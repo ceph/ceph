@@ -145,6 +145,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NOREBALANCE (1<<14) /* block osd backfill unless pg is degraded */
 #define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
 #define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
+#define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -473,6 +474,8 @@ enum {
 	CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE = 32,
 	CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED = 64,
 	CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED = 128,
+	CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
+	CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
 };
 
 const char *ceph_osd_alloc_hint_flag_name(int f);

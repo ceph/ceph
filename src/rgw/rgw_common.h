@@ -88,6 +88,10 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
+/* Account/container quota of the Swift API. */
+#define RGW_ATTR_QUOTA_NOBJS    RGW_ATTR_META_PREFIX "quota-count"
+#define RGW_ATTR_QUOTA_MSIZE    RGW_ATTR_META_PREFIX "quota-bytes"
+
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
 #define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
@@ -300,7 +304,7 @@ class RGWHTTPArgs
   int parse();
   void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
-  string& get(const string& name, bool *exists = NULL);
+  const string& get(const string& name, bool *exists = NULL) const;
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
@@ -309,22 +313,20 @@ class RGWHTTPArgs
   string sys_get(const string& name, bool *exists = nullptr);
 
   /** see if a parameter is contained in this RGWHTTPArgs */
-  bool exists(const char *name) {
-    map<string, string>::iterator iter = val_map.find(name);
-    return (iter != val_map.end());
+  bool exists(const char *name) const {
+    return (val_map.find(name) != std::end(val_map));
   }
-  bool sub_resource_exists(const char *name) {
-    map<string, string>::iterator iter = sub_resources.find(name);
-    return (iter != sub_resources.end());
+  bool sub_resource_exists(const char *name) const {
+    return (sub_resources.find(name) != std::end(sub_resources));
   }
   map<string, string>& get_params() {
     return val_map;
   }
   map<string, string>& get_sub_resources() { return sub_resources; }
-  unsigned get_num_params() {
+  unsigned get_num_params() const {
     return val_map.size();
   }
-  bool has_response_modifier() {
+  bool has_response_modifier() const {
     return has_resp_modifier;
   }
   void set_system() { /* make all system params visible */
@@ -421,6 +423,7 @@ enum RGWOpType {
   RGW_OP_LIST_BUCKET_MULTIPARTS,
   RGW_OP_DELETE_MULTI_OBJ,
   RGW_OP_BULK_DELETE,
+  RGW_OP_SET_ATTRS,
 
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA
@@ -535,9 +538,10 @@ struct RGWUserInfo
   map<string, RGWAccessKey> swift_keys;
   map<string, RGWSubUser> subusers;
   __u8 suspended;
-  uint32_t max_buckets;
+  int32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
+  __u8 admin;
   __u8 system;
   string default_placement;
   list<string> placement_tags;
@@ -545,7 +549,14 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
+  RGWUserInfo()
+    : auid(0),
+      suspended(0),
+      max_buckets(RGW_DEFAULT_MAX_BUCKETS),
+      op_mask(RGW_OP_TYPE_ALL),
+      admin(0),
+      system(0) {
+  }
 
   RGWAccessKey* get_key0() {
     if (access_keys.empty())
@@ -555,7 +566,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(17, 9, bl);
+     ENCODE_START(18, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -594,10 +605,11 @@ struct RGWUserInfo
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
      ::encode(user_id.tenant, bl);
+     ::encode(admin, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(17, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(18, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -663,6 +675,9 @@ struct RGWUserInfo
       ::decode(user_id.tenant, bl);
     } else {
       user_id.tenant.clear();
+    }
+    if (struct_v >= 18) {
+      ::decode(admin, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -753,6 +768,10 @@ struct rgw_bucket {
     DECODE_FINISH(bl);
   }
 
+  // format a key for the bucket/instance. pass delim=0 to skip a field
+  std::string get_key(char tenant_delim = '/',
+                      char id_delim = ':') const;
+
   const string& get_data_extra_pool() {
     if (data_extra_pool.empty()) {
       return data_pool;
@@ -797,7 +816,10 @@ struct rgw_bucket_shard {
   int shard_id;
 
   rgw_bucket_shard() : shard_id(-1) {}
-  rgw_bucket_shard(rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+  rgw_bucket_shard(const rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+
+  std::string get_key(char tenant_delim = '/', char id_delim = ':',
+                      char shard_delim = ':') const;
 
   bool operator<(const rgw_bucket_shard& b) const {
     if (bucket < b.bucket) {
@@ -992,11 +1014,14 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  bool versioned() { return (flags & BUCKET_VERSIONED) != 0; }
+  bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  bool has_swift_versioning() { return swift_versioning; }
+  bool has_swift_versioning() const {
+    /* A bucket may be versioned through one mechanism only. */
+    return swift_versioning && !versioned();
+  }
 
   RGWBucketInfo() : flags(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
                     has_website(false), swift_versioning(false) {}
@@ -1061,11 +1086,15 @@ WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 struct RGWStorageStats
 {
   RGWObjCategory category;
-  uint64_t num_kb;
-  uint64_t num_kb_rounded;
+  uint64_t size;
+  uint64_t size_rounded;
   uint64_t num_objects;
 
-  RGWStorageStats() : category(RGW_OBJ_CATEGORY_NONE), num_kb(0), num_kb_rounded(0), num_objects(0) {}
+  RGWStorageStats()
+    : category(RGW_OBJ_CATEGORY_NONE),
+      size(0),
+      size_rounded(0),
+      num_objects(0) {}
 
   void dump(Formatter *f) const;
 };
@@ -1188,6 +1217,10 @@ struct rgw_aws4_auth {
   string signature;
   string new_signature;
   string payload_hash;
+  string seed_signature;
+  string signing_key;
+  char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  bufferlist bl;
 };
 
 struct req_init_state {
@@ -1198,6 +1231,8 @@ struct req_init_state {
 
 /* XXX why don't RGWRequest (or descendants) hold this state? */
 class RGWRequest;
+
+#include "rgw_auth.h"
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
@@ -1253,13 +1288,23 @@ struct req_state {
 
   RGWUserInfo *user;
 
+  /* Object having the knowledge about an authenticated identity and allowing
+   * to apply it during the authorization phase (verify_permission() methods
+   * of a given RGWOp). Thus, it bounds authentication and authorization steps
+   * through a well-defined interface. For more details, see rgw_auth.h. */
+  std::unique_ptr<RGWIdentityApplier> auth_identity;
+
+  std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
+  /* Is the request made by an user marked as a system one?
+   * Being system user means we also have the admin status. */
   bool system_request;
 
   /* aws4 auth support */
   bool aws4_auth_needs_complete;
+  bool aws4_auth_streaming_mode;
   unique_ptr<rgw_aws4_auth> aws4_auth;
 
   string canned_acl;
@@ -1269,9 +1314,6 @@ struct req_state {
 
   int prot_flags;
 
-  const char *os_auth_token;
-  string swift_user;
-  string swift_groups;
   /* Content-Disposition override for TempURL of Swift API. */
   struct {
     string override;
@@ -1713,13 +1755,16 @@ public:
   bool operator<(const rgw_obj& o) const {
     int r = bucket.name.compare(o.bucket.name);
     if (r == 0) {
-     r = object.compare(o.object);
-     if (r == 0) {
-       r = ns.compare(o.ns);
-       if (r == 0) {
-         r = instance.compare(o.instance);
-       }
-     }
+      r = bucket.bucket_id.compare(o.bucket.bucket_id);
+      if (r == 0) {
+        r = object.compare(o.object);
+        if (r == 0) {
+          r = ns.compare(o.ns);
+          if (r == 0) {
+            r = instance.compare(o.instance);
+          }
+        }
+      }
     }
 
     return (r < 0);
@@ -1774,7 +1819,7 @@ static inline int hex_to_buf(const char *hex, char *buf, int len)
       return -EINVAL;
     d = hexdigit(*p);
     if (d < 0)
-      return -d;
+      return d;
     buf[i] += d;
     i++;
     p++;
@@ -1822,6 +1867,11 @@ static inline uint64_t rgw_rounded_kb(uint64_t bytes)
   return (bytes + 1023) / 1024;
 }
 
+static inline uint64_t rgw_rounded_objsize(uint64_t bytes)
+{
+  return ((bytes + 4095) & ~4095);
+}
+
 static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 {
   return ((bytes + 4095) & ~4095) / 1024;
@@ -1841,13 +1891,20 @@ extern string rgw_trim_quotes(const string& val);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+bool verify_user_permission(struct req_state * const s,
+                            RGWAccessControlPolicy * const user_acl,
+                            const int perm);
+bool verify_user_permission(struct req_state * const s,
+                            const int perm);
 extern bool verify_bucket_permission(struct req_state * s,
+                                     RGWAccessControlPolicy * user_acl,
                                      RGWAccessControlPolicy * bucket_acl,
                                      int perm);
 extern bool verify_bucket_permission(struct req_state *s, int perm);
 extern bool verify_object_permission(struct req_state *s,
-                                     RGWAccessControlPolicy *bucket_acl,
-                                     RGWAccessControlPolicy *object_acl,
+                                     RGWAccessControlPolicy * user_acl,
+                                     RGWAccessControlPolicy * bucket_acl,
+                                     RGWAccessControlPolicy * object_acl,
                                      int perm);
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name

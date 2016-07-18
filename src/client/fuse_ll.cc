@@ -271,7 +271,7 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
   int r = cfuse->client->ll_opendir(in, fi->flags, (dir_result_t **)&dirp,
 				    ctx->uid, ctx->gid);
   if (r >= 0) {
-    fi->fh = (long)dirp;
+    fi->fh = (uint64_t)dirp;
     fuse_reply_open(req, fi);
   } else {
     fuse_reply_err(req, -r);
@@ -340,11 +340,11 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     int err = 0;
     int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
     if (fd < 0) {
-      err = -errno;
+      err = errno;
     } else {
       int r = ::syncfs(fd);
       if (r < 0)
-	err = -errno;
+	err = errno;
       ::close(fd);
     }
     if (err) {
@@ -469,9 +469,11 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
 
   int r = cfuse->client->ll_open(in, fi->flags, &fh, ctx->uid, ctx->gid);
   if (r == 0) {
-    fi->fh = (long)fh;
+    fi->fh = (uint64_t)fh;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-    if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
+    if (cfuse->client->cct->_conf->fuse_disable_pagecache)
+      fi->direct_io = 1;
+    else if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
       fi->keep_cache = 1;
 #endif
     fuse_reply_open(req, fi);
@@ -671,8 +673,14 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   int r = cfuse->client->ll_create(i1, name, mode, fi->flags, &fe.attr, &i2,
 				   &fh, ctx->uid, ctx->gid);
   if (r == 0) {
-    fi->fh = (long)fh;
+    fi->fh = (uint64_t)fh;
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
+    if (cfuse->client->cct->_conf->fuse_disable_pagecache)
+      fi->direct_io = 1;
+    else if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
+      fi->keep_cache = 1;
+#endif
     fuse_reply_create(req, &fe, fi);
   } else
     fuse_reply_err(req, -r);

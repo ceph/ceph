@@ -978,16 +978,14 @@ static int os_statfs(const char *path, struct statvfs *stbuf)
   fuse_context *fc = fuse_get_context();
   FuseStore *fs = static_cast<FuseStore*>(fc->private_data);
 
-  struct statfs s;
+  struct store_statfs_t s;
   int r = fs->store->statfs(&s);
   if (r < 0)
     return r;
-  stbuf->f_bsize = s.f_bsize;
-  stbuf->f_blocks = s.f_blocks;
-  stbuf->f_bfree = s.f_bfree;
-  stbuf->f_bavail = s.f_bavail;
-  stbuf->f_files = s.f_files;
-  stbuf->f_ffree = s.f_ffree;
+  stbuf->f_bsize = 4096;   // LIES!
+  stbuf->f_blocks = s.total / 4096;
+  stbuf->f_bavail = s.available / 4096;
+
   return 0;
 }
 

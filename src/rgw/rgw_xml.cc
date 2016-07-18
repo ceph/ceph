@@ -45,7 +45,7 @@ get_next()
   return obj;
 }
 
-ostream& operator<<(ostream& out, XMLObj& obj) {
+ostream& operator<<(ostream &out, const XMLObj &obj) {
    out << obj.obj_type << ": " << obj.data;
    return out;
 }

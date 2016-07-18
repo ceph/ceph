@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 import subprocess
 import uuid
 import re
@@ -9,7 +11,6 @@ import ast
 import requests
 from operator import itemgetter
 from heapq import nlargest
-from itertools import repeat, ifilter
 
 
 CLUSTER_UUID_NAME='cluster-uuid'
@@ -18,205 +19,216 @@ CLUSTER_OWNERSHIP_NAME='cluster-ownership'
 verbose = False
 
 
-class Counter(dict):
-    '''Dict subclass for counting hashable objects.  Sometimes called a bag
-    or multiset.  Elements are stored as dictionary keys and their counts
-    are stored as dictionary values.
+try:
+    from collections import Counter
+except ImportError:
+    from itertools import repeat, ifilter
 
-    >>> Counter('zyzygy')
-    Counter({'y': 3, 'z': 2, 'g': 1})
+    class Counter(dict):
+        '''Dict subclass for counting hashable objects.  Sometimes called a bag
+        or multiset.  Elements are stored as dictionary keys and their counts
+        are stored as dictionary values.
 
-    '''
-
-    def __init__(self, iterable=None, **kwds):
-        '''Create a new, empty Counter object.  And if given, count elements
-        from an input iterable.  Or, initialize the count from another mapping
-        of elements to their counts.
-
-        >>> c = Counter()                           # a new, empty counter
-        >>> c = Counter('gallahad')                 # a new counter from an iterable
-        >>> c = Counter({'a': 4, 'b': 2})           # a new counter from a mapping
-        >>> c = Counter(a=4, b=2)                   # a new counter from keyword args
+        >>> Counter('zyzygy')
+        Counter({'y': 3, 'z': 2, 'g': 1})
 
         '''
-        self.update(iterable, **kwds)
 
-    def __missing__(self, key):
-        return 0
+        def __init__(self, iterable=None, **kwds):
+            '''Create a new, empty Counter object.  And if given, count elements
+            from an input iterable.  Or, initialize the count from another mapping
+            of elements to their counts.
 
-    def most_common(self, n=None):
-        '''List the n most common elements and their counts from the most
-        common to the least.  If n is None, then list all element counts.
+            >>> c = Counter()                           # a new, empty counter
+            >>> c = Counter('gallahad')                 # a new counter from an iterable
+            >>> c = Counter({'a': 4, 'b': 2})           # a new counter from a mapping
+            >>> c = Counter(a=4, b=2)                   # a new counter from keyword args
 
-        >>> Counter('abracadabra').most_common(3)
-        [('a', 5), ('r', 2), ('b', 2)]
+            '''
+            self.update(iterable, **kwds)
 
-        '''
-        if n is None:
-            return sorted(self.iteritems(), key=itemgetter(1), reverse=True)
-        return nlargest(n, self.iteritems(), key=itemgetter(1))
+        def __missing__(self, key):
+            return 0
 
-    def elements(self):
-        '''Iterator over elements repeating each as many times as its count.
+        def most_common(self, n=None):
+            '''List the n most common elements and their counts from the most
+            common to the least.  If n is None, then list all element counts.
 
-        >>> c = Counter('ABCABC')
-        >>> sorted(c.elements())
-        ['A', 'A', 'B', 'B', 'C', 'C']
+            >>> Counter('abracadabra').most_common(3)
+            [('a', 5), ('r', 2), ('b', 2)]
 
-        If an element's count has been set to zero or is a negative number,
-        elements() will ignore it.
+            '''
+            if n is None:
+                return sorted(self.iteritems(), key=itemgetter(1), reverse=True)
+            return nlargest(n, self.iteritems(), key=itemgetter(1))
 
-        '''
-        for elem, count in self.iteritems():
-            for _ in repeat(None, count):
-                yield elem
+        def elements(self):
+            '''Iterator over elements repeating each as many times as its count.
 
-    # Override dict methods where the meaning changes for Counter objects.
+            >>> c = Counter('ABCABC')
+            >>> sorted(c.elements())
+            ['A', 'A', 'B', 'B', 'C', 'C']
 
-    @classmethod
-    def fromkeys(cls, iterable, v=None):
-        raise NotImplementedError(
-            'Counter.fromkeys() is undefined.  Use Counter(iterable) instead.')
+            If an element's count has been set to zero or is a negative number,
+            elements() will ignore it.
 
-    def update(self, iterable=None, **kwds):
-        '''Like dict.update() but add counts instead of replacing them.
+            '''
+            for elem, count in self.iteritems():
+                for _ in repeat(None, count):
+                    yield elem
 
-        Source can be an iterable, a dictionary, or another Counter instance.
+        # Override dict methods where the meaning changes for Counter objects.
 
-        >>> c = Counter('which')
-        >>> c.update('witch')           # add elements from another iterable
-        >>> d = Counter('watch')
-        >>> c.update(d)                 # add elements from another counter
-        >>> c['h']                      # four 'h' in which, witch, and watch
-        4
+        @classmethod
+        def fromkeys(cls, iterable, v=None):
+            raise NotImplementedError(
+                'Counter.fromkeys() is undefined.  Use Counter(iterable) instead.')
 
-        '''
-        if iterable is not None:
-            if hasattr(iterable, 'iteritems'):
-                if self:
-                    self_get = self.get
-                    for elem, count in iterable.iteritems():
-                        self[elem] = self_get(elem, 0) + count
+        def update(self, iterable=None, **kwds):
+            '''Like dict.update() but add counts instead of replacing them.
+
+            Source can be an iterable, a dictionary, or another Counter instance.
+
+            >>> c = Counter('which')
+            >>> c.update('witch')           # add elements from another iterable
+            >>> d = Counter('watch')
+            >>> c.update(d)                 # add elements from another counter
+            >>> c['h']                      # four 'h' in which, witch, and watch
+            4
+
+            '''
+            if iterable is not None:
+                if hasattr(iterable, 'iteritems'):
+                    if self:
+                        self_get = self.get
+                        for elem, count in iterable.iteritems():
+                            self[elem] = self_get(elem, 0) + count
+                    else:
+                        dict.update(self, iterable) # fast path when counter is empty
                 else:
-                    dict.update(self, iterable) # fast path when counter is empty
-            else:
-                self_get = self.get
-                for elem in iterable:
-                    self[elem] = self_get(elem, 0) + 1
-        if kwds:
-            self.update(kwds)
+                    self_get = self.get
+                    for elem in iterable:
+                        self[elem] = self_get(elem, 0) + 1
+            if kwds:
+                self.update(kwds)
 
-    def copy(self):
-        'Like dict.copy() but returns a Counter instance instead of a dict.'
-        return Counter(self)
+        def copy(self):
+            'Like dict.copy() but returns a Counter instance instead of a dict.'
+            return Counter(self)
 
-    def __delitem__(self, elem):
-        'Like dict.__delitem__() but does not raise KeyError for missing values.'
-        if elem in self:
-            dict.__delitem__(self, elem)
+        def __delitem__(self, elem):
+            'Like dict.__delitem__() but does not raise KeyError for missing values.'
+            if elem in self:
+                dict.__delitem__(self, elem)
 
-    def __repr__(self):
-        if not self:
-            return '%s()' % self.__class__.__name__
-        items = ', '.join(map('%r: %r'.__mod__, self.most_common()))
-        return '%s({%s})' % (self.__class__.__name__, items)
+        def __repr__(self):
+            if not self:
+                return '%s()' % self.__class__.__name__
+            items = ', '.join(map('%r: %r'.__mod__, self.most_common()))
+            return '%s({%s})' % (self.__class__.__name__, items)
 
-    # Multiset-style mathematical operations discussed in:
-    #       Knuth TAOCP Volume II section 4.6.3 exercise 19
-    #       and at http://en.wikipedia.org/wiki/Multiset
-    #
-    # Outputs guaranteed to only include positive counts.
-    #
-    # To strip negative and zero counts, add-in an empty counter:
-    #       c += Counter()
+        # Multiset-style mathematical operations discussed in:
+        #       Knuth TAOCP Volume II section 4.6.3 exercise 19
+        #       and at http://en.wikipedia.org/wiki/Multiset
+        #
+        # Outputs guaranteed to only include positive counts.
+        #
+        # To strip negative and zero counts, add-in an empty counter:
+        #       c += Counter()
 
-    def __add__(self, other):
-        '''Add counts from two counters.
+        def __add__(self, other):
+            '''Add counts from two counters.
 
-        >>> Counter('abbb') + Counter('bcc')
-        Counter({'b': 4, 'c': 2, 'a': 1})
+            >>> Counter('abbb') + Counter('bcc')
+            Counter({'b': 4, 'c': 2, 'a': 1})
 
 
-        '''
-        if not isinstance(other, Counter):
-            return NotImplemented
-        result = Counter()
-        for elem in set(self) | set(other):
-            newcount = self[elem] + other[elem]
-            if newcount > 0:
-                result[elem] = newcount
-        return result
+            '''
+            if not isinstance(other, Counter):
+                return NotImplemented
+            result = Counter()
+            for elem in set(self) | set(other):
+                newcount = self[elem] + other[elem]
+                if newcount > 0:
+                    result[elem] = newcount
+            return result
 
-    def __sub__(self, other):
-        ''' Subtract count, but keep only results with positive counts.
+        def __sub__(self, other):
+            ''' Subtract count, but keep only results with positive counts.
 
-        >>> Counter('abbbc') - Counter('bccd')
-        Counter({'b': 2, 'a': 1})
+            >>> Counter('abbbc') - Counter('bccd')
+            Counter({'b': 2, 'a': 1})
 
-        '''
-        if not isinstance(other, Counter):
-            return NotImplemented
-        result = Counter()
-        for elem in set(self) | set(other):
-            newcount = self[elem] - other[elem]
-            if newcount > 0:
-                result[elem] = newcount
-        return result
+            '''
+            if not isinstance(other, Counter):
+                return NotImplemented
+            result = Counter()
+            for elem in set(self) | set(other):
+                newcount = self[elem] - other[elem]
+                if newcount > 0:
+                    result[elem] = newcount
+            return result
 
-    def __or__(self, other):
-        '''Union is the maximum of value in either of the input counters.
+        def __or__(self, other):
+            '''Union is the maximum of value in either of the input counters.
 
-        >>> Counter('abbb') | Counter('bcc')
-        Counter({'b': 3, 'c': 2, 'a': 1})
+            >>> Counter('abbb') | Counter('bcc')
+            Counter({'b': 3, 'c': 2, 'a': 1})
 
-        '''
-        if not isinstance(other, Counter):
-            return NotImplemented
-        _max = max
-        result = Counter()
-        for elem in set(self) | set(other):
-            newcount = _max(self[elem], other[elem])
-            if newcount > 0:
-                result[elem] = newcount
-        return result
+            '''
+            if not isinstance(other, Counter):
+                return NotImplemented
+            _max = max
+            result = Counter()
+            for elem in set(self) | set(other):
+                newcount = _max(self[elem], other[elem])
+                if newcount > 0:
+                    result[elem] = newcount
+            return result
 
-    def __and__(self, other):
-        ''' Intersection is the minimum of corresponding counts.
+        def __and__(self, other):
+            ''' Intersection is the minimum of corresponding counts.
 
-        >>> Counter('abbb') & Counter('bcc')
-        Counter({'b': 1})
+            >>> Counter('abbb') & Counter('bcc')
+            Counter({'b': 1})
 
-        '''
-        if not isinstance(other, Counter):
-            return NotImplemented
-        _min = min
-        result = Counter()
-        if len(self) < len(other):
-            self, other = other, self
-        for elem in ifilter(self.__contains__, other):
-            newcount = _min(self[elem], other[elem])
-            if newcount > 0:
-                result[elem] = newcount
-        return result
+            '''
+            if not isinstance(other, Counter):
+                return NotImplemented
+            _min = min
+            result = Counter()
+            if len(self) < len(other):
+                self, other = other, self
+            for elem in ifilter(self.__contains__, other):
+                newcount = _min(self[elem], other[elem])
+                if newcount > 0:
+                    result[elem] = newcount
+            return result
 
+
+def print_stderr(*args, **kwargs):
+  kwargs.setdefault('file', sys.stderr)
+  print(*args, **kwargs)
 
 def run_command(cmd):
   if verbose:
-    print "run_command: " + str(cmd)
+    print_stderr("run_command: " + str(cmd))
   child = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
   (o, e) = child.communicate()
+  o = o.decode('utf-8', 'ignore')
+  e = e.decode('utf-8', 'ignore')
   return (child.returncode, o, e)
 
 
 def get_uuid():
   (rc,uid,e) = run_command(['ceph', 'config-key', 'get', CLUSTER_UUID_NAME])
-  if rc is not 0:
+  if rc:
     #uuid is not yet set.
     uid = str(uuid.uuid4())
     (rc, o, e) = run_command(['ceph', 'config-key', 'put',
                              CLUSTER_UUID_NAME, uid])
-    if rc is not 0:
+    if rc:
       raise RuntimeError("\'ceph config-key put\' failed -" + e)
 
   return uid
@@ -239,13 +251,16 @@ def bytes_pretty_to_raw(byte_count, byte_scale):
 
 def get_nums():
   (rc, o, e) = run_command(['ceph', '-s', '-f', 'json'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph -s\' failed - " + e)
 
   oj = json.loads(o)
   num_mons = len(oj['monmap']['mons'])
   num_osds = int(oj['osdmap']['osdmap']['num_in_osds'])
-  num_mdss = oj['mdsmap']['in']
+  try:
+    num_mdss = oj['mdsmap']['in']
+  except KeyError:
+    num_mdss = 0
 
   pgmap = oj['pgmap']
   num_pgs = pgmap['num_pgs']
@@ -253,7 +268,7 @@ def get_nums():
   num_bytes_total = pgmap['bytes_total']
 
   (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph pg dump pools\' failed - " + e)
 
   pools = json.loads(o)
@@ -274,7 +289,7 @@ def get_nums():
 
 def get_crush_types():
   (rc, o, e) = run_command(['ceph', 'osd', 'crush', 'dump'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph osd crush dump\' failed - " + e)
 
   crush_dump = json.loads(o)
@@ -303,7 +318,7 @@ def get_crush_types():
 
 def get_osd_dump_info():
   (rc, o, e) = run_command(['ceph', 'osd', 'dump', '-f', 'json'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
   pool_meta = []
@@ -329,8 +344,8 @@ def get_sysinfo(max_osds):
   incr = lambda a,k: 1 if k not in a else a[k]+1
   while count < max_osds:
     (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
-    if rc is 0:
-      if osd_metadata_available is False:
+    if rc == 0:
+      if not osd_metadata_available:
         osd_metadata_available = True
 
       jmeta = json.loads(o)
@@ -362,8 +377,8 @@ def get_sysinfo(max_osds):
     count = count + 1
 
   sysinfo = {}
-  if osd_metadata_available is False:
-    print >> sys.stderr, "'ceph osd metadata' is not available at all"
+  if not osd_metadata_available:
+    print_stderr("'ceph osd metadata' is not available at all")
     return sysinfo
 
   def jsonify(type_count, name, type_name):
@@ -384,7 +399,7 @@ def get_sysinfo(max_osds):
 def get_ownership_info():
   (rc, o, e) = run_command(['ceph', 'config-key', 'get',
                             CLUSTER_OWNERSHIP_NAME])
-  if rc is not 0:
+  if rc:
     return {}
 
   return ast.literal_eval(o)
@@ -410,29 +425,30 @@ def output_json():
   return json.dumps(out, indent=2, separators=(',', ': ')), url
 
 def describe_usage():
-  print >> sys.stderr, "Usage:"
-  print >> sys.stderr, "======\n"
+  print_stderr("Usage:")
+  print_stderr("======")
+  print_stderr()
+  print_stderr(sys.argv[0] + " [-v|--verbose] [<commands> [command-options]]")
+  print_stderr()
+  print_stderr("without any option, shows the data to be published and do nothing")
+  print_stderr()
+  print_stderr("-v|--verbose: toggle verbose output on stdout")
+  print_stderr()
+  print_stderr("commands:")
+  print_stderr("publish - publish the brag report to the server")
+  print_stderr("update-metadata <update-metadata-options> - Update")
+  print_stderr("         ownership information for bragging")
+  print_stderr("clear-metadata - Clear information set by update-metadata")
+  print_stderr("unpublish --yes-i-am-shy - delete the brag report from the server")
+  print_stderr()
 
-  print >> sys.stderr, sys.argv[0] + " [-v|--verbose] [<commands> [command-options]]\n"
-  print >> sys.stderr, "without any option, shows the data to be published and do nothing"
-  print >> sys.stderr, ""
-  print >> sys.stderr, "-v|--verbose: toggle verbose output on stdout"
-  print >> sys.stderr, ""
-  print >> sys.stderr, "commands:"
-  print >> sys.stderr, "publish - publish the brag report to the server"
-  print >> sys.stderr, "update-metadata <update-metadata-options> - Update"
-  print >> sys.stderr, "         ownership information for bragging"
-  print >> sys.stderr, "clear-metadata - Clear information set by update-metadata"
-  print >> sys.stderr, "unpublish --yes-i-am-shy - delete the brag report from the server"
-  print >> sys.stderr, ""
-
-  print >> sys.stderr, "update-metadata options:"
-  print >> sys.stderr, "--name=  - Name of the cluster"
-  print >> sys.stderr, "--organization= - Name of the organization"
-  print >> sys.stderr, "--email= - Email contact address"
-  print >> sys.stderr, "--description= - Reporting use-case"
-  print >> sys.stderr, "--url= - The URL that is used to publish and unpublish"
-  print >> sys.stderr, ""
+  print_stderr("update-metadata options:")
+  print_stderr("--name=  - Name of the cluster")
+  print_stderr("--organization= - Name of the organization")
+  print_stderr("--email= - Email contact address")
+  print_stderr("--description= - Reporting use-case")
+  print_stderr("--url= - The URL that is used to publish and unpublish")
+  print_stderr()
 
 def update_metadata():
   info = {}
@@ -453,7 +469,7 @@ def update_metadata():
     if k in possibles:
       info[k] = v
     else:
-      print >> sys.stderr, "Unexpect option --" + k
+      print_stderr("Unexpect option --" + k)
       describe_usage()
       return 22
 
@@ -469,22 +485,22 @@ def clear_metadata():
 def publish():
   data, url = output_json()
   if url is None:
-    print >> sys.stderr, "Cannot publish until a URL is set using update-metadata"
+    print_stderr("Cannot publish until a URL is set using update-metadata")
     return 1
 
   if verbose:
-    print "PUT " + str(url) + " : " + str(data)
+    print_stderr("PUT " + str(url) + " : " + str(data))
   req = requests.put(url, data=data)
-  if req.status_code is not 201:
-    print >> sys.stderr, "Failed to publish, server responded with code " + str(req.status_code)
-    print >> sys.stderr, req.text
+  if req.status_code != 201:
+    print_stderr("Failed to publish, server responded with code " + str(req.status_code))
+    print_stderr(req.text)
     return 1
 
   return 0
 
 def unpublish():
   if len(sys.argv) <= 2 or sys.argv[2] != '--yes-i-am-shy':
-    print >> sys.stderr, "unpublish should be followed by --yes-i-am-shy"
+    print_stderr("unpublish should be followed by --yes-i-am-shy")
     return 22
 
   fail = False
@@ -497,15 +513,15 @@ def unpublish():
     fail = True
 
   if fail:
-    print >> sys.stderr, "URL is not updated yet"
+    print_stderr("URL is not updated yet")
     return 1
 
   uuid = get_uuid()
 
   params = {'uuid':uuid}
   req = requests.delete(url, params=params)
-  if req.status_code is not 200:
-    print >> sys.stderr, "Failed to unpublish, server responsed with code " + str(req.status_code)
+  if req.status_code != 200:
+    print_stderr("Failed to unpublish, server responsed with code " + str(req.status_code))
     return 1
 
   return 0
@@ -515,8 +531,8 @@ def main():
     global verbose
     verbose = True
     sys.argv.pop(1)
-  if len(sys.argv) is 1:
-    print output_json()[0]
+  if len(sys.argv) == 1:
+    print(output_json()[0])
     return 0
   if sys.argv[1] == 'update-metadata':
     return update_metadata()

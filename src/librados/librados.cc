@@ -445,6 +445,14 @@ void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist
   o->setxattr(name, v);
 }
 
+void librados::ObjectWriteOperation::setxattr(const char *name,
+					      const buffer::list&& v)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->setxattr(name, std::move(v));
+}
+
+
 void librados::ObjectWriteOperation::omap_set(
   const map<string, bufferlist> &map)
 {
@@ -1159,7 +1167,7 @@ std::string librados::IoCtx::get_pool_name()
   return s;
 }
 
-const std::string& librados::IoCtx::get_pool_name() const
+std::string librados::IoCtx::get_pool_name() const
 {
   return io_ctx_impl->get_cached_pool_name();
 }
@@ -2364,6 +2372,11 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
 				    std::map<string, stats_map>& result)
 {
   return -EOPNOTSUPP;
+}
+
+bool librados::Rados::get_pool_is_selfmanaged_snaps_mode(const std::string& pool)
+{
+  return client->get_pool_is_selfmanaged_snaps_mode(pool);
 }
 
 int librados::Rados::cluster_stat(cluster_stat_t& result)

@@ -16,6 +16,7 @@
 #include <vector>
 #include <list>
 
+#include "include/intarith.h"
 #include "include/encoding.h"
 
 namespace ceph {
@@ -59,19 +60,10 @@ public:
   }
 
   void add(int32_t v) {
-    int bin = calc_bits_of(v);
+    int bin = cbits(v);
     _expand_to(bin + 1);
     h[bin]++;
     _contract();
-  }
-
-  static int calc_bits_of(int t) {
-    int b = 0;
-    while (t > 0) {
-      t = t >> 1;
-      b++;
-    }
-    return b;
   }
 
   bool operator==(const pow2_hist_t &r) const {
@@ -89,7 +81,7 @@ public:
   int get_position_micro(int32_t v, uint64_t *lower, uint64_t *upper) {
     if (v < 0)
       return -1;
-    unsigned bin = calc_bits_of(v);
+    unsigned bin = cbits(v);
     uint64_t lower_sum = 0, upper_sum = 0, total = 0;
     for (unsigned i=0; i<h.size(); ++i) {
       if (i <= bin)

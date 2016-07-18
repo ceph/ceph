@@ -10,6 +10,18 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst']
+if tags.has('man'):
+    exclude_patterns += ['architecture.rst', 'glossary.rst', 'release*.rst',
+                         'api/*',
+                         'cephfs/*',
+                         'dev/*',
+                         'install/*',
+                         'mon/*',
+                         'rados/*',
+                         'radosgw/*',
+                         'rbd/*',
+                         'start/*']
+
 pygments_style = 'sphinx'
 
 html_theme = 'ceph'
@@ -47,6 +59,7 @@ breathe_projects_source = {
     "Ceph": (os.path.join(top_level, "src/include/rados"),
              ["rados_types.h", "librados.h"])
 }
+breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp': 'cxx'}
 pybind = os.path.join(top_level, 'src/pybind')
 if pybind not in sys.path:
     sys.path.insert(0, pybind)

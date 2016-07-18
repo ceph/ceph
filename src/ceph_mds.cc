@@ -50,7 +50,7 @@ using namespace std;
 
 void usage()
 {
-  derr << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
+  cout << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
@@ -59,7 +59,7 @@ void usage()
        << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
        << "        start up as a hot standby for rank\n"
-       << dendl;
+       << std::endl;
   generic_server_usage();
 }
 
@@ -103,8 +103,8 @@ int main(int argc, const char **argv)
       break;
     }
     else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
+      // exit(1) will be called in the usage()
       usage();
-      break;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       int r = parse_rank("hot-standby", val);
@@ -138,7 +138,7 @@ int main(int argc, const char **argv)
 
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
-				      getpid());
+				      getpid(), 0, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);

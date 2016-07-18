@@ -6,7 +6,6 @@
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -101,10 +100,17 @@ void SnapshotRemoveRequest<I>::send_remove_object_map() {
   assert(image_ctx.owner_lock.is_locked());
 
   {
+    CephContext *cct = image_ctx.cct;
     RWLock::WLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
+    if (image_ctx.snap_info.find(m_snap_id) == image_ctx.snap_info.end()) {
+      lderr(cct) << this << " " << __func__ << ": snapshot doesn't exist"
+                 << dendl;
+      this->async_complete(-ENOENT);
+      return;
+    }
+
     if (image_ctx.object_map != nullptr) {
-      CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;
       m_state = STATE_REMOVE_OBJECT_MAP;
 

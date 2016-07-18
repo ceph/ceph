@@ -22,6 +22,7 @@ OPTION(cluster_network, OPT_STR, "")
 OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
+OPTION(mon_dns_srv_name, OPT_STR, "ceph-mon")
 OPTION(lockdep, OPT_BOOL, false)
 OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
@@ -39,7 +40,6 @@ OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
 OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default location for erasure-code plugins
-OPTION(compression_dir, OPT_STR, CEPH_PKGLIBDIR"/compressor") // default location for compression plugins
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
@@ -155,6 +155,7 @@ SUBSYS(bdev, 1, 3)
 SUBSYS(kstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
+SUBSYS(memdb, 4, 5)
 SUBSYS(kinetic, 1, 5)
 SUBSYS(fuse, 1, 5)
 
@@ -373,7 +374,7 @@ OPTION(client_mount_timeout, OPT_DOUBLE, 300.0)
 OPTION(client_tick_interval, OPT_DOUBLE, 1.0)
 OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
-OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  //8 * 1024*1024
+OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
@@ -382,7 +383,7 @@ OPTION(client_mount_gid, OPT_INT, -1)
 OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
 OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
-OPTION(client_quota, OPT_BOOL, false)
+OPTION(client_quota, OPT_BOOL, true)
 OPTION(client_quota_df, OPT_BOOL, true) // use quota for df on subdir mounts
 OPTION(client_oc, OPT_BOOL, true)
 OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
@@ -402,7 +403,8 @@ OPTION(client_permissions, OPT_BOOL, true)
 OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
-OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
+OPTION(fuse_use_invalidate_cb, OPT_BOOL, true) // use fuse 2.8+ invalidate callback to keep page cache consistent
+OPTION(fuse_disable_pagecache, OPT_BOOL, false)
 OPTION(fuse_allow_other, OPT_BOOL, true)
 OPTION(fuse_default_permissions, OPT_BOOL, true)
 OPTION(fuse_big_writes, OPT_BOOL, true)
@@ -416,7 +418,7 @@ OPTION(client_try_dentry_invalidate, OPT_BOOL, true) // the client should try to
 OPTION(client_die_on_failed_remount, OPT_BOOL, true)
 OPTION(client_check_pool_perm, OPT_BOOL, true)
 OPTION(client_use_faked_inos, OPT_BOOL, false)
-OPTION(client_mds_namespace, OPT_INT, -1)
+OPTION(client_mds_namespace, OPT_STR, "")
 
 OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
 OPTION(crush_location_hook, OPT_STR, "")
@@ -428,6 +430,7 @@ OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100) // max in-flight data
 OPTION(objecter_inflight_ops, OPT_U64, 1024)               // max in-flight ios
 OPTION(objecter_completion_locks_per_session, OPT_U64, 32) // num of completion locks per each session, for serializing same object responses
 OPTION(objecter_inject_no_watch_ping, OPT_BOOL, false)   // suppress watch pings
+OPTION(objecter_retry_writes_after_first_reply, OPT_BOOL, false)   // ignore the first reply for each write, and resend the osd op instead
 
 // Max number of deletes at once in a single Filer::purge call
 OPTION(filer_max_purge_ops, OPT_U32, 10)
@@ -485,6 +488,7 @@ OPTION(mds_bal_merge_rd, OPT_FLOAT, 1000)
 OPTION(mds_bal_merge_wr, OPT_FLOAT, 1000)
 OPTION(mds_bal_interval, OPT_INT, 10)           // seconds
 OPTION(mds_bal_fragment_interval, OPT_INT, 5)      // seconds
+OPTION(mds_bal_fragment_size_max, OPT_INT, 10000*10) // order of magnitude higher than split size
 OPTION(mds_bal_idle_threshold, OPT_FLOAT, 0)
 OPTION(mds_bal_max, OPT_INT, -1)
 OPTION(mds_bal_max_until, OPT_INT, -1)
@@ -697,7 +701,7 @@ OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
-OPTION(osd_op_queue, OPT_STR, "prio") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
+OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
 // Set to true for testing.  Users should NOT set this.
@@ -774,6 +778,10 @@ OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT, 2*60*60)   // objects must
 OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
 OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL, true)
+OPTION(osd_class_load_list, OPT_STR, "cephfs hello journal lock log numops "
+    "rbd refcount replica_log rgw statelog timeindex user version") // list of object classes allowed to be loaded (allow all: *)
+OPTION(osd_class_default_list, OPT_STR, "cephfs hello journal lock log numops "
+    "rbd refcount replica_log rgw statelog timeindex user version") // list of object classes with default execute perm (allow all: *)
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
@@ -842,7 +850,8 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
-OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default leveldb cache size
+OPTION(rocksdb_cache_size, OPT_INT, 128*1024*1024)  // default rocksdb cache size
+OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
@@ -933,6 +942,7 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
+OPTION(bluestore_bluefs_buffered_io, OPT_BOOL, true)
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -949,13 +959,33 @@ OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL, false)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate space if block/db_path/wal_path is file rather that block device.
-OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
-OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
-OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
+OPTION(bluestore_csum, OPT_BOOL, true)
+OPTION(bluestore_csum_type, OPT_STR, "crc32c")
+OPTION(bluestore_min_csum_block, OPT_U32, 4096)
+OPTION(bluestore_max_csum_block, OPT_U32, 64*1024)
+OPTION(bluestore_min_alloc_size, OPT_U32, 0)
+OPTION(bluestore_min_alloc_size_hdd, OPT_U32, 64*1024)
+OPTION(bluestore_min_alloc_size_ssd, OPT_U32, 4*1024)
+OPTION(bluestore_max_alloc_size, OPT_U32, 0)
+OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
+OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
+OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
+OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
+/*
+ * Require the net gain of compression at least to be at this ratio,
+ * otherwise we don't compress.
+ * And ask for compressing at least 12.5%(1/8) off, by default.
+ */
+OPTION(bluestore_compression_required_ratio, OPT_DOUBLE, .875)
+OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
+OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
+OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
-OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
-OPTION(bluestore_freelist_type, OPT_STR, "bitmap")
+OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
+OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
+OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
+OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
@@ -972,8 +1002,8 @@ OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
-OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
-OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
+OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
+OPTION(bluestore_default_buffered_read, OPT_BOOL, true)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
 OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
@@ -1219,6 +1249,12 @@ OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending 
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 
+/**
+ * RBD Mirror options
+ */
+OPTION(rbd_mirror_sync_point_update_age, OPT_DOUBLE, 30) // number of seconds between each update of the image sync point object number
+OPTION(rbd_mirror_concurrent_image_syncs, OPT_U32, 5) // maximum number of image syncs in parallel
+
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 
@@ -1275,6 +1311,7 @@ OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project 
 OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
 OPTION(rgw_keystone_api_version, OPT_INT, 2) // Version of Keystone API to use (2 or 3)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
+OPTION(rgw_keystone_accepted_admin_roles, OPT_STR, "") // list of roles allowing an user to gain admin privileges
 OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL, true) // should we try to verify keystone's ssl
@@ -1344,6 +1381,7 @@ OPTION(rgw_enable_usage_log, OPT_BOOL, false) // enable logging bandwidth usage
 OPTION(rgw_ops_log_rados, OPT_BOOL, true) // whether ops log should go to rados
 OPTION(rgw_ops_log_socket_path, OPT_STR, "") // path to unix domain socket where ops log can go
 OPTION(rgw_ops_log_data_backlog, OPT_INT, 5 << 20) // max data backlog for ops log
+OPTION(rgw_fcgi_socket_backlog, OPT_INT, 1024) // socket  backlog for fcgi
 OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pending log data
 OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
@@ -1370,6 +1408,8 @@ OPTION(rgw_opstate_ratelimit_sec, OPT_INT, 30) // min time between opstate updat
 OPTION(rgw_curl_wait_timeout_ms, OPT_INT, 1000) // timeout for certain curl calls
 OPTION(rgw_copy_obj_progress, OPT_BOOL, true) // should dump progress during long copy operations?
 OPTION(rgw_copy_obj_progress_every_bytes, OPT_INT, 1024 * 1024) // min bytes between copy progress output
+OPTION(rgw_obj_tombstone_cache_size, OPT_INT, 1000) // how many objects in tombstone cache, which is used in multi-zone sync to keep
+                                                    // track of removed objects' mtime
 
 OPTION(rgw_data_log_window, OPT_INT, 30) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT, 1000) // number of in-memory entries to hold for data changes log
@@ -1381,7 +1421,7 @@ OPTION(rgw_bucket_quota_ttl, OPT_INT, 600) // time for cached bucket stats to be
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE, 0.95) // threshold from which we don't rely on cached info for quota decisions
 OPTION(rgw_bucket_quota_cache_size, OPT_INT, 10000) // number of entries in bucket quota cache
 OPTION(rgw_bucket_default_quota_max_objects, OPT_INT, -1) // number of objects allowed
-OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in kB
+OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in bytes
 
 OPTION(rgw_expose_bucket, OPT_BOOL, false) // Return the bucket name in the 'Bucket' response header
 
@@ -1392,7 +1432,7 @@ OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accu
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL, false) // whether stats for idle users be fully synced
 OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats sync for non-idle users
 OPTION(rgw_user_default_quota_max_objects, OPT_INT, -1) // number of objects allowed
-OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in kB
+OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in bytes
 
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
@@ -1400,7 +1440,7 @@ OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multip
 OPTION(rgw_max_slo_entries, OPT_INT, 1000) // default number of max entries in slo
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
-OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user
+OPTION(rgw_user_max_buckets, OPT_INT, 1000) // global option to set max buckets count for all user
 
 OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round of expired objects garbage collecting
 OPTION(rgw_objexp_time_step, OPT_U32, 4096) // number of seconds for rounding the timestamps

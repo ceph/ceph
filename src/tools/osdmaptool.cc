@@ -137,8 +137,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)NULL)) {
       string interr;
       pg_num = strict_strtoll(val.c_str(), 10, &interr);
-      if (interr.length() > 0)
+      if (interr.length() > 0) {
         cerr << "error parsing integer value " << interr << std::endl;
+        exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
@@ -308,18 +310,17 @@ int main(int argc, const char **argv)
   if (!test_map_pg.empty()) {
     pg_t pgid;
     if (!pgid.parse(test_map_pg.c_str())) {
-      cerr << me << ": failed to parse pg '" << test_map_pg
-	   << "', r = " << r << std::endl;
+      cerr << me << ": failed to parse pg '" << test_map_pg << std::endl;
       usage();
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
     vector<int> raw, up, acting;
-    int calced_primary, up_primary, acting_primary;
-    osdmap.pg_to_osds(pgid, &raw, &calced_primary);
+    int raw_primary, up_primary, acting_primary;
+    osdmap.pg_to_raw_osds(pgid, &raw, &raw_primary);
     osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
                                 &acting, &acting_primary);
-    cout << pgid << " raw (" << raw << ", p" << calced_primary
+    cout << pgid << " raw (" << raw << ", p" << raw_primary
          << ") up (" << up << ", p" << up_primary
          << ") acting (" << acting << ", p" << acting_primary << ")"
          << std::endl;

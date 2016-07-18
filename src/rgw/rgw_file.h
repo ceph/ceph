@@ -231,6 +231,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
     static constexpr uint32_t FLAG_DELETED = 0x0080;
+    static constexpr uint32_t FLAG_UNLINK_THIS = 0x0100;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -369,11 +370,9 @@ namespace rgw {
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
-	st->st_mode = RGW_RWXMODE|S_IFDIR /* state.unix_mode|S_IFDIR */;
 	st->st_nlink = 3;
 	break;
       case RGW_FS_TYPE_FILE:
-	st->st_mode = RGW_RWMODE|S_IFREG /* state.unix_mode|S_IFREG */;
 	st->st_nlink = 1;
 	st->st_blksize = 4096;
 	st->st_size = state.size;
@@ -768,6 +767,14 @@ namespace rgw {
       intrusive_ptr_release(this);
     }
 
+    void release_evict(RGWFileHandle* fh) {
+      /* remove from cache, releases sentinel ref */
+      fh_cache.remove(fh->fh.fh_hk.object, fh,
+		      RGWFileHandle::FHCache::FLAG_NONE);
+      /* release call-path ref */
+      (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+    }
+
     int authorize(RGWRados* store) {
       int ret = rgw_get_user_info_by_access_key(store, key.id, user);
       if (ret == 0) {
@@ -802,7 +809,10 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // the cast transfers a lvalue into a rvalue  in the ctor
+      // check the commit message for the full details
+      LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
 
       /* mount is stale? */
       if (state.flags & FLAG_CLOSED)
@@ -883,6 +893,9 @@ namespace rgw {
 
     int getattr(RGWFileHandle* rgw_fh, struct stat* st);
 
+    int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
+		uint32_t flags);
+
     LookupFHResult stat_bucket(RGWFileHandle* parent,
 			       const char *path, uint32_t flags);
 
@@ -903,7 +916,8 @@ namespace rgw {
     MkObjResult mkdir2(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
 
-    int unlink(RGWFileHandle* parent, const char *name);
+    int unlink(RGWFileHandle* rgw_fh, const char *name,
+	       uint32_t flags = FLAG_NONE);
 
     /* find existing RGWFileHandle */
     RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
@@ -1880,12 +1894,13 @@ public:
   off_t next_off;
   size_t bytes_written;
   bool multipart;
+  bool eio;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), processor(nullptr), last_off(0), next_off(0),
-      bytes_written(0), multipart(false) {
+      bytes_written(0), multipart(false), eio(false) {
 
     int ret = header_init();
     if (ret == 0) {
@@ -1958,6 +1973,8 @@ public:
   }
 
   void put_data(off_t off, buffer::list& _bl) {
+    if (off && (off != (ofs+1)))
+      eio = true;
     ofs = off;
     data.claim(_bl);
   }
@@ -2066,6 +2083,59 @@ public:
 
 }; /* RGWCopyObjRequest */
 
+class RGWSetAttrsRequest : public RGWLibRequest,
+			   public RGWSetAttrs /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+
+  RGWSetAttrsRequest(CephContext* _cct, RGWUserInfo *_user,
+		     const std::string& _bname, const std::string& _oname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    op = this;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT";
+    s->op = OP_PUT;
+
+    /* XXX derp derp derp */
+    std::string uri = make_uri(bucket_name, obj_name);
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+}; /* RGWSetAttrsRequest */
 
 } /* namespace rgw */
 

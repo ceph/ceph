@@ -6,8 +6,11 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
+#include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/BaseRequest.h"
+#include "tools/rbd_mirror/types.h"
 #include <list>
 #include <string>
 
@@ -27,28 +30,31 @@ class ProgressContext;
 namespace image_replayer {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class BootstrapRequest {
+class BootstrapRequest : public BaseRequest {
 public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
   typedef rbd::mirror::ProgressContext ProgressContext;
 
-  static BootstrapRequest* create(librados::IoCtx &local_io_ctx,
-                                  librados::IoCtx &remote_io_ctx,
-                                  ImageCtxT **local_image_ctx,
-                                  const std::string &local_image_name,
-                                  const std::string &remote_image_id,
-                                  const std::string &global_image_id,
-                                  ContextWQ *work_queue, SafeTimer *timer,
-                                  Mutex *timer_lock,
-                                  const std::string &local_mirror_uuid,
-                                  const std::string &remote_mirror_uuid,
-                                  Journaler *journaler,
-                                  MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish,
-				  ProgressContext *progress_ctx = nullptr) {
-    return new BootstrapRequest(local_io_ctx, remote_io_ctx, local_image_ctx,
+  static BootstrapRequest* create(
+        librados::IoCtx &local_io_ctx,
+        librados::IoCtx &remote_io_ctx,
+        ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+        ImageCtxT **local_image_ctx,
+        const std::string &local_image_name,
+        const std::string &remote_image_id,
+        const std::string &global_image_id,
+        ContextWQ *work_queue, SafeTimer *timer,
+        Mutex *timer_lock,
+        const std::string &local_mirror_uuid,
+        const std::string &remote_mirror_uuid,
+        Journaler *journaler,
+        MirrorPeerClientMeta *client_meta,
+        Context *on_finish,
+        ProgressContext *progress_ctx = nullptr) {
+    return new BootstrapRequest(local_io_ctx, remote_io_ctx,
+                                image_sync_throttler, local_image_ctx,
                                 local_image_name, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
@@ -58,6 +64,7 @@ public:
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
                    librados::IoCtx &remote_io_ctx,
+                   ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                    ImageCtxT **local_image_ctx,
                    const std::string &local_image_name,
                    const std::string &remote_image_id,
@@ -70,6 +77,7 @@ public:
   ~BootstrapRequest();
 
   void send();
+  void cancel();
 
 private:
   /**
@@ -130,6 +138,7 @@ private:
 
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
+  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
   ImageCtxT **m_local_image_ctx;
   std::string m_local_image_name;
   std::string m_local_image_id;
@@ -142,8 +151,9 @@ private:
   std::string m_remote_mirror_uuid;
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
-  Context *m_on_finish;
   ProgressContext *m_progress_ctx;
+  Mutex m_lock;
+  bool m_canceled = false;
 
   Tags m_remote_tags;
   cls::journal::Client m_client;
@@ -192,8 +202,6 @@ private:
 
   void close_remote_image();
   void handle_close_remote_image(int r);
-
-  void finish(int r);
 
   bool decode_client_meta();
 

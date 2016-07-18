@@ -45,9 +45,9 @@ ceph-disk-install-data:
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
 			options=--install-layout=deb ; \
 		else \
-			options=--prefix=/usr ; \
+			options=--prefix=$(prefix) ; \
 		fi ; \
-		root="--root=$(DESTDIR) --install-script=/usr/sbin" ; \
+		root="--root=$(DESTDIR) --install-script=$(sbindir)" ; \
 	fi ; \
 	python setup.py install $$root $$options
 

@@ -1,14 +1,3 @@
-add_custom_target(cython_rbd
-  COMMAND
-  env
-  CC=${PY_CC}
-  CXX=${PY_CXX}
-  LDSHARED=${PY_LDSHARED}
-  OPT=\"-DNDEBUG -g -fwrapv -O2 -Wall\"
-  LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-  CYTHON_BUILD_DIR=${CMAKE_BINARY_DIR}/src/pybind/rbd
-  CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
-  python ${CMAKE_SOURCE_DIR}/src/pybind/rbd/setup.py build --build-base ${CYTHON_MODULE_DIR} --verbose
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/rbd
-  DEPENDS rbd)
-
+distutils_add_cython_module(cython_rbd ${CMAKE_CURRENT_SOURCE_DIR}/rbd.pyx)
+add_dependencies(cython_rbd rbd)
+distutils_install_cython_module(cython_rbd)

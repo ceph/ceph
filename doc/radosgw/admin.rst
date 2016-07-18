@@ -310,7 +310,7 @@ storage size in megabytes.
   the maximum number of objects. A negative value disables this setting.
   
 - **Maximum Size:** The ``--max-size`` option allows you to specify a quota
-  for the maximum number of bytes. A negative value disables this setting.
+  size in B/K/M/G/T. A negative value disables this setting.
   
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a 
@@ -327,7 +327,7 @@ For example::
 
 For example:: 
 
-	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024
+	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
 
 
 A negative value for num objects and / or max size means that the
@@ -400,6 +400,15 @@ To see how much of the quota a user has consumed, execute the following::
 .. note:: You should execute ``radosgw-admin user stats`` with the 
    ``--sync-stats`` option to receive the latest data.
 
+Default Quotas
+--------------
+
+You can set default quotas in the config.  These defaults are used when
+creating a new user and have no effect on existing users. If the
+relevant default quota is set in config, then that quota is set on the
+new user, and that quota is enabled.  See ``rgw bucket default quota max objects``,
+``rgw bucket default quota max size``, ``rgw user default quota max objects``, and
+``rgw user default quota max size`` in `Ceph Object Gateway Config Reference`_
 
 Reading / Writing Global Quotas
 -------------------------------
@@ -468,3 +477,4 @@ ranges for trim operations. ::
 
 .. _radosgw-admin: ../../man/8/radosgw-admin/
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
+.. _Ceph Object Gateway Config Reference: ../config-ref/

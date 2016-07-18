@@ -63,6 +63,12 @@ int get_pool_image_snapshot_names(
     SnapshotPresence snapshot_presence, SpecValidation spec_validation,
     bool image_required = true);
 
+int get_pool_group_names(const boost::program_options::variables_map &vm,
+			 argument_types::ArgumentModifier mod,
+			 size_t *spec_arg_index,
+			 std::string *pool_name,
+			 std::string *group_name);
+
 int get_pool_journal_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,

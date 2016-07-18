@@ -182,7 +182,7 @@ struct frag_info_t : public scatter_info_t {
 
   // *this += cur - acc;
   void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
-    if (!(cur.mtime == acc.mtime)) {
+    if (cur.mtime > mtime) {
       mtime = cur.mtime;
       touched_mtime = true;
     }
@@ -707,12 +707,12 @@ struct session_info_t {
     completed_flushes.clear();
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<session_info_t*>& ls);
 };
-WRITE_CLASS_ENCODER(session_info_t)
+WRITE_CLASS_ENCODER_FEATURES(session_info_t)
 
 
 // =======
@@ -721,8 +721,10 @@ WRITE_CLASS_ENCODER(session_info_t)
 struct dentry_key_t {
   snapid_t snapid;
   const char *name;
-  dentry_key_t() : snapid(0), name(0) {}
-  dentry_key_t(snapid_t s, const char *n) : snapid(s), name(n) {}
+  __u32 hash;
+  dentry_key_t() : snapid(0), name(0), hash(0) {}
+  dentry_key_t(snapid_t s, const char *n, __u32 h=0) :
+    snapid(s), name(n), hash(h) {}
 
   bool is_valid() { return name || snapid; }
 
@@ -774,11 +776,15 @@ inline std::ostream& operator<<(std::ostream& out, const dentry_key_t &k)
 inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
 {
   /*
-   * order by name, then snap
+   * order by hash, name, snap
    */
-  int c = strcmp(k1.name, k2.name);
-  return 
-    c < 0 || (c == 0 && k1.snapid < k2.snapid);
+  int c = ceph_frag_value(k1.hash) - ceph_frag_value(k2.hash);
+  if (c)
+    return c < 0;
+  c = strcmp(k1.name, k2.name);
+  if (c)
+    return c < 0;
+  return k1.snapid < k2.snapid;
 }
 
 
@@ -1336,6 +1342,7 @@ class MDSCacheObject {
 
 
   // -- wait --
+  const static uint64_t WAIT_ORDERED	 = (1ull<<61);
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
   const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
 
@@ -1544,7 +1551,8 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  compact_multimap<uint64_t, MDSInternalContextBase*>  waiting;
+  compact_multimap<uint64_t, pair<uint64_t, MDSInternalContextBase*> > waiting;
+  static uint64_t last_wait_seq;
 
  public:
   bool is_waiter_for(uint64_t mask, uint64_t min=0) {
@@ -1553,7 +1561,7 @@ protected:
       while (min & (min-1))  // if more than one bit is set
 	min &= min-1;        //  clear LSB
     }
-    for (compact_multimap<uint64_t,MDSInternalContextBase*>::iterator p = waiting.lower_bound(min);
+    for (auto p = waiting.lower_bound(min);
 	 p != waiting.end();
 	 ++p) {
       if (p->first & mask) return true;
@@ -1564,7 +1572,15 @@ protected:
   virtual void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
     if (waiting.empty())
       get(PIN_WAITER);
-    waiting.insert(pair<uint64_t,MDSInternalContextBase*>(mask, c));
+
+    uint64_t seq = 0;
+    if (mask & WAIT_ORDERED) {
+      seq = ++last_wait_seq;
+      mask &= ~WAIT_ORDERED;
+    }
+    waiting.insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
+			    mask,
+			    pair<uint64_t, MDSInternalContextBase*>(seq, c)));
 //    pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this)) 
 //			       << "add_waiter " << hex << mask << dec << " " << c
 //			       << " on " << *this
@@ -1573,10 +1589,18 @@ protected:
   }
   virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
     if (waiting.empty()) return;
-    compact_multimap<uint64_t,MDSInternalContextBase*>::iterator it = waiting.begin();
-    while (it != waiting.end()) {
+
+    // process ordered waiters in the same order that they were added.
+    std::map<uint64_t, MDSInternalContextBase*> ordered_waiters;
+
+    for (auto it = waiting.begin();
+	 it != waiting.end(); ) {
       if (it->first & mask) {
-	ls.push_back(it->second);
+
+	if (it->second.first > 0)
+	  ordered_waiters.insert(it->second);
+	else
+	  ls.push_back(it->second.second);
 //	pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this))
 //				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 //				   << " tag " << hex << it->first << dec
@@ -1590,6 +1614,11 @@ protected:
 //				   << dendl;
 	++it;
       }
+    }
+    for (auto it = ordered_waiters.begin();
+	 it != ordered_waiters.end();
+	 ++it) {
+      ls.push_back(it->second);
     }
     if (waiting.empty())
       put(PIN_WAITER);

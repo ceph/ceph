@@ -41,6 +41,7 @@ using namespace libradosstriper;
 #include <stdexcept>
 #include <climits>
 #include <locale>
+#include <memory>
 
 #include "cls/lock/cls_lock_client.h"
 #include "include/compat.h"
@@ -219,6 +220,8 @@ void usage(ostream& out)
 "   --read-percent                   percent of operations that are read\n"
 "   --target-throughput              target throughput (in bytes)\n"
 "   --run-length                     total time (in seconds)\n"
+"CACHE POOLS OPTIONS:\n"
+"   --with-clones                    include clones when doing flush or evict\n"
     ;
 }
 
@@ -1189,22 +1192,59 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
 	io_ctx.locator_set_key(string());
       }
       io_ctx.set_namespace(i->get_nspace());
-      if (blocking)
-	r = do_cache_flush(io_ctx, i->get_oid());
-      else
-	r = do_cache_try_flush(io_ctx, i->get_oid());
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      r = io_ctx.list_snaps(i->get_oid(), &ls);
       if (r < 0) {
-	cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
-	     << cpp_strerror(r) << std::endl;
-	++errors;
-	continue;
+        cerr << "error listing snap shots " << i->get_nspace() << "/" << i->get_oid() << ": "
+             << cpp_strerror(r) << std::endl;
+        ++errors;
+        continue;
       }
-      r = do_cache_evict(io_ctx, i->get_oid());
-      if (r < 0) {
-	cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
-	     << cpp_strerror(r) << std::endl;
-	++errors;
-	continue;
+      std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+      // no snapshots
+      if (ci == ls.clones.end()) {
+        io_ctx.snap_set_read(CEPH_NOSNAP);
+        if (blocking)
+          r = do_cache_flush(io_ctx, i->get_oid());
+        else
+          r = do_cache_try_flush(io_ctx, i->get_oid());
+        if (r < 0) {
+          cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
+               << cpp_strerror(r) << std::endl;
+          ++errors;
+          continue;
+        }
+        r = do_cache_evict(io_ctx, i->get_oid());
+        if (r < 0) {
+          cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
+               << cpp_strerror(r) << std::endl;
+          ++errors;
+          continue;
+        }
+      } else {
+      // has snapshots
+        for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+             ci != ls.clones.end(); ++ci) {
+          io_ctx.snap_set_read(ci->cloneid);
+          if (blocking)
+	    r = do_cache_flush(io_ctx, i->get_oid());
+          else
+	    r = do_cache_try_flush(io_ctx, i->get_oid());
+          if (r < 0) {
+	    cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
+	         << cpp_strerror(r) << std::endl;
+	    ++errors;
+	    break;
+          }
+          r = do_cache_evict(io_ctx, i->get_oid());
+          if (r < 0) {
+	    cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
+	         << cpp_strerror(r) << std::endl;
+	    ++errors;
+	    break;
+          }
+        }
       }
     }
   }
@@ -1511,6 +1551,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool cleanup = true;
   bool no_verify = false;
   bool use_striper = false;
+  bool with_clones = false;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
@@ -1717,6 +1758,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("write-dest-xattr");
   if (i != opts.end()) {
     bench_write_dest |= static_cast<int>(OP_WRITE_DEST_XATTR);
+  }
+  i = opts.find("with-clones");
+  if (i != opts.end()) {
+    with_clones = true;
   }
 
   // open rados
@@ -2624,7 +2669,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "successfully created pool " << nargs[1] << std::endl;
   }
   else if (strcmp(nargs[0], "cppool") == 0) {
-    if (nargs.size() != 3)
+    bool force = nargs.size() == 4 && !strcmp(nargs[3], "--yes-i-really-mean-it");
+    if (nargs.size() != 3 && !(nargs.size() == 4 && force))
       usage_exit();
     const char *src_pool = nargs[1];
     const char *target_pool = nargs[2];
@@ -2633,6 +2679,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "cannot copy pool into itself" << std::endl;
       ret = -1;
       goto out;
+    }
+
+    cerr << "WARNING: pool copy does not preserve user_version, which some "
+	 << "    apps may rely on." << std::endl;
+
+    if (rados.get_pool_is_selfmanaged_snaps_mode(src_pool)) {
+      cerr << "WARNING: pool " << src_pool << " has selfmanaged snaps, which are not preserved\n"
+	   << "    by the cppool operation.  This will break any snapshot user."
+	   << std::endl;
+      if (!force) {
+	cerr << "    If you insist on making a broken copy, you can pass\n"
+	     << "    --yes-i-really-mean-it to proceed anyway."
+	     << std::endl;
+	exit(1);
+      }
     }
 
     ret = do_copy_pool(rados, src_pool, target_pool);
@@ -3134,31 +3195,100 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = do_cache_flush(io_ctx, oid);
-    if (ret < 0) {
-      cerr << "error from cache-flush " << oid << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (with_clones) {
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      ret = io_ctx.list_snaps(oid, &ls);
+      if (ret < 0) {
+        cerr << "error listing snapshots " << pool_name << "/" << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+           ci != ls.clones.end(); ++ci) {
+        if (snapid != CEPH_NOSNAP && ci->cloneid > snapid)
+          break;
+        io_ctx.snap_set_read(ci->cloneid);
+        ret = do_cache_flush(io_ctx, oid);
+        if (ret < 0) {
+          cerr << "error from cache-flush " << oid << ": "
+               << cpp_strerror(ret) << std::endl;
+          goto out;
+        }
+      }
+    } else {
+      ret = do_cache_flush(io_ctx, oid);
+      if (ret < 0) {
+        cerr << "error from cache-flush " << oid << ": "
+	     << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
   } else if (strcmp(nargs[0], "cache-try-flush") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = do_cache_try_flush(io_ctx, oid);
-    if (ret < 0) {
-      cerr << "error from cache-try-flush " << oid << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (with_clones) {
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      ret = io_ctx.list_snaps(oid, &ls);
+      if (ret < 0) {
+        cerr << "error listing snapshots " << pool_name << "/" << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+           ci != ls.clones.end(); ++ci) {
+        if (snapid != CEPH_NOSNAP && ci->cloneid > snapid)
+          break;
+        io_ctx.snap_set_read(ci->cloneid);
+        ret = do_cache_try_flush(io_ctx, oid);
+        if (ret < 0) {
+          cerr << "error from cache-flush " << oid << ": "
+               << cpp_strerror(ret) << std::endl;
+          goto out;
+        }
+      }
+    } else {
+      ret = do_cache_try_flush(io_ctx, oid);
+      if (ret < 0) {
+        cerr << "error from cache-flush " << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
   } else if (strcmp(nargs[0], "cache-evict") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = do_cache_evict(io_ctx, oid);
-    if (ret < 0) {
-      cerr << "error from cache-evict " << oid << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (with_clones) {
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      ret = io_ctx.list_snaps(oid, &ls);
+      if (ret < 0) {
+        cerr << "error listing snapshots " << pool_name << "/" << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+           ci != ls.clones.end(); ++ci) {
+        if (snapid != CEPH_NOSNAP && ci->cloneid > snapid)
+          break;
+        io_ctx.snap_set_read(ci->cloneid);
+        ret = do_cache_evict(io_ctx, oid);
+        if (ret < 0) {
+          cerr << "error from cache-flush " << oid << ": "
+               << cpp_strerror(ret) << std::endl;
+          goto out;
+        }
+      }
+    } else {
+      ret = do_cache_evict(io_ctx, oid);
+      if (ret < 0) {
+        cerr << "error from cache-flush " << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
   } else if (strcmp(nargs[0], "cache-flush-evict-all") == 0) {
     if (!pool_name)
@@ -3268,12 +3398,36 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  std::map < std::string, std::string > opts;
+  std::string val;
+
+  // Necessary to support usage of -f for formatting,
+  // since global_init will remove the -f using ceph
+  // argparse procedures.
+  for (auto j = args.begin(); j != args.end(); ++j) {
+    if (strcmp(*j, "--") == 0) {
+      break;
+    } else if ((j+1) == args.end()) {
+      // This can't be a formatting call (no format arg)
+      break; 
+    } else if (strcmp(*j, "-f") == 0) {
+      val = *(j+1);
+      unique_ptr<Formatter> formatter(Formatter::create(val.c_str()));
+      
+      if (formatter) {
+	j = args.erase(j);
+	opts["format"] = val;
+	
+	j = args.erase(j);
+	break;
+      }
+    }
+  }
+
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  std::map < std::string, std::string > opts;
   std::vector<const char*>::iterator i;
-  std::string val;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -3377,6 +3531,8 @@ int main(int argc, const char **argv)
       opts["write-dest-obj"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
       opts["write-dest-xattr"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
+      opts["with-clones"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();

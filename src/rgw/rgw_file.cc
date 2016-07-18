@@ -208,13 +208,21 @@ namespace rgw {
     return rc;
   }
 
-  int RGWLibFS::unlink(RGWFileHandle* parent, const char *name)
+  int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, uint32_t flags)
   {
     int rc = 0;
+    RGWFileHandle* parent = nullptr;
 
-    /* atomicity */
-    LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_LOCK);
-    RGWFileHandle* rgw_fh = get<0>(fhr);
+    if (unlikely(flags & RGWFileHandle::FLAG_UNLINK_THIS)) {
+      /* LOCKED */
+      parent = rgw_fh->get_parent();
+    } else {
+      /* atomicity */
+      parent = rgw_fh;
+      LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_LOCK);
+      rgw_fh = get<0>(fhr);
+      /* LOCKED */
+    }
 
     if (parent->is_root()) {
       /* XXXX remove uri and deal with bucket and object names */
@@ -293,13 +301,11 @@ namespace rgw {
       break;
       case 1:
       {
-	RGWDeleteObjRequest req(cct, get_user(), src_fh->bucket_name(),
-				src_name);
-	rc = rgwlib.get_fe()->execute_req(&req);
-	if (! rc) {
-	  rc = req.get_ret();
+	rc = this->unlink(rgw_fh /* LOCKED */, _src_name,
+			  RGWFileHandle::FLAG_UNLINK_THIS);
+	/* !LOCKED, -ref */
+	if (! rc)
 	  goto out;
-	}
       }
       break;
       default:
@@ -307,12 +313,6 @@ namespace rgw {
       } /* switch */
     } /* ix */
   out:
-    if (rgw_fh) {
-      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-      fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
-      rgw_fh->mtx.unlock();
-      unref(rgw_fh);
-    }
     return rc;
   } /* RGWLibFS::rename */
 
@@ -477,6 +477,27 @@ namespace rgw {
     return rgw_fh->stat(st);
   } /* RGWLibFS::getattr */
 
+  int RGWLibFS::setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
+			uint32_t flags)
+  {
+    int rc, rc2;
+    buffer::list ux_key, ux_attrs;
+    string obj_name{rgw_fh->relative_object_name()};
+
+    RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
+
+    rgw_fh->create_stat(st, mask);
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+
+    /* save attrs */
+    req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+
+    return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
+  } /* RGWLibFS::setattr */
+
   void RGWLibFS::close()
   {
     state.flags |= FLAG_CLOSED;
@@ -633,6 +654,7 @@ namespace rgw {
 			   void *buffer)
   {
     using std::get;
+
     lock_guard guard(mtx);
 
     int rc = 0;
@@ -642,14 +664,34 @@ namespace rgw {
       return -EISDIR;
 
     if (! f->write_req) {
+      /* guard--we do not support (e.g., COW-backed) partial writes */
+      if (off != 0) {
+	lsubdout(fs->get_context(), rgw, 5)
+	  << __func__
+	  << object_name()
+	  << " non-0 initial write position " << off
+	  << dendl;
+	return -EIO;
+      }
+
       /* start */
       std::string object_name = relative_object_name();
       f->write_req =
 	new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
 			    bucket_name(), object_name);
       rc = rgwlib.get_fe()->start_req(f->write_req);
-      if (rc < 0)
+      if (rc < 0) {
+	lsubdout(fs->get_context(), rgw, 5)
+	  << __func__
+	  << this->object_name()
+	  << " write start failed " << off
+	  << " (" << rc << ")"
+	  << dendl;
+	/* zap failed write transaction */
+	delete f->write_req;
+	f->write_req = nullptr;
         return -EIO;
+      }
     }
 
     buffer::list bl;
@@ -665,9 +707,23 @@ namespace rgw {
     f->write_req->put_data(off, bl);
     rc = f->write_req->exec_continue();
 
-    size_t min_size = off + len;
-    if (min_size > get_size())
-      set_size(min_size);
+    if (rc == 0) {
+      size_t min_size = off + len;
+      if (min_size > get_size())
+	set_size(min_size);
+    } else {
+      /* continuation failed (e.g., non-contiguous write position) */
+      lsubdout(fs->get_context(), rgw, 5)
+	<< __func__
+	<< object_name()
+	<< " failed write at position " << off
+	<< " (fails write transaction) "
+	<< dendl;
+      /* zap failed write transaction */
+      delete f->write_req;
+      f->write_req = nullptr;
+      rc = -EIO;
+    }
 
     *bytes_written = (rc == 0) ? len : 0;
     return rc;
@@ -738,10 +794,10 @@ namespace rgw {
     struct req_state* s = get_state();
     op_ret = 0;
 
-#if 0 // TODO: check offsets
-    if (next_off != last_off)
+    /* check guards (e.g., contig write) */
+    if (eio)
       return -EIO;
-#endif
+
     size_t len = data.length();
     if (! len)
       return 0;
@@ -1123,8 +1179,10 @@ int rgw_setattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st,
 		uint32_t mask, uint32_t flags)
 {
-  /* XXX no-op */
-  return 0;
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  return fs->setattr(rgw_fh, st, mask, flags);
 }
 
 /*
@@ -1312,8 +1370,8 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 /*
    write data to file (vector)
 */
-  int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		 rgw_uio *uio, uint32_t flags)
+int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	      rgw_uio *uio, uint32_t flags)
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);

@@ -148,6 +148,11 @@ public:
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
 
+  // RBD consistency groups support functions
+  int group_create(IoCtx& io_ctx, const char *group_name);
+  int group_remove(IoCtx& io_ctx, const char *group_name);
+  int group_list(IoCtx& io_ctx, std::vector<std::string>& names);
+
 private:
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);
@@ -204,6 +209,8 @@ public:
   /* object map feature */
   int rebuild_object_map(ProgressContext &prog_ctx);
 
+  int check_object_map(ProgressContext &prog_ctx);
+
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
   int copy3(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
@@ -247,6 +254,8 @@ public:
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
   int snap_rename(const char *srcname, const char *dstname);
+  int snap_get_limit(uint64_t *limit);
+  int snap_set_limit(uint64_t limit);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

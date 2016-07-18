@@ -5,7 +5,7 @@
   
   Positional arguments:
     <command>
-      bench-write                 Simple write benchmark.
+      bench                       Simple benchmark.
       children                    Display children of snapshot.
       clone                       Clone a snapshot into a COW child image.
       copy (cp)                   Copy src image to dest.
@@ -20,6 +20,9 @@
       feature enable              Enable the specified image feature.
       flatten                     Fill clone with parent data (make it
                                   independent).
+      group create                Create a consistency group.
+      group list (group ls)       List rbd consistency groups.
+      group remove (group rm)     Delete a consistency group.
       image-meta get              Image metadata get the value associated with
                                   the key.
       image-meta list             Image metadata list keys with values.
@@ -60,12 +63,15 @@
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
       nbd unmap                   Unmap a nbd device.
+      object-map check            Verify the object map is correct.
       object-map rebuild          Rebuild an invalid object map.
       remove (rm)                 Delete an image.
       rename (mv)                 Rename image within pool.
       resize                      Resize (expand or shrink) image.
       showmapped                  Show the rbd images mapped by the kernel.
       snap create (snap add)      Create a snapshot.
+      snap limit clear            Remove snapshot limit.
+      snap limit set              Limit the number of snapshots.
       snap list (snap ls)         Dump list of image snapshots.
       snap protect                Prevent a snapshot from being deleted.
       snap purge                  Deletes all snapshots.
@@ -90,13 +96,13 @@
   
   See 'rbd help <command>' for help on a specific command.
   $ rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g' | while read -r line; do echo rbd help $line ; rbd help $line; done
-  rbd help bench-write
-  usage: rbd bench-write [--pool <pool>] [--image <image>] [--io-size <io-size>] 
-                         [--io-threads <io-threads>] [--io-total <io-total>] 
-                         [--io-pattern <io-pattern>] 
-                         <image-spec> 
+  rbd help bench
+  usage: rbd bench [--pool <pool>] [--image <image>] [--io-size <io-size>] 
+                   [--io-threads <io-threads>] [--io-total <io-total>] 
+                   [--io-pattern <io-pattern>] --io-type <io-type> 
+                   <image-spec> 
   
-  Simple write benchmark.
+  Simple benchmark.
   
   Positional arguments
     <image-spec>         image specification
@@ -105,10 +111,11 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --io-size arg        write size (in B/K/M/G/T)
+    --io-size arg        IO size (in B/K/M/G/T)
     --io-threads arg     ios in flight
-    --io-total arg       total size to write (in B/K/M/G/T)
-    --io-pattern arg     write pattern (rand or seq)
+    --io-total arg       total size for IO (in B/K/M/G/T)
+    --io-pattern arg     IO pattern (rand or seq)
+    --io-type arg        IO type (read or write)
   
   rbd help children
   usage: rbd children [--pool <pool>] [--image <image>] [--snap <snap>] 
@@ -398,6 +405,44 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --no-progress        disable progress output
+  
+  rbd help group create
+  usage: rbd group create [--pool <pool>] [--group <group>] 
+                          <group-spec> 
+  
+  Create a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+  
+  rbd help group list
+  usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 
+  
+  List rbd consistency groups.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help group remove
+  usage: rbd group remove [--pool <pool>] [--group <group>] 
+                          <group-spec> 
+  
+  Delete a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--image <image>] 
@@ -979,6 +1024,23 @@
   Positional arguments
     <device-spec>        specify nbd device
   
+  rbd help object-map check
+  usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
+                              [--no-progress] 
+                              <image-or-snap-spec> 
+  
+  Verify the object map is correct.
+  
+  Positional arguments
+    <image-or-snap-spec>  image or snapshot specification
+                          (example: [<pool-name>/]<image-name>[@<snap-name>])
+  
+  Optional arguments
+    -p [ --pool ] arg     pool name
+    --image arg           image name
+    --snap arg            snapshot name
+    --no-progress         disable progress output
+  
   rbd help object-map rebuild
   usage: rbd object-map rebuild [--pool <pool>] [--image <image>] 
                                 [--snap <snap>] [--no-progress] 
@@ -1071,6 +1133,35 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+  
+  rbd help snap limit clear
+  usage: rbd snap limit clear [--pool <pool>] [--image <image>] 
+                              <image-spec> 
+  
+  Remove snapshot limit.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help snap limit set
+  usage: rbd snap limit set [--pool <pool>] [--image <image>] [--limit <limit>] 
+                            <image-spec> 
+  
+  Limit the number of snapshots.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --limit arg          maximum allowed snapshot count
   
   rbd help snap list
   usage: rbd snap list [--pool <pool>] [--image <image>] [--format <format>] 

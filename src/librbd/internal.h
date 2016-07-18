@@ -95,18 +95,22 @@ namespace librbd {
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
+  int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
+             std::map<std::pair<int64_t, std::string >, std::set<std::string> >& image_info);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count);
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     ImageOptions& opts);
+	     ImageOptions& opts,
+             const std::string &non_primary_global_image_id,
+             const std::string &primary_mirror_uuid);
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
-		int order, uint64_t features, uint64_t stripe_unit,
-		uint64_t stripe_count, uint8_t journal_order,
-		uint8_t journal_splay_width,
-		const std::string &journal_pool,
+                int order, uint64_t features, uint64_t stripe_unit,
+                uint64_t stripe_count, uint8_t journal_order,
+                uint8_t journal_splay_width,
+                const std::string &journal_pool,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
@@ -115,6 +119,10 @@ namespace librbd {
 	    uint64_t stripe_unit, int stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
+  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const char *c_name,
+            ImageOptions& c_opts,
+            const std::string &non_primary_global_image_id,
+            const std::string &primary_mirror_uuid);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
@@ -132,6 +140,8 @@ namespace librbd {
 	     ProgressContext& prog_ctx, bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
+  int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
+  int snap_set_limit(ImageCtx *ictx, uint64_t limit);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
@@ -209,6 +219,11 @@ namespace librbd {
                             size_t info_size);
   int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
 			      size_t status_size);
+
+  // Consistency groups functions
+  int group_create(librados::IoCtx& io_ctx, const char *imgname);
+  int group_remove(librados::IoCtx& io_ctx, const char *group_name);
+  int group_list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
 }
 
 #endif

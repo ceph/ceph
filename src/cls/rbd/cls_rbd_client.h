@@ -66,6 +66,8 @@ namespace librbd {
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   parent_spec pspec, uint64_t parent_overlap);
+    void set_parent(librados::ObjectWriteOperation *op,
+                    parent_spec pspec, uint64_t parent_overlap);
     void get_flags_start(librados::ObjectReadOperation *op,
                          const std::vector<snapid_t> &snap_ids);
     int get_flags_finish(bufferlist::iterator *it, uint64_t *flags,
@@ -122,6 +124,10 @@ namespace librbd {
 			      snapid_t snap_id, uint8_t protection_status);
     void set_protection_status(librados::ObjectWriteOperation *op,
                                snapid_t snap_id, uint8_t protection_status);
+    int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
+			   uint64_t *limit);
+    void snapshot_set_limit(librados::ObjectWriteOperation *op,
+			    uint64_t limit);
 
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op);
     int get_stripe_unit_count_finish(bufferlist::iterator *it,
@@ -243,6 +249,10 @@ namespace librbd {
                                   std::string *image_id);
     int mirror_image_get(librados::IoCtx *ioctx, const std::string &image_id,
 			 cls::rbd::MirrorImage *mirror_image);
+    void mirror_image_get_start(librados::ObjectReadOperation *op,
+                                const std::string &image_id);
+    int mirror_image_get_finish(bufferlist::iterator *iter,
+			        cls::rbd::MirrorImage *mirror_image);
     int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
 			 const cls::rbd::MirrorImage &mirror_image);
     int mirror_image_remove(librados::IoCtx *ioctx,
@@ -281,6 +291,16 @@ namespace librbd {
 	std::map<cls::rbd::MirrorImageStatusState, int> *states);
     int mirror_image_status_remove_down(librados::IoCtx *ioctx);
     void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
+
+    // Consistency groups functions
+    int group_create(librados::IoCtx *ioctx, const std::string &oid);
+    int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
+		    const std::string &start, uint64_t max_return,
+		    map<string, string> *groups);
+    int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
+	           const std::string &name, const std::string &id);
+    int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id);
 
   } // namespace cls_client
 } // namespace librbd

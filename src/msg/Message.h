@@ -422,8 +422,8 @@ public:
   uint64_t get_tid() const { return header.tid; }
   void set_tid(uint64_t t) { header.tid = t; }
 
-  unsigned get_seq() const { return header.seq; }
-  void set_seq(unsigned s) { header.seq = s; }
+  uint64_t get_seq() const { return header.seq; }
+  void set_seq(uint64_t s) { header.seq = s; }
 
   unsigned get_priority() const { return header.priority; }
   void set_priority(__s16 p) { header.priority = p; }
@@ -470,7 +470,7 @@ extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
 			       bufferlist& middle, bufferlist& data);
-inline ostream& operator<<(ostream& out, Message& m) {
+inline ostream& operator<<(ostream &out, const Message &m) {
   m.print(out);
   if (m.get_header().version)
     out << " v" << m.get_header().version;

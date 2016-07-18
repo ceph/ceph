@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OPERATIONS_H
 
 #include "include/int_types.h"
+#include "librbd/operation/ObjectMapIterate.h"
 #include <atomic>
 #include <string>
 #include <boost/function.hpp>
@@ -27,6 +28,13 @@ public:
   int rebuild_object_map(ProgressContext &prog_ctx);
   void execute_rebuild_object_map(ProgressContext &prog_ctx,
                                   Context *on_finish);
+
+  int check_object_map(ProgressContext &prog_ctx);
+  void check_object_map(ProgressContext &prog_ctx, Context *on_finish);
+
+  void object_map_iterate(ProgressContext &prog_ctx,
+			  operation::ObjectIterateWork<ImageCtxT> handle_mismatch,
+			  Context* on_finish);
 
   int rename(const char *dstname);
   void execute_rename(const char *dstname, Context *on_finish);
@@ -57,6 +65,9 @@ public:
 
   int snap_unprotect(const char *snap_name);
   void execute_snap_unprotect(const char *snap_name, Context *on_finish);
+
+  int snap_set_limit(uint64_t limit);
+  void execute_snap_set_limit(uint64_t limit, Context *on_finish);
 
   int prepare_image_update();
 

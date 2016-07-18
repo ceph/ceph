@@ -31,15 +31,19 @@ namespace librbd {
   int AioCompletion::wait_for_complete() {
     tracepoint(librbd, aio_wait_for_complete_enter, this);
     lock.Lock();
-    while (!done)
+    while (state != STATE_COMPLETE)
       cond.Wait(lock);
     lock.Unlock();
     tracepoint(librbd, aio_wait_for_complete_exit, 0);
     return 0;
   }
 
-  void AioCompletion::finalize(CephContext *cct, ssize_t rval)
+  void AioCompletion::finalize(ssize_t rval)
   {
+    assert(lock.is_locked());
+    assert(ictx != nullptr);
+    CephContext *cct = ictx->cct;
+
     ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << ", "
                    << "read_buf=" << reinterpret_cast<void*>(read_buf) << ", "
                    << "real_bl=" <<  reinterpret_cast<void*>(read_bl) << dendl;
@@ -67,10 +71,13 @@ namespace librbd {
     }
   }
 
-  void AioCompletion::complete(CephContext *cct) {
+  void AioCompletion::complete() {
+    assert(lock.is_locked());
+    assert(ictx != nullptr);
+    CephContext *cct = ictx->cct;
+
     tracepoint(librbd, aio_complete_enter, this, rval);
     utime_t elapsed;
-    assert(lock.is_locked());
     elapsed = ceph_clock_now(cct) - start_time;
     switch (aio_type) {
     case AIO_TYPE_OPEN:
@@ -95,7 +102,7 @@ namespace librbd {
       ictx->journal->commit_io_event(journal_tid, rval);
     }
 
-    done = true;
+    state = STATE_CALLBACK;
     if (complete_cb) {
       lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
@@ -108,6 +115,8 @@ namespace librbd {
       ictx->completed_reqs_lock.Unlock();
       ictx->event_socket.notify();
     }
+
+    state = STATE_COMPLETE;
     cond.Signal();
 
     // note: possible for image to be closed after op marked finished
@@ -118,47 +127,57 @@ namespace librbd {
   }
 
   void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
-    if (ictx == NULL) {
+    Mutex::Locker locker(lock);
+    if (ictx == nullptr) {
       ictx = i;
       aio_type = t;
       start_time = ceph_clock_now(ictx->cct);
     }
   }
 
-  void AioCompletion::start_op(ImageCtx *i, aio_type_t t) {
-    init_time(i, t);
-
+  void AioCompletion::start_op(bool ignore_type) {
     Mutex::Locker locker(lock);
-    if (!done && !async_op.started()) {
+    assert(ictx != nullptr);
+    assert(!async_op.started());
+    if (state == STATE_PENDING && (ignore_type || aio_type != AIO_TYPE_FLUSH)) {
       async_op.start_op(*ictx);
     }
   }
 
-  void AioCompletion::fail(CephContext *cct, int r)
+  void AioCompletion::fail(int r)
   {
+    lock.Lock();
+    assert(ictx != nullptr);
+    CephContext *cct = ictx->cct;
+
     lderr(cct) << this << " " << __func__ << ": " << cpp_strerror(r)
                << dendl;
-    lock.Lock();
     assert(pending_count == 0);
     rval = r;
-    complete(cct);
+    complete();
     put_unlock();
   }
 
-  void AioCompletion::set_request_count(CephContext *cct, uint32_t count) {
-    ldout(cct, 20) << this << " " << __func__ << ": pending=" << count << dendl;
+  void AioCompletion::set_request_count(uint32_t count) {
     lock.Lock();
+    assert(ictx != nullptr);
+    CephContext *cct = ictx->cct;
+
+    ldout(cct, 20) << this << " " << __func__ << ": pending=" << count << dendl;
     assert(pending_count == 0);
     pending_count = count;
     lock.Unlock();
 
     // if no pending requests, completion will fire now
-    unblock(cct);
+    unblock();
   }
 
-  void AioCompletion::complete_request(CephContext *cct, ssize_t r)
+  void AioCompletion::complete_request(ssize_t r)
   {
     lock.Lock();
+    assert(ictx != nullptr);
+    CephContext *cct = ictx->cct;
+
     if (rval >= 0) {
       if (r < 0 && r != -EEXIST)
 	rval = r;
@@ -171,15 +190,15 @@ namespace librbd {
     ldout(cct, 20) << this << " " << __func__ << ": cb=" << complete_cb << ", "
                    << "pending=" << pending_count << dendl;
     if (!count && blockers == 0) {
-      finalize(cct, rval);
-      complete(cct);
+      finalize(rval);
+      complete();
     }
     put_unlock();
   }
 
   void AioCompletion::associate_journal_event(uint64_t tid) {
     Mutex::Locker l(lock);
-    assert(!done);
+    assert(state == STATE_PENDING);
     journal_tid = tid;
   }
 
@@ -188,7 +207,7 @@ namespace librbd {
     bool done;
     {
       Mutex::Locker l(lock);
-      done = this->done;
+      done = this->state == STATE_COMPLETE;
     }
     tracepoint(librbd, aio_is_complete_exit, done);
     return done;
@@ -205,24 +224,27 @@ namespace librbd {
 
   void C_AioRead::finish(int r)
   {
-    ldout(m_cct, 10) << "C_AioRead::finish() " << this << " r = " << r << dendl;
+    m_completion->lock.Lock();
+    CephContext *cct = m_completion->ictx->cct;
+    ldout(cct, 10) << "C_AioRead::finish() " << this << " r = " << r << dendl;
+
     if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
-      ldout(m_cct, 10) << " got " << m_req->m_ext_map
-		       << " for " << m_req->m_buffer_extents
-		       << " bl " << m_req->data().length() << dendl;
+      ldout(cct, 10) << " got " << m_req->m_ext_map
+		     << " for " << m_req->m_buffer_extents
+		     << " bl " << m_req->data().length() << dendl;
       // reads from the parent don't populate the m_ext_map and the overlap
       // may not be the full buffer.  compensate here by filling in m_ext_map
       // with the read extent when it is empty.
       if (m_req->m_ext_map.empty())
 	m_req->m_ext_map[m_req->m_object_off] = m_req->data().length();
 
-      m_completion->lock.Lock();
       m_completion->destriper.add_partial_sparse_result(
-	  m_cct, m_req->data(), m_req->m_ext_map, m_req->m_object_off,
+	  cct, m_req->data(), m_req->m_ext_map, m_req->m_object_off,
 	  m_req->m_buffer_extents);
-      m_completion->lock.Unlock();
       r = m_req->m_object_len;
     }
+    m_completion->lock.Unlock();
+
     C_AioRequest::finish(r);
   }
 

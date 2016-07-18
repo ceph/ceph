@@ -55,6 +55,7 @@ librbd_internal_la_SOURCES = \
 	librbd/object_map/UpdateRequest.cc \
 	librbd/operation/FlattenRequest.cc \
 	librbd/operation/RebuildObjectMapRequest.cc \
+	librbd/operation/ObjectMapIterate.cc \
 	librbd/operation/RenameRequest.cc \
 	librbd/operation/Request.cc \
 	librbd/operation/ResizeRequest.cc \
@@ -64,6 +65,7 @@ librbd_internal_la_SOURCES = \
 	librbd/operation/SnapshotRenameRequest.cc \
 	librbd/operation/SnapshotRollbackRequest.cc \
 	librbd/operation/SnapshotUnprotectRequest.cc \
+	librbd/operation/SnapshotLimitRequest.cc \
 	librbd/operation/TrimRequest.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
@@ -145,6 +147,7 @@ noinst_HEADERS += \
 	librbd/object_map/UpdateRequest.h \
 	librbd/operation/FlattenRequest.h \
 	librbd/operation/RebuildObjectMapRequest.h \
+	librbd/operation/ObjectMapIterate.h \
 	librbd/operation/RenameRequest.h \
 	librbd/operation/Request.h \
 	librbd/operation/ResizeRequest.h \
@@ -154,6 +157,7 @@ noinst_HEADERS += \
 	librbd/operation/SnapshotRenameRequest.h \
 	librbd/operation/SnapshotRollbackRequest.h \
 	librbd/operation/SnapshotUnprotectRequest.h \
+	librbd/operation/SnapshotLimitRequest.h \
 	librbd/operation/TrimRequest.h
 
 endif # WITH_RBD

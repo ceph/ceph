@@ -160,6 +160,11 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
     ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
+#define WRITE_CLASS_ENCODER_OPTIONAL_FEATURES(cl)				\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features = 0) {	\
+    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
+
 
 // string
 inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
@@ -374,6 +379,28 @@ inline void encode(const std::list<T>& ls, bufferlist& bl)
     encode(*p, bl);
 }
 template<class T>
+inline void encode(const std::list<T>& ls, bufferlist& bl, uint64_t features)
+{
+  // should i pre- or post- count?
+  if (!ls.empty()) {
+    unsigned pos = bl.length();
+    unsigned n = 0;
+    encode(n, bl);
+    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+      n++;
+      encode(*p, bl, features);
+    }
+    ceph_le32 en;
+    en = n;
+    bl.copy_in(pos, sizeof(en), (char*)&en);
+  } else {
+    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
+    encode(n, bl);
+    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+      encode(*p, bl, features);
+  }
+}
+template<class T>
 inline void decode(std::list<T>& ls, bufferlist::iterator& p)
 {
   __u32 n;
@@ -558,6 +585,18 @@ inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
 
 // vector (shared_ptr)
 template<class T>
+inline void encode(const std::vector<ceph::shared_ptr<T> >& v, bufferlist& bl,
+		   uint64_t features)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (typename std::vector<ceph::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
+    if (*p)
+      encode(**p, bl, features);
+    else
+      encode(T(), bl, features);
+}
+template<class T>
 inline void encode(const std::vector<ceph::shared_ptr<T> >& v, bufferlist& bl)
 {
   __u32 n = (__u32)(v.size());
@@ -736,6 +775,17 @@ inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
 
 // ceph::unordered_map
 template<class T, class U>
+inline void encode(const unordered_map<T,U>& m, bufferlist& bl,
+		   uint64_t features)
+{
+  __u32 n = (__u32)(m.size());
+  encode(n, bl);
+  for (typename unordered_map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl, features);
+    encode(p->second, bl, features);
+  }
+}
+template<class T, class U>
 inline void encode(const unordered_map<T,U>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
@@ -781,6 +831,14 @@ inline void decode(ceph::unordered_set<T>& m, bufferlist::iterator& p)
 }
 
 // deque
+template<class T>
+inline void encode(const std::deque<T>& ls, bufferlist& bl, uint64_t features)
+{
+  __u32 n = ls.size();
+  encode(n, bl);
+  for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    encode(*p, bl, features);
+}
 template<class T>
 inline void encode(const std::deque<T>& ls, bufferlist& bl)
 {
@@ -959,5 +1017,33 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
     if (bl.get_off() < struct_end)					\
       bl.advance(struct_end - bl.get_off());				\
   }
+
+/*
+ * Encoders/decoders to read from current offset in a file handle and
+ * encode/decode the data according to argument types.
+ */
+inline ssize_t decode_file(int fd, std::string &str)
+{
+  bufferlist bl;
+  __u32 len = 0;
+  bl.read_fd(fd, sizeof(len));
+  decode(len, bl);                                                                                                  
+  bl.read_fd(fd, len);
+  decode(str, bl);                                                                                                  
+  return bl.length();
+}
+
+inline ssize_t decode_file(int fd, bufferptr &bp)
+{
+  bufferlist bl;
+  __u32 len = 0;
+  bl.read_fd(fd, sizeof(len));
+  decode(len, bl);                                                                                                  
+  bl.read_fd(fd, len);
+  bufferlist::iterator bli = bl.begin();
+
+  decode(bp, bli);                                                                                                  
+  return bl.length();
+}
 
 #endif

@@ -93,7 +93,7 @@ daemons that aren't running::
 
 If an OSD is ``down``, start it:: 
 
-	sudo /etc/init.d/ceph -a start osd.1
+	sudo systemctl start ceph-osd@1
 
 See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
 restart.

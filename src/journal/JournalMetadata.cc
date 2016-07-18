@@ -416,48 +416,80 @@ JournalMetadata::JournalMetadata(ContextWQ *work_queue, SafeTimer *timer,
 }
 
 JournalMetadata::~JournalMetadata() {
-  if (m_initialized) {
-    shut_down();
-  }
-}
-
-void JournalMetadata::init(Context *on_init) {
+  Mutex::Locker locker(m_lock);
   assert(!m_initialized);
-  m_initialized = true;
-
-  int r = m_ioctx.watch2(m_oid, &m_watch_handle, &m_watch_ctx);
-  if (r < 0) {
-    lderr(m_cct) << __func__ << ": failed to watch journal"
-                 << cpp_strerror(r) << dendl;
-    on_init->complete(r);
-    return;
-  }
-
-  C_ImmutableMetadata *ctx = new C_ImmutableMetadata(this, on_init);
-  get_immutable_metadata(&m_order, &m_splay_width, &m_pool_id, ctx);
 }
 
-void JournalMetadata::shut_down() {
+void JournalMetadata::init(Context *on_finish) {
+  {
+    Mutex::Locker locker(m_lock);
+    assert(!m_initialized);
+    m_initialized = true;
+  }
+
+  // chain the init sequence (reverse order)
+  on_finish = utils::create_async_context_callback(
+    this, on_finish);
+  on_finish = new C_ImmutableMetadata(this, on_finish);
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      if (r < 0) {
+        lderr(m_cct) << __func__ << ": failed to watch journal"
+                     << cpp_strerror(r) << dendl;
+        Mutex::Locker locker(m_lock);
+        m_watch_handle = 0;
+        on_finish->complete(r);
+        return;
+      }
+
+      get_immutable_metadata(&m_order, &m_splay_width, &m_pool_id, on_finish);
+    });
+
+  librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+    on_finish, nullptr, utils::rados_ctx_callback);
+  int r = m_ioctx.aio_watch(m_oid, comp, &m_watch_handle, &m_watch_ctx);
+  assert(r == 0);
+  comp->release();
+}
+
+void JournalMetadata::shut_down(Context *on_finish) {
 
   ldout(m_cct, 20) << __func__ << dendl;
 
-  assert(m_initialized);
+  uint64_t watch_handle = 0;
   {
     Mutex::Locker locker(m_lock);
     m_initialized = false;
-
-    if (m_watch_handle != 0) {
-      m_ioctx.unwatch2(m_watch_handle);
-      m_watch_handle = 0;
-    }
+    std::swap(watch_handle, m_watch_handle);
   }
 
-  flush_commit_position();
-
-  librados::Rados rados(m_ioctx);
-  rados.watch_flush();
-
-  m_async_op_tracker.wait_for_ops();
+  // chain the shut down sequence (reverse order)
+  on_finish = utils::create_async_context_callback(
+    this, on_finish);
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      ldout(m_cct, 20) << "shut_down: waiting for ops" << dendl;
+      m_async_op_tracker.wait_for_ops(on_finish);
+    });
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      ldout(m_cct, 20) << "shut_down: flushing watch" << dendl;
+      librados::Rados rados(m_ioctx);
+      librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+        on_finish, nullptr, utils::rados_ctx_callback);
+      r = rados.aio_watch_flush(comp);
+      assert(r == 0);
+      comp->release();
+    });
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      flush_commit_position(on_finish);
+    });
+  if (watch_handle != 0) {
+    librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+      on_finish, nullptr, utils::rados_ctx_callback);
+    int r = m_ioctx.aio_unwatch(watch_handle, comp);
+    assert(r == 0);
+    comp->release();
+  } else {
+    on_finish->complete(0);
+  }
 }
 
 void JournalMetadata::get_immutable_metadata(uint8_t *order,
@@ -555,7 +587,7 @@ void JournalMetadata::get_tags(const boost::optional<uint64_t> &tag_class,
   ctx->send();
 }
 
-void JournalMetadata::add_listener(Listener *listener) {
+void JournalMetadata::add_listener(JournalMetadataListener *listener) {
   Mutex::Locker locker(m_lock);
   while (m_update_notifications > 0) {
     m_update_cond.Wait(m_lock);
@@ -563,7 +595,7 @@ void JournalMetadata::add_listener(Listener *listener) {
   m_listeners.push_back(listener);
 }
 
-void JournalMetadata::remove_listener(Listener *listener) {
+void JournalMetadata::remove_listener(JournalMetadataListener *listener) {
   Mutex::Locker locker(m_lock);
   while (m_update_notifications > 0) {
     m_update_cond.Wait(m_lock);
@@ -792,7 +824,7 @@ void JournalMetadata::handle_commit_position_task() {
 
 void JournalMetadata::schedule_watch_reset() {
   assert(m_timer_lock->is_locked());
-  m_timer->add_event_after(0.1, new C_WatchReset(this));
+  m_timer->add_event_after(1, new C_WatchReset(this));
 }
 
 void JournalMetadata::handle_watch_reset() {
@@ -803,8 +835,12 @@ void JournalMetadata::handle_watch_reset() {
 
   int r = m_ioctx.watch2(m_oid, &m_watch_handle, &m_watch_ctx);
   if (r < 0) {
-    lderr(m_cct) << __func__ << ": failed to watch journal"
-                 << cpp_strerror(r) << dendl;
+    if (r == -ENOENT) {
+      ldout(m_cct, 5) << __func__ << ": journal header not found" << dendl;
+    } else {
+      lderr(m_cct) << __func__ << ": failed to watch journal"
+                   << cpp_strerror(r) << dendl;
+    }
     schedule_watch_reset();
   } else {
     ldout(m_cct, 10) << __func__ << ": reset journal watch" << dendl;
@@ -822,7 +858,12 @@ void JournalMetadata::handle_watch_notify(uint64_t notify_id, uint64_t cookie) {
 }
 
 void JournalMetadata::handle_watch_error(int err) {
-  lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
+  if (err == -ENOTCONN) {
+    ldout(m_cct, 5) << "journal watch error: header removed" << dendl;
+  } else {
+    lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
+  }
+
   Mutex::Locker timer_locker(*m_timer_lock);
   Mutex::Locker locker(m_lock);
 

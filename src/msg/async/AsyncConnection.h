@@ -26,6 +26,7 @@
 using namespace std;
 
 #include "auth/AuthSessionHandler.h"
+#include "common/ceph_time.h"
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
 #include "include/buffer.h"
@@ -36,6 +37,7 @@ using namespace std;
 #include "net_handler.h"
 
 class AsyncMessenger;
+class Worker;
 
 static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 
@@ -102,8 +104,19 @@ class AsyncConnection : public Connection {
     return !out_q.empty() || outcoming_bl.length();
   }
   void shutdown_socket() {
-    if (sd >= 0)
+    for (auto &&t : register_time_events)
+      center->delete_time_event(t);
+    register_time_events.clear();
+    if (last_tick_id) {
+      center->delete_time_event(last_tick_id);
+      last_tick_id = 0;
+    }
+    if (sd >= 0) {
+      center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
       ::shutdown(sd, SHUT_RDWR);
+      ::close(sd);
+      sd = -1;
+    }
   }
   Message *_get_next_outgoing(bufferlist *bl) {
     assert(write_lock.is_locked());
@@ -126,6 +139,7 @@ class AsyncConnection : public Connection {
     assert(write_lock.is_locked());
     return !out_q.empty();
   }
+  void reset_recv_state();
 
    /**
    * The DelayedDelivery is for injecting delays into Message delivery off
@@ -139,15 +153,21 @@ class AsyncConnection : public Connection {
     Mutex delay_lock;
     AsyncMessenger *msgr;
     EventCenter *center;
+    DispatchQueue *dispatch_queue;
+    uint64_t conn_id;
+    std::atomic_bool stop_dispatch;
 
    public:
-    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c)
+    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
+                             DispatchQueue *q, uint64_t cid)
       : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c) { }
+        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
+        stop_dispatch(false) { }
     ~DelayedDelivery() {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
     }
+    void set_center(EventCenter *c) { center = c; }
     void do_request(int id) override;
     void queue(double delay_period, utime_t release, Message *m) {
       Mutex::Locker l(delay_lock);
@@ -155,21 +175,27 @@ class AsyncConnection : public Connection {
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
-      Mutex::Locker l(delay_lock);
-      while (!delay_queue.empty()) {
-        Message *m = delay_queue.front().second;
-        m->put();
-        delay_queue.pop_front();
-      }
-      for (auto i : register_time_events)
-        center->delete_time_event(i);
-      register_time_events.clear();
+      stop_dispatch = true;
+      center->submit_to(center->get_id(), [this] () mutable {
+        Mutex::Locker l(delay_lock);
+        while (!delay_queue.empty()) {
+          Message *m = delay_queue.front().second;
+          dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
+          m->put();
+          delay_queue.pop_front();
+        }
+        for (auto i : register_time_events)
+          center->delete_time_event(i);
+        register_time_events.clear();
+        stop_dispatch = false;
+      }, true);
     }
+    bool ready() const { return !stop_dispatch && delay_queue.empty() && register_time_events.empty(); }
     void flush();
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -197,8 +223,6 @@ class AsyncConnection : public Connection {
     policy.lossy = true;
   }
   
-  void release_worker();
-
  private:
   enum {
     STATE_NONE,
@@ -209,6 +233,7 @@ class AsyncConnection : public Connection {
     STATE_OPEN_MESSAGE_HEADER,
     STATE_OPEN_MESSAGE_THROTTLE_MESSAGE,
     STATE_OPEN_MESSAGE_THROTTLE_BYTES,
+    STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE,
     STATE_OPEN_MESSAGE_READ_FRONT,
     STATE_OPEN_MESSAGE_READ_MIDDLE,
     STATE_OPEN_MESSAGE_READ_DATA_PREPARE,
@@ -218,8 +243,7 @@ class AsyncConnection : public Connection {
     STATE_WAIT_SEND,
     STATE_CONNECTING,
     STATE_CONNECTING_RE,
-    STATE_CONNECTING_WAIT_BANNER,
-    STATE_CONNECTING_WAIT_IDENTIFY_PEER,
+    STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY,
     STATE_CONNECTING_SEND_CONNECT_MSG,
     STATE_CONNECTING_WAIT_CONNECT_REPLY,
     STATE_CONNECTING_WAIT_CONNECT_REPLY_AUTH,
@@ -246,6 +270,7 @@ class AsyncConnection : public Connection {
                                         "STATE_OPEN_MESSAGE_HEADER",
                                         "STATE_OPEN_MESSAGE_THROTTLE_MESSAGE",
                                         "STATE_OPEN_MESSAGE_THROTTLE_BYTES",
+                                        "STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE",
                                         "STATE_OPEN_MESSAGE_READ_FRONT",
                                         "STATE_OPEN_MESSAGE_READ_MIDDLE",
                                         "STATE_OPEN_MESSAGE_READ_DATA_PREPARE",
@@ -255,8 +280,7 @@ class AsyncConnection : public Connection {
                                         "STATE_WAIT_SEND",
                                         "STATE_CONNECTING",
                                         "STATE_CONNECTING_RE",
-                                        "STATE_CONNECTING_WAIT_BANNER",
-                                        "STATE_CONNECTING_WAIT_IDENTIFY_PEER",
+                                        "STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY",
                                         "STATE_CONNECTING_SEND_CONNECT_MSG",
                                         "STATE_CONNECTING_WAIT_CONNECT_REPLY",
                                         "STATE_CONNECTING_WAIT_CONNECT_REPLY_AUTH",
@@ -275,20 +299,24 @@ class AsyncConnection : public Connection {
   }
 
   AsyncMessenger *async_msgr;
+  uint64_t conn_id;
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  atomic_t out_seq;
-  atomic_t ack_left, in_seq;
+  atomic64_t out_seq;
+  atomic64_t ack_left, in_seq;
   int state;
   int state_after_send;
   int sd;
   int port;
   Messenger::Policy policy;
 
+  DispatchQueue *dispatch_queue;
+
   Mutex write_lock;
   enum class WriteStatus {
     NOWRITE,
+    REPLACING,
     CANWRITE,
     CLOSED
   };
@@ -296,7 +324,6 @@ class AsyncConnection : public Connection {
   bool open_write;
   map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
   list<Message*> sent; // the first bufferlist need to inject seq
-  list<Message*> local_messages;    // local deliver
   bufferlist outcoming_bl;
   bool keepalive;
 
@@ -304,17 +331,17 @@ class AsyncConnection : public Connection {
   utime_t backoff;         // backoff time
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
-  EventCallbackRef reset_handler;
-  EventCallbackRef remote_reset_handler;
-  EventCallbackRef connect_handler;
-  EventCallbackRef local_deliver_handler;
   EventCallbackRef wakeup_handler;
+  EventCallbackRef tick_handler;
   struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
   uint32_t recv_end;
   set<uint64_t> register_time_events; // need to delete it if stop
+  ceph::coarse_mono_clock::time_point last_active;
+  uint64_t last_tick_id = 0;
+  const uint64_t inactive_timeout_us;
 
   // Tis section are temp variables used by state transition
 
@@ -322,6 +349,7 @@ class AsyncConnection : public Connection {
   utime_t recv_stamp;
   utime_t throttle_stamp;
   unsigned msg_left;
+  uint64_t cur_msg_size;
   ceph_msg_header current_header;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
@@ -330,6 +358,7 @@ class AsyncConnection : public Connection {
   // Connecting state
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
+  bufferlist authorizer_buf;
   ceph_msg_connect_reply connect_reply;
   // Accepting state
   entity_addr_t socket_addr;
@@ -348,6 +377,7 @@ class AsyncConnection : public Connection {
   // used only by "read_until"
   uint64_t state_offset;
   NetHandler net;
+  Worker *worker;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 
@@ -362,22 +392,22 @@ class AsyncConnection : public Connection {
   void handle_write();
   void process();
   void wakeup_from(uint64_t id);
+  void tick(uint64_t id);
   void local_deliver();
-  void stop() {
+  void stop(bool queue_reset) {
     lock.Lock();
-    if (state != STATE_CLOSED)
-      center->dispatch_event_external(reset_handler);
+    bool need_queue_reset = (state != STATE_CLOSED) && queue_reset;
+    _stop();
     lock.Unlock();
-    mark_down();
+    if (need_queue_reset)
+      dispatch_queue->queue_reset(this);
   }
-  void cleanup_handler() {
+  void cleanup() {
+    shutdown_socket();
     delete read_handler;
     delete write_handler;
-    delete reset_handler;
-    delete remote_reset_handler;
-    delete connect_handler;
-    delete local_deliver_handler;
     delete wakeup_handler;
+    delete tick_handler;
     if (delay_state) {
       delete delay_state;
       delay_state = NULL;

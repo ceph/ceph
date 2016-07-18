@@ -9,7 +9,25 @@
 #include "ClientSnapRealm.h"
 #include "UserGroups.h"
 
-ostream& operator<<(ostream &out, Inode &in)
+#include "mds/flock.h"
+
+Inode::~Inode()
+{
+  cap_item.remove_myself();
+  snaprealm_item.remove_myself();
+  snapdir_parent.reset();
+
+  if (!oset.objects.empty()) {
+    lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
+      << std::hex << ino << std::dec << dendl;
+    assert(oset.objects.empty());
+  }
+
+  delete fcntl_locks;
+  delete flock_locks;
+}
+
+ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
       << "faked_ino=" << in.faked_ino
@@ -23,7 +41,7 @@ ostream& operator<<(ostream &out, Inode &in)
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
-    for (map<mds_rank_t,Cap*>::iterator p = in.caps.begin(); p != in.caps.end(); ++p) {
+    for (auto p = in.caps.begin(); p != in.caps.end(); ++p) {
       if (p != in.caps.begin())
         out << ',';
       out << p->first << '=' << ccap_string(p->second->issued);
@@ -147,7 +165,7 @@ bool Inode::is_any_caps()
   return !caps.empty() || snap_caps;
 }
 
-bool Inode::cap_is_valid(Cap* cap)
+bool Inode::cap_is_valid(Cap* cap) const
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
@@ -160,11 +178,11 @@ bool Inode::cap_is_valid(Cap* cap)
   return false;
 }
 
-int Inode::caps_issued(int *implemented)
+int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
+  for (map<mds_rank_t,Cap*>::const_iterator it = caps.begin();
        it != caps.end();
        ++it)
     if (cap_is_valid(it->second)) {
@@ -250,6 +268,14 @@ int Inode::caps_wanted()
   int want = caps_file_wanted() | caps_used();
   if (want & CEPH_CAP_FILE_BUFFER)
     want |= CEPH_CAP_FILE_EXCL;
+  return want;
+}
+
+int Inode::caps_mds_wanted()
+{
+  int want = 0;
+  for (auto it = caps.begin(); it != caps.end(); ++it)
+    want |= it->second->wanted;
   return want;
 }
 

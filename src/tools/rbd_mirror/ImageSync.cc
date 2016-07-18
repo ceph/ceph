@@ -30,17 +30,25 @@ template <typename I>
 ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
                         SafeTimer *timer, Mutex *timer_lock,
                         const std::string &mirror_uuid, Journaler *journaler,
-                        MirrorPeerClientMeta *client_meta, Context *on_finish,
+                        MirrorPeerClientMeta *client_meta,
+                        ContextWQ *work_queue, Context *on_finish,
 			ProgressContext *progress_ctx)
-  : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
+  : BaseRequest("rbd::mirror::ImageSync", local_image_ctx->cct, on_finish),
+    m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
-    m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish),
-    m_progress_ctx(progress_ctx),
+    m_journaler(journaler), m_client_meta(client_meta),
+    m_work_queue(work_queue), m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)) {
 }
 
 template <typename I>
-void ImageSync<I>::start() {
+ImageSync<I>::~ImageSync() {
+  assert(m_snapshot_copy_request == nullptr);
+  assert(m_image_copy_request == nullptr);
+}
+
+template <typename I>
+void ImageSync<I>::send() {
   send_prune_catch_up_sync_point();
 }
 
@@ -48,10 +56,14 @@ template <typename I>
 void ImageSync<I>::cancel() {
   Mutex::Locker locker(m_lock);
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   m_canceled = true;
+
+  if (m_snapshot_copy_request != nullptr) {
+    m_snapshot_copy_request->cancel();
+  }
+
   if (m_image_copy_request != nullptr) {
     m_image_copy_request->cancel();
   }
@@ -61,14 +73,16 @@ template <typename I>
 void ImageSync<I>::send_prune_catch_up_sync_point() {
   update_progress("PRUNE_CATCH_UP_SYNC_POINT");
 
-  if (m_client_meta->sync_points.size() <= 1) {
+  if (m_client_meta->sync_points.empty()) {
     send_create_sync_point();
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
+  // prune will remove sync points with missing snapshots and
+  // ensure we have a maximum of one sync point (in case we
+  // restarted)
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_prune_catch_up_sync_point>(this);
   SyncPointPruneRequest<I> *request = SyncPointPruneRequest<I>::create(
@@ -78,12 +92,11 @@ void ImageSync<I>::send_prune_catch_up_sync_point() {
 
 template <typename I>
 void ImageSync<I>::handle_prune_catch_up_sync_point(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to prune catch-up sync point: "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to prune catch-up sync point: "
+         << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -102,8 +115,7 @@ void ImageSync<I>::send_create_sync_point() {
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_create_sync_point>(this);
@@ -114,12 +126,11 @@ void ImageSync<I>::send_create_sync_point() {
 
 template <typename I>
 void ImageSync<I>::handle_create_sync_point(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to create sync point: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to create sync point: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -129,27 +140,47 @@ void ImageSync<I>::handle_create_sync_point(int r) {
 
 template <typename I>
 void ImageSync<I>::send_copy_snapshots() {
-  update_progress("COPY_SNAPSHOTS");
+  m_lock.Lock();
+  if (m_canceled) {
+    m_lock.Unlock();
+    finish(-ECANCELED);
+    return;
+  }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_copy_snapshots>(this);
-  SnapshotCopyRequest<I> *request = SnapshotCopyRequest<I>::create(
+  m_snapshot_copy_request = SnapshotCopyRequest<I>::create(
     m_local_image_ctx, m_remote_image_ctx, &m_snap_map, m_journaler,
-    m_client_meta, ctx);
-  request->send();
+    m_client_meta, m_work_queue, ctx);
+  m_snapshot_copy_request->get();
+  m_lock.Unlock();
+
+  update_progress("COPY_SNAPSHOTS");
+
+  m_snapshot_copy_request->send();
 }
 
 template <typename I>
 void ImageSync<I>::handle_copy_snapshots(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
-  if (r < 0) {
-    lderr(cct) << ": failed to copy snapshot metadata: "
-               << cpp_strerror(r) << dendl;
+  {
+    Mutex::Locker locker(m_lock);
+    m_snapshot_copy_request->put();
+    m_snapshot_copy_request = nullptr;
+    if (r == 0 && m_canceled) {
+      r = -ECANCELED;
+    }
+  }
+
+  if (r == -ECANCELED) {
+    dout(10) << ": snapshot copy canceled" << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
+    derr << ": failed to copy snapshot metadata: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -166,8 +197,7 @@ void ImageSync<I>::send_copy_image() {
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_copy_image>(this);
@@ -175,6 +205,7 @@ void ImageSync<I>::send_copy_image() {
     m_local_image_ctx, m_remote_image_ctx, m_timer, m_timer_lock,
     m_journaler, m_client_meta, &m_client_meta->sync_points.front(),
     ctx, m_progress_ctx);
+  m_image_copy_request->get();
   m_lock.Unlock();
 
   update_progress("COPY_IMAGE");
@@ -184,23 +215,23 @@ void ImageSync<I>::send_copy_image() {
 
 template <typename I>
 void ImageSync<I>::handle_copy_image(int r) {
+  dout(20) << ": r=" << r << dendl;
+
   {
     Mutex::Locker locker(m_lock);
+    m_image_copy_request->put();
     m_image_copy_request = nullptr;
     if (r == 0 && m_canceled) {
       r = -ECANCELED;
     }
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
-
   if (r == -ECANCELED) {
-    ldout(cct, 10) << ": image copy canceled" << dendl;
+    dout(10) << ": image copy canceled" << dendl;
     finish(r);
     return;
   } else if (r < 0) {
-    lderr(cct) << ": failed to copy image: " << cpp_strerror(r) << dendl;
+    derr << ": failed to copy image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -229,9 +260,8 @@ void ImageSync<I>::send_copy_object_map() {
   assert(snap_id_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t snap_id = snap_id_it->second;
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": snap_id=" << snap_id << ", "
-                 << "snap_name=" << sync_point.snap_name << dendl;
+  dout(20) << ": snap_id=" << snap_id << ", "
+           << "snap_name=" << sync_point.snap_name << dendl;
 
   // rollback the object map (copy snapshot object map to HEAD)
   RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
@@ -243,8 +273,7 @@ void ImageSync<I>::send_copy_object_map() {
 
 template <typename I>
 void ImageSync<I>::handle_copy_object_map(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   assert(r == 0);
   send_refresh_object_map();
@@ -252,8 +281,7 @@ void ImageSync<I>::handle_copy_object_map(int r) {
 
 template <typename I>
 void ImageSync<I>::send_refresh_object_map() {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   update_progress("REFRESH_OBJECT_MAP");
 
@@ -265,8 +293,7 @@ void ImageSync<I>::send_refresh_object_map() {
 
 template <typename I>
 void ImageSync<I>::handle_refresh_object_map(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   assert(r == 0);
   {
@@ -280,8 +307,7 @@ void ImageSync<I>::handle_refresh_object_map(int r) {
 
 template <typename I>
 void ImageSync<I>::send_prune_sync_points() {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   update_progress("PRUNE_SYNC_POINTS");
 
@@ -294,12 +320,11 @@ void ImageSync<I>::send_prune_sync_points() {
 
 template <typename I>
 void ImageSync<I>::handle_prune_sync_points(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to prune sync point: "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to prune sync point: "
+         << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -310,15 +335,6 @@ void ImageSync<I>::handle_prune_sync_points(int r) {
   }
 
   finish(0);
-}
-
-template <typename I>
-void ImageSync<I>::finish(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
 }
 
 template <typename I>

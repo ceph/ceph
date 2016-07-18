@@ -277,7 +277,11 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
     if (s->aws4_auth_needs_complete) {
       request_payload_hash = STREAM_IO(s)->grab_aws4_sha256_hash();
     } else {
-      rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
+      if (s->aws4_auth_streaming_mode) {
+        request_payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+      } else {
+        rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
+      }
     }
   }
 
@@ -392,12 +396,15 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   /* aws4_request */
 
-  char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  char *signing_k = s->aws4_auth->signing_k;
+
   calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, "aws4_request", 12, signing_k);
 
   buf_to_hex((unsigned char *) signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
   ldout(s->cct, 10) << "signing_k     = " << string(aux) << dendl;
+
+  s->aws4_auth->signing_key = aux;
 
   /* new signature */
 

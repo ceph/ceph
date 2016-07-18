@@ -126,8 +126,9 @@ void OSDMonitor::create_initial()
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
-  // new cluster should require jewel by default
+  // new cluster should require jewel and kraken by default
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
+  newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
@@ -1744,9 +1745,10 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
   utime_t grace = orig_grace;
   double my_grace = 0, peer_grace = 0;
+  double decay_k = 0;
   if (g_conf->mon_osd_adjust_heartbeat_grace) {
     double halflife = (double)g_conf->mon_osd_laggy_halflife;
-    double decay_k = ::log(.5) / halflife;
+    decay_k = ::log(.5) / halflife;
 
     // scale grace period based on historical probability of 'lagginess'
     // (false positive failures due to slowness).
@@ -1756,31 +1758,35 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	     << " failed_for " << failed_for << " decay " << decay << dendl;
     my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
     grace += my_grace;
+  }
 
-    // consider the peers reporting a failure a proxy for a potential
-    // 'subcluster' over the overall cluster that is similarly
-    // laggy.  this is clearly not true in all cases, but will sometimes
-    // help us localize the grace correction to a subset of the system
-    // (say, a rack with a bad switch) that is unhappy.
-    assert(fi.reporters.size());
-    for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
-	 p != fi.reporters.end();
-	 ++p) {
-      // get the parent bucket whose type matches with "reporter_subtree_level".
-      // fall back to OSD if the level doesn't exist.
-      map<string, string> reporter_loc = osdmap.crush->get_full_location(p->first);
-      map<string, string>::iterator iter = reporter_loc.find(reporter_subtree_level);
-      if (iter == reporter_loc.end()) {
-	reporters_by_subtree.insert("osd." + to_string(p->first));
-      } else {
-	reporters_by_subtree.insert(iter->second);
-      }
-
+  // consider the peers reporting a failure a proxy for a potential
+  // 'subcluster' over the overall cluster that is similarly
+  // laggy.  this is clearly not true in all cases, but will sometimes
+  // help us localize the grace correction to a subset of the system
+  // (say, a rack with a bad switch) that is unhappy.
+  assert(fi.reporters.size());
+  for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
+	p != fi.reporters.end();
+	++p) {
+    // get the parent bucket whose type matches with "reporter_subtree_level".
+    // fall back to OSD if the level doesn't exist.
+    map<string, string> reporter_loc = osdmap.crush->get_full_location(p->first);
+    map<string, string>::iterator iter = reporter_loc.find(reporter_subtree_level);
+    if (iter == reporter_loc.end()) {
+      reporters_by_subtree.insert("osd." + to_string(p->first));
+    } else {
+      reporters_by_subtree.insert(iter->second);
+    }
+    if (g_conf->mon_osd_adjust_heartbeat_grace) {
       const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
       utime_t elapsed = now - xi.down_stamp;
       double decay = exp((double)elapsed * decay_k);
       peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
     }
+  }
+  
+  if (g_conf->mon_osd_adjust_heartbeat_grace) {
     peer_grace /= (double)fi.reporters.size();
     grace += peer_grace;
   }
@@ -1971,6 +1977,16 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << " because the osdmap requires"
 		      << " CEPH_FEATURE_SERVER_JEWEL"
 		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL\n";
+    goto ignore;
+  }
+
+  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN) &&
+      !(m->osd_features & CEPH_FEATURE_SERVER_KRAKEN)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because the osdmap requires"
+		      << " CEPH_FEATURE_SERVER_KRAKEN"
+		      << " but the osd lacks CEPH_FEATURE_SERVER_KRAKEN\n";
     goto ignore;
   }
 
@@ -2265,7 +2281,8 @@ bool OSDMonitor::prepare_alive(MonOpRequestRef op)
 
   dout(7) << "prepare_alive want up_thru " << m->want << " have " << m->version
 	  << " from " << m->get_orig_source_inst() << dendl;
-  pending_inc.new_up_thru[from] = m->version;  // set to the latest map the OSD has
+
+  update_up_thru(from, m->version); // set to the latest map the OSD has
   wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
   return true;
 }
@@ -2328,6 +2345,21 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
       continue;
     }
 
+    int acting_primary = -1;
+    osdmap.pg_to_up_acting_osds(
+      p->first, nullptr, nullptr, nullptr, &acting_primary);
+    if (acting_primary != from) {
+      /* If the source isn't the primary based on the current osdmap, we know
+       * that the interval changed and that we can discard this message.
+       * Indeed, we must do so to avoid 16127 since we can't otherwise determine
+       * which of two pg temp mappings on the same pg is more recent.
+       */
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+	       << ": primary has changed" << dendl;
+      ignore_cnt++;
+      continue;
+    }
+
     // removal?
     if (p->second.empty() && (osdmap.pg_temp->count(p->first) ||
 			      osdmap.primary_temp->count(p->first)))
@@ -2351,6 +2383,19 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 
  ignore:
   return true;
+}
+
+void OSDMonitor::update_up_thru(int from, epoch_t up_thru)
+{
+  epoch_t old_up_thru = osdmap.get_up_thru(from);
+  auto ut = pending_inc.new_up_thru.find(from);
+  if (ut != pending_inc.new_up_thru.end()) {
+    old_up_thru = ut->second;
+  }
+  if (up_thru > old_up_thru) {
+    // set up_thru too, so the osd doesn't have to ask again
+    pending_inc.new_up_thru[from] = up_thru;
+  }
 }
 
 bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
@@ -2380,7 +2425,10 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 	pending_inc.new_primary_temp.count(p->first))
       pending_inc.new_primary_temp[p->first] = -1;
   }
-  pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
+
+  // set up_thru too, so the osd doesn't have to ask again
+  update_up_thru(from, m->map_epoch);
+
   wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->map_epoch));
   return true;
 }
@@ -2872,7 +2920,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     // warn about flags
-    if (osdmap.test_flag(CEPH_OSDMAP_PAUSERD |
+    if (osdmap.test_flag(CEPH_OSDMAP_FULL |
+			 CEPH_OSDMAP_PAUSERD |
 			 CEPH_OSDMAP_PAUSEWR |
 			 CEPH_OSDMAP_NOUP |
 			 CEPH_OSDMAP_NODOWN |
@@ -4178,13 +4227,12 @@ bool OSDMonitor::update_pools_status()
         mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_bytes: "
                          << si_t(pool.quota_max_bytes) << ")";
-      } else if (pool.quota_max_objects > 0 &&
+      }
+      if (pool.quota_max_objects > 0 &&
 		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
         mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_objects: "
                          << pool.quota_max_objects << ")";
-      } else {
-        assert(0 == "we shouldn't reach this");
       }
       update_pool_flags(it->first, pool.get_flags() | pg_pool_t::FLAG_FULL);
       ret = true;
@@ -4541,7 +4589,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
 	*size = erasure_code->get_chunk_count();
-	*min_size = erasure_code->get_data_chunk_count();
+	*min_size = MIN(erasure_code->get_data_chunk_count() + 1, *size);
       }
     }
     break;
@@ -4834,7 +4882,7 @@ bool OSDMonitor::prepare_set_flag(MonOpRequestRef op, int flag)
   if (pending_inc.new_flags < 0)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags |= flag;
-  ss << "set " << OSDMap::get_flag_string(flag);
+  ss << OSDMap::get_flag_string(flag) << " is set";
   wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
@@ -4847,7 +4895,7 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   if (pending_inc.new_flags < 0)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags &= ~flag;
-  ss << "unset " << OSDMap::get_flag_string(flag);
+  ss << OSDMap::get_flag_string(flag) << " is unset";
   wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
@@ -6294,6 +6342,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
+	err = -EPERM;
+      }
+    } else if (key == "require_kraken_osds") {
+      if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
+	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+      } else {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
 	err = -EPERM;
       }
     } else {

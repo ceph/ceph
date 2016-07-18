@@ -57,6 +57,7 @@ void _usage()
   cout << "  user enable                re-enable user after suspension\n";
   cout << "  user check                 check user info\n";
   cout << "  user stats                 show user stats as accounted by quota subsystem\n";
+  cout << "  user list                  list users\n";
   cout << "  caps add                   add user capabilities\n";
   cout << "  caps rm                    remove user capabilities\n";
   cout << "  subuser create             create a new subuser\n" ;
@@ -114,6 +115,7 @@ void _usage()
   cout << "  zone modify                modify an existing zone\n";
   cout << "  zone set                   set zone cluster params (requires infile)\n";
   cout << "  zone list                  list all zones set on this cluster\n";
+  cout << "  zone rename                rename a zone\n";
   cout << "  pool add                   add an existing pool for data placement\n";
   cout << "  pool rm                    remove an existing pool from data placement set\n";
   cout << "  pools list                 list placement active set\n";
@@ -169,6 +171,7 @@ void _usage()
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>\n";
   cout << "   --max_buckets             max number of buckets for a user\n";
+  cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>\n";
   cout << "   --pool=<pool>\n";
@@ -187,18 +190,19 @@ void _usage()
   cout << "   --period=<id>             period id\n";
   cout << "   --epoch=<number>          period epoch\n";
   cout << "   --commit                  commit the period during 'period update'\n";
+  cout << "   --staging                 get staging period info\n";
   cout << "   --master                  set as master\n";
   cout << "   --master-url              master url\n";
   cout << "   --master-zonegroup=<id>   master zonegroup id\n";
   cout << "   --master-zone=<id>        master zone id\n";
-  cout << "   --rgw-realm=<realm>       realm name\n";
-  cout << "   --realm-id=<realm id>     realm id\n";
-  cout << "   --realm-new-name=<realm new name> realm new name\n";
-  cout << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
-  cout << "   --zonegroup-id=<zonegroup id> zonegroup id\n";
-  cout << "   --rgw-zone=<zone>         name of zone in which radosgw is running\n";
-  cout << "   --zone-id=<zone id>       zone id\n";
-  cout << "   --zone-new-name=<zone>    zone new name\n";
+  cout << "   --rgw-realm=<name>        realm name\n";
+  cout << "   --realm-id=<id>           realm id\n";
+  cout << "   --realm-new-name=<name>   realm new name\n";
+  cout << "   --rgw-zonegroup=<name>    zonegroup name\n";
+  cout << "   --zonegroup-id=<id>       zonegroup id\n";
+  cout << "   --rgw-zone=<name>         name of zone in which radosgw is running\n";
+  cout << "   --zone-id=<id>            zone id\n";
+  cout << "   --zone-new-name=<name>    zone new name\n";
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
@@ -228,12 +232,16 @@ void _usage()
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
   cout << "   --reset-regions           reset regionmap when regionmap update\n";
+  cout << "   --bypass-gc               when specified with bucket deletion, triggers\n";
+  cout << "                             object deletions by not involving GC\n";
+  cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
+  cout << "                             ignores bucket index consistency\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
   cout << "   --bucket                  specified bucket for quota command\n";
   cout << "   --max-objects             specify max objects (negative value to disable)\n";
-  cout << "   --max-size                specify max size (in bytes, negative value to disable)\n";
+  cout << "   --max-size                specify max size (in B/K/M/G/T, negative value to disable)\n";
   cout << "   --quota-scope             scope of quota (bucket, user)\n";
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
@@ -262,6 +270,7 @@ enum {
   OPT_USER_ENABLE,
   OPT_USER_CHECK,
   OPT_USER_STATS,
+  OPT_USER_LIST,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -446,6 +455,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USER_CHECK;
     if (strcmp(cmd, "stats") == 0)
       return OPT_USER_STATS;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_USER_LIST;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -811,8 +822,10 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
     RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
-    formatter->dump_int("size_kb", s.num_kb);
-    formatter->dump_int("size_kb_actual", s.num_kb_rounded);
+    formatter->dump_int("size", s.size);
+    formatter->dump_int("size_actual", s.size_rounded);
+    formatter->dump_int("size_kb", rgw_rounded_kb(s.size));
+    formatter->dump_int("size_kb_actual", rgw_rounded_kb(s.size_rounded));
     formatter->dump_int("num_objects", s.num_objects);
     formatter->close_section();
     formatter->flush(cout);
@@ -1027,13 +1040,17 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
 
     case OPT_QUOTA_SET:
       if (have_max_objects) {
-        quota.max_objects = max_objects;
+        if (max_objects < 0) {
+          quota.max_objects = -1;
+        } else {
+          quota.max_objects = max_objects;
+        }
       }
       if (have_max_size) {
         if (max_size < 0) {
-          quota.max_size_kb = -1;
+          quota.max_size = -1;
         } else {
-          quota.max_size_kb = rgw_rounded_kb(max_size);
+          quota.max_size = rgw_rounded_kb(max_size) * 1024;
         }
       }
       break;
@@ -1524,10 +1541,10 @@ static int update_period(const string& realm_id, const string& realm_name,
   return 0;
 }
 
-static int init_bucket_for_sync(const string& tenant, const string& bucket_name, string& bucket_id)
+static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
+                                const string& bucket_id, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
-  rgw_bucket bucket;
 
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
   if (ret == -ENOENT) {
@@ -1535,8 +1552,6 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
       cerr << "ERROR: bucket id specified" << std::endl;
       return EINVAL;
     }
-  } else {
-    bucket_id = bucket.bucket_id;
   }
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -2003,6 +2018,7 @@ int main(int argc, char **argv)
   int remove_bad = false;
   int check_head_obj_locator = false;
   int max_buckets = -1;
+  bool max_buckets_specified = false;
   map<string, bool> categories;
   string caps;
   int check_objects = false;
@@ -2015,6 +2031,8 @@ int main(int argc, char **argv)
   string start_marker;
   string end_marker;
   int max_entries = -1;
+  int admin = false;
+  bool admin_specified = false;
   int system = false;
   bool system_specified = false;
   int shard_id = -1;
@@ -2038,6 +2056,8 @@ int main(int argc, char **argv)
 
   int sync_stats = false;
   int reset_regions = false;
+  int bypass_gc = false;
+  int inconsistent_index = false;
 
   int extra_info = false;
 
@@ -2118,6 +2138,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip_zero_entries", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &admin, NULL, "--admin", (char*)NULL)) {
+      admin_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
@@ -2141,6 +2163,7 @@ int main(int argc, char **argv)
         cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
         return EINVAL;
       }
+      max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -2148,7 +2171,7 @@ int main(int argc, char **argv)
         return EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
-      max_size = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      max_size = strict_si_cast<int64_t>(val.c_str(), &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max size: " << err << std::endl;
         return EINVAL;
@@ -2249,7 +2272,10 @@ int main(int argc, char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &reset_regions, NULL, "--reset-regions", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, NULL, "--bypass-gc", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
+     // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
@@ -3517,13 +3543,6 @@ int main(int argc, char **argv)
           }
         }
 
-	RGWRealm realm(realm_id, realm_name);
-	ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
@@ -3630,8 +3649,11 @@ int main(int argc, char **argv)
   if (gen_secret_key)
     user_op.set_gen_secret(); // assume that a key pair should be created
 
-  if (max_buckets >= 0)
+  if (max_buckets_specified)
     user_op.set_max_buckets(max_buckets);
+
+  if (admin_specified)
+     user_op.set_admin(admin);
 
   if (system_specified)
     user_op.set_system(system);
@@ -3683,6 +3705,7 @@ int main(int argc, char **argv)
   bucket_op.set_check_objects(check_objects);
   bucket_op.set_delete_children(delete_child_objects);
   bucket_op.set_fix_index(fix);
+  bucket_op.set_max_aio(max_concurrent_ios);
 
   // required to gather errors from operations
   std::string err_msg;
@@ -4630,7 +4653,11 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    RGWBucketAdminOp::remove_bucket(store, bucket_op);
+    if (inconsistent_index == false) {
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
+    } else {
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, false);
+    }
   }
 
   if (opt_cmd == OPT_GC_LIST) {
@@ -4821,7 +4848,10 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_METADATA_LIST) {
+  if (opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_USER_LIST) {
+    if (opt_cmd == OPT_USER_LIST) {
+      metadata_key = "user";
+    }
     void *handle;
     int max = 1000;
     int ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
@@ -5141,11 +5171,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5168,11 +5199,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5200,11 +5232,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {

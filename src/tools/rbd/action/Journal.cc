@@ -200,13 +200,13 @@ public:
   }
 
   int shut_down() {
-    ::journal::Journaler::shut_down();
-
     int r = unregister_client();
     if (r < 0) {
       std::cerr << "rbd: failed to unregister journal client: "
 		<< cpp_strerror(r) << std::endl;
     }
+    ::journal::Journaler::shut_down();
+
     return r;
   }
 };
@@ -235,7 +235,6 @@ public:
     m_journaler.start_replay(&replay_handler);
 
     r = m_cond.wait();
-
     if (r < 0) {
       std::cerr << "rbd: failed to process journal: " << cpp_strerror(r)
 		<< std::endl;
@@ -243,13 +242,11 @@ public:
        m_r = r;
       }
     }
-
-    r = m_journaler.shut_down();
-    if (r < 0 && m_r == 0) {
-      m_r = r;
-    }
-
     return m_r;
+  }
+
+  int shut_down() {
+    return m_journaler.shut_down();
   }
 
 protected:
@@ -288,8 +285,10 @@ protected:
 			    uint64_t tag_id) = 0;
 
   void handle_replay_complete(int r) {
-    m_journaler.stop_replay();
-    m_cond.complete(r);
+    if (m_r == 0 && r < 0) {
+      m_r = r;
+    }
+    m_journaler.stop_replay(&m_cond);
   }
 
   Journaler m_journaler;
@@ -370,7 +369,18 @@ private:
 static int do_inspect_journal(librados::IoCtx& io_ctx,
 			      const std::string& journal_id,
 			      bool verbose) {
-  return JournalInspector(io_ctx, journal_id, verbose).exec();
+  JournalInspector inspector(io_ctx, journal_id, verbose);
+  int r = inspector.exec();
+  if (r < 0) {
+    inspector.shut_down();
+    return r;
+  }
+
+  r = inspector.shut_down();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
 }
 
 struct ExportEntry {
@@ -504,10 +514,16 @@ static int do_export_journal(librados::IoCtx& io_ctx,
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
   }
 
-  r = JournalExporter(io_ctx, journal_id, fd, no_error, verbose).exec();
+  JournalExporter exporter(io_ctx, journal_id, fd, no_error, verbose);
+  r = exporter.exec();
 
   if (!to_stdout) {
     close(fd);
+  }
+
+  int shut_down_r = exporter.shut_down();
+  if (r == 0 && shut_down_r < 0) {
+    r = shut_down_r;
   }
 
   return r;
@@ -673,11 +689,11 @@ public:
     if (r1 < 0 && r == 0) {
       r = r1;
     }
-    r1 = m_journaler.shut_down();
-    if (r1 < 0 && r == 0) {
-      r = r1;
-    }
     return r;
+  }
+
+  int shut_down() {
+    return m_journaler.shut_down();
   }
 
 private:
@@ -706,10 +722,16 @@ static int do_import_journal(librados::IoCtx& io_ctx,
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
   }
 
-  r = JournalImporter(io_ctx, journal_id, fd, no_error, verbose).exec();
+  JournalImporter importer(io_ctx, journal_id, fd, no_error, verbose);
+  r = importer.exec();
 
   if (!from_stdin) {
     close(fd);
+  }
+
+  int shut_down_r = importer.shut_down();
+  if (r == 0 && shut_down_r < 0) {
+    r = shut_down_r;
   }
 
   return r;

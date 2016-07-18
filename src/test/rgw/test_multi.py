@@ -79,7 +79,7 @@ def mstart(cluster_id, is_new):
     cmd = mpath('mstart.sh', cluster_id)
     if is_new:
         cmd += ' -n'
-
+        cmd += ' --mds_num 0'
     bash(cmd)
 
 def mstop(cluster_id, entity = None):
@@ -302,10 +302,12 @@ class RGWRealm:
         if target_zone.zone_name == source_zone.zone_name:
             return None
 
+        cmd = '--rgw-realm=' + self.realm + ' bucket sync status --source-zone=' + source_zone.zone_name + ' --bucket=' + bucket_name
+        global user
+        if user.tenant is not None:
+            cmd += ' --tenant=' + user.tenant + ' --uid=' + user.uid
         while True:
-            (bucket_sync_status_json, retcode) = target_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm +
-                                                                                ' bucket sync status --source-zone=' + source_zone.zone_name +
-                                                                                ' --bucket=' + bucket_name, check_retcode = False)
+            (bucket_sync_status_json, retcode) = target_zone.cluster.rgw_admin_ro(cmd, check_retcode = False)
             if retcode == 0:
                 break
 
@@ -341,8 +343,12 @@ class RGWRealm:
         return markers
 
     def bucket_source_log_status(self, source_zone, bucket_name):
+        cmd = '--rgw-realm=' + self.realm + ' bilog status --bucket=' + bucket_name
+        global user
+        if user.tenant is not None:
+            cmd += ' --tenant=' + user.tenant + ' --uid=' + user.uid
         source_cluster = source_zone.cluster
-        (bilog_status_json, retcode) = source_cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' bilog status --bucket=' + bucket_name)
+        (bilog_status_json, retcode) = source_cluster.rgw_admin_ro(cmd)
         bilog_status = json.loads(bilog_status_json)
 
         m={}
@@ -442,6 +448,8 @@ class RGWRealm:
         log(5, 'creating user uid=', user.uid)
         cmd = build_cmd('--uid', user.uid, '--display-name', user.display_name,
                         '--access-key', user.access_key, '--secret', user.secret)
+        if user.tenant is not None:
+            cmd += ' --tenant ' + user.tenant
         self.master_zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' user create ' + cmd)
 
         if wait_meta:
@@ -454,11 +462,12 @@ class RGWRealm:
 
 
 class RGWUser:
-    def __init__(self, uid, display_name, access_key, secret):
+    def __init__(self, uid, display_name, access_key, secret, tenant):
         self.uid = uid
         self.display_name = display_name
         self.access_key = access_key
         self.secret = secret
+        self.tenant = tenant
 
 def gen_access_key():
      return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
@@ -482,7 +491,7 @@ class RGWMulti:
         for i in xrange(num_clusters):
             self.clusters[i] = RGWCluster(i + 1, self.base_port + i)
 
-    def setup(self, bootstrap):
+    def setup(self, bootstrap, tenant):
         global realm
         global realm_credentials
         global user
@@ -491,7 +500,7 @@ class RGWMulti:
         realm = RGWRealm('earth', realm_credentials, self.clusters)
 
         if bootstrap:
-            log(1, 'bootstapping clusters')
+            log(1, 'bootstrapping clusters')
             self.clusters[0].start()
             realm.init_zone(self.clusters[0], 'us', 'us-1', self.base_port)
 
@@ -504,7 +513,7 @@ class RGWMulti:
 
         realm.meta_checkpoint()
 
-        user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret())
+        user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret(), tenant)
         realm.create_user(user)
 
 def check_all_buckets_exist(zone, buckets):
@@ -804,6 +813,7 @@ def init(parse_args):
                                          'num_zones': 3,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
+                                         'tenant': None,
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
@@ -825,6 +835,7 @@ def init(parse_args):
     parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
     parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
+    parser.add_argument('--tenant', type=str, default=cfg.get(section, 'tenant'))
 
     argv = []
 
@@ -840,7 +851,7 @@ def init(parse_args):
 
     rgw_multi = RGWMulti(int(args.num_zones))
 
-    rgw_multi.setup(not args.no_bootstrap)
+    rgw_multi.setup(not args.no_bootstrap, args.tenant)
 
 
 def setup_module():

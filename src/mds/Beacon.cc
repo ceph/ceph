@@ -443,10 +443,35 @@ void Beacon::notify_health(MDSRank const *mds)
     }
   }
 
+  // Detect MDS_HEALTH_SLOW_REQUEST condition
+  {
+    int slow = mds->get_mds_slow_req_count();
+    dout(20) << slow << " slow request found" << dendl;
+    if (slow) {
+      std::ostringstream oss;
+      oss << slow << " slow requests are blocked > " << g_conf->mds_op_complaint_time << " sec";
+
+      MDSHealthMetric m(MDS_HEALTH_SLOW_REQUEST, HEALTH_WARN, oss.str());
+      health.metrics.push_back(m);
+    }
+  }
+
   // Report a health warning if we are readonly
   if (mds->mdcache->is_readonly()) {
     MDSHealthMetric m(MDS_HEALTH_READ_ONLY, HEALTH_WARN,
                       "MDS in read-only mode");
+    health.metrics.push_back(m);
+  }
+
+  // Report if we have significantly exceeded our cache size limit
+  if (mds->mdcache->get_num_inodes() > g_conf->mds_cache_size * 1.5) {
+    std::ostringstream oss;
+    oss << "Too many inodes in cache (" << mds->mdcache->get_num_inodes()
+        << "/" << g_conf->mds_cache_size << "), "
+        << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
+        << mds->mdcache->get_num_strays() << " stray files";
+
+    MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, oss.str());
     health.metrics.push_back(m);
   }
 }

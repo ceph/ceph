@@ -924,6 +924,10 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     if (mds->is_standby_replay()) {
       dout(1) << "Journal " << jp.front << " is being rewritten, "
         << "cannot replay in standby until an active MDS completes rewrite" << dendl;
+      Mutex::Locker l(mds->mds_lock);
+      if (mds->is_daemon_stopping()) {
+        return;
+      }
       completion->complete(-EAGAIN);
       return;
     }

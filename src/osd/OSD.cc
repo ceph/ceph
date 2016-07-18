@@ -239,7 +239,6 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSDService::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
-  promote_probability_millis(1000),
   last_recalibrate(ceph_clock_now(NULL)),
   promote_max_objects(0),
   promote_max_bytes(0),
@@ -250,7 +249,6 @@ OSDService::OSDService(OSD *osd) :
   next_notif_id(0),
   backfill_request_lock("OSDService::backfill_request_lock"),
   backfill_request_timer(cct, backfill_request_lock, false),
-  last_tid(0),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
@@ -273,8 +271,7 @@ OSDService::OSDService(OSD *osd) :
   cur_ratio(0),
   epoch_lock("OSDService::epoch_lock"),
   boot_epoch(0), up_epoch(0), bind_epoch(0),
-  is_stopping_lock("OSDService::is_stopping_lock"),
-  state(NOT_STOPPING)
+  is_stopping_lock("OSDService::is_stopping_lock")
 #ifdef PG_DEBUG_REFS
   , pgid_lock("OSDService::pgid_lock")
 #endif
@@ -617,7 +614,7 @@ void OSDService::promote_throttle_recalibrate()
   utime_t now = ceph_clock_now(NULL);
   double dur = now - last_recalibrate;
   last_recalibrate = now;
-  unsigned prob = promote_probability_millis.read();
+  unsigned prob = promote_probability_millis;
 
   uint64_t target_obj_sec = g_conf->osd_tier_promote_max_objects_sec;
   uint64_t target_bytes_sec = g_conf->osd_tier_promote_max_bytes_sec;
@@ -674,9 +671,9 @@ void OSDService::promote_throttle_recalibrate()
   dout(10) << __func__ << "  actual " << actual
 	   << ", actual/prob ratio " << ratio
 	   << ", adjusted new_prob " << new_prob
-	   << ", prob " << promote_probability_millis.read() << " -> " << prob
+	   << ", prob " << promote_probability_millis << " -> " << prob
 	   << dendl;
-  promote_probability_millis.set(prob);
+  promote_probability_millis = prob;
 
   // set hard limits for this interval to mitigate stampedes
   promote_max_objects = target_obj_sec * OSD::OSD_TICK_INTERVAL * 2;
@@ -767,16 +764,16 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
   // fill in osd stats too
-  struct statfs stbuf;
+  struct store_statfs_t stbuf;
   int r = osd->store->statfs(&stbuf);
   if (r < 0) {
     derr << "statfs() failed: " << cpp_strerror(r) << dendl;
     return;
   }
 
-  uint64_t bytes = stbuf.f_blocks * stbuf.f_bsize;
-  uint64_t used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize;
-  uint64_t avail = stbuf.f_bavail * stbuf.f_bsize;
+  uint64_t bytes = stbuf.total;
+  uint64_t used = bytes - stbuf.available;
+  uint64_t avail = stbuf.available;
 
   osd_stat.kb = bytes >> 10;
   osd_stat.kb_used = used >> 10;
@@ -1482,6 +1479,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
+  store->set_cache_shards(g_conf->osd_op_num_shards);
+
   ret = store->mount();
   if (ret) {
     derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
@@ -1652,10 +1651,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  dispatch_running(false),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
-  state(STATE_INITIALIZING),
   osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
     cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
@@ -1670,7 +1667,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   hb_back_server_messenger(hb_back_serverm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
-  finished_lock("OSD::finished_lock"),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
                   cct->_conf->osd_num_op_tracker_shard),
   test_ops_hook(NULL),
@@ -2022,6 +2018,8 @@ int OSD::init()
   dout(2) << "mounting " << dev_path << " "
 	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
   assert(store);  // call pre_init() first!
+
+  store->set_cache_shards(g_conf->osd_op_num_shards);
 
   int r = store->mount();
   if (r < 0) {
@@ -2635,7 +2633,6 @@ int OSD::shutdown()
   // finish ops
   op_shardedwq.drain(); // should already be empty except for laggard PGs
   {
-    Mutex::Locker l(finished_lock);
     finished.clear(); // zap waiters (bleh, this is messy)
   }
 
@@ -2741,9 +2738,9 @@ int OSD::shutdown()
         ++p) {
       dout(20) << " kicking pg " << p->first << dendl;
       p->second->lock();
-      if (p->second->ref.read() != 1) {
+      if (p->second->ref != 1) {
         derr << "pgid " << p->first << " has ref count of "
-            << p->second->ref.read() << dendl;
+            << p->second->ref << dendl;
 #ifdef PG_DEBUG_REFS
 	p->second->dump_live_ids();
 #endif
@@ -2790,7 +2787,7 @@ int OSD::update_crush_location()
   if (g_conf->osd_crush_initial_weight >= 0) {
     snprintf(weight, sizeof(weight), "%.4lf", g_conf->osd_crush_initial_weight);
   } else {
-    struct statfs st;
+    struct store_statfs_t st;
     int r = store->statfs(&st);
     if (r < 0) {
       derr << "statfs: " << cpp_strerror(r) << dendl;
@@ -2798,7 +2795,7 @@ int OSD::update_crush_location()
     }
     snprintf(weight, sizeof(weight), "%.4lf",
 	     MAX((double).00001,
-		 (double)(st.f_blocks * st.f_bsize) /
+		 (double)(st.total) /
 		 (double)(1ull << 40 /* TB */)));
   }
 
@@ -2986,14 +2983,8 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
     assert(0);
   }
 
-  PGPool p = PGPool(id, createmap->get_pool_name(id),
-		    createmap->get_pg_pool(id)->auid);
+  PGPool p = PGPool(createmap, id);
 
-  const pg_pool_t *pi = createmap->get_pg_pool(id);
-  p.info = *pi;
-  p.snapc = pi->get_snap_context();
-
-  pi->build_removed_snaps(p.cached_removed_snaps);
   dout(10) << "_get_pool " << p.id << dendl;
   return p;
 }
@@ -3366,16 +3357,15 @@ void OSD::load_pgs()
  * follow the same logic, but do all pgs at the same time so that we
  * can make a single pass across the osdmap history.
  */
-struct pistate {
-  epoch_t start, end;
-  vector<int> old_acting, old_up;
-  epoch_t same_interval_since;
-  int primary;
-  int up_primary;
-};
-
 void OSD::build_past_intervals_parallel()
 {
+  struct pistate {
+    epoch_t start, end;
+    vector<int> old_acting, old_up;
+    epoch_t same_interval_since;
+    int primary;
+    int up_primary;
+  };
   map<PG*,pistate> pis;
 
   // calculate junction of map range
@@ -3992,6 +3982,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
   }
 
   OSDMapRef curmap = service.get_osdmap();
+  assert(curmap);
 
   switch (m->op) {
 
@@ -4142,11 +4133,6 @@ void OSD::heartbeat_check()
 {
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now(cct);
-  double age = hbclient_messenger->get_dispatch_queue_max_age(now);
-  if (age > ((double)cct->_conf->osd_heartbeat_grace / 2.0)) {
-    derr << "skipping heartbeat_check, hbqueue max age: " << age << dendl;
-    return; // hb dispatch is too backed up for our hb status to be meaningful
-  }
 
   // check for incoming heartbeats (move me elsewhere?)
   utime_t cutoff = now;
@@ -4336,15 +4322,7 @@ void OSD::tick()
     service.promote_throttle_recalibrate();
   }
 
-  // only do waiters if dispatch() isn't currently running.  (if it is,
-  // it'll do the waiters, and doing them here may screw up ordering
-  // of op_queue vs handle_osd_map.)
-  if (!dispatch_running) {
-    dispatch_running = true;
-    do_waiters();
-    dispatch_running = false;
-    dispatch_cond.Signal();
-  }
+  do_waiters();
 
   check_ops_in_flight();
 
@@ -5341,6 +5319,7 @@ COMMAND("list_missing " \
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
+COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
@@ -5597,6 +5576,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       }
     }
 
+    if (osize && bsize > osize)
+      bsize = osize;
+
     dout(1) << " bench count " << count
             << " bsize " << prettybyte_t(bsize) << dendl;
 
@@ -5842,18 +5824,8 @@ bool OSD::ms_dispatch(Message *m)
     return true;
   }
 
-  while (dispatch_running) {
-    dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
-    dispatch_cond.Wait(osd_lock);
-  }
-  dispatch_running = true;
-
   do_waiters();
   _dispatch(m);
-  do_waiters();
-
-  dispatch_running = false;
-  dispatch_cond.Signal();
 
   osd_lock.Unlock();
 
@@ -6089,15 +6061,11 @@ void OSD::do_waiters()
   assert(osd_lock.is_locked());
 
   dout(10) << "do_waiters -- start" << dendl;
-  finished_lock.Lock();
   while (!finished.empty()) {
     OpRequestRef next = finished.front();
     finished.pop_front();
-    finished_lock.Unlock();
     dispatch_op(next);
-    finished_lock.Lock();
   }
-  finished_lock.Unlock();
   dout(10) << "do_waiters -- finish" << dendl;
 }
 
@@ -6356,6 +6324,20 @@ void OSD::_dispatch(Message *m)
 
 }
 
+void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
+{
+  pg->lock();
+  if (pg->is_primary()) {
+    pg->unreg_next_scrub();
+    pg->scrubber.must_scrub = true;
+    pg->scrubber.must_deep_scrub = m->deep || m->repair;
+    pg->scrubber.must_repair = m->repair;
+    pg->reg_next_scrub();
+    dout(10) << "marking " << *pg << " for scrub" << dendl;
+  }
+  pg->unlock();
+}
+
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
@@ -6371,38 +6353,16 @@ void OSD::handle_scrub(MOSDScrub *m)
   if (m->scrub_pgs.empty()) {
     for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
 	 p != pg_map.end();
-	 ++p) {
-      PG *pg = p->second;
-      pg->lock();
-      if (pg->is_primary()) {
-	pg->unreg_next_scrub();
-	pg->scrubber.must_scrub = true;
-	pg->scrubber.must_deep_scrub = m->deep || m->repair;
-	pg->scrubber.must_repair = m->repair;
-	pg->reg_next_scrub();
-	dout(10) << "marking " << *pg << " for scrub" << dendl;
-      }
-      pg->unlock();
-    }
+	 ++p)
+      handle_pg_scrub(m, p->second);
   } else {
     for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
 	 p != m->scrub_pgs.end();
 	 ++p) {
       spg_t pcand;
       if (osdmap->get_primary_shard(*p, &pcand) &&
-	  pg_map.count(pcand)) {
-	PG *pg = pg_map[pcand];
-	pg->lock();
-	if (pg->is_primary()) {
-	  pg->unreg_next_scrub();
-	  pg->scrubber.must_scrub = true;
-	  pg->scrubber.must_deep_scrub = m->deep || m->repair;
-	  pg->scrubber.must_repair = m->repair;
-	  pg->reg_next_scrub();
-	  dout(10) << "marking " << *pg << " for scrub" << dendl;
-	}
-	pg->unlock();
-      }
+	  pg_map.count(pcand))
+	handle_pg_scrub(m, pg_map[pcand]);
     }
   }
 
@@ -8810,8 +8770,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
 }
 
 void OSD::ShardedOpWQ::_enqueue(pair<PGRef, PGQueueable> item) {
-
-  uint32_t shard_index = (((item.first)->get_pgid().ps())% shard_list.size());
+  uint32_t shard_index =
+    (item.first)->get_pgid().hash_to_shard(shard_list.size());
 
   ShardData* sdata = shard_list[shard_index];
   assert (NULL != sdata);
@@ -9242,7 +9202,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  derr << "class " << cname << " open got " << cpp_strerror(r) << dendl;
 	  if (r == -ENOENT)
 	    r = -EOPNOTSUPP;
-	  else
+	  else if (r != -EPERM) // propgate permission errors
 	    r = -EIO;
 	  return r;
 	}
@@ -9269,6 +9229,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  op->set_class_write();
         if (is_promote)
           op->set_promote();
+        op->add_class(cname, is_read, is_write, cls->whitelisted);
 	break;
       }
 

@@ -20,57 +20,74 @@
 #include "include/buffer.h"
 #include "compressor/Compressor.h"
 
-class BufferlistSource : public snappy::Source {
-  list<bufferptr>::const_iterator pb;
-  size_t pb_off;
-  size_t left;
+class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
+  bufferlist::iterator pb;
+  size_t remaining;
 
  public:
-  explicit BufferlistSource(const bufferlist &data): pb(data.buffers().begin()), pb_off(0), left(data.length()) {}
-  virtual ~BufferlistSource() {}
-  virtual size_t Available() const { return left; }
-  virtual const char* Peek(size_t* len) {
-    if (left) {
-      *len = pb->length() - pb_off;
-      return pb->c_str() + pb_off;
-    } else {
-      *len = 0;
-      return NULL;
-    }
+  explicit BufferlistSource(bufferlist::iterator _pb, size_t _input_len)
+    : pb(_pb),
+      remaining(_input_len) {
+    remaining = std::min(remaining, (size_t)pb.get_remaining());
   }
-  virtual void Skip(size_t n) {
-    if (n + pb_off == pb->length()) {
-      ++pb;
-      pb_off = 0;
-    } else {
-      pb_off += n;
+  size_t Available() const override {
+    return remaining;
+  }
+  const char *Peek(size_t *len) override {
+    const char *data = NULL;
+    *len = 0;
+    size_t avail = Available();
+    if (avail) {
+      auto ptmp = pb;
+      *len = ptmp.get_ptr_and_advance(avail, &data);
     }
-    left -= n;
+    return data;
+  }
+  void Skip(size_t n) override {
+    assert(n <= remaining);
+    pb.advance(n);
+    remaining -= n;
+  }
+
+  bufferlist::iterator get_pos() const {
+    return pb;
   }
 };
 
 class SnappyCompressor : public Compressor {
  public:
-  virtual ~SnappyCompressor() {}
-  virtual const char* get_method_name() { return "snappy"; }
-  virtual int compress(const bufferlist &src, bufferlist &dst) {
-    BufferlistSource source(src);
-    bufferptr ptr(snappy::MaxCompressedLength(src.length()));
+  SnappyCompressor() : Compressor("snappy") {}
+
+  int compress(const bufferlist &src, bufferlist &dst) override {
+    BufferlistSource source(const_cast<bufferlist&>(src).begin(), src.length());
+    bufferptr ptr = buffer::create_page_aligned(
+      snappy::MaxCompressedLength(src.length()));
     snappy::UncheckedByteArraySink sink(ptr.c_str());
     snappy::Compress(&source, &sink);
-    dst.append(ptr, 0, sink.CurrentDestination()-ptr.c_str());
+    dst.append(ptr, 0, sink.CurrentDestination() - ptr.c_str());
     return 0;
   }
-  virtual int decompress(const bufferlist &src, bufferlist &dst) {
+
+  int decompress(const bufferlist &src, bufferlist &dst) override {
+    bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
+    return decompress(i, src.length(), dst);
+  }
+
+  int decompress(bufferlist::iterator &p,
+		 size_t compressed_len,
+		 bufferlist &dst) override {
     size_t res_len = 0;
     // Trick, decompress only need first 32bits buffer
+    bufferlist::const_iterator ptmp = p;
     bufferlist tmp;
-    tmp.substr_of( src, 0, 4 );
-    if (!snappy::GetUncompressedLength(tmp.c_str(), tmp.length(), &res_len))
+    ptmp.copy(4, tmp);
+    if (!snappy::GetUncompressedLength(tmp.c_str(), tmp.length(), &res_len)) {
       return -1;
-    BufferlistSource source(src);
+    }
+    BufferlistSource source(p, compressed_len);
     bufferptr ptr(res_len);
     if (snappy::RawUncompress(&source, ptr.c_str())) {
+      p = source.get_pos();
       dst.append(ptr);
       return 0;
     }

@@ -7,11 +7,8 @@ a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
 
-.. important:: CephFS currently lacks a robust 'fsck' check and
-               repair function.  Please use caution when storing
-               important data as the disaster recovery tools are
-               still under development.  For more information about
-               using CephFS today, see :doc:`/cephfs/early-adopters`
+.. note:: If you are evaluating CephFS for the first time, please review
+          the best practices for deployment: :doc:`/cephfs/best-practices`
 
 .. ditaa::
             +-----------------------+  +------------------------+
@@ -82,8 +79,10 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+    Deployment best practices <best-practices>
     Administrative commands <administration>
 	POSIX compatibility <posix>
+	Experimental Features <experimental-features>
         CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>

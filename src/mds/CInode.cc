@@ -493,6 +493,7 @@ __u32 InodeStoreBase::hash_dentry_name(const string &dn)
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
     which = CEPH_STR_HASH_LINUX;
+  assert(ceph_str_hash_valid(which));
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
@@ -807,9 +808,14 @@ bool CInode::is_projected_ancestor_of(CInode *other)
   return false;
 }
 
-void CInode::make_path_string(string& s, bool force, CDentry *use_parent) const
+/*
+ * If use_parent is NULL (it should be one of inode's projected parents),
+ * we use it to make path string. Otherwise, we use inode's parent dentry
+ * to make path string
+ */
+void CInode::make_path_string(string& s, CDentry *use_parent) const
 {
-  if (!force)
+  if (!use_parent)
     use_parent = parent;
 
   if (use_parent) {
@@ -844,7 +850,7 @@ void CInode::make_path_string_projected(string& s) const
 	 p != projected_parent.end();
 	 ++p) {
       string q;
-      make_path_string(q, true, *p);
+      make_path_string(q, *p);
       s += " ";
       s += q;
     }
@@ -995,6 +1001,7 @@ void CInode::_stored(int r, version_t v, Context *fin)
     mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
 				<< " errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
+    fin->complete(r);
     return;
   }
 
@@ -1211,6 +1218,8 @@ void CInode::_stored_backtrace(int r, version_t v, Context *fin)
                                 << ", pool " << get_backtrace_pool()
                                 << ", errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
+    if (fin)
+      fin->complete(r);
     return;
   }
 
@@ -1969,6 +1978,7 @@ void CInode::finish_scatter_gather_update(int type)
     {
       fragtree_t tmpdft = dirfragtree;
       struct frag_info_t dirstat;
+      bool dirstat_valid = true;
 
       // adjust summation
       assert(is_auth());
@@ -1984,7 +1994,13 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && dir->get_version() != 0 &&  !dir->is_frozen();
+	bool update;
+	if (dir->get_version() != 0) {
+	  update = dir->is_auth() && !dir->is_frozen();
+	} else {
+	  update = false;
+	  dirstat_valid = false;
+	}
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -2023,16 +2039,15 @@ void CInode::finish_scatter_gather_update(int type)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
-      if (!dirstat.same_sums(pi->dirstat)) {
-	bool all = true;
+      if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
 	list<frag_t> ls;
 	tmpdft.get_leaves_under(frag_t(), ls);
 	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
 	  if (!dirfrags.count(*p)) {
-	    all = false;
+	    dirstat_valid = false;
 	    break;
 	  }
-	if (all) {
+	if (dirstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " dirstat mismatch, fixing" << dendl;
 	  } else {
@@ -2068,6 +2083,7 @@ void CInode::finish_scatter_gather_update(int type)
       fragtree_t tmpdft = dirfragtree;
       nest_info_t rstat;
       rstat.rsubdirs = 1;
+      bool rstat_valid = true;
 
       // adjust summation
       assert(is_auth());
@@ -2081,7 +2097,13 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && dir->get_version() != 0 && !dir->is_frozen();
+	bool update;
+	if (dir->get_version() != 0) {
+	  update = dir->is_auth() && !dir->is_frozen();
+	} else {
+	  update = false;
+	  rstat_valid = false;
+	}
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -2122,16 +2144,15 @@ void CInode::finish_scatter_gather_update(int type)
       }
       dout(20) << " final rstat " << pi->rstat << dendl;
 
-      if (!rstat.same_sums(pi->rstat)) {
-	bool all = true;
+      if (rstat_valid && !rstat.same_sums(pi->rstat)) {
 	list<frag_t> ls;
 	tmpdft.get_leaves_under(frag_t(), ls);
 	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
 	  if (!dirfrags.count(*p)) {
-	    all = false;
+	    rstat_valid = false;
 	    break;
 	  }
-	if (all) {
+	if (rstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " rstat mismatch, fixing" << dendl;
 	  } else {

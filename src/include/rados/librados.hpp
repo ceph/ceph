@@ -292,6 +292,8 @@ namespace librados
     ALLOC_HINT_FLAG_IMMUTABLE = 32,
     ALLOC_HINT_FLAG_SHORTLIVED = 64,
     ALLOC_HINT_FLAG_LONGLIVED = 128,
+    ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
+    ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
   };
 
   /*
@@ -391,6 +393,7 @@ namespace librados
     void zero(uint64_t off, uint64_t len);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
+    void setxattr(const char *name, const buffer::list&& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
     void clone_range(uint64_t dst_off,
@@ -1118,7 +1121,7 @@ namespace librados
     int cache_pin(const std::string& o);
     int cache_unpin(const std::string& o);
 
-    const std::string& get_pool_name() const;
+    std::string get_pool_name() const;
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
@@ -1211,7 +1214,7 @@ namespace librados
     // Features useful for test cases
     void test_blacklist_self(bool set);
 
-    /* listing objects */
+    /* pool info */
     int pool_list(std::list<std::string>& v);
     int pool_list2(std::list<std::pair<int64_t, std::string> >& v);
     int get_pool_stats(std::list<std::string>& v,
@@ -1223,6 +1226,9 @@ namespace librados
     int get_pool_stats(std::list<std::string>& v,
                        std::string& category,
 		       std::map<std::string, stats_map>& stats);
+    /// check if pool has selfmanaged snaps
+    bool get_pool_is_selfmanaged_snaps_mode(const std::string& poolname);
+
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
 

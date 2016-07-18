@@ -27,6 +27,7 @@
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
+#include "librbd/LibrbdWriteback.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -662,17 +663,6 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  uint64_t ImageCtx::get_copyup_snap_id() const
-  {
-    assert(snap_lock.is_locked());
-    // copyup requires the largest possible parent overlap,
-    // which is always the oldest snapshot (if any).
-    if (!snaps.empty()) {
-      return snaps.back();
-    }
-    return CEPH_NOSNAP;
-  }
-
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
 				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish,
@@ -1019,10 +1009,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::notify_update() {
     state->handle_update_notification();
-
-    C_SaferCond ctx;
-    image_watcher->notify_header_update(&ctx);
-    ctx.wait();
+    ImageWatcher::notify_header_update(md_ctx, header_oid);
   }
 
   void ImageCtx::notify_update(Context *on_finish) {

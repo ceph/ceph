@@ -15,4 +15,6 @@ target_link_libraries(ceph_test_cls_refcount
   ${EXTRALIBS}
   radostest
   )
-
+install(TARGETS
+  ceph_test_cls_refcount
+  DESTINATION ${CMAKE_INSTALL_BINDIR})

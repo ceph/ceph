@@ -1,8 +1,5 @@
-set(journal_test
-  mock/MockJournaler.cc
-  )
-add_library(journal_test STATIC ${journal_test})
-set_target_properties(journal_test PROPERTIES COMPILE_FLAGS
+add_library(journal_test_mock STATIC mock/MockJournaler.cc)
+set_target_properties(journal_test_mock PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_journal
@@ -20,7 +17,7 @@ set(unittest_journal_srcs
   RadosTestFixture.cc
   )
 
-add_executable(unittest_journal EXCLUDE_FROM_ALL
+add_executable(unittest_journal
   ${unittest_journal_srcs} 
   )
 add_ceph_unittest(unittest_journal ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_journal)

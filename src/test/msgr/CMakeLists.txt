@@ -26,3 +26,9 @@ set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
+install(TARGETS
+  ceph_test_async_driver
+  ceph_test_msgr
+  ceph_perf_msgr_server
+  ceph_perf_msgr_client
+  DESTINATION ${CMAKE_INSTALL_BINDIR})

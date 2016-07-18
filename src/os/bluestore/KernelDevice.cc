@@ -25,6 +25,7 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/blkdev.h"
+#include "common/align.h"
 
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -46,6 +47,7 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
+  rotational = true;
 }
 
 int KernelDevice::_lock()
@@ -115,9 +117,13 @@ int KernelDevice::open(string p)
     if (r < 0) {
       goto out_fail;
     }
+
+    rotational = block_device_is_rotational(path.c_str());
     size = s;
   } else {
     size = st.st_size;
+    //regular file is rotational device
+    rotational = true;
   }
 
   // Operate as though the block size is 4 KB.  The backing file
@@ -139,9 +145,11 @@ int KernelDevice::open(string p)
 
   dout(1) << __func__
 	  << " size " << size
-	  << " (" << pretty_si_t(size) << "B)"
+	  << " (0x" << std::hex << size << std::dec << ", "
+	  << pretty_si_t(size) << "B)"
 	  << " block_size " << block_size
 	  << " (" << pretty_si_t(block_size) << "B)"
+	  << " " << (rotational ? "rotational" : "non-rotational")
 	  << dendl;
   return 0;
 
@@ -284,12 +292,14 @@ void KernelDevice::_aio_log_start(
   uint64_t offset,
   uint64_t length)
 {
-  dout(20) << __func__ << " " << offset << "~" << length << dendl;
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   << std::dec << dendl;
   if (g_conf->bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
-      derr << __func__ << " inflight overlap of "
-	   << offset << "~" << length
+      derr << __func__ << " inflight overlap of 0x"
+	   << std::hex
+	   << offset << "~" << length << std::dec
 	   << " with " << debug_inflight << dendl;
       assert(0);
     }
@@ -302,7 +312,8 @@ void KernelDevice::_aio_log_finish(
   uint64_t offset,
   uint64_t length)
 {
-  dout(20) << __func__ << " " << aio << " " << offset << "~" << length << dendl;
+  dout(20) << __func__ << " " << aio << " 0x"
+	   << std::hex << offset << "~" << length << std::dec << dendl;
   if (g_conf->bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
     debug_inflight.erase(offset, length);
@@ -332,7 +343,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
     FS::aio_t& aio = *p;
     aio.priv = static_cast<void*>(ioc);
     dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
-	     << " " << aio.offset << "~" << aio.length << dendl;
+	     << " 0x" << std::hex << aio.offset << "~" << aio.length
+	     << std::dec << dendl;
     for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
       dout(30) << __func__ << "   iov " << (void*)q->iov_base
 	       << " len " << q->iov_len << dendl;
@@ -364,7 +376,7 @@ int KernelDevice::aio_write(
   bool buffered)
 {
   uint64_t len = bl.length();
-  dout(20) << __func__ << " " << off << "~" << len
+  dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   assert(off % block_size == 0);
@@ -373,10 +385,10 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!buffered && bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
+      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
@@ -390,7 +402,8 @@ int KernelDevice::aio_write(
     FS::aio_t& aio = ioc->pending_aios.back();
     if (g_conf->bdev_inject_crash &&
 	rand() % g_conf->bdev_inject_crash == 0) {
-      derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
+      derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
+	   << off << "~" << len << std::dec
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
@@ -405,15 +418,17 @@ int KernelDevice::aio_write(
       aio.bl.claim_append(bl);
       aio.pwritev(off);
     }
-    dout(5) << __func__ << " " << off << "~" << len << " aio " << &aio << dendl;
+    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
+	    << std::dec << " aio " << &aio << dendl;
   } else
 #endif
   {
-    dout(5) << __func__ << " " << off << "~" << len << " buffered" << dendl;
+    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
+	    << std::dec << " buffered" << dendl;
     if (g_conf->bdev_inject_crash &&
 	rand() % g_conf->bdev_inject_crash == 0) {
-      derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
-	   << dendl;
+      derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
+	   << off << "~" << len << std::dec << dendl;
       ++injecting_crash;
       return 0;
     }
@@ -443,35 +458,11 @@ int KernelDevice::aio_write(
   return 0;
 }
 
-int KernelDevice::aio_zero(
-  uint64_t off,
-  uint64_t len,
-  IOContext *ioc)
-{
-  dout(5) << __func__ << " " << off << "~" << len << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
-
-  bufferlist bl;
-  while (len > 0) {
-    bufferlist t;
-    t.append(zeros, 0, MIN(zeros.length(), len));
-    len -= t.length();
-    bl.claim_append(t);
-  }
-  // note: this works with aio only becaues the actual buffer is
-  // this->zeros, which is page-aligned and never freed.
-  return aio_write(off, bl, ioc, false);
-}
-
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
 {
-  dout(5) << __func__ << " " << off << "~" << len
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
   assert(off % block_size == 0);
@@ -505,25 +496,69 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   return r < 0 ? r : 0;
 }
 
-int KernelDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
+int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 {
-  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  uint64_t aligned_off = align_down(off, block_size);
+  uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
+  bufferptr p = buffer::create_page_aligned(aligned_len);
+  int r = 0;
+
+  r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
+  if (r < 0) {
+    r = -errno;
+    goto out;
+  }
+  assert((uint64_t)r == aligned_len);
+  memcpy(buf, p.c_str() + (off - aligned_off), len);
+
+  dout(40) << __func__ << " data: ";
+  bufferlist bl;
+  bl.append(buf, len);
+  bl.hexdump(*_dout);
+  *_dout << dendl;
+
+ out:
+  return r < 0 ? r : 0;
+}
+
+int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
+                       bool buffered)
+{
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+	  << dendl;
   assert(len > 0);
   assert(off < size);
   assert(off + len <= size);
-
   int r = 0;
-  char *t = buf;
-  uint64_t left = len;
-  while (left > 0) {
-    r = ::pread(fd_buffered, t, left, off);
+
+  //if it's direct io and unaligned, we have to use a internal buffer
+  if (!buffered && ((off % block_size != 0)
+                    || (len % block_size != 0)
+                    || (uintptr_t(buf) % CEPH_PAGE_SIZE != 0)))
+    return direct_read_unaligned(off, len, buf);
+
+  if (buffered) {
+    //buffered read
+    char *t = buf;
+    uint64_t left = len;
+    while (left > 0) {
+      r = ::pread(fd_buffered, t, left, off);
+      if (r < 0) {
+	r = -errno;
+	goto out;
+      }
+      off += r;
+      t += r;
+      left -= r;
+    }
+  } else {
+    //direct and aligned read
+    r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
       goto out;
     }
-    off += r;
-    t += r;
-    left -= r;
+    assert((uint64_t)r == len);
   }
 
   dout(40) << __func__ << " data: ";
@@ -538,14 +573,15 @@ int KernelDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
 
 int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
-  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+	  << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
   if (r < 0) {
     r = -errno;
-    derr << __func__ << " " << off << "~" << len << " error: "
-	 << cpp_strerror(r) << dendl;
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+	 << " error: " << cpp_strerror(r) << dendl;
   }
   return r;
 }

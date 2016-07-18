@@ -56,8 +56,6 @@ struct ceph_file_layout {
 
 #define CEPH_MIN_STRIPE_UNIT 65536
 
-int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
-
 struct ceph_dir_layout {
 	__u8   dl_dir_hash;   /* see ceph_hash.h for ids */
 	__u8   dl_unused1;
@@ -133,6 +131,8 @@ struct ceph_dir_layout {
 
 /* FSMap subscribers (see all MDS clusters at once) */
 #define CEPH_MSG_FS_MAP                 45
+/* FSMapUser subscribers (get MDS clusters name->ID mapping) */
+#define CEPH_MSG_FS_MAP_USER		103
 
 
 /* watch-notify operations */
@@ -369,7 +369,7 @@ enum {
 
 extern const char *ceph_mds_op_name(int op);
 
-
+#ifndef CEPH_SETATTR_MODE
 #define CEPH_SETATTR_MODE	(1 << 0)
 #define CEPH_SETATTR_UID	(1 << 1)
 #define CEPH_SETATTR_GID	(1 << 2)
@@ -377,6 +377,7 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_ATIME	(1 << 4)
 #define CEPH_SETATTR_SIZE	(1 << 5)
 #define CEPH_SETATTR_CTIME	(1 << 6)
+#endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 
@@ -386,6 +387,18 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_XATTR_CREATE  (1 << 0)
 #define CEPH_XATTR_REPLACE (1 << 1)
 #define CEPH_XATTR_REMOVE  (1 << 31)
+
+/*
+ * readdir request flags;
+ */
+#define CEPH_READDIR_REPLY_BITFLAGS	(1<<0)
+
+/*
+ * readdir reply flags.
+ */
+#define CEPH_READDIR_FRAG_END		(1<<0)
+#define CEPH_READDIR_FRAG_COMPLETE	(1<<8)
+#define CEPH_READDIR_HASH_ORDER		(1<<9)
 
 union ceph_mds_request_args {
 	struct {
@@ -404,6 +417,7 @@ union ceph_mds_request_args {
 		__le32 frag;                 /* which dir fragment */
 		__le32 max_entries;          /* how many dentries to grab */
 		__le32 max_bytes;
+		__le16 flags;
 	} __attribute__ ((packed)) readdir;
 	struct {
 		__le32 mode;

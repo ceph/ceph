@@ -30,6 +30,12 @@ namespace librbd {
     AIO_TYPE_FLUSH,
   } aio_type_t;
 
+  typedef enum {
+    STATE_PENDING = 0,
+    STATE_CALLBACK,
+    STATE_COMPLETE,
+  } aio_state_t;
+
   /**
    * AioCompletion is the overall completion for a single
    * rbd I/O request. It may be composed of many AioObjectRequests,
@@ -46,7 +52,7 @@ namespace librbd {
   struct AioCompletion {
     Mutex lock;
     Cond cond;
-    bool done;
+    aio_state_t state;
     ssize_t rval;
     callback_t complete_cb;
     void *complete_arg;
@@ -95,7 +101,7 @@ namespace librbd {
     }
 
     AioCompletion() : lock("AioCompletion::lock", true, false),
-		      done(false), rval(0), complete_cb(NULL),
+		      state(STATE_PENDING), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), blockers(1),
 		      ref(1), released(false), ictx(NULL),
@@ -109,27 +115,27 @@ namespace librbd {
 
     int wait_for_complete();
 
-    void finalize(CephContext *cct, ssize_t rval);
+    void finalize(ssize_t rval);
 
     void init_time(ImageCtx *i, aio_type_t t);
-    void start_op(ImageCtx *i, aio_type_t t);
-    void fail(CephContext *cct, int r);
+    void start_op(bool ignore_type = false);
+    void fail(int r);
 
-    void complete(CephContext *cct);
+    void complete();
 
     void set_complete_cb(void *cb_arg, callback_t cb) {
       complete_cb = cb;
       complete_arg = cb_arg;
     }
 
-    void set_request_count(CephContext *cct, uint32_t num);
+    void set_request_count(uint32_t num);
     void add_request() {
       lock.Lock();
       assert(pending_count > 0);
       lock.Unlock();
       get();
     }
-    void complete_request(CephContext *cct, ssize_t r);
+    void complete_request(ssize_t r);
 
     void associate_journal_event(uint64_t tid);
 
@@ -177,13 +183,13 @@ namespace librbd {
       Mutex::Locker l(lock);
       ++blockers;
     }
-    void unblock(CephContext *cct) {
+    void unblock() {
       Mutex::Locker l(lock);
       assert(blockers > 0);
       --blockers;
       if (pending_count == 0 && blockers == 0) {
-        finalize(cct, rval);
-        complete(cct);
+        finalize(rval);
+        complete();
       }
     }
 
@@ -199,23 +205,21 @@ namespace librbd {
 
   class C_AioRequest : public Context {
   public:
-    C_AioRequest(CephContext *cct, AioCompletion *completion)
-      : m_cct(cct), m_completion(completion) {
+    C_AioRequest(AioCompletion *completion) : m_completion(completion) {
       m_completion->add_request();
     }
     virtual ~C_AioRequest() {}
     virtual void finish(int r) {
-      m_completion->complete_request(m_cct, r);
+      m_completion->complete_request(r);
     }
   protected:
-    CephContext *m_cct;
     AioCompletion *m_completion;
   };
 
   class C_AioRead : public C_AioRequest {
   public:
-    C_AioRead(CephContext *cct, AioCompletion *completion)
-      : C_AioRequest(cct, completion), m_req(NULL) {
+    C_AioRead(AioCompletion *completion)
+      : C_AioRequest(completion), m_req(nullptr) {
     }
     virtual ~C_AioRead() {}
     virtual void finish(int r);

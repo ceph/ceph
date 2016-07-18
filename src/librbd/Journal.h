@@ -8,29 +8,29 @@
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
-#include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
+#include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <algorithm>
-#include <iosfwd>
 #include <list>
 #include <string>
 #include <unordered_map>
 
-class Context;
 class ContextWQ;
 class SafeTimer;
 namespace journal {
 class Journaler;
 }
+namespace librados {
+  class IoCtx;
+}
 
 namespace librbd {
 
-class AioCompletion;
 class AioObjectRequest;
 class ImageCtx;
 
@@ -129,13 +129,11 @@ public:
 
   void flush_commit_position(Context *on_finish);
 
-  uint64_t append_write_event(AioCompletion *aio_comp,
-                              uint64_t offset, size_t length,
+  uint64_t append_write_event(uint64_t offset, size_t length,
                               const bufferlist &bl,
                               const AioObjectRequests &requests,
                               bool flush_entry);
-  uint64_t append_io_event(AioCompletion *aio_comp,
-                           journal::EventEntry &&event_entry,
+  uint64_t append_io_event(journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,
                            uint64_t offset, size_t length,
                            bool flush_entry);
@@ -157,8 +155,16 @@ public:
     return op_tid;
   }
 
-  int start_external_replay(journal::Replay<ImageCtxT> **journal_replay);
+  void start_external_replay(journal::Replay<ImageCtxT> **journal_replay,
+                             Context *on_start, Context *on_close_request);
   void stop_external_replay();
+
+  void add_listener(journal::ListenerType type,
+                    journal::JournalListenerPtr listener);
+  void remove_listener(journal::ListenerType type,
+                       journal::JournalListenerPtr listener);
+
+  int check_resync_requested(bool *do_resync);
 
 private:
   ImageCtxT &m_image_ctx;
@@ -176,7 +182,6 @@ private:
 
   struct Event {
     Futures futures;
-    AioCompletion *aio_comp = nullptr;
     AioObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
     ExtentInterval pending_extents;
@@ -186,9 +191,9 @@ private:
 
     Event() {
     }
-    Event(const Futures &_futures, AioCompletion *_aio_comp,
-          const AioObjectRequests &_requests, uint64_t offset, size_t length)
-      : futures(_futures), aio_comp(_aio_comp), aio_object_requests(_requests) {
+    Event(const Futures &_futures, const AioObjectRequests &_requests,
+          uint64_t offset, size_t length)
+      : futures(_futures), aio_object_requests(_requests) {
       if (length > 0) {
         pending_extents.insert(offset, length);
       }
@@ -289,9 +294,26 @@ private:
   bool m_blocking_writes;
 
   journal::Replay<ImageCtxT> *m_journal_replay;
+  Context *m_on_replay_close_request = nullptr;
 
-  uint64_t append_io_events(AioCompletion *aio_comp,
-                            journal::EventType event_type,
+  struct MetadataListener : public ::journal::JournalMetadataListener {
+    Journal<ImageCtxT> *journal;
+
+    MetadataListener(Journal<ImageCtxT> *journal) : journal(journal) { }
+
+    void handle_update(::journal::JournalMetadata *) {
+      FunctionContext *ctx = new FunctionContext([this](int r) {
+        journal->handle_metadata_updated();
+      });
+      journal->m_work_queue->queue(ctx, 0);
+    }
+  } m_metadata_listener;
+
+  typedef std::map<journal::ListenerType,
+                   std::list<journal::JournalListenerPtr> > ListenerMap;
+  ListenerMap m_listener_map;
+
+  uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
                             const AioObjectRequests &requests,
                             uint64_t offset, size_t length, bool flush_entry);
@@ -303,6 +325,8 @@ private:
 
   void complete_event(typename Events::iterator it, int r);
 
+  void start_append();
+
   void handle_initialized(int r);
   void handle_get_tags(int r);
 
@@ -311,8 +335,12 @@ private:
   void handle_replay_process_ready(int r);
   void handle_replay_process_safe(ReplayEntry replay_entry, int r);
 
+  void handle_start_external_replay(int r,
+                                    journal::Replay<ImageCtxT> **journal_replay,
+                                    Context *on_finish);
+
   void handle_flushing_restart(int r);
-  void handle_flushing_replay(int r);
+  void handle_flushing_replay();
 
   void handle_recording_stopped(int r);
 
@@ -328,6 +356,10 @@ private:
 
   bool is_steady_state() const;
   void wait_for_steady_state(Context *on_state);
+
+  int check_resync_requested_internal(bool *do_resync);
+
+  void handle_metadata_updated();
 };
 
 } // namespace librbd

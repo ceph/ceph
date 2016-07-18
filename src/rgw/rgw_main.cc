@@ -46,7 +46,6 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_swift_auth.h"
-#include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
@@ -81,7 +80,7 @@ void signal_shutdown()
     if (ret < 0) {
       int err = -errno;
       derr << "ERROR: " << __func__ << ": write() returned "
-	   << cpp_strerror(-err) << dendl;
+           << cpp_strerror(-err) << dendl;
     }
   }
 }
@@ -201,7 +200,7 @@ int main(int argc, const char **argv)
   if (TEMP_FAILURE_RETRY(dup2(STDOUT_FILENO, STDERR_FILENO) < 0)) {
     int err = errno;
     cout << "failed to redirect stderr to stdout: " << cpp_strerror(err)
-	 << std::endl;
+         << std::endl;
     return ENOSYS;
   }
 
@@ -217,7 +216,7 @@ int main(int argc, const char **argv)
   // First, let's determine which frontends are configured.
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
   global_pre_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-		  flags);
+          flags);
 
   list<string> frontends;
   get_str_list(g_conf->rgw_frontends, ",", frontends);
@@ -234,11 +233,13 @@ int main(int argc, const char **argv)
       // dropping permissions by setting the appropriate flag.
       flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
       if (f.find("port") != string::npos) {
-	// check for the most common ws problems
-	if ((f.find("port=") == string::npos) ||
-	    (f.find("port= ") != string::npos)) {
-	  derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' (ensure civetweb port parameter has the form 'port=80' with no spaces before or after '=')" << dendl;
-	}
+        // check for the most common ws problems
+        if ((f.find("port=") == string::npos) ||
+            (f.find("port= ") != string::npos)) {
+          derr << "WARNING: civetweb frontend config found unexpected spacing around 'port' "
+               << "(ensure civetweb port parameter has the form 'port=80' with no spaces "
+               << "before or after '=')" << dendl;
+        }
       }
     }
 
@@ -259,7 +260,7 @@ int main(int argc, const char **argv)
   // initialization. Passing false as the final argument ensures that
   // global_pre_init() is not invoked twice.
   global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-	      flags, "rgw_data", false);
+          flags, "rgw_data", false);
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -288,7 +289,11 @@ int main(int argc, const char **argv)
   // claim the reference and release it after subsequent destructors have fired
   boost::intrusive_ptr<CephContext> cct(g_ceph_context, false);
 
-  rgw_tools_init(g_ceph_context);
+  int r = rgw_tools_init(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: unable to initialize rgw tools" << dendl;
+    return -r;
+  }
 
   rgw_init_resolver();
   
@@ -296,7 +301,6 @@ int main(int argc, const char **argv)
   
   FCGX_Init();
 
-  int r = 0;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads,
       g_conf->rgw_run_sync_thread);
@@ -310,6 +314,10 @@ int main(int argc, const char **argv)
     return EIO;
   }
   r = rgw_perf_start(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: failed starting rgw perf" << dendl;
+    return -r;
+  }
 
   rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
 
@@ -318,9 +326,6 @@ int main(int argc, const char **argv)
   init_timer.shutdown();
   mutex.Unlock();
 
-  if (r) 
-    return 1;
-
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
   rgw_log_usage_init(g_ceph_context, store);
@@ -328,7 +333,6 @@ int main(int argc, const char **argv)
   RGWREST rest;
 
   list<string> apis;
-  bool do_swift = false;
 
   get_str_list(g_conf->rgw_enable_apis, apis);
 
@@ -343,15 +347,13 @@ int main(int argc, const char **argv)
     rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
 
   if (apis_map.count("swift") > 0) {
-    do_swift = true;
-    swift_init(g_ceph_context);
     rest.register_resource(g_conf->rgw_swift_url_prefix,
-			   set_logging(new RGWRESTMgr_SWIFT));
+               set_logging(new RGWRESTMgr_SWIFT));
   }
 
   if (apis_map.count("swift_auth") > 0)
     rest.register_resource(g_conf->rgw_swift_auth_entry,
-			   set_logging(new RGWRESTMgr_SWIFT_Auth));
+               set_logging(new RGWRESTMgr_SWIFT_Auth));
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
@@ -472,10 +474,6 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGINT, handle_sigterm);
   unregister_async_signal_handler(SIGUSR1, handle_sigterm);
   shutdown_async_signal_handler();
-
-  if (do_swift) {
-    swift_finalize();
-  }
 
   rgw_log_usage_finalize();
 

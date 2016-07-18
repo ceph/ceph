@@ -12,6 +12,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/compat.h"
 #include "include/int_types.h"
 
 #include <unistd.h>
@@ -31,7 +32,6 @@
 #include <iostream>
 #include <map>
 
-#include "include/compat.h"
 #include "include/linux_fiemap.h"
 
 #include "common/xattr.h"
@@ -701,14 +701,18 @@ void FileStore::collect_metadata(map<string,string> *pm)
   }
 }
 
-int FileStore::statfs(struct statfs *buf)
+int FileStore::statfs(struct store_statfs_t *buf0)
 {
-  if (::statfs(basedir.c_str(), buf) < 0) {
+  struct statfs buf;
+  buf0->reset();
+  if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
     assert(!m_filestore_fail_eio || r != -EIO);
     assert(r != -ENOENT);
     return r;
   }
+  buf0->total = buf.f_blocks * buf.f_bsize;
+  buf0->available = buf.f_bavail * buf.f_bsize;
   return 0;
 }
 
@@ -5419,7 +5423,10 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
   dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
 
   FDRef fd;
-  int ret;
+  int ret = 0;
+
+  if (expected_object_size == 0 || expected_write_size == 0)
+    goto out;
 
   ret = lfn_open(cid, oid, false, &fd);
   if (ret < 0)

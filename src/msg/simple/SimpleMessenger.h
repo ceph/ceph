@@ -35,7 +35,7 @@ using namespace std;
 #include "msg/Message.h"
 #include "include/assert.h"
 
-#include "DispatchQueue.h"
+#include "msg/DispatchQueue.h"
 #include "Pipe.h"
 #include "Accepter.h"
 
@@ -93,7 +93,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(entity_addr_t& addr);
+  void set_addr_unknowns(const entity_addr_t& addr) override;
 
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
@@ -305,9 +305,6 @@ private:
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
-  /// Throttle preventing us from building up a big backlog waiting for dispatch
-  Throttle dispatch_throttler;
-
   bool reaper_started, reaper_stop;
   Cond reaper_cond;
 
@@ -382,13 +379,6 @@ public:
    * probably shouldn't be called by anybody else.
    */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
-
-  /**
-   * Release memory accounting back to the dispatch throttler.
-   *
-   * @param msize The amount of memory to release.
-   */
-  void dispatch_throttle_release(uint64_t msize);
 
   /**
    * This function is used by the reaper thread. As long as nobody

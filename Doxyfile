@@ -7,10 +7,12 @@ SYMBOL_CACHE_SIZE = 2
 WARN_IF_UNDOCUMENTED = NO
 INPUT = src
 RECURSIVE = YES
-EXCLUDE = src/gmock \
+EXCLUDE = src/googletest \
 	src/test/virtualenv \
 	src/out \
-        src/tracing
+	src/tracing \
+	src/civetweb
+
 VERBATIM_HEADERS = NO
 GENERATE_HTML = NO
 GENERATE_LATEX = NO

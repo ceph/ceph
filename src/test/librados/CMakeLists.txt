@@ -141,26 +141,31 @@ set_target_properties(ceph_test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_snapshots
   librados ${UNITTEST_LIBS} radostest)
 
-# ceph_test_rados_api_tmap_migrate
-add_executable(ceph_test_rados_api_tmap_migrate
-  ${CMAKE_SOURCE_DIR}/src/tools/cephfs/DataScan.cc
-  ${CMAKE_SOURCE_DIR}/src/tools/cephfs/MDSUtility.cc
-  tmap_migrate.cc
-  )
-set_target_properties(ceph_test_rados_api_tmap_migrate PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_tmap_migrate
-  librados mds osdc global cls_cephfs_client ${UNITTEST_LIBS} radostest)
+install(TARGETS
+  ceph_test_rados_api_aio
+  ceph_test_rados_api_c_read_operations
+  ceph_test_rados_api_c_write_operations
+  ceph_test_rados_api_cmd
+  ceph_test_rados_api_io
+  ceph_test_rados_api_list
+  ceph_test_rados_api_lock
+  ceph_test_rados_api_misc
+  ceph_test_rados_api_pool
+  ceph_test_rados_api_snapshots
+  ceph_test_rados_api_stat
+  ceph_test_rados_api_tier
+  ceph_test_rados_api_watch_notify
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_librados
-add_executable(unittest_librados EXCLUDE_FROM_ALL
+add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados)
 target_link_libraries(unittest_librados librados global ${BLKID_LIBRARIES})
 
 # unittest_librados_config
-add_executable(unittest_librados_config EXCLUDE_FROM_ALL
+add_executable(unittest_librados_config
   librados_config.cc
   )
 add_ceph_unittest(unittest_librados_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados_config)

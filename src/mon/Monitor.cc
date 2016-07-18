@@ -777,7 +777,7 @@ int Monitor::preinit()
 int Monitor::init()
 {
   dout(2) << "init" << dendl;
-  lock.Lock();
+  Mutex::Locker l(lock);
 
   // start ticker
   timer.init();
@@ -797,7 +797,6 @@ int Monitor::init()
   get_classic_monitor_commands(&cmds, &cmdsize);
   MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
 
-  lock.Unlock();
   return 0;
 }
 
@@ -2631,7 +2630,19 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  // check return value. If no prefix parameter provided,
+  // return value will be false, then return error info.
+  if(!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+    reply_command(op, -EINVAL, "command prefix not found", 0);
+    return;
+  }
+
+  // check prefix is empty
+  if (prefix.empty()) {
+    reply_command(op, -EINVAL, "command prefix must not be empty", 0);
+    return;
+  }
+
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = Formatter::create("json");
@@ -2652,6 +2663,15 @@ void Monitor::handle_command(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);
+
+  // make sure fullcmd is not empty.
+  // invalid prefix will cause empty vector fullcmd.
+  // such as, prefix=";,,;"
+  if (fullcmd.empty()) {
+    reply_command(op, -EINVAL, "command requires a prefix to be valid", 0);
+    return;
+  }
+
   module = fullcmd[0];
 
   // validate command is in leader map
@@ -3712,8 +3732,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       {
         op->set_type_paxos();
         MMonPaxos *pm = static_cast<MMonPaxos*>(op->get_req());
-        if (!op->is_src_mon() ||
-            !op->get_session()->is_capable("mon", MON_CAP_X)) {
+        if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
           //can't send these!
           break;
         }
@@ -4272,7 +4291,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,
 			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
-    if (p->first.find("mdsmap") == 0 || p->first == "fsmap") {
+    if (p->first.compare(0, 6, "mdsmap") == 0 || p->first.compare(0, 5, "fsmap") == 0) {
       dout(10) << __func__ << ": MDS sub '" << p->first << "'" << dendl;
       if ((int)s->is_capable("mds", MON_CAP_R)) {
         Subscription *sub = s->sub_map[p->first];

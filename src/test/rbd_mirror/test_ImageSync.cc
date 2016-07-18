@@ -88,7 +88,7 @@ public:
     return new ImageSync<>(m_local_image_ctx, m_remote_image_ctx,
                            m_threads->timer, &m_threads->timer_lock,
                            "mirror-uuid", m_remote_journaler, &m_client_meta,
-                           ctx);
+                           m_threads->work_queue, ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
@@ -100,7 +100,7 @@ public:
 TEST_F(TestImageSync, Empty) {
   C_SaferCond ctx;
   ImageSync<> *request = create_request(&ctx);
-  request->start();
+  request->send();
   ASSERT_EQ(0, ctx.wait());
 
   ASSERT_EQ(0U, m_client_meta.sync_points.size());
@@ -115,7 +115,7 @@ TEST_F(TestImageSync, Simple) {
 
   C_SaferCond ctx;
   ImageSync<> *request = create_request(&ctx);
-  request->start();
+  request->send();
   ASSERT_EQ(0, ctx.wait());
 
   int64_t object_size = std::min<int64_t>(
@@ -159,7 +159,7 @@ TEST_F(TestImageSync, SnapshotStress) {
 
   C_SaferCond ctx;
   ImageSync<> *request = create_request(&ctx);
-  request->start();
+  request->send();
   ASSERT_EQ(0, ctx.wait());
 
   int64_t object_size = std::min<int64_t>(

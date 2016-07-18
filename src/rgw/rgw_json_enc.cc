@@ -138,6 +138,7 @@ void ACLGrant::dump(Formatter *f) const
 
   f->dump_string("name", name);
   f->dump_int("group", (int)group);
+  f->dump_string("url_spec", url_spec);
 }
 
 void RGWAccessControlList::dump(Formatter *f) const
@@ -488,14 +489,25 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 void RGWQuotaInfo::dump(Formatter *f) const
 {
   f->dump_bool("enabled", enabled);
-  f->dump_int("max_size_kb", max_size_kb);
+  f->dump_bool("check_on_raw", check_on_raw);
+
+  f->dump_int("max_size", max_size);
+  f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
   f->dump_int("max_objects", max_objects);
 }
 
 void RGWQuotaInfo::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
+  if (false == JSONDecoder::decode_json("max_size", max_size, obj)) {
+    /* We're parsing an older version of the struct. */
+    int64_t max_size_kb = 0;
+
+    JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
+    max_size = max_size_kb * 1024;
+  }
   JSONDecoder::decode_json("max_objects", max_objects, obj);
+
+  JSONDecoder::decode_json("check_on_raw", check_on_raw, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
 
@@ -507,6 +519,7 @@ void rgw_bucket::dump(Formatter *f) const
   encode_json("index_pool", index_pool, f);
   encode_json("marker", marker, f);
   encode_json("bucket_id", bucket_id, f);
+  encode_json("tenant", tenant, f);
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
@@ -516,6 +529,7 @@ void rgw_bucket::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const
@@ -545,8 +559,10 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
 
 void RGWStorageStats::dump(Formatter *f) const
 {
-  encode_json("num_kb", num_kb, f);
-  encode_json("num_kb_rounded", num_kb_rounded, f);
+  encode_json("size", size, f);
+  encode_json("size_rounded", size_rounded, f);
+  encode_json("num_kb", rgw_rounded_kb(size), f);
+  encode_json("num_kb_rounded", rgw_rounded_kb(size_rounded), f);
   encode_json("num_objects", num_objects, f);
 }
 

@@ -12,9 +12,57 @@
 #ifndef CEPH_COMPAT_H
 #define CEPH_COMPAT_H
 
+#include "acconfig.h"
+
 #if defined(__FreeBSD__)
+
+/* Make sure that ENODATA is defined in the correct way */
+#ifndef ENODATA
 #define	ENODATA	ENOATTR
+#else
+#if (ENODATA == 9919)
+// #warning ENODATA already defined to be 9919, redefining to fix
+// Silencing this warning because it fires at all files where compat.h
+// is included after boost files.
+//
+// This value stems from the definition in the boost library
+// And when this case occurs it is due to the fact that boost files
+// are included before this file. Redefinition might not help in this
+// case since already parsed code has evaluated to the wrong value.
+// This would warrrant for d definition that would actually be evaluated
+// at the location of usage and report a possible confict.
+// This is left up to a future improvement
+#elif (ENODATA != 87)
+#warning ENODATA already defined to a value different from 87 (ENOATRR), refining to fix
+#endif
+#undef ENODATA
+#define ENODATA ENOATTR
+#endif
+
+#ifndef MSG_MORE
 #define	MSG_MORE 0
+#endif
+
+#ifndef O_DSYNC
+#define O_DSYNC O_SYNC
+#endif
+
+#ifndef HOST_NAME_MAX
+#define HOST_NAME_MAX 64
+#endif
+
+// Fix clock accuracy
+#if !defined(CLOCK_MONOTONIC_COARSE)
+#if defined(CLOCK_MONOTONIC_FAST)
+#define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC_FAST
+#else
+#define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
+#endif
+#endif
+
+/* And include the extra required include file */
+#include <pthread_np.h>
+
 #endif /* !__FreeBSD__ */
 
 #if defined(__APPLE__)
@@ -62,6 +110,32 @@
 
 #if defined(_AIX)
 #define MSG_DONTWAIT MSG_NONBLOCK
+#endif
+
+#if defined(HAVE_PTHREAD_SETNAME_NP)
+  #if defined(__APPLE__)
+    #define pthread_setname_np(thread, name) ({ \
+      int __result = 0;                         \
+      if (thread == pthread_self())             \
+        __result = pthread_setname_np(name)     \
+      __result; })
+  #endif
+#elif defined(HAVE_PTHREAD_SET_NAME_NP)
+  /* Fix a small name diff */
+  #define pthread_setname_np pthread_set_name_np
+#else
+  /* compiler warning free success noop */
+  #define pthread_setname_np(thread, name) ({ \
+    int __i = 0;                              \
+    __i; })
+#endif
+
+#if !defined(HAVE_PTHREAD_GETNAME_NP)
+  /* compiler warning free success noop */
+  #define pthread_getname_np(thread, name, len) ({ \
+    if (name != NULL)                              \
+      *name = '\0';                                \
+    0; })
 #endif
 
 #endif /* !CEPH_COMPAT_H */

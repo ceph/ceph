@@ -6,34 +6,41 @@
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
 
 namespace librbd {
 
-struct MockImageReplayerJournal;
+namespace {
 
-struct MockImageReplayerImageCtx : public MockImageCtx {
-  MockImageReplayerJournal *journal = nullptr;
+struct MockTestJournal;
+
+struct MockTestImageCtx : public MockImageCtx {
+  MockTestJournal *journal = nullptr;
 };
 
-struct MockImageReplayerJournal : public MockJournal {
-  MOCK_METHOD1(start_external_replay, int(journal::Replay<MockImageReplayerImageCtx> **));
+struct MockTestJournal : public MockJournal {
+  MOCK_METHOD3(start_external_replay, void(journal::Replay<MockTestImageCtx> **,
+                                           Context *on_finish,
+                                           Context *on_close_request));
   MOCK_METHOD0(stop_external_replay, void());
 };
+
+} // anonymous namespace
 
 namespace journal {
 
 template<>
-struct Replay<MockImageReplayerImageCtx> {
+struct Replay<MockTestImageCtx> {
   MOCK_METHOD3(process, void(bufferlist::iterator *, Context *, Context *));
   MOCK_METHOD1(flush, void(Context*));
   MOCK_METHOD2(shut_down, void(bool, Context*));
 };
 
 template <>
-struct TypeTraits<MockImageReplayerImageCtx> {
+struct TypeTraits<MockTestImageCtx> {
   typedef ::journal::MockJournalerProxy Journaler;
   typedef ::journal::MockReplayEntryProxy ReplayEntry;
 };
@@ -48,24 +55,25 @@ namespace mirror {
 namespace image_replayer {
 
 template<>
-struct BootstrapRequest<librbd::MockImageReplayerImageCtx> {
+struct BootstrapRequest<librbd::MockTestImageCtx> {
   static BootstrapRequest* s_instance;
   Context *on_finish = nullptr;
 
   static BootstrapRequest* create(librados::IoCtx &local_io_ctx,
-                                  librados::IoCtx &remote_io_ctx,
-                                  librbd::MockImageReplayerImageCtx **local_image_ctx,
-                                  const std::string &local_image_name,
-                                  const std::string &remote_image_id,
-                                  const std::string &global_image_id,
-                                  ContextWQ *work_queue, SafeTimer *timer,
-                                  Mutex *timer_lock,
-                                  const std::string &local_mirror_uuid,
-                                  const std::string &remote_mirror_uuid,
-                                  ::journal::MockJournalerProxy *journaler,
-                                  librbd::journal::MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish,
-                                  rbd::mirror::ProgressContext *progress_ctx = nullptr) {
+        librados::IoCtx &remote_io_ctx,
+        rbd::mirror::ImageSyncThrottlerRef<librbd::MockTestImageCtx> image_sync_throttler,
+        librbd::MockTestImageCtx **local_image_ctx,
+        const std::string &local_image_name,
+        const std::string &remote_image_id,
+        const std::string &global_image_id,
+        ContextWQ *work_queue, SafeTimer *timer,
+        Mutex *timer_lock,
+        const std::string &local_mirror_uuid,
+        const std::string &remote_mirror_uuid,
+        ::journal::MockJournalerProxy *journaler,
+        librbd::journal::MirrorPeerClientMeta *client_meta,
+        Context *on_finish,
+        rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -76,15 +84,22 @@ struct BootstrapRequest<librbd::MockImageReplayerImageCtx> {
     s_instance = this;
   }
 
+  void put() {
+  }
+
+  void get() {
+  }
+
   MOCK_METHOD0(send, void());
+  MOCK_METHOD0(cancel, void());
 };
 
 template<>
-struct CloseImageRequest<librbd::MockImageReplayerImageCtx> {
+struct CloseImageRequest<librbd::MockTestImageCtx> {
   static CloseImageRequest* s_instance;
   Context *on_finish = nullptr;
 
-  static CloseImageRequest* create(librbd::MockImageReplayerImageCtx **image_ctx,
+  static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
                                    ContextWQ *work_queue, bool destroy_only,
                                    Context *on_finish) {
     assert(s_instance != nullptr);
@@ -101,7 +116,7 @@ struct CloseImageRequest<librbd::MockImageReplayerImageCtx> {
 };
 
 template<>
-struct ReplayStatusFormatter<librbd::MockImageReplayerImageCtx> {
+struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
   static ReplayStatusFormatter* s_instance;
 
   static ReplayStatusFormatter* create(::journal::MockJournalerProxy *journaler,
@@ -118,9 +133,9 @@ struct ReplayStatusFormatter<librbd::MockImageReplayerImageCtx> {
   MOCK_METHOD2(get_or_send_update, bool(std::string *description, Context *on_finish));
 };
 
-BootstrapRequest<librbd::MockImageReplayerImageCtx>* BootstrapRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
-CloseImageRequest<librbd::MockImageReplayerImageCtx>* CloseImageRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
-ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>* ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
+BootstrapRequest<librbd::MockTestImageCtx>* BootstrapRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+CloseImageRequest<librbd::MockTestImageCtx>* CloseImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+ReplayStatusFormatter<librbd::MockTestImageCtx>* ReplayStatusFormatter<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image_replayer
 } // namespace mirror
@@ -128,14 +143,14 @@ ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>* ReplayStatusFormatter<
 
 // template definitions
 #include "tools/rbd_mirror/ImageReplayer.cc"
-template class rbd::mirror::ImageReplayer<librbd::MockImageReplayerImageCtx>;
+template class rbd::mirror::ImageReplayer<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
 
 class TestMockImageReplayer : public TestMockFixture {
 public:
-  typedef ImageReplayer<librbd::MockImageReplayerImageCtx> MockImageReplayer;
+  typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();

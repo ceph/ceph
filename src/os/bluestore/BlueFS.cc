@@ -17,6 +17,7 @@ BlueFS::BlueFS()
   : logger(NULL),
     ino_last(0),
     log_seq(0),
+    log_seq_stable(0),
     log_writer(NULL),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
@@ -27,6 +28,10 @@ BlueFS::BlueFS()
 
 BlueFS::~BlueFS()
 {
+  for (auto p : ioc) {
+    if (p)
+      p->aio_wait();
+  }
   for (auto p : bdev) {
     if (p) {
       p->close();
@@ -42,18 +47,36 @@ void BlueFS::_init_logger()
 {
   PerfCountersBuilder b(g_ceph_context, "BlueFS",
                         l_bluefs_first, l_bluefs_last);
-  b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes", "Bytes gifted from BlueStore");
-  b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes", "Bytes reclaimed by BlueStore");
-  b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes", "Total bytes (main db device)");
-  b.add_u64(l_bluefs_db_free_bytes, "db_free_bytes", "Free bytes (main db device)");
-  b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes", "Total bytes (wal device)");
-  b.add_u64(l_bluefs_wal_free_bytes, "wal_free_bytes", "Free bytes (wal device)");
-  b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes", "Total bytes (slow device)");
-  b.add_u64(l_bluefs_slow_free_bytes, "slow_free_bytes", "Free bytes (slow device)");
+  b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes",
+		    "Bytes gifted from BlueStore");
+  b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes",
+		    "Bytes reclaimed by BlueStore");
+  b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes",
+	    "Total bytes (main db device)");
+  b.add_u64(l_bluefs_db_free_bytes, "db_free_bytes",
+	    "Free bytes (main db device)");
+  b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
+	    "Total bytes (wal device)");
+  b.add_u64(l_bluefs_wal_free_bytes, "wal_free_bytes",
+	    "Free bytes (wal device)");
+  b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes",
+	    "Total bytes (slow device)");
+  b.add_u64(l_bluefs_slow_free_bytes, "slow_free_bytes",
+	    "Free bytes (slow device)");
   b.add_u64(l_bluefs_num_files, "num_files", "File count");
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log");
-  b.add_u64_counter(l_bluefs_log_compactions, "log_compactions", "Compactions of the metadata log");
-  b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes", "Bytes written to the metadata log");
+  b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
+		    "Compactions of the metadata log");
+  b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
+		    "Bytes written to the metadata log");
+  b.add_u64_counter(l_bluefs_files_written_wal, "files_written_wal",
+		    "Files written to WAL");
+  b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
+		    "Files written to SSTs");
+  b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
+		    "Bytes written to WAL");
+  b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
+		    "Bytes written to SSTs");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -84,19 +107,12 @@ void BlueFS::_update_logger_stats()
   }
 }
 
-/*static void aio_cb(void *priv, void *priv2)
-{
-  BlueFS *fs = static_cast<BlueFS*>(priv);
-  if (priv2)
-    fs->_aio_finish(priv2);
-    }*/
-
 int BlueFS::add_block_device(unsigned id, string path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
   assert(bdev[id] == NULL);
-  BlockDevice *b = BlockDevice::create(path, NULL, NULL); //aio_cb, this);
+  BlockDevice *b = BlockDevice::create(path, NULL, NULL);
   int r = b->open(path);
   if (r < 0) {
     delete b;
@@ -118,8 +134,9 @@ uint64_t BlueFS::get_block_device_size(unsigned id)
 
 void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 {
-  std::lock_guard<std::mutex> l(lock);
-  dout(1) << __func__ << " bdev " << id << " " << offset << "~" << length
+  std::unique_lock<std::mutex> l(lock);
+  dout(1) << __func__ << " bdev " << id
+          << " 0x" << std::hex << offset << "~" << length << std::dec
 	  << dendl;
   assert(id < bdev.size());
   assert(bdev[id]);
@@ -129,7 +146,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 
   if (alloc.size()) {
     log_t.op_alloc_add(id, offset, length);
-    int r = _flush_log();
+    int r = _flush_and_sync_log(l);
     assert(r == 0);
     alloc[id]->init_add_free(offset, length);
   }
@@ -142,8 +159,9 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 			   uint64_t *offset, uint32_t *length)
 {
-  std::lock_guard<std::mutex> l(lock);
-  dout(1) << __func__ << " bdev " << id << " want " << want << dendl;
+  std::unique_lock<std::mutex> l(lock);
+  dout(1) << __func__ << " bdev " << id
+          << " want 0x" << std::hex << want << std:: dec << dendl;
   assert(id < alloc.size());
   assert(alloc[id]);
   int r = alloc[id]->reserve(want);
@@ -158,13 +176,13 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   block_all[id].erase(*offset, *length);
   block_total[id] -= *length;
   log_t.op_alloc_rm(id, *offset, *length);
-  r = _flush_log();
+  r = _flush_and_sync_log(l);
   assert(r == 0);
 
   if (logger)
     logger->inc(l_bluefs_reclaim_bytes, *length);
-  dout(1) << __func__ << " bdev " << id << " want " << want
-	  << " got " << *offset << "~" << *length << dendl;
+  dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
+	  << " got 0x" << *offset << "~" << *length << std::dec << dendl;
   return 0;
 }
 
@@ -217,6 +235,7 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
 
 int BlueFS::mkfs(uuid_d osd_uuid)
 {
+  std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__
 	  << " osd_uuid " << osd_uuid
 	  << dendl;
@@ -248,17 +267,18 @@ int BlueFS::mkfs(uuid_d osd_uuid)
     if (p.empty())
       continue;
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
-      dout(20) << __func__ << " op_alloc_add " << bdev << " " << q.get_start()
-	       << "~" << q.get_len() << dendl;
+      dout(20) << __func__ << " op_alloc_add " << bdev << " 0x"
+               << std::hex << q.get_start() << "~" << q.get_len() << std::dec
+               << dendl;
       log_t.op_alloc_add(bdev, q.get_start(), q.get_len());
     }
   }
-  _flush_log();
+  _flush_and_sync_log(l);
 
   // write supers
   super.log_fnode = log_file->fnode;
   _write_super();
-  _flush_bdev();
+  flush_bdev();
 
   // clean up
   super = bluefs_super_t();
@@ -282,7 +302,9 @@ void BlueFS::_init_alloc()
       continue;
     }
     assert(bdev[id]->get_size());
-    alloc[id] = Allocator::create(g_conf->bluestore_allocator, bdev[id]->get_size());
+    alloc[id] = Allocator::create(g_conf->bluestore_allocator,
+                                  bdev[id]->get_size(),
+                                  g_conf->bluefs_alloc_size);
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());
@@ -294,7 +316,10 @@ void BlueFS::_stop_alloc()
 {
   dout(20) << __func__ << dendl;
   for (auto p : alloc) {
-    delete p;
+    if (p != nullptr)  {
+      p->shutdown();
+      delete p;
+    }
   }
   alloc.clear();
 }
@@ -334,7 +359,9 @@ int BlueFS::mount()
   log_writer = _create_writer(_get_file(1));
   assert(log_writer->file->fnode.ino == 1);
   log_writer->pos = log_writer->file->fnode.size;
-  dout(10) << __func__ << " log write pos set to " << log_writer->pos << dendl;
+  dout(10) << __func__ << " log write pos set to 0x"
+           << std::hex << log_writer->pos << std::dec
+           << dendl;
 
   _init_logger();
   return 0;
@@ -376,15 +403,19 @@ int BlueFS::_write_super()
   ::encode(super, bl);
   uint32_t crc = bl.crc32c(-1);
   ::encode(crc, bl);
+  dout(10) << __func__ << " super block length(encoded): " << bl.length() << dendl;
+  dout(10) << __func__ << " superblock " << super.version << dendl;
+  dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
-  IOContext ioc(NULL);
-  bdev[BDEV_DB]->aio_write(get_super_offset(), bl, &ioc, false);
-  bdev[BDEV_DB]->aio_submit(&ioc);
-  ioc.aio_wait();
-  dout(20) << __func__ << " v " << super.version << " crc " << crc
-	   << " offset " << get_super_offset() << dendl;
+  bdev[BDEV_DB]->aio_write(get_super_offset(), bl, ioc[BDEV_DB], false);
+  bdev[BDEV_DB]->aio_submit(ioc[BDEV_DB]);
+  ioc[BDEV_DB]->aio_wait();
+  dout(20) << __func__ << " v " << super.version
+           << " crc 0x" << std::hex << crc
+           << " offset 0x" << get_super_offset() << std::dec
+           << dendl;
   return 0;
 }
 
@@ -411,8 +442,9 @@ int BlueFS::_open_super()
   }
   ::decode(expected_crc, p);
   if (crc != expected_crc) {
-    derr << __func__ << " bad crc on superblock, expected " << expected_crc
-	 << " != actual " << crc << dendl;
+    derr << __func__ << " bad crc on superblock, expected 0x"
+         << std::hex << expected_crc << " != actual 0x" << crc << std::dec
+         << dendl;
     return -EIO;
   }
   dout(10) << __func__ << " superblock " << super.version << dendl;
@@ -428,6 +460,7 @@ int BlueFS::_replay()
 
   FileRef log_file = _get_file(1);
   log_file->fnode = super.log_fnode;
+  dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
 
   FileReader *log_reader = new FileReader(
     log_file, g_conf->bluefs_alloc_size,
@@ -459,23 +492,27 @@ int BlueFS::_replay()
       }
     }
     if (uuid != super.uuid) {
-      dout(10) << __func__ << " " << pos << ": stop: uuid " << uuid
-	       << " != super.uuid " << super.uuid << dendl;
+      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+               << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
+               << dendl;
       break;
     }
     if (seq != log_seq + 1) {
-      dout(10) << __func__ << " " << pos << ": stop: seq " << seq
-	       << " != expected " << log_seq + 1 << dendl;
+      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+               << ": stop: seq " << seq << " != expected " << log_seq + 1
+               << dendl;
       break;
     }
     if (more) {
-      dout(20) << __func__ << "  need " << more << " more bytes" << dendl;
+      dout(20) << __func__ << " need 0x" << std::hex << more << std::dec
+               << " more bytes" << dendl;
       bufferlist t;
       int r = _read(log_reader, &log_reader->buf, pos + super.block_size, more,
 		    &t, NULL);
       if (r < (int)more) {
-	dout(10) << __func__ << " " << pos << ": stop: len is "
-		 << bl.length() + more << ", which is past eof" << dendl;
+	dout(10) << __func__ << " 0x" << std::hex << pos
+                 << ": stop: len is 0x" << bl.length() + more << std::dec
+                 << ", which is past eof" << dendl;
 	break;
       }
       assert(r == (int)more);
@@ -487,13 +524,15 @@ int BlueFS::_replay()
       ::decode(t, p);
     }
     catch (buffer::error& e) {
-      dout(10) << __func__ << " " << pos << ": stop: failed to decode: "
-	       << e.what() << dendl;
+      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+               << ": stop: failed to decode: " << e.what()
+               << dendl;
       delete log_reader;
       return -EIO;
     }
     assert(seq == t.seq);
-    dout(10) << __func__ << " " << pos << ": " << t << dendl;
+    dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+             << ": " << t << dendl;
 
     bufferlist::iterator p = t.op_bl.begin();
     while (!p.end()) {
@@ -502,7 +541,8 @@ int BlueFS::_replay()
       switch (op) {
 
       case bluefs_transaction_t::OP_INIT:
-	dout(20) << __func__ << " " << pos << ":  op_init" << dendl;
+	dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                 << ":  op_init" << dendl;
 	assert(t.seq == 1);
 	break;
 
@@ -510,8 +550,8 @@ int BlueFS::_replay()
         {
 	  uint64_t next_seq;
 	  ::decode(next_seq, p);
-	  dout(20) << __func__ << " " << pos << ":  op_jump_seq "
-		   << next_seq << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_jump_seq " << next_seq << dendl;
 	  assert(next_seq >= log_seq);
 	  log_seq = next_seq - 1; // we will increment it below
 	}
@@ -524,8 +564,10 @@ int BlueFS::_replay()
 	  ::decode(id, p);
 	  ::decode(offset, p);
 	  ::decode(length, p);
-	  dout(20) << __func__ << " " << pos << ":  op_alloc_add "
-		   << " " << (int)id << ":" << offset << "~" << length << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_alloc_add " << " " << (int)id
+                   << ":0x" << std::hex << offset << "~" << length << std::dec
+                   << dendl;
 	  block_all[id].insert(offset, length);
 	  block_total[id] += length;
 	  alloc[id]->init_add_free(offset, length);
@@ -539,8 +581,10 @@ int BlueFS::_replay()
 	  ::decode(id, p);
 	  ::decode(offset, p);
 	  ::decode(length, p);
-	  dout(20) << __func__ << " " << pos << ":  op_alloc_rm "
-		   << " " << (int)id << ":" << offset << "~" << length << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_alloc_rm " << " " << (int)id
+                   << ":0x" << std::hex << offset << "~" << length << std::dec
+                   << dendl;
 	  block_all[id].erase(offset, length);
 	  block_total[id] -= length;
 	  alloc[id]->init_rm_free(offset, length);
@@ -554,8 +598,9 @@ int BlueFS::_replay()
 	  ::decode(dirname, p);
 	  ::decode(filename, p);
 	  ::decode(ino, p);
-	  dout(20) << __func__ << " " << pos << ":  op_dir_link "
-		   << " " << dirname << "/" << filename << " to " << ino
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_dir_link " << " " << dirname << "/" << filename
+                   << " to " << ino
 		   << dendl;
 	  FileRef file = _get_file(ino);
 	  assert(file->fnode.ino);
@@ -573,8 +618,9 @@ int BlueFS::_replay()
 	  string dirname, filename;
 	  ::decode(dirname, p);
 	  ::decode(filename, p);
-	  dout(20) << __func__ << " " << pos << ":  op_dir_unlink "
-		   << " " << dirname << "/" << filename << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_dir_unlink " << " " << dirname << "/" << filename
+                   << dendl;
 	  map<string,DirRef>::iterator q = dir_map.find(dirname);
 	  assert(q != dir_map.end());
 	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
@@ -588,8 +634,8 @@ int BlueFS::_replay()
         {
 	  string dirname;
 	  ::decode(dirname, p);
-	  dout(20) << __func__ << " " << pos << ":  op_dir_create " << dirname
-		   << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_dir_create " << dirname << dendl;
 	  map<string,DirRef>::iterator q = dir_map.find(dirname);
 	  assert(q == dir_map.end());
 	  dir_map[dirname] = new Dir;
@@ -600,8 +646,8 @@ int BlueFS::_replay()
         {
 	  string dirname;
 	  ::decode(dirname, p);
-	  dout(20) << __func__ << " " << pos << ":  op_dir_remove " << dirname
-		   << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_dir_remove " << dirname << dendl;
 	  map<string,DirRef>::iterator q = dir_map.find(dirname);
 	  assert(q != dir_map.end());
 	  assert(q->second->file_map.empty());
@@ -613,8 +659,8 @@ int BlueFS::_replay()
         {
 	  bluefs_fnode_t fnode;
 	  ::decode(fnode, p);
-	  dout(20) << __func__ << " " << pos << ":  op_file_update "
-		   << " " << fnode << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_file_update " << " " << fnode << dendl;
 	  FileRef f = _get_file(fnode.ino);
 	  f->fnode = fnode;
 	  if (fnode.ino > ino_last) {
@@ -627,8 +673,8 @@ int BlueFS::_replay()
         {
 	  uint64_t ino;
 	  ::decode(ino, p);
-	  dout(20) << __func__ << " " << pos << ":  op_file_remove " << ino
-		   << dendl;
+	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
+                   << ":  op_file_remove " << ino << dendl;
 	  auto p = file_map.find(ino);
 	  assert(p != file_map.end());
 	  file_map.erase(p);
@@ -636,8 +682,8 @@ int BlueFS::_replay()
 	break;
 
       default:
-	derr << __func__ << " " << pos << ": stop: unrecognized op " << (int)op
-	     << dendl;
+	derr << __func__ << " 0x" << std::hex << pos << std::dec
+             << ": stop: unrecognized op " << (int)op << dendl;
 	delete log_reader;
         return -EIO;
       }
@@ -649,7 +695,8 @@ int BlueFS::_replay()
     log_file->fnode.size = log_reader->buf.pos;
   }
 
-  dout(10) << __func__ << " log file size was " << log_file->fnode.size << dendl;
+  dout(10) << __func__ << " log file size was 0x"
+           << std::hex << log_file->fnode.size << std::dec << dendl;
   delete log_reader;
 
   // verify file link counts are all >0
@@ -695,8 +742,9 @@ void BlueFS::_drop_link(FileRef file)
     }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
-    if (file->dirty) {
-      file->dirty = false;
+    if (file->dirty_seq) {
+      assert(file->dirty_seq > log_seq_stable);
+      file->dirty_seq = 0;
       dirty_files.erase(dirty_files.iterator_to(*file));
     }
   }
@@ -708,7 +756,8 @@ int BlueFS::_read_random(
   size_t len,            ///< [in] this many bytes
   char *out)             ///< [out] optional: or copy it here
 {
-  dout(10) << __func__ << " h " << h << " " << off << "~" << len
+  dout(10) << __func__ << " h " << h
+           << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
 
   ++h->file->num_reading;
@@ -719,8 +768,8 @@ int BlueFS::_read_random(
       len = 0;
     else
       len = h->file->fnode.size - off;
-    dout(20) << __func__ << " reaching (or past) eof, len clipped to "
-	     << len << dendl;
+    dout(20) << __func__ << " reaching (or past) eof, len clipped to 0x"
+	     << std::hex << len << std::dec << dendl;
   }
 
   int ret = 0;
@@ -732,9 +781,11 @@ int BlueFS::_read_random(
 	off + l > h->file->fnode.size) {
       l = h->file->fnode.size - off;
     }
-    dout(20) << __func__ << " read buffered " << x_off << "~" << l << " of "
-	       << *p << dendl;
-    int r = bdev[p->bdev]->read_buffered(p->offset + x_off, l, out);
+    dout(20) << __func__ << " read buffered 0x"
+             << std::hex << x_off << "~" << l << std::dec
+             << " of " << *p << dendl;
+    int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
+				       g_conf->bluestore_bluefs_buffered_io);
     assert(r == 0);
     off += l;
     len -= l;
@@ -755,7 +806,8 @@ int BlueFS::_read(
   bufferlist *outbl,     ///< [out] optional: reference the result here
   char *out)             ///< [out] optional: or copy it here
 {
-  dout(10) << __func__ << " h " << h << " " << off << "~" << len
+  dout(10) << __func__ << " h " << h
+           << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
 
   ++h->file->num_reading;
@@ -766,8 +818,8 @@ int BlueFS::_read(
       len = 0;
     else
       len = h->file->fnode.size - off;
-    dout(20) << __func__ << " reaching (or past) eof, len clipped to "
-	     << len << dendl;
+    dout(20) << __func__ << " reaching (or past) eof, len clipped to 0x"
+	     << std::hex << len << std::dec << dendl;
   }
   if (outbl)
     outbl->clear();
@@ -790,14 +842,16 @@ int BlueFS::_read(
 	  buf->bl_off + l > eof_offset) {
 	l = eof_offset - buf->bl_off;
       }
-      dout(20) << __func__ << " fetching " << x_off << "~" << l << " of "
-	       << *p << dendl;
+      dout(20) << __func__ << " fetching 0x"
+               << std::hex << x_off << "~" << l << std::dec
+               << " of " << *p << dendl;
       int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				  true);
+				  g_conf->bluestore_bluefs_buffered_io);
       assert(r == 0);
     }
     left = buf->get_buf_remaining(off);
-    dout(20) << __func__ << " left " << left << " len " << len << dendl;
+    dout(20) << __func__ << " left 0x" << std::hex << left
+             << " len 0x" << len << std::dec << dendl;
 
     int r = MIN(len, left);
     if (outbl) {
@@ -811,7 +865,8 @@ int BlueFS::_read(
       out += r;
     }
 
-    dout(30) << __func__ << " result chunk (" << r << " bytes):\n";
+    dout(30) << __func__ << " result chunk (0x"
+             << std::hex << r << std::dec << " bytes):\n";
     bufferlist t;
     t.substr_of(buf->bl, off - buf->bl_off, r);
     t.hexdump(*_dout);
@@ -832,7 +887,8 @@ int BlueFS::_read(
 void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " file " << f->fnode
-	   << " " << offset << "~" << length << dendl;
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
+           << dendl;
   if (offset & ~super.block_mask()) {
     offset &= super.block_mask();
     length = ROUND_UP_TO(length, super.block_size);
@@ -842,7 +898,8 @@ void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
   while (length > 0 && p != f->fnode.extents.end()) {
     uint64_t x_len = MIN(p->length - x_off, length);
     bdev[p->bdev]->invalidate_cache(p->offset + x_off, x_len);
-    dout(20) << "  " << x_off << "~" << x_len << " of " << *p << dendl;
+    dout(20) << __func__  << " 0x" << std::hex << x_off << "~" << x_len
+             << std:: dec << " of " << *p << dendl;
     offset += x_len;
     length -= x_len;
   }
@@ -897,8 +954,9 @@ void BlueFS::_compact_log()
   for (unsigned bdev = 0; bdev < MAX_BDEV; ++bdev) {
     interval_set<uint64_t>& p = block_all[bdev];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
-      dout(20) << __func__ << " op_alloc_add " << bdev << " " << q.get_start()
-	       << "~" << q.get_len() << dendl;
+      dout(20) << __func__ << " op_alloc_add " << bdev << " 0x"
+               << std::hex << q.get_start() << "~" << q.get_len() << std::dec
+               << dendl;
       t.op_alloc_add(bdev, q.get_start(), q.get_len());
     }
   }
@@ -943,13 +1001,13 @@ void BlueFS::_compact_log()
   log_writer->append(bl);
   int r = _flush(log_writer, true);
   assert(r == 0);
-  _flush_wait(log_writer);
+  wait_for_aio(log_writer);
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
   ++super.version;
   _write_super();
-  _flush_bdev();
+  flush_bdev();
 
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
   for (auto& r : old_extents) {
@@ -969,9 +1027,26 @@ void BlueFS::_pad_bl(bufferlist& bl)
   }
 }
 
-int BlueFS::_flush_log()
+int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
+				uint64_t want_seq)
 {
-  log_t.seq = ++log_seq;
+  while (log_flushing) {
+    dout(10) << __func__ << " want_seq " << want_seq
+	     << " log is currently flushing, waiting" << dendl;
+    log_cond.wait(l);
+  }
+  if (want_seq && want_seq <= log_seq_stable) {
+    dout(10) << __func__ << " want_seq " << want_seq << " <= log_seq_stable "
+	     << log_seq_stable << ", done" << dendl;
+    return 0;
+  }
+  if (log_t.empty()) {
+    dout(10) << __func__ << " want_seq " << want_seq
+	     << " " << log_t << " not dirty, no-op" << dendl;
+    return 0;
+  }
+  uint64_t seq = log_t.seq = ++log_seq;
+  assert(want_seq == 0 || want_seq <= seq);
   log_t.uuid = super.uuid;
   dout(10) << __func__ << " " << log_t << dendl;
   assert(!log_t.empty());
@@ -999,21 +1074,41 @@ int BlueFS::_flush_log()
 
   log_t.clear();
   log_t.seq = 0;  // just so debug output is less confusing
+  log_flushing = true;
 
-  _flush_bdev();
+  flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
-  _flush_wait(log_writer);
-  _flush_bdev();
+
+  // drop lock while we wait for io
+  l.unlock();
+  wait_for_aio(log_writer);
+  flush_bdev();
+  l.lock();
+
+  log_flushing = false;
+  log_cond.notify_all();
 
   // clean dirty files
-  dirty_file_list_t::iterator p = dirty_files.begin();
-  while (p != dirty_files.end()) {
-    File *file = &(*p);
-    assert(file->dirty);
-    dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
-    file->dirty = false;
-    dirty_files.erase(p++);
+  if (seq > log_seq_stable) {
+    log_seq_stable = seq;
+    dout(20) << __func__ << " log_seq_stable " << log_seq_stable << dendl;
+    dirty_file_list_t::iterator p = dirty_files.begin();
+    while (p != dirty_files.end()) {
+      File *file = &(*p);
+      assert(file->dirty_seq > 0);
+      if (file->dirty_seq <= log_seq_stable) {
+	dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
+	file->dirty_seq = 0;
+	dirty_files.erase(p++);
+      } else {
+	++p;
+      }
+    }
+  } else {
+    dout(20) << __func__ << " log_seq_stable " << log_seq_stable
+	     << " already > out seq " << seq
+	     << ", we lost a race against another log flush, done" << dendl;
   }
 
   _update_logger_stats();
@@ -1023,8 +1118,8 @@ int BlueFS::_flush_log()
 
 int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 {
-  dout(10) << __func__ << " " << h << " pos " << h->pos
-	   << " " << offset << "~" << length
+  dout(10) << __func__ << " " << h << " pos 0x" << std::hex << h->pos
+	   << " 0x" << offset << "~" << length << std::dec
 	   << " to " << h->file->fnode << dendl;
   assert(!h->file->deleted);
   assert(h->file->num_readers.load() == 0);
@@ -1034,7 +1129,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   if (offset < h->pos) {
     length -= h->pos - offset;
     offset = h->pos;
-    dout(10) << " still need " << offset << "~" << length << dendl;
+    dout(10) << " still need 0x"
+             << std::hex << offset << "~" << length << std::dec
+             << dendl;
   }
   assert(offset <= h->file->fnode.size);
 
@@ -1053,27 +1150,39 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   if (h->file->fnode.size < offset + length) {
     h->file->fnode.size = offset + length;
-    must_dirty = true;
+    if (h->file->fnode.ino != 1) {
+      // we do not need to dirty the log file when the file size
+      // changes because replay is smart enough to discover it on its
+      // own.
+      must_dirty = true;
+    }
   }
   if (must_dirty) {
     h->file->fnode.mtime = ceph_clock_now(NULL);
     log_t.op_file_update(h->file->fnode);
-    if (!h->file->dirty) {
-      h->file->dirty = true;
+    if (h->file->dirty_seq == 0) {
       dirty_files.push_back(*h->file);
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	       << " (was clean)" << dendl;
+    } else {
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	       << " (was " << h->file->dirty_seq << ")" << dendl;
     }
+    h->file->dirty_seq = log_seq + 1;
   }
   dout(20) << __func__ << " file now " << h->file->fnode << dendl;
 
   uint64_t x_off = 0;
   vector<bluefs_extent_t>::iterator p = h->file->fnode.seek(offset, &x_off);
   assert(p != h->file->fnode.extents.end());
-  dout(20) << __func__ << " in " << *p << " x_off " << x_off << dendl;
+  dout(20) << __func__ << " in " << *p << " x_off 0x"
+           << std::hex << x_off << std::dec << dendl;
 
   unsigned partial = x_off & ~super.block_mask();
   bufferlist bl;
   if (partial) {
-    dout(20) << __func__ << " using partial tail " << partial << dendl;
+    dout(20) << __func__ << " using partial tail 0x"
+             << std::hex << partial << std::dec << dendl;
     assert(h->tail_block.length() == partial);
     bl.claim_append(h->tail_block);
     x_off -= partial;
@@ -1094,9 +1203,19 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     bl.claim_append(t);
     t.substr_of(h->buffer, length, h->buffer.length() - length);
     h->buffer.swap(t);
-    dout(20) << " leaving " << h->buffer.length() << " unflushed" << dendl;
+    dout(20) << " leaving 0x" << std::hex << h->buffer.length() << std::dec
+             << " unflushed" << dendl;
   }
   assert(bl.length() == length);
+
+  switch (h->writer_type) {
+  case WRITER_WAL:
+    logger->inc(l_bluefs_bytes_written_wal, length);
+    break;
+  case WRITER_SST:
+    logger->inc(l_bluefs_bytes_written_sst, length);
+    break;
+  }
 
   dout(30) << "dump:\n";
   bl.hexdump(*_dout);
@@ -1112,12 +1231,14 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     t.substr_of(bl, bloff, x_len);
     unsigned tail = x_len & ~super.block_mask();
     if (tail) {
-      dout(20) << __func__ << " caching tail of " << tail
+      dout(20) << __func__ << " caching tail of 0x"
+               << std::hex << tail << std::dec
 	       << " and padding block with zeros" << dendl;
       h->tail_block.substr_of(bl, bl.length() - tail, tail);
       t.append_zero(super.block_size - tail);
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], true);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev],
+			     g_conf->bluestore_bluefs_buffered_io);
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1129,12 +1250,15 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       bdev[i]->aio_submit(h->iocv[i]);
     }
   }
-  dout(20) << __func__ << " h " << h << " pos now " << h->pos << dendl;
+  dout(20) << __func__ << " h " << h << " pos now 0x"
+           << std::hex << h->pos << std::dec << dendl;
   return 0;
 }
 
-void BlueFS::_flush_wait(FileWriter *h)
+void BlueFS::wait_for_aio(FileWriter *h)
 {
+  // NOTE: this is safe to call without a lock, as long as our reference is
+  // stable.
   dout(10) << __func__ << " " << h << dendl;
   utime_t start = ceph_clock_now(NULL);
   for (auto p : h->iocv) {
@@ -1163,7 +1287,8 @@ int BlueFS::_flush(FileWriter *h, bool force)
 	     << h->file->fnode << dendl;
     return 0;
   }
-  dout(10) << __func__ << " " << h << " " << offset << "~" << length
+  dout(10) << __func__ << " " << h << " 0x"
+           << std::hex << offset << "~" << length << std::dec
 	   << " to " << h->file->fnode << dendl;
   assert(h->pos <= h->file->fnode.size);
   return _flush_range(h, offset, length);
@@ -1171,7 +1296,8 @@ int BlueFS::_flush(FileWriter *h, bool force)
 
 int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 {
-  dout(10) << __func__ << " " << offset << " file " << h->file->fnode << dendl;
+  dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
+           << " file " << h->file->fnode << dendl;
 
   // truncate off unflushed data?
   if (h->pos < offset &&
@@ -1200,21 +1326,30 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   return 0;
 }
 
-void BlueFS::_fsync(FileWriter *h)
+int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
-  _flush(h, true);
-  _flush_wait(h);
-  if (h->file->dirty) {
-    dout(20) << __func__ << " file metadata is dirty, flushing log on "
-	     << h->file->fnode << dendl;
-    _flush_log();
-    assert(!h->file->dirty);
+  int r = _flush(h, true);
+  if (r < 0)
+     return r;
+  uint64_t old_dirty_seq = h->file->dirty_seq;
+  lock.unlock();
+  wait_for_aio(h);
+  lock.lock();
+  if (old_dirty_seq) {
+    uint64_t s = log_seq;
+    dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
+	     << ") on " << h->file->fnode << ", flushing log" << dendl;
+    _flush_and_sync_log(l, old_dirty_seq);
+    assert(h->file->dirty_seq == 0 ||  // cleaned
+	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
+  return 0;
 }
 
-void BlueFS::_flush_bdev()
+void BlueFS::flush_bdev()
 {
+  // NOTE: this is safe to call without a lock.
   dout(20) << __func__ << dendl;
   for (auto p : bdev) {
     if (p)
@@ -1224,7 +1359,8 @@ void BlueFS::_flush_bdev()
 
 int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
 {
-  dout(10) << __func__ << " len " << len << " from " << id << dendl;
+  dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
+           << " from " << id << dendl;
   assert(id < alloc.size());
 
   uint64_t left = ROUND_UP_TO(len, g_conf->bluefs_alloc_size);
@@ -1276,8 +1412,8 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
 
 int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 {
-  dout(10) << __func__ << " file " << f->fnode << " "
-	   << off << "~" << len << dendl;
+  dout(10) << __func__ << " file " << f->fnode << " 0x"
+	   << std::hex << off << "~" << len << std::dec << dendl;
   uint64_t allocated = f->fnode.get_allocated();
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
@@ -1291,7 +1427,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 
 void BlueFS::sync_metadata()
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::unique_lock<std::mutex> l(lock);
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
     return;
@@ -1303,7 +1439,7 @@ void BlueFS::sync_metadata()
       p->commit_start();
     }
   }
-  _flush_log();
+  _flush_and_sync_log(l);
   for (auto p : alloc) {
     if (p) {
       p->commit_finish();
@@ -1391,6 +1527,19 @@ int BlueFS::open_for_write(
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
 
   *h = _create_writer(file);
+
+  if (0 == filename.compare(filename.length() - 4, 4, ".log")) {
+    (*h)->writer_type = BlueFS::WRITER_WAL;
+    if (logger) {
+      logger->inc(l_bluefs_files_written_wal);
+    }
+  } else if (0 == filename.compare(filename.length() - 4, 4, ".sst")) {
+    (*h)->writer_type = BlueFS::WRITER_SST;
+    if (logger) {
+      logger->inc(l_bluefs_files_written_sst);
+    }
+  }
+
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
@@ -1410,7 +1559,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 
 void BlueFS::_close_writer(FileWriter *h)
 {
-  dout(10) << __func__ << " " << h << dendl;
+  dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
   for (unsigned i=0; i<MAX_BDEV; ++i) {
     if (bdev[i]) {
       assert(h->iocv[i]);

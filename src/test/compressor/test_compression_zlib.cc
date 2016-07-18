@@ -19,15 +19,15 @@
 #include <string.h>
 #include <gtest/gtest.h>
 #include "global/global_init.h"
-#include "compressor/zlib/CompressionZlib.h"
+#include "compressor/zlib/ZlibCompressor.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 
-TEST(CompressionZlib, compress_decompress)
+TEST(ZlibCompressor, compress_decompress)
 {
-  CompressionZlib sp;
-  EXPECT_STREQ(sp.get_method_name(), "zlib");
+  ZlibCompressor sp;
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
   int len = strlen(test);
   bufferlist in, out;
@@ -40,12 +40,19 @@ TEST(CompressionZlib, compress_decompress)
   bufferlist exp;
   exp.append(test);
   EXPECT_TRUE(exp.contents_equal(after));
+  after.clear();
+  size_t compressed_len = out.length();
+  out.append_zero(12);
+  auto it = out.begin();
+  res = sp.decompress(it, compressed_len, after);
+  EXPECT_EQ(res, 0);
+  EXPECT_TRUE(exp.contents_equal(after));
 }
 
-TEST(CompressionZlib, compress_decompress_chunk)
+TEST(ZlibCompressor, compress_decompress_chunk)
 {
-  CompressionZlib sp;
-  EXPECT_STREQ(sp.get_method_name(), "zlib");
+  ZlibCompressor sp;
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
   buffer::ptr test2 ("1234567890", 10);
   int len = strlen(test);

@@ -14,6 +14,10 @@ struct rgw_user {
   rgw_user(const std::string& s) {
     from_str(s);
   }
+  rgw_user(const std::string& tenant, const std::string& id)
+    : tenant(tenant),
+      id(id) {
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -52,8 +56,8 @@ struct rgw_user {
   }
 
   void from_str(const std::string& str) {
-    ssize_t pos = str.find('$');
-    if (pos >= 0) {
+    size_t pos = str.find('$');
+    if (pos != std::string::npos) {
       tenant = str.substr(0, pos);
       id = str.substr(pos + 1);
     } else {

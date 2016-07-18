@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.11)
 
-project(Ceph)
+project(ceph)
 set(VERSION "10.2.1")
 
 if (NOT (CMAKE_MAJOR_VERSION LESS 3))
@@ -86,6 +86,9 @@ CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 CHECK_FUNCTION_EXISTS(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
+CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
 
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
@@ -132,30 +135,22 @@ CHECK_CXX_SOURCE_COMPILES("
   #include <string.h>
   int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
   " STRERROR_R_CHAR_P)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <sys/stat.h>
-  #include <stdio.h>
-  int main() { struct stat foo = {}; foo.st_mtim.tv_nsec = 0;
-  return 0; } 
-  " HAVE_STAT_ST_MTIM_TV_NSEC)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <sys/stat.h>
-  #include <stdio.h>
-  int main() { struct stat foo = {}; foo.st_mtimespec.tv_nsec = 0;
-  return 0; } 
-  " HAVE_STAT_ST_MTIMESPEC_TV_NSEC)
-CHECK_CXX_SOURCE_COMPILES("
-  int main() { float f = 12.3; int n = static_cast<int>(f); return 0; }
-  " HAVE_STATIC_CAST)
+
+include(CheckStructHasMember)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
 option(ENABLE_SHARED "build shared libraries" ON)
-if(${ENABLE_SHARED})
- set(CEPH_SHARED SHARED)
-else(${ENABLE_SHARED})
- set(CEPH_SHARED STATIC)
-endif(${ENABLE_SHARED})
+if(ENABLE_SHARED)
+  set(CEPH_SHARED SHARED)
+else(ENABLE_SHARED)
+  set(CEPH_SHARED STATIC)
+endif(ENABLE_SHARED)
+set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
 find_package(execinfo)
 
@@ -175,16 +170,6 @@ find_package(OpenLdap REQUIRED)
 set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
 message(STATUS "${OPENLDAP_LIBS}")
 endif(${WITH_OPENLDAP})
-
-option(WITH_OPENSSL "OPENSSL is here" ON)
-if(${WITH_OPENSSL})
-find_package(OpenSSL REQUIRED)
-set(HAVE_OPENSSL ON)
-#message(STATUS "${OPENSSL_LIBRARIES}")
-else(${WITH_OPENSSL})
-set(HAVE_OPENSSL OFF)
-set(OPENSSL_LIBRARIES)
-endif(${WITH_OPENSSL})
 
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
@@ -207,9 +192,6 @@ endif(WITH_SPDK)
 
 find_package(blkid REQUIRED)
 
-# probably fuse etc need this -- how to check? XXX
-option(WITH_MDS "MDS is here" ON)
-
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
@@ -227,7 +209,7 @@ endif(${WITH_LEVELDB})
 
 option(WITH_EXPAT "EXPAT is here" ON)
 if(${WITH_EXPAT})
-find_package(expat REQUIRED)
+find_package(EXPAT REQUIRED)
 endif(${WITH_EXPAT})
 
 find_package(Cython REQUIRED)
@@ -268,38 +250,50 @@ else(ALLOCATOR)
     find_package(JeMalloc)
     set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
   endif(NOT ${Tcmalloc_FOUND})
-  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+  if(Tcmalloc_FOUND)
+    set(ALLOCATOR tcmalloc)
+  elseif(JEMALLOC_FOUND)
+    set(ALLOCATOR jemalloc)
+  else()
     message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
     set(ALLOCATOR "libc")
-  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+  endif(Tcmalloc_FOUND)
 endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
 
 find_package(libuuid REQUIRED)
 
-find_package(libcurl REQUIRED)
+find_package(CURL REQUIRED)
+set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
+CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
-option(USE_CRYPTOPP "Cryptopp is ON" ON)
-find_package(cryptopp)
-if(CRYPTOPP_FOUND)
-        MESSAGE(STATUS "${CRYPTOPP_LIBRARIES}")
-        set(CRYPTO_LIBS ${CRYPTOPP_LIBRARIES})
-	set(USE_NSS 0)
-else()
-        MESSAGE(STATUS "Cryptopp not found using NSS instead")
-	find_package(NSS REQUIRED)
-        if(NSS_FOUND)
-		set(USE_NSS 1)
-		set(USE_CRYPTOPP 0)
-		find_package(NSPR)
-		if(NSPR_FOUND)
-			set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
-			#MESSAGE(STATUS "${CRYPTO_LIBS}")
-			#MESSAGE(STATUS "${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}")
-		endif(NSPR_FOUND)
-	endif(NSS_FOUND)
-endif(CRYPTOPP_FOUND)
+# nss or cryptopp?
+option(WITH_NSS "Use NSS crypto and SSL implementations" ON)
+if (${WITH_NSS})
+  find_package(NSS REQUIRED)
+    set(USE_NSS 1)
+    find_package(NSPR REQUIRED)
+    set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
+else ()
+  find_package(cryptopp REQUIRED)
+    set(CRYPTO_LIBS ${CRYPTOPP_LIBRARIES})
+    set(USE_CRYPTOPP 1)
+endif (${WITH_NSS})
+
+option(WITH_SSL "SSL build selected" ON)
+if (${USE_NSS})
+  #nss
+  set(SSL_LIBRARIES ${NSS_LIBRARIES})
+  message(STATUS "SSL with NSS selected (Libs: ${SSL_LIBRARIES})")
+else (${USE_NSS})
+  #openssl
+  find_package(OpenSSL REQUIRED)
+  set(HAVE_OPENSSL ON)
+  set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
+  message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
+endif(${USE_NSS})
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
@@ -332,8 +326,7 @@ find_package(ZLIB REQUIRED)
 #currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
 option(WITH_LTTNG "LTTng tracing is enabled" OFF)
 if(${WITH_LTTNG})
-  find_package(lttng-ust)
-  set(WITH_LTTNG ${LTTNG_FOUND})
+  find_package(lttng-ust REQUIRED)
 endif(${WITH_LTTNG})
 
 #option for Babeltrace
@@ -353,11 +346,11 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 add_definitions(-D__linux__)
 
-if(${ENABLE_SHARED})
+if(ENABLE_SHARED)
   set(Boost_USE_STATIC_LIBS   OFF)
-else(${ENABLE_SHARED})
+else(ENABLE_SHARED)
   set(Boost_USE_STATIC_LIBS   ON)
-endif(${ENABLE_SHARED})
+endif(ENABLE_SHARED)
 
 set(Boost_USE_MULTITHREADED ON)
 find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
@@ -368,7 +361,7 @@ find_package(Threads REQUIRED)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)
-  find_file(SELINUX_MAKEFILE selinux/devel/include/Makefile
+  find_file(SELINUX_MAKEFILE selinux/devel/Makefile
     PATH /usr/share)
   if(NOT SELINUX_MAKEFILE)
     message(FATAL_ERROR "Can't find selinux's Makefile")
@@ -399,3 +392,9 @@ add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
 endif(WITH_MANPAGE)
+
+option(WITH_SYSTEMD "install systemd target and service files" OFF)
+if(WITH_SYSTEMD)
+  add_subdirectory(systemd)
+endif()
+

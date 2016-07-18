@@ -249,7 +249,7 @@ public:
   typedef ceph::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
-  PGBackend *get_pgbackend() {
+  PGBackend *get_pgbackend() override {
     return pgbackend.get();
   }
 
@@ -259,13 +259,13 @@ public:
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
     ObjectStore::Transaction *t
-    );
+    ) override;
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     const object_stat_sum_t &stat
-    );
+    ) override;
   void begin_peer_recover(
     pg_shard_t peer,
     const hobject_t oid);
@@ -390,6 +390,22 @@ public:
     append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
   }
 
+  struct C_OSD_OnApplied : Context {
+    ReplicatedPGRef pg;
+    epoch_t epoch;
+    eversion_t v;
+    C_OSD_OnApplied(
+      ReplicatedPGRef pg,
+      epoch_t epoch,
+      eversion_t v)
+      : pg(pg), epoch(epoch), v(v) {}
+    void finish(int) override {
+      pg->lock();
+      if (!pg->pg_has_reset_since(epoch))
+	pg->op_applied(v);
+      pg->unlock();
+    }
+  };
   void op_applied(
     const eversion_t &applied_version);
 
@@ -493,6 +509,7 @@ public:
     bool cache_evict;     ///< true if this is a cache eviction
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
     bool ignore_log_op_stats;  // don't log op stats
+    bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
 
     // side effects
     list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
@@ -555,19 +572,19 @@ public:
     list<std::function<void()>> on_success;
     template <typename F>
     void register_on_finish(F &&f) {
-      on_finish.emplace_back(std::move(f));
+      on_finish.emplace_back(std::forward<F>(f));
     }
     template <typename F>
     void register_on_success(F &&f) {
-      on_success.emplace_back(std::move(f));
+      on_success.emplace_back(std::forward<F>(f));
     }
     template <typename F>
     void register_on_applied(F &&f) {
-      on_applied.emplace_back(std::move(f));
+      on_applied.emplace_back(std::forward<F>(f));
     }
     template <typename F>
     void register_on_commit(F &&f) {
-      on_committed.emplace_back(std::move(f));
+      on_committed.emplace_back(std::forward<F>(f));
     }
 
     bool sent_ack;
@@ -624,7 +641,7 @@ public:
       snapset(0),
       new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
-      ignore_cache(false), ignore_log_op_stats(false),
+      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
@@ -645,7 +662,7 @@ public:
               vector<OSDOp>& _ops, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
-      ignore_cache(false), ignore_log_op_stats(false),
+      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       data_off(0), reply(NULL), pg(_pg),
@@ -673,6 +690,12 @@ public:
 	   pending_async_reads.erase(i++)) {
 	delete i->second.second;
       }
+    }
+    uint64_t get_features() {
+      if (op && op->get_req()) {
+        return op->get_req()->get_connection()->get_features();
+      }
+      return -1ll;
     }
   };
   using OpContextUPtr = std::unique_ptr<OpContext>;
@@ -880,7 +903,9 @@ protected:
 
   /**
    * Merge entries atomically into all actingbackfill osds
-   * adjusting missing and recovery state as necessary
+   * adjusting missing and recovery state as necessary.
+   *
+   * Also used to store error log entries for dup detection.
    */
   void submit_log_entries(
     const list<pg_log_entry_t> &entries,
@@ -890,6 +915,7 @@ protected:
     boost::intrusive_ptr<RepGather> repop;
     set<pg_shard_t> waiting_on;
   };
+  void cancel_log_updates();
   map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
 
 
@@ -1022,7 +1048,6 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
-  SnapSetContext *create_snapset_context(const hobject_t& oid);
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
@@ -1449,6 +1474,8 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle);
   void do_op(OpRequestRef& op);
+  void record_write_error(OpRequestRef op, const hobject_t &soid,
+			  MOSDOpReply *orig_reply, int r);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op);
@@ -1604,9 +1631,6 @@ public:
     ConnectionRef con,
     ceph_tid_t tid);
   eversion_t pick_newest_available(const hobject_t& oid);
-  ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
-				  const hobject_t& oid, eversion_t version,
-				  utime_t mtime, int what);
 
   void do_update_log_missing(
     OpRequestRef &op);
@@ -1654,7 +1678,7 @@ public:
     bool user_only = false);
 };
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
+inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop
       << " " << repop.v
@@ -1665,7 +1689,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::ProxyWriteOpRef pwop)
+inline ostream& operator<<(ostream& out,
+			   const ReplicatedPG::ProxyWriteOpRef& pwop)
 {
   out << "proxywrite(" << &pwop
       << " " << pwop->user_version

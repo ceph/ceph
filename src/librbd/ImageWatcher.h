@@ -7,16 +7,13 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
-#include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "librbd/image_watcher/Notifier.h"
 #include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
 #include <utility>
-#include <vector>
-#include <boost/function.hpp>
-#include "include/assert.h"
+#include <boost/variant.hpp>
 
 class entity_name_t;
 
@@ -54,6 +51,8 @@ public:
   void notify_request_lock();
 
   void notify_header_update(Context *on_finish);
+  static void notify_header_update(librados::IoCtx &io_ctx,
+                                   const std::string &oid);
 
   uint64_t get_watch_handle() const {
     RWLock::RLocker watch_locker(m_watch_lock);

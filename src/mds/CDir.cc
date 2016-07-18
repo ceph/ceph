@@ -295,14 +295,16 @@ bool CDir::check_rstats(bool scrub)
   return good;
 }
 
-CDentry *CDir::lookup(const char *name, snapid_t snap)
+CDentry *CDir::lookup(const string& name, snapid_t snap)
 { 
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
-  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name));
+  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name.c_str(),
+							inode->hash_dentry_name(name)));
   if (iter == items.end())
     return 0;
   if (iter->second->name == name &&
-      iter->second->first <= snap) {
+      iter->second->first <= snap &&
+      iter->second->last >= snap) {
     dout(20) << "  hit -> " << iter->first << dendl;
     return iter->second;
   }
@@ -310,9 +312,13 @@ CDentry *CDir::lookup(const char *name, snapid_t snap)
   return 0;
 }
 
-
-
-
+CDentry *CDir::lookup_exact_snap(const string& name, snapid_t last) {
+  map_t::iterator p = items.find(dentry_key_t(last, name.c_str(),
+					      inode->hash_dentry_name(name)));
+  if (p == items.end())
+    return NULL;
+  return p->second;
+}
 
 /***
  * linking fun
@@ -557,10 +563,10 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 
 void CDir::unlink_inode(CDentry *dn)
 {
-  if (dn->get_linkage()->is_remote()) {
-    dout(12) << "unlink_inode " << *dn << dendl;
-  } else {
+  if (dn->get_linkage()->is_primary()) {
     dout(12) << "unlink_inode " << *dn << " " << *dn->get_linkage()->get_inode() << dendl;
+  } else {
+    dout(12) << "unlink_inode " << *dn << dendl;
   }
 
   unlink_inode_work(dn);
@@ -608,10 +614,8 @@ void CDir::unlink_inode_work( CDentry *dn )
       dn->unlink_remote(dn->get_linkage());
 
     dn->get_linkage()->set_remote(0, 0);
-  } else {
+  } else if (dn->get_linkage()->is_primary()) {
     // primary
-    assert(dn->get_linkage()->is_primary());
- 
     // unpin dentry?
     if (in->get_num_ref())
       dn->put(CDentry::PIN_INODEPIN);
@@ -623,6 +627,8 @@ void CDir::unlink_inode_work( CDentry *dn )
     // detach inode
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
+  } else {
+    assert(!dn->get_linkage()->is_null());
   }
 }
 
@@ -1481,57 +1487,6 @@ void CDir::fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys)
   _omap_fetch(c, keys);
 }
 
-class C_IO_Dir_TMAP_Fetched : public CDirIOContext {
- public:
-  bufferlist bl;
-
-  C_IO_Dir_TMAP_Fetched(CDir *d) : CDirIOContext(d) { }
-  void finish(int r) {
-    dir->_tmap_fetched(bl, r);
-  }
-};
-
-void CDir::_tmap_fetch()
-{
-  // start by reading the first hunk of it
-  C_IO_Dir_TMAP_Fetched *fin = new C_IO_Dir_TMAP_Fetched(this);
-  object_t oid = get_ondisk_object();
-  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
-  ObjectOperation rd;
-  rd.tmap_get(&fin->bl, NULL);
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, cache->mds->finisher));
-}
-
-void CDir::_tmap_fetched(bufferlist& bl, int r)
-{
-  LogChannelRef clog = cache->mds->clog;
-  dout(10) << "_tmap_fetched " << bl.length()  << " bytes for " << *this << dendl;
-
-  assert(r == 0 || r == -ENOENT);
-  assert(is_auth());
-  assert(!is_frozen());
-
-  bufferlist header;
-  map<string, bufferlist> omap;
-
-  if (bl.length() == 0) {
-    r = -ENODATA;
-  } else {
-    bufferlist::iterator p = bl.begin();
-    ::decode(header, p);
-    ::decode(omap, p);
-
-    if (!p.end()) {
-      clog->warn() << "tmap buffer of dir " << dirfrag() << " has "
-		  << bl.length() - p.get_off() << " extra bytes\n";
-    }
-    bl.clear();
-  }
-
-  _omap_fetched(header, omap, true, r);
-}
-
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
   MDSInternalContextBase *fin;
 public:
@@ -1773,12 +1728,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   assert(!is_frozen());
 
   if (hdrbl.length() == 0) {
-    if (r != -ENODATA) { // called by _tmap_fetched() ?
-      dout(10) << "_fetched 0 byte from omap, retry tmap" << dendl;
-      _tmap_fetch();
-      return;
-    }
-
     dout(0) << "_fetched missing object for " << *this << dendl;
     clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
@@ -2119,8 +2068,6 @@ void CDir::_omap_commit(int op_prio)
       if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
 	op.stat(NULL, (ceph::real_time*) NULL, NULL);
 
-      op.tmap_to_omap(true); // convert tmap to omap
-
       if (!to_set.empty())
 	op.omap_set(to_set);
       if (!to_remove.empty())
@@ -2142,8 +2089,6 @@ void CDir::_omap_commit(int op_prio)
   // don't create new dirfrag blindly
   if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
     op.stat(NULL, (ceph::real_time*)NULL, NULL);
-
-  op.tmap_to_omap(true); // convert tmap to omap
 
   /*
    * save the header at the last moment.. If we were to send it off before other
@@ -2187,7 +2132,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     bl.append('L');         // remote link
     ::encode(ino, bl);
     ::encode(d_type, bl);
-  } else {
+  } else if (dn->linkage.is_primary()) {
     // primary link
     CInode *in = dn->linkage.get_inode();
     assert(in);
@@ -2209,6 +2154,8 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     bufferlist snap_blob;
     in->encode_snap_blob(snap_blob);
     in->encode_bare(bl, cache->mds->mdsmap->get_up_features(), &snap_blob);
+  } else {
+    assert(!dn->linkage.is_null());
   }
 }
 

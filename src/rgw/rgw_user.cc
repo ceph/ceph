@@ -41,11 +41,6 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
-bool rgw_user_is_authenticated(RGWUserInfo& info)
-{
-  return (info.user_id.id != RGW_USER_ANON_ID);
-}
-
 int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 {
   CephContext *cct = store->ctx();
@@ -100,8 +95,6 @@ int rgw_store_user_info(RGWRados *store,
                         bool exclusive,
                         map<string, bufferlist> *pattrs)
 {
-  bufferlist bl;
-  info.encode(bl);
   int ret;
   RGWObjVersionTracker ot;
 
@@ -215,8 +208,12 @@ struct user_info_entry {
 
 static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
 
-int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
-                                 RGWObjVersionTracker *objv_tracker, real_time *pmtime)
+int rgw_get_user_info_from_index(RGWRados * const store,
+                                 const string& key,
+                                 rgw_bucket& bucket,
+                                 RGWUserInfo& info,
+                                 RGWObjVersionTracker * const objv_tracker,
+                                 real_time * const pmtime)
 {
   user_info_entry e;
   if (uinfo_cache.find(key, &e)) {
@@ -271,10 +268,10 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
 int rgw_get_user_info_by_uid(RGWRados *store,
                              const rgw_user& uid,
                              RGWUserInfo& info,
-                             RGWObjVersionTracker *objv_tracker,
-                             real_time *pmtime,
-                             rgw_cache_entry_info *cache_info,
-                             map<string, bufferlist> *pattrs)
+                             RGWObjVersionTracker * const objv_tracker,
+                             real_time * const pmtime,
+                             rgw_cache_entry_info * const cache_info,
+                             map<string, bufferlist> * const pattrs)
 {
   bufferlist bl;
   RGWUID user_id;
@@ -318,10 +315,15 @@ int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info
  * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker, real_time *pmtime)
+extern int rgw_get_user_info_by_swift(RGWRados * const store,
+                                      const string& swift_name,
+                                      RGWUserInfo& info,        /* out */
+                                      RGWObjVersionTracker * const objv_tracker,
+                                      real_time * const pmtime)
 {
-  return rgw_get_user_info_from_index(store, swift_name, store->get_zone_params().user_swift_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, swift_name,
+                                      store->get_zone_params().user_swift_pool,
+                                      info, objv_tracker, pmtime);
 }
 
 /**
@@ -1927,13 +1929,24 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   }
 
   user_info.suspended = op_state.get_suspension_status();
+  user_info.admin = op_state.admin;
   user_info.system = op_state.system;
 
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
 
-  if (op_state.has_bucket_quota())
+  if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
+  } else {
+    if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
+      user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
+      user_info.bucket_quota.enabled = true;
+    }
+    if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
+      user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
+      user_info.bucket_quota.enabled = true;
+    }
+  }
 
   if (op_state.temp_url_key_specified) {
     map<int, string>::iterator iter;
@@ -1943,8 +1956,18 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     }
   }
 
-  if (op_state.has_user_quota())
+  if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
+  } else {
+    if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
+      user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
+      user_info.user_quota.enabled = true;
+    }
+    if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
+      user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
+      user_info.user_quota.enabled = true;
+    }
+  }
 
   // update the request
   op_state.set_user_info(user_info);
@@ -2135,6 +2158,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (op_state.max_buckets_specified)
     user_info.max_buckets = op_state.get_max_buckets();
+
+  if (op_state.admin_specified)
+    user_info.admin = op_state.admin;
 
   if (op_state.system_specified)
     user_info.system = op_state.system;

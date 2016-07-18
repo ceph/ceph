@@ -43,6 +43,7 @@
 #include "OpRequest.h"
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
+#include <atomic>
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -84,6 +85,8 @@ const char *ceph_osd_op_flag_name(unsigned flag);
 string ceph_osd_flag_string(unsigned flags);
 /// conver CEPH_OSD_OP_FLAG_* op flags to a string
 string ceph_osd_op_flag_string(unsigned flags);
+/// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a string
+string ceph_osd_alloc_hint_flag_string(unsigned flags);
 
 struct pg_shard_t {
   int32_t osd;
@@ -511,6 +514,10 @@ struct spg_t {
       ghobject_t::NO_GEN,
       shard);
   }
+
+  unsigned hash_to_shard(unsigned num_shards) const {
+    return ps() % num_shards;
+  }
 };
 WRITE_CLASS_ENCODER(spg_t)
 WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
@@ -668,6 +675,12 @@ public:
       break;
     }
     return o;
+  }
+
+  unsigned hash_to_shard(unsigned num_shards) const {
+    if (type == TYPE_PG)
+      return pgid.hash_to_shard(num_shards);
+    return 0;  // whatever.
   }
 
   void dump(Formatter *f) const;
@@ -1428,7 +1441,6 @@ public:
     return quota_max_objects;
   }
 
-  static int calc_bits_of(int t);
   void calc_pg_masks();
 
   /*
@@ -2528,6 +2540,7 @@ struct pg_log_entry_t {
     LOST_MARK = 7,   // lost new version, now EIO
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
+    ERROR = 10,      // write that returned an error
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -2549,6 +2562,8 @@ struct pg_log_entry_t {
       return "l_mark  ";
     case CLEAN:
       return "clean   ";
+    case ERROR:
+      return "error   ";
     default:
       return "unknown ";
     }
@@ -2566,20 +2581,23 @@ struct pg_log_entry_t {
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
+  int32_t return_code; // only stored for ERRORs for dup detection
 
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
 
   pg_log_entry_t()
-   : user_version(0), op(0),
+   : user_version(0), return_code(0), op(0),
      invalid_hash(false), invalid_pool(false) {}
   pg_log_entry_t(int _op, const hobject_t& _soid,
                 const eversion_t& v, const eversion_t& pv,
                 version_t uv,
-                const osd_reqid_t& rid, const utime_t& mt)
+                const osd_reqid_t& rid, const utime_t& mt,
+                int return_code)
    : soid(_soid), reqid(rid), version(v), prior_version(pv), user_version(uv),
-     mtime(mt), op(_op), invalid_hash(false), invalid_pool(false)
+     mtime(mt), return_code(return_code), op(_op),
+     invalid_hash(false), invalid_pool(false)
      {}
       
   bool is_clone() const { return op == CLONE; }
@@ -2590,6 +2608,7 @@ struct pg_log_entry_t {
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
+  bool is_error() const { return op == ERROR; }
 
   bool is_update() const {
     return
@@ -2599,9 +2618,18 @@ struct pg_log_entry_t {
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
   }
-      
+
+  // Errors are only used for dup detection, whereas
+  // the index by objects is used by recovery, copy_get,
+  // and other facilities that don't expect or need to
+  // be aware of error entries.
+  bool object_is_indexed() const {
+    return !is_error();
+  }
+
   bool reqid_is_indexed() const {
-    return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
+    return reqid != osd_reqid_t() &&
+      (op == MODIFY || op == DELETE || op == ERROR);
   }
 
   string get_key_name() const;
@@ -3020,6 +3048,25 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
 // -----------------------------------------
 
 class ObjectExtent {
+  /**
+   * ObjectExtents are used for specifying IO behavior against RADOS
+   * objects when one is using the ObjectCacher.
+   *
+   * To use this in a real system, *every member* must be filled
+   * out correctly. In particular, make sure to initialize the
+   * oloc correctly, as its default values are deliberate poison
+   * and will cause internal ObjectCacher asserts.
+   *
+   * Similarly, your buffer_extents vector *must* specify a total
+   * size equal to your length. If the buffer_extents inadvertently
+   * contain less space than the length member specifies, you
+   * will get unintelligible asserts deep in the ObjectCacher.
+   *
+   * If you are trying to do testing and don't care about actual
+   * RADOS function, the simplest thing to do is to initialize
+   * the ObjectExtent (truncate_size can be 0), create a single entry
+   * in buffer_extents matching the length, and set oloc.pool to 0.
+   */
  public:
   object_t    oid;       // object id
   uint64_t    objectno;
@@ -3171,12 +3218,12 @@ struct watch_info_t {
   watch_info_t() : cookie(0), timeout_seconds(0) { }
   watch_info_t(uint64_t c, uint32_t t, const entity_addr_t& a) : cookie(c), timeout_seconds(t), addr(a) {}
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<watch_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(watch_info_t)
+WRITE_CLASS_ENCODER_FEATURES(watch_info_t)
 
 static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
   return l.cookie == r.cookie && l.timeout_seconds == r.timeout_seconds
@@ -3263,6 +3310,10 @@ struct object_info_t {
   // opportunistic checksums; may or may not be present
   __u32 data_digest;  ///< data crc32c
   __u32 omap_digest;  ///< omap crc32c
+  
+  // alloc hint attribute
+  uint64_t expected_object_size, expected_write_size;
+  uint32_t alloc_hint_flags;
 
   void copy_user_bits(const object_info_t& other);
 
@@ -3321,7 +3372,7 @@ struct object_info_t {
     set_omap_digest(-1);
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -3333,14 +3384,18 @@ struct object_info_t {
   explicit object_info_t()
     : user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0),
-      data_digest(-1), omap_digest(-1)
+      data_digest(-1), omap_digest(-1),
+      expected_object_size(0), expected_write_size(0),
+      alloc_hint_flags(0)
   {}
 
   explicit object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0),
-      data_digest(-1), omap_digest(-1)
+      data_digest(-1), omap_digest(-1),
+      expected_object_size(0), expected_write_size(0),
+      alloc_hint_flags(0)
   {}
 
   explicit object_info_t(bufferlist& bl) {
@@ -3351,7 +3406,7 @@ struct object_info_t {
     return *this;
   }
 };
-WRITE_CLASS_ENCODER(object_info_t)
+WRITE_CLASS_ENCODER_FEATURES(object_info_t)
 
 struct ObjectState {
   object_info_t oi;
@@ -3879,12 +3934,12 @@ struct ObjectRecoveryInfo {
   ObjectRecoveryInfo() : size(0) { }
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl, int64_t pool = -1);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+WRITE_CLASS_ENCODER_FEATURES(ObjectRecoveryInfo)
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 struct ObjectRecoveryProgress {
@@ -3936,14 +3991,14 @@ struct PullOp {
   ObjectRecoveryProgress recovery_progress;
 
   static void generate_test_instances(list<PullOp*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
 };
-WRITE_CLASS_ENCODER(PullOp)
+WRITE_CLASS_ENCODER_FEATURES(PullOp)
 ostream& operator<<(ostream& out, const PullOp &op);
 
 struct PushOp {
@@ -3960,14 +4015,14 @@ struct PushOp {
   ObjectRecoveryProgress after_progress;
 
   static void generate_test_instances(list<PushOp*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
 };
-WRITE_CLASS_ENCODER(PushOp)
+WRITE_CLASS_ENCODER_FEATURES(PushOp)
 ostream& operator<<(ostream& out, const PushOp &op);
 
 
@@ -4077,12 +4132,12 @@ struct watch_item_t {
     : name(name), cookie(cookie), timeout_seconds(timeout),
     addr(addr) { }
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(cookie, bl);
     ::encode(timeout_seconds, bl);
-    ::encode(addr, bl);
+    ::encode(addr, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -4096,7 +4151,7 @@ struct watch_item_t {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(watch_item_t)
+WRITE_CLASS_ENCODER_FEATURES(watch_item_t)
 
 struct obj_watch_item_t {
   hobject_t obj;
@@ -4110,9 +4165,9 @@ struct obj_watch_item_t {
 struct obj_list_watch_response_t {
   list<watch_item_t> entries;
 
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl);
+    ::encode(entries, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -4152,8 +4207,7 @@ struct obj_list_watch_response_t {
     o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
   }
 };
-
-WRITE_CLASS_ENCODER(obj_list_watch_response_t)
+WRITE_CLASS_ENCODER_FEATURES(obj_list_watch_response_t)
 
 struct clone_info {
   snapid_t cloneid;
@@ -4280,25 +4334,49 @@ enum scrub_error_type {
 // PromoteCounter
 
 struct PromoteCounter {
-  atomic64_t attempts, objects, bytes;
+  std::atomic_ullong  attempts{0};
+  std::atomic_ullong  objects{0};
+  std::atomic_ullong  bytes{0};
 
   void attempt() {
-    attempts.inc();
+    attempts++;
   }
 
   void finish(uint64_t size) {
-    objects.inc();
-    bytes.add(size);
+    objects++;
+    bytes += size;
   }
 
   void sample_and_attenuate(uint64_t *a, uint64_t *o, uint64_t *b) {
-    *a = attempts.read();
-    *o = objects.read();
-    *b = bytes.read();
-    attempts.set(*a / 2);
-    objects.set(*o / 2);
-    bytes.set(*b / 2);
+    *a = attempts;
+    *o = objects;
+    *b = bytes;
+    attempts = *a / 2;
+    objects = *o / 2;
+    bytes = *b / 2;
   }
 };
+
+/** store_statfs_t
++* ObjectStore full statfs information
++*/
+struct store_statfs_t
+{
+  uint64_t total = 0;                  // Total bytes
+  uint64_t available = 0;              // Free bytes available
+
+  int64_t allocated = 0;               // Bytes allocated by the store
+  int64_t stored = 0;                  // Bytes actually stored by the user
+  int64_t compressed = 0;              // Bytes stored after compression
+  int64_t compressed_allocated = 0;    // Bytes allocated for compressed data
+  int64_t compressed_original = 0;     // Bytes that were successfully compressed
+
+  void reset() {
+    *this = store_statfs_t();
+  }
+  bool operator ==(const store_statfs_t& other) const;
+  void dump(Formatter *f) const;
+};
+ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
 
 #endif

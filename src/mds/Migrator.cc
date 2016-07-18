@@ -145,7 +145,8 @@ void Migrator::dispatch(Message *m)
     break;
 
   default:
-    assert(0);
+    derr << "migrator unknown message " << m->get_type() << dendl;
+    assert(0 == "migrator unknown message");
   }
 }
 
@@ -1235,7 +1236,8 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
 					      dir,   // recur start point
 					      exported_client_map,
 					      now);
-  ::encode(exported_client_map, req->client_map);
+  ::encode(exported_client_map, req->client_map,
+           mds->mdsmap->get_up_features());
 
   // add bounds to message
   set<CDir*> bounds;

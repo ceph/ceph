@@ -85,7 +85,7 @@ void Graylog::log_entry(Entry const * const e)
     m_formatter->dump_string("short_message", s);
     m_formatter->dump_string("_app", "ceph");
     m_formatter->dump_float("timestamp", e->m_stamp.sec() + (e->m_stamp.usec() / 1000000.0));
-    m_formatter->dump_int("_thread", e->m_thread);
+    m_formatter->dump_unsigned("_thread", (uint64_t)e->m_thread);
     m_formatter->dump_int("_level", e->m_prio);
     if (m_subs != NULL)
     m_formatter->dump_string("_subsys_name", m_subs->get_name(e->m_subsys));

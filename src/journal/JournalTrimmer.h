@@ -13,6 +13,8 @@
 #include "cls/journal/cls_journal_types.h"
 #include <functional>
 
+struct Context;
+
 namespace journal {
 
 class JournalTrimmer {
@@ -23,13 +25,15 @@ public:
                  const JournalMetadataPtr &journal_metadata);
   ~JournalTrimmer();
 
+  void shut_down(Context *on_finish);
+
   int remove_objects(bool force);
   void committed(uint64_t commit_tid);
 
 private:
   typedef std::function<Context*()> CreateContext;
 
-  struct MetadataListener : public JournalMetadata::Listener {
+  struct MetadataListener : public JournalMetadataListener {
     JournalTrimmer *journal_trimmmer;
 
     MetadataListener(JournalTrimmer *journal_trimmmer)
@@ -84,6 +88,8 @@ private:
   bool m_remove_set_pending;
   uint64_t m_remove_set;
   Context *m_remove_set_ctx;
+
+  bool m_shutdown = false;
 
   CreateContext m_create_commit_position_safe_context = [this]() {
       return new C_CommitPositionSafe(this);

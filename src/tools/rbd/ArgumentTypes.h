@@ -38,6 +38,7 @@ static const std::string DEST_PREFIX("dest-");
 static const std::string POSITIONAL_COMMAND_SPEC("positional-command-spec");
 static const std::string POSITIONAL_ARGUMENTS("positional-arguments");
 static const std::string IMAGE_SPEC("image-spec");
+static const std::string GROUP_SPEC("group-spec");
 static const std::string SNAPSHOT_SPEC("snap-spec");
 static const std::string IMAGE_OR_SNAPSHOT_SPEC("image-or-snap-spec");
 static const std::string JOURNAL_SPEC("journal-spec");
@@ -49,6 +50,8 @@ static const std::string POOL_NAME("pool");
 static const std::string DEST_POOL_NAME("dest-pool");
 static const std::string IMAGE_NAME("image");
 static const std::string DEST_IMAGE_NAME("dest");
+static const std::string GROUP_NAME("group");
+static const std::string DEST_GROUP_NAME("dest-group");
 static const std::string SNAPSHOT_NAME("snap");
 static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string JOURNAL_NAME("journal");
@@ -76,6 +79,8 @@ static const std::string FORMAT("format");
 static const std::string PRETTY_FORMAT("pretty-format");
 static const std::string VERBOSE("verbose");
 static const std::string NO_ERROR("no-error");
+
+static const std::string LIMIT("limit");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
   WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR};
@@ -111,6 +116,7 @@ struct JournalObjectSize {};
 std::string get_name_prefix(ArgumentModifier modifier);
 std::string get_description_prefix(ArgumentModifier modifier);
 
+
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix = "");
@@ -118,6 +124,10 @@ void add_pool_option(boost::program_options::options_description *opt,
 void add_image_option(boost::program_options::options_description *opt,
                       ArgumentModifier modifier,
                       const std::string &desc_suffix = "");
+
+void add_group_option(boost::program_options::options_description *opt,
+		      ArgumentModifier modifier,
+		      const std::string &desc_suffix = "");
 
 void add_snap_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier);
@@ -132,6 +142,10 @@ void add_pool_options(boost::program_options::options_description *pos,
 void add_image_spec_options(boost::program_options::options_description *pos,
                             boost::program_options::options_description *opt,
                             ArgumentModifier modifier);
+
+void add_group_spec_options(boost::program_options::options_description *pos,
+			    boost::program_options::options_description *opt,
+			    ArgumentModifier modifier);
 
 void add_snap_spec_options(boost::program_options::options_description *pos,
                            boost::program_options::options_description *opt,
@@ -158,6 +172,8 @@ void add_size_option(boost::program_options::options_description *opt);
 void add_path_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt,
                       const std::string &description);
+
+void add_limit_option(boost::program_options::options_description *opt);
 
 void add_no_progress_option(boost::program_options::options_description *opt);
 

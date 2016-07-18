@@ -142,6 +142,8 @@ enum {
   LIBRADOS_ALLOC_HINT_FLAG_IMMUTABLE = 32,
   LIBRADOS_ALLOC_HINT_FLAG_SHORTLIVED = 64,
   LIBRADOS_ALLOC_HINT_FLAG_LONGLIVED = 128,
+  LIBRADOS_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
+  LIBRADOS_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
 };
 /** @} */
 
@@ -1853,6 +1855,22 @@ CEPH_RADOS_API int rados_aio_is_safe_and_cb(rados_completion_t c);
  * @returns return value of the operation
  */
 CEPH_RADOS_API int rados_aio_get_return_value(rados_completion_t c);
+
+/**
+ * Get the internal object version of the target of an asychronous operation
+ *
+ * The return value is set when the operation is complete or safe,
+ * whichever comes first.
+ *
+ * @pre The operation is safe or complete
+ *
+ * @note BUG: complete callback may never be called when the safe
+ * message is received before the complete message
+ *
+ * @param c async operation to inspect
+ * @returns version number of the asychronous operation's target
+ */
+CEPH_RADOS_API uint64_t rados_aio_get_version(rados_completion_t c);
 
 /**
  * Release a completion

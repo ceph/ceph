@@ -9,7 +9,6 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
@@ -86,7 +85,19 @@ struct ExecuteOp : public Context {
                                           on_op_complete);
   }
 
+  void execute(const journal::SnapLimitEvent &_) {
+    image_ctx.operations->execute_snap_set_limit(event.limit, on_op_complete);
+  }
+
   virtual void finish(int r) override {
+    CephContext *cct = image_ctx.cct;
+    if (r < 0) {
+      lderr(cct) << "ExecuteOp: " << __func__ << ": r=" << r << dendl;
+      on_op_complete->complete(r);
+      return;
+    }
+
+    ldout(cct, 20) << "ExecuteOp: " << __func__ << dendl;
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
     execute(event);
   }
@@ -100,14 +111,29 @@ struct C_RefreshIfRequired : public Context {
   C_RefreshIfRequired(I &image_ctx, Context *on_finish)
     : image_ctx(image_ctx), on_finish(on_finish) {
   }
+  virtual ~C_RefreshIfRequired() {
+    delete on_finish;
+  }
 
   virtual void finish(int r) override {
-    if (image_ctx.state->is_refresh_required()) {
-      image_ctx.state->refresh(on_finish);
+    CephContext *cct = image_ctx.cct;
+    Context *ctx = on_finish;
+    on_finish = nullptr;
+
+    if (r < 0) {
+      lderr(cct) << "C_RefreshIfRequired: " << __func__ << ": r=" << r << dendl;
+      image_ctx.op_work_queue->queue(ctx, r);
       return;
     }
 
-    image_ctx.op_work_queue->queue(on_finish, 0);
+    if (image_ctx.state->is_refresh_required()) {
+      ldout(cct, 20) << "C_RefreshIfRequired: " << __func__ << ": "
+                     << "refresh required" << dendl;
+      image_ctx.state->refresh(ctx);
+      return;
+    }
+
+    image_ctx.op_work_queue->queue(ctx, 0);
   }
 };
 
@@ -125,6 +151,7 @@ Replay<I>::~Replay() {
   assert(m_aio_modify_unsafe_contexts.empty());
   assert(m_aio_modify_safe_contexts.empty());
   assert(m_op_events.empty());
+  assert(m_in_flight_op_events == 0);
 }
 
 template <typename I>
@@ -156,8 +183,6 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   AioCompletion *flush_comp = nullptr;
-  OpTids cancel_op_tids;
-  Contexts op_finish_events;
   on_finish = util::create_async_context_callback(
     m_image_ctx, on_finish);
 
@@ -176,7 +201,9 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
         // OpFinishEvent or waiting for ready)
         if (op_event.on_start_ready == nullptr &&
             op_event.on_op_finish_event != nullptr) {
-          cancel_op_tids.push_back(op_event_pair.first);
+          Context *on_op_finish_event = nullptr;
+          std::swap(on_op_finish_event, op_event.on_op_finish_event);
+          m_image_ctx.op_work_queue->queue(on_op_finish_event, -ERESTART);
         }
       } else if (op_event.on_op_finish_event != nullptr) {
         // start ops waiting for OpFinishEvent
@@ -190,7 +217,7 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
     }
 
     assert(m_flush_ctx == nullptr);
-    if (!m_op_events.empty() || flush_comp != nullptr) {
+    if (m_in_flight_op_events > 0 || flush_comp != nullptr) {
       std::swap(m_flush_ctx, on_finish);
     }
   }
@@ -199,9 +226,6 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   if (flush_comp != nullptr) {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
-  }
-  for (auto op_tid : cancel_op_tids) {
-    handle_op_complete(op_tid, -ERESTART);
   }
   if (on_finish != nullptr) {
     on_finish->complete(0);
@@ -325,6 +349,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
                  << "op_tid=" << event.op_tid << dendl;
 
   bool op_in_progress;
+  bool filter_ret_val;
   Context *on_op_complete = nullptr;
   Context *on_op_finish_event = nullptr;
   {
@@ -345,6 +370,10 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
     op_in_progress = op_event.op_in_progress;
     std::swap(on_op_complete, op_event.on_op_complete);
     std::swap(on_op_finish_event, op_event.on_op_finish_event);
+
+    // special errors which indicate op never started but was recorded
+    // as failed in the journal
+    filter_ret_val = (op_event.op_finish_error_codes.count(event.r) != 0);
   }
 
   if (event.r < 0) {
@@ -358,7 +387,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
       // creating the op event
       delete on_op_complete;
       delete on_op_finish_event;
-      handle_op_complete(event.op_tid, event.r);
+      handle_op_complete(event.op_tid, filter_ret_val ? 0 : event.r);
     }
     return;
   }
@@ -488,6 +517,9 @@ void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
                                                                event,
                                                                on_op_complete));
 
+  // ignore errors recorded in the journal
+  op_event->op_finish_error_codes = {-EBUSY};
+
   // ignore errors caused due to replay
   op_event->ignore_error_codes = {-EINVAL};
 
@@ -600,6 +632,29 @@ void Replay<I>::handle_event(const journal::DemoteEvent &event,
 }
 
 template <typename I>
+void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
+			     Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap limit event"
+                 << dendl;
+
+  Mutex::Locker locker(m_lock);
+  OpEvent *op_event;
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
+  op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
+    m_image_ctx, new ExecuteOp<I, journal::SnapLimitEvent>(m_image_ctx,
+							   event,
+							   on_op_complete));
+
+  on_ready->complete(0);
+}
+
+template <typename I>
 void Replay<I>::handle_event(const journal::UnknownEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
@@ -649,7 +704,7 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
     m_in_flight_aio_modify -= on_safe_ctxs.size();
 
     std::swap(on_aio_ready, m_on_aio_ready);
-    if (m_op_events.empty() &&
+    if (m_in_flight_op_events == 0 &&
         (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
@@ -693,11 +748,15 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
   assert(m_lock.is_locked());
   if (m_op_events.count(op_tid) != 0) {
     lderr(cct) << "duplicate op tid detected: " << op_tid << dendl;
+
+    // on_ready is already async but on failure invoke on_safe async
+    // as well
     on_ready->complete(0);
-    on_safe->complete(-EINVAL);
+    m_image_ctx.op_work_queue->queue(on_safe, -EINVAL);
     return nullptr;
   }
 
+  ++m_in_flight_op_events;
   *op_event = &m_op_events[op_tid];
   (*op_event)->on_start_safe = on_safe;
 
@@ -713,7 +772,6 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
                  << "r=" << r << dendl;
 
   OpEvent op_event;
-  Context *on_flush = nullptr;
   bool shutting_down = false;
   {
     Mutex::Locker locker(m_lock);
@@ -724,10 +782,6 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     m_op_events.erase(op_it);
 
     shutting_down = (m_flush_ctx != nullptr);
-    if (m_op_events.empty() &&
-        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
-      on_flush = m_flush_ctx;
-    }
   }
 
   assert(op_event.on_start_ready == nullptr || (r < 0 && r != -ERESTART));
@@ -743,10 +797,8 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
             op_event.on_finish_safe != nullptr) || shutting_down);
   }
 
-  // skipped upon error -- so clean up if non-null
-  delete op_event.on_op_finish_event;
-  if (r == -ERESTART) {
-    delete op_event.on_op_complete;
+  if (op_event.on_op_finish_event != nullptr) {
+    op_event.on_op_finish_event->complete(r);
   }
 
   if (op_event.on_finish_ready != nullptr) {
@@ -762,8 +814,21 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
   if (op_event.on_finish_safe != nullptr) {
     op_event.on_finish_safe->complete(r);
   }
+
+  // shut down request might have occurred while lock was
+  // dropped -- handle if pending
+  Context *on_flush = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_in_flight_op_events > 0);
+    --m_in_flight_op_events;
+    if (m_in_flight_op_events == 0 &&
+        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
+      on_flush = m_flush_ctx;
+    }
+  }
   if (on_flush != nullptr) {
-    on_flush->complete(0);
+    m_image_ctx.op_work_queue->queue(on_flush, 0);
   }
 }
 

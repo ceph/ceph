@@ -12,8 +12,8 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_LIB=$SRC_PATH/.libs
 
   if [ -e CMakeCache.txt ]; then
-      CEPH_BIN=$VSTART_DEST/../../bin
-      CEPH_LIB=$VSTART_DEST/../../lib
+      CEPH_BIN=${PWD}/bin
+      CEPH_LIB=${PWD}/lib
   fi
 
   CEPH_CONF_PATH=$VSTART_DEST
@@ -24,7 +24,7 @@ fi
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
   # Out of tree build, learn source location from CMakeCache.txt
-  CEPH_ROOT=`grep Ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  CEPH_ROOT=`grep ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
   CEPH_BUILD_DIR=`pwd`
 fi
 
@@ -33,7 +33,6 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
-        [ -z "$CS_PATH" ] && CS_PATH=$CEPH_LIB/compressor
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
@@ -47,7 +46,6 @@ else
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
-        [ -z "$CS_PATH" ] && CS_PATH=$CEPH_LIB
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
 fi
 
@@ -99,6 +97,7 @@ cephx=1 #turn cephx on by default
 cache=""
 memstore=0
 bluestore=0
+lockdep=${LOCKDEP:-1}
 
 VSTART_SEC="client.vstart.sh"
 
@@ -117,7 +116,7 @@ usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
 usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw)\n"
 usage=$usage"\t-n, --new\n"
-usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
+usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
@@ -135,6 +134,7 @@ usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
+usage=$usage"\t--nolockdep disable lockdep\n"
 
 usage_exit() {
 	printf "$usage"
@@ -187,6 +187,11 @@ case $1 in
     --valgrind_mon )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mon=$2
+	    shift
+	    ;;
+    --valgrind_rgw )
+	    [ -z "$2" ] && usage_exit
+	    valgrind_rgw=$2
 	    shift
 	    ;;
     --nodaemon )
@@ -266,6 +271,9 @@ case $1 in
 	    fi
 	    shift
 	    ;;
+    --nolockdep )
+            lockdep=0
+            ;;
     * )
 	    usage_exit
 esac
@@ -365,9 +373,6 @@ if [ "$bluestore" -eq 1 ]; then
 	osd objectstore = bluestore'
 fi
 
-# lockdep everywhere?
-# export CEPH_ARGS="--lockdep 1"
-
 if [ -z "$CEPH_PORT" ]; then
     CEPH_PORT=6789
     [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
@@ -397,8 +402,13 @@ if [ -n "$ip" ]; then
     IP="$ip"
 else
     echo hostname $HOSTNAME
+    if [ -x "$(which ip 2>/dev/null)" ]; then
+	IP_CMD="ip addr"
+    else
+	IP_CMD="ifconfig"
+    fi
     # filter out IPv6 and localhost addresses
-    IP="$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
+    IP="$($IP_CMD | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
     # if nothing left, try using localhost address, it might work
     if [ -z "$IP" ]; then IP="127.0.0.1"; fi
 fi
@@ -461,15 +471,19 @@ if [ "$start_mon" -eq 1 ]; then
         mon data avail warn = 10
         mon data avail crit = 1
         erasure code dir = $EC_PATH
-        plugin dir = $CS_PATH
+        plugin dir = $CEPH_LIB
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+EOF
+if [ "$lockdep" -eq 1 ] ; then
+cat <<EOF >> $conf_fn
         lockdep = true
 EOF
+fi
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf_fn
         auth supported = cephx
@@ -504,11 +518,14 @@ $CMDSDEBUG
 $extra_conf
 [osd]
 $DAEMONOPTS
+        osd_check_max_object_name_len_on_startup = false
         osd data = $CEPH_DEV_DIR/osd\$id
         osd journal = $CEPH_DEV_DIR/osd\$id/journal
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
+        osd class load list = *
+        osd class default list = *
         osd scrub load threshold = 2000.0
         osd debug op order = true
         filestore wbthrottle xfs ios start flusher = 10
@@ -796,7 +813,7 @@ do_rgw()
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw

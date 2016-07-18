@@ -372,7 +372,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 
       // Serialize V
       bufferlist bl;
-      session->info.encode(bl);
+      session->info.encode(bl, mds->mdsmap->get_up_features());
 
       // Add to RADOS op
       to_set[k.str()] = bl;
@@ -710,7 +710,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 
     // Serialize V
     bufferlist bl;
-    session->info.encode(bl);
+    session->info.encode(bl, mds->mdsmap->get_up_features());
 
     // Add to RADOS op
     to_set[k.str()] = bl;
@@ -854,7 +854,7 @@ int Session::check_access(CInode *in, unsigned mask,
     path = in->get_projected_inode()->stray_prior_path;
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
-    in->make_path_string(path, false, in->get_projected_parent_dn());
+    in->make_path_string(path, in->get_projected_parent_dn());
     dout(20) << __func__ << " path " << path << dendl;
   }
   if (path.length())

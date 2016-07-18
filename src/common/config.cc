@@ -35,10 +35,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#if defined(__FreeBSD__)
-/* FreeBSD/Clang requires basename() whereas Linux preffers the version in <string.h> */
-#include <libgen.h>
-#endif
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
@@ -267,18 +263,17 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
      * If cluster name is not set yet, use the prefix of the
      * basename of configuration file as cluster name.
      */
-    const char *fn = c->c_str();
-    std::string name(basename(fn));
-    int pos = name.find(".conf");
-    if (pos < 0) {
-      /*
-       * If the configuration file does not follow $cluster.conf
-       * convention, we do the last try and assign the cluster to
-       * 'ceph'.
-       */
-      cluster = "ceph";
+    auto start = c->rfind('/') + 1;
+    auto end = c->find(".conf", start);
+    if (end == c->npos) {
+        /*
+         * If the configuration file does not follow $cluster.conf
+         * convention, we do the last try and assign the cluster to
+         * 'ceph'.
+         */
+        cluster = "ceph";
     } else {
-      cluster = name.substr(0, pos);      
+      cluster = c->substr(start, end - start);
     }
   }
 
@@ -650,13 +645,14 @@ void md_config_t::_apply_changes(std::ostream *oss)
     }
   }
 
+  changed.clear();
+
   // Make any pending observer callbacks
   for (rev_obs_map_t::const_iterator r = robs.begin(); r != robs.end(); ++r) {
     md_config_obs_t *obs = r->first;
     obs->handle_conf_change(this, r->second);
   }
 
-  changed.clear();
 }
 
 void md_config_t::call_all_observers()

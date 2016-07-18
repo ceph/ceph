@@ -53,14 +53,26 @@ void SyncPointPruneRequest<I>::send() {
       m_snap_names.push_back(sync_point.from_snap_name);
     }
   } else {
-    // if we have more than one sync point, trim the extras off
+    // if we have more than one sync point or invalid sync points,
+    // trim them off
+    RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
     std::set<std::string> snap_names;
     for (auto it = m_client_meta_copy.sync_points.rbegin();
          it != m_client_meta_copy.sync_points.rend(); ++it) {
-      MirrorPeerSyncPoint &sync_point =
-        m_client_meta_copy.sync_points.back();
+      MirrorPeerSyncPoint &sync_point = *it;
       if (&sync_point == &m_client_meta_copy.sync_points.front()) {
-        break;
+        if (m_remote_image_ctx->get_snap_id(sync_point.snap_name) ==
+              CEPH_NOSNAP) {
+          derr << ": failed to locate sync point snapshot: "
+               << sync_point.snap_name << dendl;
+        } else if (!sync_point.from_snap_name.empty()) {
+          derr << ": unexpected from_snap_name in primary sync point: "
+               << sync_point.from_snap_name << dendl;
+        } else {
+          // first sync point is OK -- keep it
+          break;
+        }
+        m_invalid_master_sync_point = true;
       }
 
       if (snap_names.count(sync_point.snap_name) == 0) {
@@ -91,8 +103,7 @@ void SyncPointPruneRequest<I>::send_remove_snap() {
 
   const std::string &snap_name = m_snap_names.front();
 
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": snap_name=" << snap_name << dendl;
+  dout(20) << ": snap_name=" << snap_name << dendl;
 
   Context *ctx = create_context_callback<
     SyncPointPruneRequest<I>, &SyncPointPruneRequest<I>::handle_remove_snap>(
@@ -102,8 +113,7 @@ void SyncPointPruneRequest<I>::send_remove_snap() {
 
 template <typename I>
 void SyncPointPruneRequest<I>::handle_remove_snap(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   assert(!m_snap_names.empty());
   std::string snap_name = m_snap_names.front();
@@ -113,8 +123,8 @@ void SyncPointPruneRequest<I>::handle_remove_snap(int r) {
     r = 0;
   }
   if (r < 0) {
-    lderr(cct) << ": failed to remove snapshot '" << snap_name << "': "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to remove snapshot '" << snap_name << "': "
+         << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -124,8 +134,7 @@ void SyncPointPruneRequest<I>::handle_remove_snap(int r) {
 
 template <typename I>
 void SyncPointPruneRequest<I>::send_refresh_image() {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     SyncPointPruneRequest<I>, &SyncPointPruneRequest<I>::handle_refresh_image>(
@@ -135,11 +144,10 @@ void SyncPointPruneRequest<I>::send_refresh_image() {
 
 template <typename I>
 void SyncPointPruneRequest<I>::handle_refresh_image(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
+    derr << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -149,8 +157,7 @@ void SyncPointPruneRequest<I>::handle_refresh_image(int r) {
 
 template <typename I>
 void SyncPointPruneRequest<I>::send_update_client() {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   if (m_sync_complete) {
     m_client_meta_copy.sync_points.pop_front();
@@ -160,6 +167,10 @@ void SyncPointPruneRequest<I>::send_update_client() {
   } else {
     while (m_client_meta_copy.sync_points.size() > 1) {
       m_client_meta_copy.sync_points.pop_back();
+    }
+    if (m_invalid_master_sync_point) {
+      // all subsequent sync points would have been pruned
+      m_client_meta_copy.sync_points.clear();
     }
   }
 
@@ -175,12 +186,11 @@ void SyncPointPruneRequest<I>::send_update_client() {
 
 template <typename I>
 void SyncPointPruneRequest<I>::handle_update_client(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to update client data: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -192,8 +202,7 @@ void SyncPointPruneRequest<I>::handle_update_client(int r) {
 
 template <typename I>
 void SyncPointPruneRequest<I>::finish(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

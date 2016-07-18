@@ -91,6 +91,7 @@ struct MockJournaler {
 
   MOCK_METHOD1(init, void(Context *));
   MOCK_METHOD0(shut_down, void());
+  MOCK_METHOD1(shut_down, void(Context *));
   MOCK_CONST_METHOD0(is_initialized, bool());
 
   MOCK_METHOD3(get_metadata, void(uint8_t *order, uint8_t *splay_width,
@@ -113,6 +114,7 @@ struct MockJournaler {
   MOCK_METHOD1(try_pop_front, bool(MockReplayEntryProxy *));
   MOCK_METHOD2(try_pop_front, bool(MockReplayEntryProxy *, uint64_t *));
   MOCK_METHOD0(stop_replay, void());
+  MOCK_METHOD1(stop_replay, void(Context *on_finish));
 
   MOCK_METHOD3(start_append, void(int flush_interval, uint64_t flush_bytes,
                                   double flush_age));
@@ -125,6 +127,9 @@ struct MockJournaler {
   MOCK_METHOD1(committed, void(const MockReplayEntryProxy &));
   MOCK_METHOD1(committed, void(const MockFutureProxy &future));
   MOCK_METHOD1(flush_commit_position, void(Context*));
+
+  MOCK_METHOD1(add_listener, void(JournalMetadataListener *));
+  MOCK_METHOD1(remove_listener, void(JournalMetadataListener *));
 
 };
 
@@ -153,6 +158,10 @@ struct MockJournalerProxy {
   int register_client(const bufferlist &data) {
     return -EINVAL;
   }
+  void unregister_client(Context *ctx) {
+    ctx->complete(-EINVAL);
+  }
+
   void allocate_tag(uint64_t, const bufferlist &,
                     cls::journal::Tag*, Context *on_finish) {
     on_finish->complete(-EINVAL);
@@ -163,6 +172,9 @@ struct MockJournalerProxy {
   }
   void shut_down() {
     MockJournaler::get_instance().shut_down();
+  }
+  void shut_down(Context *on_finish) {
+    MockJournaler::get_instance().shut_down(on_finish);
   }
   bool is_initialized() const {
     return MockJournaler::get_instance().is_initialized();
@@ -225,6 +237,9 @@ struct MockJournalerProxy {
   void stop_replay() {
     MockJournaler::get_instance().stop_replay();
   }
+  void stop_replay(Context *on_finish) {
+    MockJournaler::get_instance().stop_replay(on_finish);
+  }
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age) {
     MockJournaler::get_instance().start_append(flush_interval, flush_bytes,
@@ -257,6 +272,14 @@ struct MockJournalerProxy {
 
   void flush_commit_position(Context *on_finish) {
     MockJournaler::get_instance().flush_commit_position(on_finish);
+  }
+
+  void add_listener(JournalMetadataListener *listener) {
+    MockJournaler::get_instance().add_listener(listener);
+  }
+
+  void remove_listener(JournalMetadataListener *listener) {
+    MockJournaler::get_instance().remove_listener(listener);
   }
 };
 

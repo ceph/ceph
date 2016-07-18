@@ -6,7 +6,7 @@ add_library(compressor_objs OBJECT ${compressor_srcs})
 
 ## compressor plugins
 
-set(compressorlibdir ${LIBRARY_OUTPUT_PATH}/compressor)
+set(compressor_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/compressor)
 
 add_subdirectory(snappy)
 add_subdirectory(zlib)

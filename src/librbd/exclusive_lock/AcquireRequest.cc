@@ -10,6 +10,7 @@
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
@@ -123,7 +124,7 @@ Context *AcquireRequest<I>::handle_lock(int *ret_val) {
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
   if (*ret_val == 0) {
-    return send_open_object_map();
+    return send_refresh();
   } else if (*ret_val != -EBUSY) {
     lderr(cct) << "failed to lock: " << cpp_strerror(*ret_val) << dendl;
     return m_on_finish;
@@ -131,6 +132,37 @@ Context *AcquireRequest<I>::handle_lock(int *ret_val) {
 
   send_get_lockers();
   return nullptr;
+}
+
+template <typename I>
+Context *AcquireRequest<I>::send_refresh() {
+  if (!m_image_ctx.state->is_refresh_required()) {
+    return send_open_object_map();
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  using klass = AcquireRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_refresh>(this);
+  m_image_ctx.state->acquire_lock_refresh(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_refresh(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to refresh image: " << cpp_strerror(*ret_val)
+               << dendl;
+    m_error_result = *ret_val;
+    send_unlock();
+    return nullptr;
+  }
+
+  return send_open_object_map();
 }
 
 template <typename I>

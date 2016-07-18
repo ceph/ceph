@@ -5,10 +5,9 @@
 #define CEPH_LIBRBD_UTILS_H
 
 #include "include/rados/librados.hpp"
+#include "include/rbd_types.h"
 #include "include/Context.h"
 #include <type_traits>
-
-class Context;
 
 namespace librbd {
 
@@ -93,6 +92,7 @@ struct C_AsyncCallback : public Context {
 
 } // namespace detail
 
+const std::string group_header_name(const std::string &group_id);
 const std::string id_obj_name(const std::string &name);
 const std::string header_name(const std::string &image_id);
 const std::string old_header_name(const std::string &image_name);

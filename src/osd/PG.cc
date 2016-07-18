@@ -84,7 +84,7 @@ static ostream& _prefix(std::ostream *_dout, T *t)
 
 void PG::get(const char* tag)
 {
-  ref.inc();
+  ref++;
 #ifdef PG_DEBUG_REFS
   Mutex::Locker l(_ref_id_lock);
   if (!_tag_counts.count(tag)) {
@@ -106,14 +106,14 @@ void PG::put(const char* tag)
     }
   }
 #endif
-  if (ref.dec() == 0)
+  if (--ref== 0)
     delete this;
 }
 
 #ifdef PG_DEBUG_REFS
 uint64_t PG::get_with_id()
 {
-  ref.inc();
+  ref++;
   Mutex::Locker l(_ref_id_lock);
   uint64_t id = ++_ref_id;
   BackTrace bt(0);
@@ -133,7 +133,7 @@ void PG::put_with_id(uint64_t id)
     assert(_live_ids.count(id));
     _live_ids.erase(id);
   }
-  if (ref.dec() == 0)
+  if (--ref == 0)
     delete this;
 }
 
@@ -162,7 +162,10 @@ void PGPool::update(OSDMapRef map)
   info = *pi;
   auid = pi->auid;
   name = map->get_pool_name(id);
-  if (pi->get_snap_epoch() == map->get_epoch()) {
+  bool updated = false;
+  if ((map->get_epoch() == cached_epoch + 1) &&
+      (pi->get_snap_epoch() == map->get_epoch())) {
+    updated = true;
     pi->build_removed_snaps(newly_removed_snaps);
     interval_set<snapid_t> intersection;
     intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
@@ -180,14 +183,14 @@ void PGPool::update(OSDMapRef map)
   } else {
     newly_removed_snaps.clear();
   }
+  cached_epoch = map->get_epoch();
   lgeneric_subdout(g_ceph_context, osd, 20)
     << "PGPool::update cached_removed_snaps "
     << cached_removed_snaps
     << " newly_removed_snaps "
     << newly_removed_snaps
     << " snapc " << snapc
-    << (pi->get_snap_epoch() == map->get_epoch() ?
-	" (updated)":" (no change)")
+    << (updated ? " (updated)":" (no change)")
     << dendl;
 }
 
@@ -205,7 +208,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   map_lock("PG::map_lock"),
   osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
-  ref(0),
   #ifdef PG_DEBUG_REFS
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif
@@ -538,7 +540,7 @@ bool PG::MissingLoc::add_source_info(
 	       << dendl;
       continue;
     }
-    if (oinfo.last_backfill != hobject_t::get_max() &&
+    if (!oinfo.last_backfill.is_max() &&
 	oinfo.last_backfill_bitwise != sort_bitwise) {
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
@@ -1329,26 +1331,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     return false;
   }
 
-  if ((up.size() &&
-      !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
-       auth_log_shard->second.log_tail) &&
-      auth_log_shard->second.is_incomplete()) {
-    map<pg_shard_t, pg_info_t> complete_infos;
-    for (map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
-	 i != all_info.end();
-	 ++i) {
-      if (!i->second.is_incomplete())
-	complete_infos.insert(*i);
-    }
-    map<pg_shard_t, pg_info_t>::const_iterator i = find_best_info(
-      complete_infos,
-      history_les_bound);
-    if (i != complete_infos.end()) {
-      auth_log_shard = all_info.find(i->first);
-    }
-  }
-
+  assert(!auth_log_shard->second.is_incomplete());
   auth_log_shard_id = auth_log_shard->first;
 
   // Determine if compatibility needed
@@ -1798,7 +1781,7 @@ void PG::activate(ObjectStore::Transaction& t,
       } else {
 	assert(peer_missing.count(*i));
 	missing_loc.add_active_missing(peer_missing[*i]);
-        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill == hobject_t::get_max())
+        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill.is_max())
           complete_shards.insert(*i);
       }
     }
@@ -1885,16 +1868,14 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
                              pool.auid, key,
 			     op->need_read_cap(),
 			     op->need_write_cap(),
-			     op->need_class_read_cap(),
-			     op->need_class_write_cap());
+			     op->classes());
 
   dout(20) << "op_has_sufficient_caps pool=" << pool.id << " (" << pool.name
 		   << " " << req->get_object_locator().nspace
 	   << ") owner=" << pool.auid
 	   << " need_read_cap=" << op->need_read_cap()
 	   << " need_write_cap=" << op->need_write_cap()
-	   << " need_class_read_cap=" << op->need_class_read_cap()
-	   << " need_class_write_cap=" << op->need_class_write_cap()
+	   << " classes=" << op->classes()
 	   << " -> " << (cap ? "yes" : "NO")
 	   << dendl;
   return cap;
@@ -3196,7 +3177,7 @@ void PG::update_snap_map(
 	  i->soid,
 	  &_t);
 	assert(r == 0);
-      } else {
+      } else if (i->is_update()) {
 	assert(i->snaps.length() > 0);
 	vector<snapid_t> snaps;
 	bufferlist snapbl = i->snaps;
@@ -3864,8 +3845,10 @@ void PG::replica_scrub(
   // compensate for hobject_t's with wrong pool from sloppy hammer OSDs
   hobject_t start = msg->start;
   hobject_t end = msg->end;
-  start.pool = info.pgid.pool();
-  end.pool = info.pgid.pool();
+  if (!start.is_max())
+    start.pool = info.pgid.pool();
+  if (!end.is_max())
+    end.pool = info.pgid.pool();
 
   build_scrub_map_chunk(
     map, start, end, msg->deep, msg->seed,
@@ -4244,7 +4227,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  break;
 	}
 
-	if (cmp(scrubber.end, hobject_t::get_max(), get_sort_bitwise()) < 0) {
+	if (!(scrubber.end.is_max())) {
           scrubber.state = PG::Scrubber::NEW_CHUNK;
 	  requeue_scrub();
           done = true;
@@ -4559,7 +4542,7 @@ void PG::share_pg_info()
   }
 }
 
-void PG::append_log_entries_update_missing(
+bool PG::append_log_entries_update_missing(
   const list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
@@ -4567,11 +4550,11 @@ void PG::append_log_entries_update_missing(
   assert(entries.begin()->version > info.last_update);
 
   PGLogEntryHandler rollbacker;
-  pg_log.append_new_log_entries(
-    info.last_backfill,
-    info.last_backfill_bitwise,
-    entries,
-    &rollbacker);
+  bool invalidate_stats =
+    pg_log.append_new_log_entries(info.last_backfill,
+				  info.last_backfill_bitwise,
+				  entries,
+				  &rollbacker);
   rollbacker.apply(this, &t);
   info.last_update = pg_log.get_head();
 
@@ -4580,9 +4563,10 @@ void PG::append_log_entries_update_missing(
     info.last_complete = info.last_update;
   }
 
-  info.stats.stats_invalid = true;
+  info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
   dirty_info = true;
   write_if_dirty(t);
+  return invalidate_stats;
 }
 
 
@@ -4593,7 +4577,7 @@ void PG::merge_new_log_entries(
   dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
-  append_log_entries_update_missing(entries, t);
+  bool rebuild_missing = append_log_entries_update_missing(entries, t);
   for (set<pg_shard_t>::const_iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -4603,7 +4587,7 @@ void PG::merge_new_log_entries(
     assert(peer_info.count(peer));
     pg_missing_t& pmissing(peer_missing[peer]);
     pg_info_t& pinfo(peer_info[peer]);
-    PGLog::append_log_entries_update_missing(
+    bool invalidate_stats = PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
       info.last_backfill_bitwise,
       entries,
@@ -4612,8 +4596,14 @@ void PG::merge_new_log_entries(
       NULL,
       this);
     pinfo.last_update = info.last_update;
-    pinfo.stats.stats_invalid = true;
+    pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;
+    rebuild_missing = rebuild_missing || invalidate_stats;
   }
+
+  if (!rebuild_missing) {
+    return;
+  }
+
   for (auto &&i: entries) {
     missing_loc.rebuild(
       i.soid,

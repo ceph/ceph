@@ -102,6 +102,29 @@ void add_image_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_group_option(po::options_description *opt,
+		      ArgumentModifier modifier,
+		      const std::string &desc_suffix) {
+  std::string name = GROUP_NAME;
+  std::string description = "group name";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+    break;
+  case ARGUMENT_MODIFIER_SOURCE:
+    description = "source " + description;
+    break;
+  case ARGUMENT_MODIFIER_DEST:
+    name = DEST_GROUP_NAME;
+    description = "destination " + description;
+    break;
+  }
+  description += desc_suffix;
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
 void add_snap_option(po::options_description *opt,
                       ArgumentModifier modifier) {
 
@@ -164,6 +187,17 @@ void add_image_spec_options(po::options_description *pos,
       "(example: [<pool-name>/]<image-name>)").c_str());
   add_pool_option(opt, modifier);
   add_image_option(opt, modifier);
+}
+
+void add_group_spec_options(po::options_description *pos,
+			    po::options_description *opt,
+			    ArgumentModifier modifier) {
+  pos->add_options()
+    ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
+     (get_description_prefix(modifier) + "group specification\n" +
+      "(example: [<pool-name>/]<group-name>)").c_str());
+  add_pool_option(opt, modifier);
+  add_group_option(opt, modifier);
 }
 
 void add_snap_spec_options(po::options_description *pos,
@@ -253,6 +287,13 @@ void add_path_options(boost::program_options::options_description *pos,
     (PATH_NAME.c_str(), po::value<std::string>(), description.c_str());
   opt->add_options()
     (PATH.c_str(), po::value<std::string>(), description.c_str());
+}
+
+void add_limit_option(po::options_description *opt) {
+  std::string description = "maximum allowed snapshot count";
+
+  opt->add_options()
+    (LIMIT.c_str(), po::value<uint64_t>(), description.c_str());
 }
 
 void add_no_progress_option(boost::program_options::options_description *opt) {

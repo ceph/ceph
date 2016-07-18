@@ -1,20 +1,28 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/optional.hpp>
+#include <boost/utility/in_place_factory.hpp>
+
 #include "include/assert.h"
 
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 
-#include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
 #include "rgw_cors_swift.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
 
+#include "rgw_auth.h"
+#include "rgw_auth_decoimpl.h"
+#include "rgw_swift_auth.h"
+
+#include <array>
 #include <sstream>
+#include <memory>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -55,11 +63,13 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-				  const uint32_t buckets_count,
-				  const uint64_t buckets_object_count,
-				  const uint64_t buckets_size,
-				  const uint64_t buckets_size_rounded,
-				  map<string, bufferlist>& attrs)
+                                  const uint32_t buckets_count,
+                                  const uint64_t buckets_object_count,
+                                  const uint64_t buckets_size,
+                                  const uint64_t buckets_size_rounded,
+                                  /* const */map<string, bufferlist>& attrs,
+                                  const RGWQuotaInfo& quota,
+                                  const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -77,17 +87,31 @@ static void dump_account_metadata(struct req_state * const s,
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
-    map<int, string>::iterator iter;
-    iter = s->user->temp_url_keys.find(0);
-    if (iter != s->user->temp_url_keys.end() && !iter->second.empty()) {
+    auto iter = s->user->temp_url_keys.find(0);
+    if (iter != std::end(s->user->temp_url_keys) && !iter->second.empty()) {
       STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key: %s\r\n",
 			  iter->second.c_str());
     }
 
     iter = s->user->temp_url_keys.find(1);
-    if (iter != s->user->temp_url_keys.end() && !iter->second.empty()) {
+    if (iter != std::end(s->user->temp_url_keys) && !iter->second.empty()) {
       STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n",
 			  iter->second.c_str());
+    }
+  }
+
+  /* Dump quota headers. */
+  if (quota.enabled) {
+    if (quota.max_size >= 0) {
+      STREAM_IO(s)->print("X-Account-Meta-Quota-Bytes: %lld\r\n",
+			  (long long)quota.max_size);
+    }
+
+    /* Limit on the number of objects in a given account is a RadosGW's
+     * extension. Swift's account quota WSGI filter doesn't support it. */
+    if (quota.max_objects >= 0) {
+      STREAM_IO(s)->print("X-Account-Meta-Quota-Count: %lld\r\n",
+			  (long long)quota.max_objects);
     }
   }
 
@@ -107,6 +131,13 @@ static void dump_account_metadata(struct req_state * const s,
                           iter->second.c_str());
     }
   }
+
+  /* Dump account ACLs */
+  string acct_acl;
+  policy.to_str(acct_acl);
+  if (acct_acl.size()) {
+    STREAM_IO(s)->print("X-Account-Access-Control: %s\r\n", acct_acl.c_str());
+  }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
@@ -125,7 +156,9 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            user_quota,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
   }
@@ -175,7 +208,9 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            user_quota,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, s->formatter->get_len(), true);
   }
@@ -225,7 +260,9 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   return 0;
 }
 
-static void dump_container_metadata(struct req_state *, RGWBucketEnt&);
+static void dump_container_metadata(struct req_state *,
+                                    const RGWBucketEnt&,
+                                    const RGWQuotaInfo&);
 
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
@@ -233,7 +270,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, bucket);
+  dump_container_metadata(s, bucket, bucket_quota);
 
   s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
@@ -282,17 +319,17 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       if (name.compare(delimiter) == 0)
         goto next;
 
-        s->formatter->open_object_section_with_attrs("subdir", FormatterAttrs("name", name.c_str(), NULL));
+      s->formatter->open_object_section_with_attrs("subdir", FormatterAttrs("name", name.c_str(), NULL));
 
-        /* swift is a bit inconsistent here */
-        switch (s->format) {
-          case RGW_FORMAT_XML:
-            s->formatter->dump_string("name", name);
-            break;
-          default:
-            s->formatter->dump_string("subdir", name);
-        }
-        s->formatter->close_section();
+      /* swift is a bit inconsistent here */
+      switch (s->format) {
+        case RGW_FORMAT_XML:
+          s->formatter->dump_string("name", name);
+          break;
+        default:
+          s->formatter->dump_string("subdir", name);
+      }
+      s->formatter->close_section();
     }
 next:
     if (do_objs)
@@ -323,7 +360,9 @@ next:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
+static void dump_container_metadata(struct req_state *s,
+                                    const RGWBucketEnt& bucket,
+                                    const RGWQuotaInfo& quota)
 {
   char buf[32];
   /* Adding X-Timestamp to keep align with Swift API */
@@ -381,6 +420,18 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     STREAM_IO(s)->print("X-Versions-Location: %s\r\n", encoded_loc.c_str());
   }
 
+  /* Dump quota headers. */
+  if (quota.enabled) {
+    if (quota.max_size >= 0) {
+      STREAM_IO(s)->print("X-Container-Meta-Quota-Bytes: %lld\r\n",
+			  (long long)quota.max_size);
+    }
+
+    if (quota.max_objects >= 0) {
+      STREAM_IO(s)->print("X-Container-Meta-Quota-Count: %lld\r\n",
+			  (long long)quota.max_objects);
+    }
+  }
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
@@ -393,8 +444,14 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size,
-			  buckets_size_rounded, attrs);
+    dump_account_metadata(s,
+            buckets_count,
+            buckets_objcount,
+            buckets_size,
+            buckets_size_rounded,
+            attrs,
+            user_quota,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
   set_req_state_err(s, op_ret);
@@ -409,7 +466,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket);
+    dump_container_metadata(s, bucket, bucket_quota);
   }
 
   set_req_state_err(s, op_ret);
@@ -419,16 +476,20 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   dump_start(s);
 }
 
-static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccessControlPolicy *policy, bool *has_policy,
-                                        RGWCORSConfiguration *cors_config, bool *has_cors)
+static int get_swift_container_settings(req_state * const s,
+                                        RGWRados * const store,
+                                        RGWAccessControlPolicy * const policy,
+                                        bool * const has_policy,
+                                        RGWCORSConfiguration * const cors_config,
+                                        bool * const has_cors)
 {
   string read_list, write_list;
 
-  const char *read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
+  const char * const read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
   if (read_attr) {
     read_list = read_attr;
   }
-  const char *write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
+  const char * const write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
   if (write_attr) {
     write_list = write_attr;
   }
@@ -437,9 +498,14 @@ static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccess
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    int r = swift_policy.create(store, s->user->user_id, s->user->display_name, read_list, write_list);
-    if (r < 0)
+    int r = swift_policy.create(store,
+                                s->user->user_id,
+                                s->user->display_name,
+                                read_list,
+                                write_list);
+    if (r < 0) {
       return r;
+    }
 
     *policy = swift_policy;
     *has_policy = true;
@@ -505,6 +571,33 @@ static void get_rmattrs_from_headers(const req_state * const s,
   }
 }
 
+static int get_swift_versioning_settings(
+  req_state * const s,
+  boost::optional<std::string>& swift_ver_location)
+{
+  /* Removing the Swift's versions location has lower priority than setting
+   * a new one. That's the reason why we're handling it first. */
+  const std::string vlocdel =
+    s->info.env->get("HTTP_X_REMOVE_VERSIONS_LOCATION", "");
+  if (vlocdel.size()) {
+    swift_ver_location = boost::in_place(std::string());
+  }
+
+  std::string vloc = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+  if (vloc.size()) {
+    /* If the Swift's versioning is globally disabled but someone wants to
+     * enable it for a given container, new version of Swift will generate
+     * the precondition failed error. */
+    if (! s->cct->_conf->rgw_swift_versioning_enabled) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+
+    swift_ver_location = std::move(vloc);
+  }
+
+  return 0;
+}
+
 int RGWCreateBucket_ObjStore_SWIFT::get_params()
 {
   bool has_policy;
@@ -523,11 +616,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
-  if (s->cct->_conf->rgw_swift_versioning_enabled) {
-    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
-  }
-
-  return 0;
+  return get_swift_versioning_settings(s, swift_ver_location);
 }
 
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
@@ -703,10 +792,45 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int get_swift_account_settings(req_state * const s,
+                                      RGWRados * const store,
+                                      RGWAccessControlPolicy_SWIFTAcct * const policy,
+                                      bool * const has_policy)
+{
+  *has_policy = false;
+
+  const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
+  if (acl_attr) {
+    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
+    int r = swift_acct_policy.create(store,
+                                     s->user->user_id,
+                                     s->user->display_name,
+                                     string(acl_attr));
+    if (r < 0) {
+      return r;
+    }
+
+    *policy = swift_acct_policy;
+    *has_policy = true;
+  }
+
+  return 0;
+}
+
 int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta) {
     return -EINVAL;
+  }
+
+  int ret = get_swift_account_settings(s,
+                                       store,
+                                       // FIXME: we need to carry unique_ptr in generic class
+                                       // and allocate appropriate ACL class in the ctor
+                                       static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
+                                       &has_policy);
+  if (ret < 0) {
+    return ret;
   }
 
   get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX,
@@ -741,10 +865,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 			   rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
-  if (s->cct->_conf->rgw_swift_versioning_enabled) {
-    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
-  }
-  return 0;
+  return get_swift_versioning_settings(s, swift_ver_location);
 }
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
@@ -1267,17 +1388,11 @@ RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_get()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(true);
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_head()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(false);
 }
 
@@ -1317,17 +1432,11 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_get()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(true);
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_head()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(false);
 }
 
@@ -1364,38 +1473,132 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
-      (s->op == OP_OPTIONS)) {
-    /* anonymous access */
-    rgw_get_anon_user(*(s->user));
-    s->perm_mask = RGW_PERM_FULL_CONTROL;
+  /* Factories. */
+  class SwiftAuthFactory
+    : public RGWTempURLAuthApplier::Factory,
+      public RGWLocalAuthApplier::Factory,
+      public RGWRemoteAuthApplier::Factory {
+    typedef RGWAuthApplier::aplptr_t aplptr_t;
+
+    RGWRados * const store;
+    const std::string acct_override;
+
+  public:
+    SwiftAuthFactory(RGWRados * const store,
+                     const std::string& acct_override)
+      : store(store),
+        acct_override(acct_override) {
+    }
+
+    aplptr_t create_apl_turl(CephContext * const cct,
+                             const RGWUserInfo& user_info) const override {
+      /* TempURL doesn't need any user account override. It's a Swift-specific
+       * mechanism that requires  account name internally, so there is no
+       * business with delegating the responsibility outside. */
+      return aplptr_t(new RGWTempURLAuthApplier(cct, user_info));
+    }
+
+    aplptr_t create_apl_local(CephContext * const cct,
+                           const RGWUserInfo& user_info,
+                           const std::string& subuser) const override {
+      return aplptr_t(
+        new RGWThirdPartyAccountAuthApplier<RGWLocalAuthApplier>(
+          RGWLocalAuthApplier(cct, user_info, subuser),
+          store, acct_override));
+    }
+
+    aplptr_t create_apl_remote(CephContext * const cct,
+                               RGWRemoteAuthApplier::acl_strategy_t&& acl_alg,
+                               const RGWRemoteAuthApplier::AuthInfo info
+                              ) const override {
+      return aplptr_t(
+        new RGWThirdPartyAccountAuthApplier<RGWRemoteAuthApplier>(
+          RGWRemoteAuthApplier(cct, store, std::move(acl_alg), info),
+          store, acct_override));
+    }
+  } aplfact(store, s->account_name);
+
+  /* Extractors. */
+  RGWXAuthTokenExtractor token_extr(s);
+
+  /* Auth engines. */
+  RGWTempURLAuthEngine tempurl(s, store,                    &aplfact);
+  RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &aplfact);
+  RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &aplfact);
+  RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &aplfact);
+  RGWAnonymousAuthEngine anoneng(s->cct,        token_extr, &aplfact);
+
+  /* Pipeline. */
+  constexpr size_t ENGINES_NUM = 5;
+  const std::array<const RGWAuthEngine *, ENGINES_NUM> engines = {
+    &tempurl, &rgwtk, &keystone, &ext, &anoneng
+  };
+
+  for (const auto engine : engines) {
+    if (! engine->is_applicable()) {
+      /* Engine said it isn't suitable for handling this particular
+       * request. Let's try a next one. */
+      continue;
+    }
+
+    try {
+      ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
+
+      auto applier = engine->authenticate();
+      if (!applier) {
+        /* Access denied is acknowledged by returning a std::unique_ptr with
+         * nullptr inside. */
+        ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
+        return -EPERM;
+      }
+
+      try {
+        /* Account used by a given RGWOp is decoupled from identity employed
+         * in the authorization phase (RGWOp::verify_permissions). */
+        applier->load_acct_info(*s->user);
+        s->perm_mask = applier->get_perm_mask();
+
+        /* This is the signle place where we pass req_state as a pointer
+         * to non-const and thus its modification is allowed. In the time
+         * of writing only RGWTempURLEngine needed that feature. */
+        applier->modify_request_state(s);
+
+        s->auth_identity = std::move(applier);
+      } catch (int err) {
+        ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
+        return err;
+      }
+    } catch (int err) {
+      ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+      return err;
+    }
+
+    /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
+    if (s->user->system) {
+      s->system_request = true;
+      ldout(s->cct, 20) << "system request over Swift API" << dendl;
+
+      rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
+      if (!euid.empty()) {
+        RGWUserInfo einfo;
+
+        const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
+        if (ret < 0) {
+          ldout(s->cct, 0) << "User lookup failed, euid=" << euid
+                           << " ret=" << ret << dendl;
+          return ret;
+        }
+
+        *(s->user) = einfo;
+      }
+    }
+
     return 0;
   }
 
-  bool authorized = rgw_swift->verify_swift_token(store, s);
-  if (!authorized)
-    return -EPERM;
-
-  if (s->user->system) {
-    s->system_request = true;
-    ldout(s->cct, 20) << "system request over Swift API" << dendl;
-
-    rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-    if (!euid.empty()) {
-      RGWUserInfo einfo;
-
-      const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "User lookup failed, euid=" << euid
-                         << " ret=" << ret << dendl;
-        return -ENOENT;
-      }
-
-      *(s->user) = einfo;
-    }
-  }
-
-  return 0;
+  /* All engines refused to handle this authentication request by
+   * returning RGWAuthEngine::Status::UNKKOWN. Rather rare case. */
+  return -EPERM;
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()
@@ -1579,7 +1782,6 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
     }
   }
 
-  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 
   dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;

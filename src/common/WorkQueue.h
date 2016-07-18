@@ -62,7 +62,7 @@ private:
     string name;
     time_t timeout_interval, suicide_interval;
     WorkQueue_(string n, time_t ti, time_t sti)
-      : name(n), timeout_interval(ti), suicide_interval(sti)
+      : name(std::move(n)), timeout_interval(ti), suicide_interval(sti)
     { }
     virtual ~WorkQueue_() {}
     /// Remove all work items from the queue.
@@ -130,7 +130,7 @@ public:
 
   public:
     BatchWorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(n, ti, sti), pool(p) {
+      : WorkQueue_(std::move(n), ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
     ~BatchWorkQueue() {
@@ -228,7 +228,7 @@ public:
 
   public:
     WorkQueueVal(string n, time_t ti, time_t sti, ThreadPool *p)
-      : WorkQueue_(n, ti, sti), _lock("WorkQueueVal::lock"), pool(p) {
+      : WorkQueue_(std::move(n), ti, sti), _lock("WorkQueueVal::lock"), pool(p) {
       pool->add_work_queue(this);
     }
     ~WorkQueueVal() {
@@ -290,7 +290,8 @@ public:
     virtual void _process(T *t, TPHandle &) = 0;
 
   public:
-    WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p) : WorkQueue_(n, ti, sti), pool(p) {
+    WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
+      : WorkQueue_(std::move(n), ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
     ~WorkQueue() {
@@ -371,7 +372,7 @@ public:
     }
   protected:
     PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
+      : WorkQueue_(std::move(n), ti, sti), m_pool(p), m_processing(0) {
     }
     virtual void _clear() {
       assert(m_pool->_lock.is_locked());
@@ -537,16 +538,16 @@ public:
     : ThreadPool::WorkQueueVal<
       GenContext<ThreadPool::TPHandle&>*>(name, ti, ti*10, tp) {}
   
-  void _enqueue(GenContext<ThreadPool::TPHandle&> *c) {
+  void _enqueue(GenContext<ThreadPool::TPHandle&> *c) override {
     _queue.push_back(c);
   }
-  void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) {
+  void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) override {
     _queue.push_front(c);
   }
-  bool _empty() {
+  bool _empty() override {
     return _queue.empty();
   }
-  GenContext<ThreadPool::TPHandle&> *_dequeue() {
+  GenContext<ThreadPool::TPHandle&> *_dequeue() override {
     assert(!_queue.empty());
     GenContext<ThreadPool::TPHandle&> *c = _queue.front();
     _queue.pop_front();

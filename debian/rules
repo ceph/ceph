@@ -3,120 +3,55 @@
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
-ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-  NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-  MAKEFLAGS += -j$(NUMJOBS)
-endif
-
-export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-export DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
-
-# Recommended snippet for Autoconf 2.52 or later
-ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
-  confflags += --build $(DEB_HOST_GNU_TYPE)
-else
-  confflags += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
-endif
-
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += --with-ocf --with-nss
-extraopts += --with-debug
-extraopts += --enable-cephfs-java
-
-# rocksdb is not packaged by anyone.  build it if we can.
-extraopts += --with-librocksdb-static=check
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON
+extraopts += -DWITH_CEPHFS_JAVA=ON
+# assumes that ceph is exmpt from multiarch support, so we override the libdir.
+extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
+extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
+extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
   # libatomic-ops is only usable with Ceph for ARMv6 or above.
-  extraopts += --without-libatomic-ops
+  extraopts += -DWITH_ATOMIC_OPS=OFF
 endif
 
-configure: configure-stamp
-configure-stamp:
-	dh_testdir
-	./autogen.sh
-	./configure --prefix=/usr --localstatedir=/var \
-	  --sysconfdir=/etc  --libexecdir=/usr/lib $(extraopts) $(confflags) \
-	  $(CEPH_EXTRA_CONFIGURE_ARGS)
-	touch $@
+%:
+	dh $@ --buildsystem=cmake --with javahelper,python2,systemd --parallel
 
-build-arch: build
-build-indep: build
+override_dh_auto_configure:
+	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
-build: build-stamp
-build-stamp: configure-stamp  
-	dh_testdir
-
-	$(MAKE)
-
-	cp src/init-ceph debian/ceph-base.ceph.init
+override_dh_auto_build:
+	dh_auto_build --buildsystem=cmake
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
 
-	touch $@
+override_dh_auto_clean:
+	dh_auto_clean --buildsystem=cmake
+	rm -f debian/radosgw.init debian/ceph.logrotate
 
-clean:
-	dh_testdir
-	dh_testroot
-	rm -f build-stamp configure-stamp
-
-	[ ! -f Makefile ] || $(MAKE) distclean
-	rm -f aclocal.m4 compile config.sub config.guess depcomp install-sh \
-	  ltmain.sh missing
-	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
-	rm -f src/acconfig.h.in
-	rm -f debian/ceph-base.ceph.init debian/radosgw.init debian/ceph.logrotate debian/radosgw.logrotate
-
-	dh_clean
-
-install: build
-	dh_testdir
-	dh_testroot
-	dh_clean -k 
-	dh_installdirs
-
-	$(MAKE) DESTDIR=$(DESTDIR) install
-	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
+override_dh_auto_install:
+	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
+	install -D -m 644 udev/60-ceph-by-parttypeuuid.rules $(DESTDIR)/lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
 	install -D -m 755 src/init-rbdmap $(DESTDIR)/etc/init.d/rbdmap
 
-# Add here commands to install the package into debian/testpack.
-# Build architecture-independent files here.
-binary-indep: build install
-	dh_testdir
-	dh_testroot
-	jh_installlibs -v -i
-	dh_installchangelogs -i
-	dh_installdocs -i --all ChangeLog
-	dh_installexamples -i
-	dh_install -i --sourcedir=$(DESTDIR) --list-missing
-	dh_installman -i
-	dh_lintian -i
-	dh_link -i
-	dh_compress -i
-	dh_fixperms -i
-	dh_python2 -i
-	dh_installdeb -i
-	dh_gencontrol -i
-	dh_md5sums -i
-	dh_builddeb -i
+# doc/changelog is a directory, which confuses dh_installchangelogs
+override_dh_installchangelogs:
+	dh_installchangelogs --exclude doc/changelog
 
-# We have nothing to do by default.
-# Build architecture-dependent files here.
-binary-arch: build install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs -a
+override_dh_installdocs:
 	dh_installdocs -a --all ChangeLog
-	dh_installexamples -a
-	dh_install -a --sourcedir=$(DESTDIR) --list-missing
-	install -d -m0755 debian/ceph-base/etc/logrotate.d
-	install -m0644 debian/ceph.logrotate debian/ceph-base/etc/logrotate.d
 
+override_dh_installlogrotate:
+	dh_installlogrotate -pceph-base --name ceph
+
+override_dh_installinit:
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph-base/etc/init
@@ -172,15 +107,13 @@ binary-arch: build install
 	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
 	install -m0644 systemd/ceph-rbd-mirror.target debian/rbd-mirror/lib/systemd/system
 
-	dh_systemd_enable
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
+
+override_dh_systemd_start:
 	dh_systemd_start --no-restart-on-upgrade
 
-	dh_installman -a
-	dh_lintian -a
-	dh_link -a
-
+override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
@@ -198,15 +131,10 @@ binary-arch: build install
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
-	dh_compress -a
-	dh_fixperms -a
-	dh_makeshlibs -a
-	dh_python2 -a
-	dh_installdeb -a
-	dh_shlibdeps -a
-	dh_gencontrol -a
-	dh_md5sums -a
-	dh_builddeb -a
+override_dh_shlibdeps:
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
 
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install configure
+# do not run tests
+override_dh_auto_test:
+
+.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_build override_dh_auto_clean override_dh_auto_install override_dh_installdocs override_dh_installlogrotate override_dh_installinit override_dh_systemd_start override_dh_strip override_dh_auto_test

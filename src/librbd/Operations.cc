@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
+
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -13,6 +14,7 @@
 #include "librbd/Utils.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
+#include "librbd/operation/ObjectMapIterate.h"
 #include "librbd/operation/RenameRequest.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
@@ -21,6 +23,7 @@
 #include "librbd/operation/SnapshotRenameRequest.h"
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
+#include "librbd/operation/SnapshotLimitRequest.h"
 #include <set>
 #include <boost/bind.hpp>
 
@@ -176,8 +179,9 @@ struct C_InvokeAsyncRequest : public Context {
       return;
     }
 
+    int r;
     if (image_ctx.exclusive_lock->is_lock_owner() &&
-        image_ctx.exclusive_lock->accept_requests()) {
+        image_ctx.exclusive_lock->accept_requests(&r)) {
       send_local_request();
       owner_lock.put_read();
       return;
@@ -233,6 +237,8 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r != -ETIMEDOUT && r != -ERESTART) {
+      image_ctx.state->handle_update_notification();
+
       complete(r);
       return;
     }
@@ -273,6 +279,18 @@ struct C_InvokeAsyncRequest : public Context {
     on_finish->complete(r);
   }
 };
+
+template <typename I>
+bool needs_invalidate(I& image_ctx, uint64_t object_no,
+		     uint8_t current_state, uint8_t new_state) {
+  if ( (current_state == OBJECT_EXISTS ||
+	current_state == OBJECT_EXISTS_CLEAN) &&
+       (new_state == OBJECT_NONEXISTENT ||
+	new_state == OBJECT_PENDING)) {
+    return false;
+  }
+  return true;
+}
 
 } // anonymous namespace
 
@@ -413,6 +431,7 @@ void Operations<I>::execute_rebuild_object_map(ProgressContext &prog_ctx,
     return;
   }
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+    lderr(cct) << "image must support object-map feature" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
@@ -421,6 +440,48 @@ void Operations<I>::execute_rebuild_object_map(ProgressContext &prog_ctx,
     new operation::RebuildObjectMapRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), prog_ctx);
   req->send();
+}
+
+template <typename I>
+int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  r = invoke_async_request("check object map", true,
+                           boost::bind(&Operations<I>::check_object_map, this,
+                                       boost::ref(prog_ctx), _1),
+			   [] (Context *c) { c->complete(-EOPNOTSUPP); });
+
+  return r;
+}
+
+template <typename I>
+void Operations<I>::object_map_iterate(ProgressContext &prog_ctx,
+				       operation::ObjectIterateWork<I> handle_mismatch,
+				       Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  operation::ObjectMapIterateRequest<I> *req =
+    new operation::ObjectMapIterateRequest<I>(m_image_ctx, on_finish,
+					      prog_ctx, handle_mismatch);
+  req->send();
+}
+
+template <typename I>
+void Operations<I>::check_object_map(ProgressContext &prog_ctx,
+				     Context *on_finish) {
+  object_map_iterate(prog_ctx, needs_invalidate, on_finish);
 }
 
 template <typename I>
@@ -478,7 +539,18 @@ void Operations<I>::execute_rename(const char *dstname, Context *on_finish) {
                 << dendl;
 
   if (m_image_ctx.old_format) {
+    // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
+    on_finish = new FunctionContext([this, on_finish](int r) {
+	m_image_ctx.image_watcher->register_watch(on_finish);
+      });
+    on_finish = new FunctionContext([this, dstname, on_finish](int r) {
+	operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
+	  m_image_ctx, on_finish, dstname);
+	req->send();
+      });
+    m_image_ctx.image_watcher->unregister_watch(on_finish);
+    return;
   }
   operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
     m_image_ctx, on_finish, dstname);
@@ -616,6 +688,14 @@ void Operations<I>::execute_snap_create(const char *snap_name,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
+
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.get_snap_id(snap_name) != CEPH_NOSNAP) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EEXIST);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
 
   operation::SnapshotCreateRequest<I> *req =
     new operation::SnapshotCreateRequest<I>(
@@ -1024,6 +1104,56 @@ void Operations<I>::execute_snap_unprotect(const char *snap_name,
 }
 
 template <typename I>
+int Operations<I>::snap_set_limit(uint64_t limit) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": limit=" << limit << dendl;
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  {
+    RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+    C_SaferCond limit_ctx;
+
+    if (m_image_ctx.exclusive_lock != nullptr &&
+	!m_image_ctx.exclusive_lock->is_lock_owner()) {
+      C_SaferCond lock_ctx;
+
+      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      r = lock_ctx.wait();
+      if (r < 0) {
+	return r;
+      }
+    }
+
+    execute_snap_set_limit(limit, &limit_ctx);
+    r = limit_ctx.wait();
+  }
+
+  return r;
+}
+
+template <typename I>
+void Operations<I>::execute_snap_set_limit(const uint64_t limit,
+					   Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": limit=" << limit
+                << dendl;
+
+  operation::SnapshotLimitRequest<I> *request =
+    new operation::SnapshotLimitRequest<I>(m_image_ctx, on_finish, limit);
+  request->send();
+}
+
+template <typename I>
 int Operations<I>::prepare_image_update() {
   assert(m_image_ctx.owner_lock.is_locked() &&
          !m_image_ctx.owner_lock.is_wlocked());
@@ -1040,7 +1170,7 @@ int Operations<I>::prepare_image_update() {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
-         !m_image_ctx.exclusive_lock->accept_requests())) {
+         !m_image_ctx.exclusive_lock->accept_requests(&r))) {
       m_image_ctx.exclusive_lock->try_lock(&ctx);
       trying_lock = true;
     }

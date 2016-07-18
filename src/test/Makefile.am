@@ -128,14 +128,14 @@ unittests:: $(check_PROGRAMS)
 
 UNITTEST_CXXFLAGS = \
 	$(AM_CXXFLAGS) \
-	-I$(top_srcdir)/src/gmock/include \
-	-I$(top_builddir)/src/gmock/include \
-	-I$(top_srcdir)/src/gmock/gtest/include \
-	-I$(top_builddir)/src/gmock/gtest/include
+	-I$(top_srcdir)/src/googletest/googlemock/include \
+	-I$(top_builddir)/src/googletest/googlemock/include \
+	-I$(top_srcdir)/src/googletest/googletest/include \
+	-I$(top_builddir)/src/googletest/googletest/include
 UNITTEST_LDADD = \
-	$(top_builddir)/src/gmock/lib/libgmock_main.la \
-	$(top_builddir)/src/gmock/lib/libgmock.la \
-	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
+	$(top_builddir)/src/googletest/googlemock/lib/libgmock_main.la \
+	$(top_builddir)/src/googletest/googlemock/lib/libgmock.la \
+	$(top_builddir)/src/googletest/googletest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
 
 if SOLARIS
@@ -452,6 +452,16 @@ unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
+unittest_dns_resolve_SOURCES = test/common/dns_resolve.cc
+unittest_dns_resolve_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RESOLV_LIBS)
+unittest_dns_resolve_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_dns_resolve
+
+unittest_monmap_SOURCES = test/mon/MonMap.cc
+unittest_monmap_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RESOLV_LIBS)
+unittest_monmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_monmap
+
 if LINUX
 #
 # XXX FREEBSD
@@ -463,7 +473,8 @@ endif
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \
-	test/osdc/FakeWriteback.cc
+	test/osdc/FakeWriteback.cc \
+	test/osdc/MemWriteback.cc
 ceph_test_objectcacher_stress_LDADD = $(LIBOSDC) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 
@@ -500,6 +511,7 @@ noinst_HEADERS += \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
+	test/osdc/MemWriteback.h \
 	test/osd/Object.h \
 	test/osd/RadosModel.h \
 	test/osd/TestOpStat.h \

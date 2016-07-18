@@ -9,6 +9,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
+#include "journal/JournalMetadataListener.h"
 #include "cls/journal/cls_journal_types.h"
 #include <list>
 #include <map>
@@ -62,6 +63,7 @@ public:
 
   void init(Context *on_init);
   void shut_down();
+  void shut_down(Context *on_finish);
 
   bool is_initialized() const;
 
@@ -69,6 +71,9 @@ public:
 			      int64_t *pool_id, Context *on_finish);
   void get_mutable_metadata(uint64_t *minimum_set, uint64_t *active_set,
 			    RegisteredClients *clients, Context *on_finish);
+
+  void add_listener(JournalMetadataListener *listener);
+  void remove_listener(JournalMetadataListener *listener);
 
   int register_client(const bufferlist &data);
   void register_client(const bufferlist &data, Context *on_finish);
@@ -95,6 +100,7 @@ public:
   void start_live_replay(ReplayHandler *replay_handler, double interval);
   bool try_pop_front(ReplayEntry *replay_entry, uint64_t *tag_tid = nullptr);
   void stop_replay();
+  void stop_replay(Context *on_finish);
 
   uint64_t get_max_append_size() const;
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);

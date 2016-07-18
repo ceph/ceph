@@ -669,10 +669,10 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 /*
  * session_info_t
  */
-void session_info_t::encode(bufferlist& bl) const
+void session_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(6, 3, bl);
-  ::encode(inst, bl);
+  ::encode(inst, bl, features);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
@@ -1038,6 +1038,8 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.back()->capinfo.cap_id = 1;
 }
 
+uint64_t MDSCacheObject::last_wait_seq = 0;
+
 void MDSCacheObject::dump(Formatter *f) const
 {
   f->dump_bool("is_auth", is_auth());
@@ -1064,7 +1066,7 @@ void MDSCacheObject::dump(Formatter *f) const
     f->dump_int("first", authority().first);
     f->dump_int("second", authority().second);
     f->close_section();
-    f->dump_int("replica_nonce", get_replica_nonce());
+    f->dump_unsigned("replica_nonce", get_replica_nonce());
   }
   f->close_section();  // replica_state
 

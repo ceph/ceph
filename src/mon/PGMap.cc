@@ -206,20 +206,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t == pg_stat.end()) {
       ceph::unordered_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
       pg_stat.insert(v);
-      // did we affect the min?
-      if (min_last_epoch_clean &&
-          update_stat.get_effective_last_epoch_clean() < min_last_epoch_clean)
-	min_last_epoch_clean = 0;
     } else {
-      // did we (or might we) affect the min?
-      epoch_t lec = update_stat.get_effective_last_epoch_clean();
-      if (min_last_epoch_clean &&
-          (lec < min_last_epoch_clean ||  // we did
-           (lec > min_last_epoch_clean && // we might
-            t->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
-          ))
-	min_last_epoch_clean = 0;
-
       stat_pg_sub(update_pg, t->second);
       t->second = update_stat;
     }
@@ -244,14 +231,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     ceph::unordered_map<int32_t,epoch_t>::iterator i = osd_epochs.find(osd);
     map<int32_t,epoch_t>::const_iterator j = inc.get_osd_epochs().find(osd);
     assert(j != inc.get_osd_epochs().end());
-
-    // will we potentially affect the min?
-    if (min_last_epoch_clean &&
-        (i == osd_epochs.end() ||
-         j->second < min_last_epoch_clean ||
-         (j->second > min_last_epoch_clean &&
-          i->second == min_last_epoch_clean)))
-      min_last_epoch_clean = 0;
 
     if (i == osd_epochs.end())
       osd_epochs.insert(*j);
@@ -1754,16 +1733,9 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs)
 {
-  int type = 0;
-  if (state != "all") {
-    type = pg_string_state(state);
-    if (type == -1)
-      assert(0 == "invalid type");
-  }
-
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
@@ -1771,7 +1743,7 @@ void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t o
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if ((state != "all") && !(i->second.state & type))
+    if (!(i->second.state & state))
       continue;
     pgs.insert(i->first);
   }

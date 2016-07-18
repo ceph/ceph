@@ -124,6 +124,7 @@ public:
   virtual int init(string option_str="") = 0;
   virtual int open(std::ostream &out) = 0;
   virtual int create_and_open(std::ostream &out) = 0;
+  virtual void close() { }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -276,7 +277,7 @@ public:
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
-  virtual int get_statfs(struct statfs *buf) {
+  virtual int get_statfs(struct store_statfs_t *buf) {
     return -EOPNOTSUPP;
   }
 
@@ -299,7 +300,7 @@ public:
   class MergeOperator {
     public:
     /// Merge into a key that doesn't exist
-    virtual void merge_nonexistant(
+    virtual void merge_nonexistent(
       const char *rdata, size_t rlen,
       std::string *new_value) = 0;
     /// Merge into a key that does exist

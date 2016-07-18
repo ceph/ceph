@@ -205,7 +205,6 @@ Requires:      python-setuptools
 Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
-Requires:      parted
 Requires:      util-linux
 Requires:      hdparm
 Requires:      cryptsetup
@@ -313,12 +312,6 @@ Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librgw2 = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
-# python-flask for powerdns
-Requires:	python-flask
-%endif
-%if 0%{?suse_version}
-# python-Flask for powerdns
-Requires:      python-Flask
 %endif
 %description radosgw
 RADOS is a distributed object store used by the Ceph distributed
@@ -350,6 +343,7 @@ Requires:	gdisk
 %if 0%{?suse_version}
 Requires:	gptfdisk
 %endif
+Requires:       parted
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -629,49 +623,50 @@ for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
 done
 %endif
 
-./autogen.sh
-
 %if %{with lowmem_builder}
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
-%{configure}	CPPFLAGS="$java_inc" \
-		--prefix=/usr \
-                --libexecdir=%{_libexecdir} \
-		--localstatedir=%{_localstatedir} \
-		--sysconfdir=%{_sysconfdir} \
+export CPPFLAGS="$java_inc"
+export CFLAGS="$RPM_OPT_FLAGS"
+export CXXFLAGS="$RPM_OPT_FLAGS"
+
+mkdir build
+cd build
+cmake .. \
+    -DCMAKE_INSTALL_PREFIX=%{_prefix} \
+    -DCMAKE_INSTALL_LIBDIR=%{_libdir} \
+    -DCMAKE_INSTALL_LIBEXECDIR=%{_libexecdir} \
+    -DCMAKE_INSTALL_LOCALSTATEDIR=%{_localstatedir} \
+    -DCMAKE_INSTALL_SYSCONFDIR=%{_sysconfdir} \
+    -DCMAKE_INSTALL_MANDIR=%{_mandir} \
+    -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
+    -DWITH_MANPAGE=ON \
+    -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
-                --enable-subman \
-%endif
-		--with-systemdsystemunitdir=%_unitdir \
-		--docdir=%{_docdir}/ceph \
-		--with-man-pages \
-		--mandir="%_mandir" \
-		--with-nss \
-		--without-cryptopp \
-		--with-debug \
-%if 0%{with cephfs_java}
-		--enable-cephfs-java \
+    -DWITH_SUBMAN=ON \
 %endif
 %if 0%{with xio}
-		--enable-xio \
+    -DWITH_XIO=ON \
+%endif
+%if 0%{with cephfs_java}
+    -DWITH_CEPHFS_JAVA=ON \
 %endif
 %if 0%{with selinux}
-		--with-selinux \
+    -DWITH_SELINUX=ON \
 %endif
-		--with-librocksdb-static=check \
-		--with-radosgw \
-%if %{without lttng}
-		--without-lttng \
-		--without-babeltrace \
+%if %{with lttng}
+    -DWITH_LTTNG=ON \
+    -DHAVE_BABELTRACE=ON \
+%else
+    -DWITH_LTTNG=OFF \
+    -DHAVE_BABELTRACE=OFF \
 %endif
-		$CEPH_EXTRA_CONFIGURE_ARGS \
-		%{?_with_ocf} \
-%if %{without tcmalloc}
-		--without-tcmalloc \
+    $CEPH_EXTRA_CMAKE_ARGS \
+%if 0%{with ocf}
+    -DWITH_OCF=ON
 %endif
-		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %if %{with lowmem_builder}
 %if 0%{?jobs} > 8
@@ -685,16 +680,19 @@ make %{?_smp_mflags}
 %if 0%{with tests}
 %check
 # run in-tree unittests
-make %{?_smp_mflags} check
+cd build
+ctest %{?_smp_mflags}
 
 %endif
 
 
 
 %install
+pushd build
 make DESTDIR=%{buildroot} install
-find %{buildroot} -type f -name "*.la" -exec rm -f {} ';'
-find %{buildroot} -type f -name "*.a" -exec rm -f {} ';'
+# we have dropped sysvinit bits
+rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
+popd
 install -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
@@ -718,9 +716,8 @@ install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildro
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
+install -m 0644 -D udev/60-ceph-by-parttypeuuid.rules %{buildroot}%{_udevrulesdir}/60-ceph-by-parttypeuuid.rules
 install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}%{_udevrulesdir}/95-ceph-osd.rules
-mv %{buildroot}/sbin/mount.ceph %{buildroot}/usr/sbin/mount.ceph
-mv %{buildroot}/sbin/mount.fuse.ceph %{buildroot}/usr/sbin/mount.fuse.ceph
 
 #set up placeholder directories
 mkdir -p %{buildroot}%{_sysconfdir}/ceph
@@ -806,14 +803,16 @@ rm -rf %{buildroot}
 /sbin/ldconfig
 %if 0%{?suse_version}
 %fillup_only
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
+fi
 
 %preun base
 %if 0%{?suse_version}
@@ -901,8 +900,13 @@ fi
 if ! getent passwd ceph >/dev/null ; then
     CEPH_USER_ID_OPTION=""
     getent passwd $CEPH_USER_ID >/dev/null || CEPH_USER_ID_OPTION="-u $CEPH_USER_ID"
-    useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
+    useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin 2>/dev/null || :
 fi
+usermod -c "Ceph storage service" \
+        -d %{_localstatedir}/lib/ceph \   
+        -g ceph \
+        -s /sbin/nologin \
+        ceph
 %endif
 exit 0
 
@@ -926,14 +930,16 @@ fi
 
 %post mds
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mds@\*.service ceph-mds.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-mds@\*.service ceph-mds.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-mds.target >/dev/null 2>&1 || :
+fi
 
 %preun mds
 %if 0%{?suse_version}
@@ -977,14 +983,16 @@ fi
 
 %post mon
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-mon.target >/dev/null 2>&1 || :
+fi
 
 %preun mon
 %if 0%{?suse_version}
@@ -1038,14 +1046,16 @@ fi
 
 %post -n rbd-mirror
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-rbd-mirror@\*.service ceph-rbd-mirror.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-rbd-mirror.target >/dev/null 2>&1 || :
+fi
 
 %preun -n rbd-mirror
 %if 0%{?suse_version}
@@ -1098,14 +1108,16 @@ fi
 
 %post radosgw
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-radosgw@\*.service ceph-radosgw.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-radosgw@\*.service ceph-radosgw.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-radosgw.target >/dev/null 2>&1 || :
+fi
 
 %preun radosgw
 %if 0%{?suse_version}
@@ -1145,6 +1157,7 @@ fi
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-udev
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
+%{_udevrulesdir}/60-ceph-by-parttypeuuid.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-disk.8*
@@ -1159,14 +1172,16 @@ fi
 
 %post osd
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
+fi
 
 %preun osd
 %if 0%{?suse_version}
@@ -1206,10 +1221,6 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/ceph
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/mds
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/mon
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/osd
 %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
@@ -1376,7 +1387,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
 %{_bindir}/ceph_test_*
-%{_bindir}/librgw_file*
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage

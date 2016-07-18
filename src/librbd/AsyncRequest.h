@@ -3,7 +3,6 @@
 #ifndef CEPH_LIBRBD_ASYNC_REQUEST_H
 #define CEPH_LIBRBD_ASYNC_REQUEST_H
 
-#include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"

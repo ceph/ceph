@@ -429,6 +429,37 @@ public:
   }
 };
 
+class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+
+  string marker;
+  map<string, bufferlist> *entries;
+  int max_entries;
+
+  int rval;
+  librados::IoCtx ioctx;
+
+  set<string> keys;
+
+  rgw_bucket pool;
+  string oid;
+
+  RGWAioCompletionNotifier *cn;
+
+public:
+  RGWRadosRemoveOmapKeysCR(RGWRados *_store,
+		      const rgw_bucket& _pool, const string& _oid,
+		      const set<string>& _keys);
+
+  ~RGWRadosRemoveOmapKeysCR();
+
+  int send_request();
+
+  int request_complete() {
+    return rval;
+  }
+};
+
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -479,6 +510,8 @@ public:
   int request_complete();
 };
 
+#define OMAP_APPEND_MAX_ENTRIES_DEFAULT 100
+
 class RGWOmapAppend : public RGWConsumerCR<string> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -493,9 +526,11 @@ class RGWOmapAppend : public RGWConsumerCR<string> {
 
   map<string, bufferlist> entries;
 
+  uint64_t window_size;
   uint64_t total_entries;
 public:
-  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid);
+  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+                uint64_t _window_size = OMAP_APPEND_MAX_ENTRIES_DEFAULT);
   int operate();
   void flush_pending();
   bool append(const string& s);
@@ -503,6 +538,14 @@ public:
 
   uint64_t get_total_entries() {
     return total_entries;
+  }
+
+  const rgw_bucket& get_pool() {
+    return pool;
+  }
+
+  const string& get_oid() {
+    return oid;
   }
 };
 
@@ -617,35 +660,32 @@ public:
 
 class RGWAsyncGetBucketInstanceInfo : public RGWAsyncRadosRequest {
   RGWRados *store;
-  string bucket_name;
-  string bucket_id;
+  rgw_bucket bucket;
   RGWBucketInfo *bucket_info;
 
 protected:
   int _send_request();
 public:
-  RGWAsyncGetBucketInstanceInfo(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-		        const string& _bucket_name, const string& _bucket_id,
-                        RGWBucketInfo *_bucket_info) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                       bucket_name(_bucket_name), bucket_id(_bucket_id),
-                                                       bucket_info(_bucket_info) {}
+  RGWAsyncGetBucketInstanceInfo(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+                                RGWRados *_store, const rgw_bucket& bucket,
+                                RGWBucketInfo *_bucket_info)
+    : RGWAsyncRadosRequest(caller, cn), store(_store),
+      bucket(bucket), bucket_info(_bucket_info) {}
 };
 
 class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  string bucket_name;
-  string bucket_id;
+  rgw_bucket bucket;
   RGWBucketInfo *bucket_info;
 
   RGWAsyncGetBucketInstanceInfo *req;
   
 public:
   RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		        const string& _bucket_name, const string& _bucket_id,
-                        RGWBucketInfo *_bucket_info) : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-                                                       bucket_name(_bucket_name), bucket_id(_bucket_id),
-                                                       bucket_info(_bucket_info), req(NULL) {}
+                             const rgw_bucket& bucket, RGWBucketInfo *_bucket_info)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+      bucket(bucket), bucket_info(_bucket_info), req(NULL) {}
   ~RGWGetBucketInstanceInfoCR() {
     request_cleanup();
   }
@@ -657,7 +697,7 @@ public:
   }
 
   int send_request() {
-    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, bucket_name, bucket_id, bucket_info);
+    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, bucket, bucket_info);
     async_rados->queue(req);
     return 0;
   }

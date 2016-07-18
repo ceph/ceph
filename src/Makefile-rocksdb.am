@@ -16,22 +16,30 @@ EXTRA_DIST += \
   rocksdb/AUTHORS \
   rocksdb/build_tools/amalgamate.py \
   rocksdb/build_tools/build_detect_platform \
+  rocksdb/build_tools/dependencies_4.8.1.sh \
+  rocksdb/build_tools/dependencies.sh \
   rocksdb/build_tools/dockerbuild.sh \
+  rocksdb/build_tools/error_filter.py \
   rocksdb/build_tools/fbcode_config4.8.1.sh \
   rocksdb/build_tools/fbcode_config.sh \
   rocksdb/build_tools/fb_compile_mongo.sh \
   rocksdb/build_tools/format-diff.sh \
   rocksdb/build_tools/make_new_version.sh \
   rocksdb/build_tools/make_package.sh \
+  rocksdb/build_tools/precommit_checker.py \
   rocksdb/build_tools/regression_build_test.sh \
   rocksdb/build_tools/rocksdb-lego-determinator \
   rocksdb/build_tools/run_ci_db_test.ps1 \
+  rocksdb/build_tools/update_dependencies.sh \
   rocksdb/build_tools/version.sh \
   rocksdb/.clang-format \
   rocksdb/CMakeLists.txt \
   rocksdb/CONTRIBUTING.md \
   rocksdb/coverage/coverage_test.sh \
   rocksdb/coverage/parse_gcov_output.py \
+  rocksdb/db/auto_roll_logger.cc \
+  rocksdb/db/auto_roll_logger.h \
+  rocksdb/db/auto_roll_logger_test.cc \
   rocksdb/db/builder.cc \
   rocksdb/db/builder.h \
   rocksdb/db/c.cc \
@@ -58,7 +66,8 @@ EXTRA_DIST += \
   rocksdb/db/corruption_test.cc \
   rocksdb/db/c_test.c \
   rocksdb/db/cuckoo_table_db_test.cc \
-  rocksdb/db/db_bench.cc \
+  rocksdb/db/db_block_cache_test.cc \
+  rocksdb/db/db_bloom_filter_test.cc \
   rocksdb/db/db_compaction_filter_test.cc \
   rocksdb/db/db_compaction_test.cc \
   rocksdb/db/db_dynamic_level_test.cc \
@@ -72,13 +81,20 @@ EXTRA_DIST += \
   rocksdb/db/db_impl.h \
   rocksdb/db/db_impl_readonly.cc \
   rocksdb/db/db_impl_readonly.h \
+  rocksdb/db/db_info_dumper.cc \
+  rocksdb/db/db_info_dumper.h \
   rocksdb/db/db_inplace_update_test.cc \
+  rocksdb/db/db_io_failure_test.cc \
+  rocksdb/db/db_iterator_test.cc \
   rocksdb/db/db_iter.cc \
   rocksdb/db/db_iter.h \
   rocksdb/db/db_iter_test.cc \
   rocksdb/db/db_log_iter_test.cc \
+  rocksdb/db/db_properties_test.cc \
+  rocksdb/db/db_sst_test.cc \
   rocksdb/db/db_table_properties_test.cc \
   rocksdb/db/db_tailing_iter_test.cc \
+  rocksdb/db/db_test2.cc \
   rocksdb/db/db_test.cc \
   rocksdb/db/db_test_util.cc \
   rocksdb/db/db_test_util.h \
@@ -134,9 +150,11 @@ EXTRA_DIST += \
   rocksdb/db/merge_test.cc \
   rocksdb/db/options_file_test.cc \
   rocksdb/db/perf_context_test.cc \
+  rocksdb/db/pinned_iterators_manager.h \
   rocksdb/db/plain_table_db_test.cc \
   rocksdb/db/prefix_test.cc \
   rocksdb/db/repair.cc \
+  rocksdb/db/repair_test.cc \
   rocksdb/db/skiplist.h \
   rocksdb/db/skiplist_test.cc \
   rocksdb/db/slice.cc \
@@ -173,6 +191,9 @@ EXTRA_DIST += \
   rocksdb/db/write_controller_test.cc \
   rocksdb/db/write_thread.cc \
   rocksdb/db/write_thread.h \
+  rocksdb/db/xfunc_test_points.cc \
+  rocksdb/db/xfunc_test_points.h \
+  rocksdb/DEFAULT_OPTIONS_HISTORY.md \
   rocksdb/doc/doc.css \
   rocksdb/doc/index.html \
   rocksdb/doc/log_format.txt \
@@ -202,9 +223,9 @@ EXTRA_DIST += \
   rocksdb/include/rocksdb/compaction_job_stats.h \
   rocksdb/include/rocksdb/comparator.h \
   rocksdb/include/rocksdb/convenience.h \
+  rocksdb/include/rocksdb/db_bench_tool.h \
   rocksdb/include/rocksdb/db_dump_tool.h \
   rocksdb/include/rocksdb/db.h \
-  rocksdb/include/rocksdb/delete_scheduler.h \
   rocksdb/include/rocksdb/env.h \
   rocksdb/include/rocksdb/experimental.h \
   rocksdb/include/rocksdb/filter_policy.h \
@@ -220,11 +241,13 @@ EXTRA_DIST += \
   rocksdb/include/rocksdb/options.h \
   rocksdb/include/rocksdb/perf_context.h \
   rocksdb/include/rocksdb/perf_level.h \
+  rocksdb/include/rocksdb/persistent_cache.h \
   rocksdb/include/rocksdb/rate_limiter.h \
   rocksdb/include/rocksdb/slice.h \
   rocksdb/include/rocksdb/slice_transform.h \
   rocksdb/include/rocksdb/snapshot.h \
   rocksdb/include/rocksdb/sst_dump_tool.h \
+  rocksdb/include/rocksdb/sst_file_manager.h \
   rocksdb/include/rocksdb/sst_file_writer.h \
   rocksdb/include/rocksdb/statistics.h \
   rocksdb/include/rocksdb/status.h \
@@ -240,14 +263,18 @@ EXTRA_DIST += \
   rocksdb/include/rocksdb/utilities/db_ttl.h \
   rocksdb/include/rocksdb/utilities/document_db.h \
   rocksdb/include/rocksdb/utilities/env_mirror.h \
+  rocksdb/include/rocksdb/utilities/env_registry.h \
   rocksdb/include/rocksdb/utilities/flashcache.h \
   rocksdb/include/rocksdb/utilities/geo_db.h \
   rocksdb/include/rocksdb/utilities/info_log_finder.h \
   rocksdb/include/rocksdb/utilities/json_document.h \
+  rocksdb/include/rocksdb/utilities/ldb_cmd_execute_result.h \
+  rocksdb/include/rocksdb/utilities/ldb_cmd.h \
   rocksdb/include/rocksdb/utilities/leveldb_options.h \
   rocksdb/include/rocksdb/utilities/memory_util.h \
   rocksdb/include/rocksdb/utilities/optimistic_transaction_db.h \
   rocksdb/include/rocksdb/utilities/options_util.h \
+  rocksdb/include/rocksdb/utilities/sim_cache.h \
   rocksdb/include/rocksdb/utilities/spatial_db.h \
   rocksdb/include/rocksdb/utilities/stackable_db.h \
   rocksdb/include/rocksdb/utilities/table_properties_collectors.h \
@@ -262,6 +289,7 @@ EXTRA_DIST += \
   rocksdb/include/rocksdb/write_batch.h \
   rocksdb/INSTALL.md \
   rocksdb/java/benchmark/src/main/java/org/rocksdb/benchmark/DbBenchmark.java \
+  rocksdb/java/CMakeLists.txt \
   rocksdb/java/crossbuild/build-linux-centos.sh \
   rocksdb/java/crossbuild/build-linux.sh \
   rocksdb/java/crossbuild/Vagrantfile \
@@ -306,6 +334,8 @@ EXTRA_DIST += \
   rocksdb/java/samples/src/main/java/RocksDBSample.java \
   rocksdb/java/src/main/java/org/rocksdb/AbstractCompactionFilter.java \
   rocksdb/java/src/main/java/org/rocksdb/AbstractComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractImmutableNativeReference.java \
+  rocksdb/java/src/main/java/org/rocksdb/AbstractNativeReference.java \
   rocksdb/java/src/main/java/org/rocksdb/AbstractRocksIterator.java \
   rocksdb/java/src/main/java/org/rocksdb/AbstractSlice.java \
   rocksdb/java/src/main/java/org/rocksdb/AbstractWriteBatch.java \
@@ -358,6 +388,7 @@ EXTRA_DIST += \
   rocksdb/java/src/main/java/org/rocksdb/RocksIteratorInterface.java \
   rocksdb/java/src/main/java/org/rocksdb/RocksIterator.java \
   rocksdb/java/src/main/java/org/rocksdb/RocksMemEnv.java \
+  rocksdb/java/src/main/java/org/rocksdb/RocksMutableObject.java \
   rocksdb/java/src/main/java/org/rocksdb/RocksObject.java \
   rocksdb/java/src/main/java/org/rocksdb/SkipListMemTableConfig.java \
   rocksdb/java/src/main/java/org/rocksdb/Slice.java \
@@ -371,7 +402,10 @@ EXTRA_DIST += \
   rocksdb/java/src/main/java/org/rocksdb/TickerType.java \
   rocksdb/java/src/main/java/org/rocksdb/TransactionLogIterator.java \
   rocksdb/java/src/main/java/org/rocksdb/TtlDB.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/BytewiseComparator.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/DirectBytewiseComparator.java \
   rocksdb/java/src/main/java/org/rocksdb/util/Environment.java \
+  rocksdb/java/src/main/java/org/rocksdb/util/ReverseBytewiseComparator.java \
   rocksdb/java/src/main/java/org/rocksdb/util/SizeUnit.java \
   rocksdb/java/src/main/java/org/rocksdb/VectorMemTableConfig.java \
   rocksdb/java/src/main/java/org/rocksdb/WBWIRocksIterator.java \
@@ -381,7 +415,6 @@ EXTRA_DIST += \
   rocksdb/java/src/main/java/org/rocksdb/WriteOptions.java \
   rocksdb/java/src/test/java/org/rocksdb/AbstractComparatorTest.java \
   rocksdb/java/src/test/java/org/rocksdb/BackupableDBOptionsTest.java \
-  rocksdb/java/src/test/java/org/rocksdb/BackupableDBTest.java \
   rocksdb/java/src/test/java/org/rocksdb/BackupEngineTest.java \
   rocksdb/java/src/test/java/org/rocksdb/BlockBasedTableConfigTest.java \
   rocksdb/java/src/test/java/org/rocksdb/CheckPointTest.java \
@@ -420,12 +453,15 @@ EXTRA_DIST += \
   rocksdb/java/src/test/java/org/rocksdb/TransactionLogIteratorTest.java \
   rocksdb/java/src/test/java/org/rocksdb/TtlDBTest.java \
   rocksdb/java/src/test/java/org/rocksdb/Types.java \
+  rocksdb/java/src/test/java/org/rocksdb/util/BytewiseComparatorTest.java \
   rocksdb/java/src/test/java/org/rocksdb/util/EnvironmentTest.java \
   rocksdb/java/src/test/java/org/rocksdb/util/SizeUnitTest.java \
   rocksdb/java/src/test/java/org/rocksdb/WriteBatchHandlerTest.java \
   rocksdb/java/src/test/java/org/rocksdb/WriteBatchTest.java \
+  rocksdb/java/src/test/java/org/rocksdb/WriteBatchThreadedTest.java \
   rocksdb/java/src/test/java/org/rocksdb/WriteBatchWithIndexTest.java \
   rocksdb/java/src/test/java/org/rocksdb/WriteOptionsTest.java \
+  rocksdb/LANGUAGE-BINDINGS.md \
   rocksdb/LICENSE \
   rocksdb/Makefile \
   rocksdb/memtable/hash_cuckoo_rep.cc \
@@ -434,7 +470,9 @@ EXTRA_DIST += \
   rocksdb/memtable/hash_linklist_rep.h \
   rocksdb/memtable/hash_skiplist_rep.cc \
   rocksdb/memtable/hash_skiplist_rep.h \
+  rocksdb/memtable/skiplistrep.cc \
   rocksdb/memtable/stl_wrappers.h \
+  rocksdb/memtable/vectorrep.cc \
   rocksdb/PATENTS \
   rocksdb/port/dirent.h \
   rocksdb/port/likely.h \
@@ -447,11 +485,18 @@ EXTRA_DIST += \
   rocksdb/port/stack_trace.h \
   rocksdb/port/sys_time.h \
   rocksdb/port/util_logger.h \
+  rocksdb/port/win/env_default.cc \
   rocksdb/port/win/env_win.cc \
+  rocksdb/port/win/env_win.h \
+  rocksdb/port/win/io_win.cc \
+  rocksdb/port/win/io_win.h \
   rocksdb/port/win/port_win.cc \
   rocksdb/port/win/port_win.h \
   rocksdb/port/win/win_logger.cc \
   rocksdb/port/win/win_logger.h \
+  rocksdb/port/win/xpress_win.cc \
+  rocksdb/port/win/xpress_win.h \
+  rocksdb/port/xpress.h \
   rocksdb/README.md \
   rocksdb/ROCKSDB_LITE.md \
   rocksdb/src.mk \
@@ -470,9 +515,6 @@ EXTRA_DIST += \
   rocksdb/table/block_builder.h \
   rocksdb/table/block.cc \
   rocksdb/table/block.h \
-  rocksdb/table/block_hash_index.cc \
-  rocksdb/table/block_hash_index.h \
-  rocksdb/table/block_hash_index_test.cc \
   rocksdb/table/block_prefix_index.cc \
   rocksdb/table/block_prefix_index.h \
   rocksdb/table/block_test.cc \
@@ -506,6 +548,8 @@ EXTRA_DIST += \
   rocksdb/table/meta_blocks.h \
   rocksdb/table/mock_table.cc \
   rocksdb/table/mock_table.h \
+  rocksdb/table/persistent_cache_helper.cc \
+  rocksdb/table/persistent_cache_helper.h \
   rocksdb/table/plain_table_builder.cc \
   rocksdb/table/plain_table_builder.h \
   rocksdb/table/plain_table_factory.cc \
@@ -541,6 +585,9 @@ EXTRA_DIST += \
   rocksdb/tools/benchmark_leveldb.sh \
   rocksdb/tools/benchmark.sh \
   rocksdb/tools/check_format_compatible.sh \
+  rocksdb/tools/db_bench.cc \
+  rocksdb/tools/db_bench_tool.cc \
+  rocksdb/tools/db_bench_tool_test.cc \
   rocksdb/tools/db_crashtest.py \
   rocksdb/tools/dbench_monitor \
   rocksdb/tools/db_repl_stress.cc \
@@ -553,13 +600,13 @@ EXTRA_DIST += \
   rocksdb/tools/generate_random_db.sh \
   rocksdb/tools/ldb.cc \
   rocksdb/tools/ldb_cmd.cc \
-  rocksdb/tools/ldb_cmd_execute_result.h \
-  rocksdb/tools/ldb_cmd.h \
+  rocksdb/tools/ldb_cmd_impl.h \
   rocksdb/tools/ldb_cmd_test.cc \
   rocksdb/tools/ldb_test.py \
   rocksdb/tools/ldb_tool.cc \
   rocksdb/tools/pflag \
   rocksdb/tools/reduce_levels_test.cc \
+  rocksdb/tools/regression_test.sh \
   rocksdb/tools/rocksdb_dump_test.sh \
   rocksdb/tools/run_flash_bench.sh \
   rocksdb/tools/run_leveldb.sh \
@@ -578,9 +625,6 @@ EXTRA_DIST += \
   rocksdb/util/arena.cc \
   rocksdb/util/arena.h \
   rocksdb/util/arena_test.cc \
-  rocksdb/util/auto_roll_logger.cc \
-  rocksdb/util/auto_roll_logger.h \
-  rocksdb/util/auto_roll_logger_test.cc \
   rocksdb/util/autovector.h \
   rocksdb/util/autovector_test.cc \
   rocksdb/util/bloom.cc \
@@ -596,24 +640,29 @@ EXTRA_DIST += \
   rocksdb/util/compaction_job_stats_impl.cc \
   rocksdb/util/comparator.cc \
   rocksdb/util/compression.h \
+  rocksdb/util/concurrent_arena.cc \
+  rocksdb/util/concurrent_arena.h \
   rocksdb/util/crc32c.cc \
   rocksdb/util/crc32c.h \
   rocksdb/util/crc32c_test.cc \
-  rocksdb/util/db_info_dumper.cc \
-  rocksdb/util/db_info_dumper.h \
-  rocksdb/util/delete_scheduler_impl.cc \
-  rocksdb/util/delete_scheduler_impl.h \
+  rocksdb/util/delete_scheduler.cc \
+  rocksdb/util/delete_scheduler.h \
   rocksdb/util/delete_scheduler_test.cc \
   rocksdb/util/dynamic_bloom.cc \
   rocksdb/util/dynamic_bloom.h \
   rocksdb/util/dynamic_bloom_test.cc \
+  rocksdb/util/env_basic_test.cc \
   rocksdb/util/env.cc \
+  rocksdb/util/env_chroot.cc \
+  rocksdb/util/env_chroot.h \
   rocksdb/util/env_hdfs.cc \
   rocksdb/util/env_posix.cc \
   rocksdb/util/env_test.cc \
   rocksdb/util/event_logger.cc \
   rocksdb/util/event_logger.h \
   rocksdb/util/event_logger_test.cc \
+  rocksdb/util/fault_injection_test_env.cc \
+  rocksdb/util/fault_injection_test_env.h \
   rocksdb/util/filelock_test.cc \
   rocksdb/util/file_reader_writer.cc \
   rocksdb/util/file_reader_writer.h \
@@ -628,15 +677,17 @@ EXTRA_DIST += \
   rocksdb/util/histogram.cc \
   rocksdb/util/histogram.h \
   rocksdb/util/histogram_test.cc \
+  rocksdb/util/histogram_windowing.cc \
+  rocksdb/util/histogram_windowing.h \
   rocksdb/util/instrumented_mutex.cc \
   rocksdb/util/instrumented_mutex.h \
   rocksdb/util/io_posix.cc \
   rocksdb/util/io_posix.h \
   rocksdb/util/iostats_context.cc \
   rocksdb/util/iostats_context_imp.h \
+  rocksdb/util/iostats_context_test.cc \
   rocksdb/utilities/backupable/backupable_db.cc \
   rocksdb/utilities/backupable/backupable_db_test.cc \
-  rocksdb/utilities/backupable/backupable_db_testutil.h \
   rocksdb/utilities/checkpoint/checkpoint.cc \
   rocksdb/utilities/checkpoint/checkpoint_test.cc \
   rocksdb/utilities/compaction_filters/remove_emptyvalue_compactionfilter.cc \
@@ -649,6 +700,8 @@ EXTRA_DIST += \
   rocksdb/utilities/document/json_document_test.cc \
   rocksdb/utilities/env_mirror.cc \
   rocksdb/utilities/env_mirror_test.cc \
+  rocksdb/utilities/env_registry.cc \
+  rocksdb/utilities/env_registry_test.cc \
   rocksdb/utilities/flashcache/flashcache.cc \
   rocksdb/utilities/flashcache/flashcache.h \
   rocksdb/utilities/geodb/geodb_impl.cc \
@@ -658,6 +711,7 @@ EXTRA_DIST += \
   rocksdb/utilities/memory/memory_test.cc \
   rocksdb/utilities/memory/memory_util.cc \
   rocksdb/utilities/merge_operators.h \
+  rocksdb/utilities/merge_operators/max.cc \
   rocksdb/utilities/merge_operators/put.cc \
   rocksdb/utilities/merge_operators/string_append/stringappend2.cc \
   rocksdb/utilities/merge_operators/string_append/stringappend2.h \
@@ -667,12 +721,19 @@ EXTRA_DIST += \
   rocksdb/utilities/merge_operators/uint64add.cc \
   rocksdb/utilities/options/options_util.cc \
   rocksdb/utilities/options/options_util_test.cc \
+  rocksdb/utilities/persistent_cache/hash_table_bench.cc \
+  rocksdb/utilities/persistent_cache/hash_table_evictable.h \
+  rocksdb/utilities/persistent_cache/hash_table.h \
+  rocksdb/utilities/persistent_cache/hash_table_test.cc \
+  rocksdb/utilities/persistent_cache/lrulist.h \
   rocksdb/utilities/redis/README \
   rocksdb/utilities/redis/redis_list_exception.h \
   rocksdb/utilities/redis/redis_list_iterator.h \
   rocksdb/utilities/redis/redis_lists.cc \
   rocksdb/utilities/redis/redis_lists.h \
   rocksdb/utilities/redis/redis_lists_test.cc \
+  rocksdb/utilities/simulator_cache/sim_cache.cc \
+  rocksdb/utilities/simulator_cache/sim_cache_test.cc \
   rocksdb/utilities/spatialdb/spatial_db.cc \
   rocksdb/utilities/spatialdb/spatial_db_test.cc \
   rocksdb/utilities/spatialdb/utils.h \
@@ -700,6 +761,7 @@ EXTRA_DIST += \
   rocksdb/utilities/ttl/db_ttl_impl.cc \
   rocksdb/utilities/ttl/db_ttl_impl.h \
   rocksdb/utilities/ttl/ttl_test.cc \
+  rocksdb/utilities/util_merge_operators_test.cc \
   rocksdb/utilities/write_batch_with_index/write_batch_with_index.cc \
   rocksdb/utilities/write_batch_with_index/write_batch_with_index_internal.cc \
   rocksdb/utilities/write_batch_with_index/write_batch_with_index_internal.h \
@@ -710,8 +772,8 @@ EXTRA_DIST += \
   rocksdb/util/logging.cc \
   rocksdb/util/logging.h \
   rocksdb/util/log_write_bench.cc \
+  rocksdb/util/lru_cache_handle.h \
   rocksdb/util/memenv.cc \
-  rocksdb/util/memenv_test.cc \
   rocksdb/util/mock_env.cc \
   rocksdb/util/mock_env.h \
   rocksdb/util/mock_env_test.cc \
@@ -728,6 +790,7 @@ EXTRA_DIST += \
   rocksdb/util/options_parser.h \
   rocksdb/util/options_sanity_check.cc \
   rocksdb/util/options_sanity_check.h \
+  rocksdb/util/options_settable_test.cc \
   rocksdb/util/options_test.cc \
   rocksdb/util/perf_context.cc \
   rocksdb/util/perf_context_imp.h \
@@ -740,13 +803,15 @@ EXTRA_DIST += \
   rocksdb/util/rate_limiter.cc \
   rocksdb/util/rate_limiter.h \
   rocksdb/util/rate_limiter_test.cc \
-  rocksdb/util/skiplistrep.cc \
   rocksdb/util/slice.cc \
   rocksdb/util/slice_transform_test.cc \
+  rocksdb/util/sst_file_manager_impl.cc \
+  rocksdb/util/sst_file_manager_impl.h \
   rocksdb/util/statistics.cc \
   rocksdb/util/statistics.h \
   rocksdb/util/status.cc \
   rocksdb/util/status_message.cc \
+  rocksdb/util/stderr_logger.h \
   rocksdb/util/stop_watch.h \
   rocksdb/util/string_util.cc \
   rocksdb/util/string_util.h \
@@ -761,8 +826,8 @@ EXTRA_DIST += \
   rocksdb/util/thread_local.h \
   rocksdb/util/thread_local_test.cc \
   rocksdb/util/thread_operation.h \
-  rocksdb/util/thread_posix.cc \
-  rocksdb/util/thread_posix.h \
+  rocksdb/util/threadpool.cc \
+  rocksdb/util/threadpool.h \
   rocksdb/util/thread_status_impl.cc \
   rocksdb/util/thread_status_updater.cc \
   rocksdb/util/thread_status_updater_debug.cc \
@@ -770,7 +835,8 @@ EXTRA_DIST += \
   rocksdb/util/thread_status_util.cc \
   rocksdb/util/thread_status_util_debug.cc \
   rocksdb/util/thread_status_util.h \
-  rocksdb/util/vectorrep.cc \
+  rocksdb/util/transaction_test_util.cc \
+  rocksdb/util/transaction_test_util.h \
   rocksdb/util/xfunc.cc \
   rocksdb/util/xfunc.h \
   rocksdb/util/xxhash.cc \

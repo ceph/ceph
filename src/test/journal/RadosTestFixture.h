@@ -35,7 +35,7 @@ public:
 
   bufferlist create_payload(const std::string &payload);
 
-  struct Listener : public journal::JournalMetadata::Listener {
+  struct Listener : public journal::JournalMetadataListener {
     RadosTestFixture *test_fixture;
     Mutex mutex;
     Cond cond;
@@ -68,4 +68,6 @@ public:
   SafeTimer *m_timer;
 
   Listener m_listener;
+
+  std::list<journal::JournalMetadataPtr> m_metadatas;
 };

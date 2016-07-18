@@ -147,7 +147,7 @@ public:
    * Render table to ostream (i.e. cout << table)
    */
 
-  friend std::ostream &operator<<(std::ostream& out, TextTable &t);
+  friend std::ostream &operator<<(std::ostream &out, const TextTable &t);
 
   /**
    * clear: Reset everything in a TextTable except column defs

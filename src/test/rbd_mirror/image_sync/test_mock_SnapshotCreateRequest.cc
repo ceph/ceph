@@ -13,9 +13,21 @@
 #include "tools/rbd_mirror/image_sync/SnapshotCreateRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 
+namespace librbd {
+namespace {
+
+struct MockTestImageCtx : public librbd::MockImageCtx {
+  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+    : librbd::MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+} // namespace librbd
+
 // template definitions
 #include "tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc"
-template class rbd::mirror::image_sync::SnapshotCreateRequest<librbd::MockImageCtx>;
+template class rbd::mirror::image_sync::SnapshotCreateRequest<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
@@ -32,7 +44,7 @@ using ::testing::WithArg;
 
 class TestMockImageSyncSnapshotCreateRequest : public TestMockFixture {
 public:
-  typedef SnapshotCreateRequest<librbd::MockImageCtx> MockSnapshotCreateRequest;
+  typedef SnapshotCreateRequest<librbd::MockTestImageCtx> MockSnapshotCreateRequest;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();
@@ -42,19 +54,31 @@ public:
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
   }
 
-  void expect_test_features(librbd::MockImageCtx &mock_image_ctx,
+  void expect_test_features(librbd::MockTestImageCtx &mock_image_ctx,
                             uint64_t features, bool enabled) {
     EXPECT_CALL(mock_image_ctx, test_features(features))
                   .WillOnce(Return(enabled));
   }
 
-  void expect_set_size(librbd::MockImageCtx &mock_image_ctx, int r) {
+  void expect_set_size(librbd::MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_size"), _, _, _))
                   .WillOnce(Return(r));
   }
 
-  void expect_snap_create(librbd::MockImageCtx &mock_image_ctx,
+  void expect_remove_parent(librbd::MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("remove_parent"), _, _, _))
+                  .WillOnce(Return(r));
+  }
+
+  void expect_set_parent(librbd::MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_parent"), _, _, _))
+                  .WillOnce(Return(r));
+  }
+
+  void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
     EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, 0, true))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
@@ -65,7 +89,7 @@ public:
                                   }))));
   }
 
-  void expect_object_map_resize(librbd::MockImageCtx &mock_image_ctx,
+  void expect_object_map_resize(librbd::MockTestImageCtx &mock_image_ctx,
                                 librados::snap_t snap_id, int r) {
     std::string oid(librbd::ObjectMap::object_map_name(mock_image_ctx.id,
                                                        snap_id));
@@ -74,23 +98,26 @@ public:
                   .WillOnce(Return(r));
   }
 
-  static void inject_snap(librbd::MockImageCtx &mock_image_ctx,
+  static void inject_snap(librbd::MockTestImageCtx &mock_image_ctx,
                    uint64_t snap_id, const std::string &snap_name) {
     mock_image_ctx.snap_ids[snap_name] = snap_id;
   }
 
-  MockSnapshotCreateRequest *create_request(librbd::MockImageCtx &mock_local_image_ctx,
+  MockSnapshotCreateRequest *create_request(librbd::MockTestImageCtx &mock_local_image_ctx,
                                             const std::string &snap_name,
-                                            uint64_t size, Context *on_finish) {
+                                            uint64_t size,
+                                            const librbd::parent_spec &spec,
+                                            uint64_t parent_overlap,
+                                            Context *on_finish) {
     return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, size,
-                                         on_finish);
+                                         spec, parent_overlap, on_finish);
   }
 
   librbd::ImageCtx *m_local_image_ctx;
 };
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, Resize) {
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
   InSequence seq;
   expect_set_size(mock_local_image_ctx, 0);
@@ -99,28 +126,135 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, Resize) {
 
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
-                                                      "snap1", 123,
+                                                      "snap1", 123, {}, 0,
                                                       &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeError) {
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
   InSequence seq;
   expect_set_size(mock_local_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
-                                                      "snap1", 123,
+                                                      "snap1", 123, {}, 0,
                                                       &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParent) {
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.parent_md.spec.pool_id = 213;
+
+  InSequence seq;
+  expect_remove_parent(mock_local_image_ctx, 0);
+  expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
+  expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+
+  C_SaferCond ctx;
+  MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
+                                                      "snap1",
+                                                      m_local_image_ctx->size,
+                                                      {}, 0, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParentError) {
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.parent_md.spec.pool_id = 213;
+
+  InSequence seq;
+  expect_remove_parent(mock_local_image_ctx, -EINVAL);
+
+  C_SaferCond ctx;
+  MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
+                                                      "snap1",
+                                                      m_local_image_ctx->size,
+                                                      {}, 0, &ctx);
+  request->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveSetParent) {
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.parent_md.spec.pool_id = 213;
+
+  InSequence seq;
+  expect_remove_parent(mock_local_image_ctx, 0);
+  expect_set_parent(mock_local_image_ctx, 0);
+  expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
+  expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+
+  C_SaferCond ctx;
+  MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
+                                                      "snap1",
+                                                      m_local_image_ctx->size,
+                                                      {123, "test", 0}, 0,
+                                                      &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentSpec) {
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  InSequence seq;
+  expect_set_parent(mock_local_image_ctx, 0);
+  expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
+  expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+
+  C_SaferCond ctx;
+  MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
+                                                      "snap1",
+                                                      m_local_image_ctx->size,
+                                                      {123, "test", 0}, 0,
+                                                      &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentOverlap) {
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.parent_md.spec = {123, "test", 0};
+
+  InSequence seq;
+  expect_set_parent(mock_local_image_ctx, 0);
+  expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
+  expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+
+  C_SaferCond ctx;
+  MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
+                                                      "snap1",
+                                                      m_local_image_ctx->size,
+                                                      mock_local_image_ctx.parent_md.spec,
+                                                      123, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentError) {
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  InSequence seq;
+  expect_set_parent(mock_local_image_ctx, -ESTALE);
+
+  C_SaferCond ctx;
+  MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
+                                                      "snap1",
+                                                      m_local_image_ctx->size,
+                                                      {123, "test", 0}, 0,
+                                                      &ctx);
+  request->send();
+  ASSERT_EQ(-ESTALE, ctx.wait());
+}
+
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreate) {
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
   InSequence seq;
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
@@ -130,13 +264,13 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreate) {
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
                                                       m_local_image_ctx->size,
-                                                      &ctx);
+                                                      {}, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreateError) {
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
   InSequence seq;
   expect_snap_create(mock_local_image_ctx, "snap1", 10, -EINVAL);
@@ -145,13 +279,13 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreateError) {
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
                                                       m_local_image_ctx->size,
-                                                      &ctx);
+                                                      {}, 0, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMap) {
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
   InSequence seq;
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
@@ -162,13 +296,13 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMap) {
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
                                                       m_local_image_ctx->size,
-                                                      &ctx);
+                                                      {}, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMapError) {
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
   InSequence seq;
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
@@ -179,7 +313,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMapError) {
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
                                                       m_local_image_ctx->size,
-                                                      &ctx);
+                                                      {}, 0, &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
