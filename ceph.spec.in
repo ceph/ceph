@@ -828,8 +828,8 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
-%{_bindir}/ceph-post-file
-%{_bindir}/ceph-brag
+%exclude %{_bindir}/ceph-post-file
+%exclude %{_bindir}/ceph-brag
 %{_tmpfilesdir}/ceph-common.conf
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
