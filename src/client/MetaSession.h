@@ -35,17 +35,17 @@ struct MetaSession {
     STATE_STALE,
   } state;
 
+  int mds_state;
   bool readonly;
 
   list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
   xlist<Inode*> flushing_caps;
-  xlist<CapSnap*> flushing_capsnaps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
   std::set<ceph_tid_t> flushing_caps_tids;
-  std::set<ceph_tid_t> kicked_flush_tids;
+  std::set<Inode*> early_flushing_caps;
 
   Cap *s_cap_iterator;
 
@@ -54,8 +54,8 @@ struct MetaSession {
   MetaSession()
     : mds_num(-1), con(NULL),
       seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-      state(STATE_NEW), readonly(false), s_cap_iterator(NULL),
-      release(NULL)
+      state(STATE_NEW), mds_state(0), readonly(false),
+      s_cap_iterator(NULL), release(NULL)
   {}
   ~MetaSession();
 

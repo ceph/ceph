@@ -64,13 +64,11 @@ struct CapSnap {
 
   bool writing, dirty_data;
   uint64_t flush_tid;
-  xlist<CapSnap*>::item flushing_item;
 
   explicit CapSnap(Inode *i)
     : in(i), issued(0), dirty(0),
       size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-      inline_version(0), writing(false), dirty_data(false), flush_tid(0),
-      flushing_item(this)
+      inline_version(0), writing(false), dirty_data(false), flush_tid(0)
   {}
 
   void dump(Formatter *f) const;
@@ -80,6 +78,7 @@ struct CapSnap {
 #define I_COMPLETE	1
 #define I_DIR_ORDERED	2
 #define I_CAP_DROPPED	4
+#define I_SNAPDIR_OPEN	8
 
 struct Inode {
   Client *client;

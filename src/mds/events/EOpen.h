@@ -22,6 +22,7 @@ class EOpen : public LogEvent {
 public:
   EMetaBlob metablob;
   vector<inodeno_t> inos;
+  vector<vinodeno_t> snap_inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
   explicit EOpen(MDLog *mdlog) :
@@ -37,7 +38,10 @@ public:
     if (!in->is_base()) {
       metablob.add_dir_context(in->get_projected_parent_dn()->get_dir());
       metablob.add_primary_dentry(in->get_projected_parent_dn(), 0, false);
-      inos.push_back(in->ino());
+      if (in->last == CEPH_NOSNAP)
+	inos.push_back(in->ino());
+      else
+	snap_inos.push_back(in->vino());
     }
   }
   void add_ino(inodeno_t ino) {

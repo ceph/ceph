@@ -996,8 +996,9 @@ void mds_load_t::generate_test_instances(list<mds_load_t*>& ls)
  * cap_reconnect_t
  */
 void cap_reconnect_t::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode_old(bl); // extract out when something changes
+  ::encode(snap_follows, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1011,6 +1012,8 @@ void cap_reconnect_t::encode_old(bufferlist& bl) const {
 void cap_reconnect_t::decode(bufferlist::iterator& bl) {
   DECODE_START(1, bl);
   decode_old(bl); // extract out when something changes
+  if (struct_v >= 2)
+    ::decode(snap_follows, bl);
   DECODE_FINISH(bl);
 }
 
