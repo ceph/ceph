@@ -4072,6 +4072,9 @@ int BlueStore::collection_list(
     *pnext = ghobject_t::get_max();
   }
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << c->cid
 	   << " start " << start << " end " << end << " max " << max
 	   << " = " << r << ", ls.size() = " << ls->size()
