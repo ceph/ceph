@@ -68,8 +68,9 @@ function run() {
     if test -x ./do_cmake.sh ; then
         $DRY_RUN ./do_cmake.sh || return 1
         cd build
-        export CTEST_OUTPUT_ON_FAILURE=1 CTEST_PARALLEL_LEVEL=$(get_processors)
-        $DRY_RUN make $BUILD_MAKEOPTS check || return 1
+        $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+        $DRY_RUN ctest -L Racing -j1 --output-on-failure || return 1
+        $DRY_RUN ctest -LE Racing $CHECK_MAKEOPTS --output-on-failure || return 1
     else
         $DRY_RUN ./autogen.sh || return 1
         $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
