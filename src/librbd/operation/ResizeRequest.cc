@@ -25,11 +25,11 @@ using util::create_rados_safe_callback;
 
 template <typename I>
 ResizeRequest<I>::ResizeRequest(I &image_ctx, Context *on_finish,
-                                uint64_t new_size, ProgressContext &prog_ctx,
+                                uint64_t new_size, bool allow_shrink, ProgressContext &prog_ctx,
                                 uint64_t journal_op_tid, bool disable_journal)
   : Request<I>(image_ctx, on_finish, journal_op_tid),
-    m_original_size(0), m_new_size(new_size), m_prog_ctx(prog_ctx),
-    m_new_parent_overlap(0), m_disable_journal(disable_journal),
+    m_original_size(0), m_new_size(new_size), m_allow_shrink(allow_shrink),
+    m_prog_ctx(prog_ctx), m_new_parent_overlap(0), m_disable_journal(disable_journal),
     m_xlist_item(this)
 {
 }
@@ -114,12 +114,19 @@ Context *ResizeRequest<I>::handle_pre_block_writes(int *result) {
 template <typename I>
 Context *ResizeRequest<I>::send_append_op_event() {
   I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  if (m_new_size < m_original_size && !m_allow_shrink) {
+    ldout(cct, 1) << " shrinking the image is not permitted" << dendl;
+    this->async_complete(-EINVAL);
+    return nullptr;
+  }
+
   if (m_disable_journal || !this->template append_op_event<
         ResizeRequest<I>, &ResizeRequest<I>::handle_append_op_event>(this)) {
     return send_grow_object_map();
   }
 
-  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
   return nullptr;
 }

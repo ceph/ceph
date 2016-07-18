@@ -617,7 +617,7 @@ TEST_F(TestJournalReplay, Resize) {
 
   // verify lock ordering constraints
   librbd::NoOpProgressContext no_op_progress;
-  ASSERT_EQ(0, ictx->operations->resize(0, no_op_progress));
+  ASSERT_EQ(0, ictx->operations->resize(0, true, no_op_progress));
 }
 
 TEST_F(TestJournalReplay, Flatten) {
