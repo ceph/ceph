@@ -808,8 +808,15 @@ protected:
 
   bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
 			      int64_t* kb_avail) const {
-    if (id >= 0)
+    if (id >= 0) {
+      if (osdmap->is_out(id)) {
+        *kb = 0;
+        *kb_used = 0;
+        *kb_avail = 0;
+        return true;
+      }
       return get_osd_utilization(id, kb, kb_used, kb_avail);
+    }
 
     *kb = 0;
     *kb_used = 0;
