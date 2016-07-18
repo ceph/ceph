@@ -251,6 +251,36 @@ protected:
 };
 
 
+class AioDiscardAction : public TypedAction<action::AioDiscardAction> {
+public:
+  explicit AioDiscardAction(const action::AioDiscardAction &action)
+    : TypedAction<action::AioDiscardAction>(action) {
+  }
+
+  virtual void perform(ActionCtx &ctx);
+
+protected:
+  virtual const char *get_action_name() const {
+    return "AioDiscardAction";
+  }
+};
+
+
+class DiscardAction : public TypedAction<action::DiscardAction> {
+public:
+  explicit DiscardAction(const action::DiscardAction &action)
+    : TypedAction<action::DiscardAction>(action) {
+  }
+
+  virtual void perform(ActionCtx &ctx);
+
+protected:
+  virtual const char *get_action_name() const {
+    return "DiscardAction";
+  }
+};
+
+
 class OpenImageAction : public TypedAction<action::OpenImageAction> {
 public:
   explicit OpenImageAction(const action::OpenImageAction &action)
