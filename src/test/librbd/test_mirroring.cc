@@ -24,6 +24,7 @@
 #include "librbd/Operations.h"
 #include "librbd/journal/Types.h"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
@@ -267,7 +268,7 @@ public:
       "remote-image-id", {{"sync-point-snap", boost::none}}, {});
     librbd::journal::ClientData client_data(peer_client_meta);
 
-    journal::Journaler journaler(io_ctx, image_id, "peer-client", 5);
+    journal::Journaler journaler(io_ctx, image_id, "peer-client", {});
     C_SaferCond init_ctx;
     journaler.init(&init_ctx);
     ASSERT_EQ(-ENOENT, init_ctx.wait());

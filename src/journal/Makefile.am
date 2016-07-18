@@ -31,6 +31,7 @@ noinst_HEADERS += \
 	journal/ObjectRecorder.h \
 	journal/ReplayEntry.h \
 	journal/ReplayHandler.h \
+	journal/Settings.h \
 	journal/Utils.h
 DENCODER_DEPS += libjournal.la
 
