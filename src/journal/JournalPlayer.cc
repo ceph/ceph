@@ -107,9 +107,7 @@ void JournalPlayer::prefetch() {
     splay_offset_to_objects[position.first] = position.second.object_number;
   }
 
-  // prefetch the active object for each splay offset (and the following object)
-  uint64_t active_set = m_journal_metadata->get_active_set();
-  uint64_t max_object_number = (splay_width * (active_set + 1)) - 1;
+  // prefetch the active object for each splay offset
   std::set<uint64_t> prefetch_object_numbers;
   for (uint8_t splay_offset = 0; splay_offset < splay_width; ++splay_offset) {
     uint64_t object_number = splay_offset;
@@ -118,9 +116,6 @@ void JournalPlayer::prefetch() {
     }
 
     prefetch_object_numbers.insert(object_number);
-    if (object_number + splay_width <= max_object_number) {
-      prefetch_object_numbers.insert(object_number + splay_width);
-    }
   }
 
   ldout(m_cct, 10) << __func__ << ": prefetching "
@@ -156,7 +151,7 @@ void JournalPlayer::shut_down(Context *on_finish) {
     ObjectPlayerPtr object_player = get_object_player();
     switch (m_watch_step) {
     case WATCH_STEP_FETCH_FIRST:
-      object_player = m_object_players.begin()->second.begin()->second;
+      object_player = m_object_players.begin()->second;
       // fallthrough
     case WATCH_STEP_FETCH_CURRENT:
       object_player->unwatch();
@@ -266,12 +261,11 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
 
   bool prefetch_complete = false;
   assert(m_object_players.count(splay_offset) == 1);
-  ObjectPlayers &object_players = m_object_players[splay_offset];
+  ObjectPlayerPtr object_player = m_object_players[splay_offset];
 
   // prefetch in-order since a newer splay object could prefetch first
   while (m_fetch_object_numbers.count(
-           object_players.begin()->second->get_object_number()) == 0) {
-    ObjectPlayerPtr object_player = object_players.begin()->second;
+           object_player->get_object_number()) == 0) {
     uint64_t player_object_number = object_player->get_object_number();
 
     // skip past known committed records
@@ -492,28 +486,23 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
     m_prune_tag_tid = tag_tid;
   }
 
-  for (auto &players : m_object_players) {
-    for (auto player_pair : players.second) {
-      ObjectPlayerPtr object_player = player_pair.second;
-      ldout(m_cct, 15) << __func__ << ": checking " << object_player->get_oid()
-                       << dendl;
-      while (!object_player->empty()) {
-        Entry entry;
-        object_player->front(&entry);
-        if (entry.get_tag_tid() == tag_tid) {
-          ldout(m_cct, 20) << __func__ << ": pruned " << entry << dendl;
-          object_player->pop_front();
-        } else {
-          break;
-        }
+  for (auto &player_pair : m_object_players) {
+    ObjectPlayerPtr object_player(player_pair.second);
+    ldout(m_cct, 15) << __func__ << ": checking " << object_player->get_oid()
+                     << dendl;
+    while (!object_player->empty()) {
+      Entry entry;
+      object_player->front(&entry);
+      if (entry.get_tag_tid() == tag_tid) {
+        ldout(m_cct, 20) << __func__ << ": pruned " << entry << dendl;
+        object_player->pop_front();
+      } else {
+        break;
       }
     }
 
-    // trim any empty players to prefetch the next available object
-    ObjectPlayers object_players(players.second);
-    for (auto player_pair : object_players) {
-      remove_empty_object_player(player_pair.second);
-    }
+    // trim empty player to prefetch the next available object
+    remove_empty_object_player(player_pair.second);
   }
 }
 
@@ -531,21 +520,13 @@ void JournalPlayer::prune_active_tag(const boost::optional<uint64_t>& tag_tid) {
   prune_tag(active_tag_tid);
 }
 
-const JournalPlayer::ObjectPlayers &JournalPlayer::get_object_players() const {
+ObjectPlayerPtr JournalPlayer::get_object_player() const {
   assert(m_lock.is_locked());
 
   SplayedObjectPlayers::const_iterator it = m_object_players.find(
     m_splay_offset);
   assert(it != m_object_players.end());
-
   return it->second;
-}
-
-ObjectPlayerPtr JournalPlayer::get_object_player() const {
-  assert(m_lock.is_locked());
-
-  const ObjectPlayers &object_players = get_object_players();
-  return object_players.begin()->second;
 }
 
 ObjectPlayerPtr JournalPlayer::get_object_player(uint64_t object_number) const {
@@ -556,17 +537,9 @@ ObjectPlayerPtr JournalPlayer::get_object_player(uint64_t object_number) const {
   auto splay_it = m_object_players.find(splay_offset);
   assert(splay_it != m_object_players.end());
 
-  const ObjectPlayers &object_players = splay_it->second;
-  auto player_it = object_players.find(object_number);
-  assert(player_it != object_players.end());
-  return player_it->second;
-}
-
-ObjectPlayerPtr JournalPlayer::get_next_set_object_player() const {
-  assert(m_lock.is_locked());
-
-  const ObjectPlayers &object_players = get_object_players();
-  return object_players.rbegin()->second;
+  ObjectPlayerPtr object_player = splay_it->second;
+  assert(object_player->get_object_number() == object_number);
+  return object_player;
 }
 
 void JournalPlayer::advance_splay_object() {
@@ -599,16 +572,8 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
   m_watch_prune_active_tag = false;
   m_watch_step = WATCH_STEP_FETCH_CURRENT;
 
-  ObjectPlayers &object_players = m_object_players[
-    player->get_object_number() % splay_width];
-  assert(!object_players.empty());
-
-  uint64_t next_object_num = object_players.rbegin()->first + splay_width;
-  uint64_t next_object_set = next_object_num / splay_width;
-  if (next_object_set <= active_set) {
-    fetch(next_object_num);
-  }
-  object_players.erase(player->get_object_number());
+  uint64_t next_object_num = player->get_object_number() + splay_width;
+  fetch(next_object_num);
   return true;
 }
 
@@ -628,7 +593,7 @@ void JournalPlayer::fetch(uint64_t object_num) {
     m_journal_metadata->get_settings().max_fetch_bytes));
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
-  m_object_players[object_num % splay_width][object_num] = object_player;
+  m_object_players[object_num % splay_width] = object_player;
   object_player->fetch(fetch_ctx);
 }
 
@@ -699,7 +664,7 @@ void JournalPlayer::schedule_watch() {
     }
     break;
   case WATCH_STEP_FETCH_FIRST:
-    object_player = m_object_players.begin()->second.begin()->second;
+    object_player = m_object_players.begin()->second;
     watch_interval = 0;
     break;
   default:
