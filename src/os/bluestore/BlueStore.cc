@@ -1478,12 +1478,14 @@ void BlueStore::_set_compression()
 
 void BlueStore::_set_csum()
 {
-  int t = bluestore_blob_t::get_csum_string_type(
-    g_conf->bluestore_csum_type);
-  if (t < 0 || !g_conf->bluestore_csum) {
-    t = bluestore_blob_t::CSUM_NONE;
+  csum_type = bluestore_blob_t::CSUM_NONE;
+  if (g_conf->bluestore_csum) {
+    int t = bluestore_blob_t::get_csum_string_type(
+            g_conf->bluestore_csum_type);
+    if (t > bluestore_blob_t::CSUM_NONE)
+      csum_type = t;
   }
-  csum_type = t;
+
   dout(10) << __func__ << " csum_type "
 	   << bluestore_blob_t::get_csum_type_string(csum_type)
 	   << dendl;
