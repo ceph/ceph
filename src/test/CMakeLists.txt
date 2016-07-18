@@ -478,7 +478,7 @@ target_link_libraries(ceph_test_get_blkdev_size
 #make check starts here
 
 #following dependencies are run inside make check unit tests
-add_dependencies(check 
+add_dependencies(tests
   ceph-mon
   ceph
   ceph-authtool
@@ -507,9 +507,12 @@ add_dependencies(check
   cython_modules)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
+add_ceph_test(ceph_objectstore_tool.py ${CMAKE_CURRENT_SOURCE_DIR}/ceph_objectstore_tool.py)
+set_property(TEST test-ceph-helpers.sh ceph_objectstore_tool.py
+  PROPERTY LABELS Racing LongRunning)
+
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
 
-add_ceph_test(ceph_objectstore_tool.py ${CMAKE_CURRENT_SOURCE_DIR}/ceph_objectstore_tool.py)
 add_ceph_test(cephtool-test-mds.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mds.sh)
 add_ceph_test(cephtool-test-mon.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mon.sh)
 add_ceph_test(cephtool-test-osd.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-osd.sh)
@@ -521,10 +524,7 @@ add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 add_ceph_test(unittest_bufferlist.sh ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
 
 add_test(NAME run-tox-ceph-disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/run-tox.sh)
-add_dependencies(check run-tox-ceph-disk)
-
-add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_dependencies(check run-tox-ceph-detect-init)
+add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh)
 
 set(CEPH_DISK_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv)
 set(CEPH_DETECT_INIT_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv)
