@@ -981,10 +981,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   char *buffer::ptr::push_back(unsigned len) {
     assert(_raw);
-    assert(l <= unused_tail_length());
+    assert(len <= unused_tail_length());
 
     char *c = _raw->data + _off + len;
-    _len += l;
+    _len += len;
     return c;
   }
 
