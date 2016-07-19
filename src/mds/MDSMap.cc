@@ -129,6 +129,7 @@ void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
 void MDSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
+  f->dump_stream("fsid") << get_fsid();
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("ever_allowed_features", ever_allowed_features);
   f->dump_unsigned("explicitly_allowed_features", explicitly_allowed_features);
@@ -206,6 +207,7 @@ void MDSMap::print(ostream& out) const
 {
   out << "fs_name\t" << fs_name << "\n";
   out << "epoch\t" << epoch << "\n";
+  out << "fsid\t" << get_fsid() << "\n";
   out << "flags\t" << hex << flags << dec << "\n";
   out << "created\t" << created << "\n";
   out << "modified\t" << modified << "\n";
@@ -556,7 +558,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 10;
+  __u16 ev = 11;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -575,6 +577,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
   ::encode(damaged, bl);
+  ::encode(fsid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -678,6 +681,9 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   if (ev >= 9) {
     ::decode(damaged, p);
+  }
+  if (ev >= 11) {
+    ::decode(fsid, p);
   }
   DECODE_FINISH(p);
 }

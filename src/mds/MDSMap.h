@@ -163,6 +163,7 @@ public:
 protected:
   // base map
   epoch_t epoch;
+  uuid_d fsid;
   bool enabled;
   std::string fs_name;
   uint32_t flags;        // flags
@@ -230,8 +231,9 @@ public:
       ever_allowed_features(0),
       explicitly_allowed_features(0),
       inline_data_enabled(false),
-      cached_up_features(0)
-  { }
+      cached_up_features(0) {
+    memset(&fsid, 0, sizeof(fsid));
+  }
 
   bool get_inline_data_enabled() { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
@@ -274,6 +276,7 @@ public:
   bool allows_dirfrags() const { return test_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
 
   epoch_t get_epoch() const { return epoch; }
+  const uuid_d& get_fsid() const { return fsid; }
   void inc_epoch() { epoch++; }
 
   bool get_enabled() const { return enabled; }
