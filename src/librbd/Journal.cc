@@ -1008,7 +1008,7 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 }
 
 template <typename I>
-void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
+void Journal<I>::commit_op_event(uint64_t op_tid, int r, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": op_tid=" << op_tid << ", "
                  << "r=" << r << dendl;
@@ -1035,7 +1035,7 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
 
   op_finish_future.flush(create_async_context_callback(
     m_image_ctx, new C_OpEventSafe(this, op_tid, op_start_future,
-                                   op_finish_future)));
+                                   op_finish_future, on_safe)));
 }
 
 template <typename I>
@@ -1647,7 +1647,8 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 template <typename I>
 void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
                                       const Future &op_start_future,
-                                      const Future &op_finish_future) {
+                                      const Future &op_finish_future,
+                                      Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
@@ -1663,7 +1664,7 @@ void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
   m_journaler->committed(op_finish_future);
 
   // reduce the replay window after committing an op event
-  m_journaler->flush_commit_position(nullptr);
+  m_journaler->flush_commit_position(on_safe);
 }
 
 template <typename I>
