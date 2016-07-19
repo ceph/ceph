@@ -4,7 +4,6 @@ add_library(librados_objs OBJECT
   RadosClient.cc)
 add_library(librados ${CEPH_SHARED}
   librados.cc
-  $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:librados_objs>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
