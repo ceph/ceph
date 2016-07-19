@@ -21,7 +21,7 @@ class TestWorker(object):
     @patch("os.path.exists")
     def test_restart_file_path_doesnt_exist(self, m_exists):
         m_exists.return_value = False
-        result = worker.need_restart()
+        result = worker.sentinel(worker.restart_file_path)
         assert not result
 
     @patch("os.path.getmtime")
@@ -30,7 +30,7 @@ class TestWorker(object):
     def test_needs_restart(self, m_datetime, m_exists, m_getmtime):
         m_exists.return_value = True
         m_datetime.utcfromtimestamp.return_value = datetime.utcnow() + timedelta(days=1)
-        result = worker.need_restart()
+        result = worker.sentinel(worker.restart_file_path)
         assert result
 
     @patch("os.path.getmtime")
@@ -39,7 +39,7 @@ class TestWorker(object):
     def test_does_not_need_restart(self, m_datetime, m_exists, getmtime):
         m_exists.return_value = True
         m_datetime.utcfromtimestamp.return_value = datetime.utcnow() - timedelta(days=1)
-        result = worker.need_restart()
+        result = worker.sentinel(worker.restart_file_path)
         assert not result
 
     @patch("os.symlink")
