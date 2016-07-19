@@ -730,7 +730,6 @@ rm -rf %{buildroot}
 %{_bindir}/ceph-run
 %{_bindir}/ceph-dencoder
 %{_bindir}/ceph-detect-init
-%{_bindir}/ceph-client-debug
 %{_bindir}/cephfs
 %{_bindir}/cephfs-data-scan
 %{_bindir}/cephfs-journal-tool
@@ -1346,6 +1345,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 #################################################################################
 %files -n ceph-test
 %defattr(-,root,root,-)
+%{_bindir}/ceph-client-debug
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
