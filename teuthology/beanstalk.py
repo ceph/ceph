@@ -171,8 +171,19 @@ def pause_tube(connection, tube, duration):
         connection.pause_tube(tube, duration)
 
 
+def stats_tube(connection, tube):
+    stats = connection.stats_tube(tube)
+    result = dict(
+        name=tube,
+        count=stats['current-jobs-ready'],
+        paused=(stats['pause'] != 0),
+    )
+    return result
+
+
 def main(args):
     machine_type = args['--machine_type']
+    status = args['--status']
     delete = args['--delete']
     runs = args['--runs']
     show_desc = args['--description']
@@ -184,7 +195,9 @@ def main(args):
             # watch_tube needs to be run before we inspect individual jobs;
             # it is not needed for pausing tubes
             watch_tube(connection, machine_type)
-        if pause_duration:
+        if status:
+            print stats_tube(connection, machine_type)
+        elif pause_duration:
             pause_tube(connection, machine_type, pause_duration)
         elif delete:
             walk_jobs(connection, machine_type,

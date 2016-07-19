@@ -5,7 +5,7 @@ import teuthology.beanstalk
 
 doc = """
 usage: teuthology-queue -h
-       teuthology-queue [-d|-f] -m MACHINE_TYPE
+       teuthology-queue [-s|-d|-f] -m MACHINE_TYPE
        teuthology-queue [-r] -m MACHINE_TYPE
        teuthology-queue -m MACHINE_TYPE -D PATTERN
        teuthology-queue -p SECONDS [-m MACHINE_TYPE]
@@ -24,6 +24,7 @@ optional arguments:
   -d, --description     Show job descriptions
   -r, --runs            Only show run names
   -f, --full            Print the entire job config. Use with caution.
+  -s, --status          Prints the status of the queue
   -p, --pause SECONDS   Pause queues for a number of seconds. A value of 0
                         will unpause. If -m is passed, pause that queue,
                         otherwise pause all queues.
