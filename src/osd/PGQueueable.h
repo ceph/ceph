@@ -66,6 +66,7 @@ class PGQueueable {
   unsigned priority;
   utime_t start_time;
   entity_inst_t owner;
+
   struct RunVis : public boost::static_visitor<> {
     OSD *osd;
     PGRef &pg;
