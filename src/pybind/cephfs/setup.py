@@ -63,6 +63,11 @@ def check_sanity():
     """
     Test if development headers and library for cephfs is available by compiling a dummy C program.
     """
+    CEPH_SRC_DIR = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        '..',
+        '..'
+    )
 
     tmp_dir = tempfile.mkdtemp(dir=os.environ.get('TMPDIR', os.path.dirname(__file__)))
     tmp_file = os.path.join(tmp_dir, 'cephfs_dummy.c')
@@ -70,7 +75,7 @@ def check_sanity():
     with open(tmp_file, 'w') as fp:
         dummy_prog = textwrap.dedent("""
         #include <stddef.h>
-        #include <cephfs/libcephfs.h>
+        #include "cephfs/libcephfs.h"
 
         int main(void) {
             struct ceph_mount_info *cmount = NULL;
@@ -86,21 +91,21 @@ def check_sanity():
     if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
-        CEPH_SRC_DIR = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '..',
-            '..'
-        )
 
-        compiler.set_include_dirs(os.path.join(CEPH_SRC_DIR, 'include'))
-        compiler.add_library_dir(os.environ.get('CEPH_LIBDIR'))
+        compiler.set_library_dirs([os.environ.get('CEPH_LIBDIR')])
 
     try:
         compiler.define_macro('_FILE_OFFSET_BITS', '64')
 
+        link_objects = compiler.compile(
+            sources=[tmp_file],
+            output_dir=tmp_dir,
+            extra_preargs=['-iquote{path}'.format(path=os.path.join(CEPH_SRC_DIR, 'include'))]
+        )
+
         compiler.link_executable(
-            compiler.compile([tmp_file], tmp_dir),
-            os.path.join(tmp_dir, 'cephfs_dummy'),
+            objects=link_objects,
+            output_progname=os.path.join(tmp_dir, 'cephfs_dummy'),
             libraries=['cephfs', 'rados'],
             output_dir=tmp_dir,
         )
