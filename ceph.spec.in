@@ -704,7 +704,8 @@ chmod 0644 %{buildroot}%{_docdir}/ceph/sample.fetch_config
 %if 0%{?suse_version}
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-mon %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
-ln -sf %{buildroot}%{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
+mkdir -p %{buildroot}/sbin
+ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
 
 # udev rules
