@@ -144,6 +144,7 @@ class TestScheduleSuite(object):
             kernel_branch=None,
             kernel_flavor='kernel_flavor',
             distro='ubuntu',
+            distro_version='14.04',
             machine_type='machine_type',
             base_yaml_paths=list(),
         )
@@ -196,7 +197,7 @@ class TestScheduleSuite(object):
         count = runobj.schedule_suite()
         assert(count == 1)
         m_has_packages_for_distro.assert_has_calls(
-            [call('ceph_sha1', 'ubuntu', 'basic', {})],
+            [call('ceph_sha1', 'ubuntu', '14.04', 'basic', {})],
         )
         frags = (frag1_read_output, frag2_read_output)
         expected_job = dict(
@@ -321,7 +322,7 @@ class TestScheduleSuite(object):
         count = runobj.schedule_suite()
         assert count == 1
         m_has_packages_for_distro.assert_has_calls(
-            [call('ceph_sha1' + '^' * i, 'ubuntu', 'basic', {})
+            [call('ceph_sha1' + '^' * i, 'ubuntu', '14.04', 'basic', {})
              for i in xrange(NUM_FAILS+1)]
         )
         m_find_git_parent.assert_has_calls(

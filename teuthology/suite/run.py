@@ -95,7 +95,7 @@ class Run(object):
             teuthology_branch=teuthology_branch,
             machine_type=self.args.machine_type,
             distro=self.args.distro,
-            distroversion=self.args.distroversion,
+            distro_version=self.args.distro_version,
             archive_upload=config.archive_upload,
             archive_upload_key=config.archive_upload_key,
         )
@@ -157,7 +157,7 @@ class Run(object):
             try:
                 ceph_version = util.package_version_for_hash(
                     ceph_hash, self.args.kernel_flavor, self.args.distro,
-                    self.args.distroversion, self.args.machine_type,
+                    self.args.distro_version, self.args.machine_type,
                 )
             except Exception as exc:
                 util.schedule_fail(str(exc), self.name)

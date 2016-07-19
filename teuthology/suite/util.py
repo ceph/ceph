@@ -84,7 +84,7 @@ def get_worker(machine_type):
 
 def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
                         machine_type='plana', distro='ubuntu',
-                        distroversion='14.04'):
+                        distro_version='14.04'):
     """
     Find the hash representing the head of the project's repository via
     querying a gitbuilder repo.
@@ -105,7 +105,7 @@ def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
             branch=branch,
             flavor=flavor,
             os_type=distro,
-            os_version=distroversion,
+            os_version=distro_version,
             arch=arch,
         ),
     )
@@ -253,7 +253,7 @@ def get_branch_info(project, branch, project_owner='ceph'):
 
 
 def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
-                             distroversion='7.0', machine_type='smithi'):
+                             distro_version='7.0', machine_type='smithi'):
     """
     Does what it says on the tin. Uses gitbuilder repos.
 
@@ -267,7 +267,7 @@ def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
         dict(
             flavor=kernel_flavor,
             os_type=distro,
-            os_version=distroversion,
+            os_version=distro_version,
             arch=arch,
             sha1=hash,
         ),
@@ -382,7 +382,7 @@ def get_package_versions(sha1, os_type, os_version, flavor,
             sha1,
             flavor,
             distro=os_type,
-            distroversion=os_version,
+            distro_version=os_version,
         )
         flavors[flavor] = package_version
         os_versions[os_version] = flavors

@@ -54,7 +54,7 @@ Standard arguments:
                               Machine type [default: {default_machine_type}]
   -d <distro>, --distro <distro>
                               Distribution to run against
-  -D <distroversion>, --distroversion <distroversion>
+  -D <distroversion>, --distro-version <distroversion>
                               Distro version to run against
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
