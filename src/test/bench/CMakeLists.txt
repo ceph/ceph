@@ -12,7 +12,7 @@ target_link_libraries(ceph_smalliobench librados ${Boost_PROGRAM_OPTIONS_LIBRARY
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
 
 # ceph_smalliobenchrbd
-if (${WITH_RBD})
+if (WITH_RBD)
   set(smalliobenchrbd_srcs
     small_io_bench_rbd.cc
     rbd_backend.cc
@@ -35,7 +35,10 @@ if (${WITH_RBD})
     ${CMAKE_DL_LIBS}
     keyutils
     )
-endif (${WITH_RBD})
+install(TARGETS
+  ceph_smalliobenchrbd
+    DESTINATION bin)
+endif(WITH_RBD)
 
 # ceph_smalliobenchfs
 set(ceph_smalliobenchfs_srcs
@@ -75,7 +78,6 @@ target_link_libraries(ceph_tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} glo
 
 install(TARGETS
   ceph_smalliobench
-  ceph_smalliobenchrbd
   ceph_smalliobenchfs
   ceph_smalliobenchdumb
   ceph_tpbench

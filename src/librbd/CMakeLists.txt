@@ -71,13 +71,22 @@ if(WITH_LTTNG)
   add_dependencies(rbd_internal rbd-tp)
 endif()
 
-add_library(librbd ${CEPH_SHARED}
-  $<TARGET_OBJECTS:osdc_rbd_objs>
-  $<TARGET_OBJECTS:common_util_obj>
-  $<TARGET_OBJECTS:krbd_objs>
-  $<TARGET_OBJECTS:parse_secret_objs>  
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
-  librbd.cc)
+if(WITH_KVS)
+  add_library(librbd ${CEPH_SHARED}
+    $<TARGET_OBJECTS:osdc_rbd_objs>
+    $<TARGET_OBJECTS:common_util_obj>
+    $<TARGET_OBJECTS:krbd_objs>
+    $<TARGET_OBJECTS:parse_secret_objs>  
+    ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+    librbd.cc)
+else()
+  add_library(librbd ${CEPH_SHARED}
+    $<TARGET_OBJECTS:osdc_rbd_objs>
+    $<TARGET_OBJECTS:common_util_obj>
+    $<TARGET_OBJECTS:krbd_objs>
+    ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+    librbd.cc)
+endif(WITH_KVS)
 target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types

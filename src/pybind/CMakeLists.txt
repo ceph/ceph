@@ -4,11 +4,21 @@ include(Distutils)
 set(CYTHON_MODULE_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules)
 
 add_subdirectory(rados)
-add_subdirectory(rbd)
-add_subdirectory(cephfs)
+if(WITH_RBD)
+  add_subdirectory(rbd)
+endif(WITH_RBD)
+if(WITH_CEPHFS)
+  add_subdirectory(cephfs)
+endif(WITH_CEPHFS)
 
 add_custom_target(cython_modules ALL
-  DEPENDS cython_rados cython_cephfs cython_rbd)
+  DEPENDS cython_rados)
+if(WITH_RBD)
+  add_dependencies(cython_modules cython_rbd)
+endif(WITH_RBD)
+if(WITH_CEPHFS)
+  add_dependencies(cython_modules cython_cephfs)
+endif(WITH_CEPHFS)
 
 # if CMAKE_INSTALL_PREFIX is an empty string, must replace
 # it with "/" to make PYTHON_INSTALL_TEMPLATE an absolute path to be

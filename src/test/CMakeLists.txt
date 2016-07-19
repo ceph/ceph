@@ -84,9 +84,11 @@ add_executable(test_build_librgw buildtest_skeleton.cc)
 target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(${WITH_RADOSGW})
 
-# From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
-add_executable(test_build_libcephfs buildtest_skeleton.cc)
-target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+if(WITH_LIBCEPHFS)
+  # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
+  add_executable(test_build_libcephfs buildtest_skeleton.cc)
+  target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES})
@@ -131,6 +133,7 @@ target_link_libraries(ceph_omapbench
   ${CMAKE_DL_LIBS}
   )
 
+if(WITH_KVS)
 # ceph_kvstorebench
 set(kvstorebench_srcs
   kv_store_bench.cc
@@ -140,6 +143,10 @@ add_executable(ceph_kvstorebench
   ${kvstorebench_srcs}
   )
 target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+install(TARGETS
+  ceph_kvstorebench
+  DESTINATION bin)
+endif(WITH_KVS)
 
 # ceph_objectstore_bench
 add_executable(ceph_objectstore_bench objectstore_bench.cc)
@@ -380,7 +387,6 @@ target_link_libraries(ceph_xattr_bench
 
 install(TARGETS
   ceph_bench_log
-  ceph_kvstorebench
   ceph_multi_stress_watch
   ceph_objectstore_bench
   ceph_omapbench
@@ -513,11 +519,20 @@ set_property(TEST test-ceph-helpers.sh ceph_objectstore_tool.py
 
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
 
+<<<<<<< 383620af1a33c45c02fd48177f8fe31d9f9b52ef
 add_ceph_test(cephtool-test-mds.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mds.sh)
+=======
+add_ceph_test(ceph_objectstore_tool.py ${CMAKE_CURRENT_SOURCE_DIR}/ceph_objectstore_tool.py)
+if(WITH_LIBCEPHFS)
+  add_ceph_test(cephtool-test-mds.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mds.sh)
+endif(WITH_LIBCEPHFS)
+>>>>>>> src/test/*/CMakeLists.txt: Accomodate WITH_RBD|KVS|CEPHFS|AIO|BLKID
 add_ceph_test(cephtool-test-mon.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mon.sh)
 add_ceph_test(cephtool-test-osd.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-osd.sh)
 add_ceph_test(cephtool-test-rados.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-rados.sh)
-add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh)
+if(WITH_RBD)
+  add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh)
+endif(WITH_RBD)
 add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_objectstore_memstore.sh)
 add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
@@ -764,13 +779,16 @@ target_link_libraries(unittest_daemon_config
   ${EXTRALIBS}
   )
 
+if(WITH_LIBCEPHFS)
 # unittest_libcephfs_config
 add_executable(unittest_libcephfs_config
   libcephfs_config.cc
   )
 add_ceph_unittest(unittest_libcephfs_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_libcephfs_config)
 target_link_libraries(unittest_libcephfs_config cephfs)
+endif(WITH_LIBCEPHFS)
 
+if(WITH_RBD)
 # unittest_rbd_replay
 add_executable(unittest_rbd_replay
   test_rbd_replay.cc
@@ -786,6 +804,7 @@ target_link_libraries(unittest_rbd_replay
   keyutils
   ${BLKID_LIBRARIES}
   )
+endif(WITH_RBD)
 
 # unittest_ipaddr
 add_executable(unittest_ipaddr

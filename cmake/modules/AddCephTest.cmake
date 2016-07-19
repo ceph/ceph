@@ -1,5 +1,22 @@
 #AddCephTest is a module for adding tests to the "make check" target which runs CTest
 
+execute_process(
+    COMMAND uname -m
+    OUTPUT_VARIABLE ARCHSTR
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+if(LINUX)
+  set(OSSTR linux)
+  set(PYVER 2.7)
+elseif(FREEBSD)
+  execute_process(
+    COMMAND uname -r
+    OUTPUT_VARIABLE OSVER
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(OSSTR freebsd-${OSVER})
+  set(PYVER 2.7)
+endif(LINUX)
+
 #adds makes target/script into a test, test to check target, sets necessary environment variables
 function(add_ceph_test test_name test_path)
   add_test(NAME ${test_name} COMMAND ${test_path})
@@ -13,7 +30,7 @@ function(add_ceph_test test_name test_path)
     CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
     LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
-    PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.linux-x86_64-2.7:${CMAKE_SOURCE_DIR}/src/pybind
+    PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.${OSSTR}-${ARCHSTR}-${PYVER}:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
   # none of the tests should take more than 1 hour to complete
   set_property(TEST

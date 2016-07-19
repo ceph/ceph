@@ -102,6 +102,7 @@ add_executable(unittest_rocksdb_option
 add_ceph_unittest(unittest_rocksdb_option ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
+if(HAVE_LIBAIO)
 # unittest_bit_alloc
 add_executable(unittest_bit_alloc
   BitAllocator_test.cc
@@ -122,6 +123,7 @@ add_executable(unittest_bluestore_types
   )
 add_ceph_unittest(unittest_bluestore_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluestore_types)
 target_link_libraries(unittest_bluestore_types os global)
+endif(HAVE_LIBAIO)
   
 # unittest_transaction
 add_executable(unittest_transaction
