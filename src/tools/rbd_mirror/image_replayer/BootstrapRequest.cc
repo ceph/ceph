@@ -549,12 +549,22 @@ void BootstrapRequest<I>::image_sync() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(
       this);
 
-  m_image_sync_throttler->start_sync(*m_local_image_ctx,
-                                     m_remote_image_ctx, m_timer,
-                                     m_timer_lock,
-                                     m_local_mirror_uuid, m_journaler,
-                                     m_client_meta, m_work_queue, ctx,
-                                     m_progress_ctx);
+  {
+    Mutex::Locker locker(m_lock);
+    if (!m_canceled) {
+      m_image_sync_throttler->start_sync(*m_local_image_ctx,
+                                         m_remote_image_ctx, m_timer,
+                                         m_timer_lock,
+                                         m_local_mirror_uuid, m_journaler,
+                                         m_client_meta, m_work_queue, ctx,
+                                         m_progress_ctx);
+      return;
+    }
+  }
+
+  dout(10) << ": request canceled" << dendl;
+  m_ret_val = -ECANCELED;
+  close_remote_image();
 }
 
 template <typename I>
