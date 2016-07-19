@@ -48,7 +48,7 @@ public:
 
   void print_status(Formatter *f, stringstream *ss);
   void start();
-  void stop();
+  void stop(bool manual);
   void restart();
   void flush();
 

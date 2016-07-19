@@ -660,7 +660,7 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
   }
 
   if (!running) {
-    derr << "not running" << dendl;
+    dout(20) << "not running" << dendl;
     if (on_finish) {
       on_finish->complete(-EINVAL);
     }
