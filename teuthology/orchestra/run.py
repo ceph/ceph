@@ -102,6 +102,15 @@ class RemoteProcess(object):
 
         status = self._get_exitstatus()
         self.exitstatus = self.returncode = status
+        for stream in ('stdout', 'stderr'):
+            if hasattr(self, stream):
+                stream_obj = getattr(self, stream)
+                # Despite ChannelFile having a seek() method, it raises
+                # "IOError: File does not support seeking."
+                if hasattr(stream_obj, 'seek') and \
+                        not isinstance(stream_obj, ChannelFile):
+                    stream_obj.seek(0)
+
         if self.check_status:
             if status is None:
                 # command either died due to a signal, or the connection
@@ -370,9 +379,13 @@ def run(
 
     g_err = None
     if stderr is not PIPE:
-        if stderr is None:
-            stderr = logger.getChild(name).getChild('stderr')
-        g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
+        # Log stderr
+        stderr_logger = logger.getChild(name).getChild('stderr')
+        # If the stderr arg is a stream, have the logging module write to it as
+        # well
+        if stderr is not None:
+            stderr_logger.addHandler(logging.StreamHandler(stdout))
+        g_err = gevent.spawn(copy_file_to, r.stderr, stderr_logger)
         r.add_greenlet(g_err)
         r.stderr = stderr
     else:
@@ -381,9 +394,13 @@ def run(
 
     g_out = None
     if stdout is not PIPE:
-        if stdout is None:
-            stdout = logger.getChild(name).getChild('stdout')
-        g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
+        # Log stdout
+        stdout_logger = logger.getChild(name).getChild('stdout')
+        # If the stdout arg is a stream, have the logging module write to it as
+        # well
+        if stdout is not None:
+            stdout_logger.addHandler(logging.StreamHandler(stdout))
+        g_out = gevent.spawn(copy_file_to, r.stdout, stdout_logger)
         r.add_greenlet(g_out)
         r.stdout = stdout
     else:
