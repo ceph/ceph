@@ -58,7 +58,7 @@ function teardown() {
     if ! test -e $dir ; then
         return
     fi
-    kill_daemons
+    kill_daemons $dir
     if [ $(stat -f -c '%T' .) == "btrfs" ]; then
         rm -fr $dir/*/*db
         __teardown_btrfs $dir
