@@ -374,7 +374,8 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
 
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
   journal::Settings settings;
-  settings.commit_interval = cct->_conf->rbd_journal_commit_age;
+  settings.commit_interval = cct->_conf->rbd_mirror_journal_commit_age;
+  settings.max_fetch_bytes = cct->_conf->rbd_mirror_journal_max_fetch_bytes;
 
   m_remote_journaler = new Journaler(m_threads->work_queue,
                                      m_threads->timer,
@@ -564,10 +565,12 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   }
 
   {
+    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+    double poll_seconds = cct->_conf->rbd_mirror_journal_poll_age;
+
     Mutex::Locker locker(m_lock);
     m_replay_handler = new ReplayHandler<I>(this);
-    m_remote_journaler->start_live_replay(m_replay_handler,
-                                          1 /* TODO: configurable */);
+    m_remote_journaler->start_live_replay(m_replay_handler, poll_seconds);
 
     dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
   }
