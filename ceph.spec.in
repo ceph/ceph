@@ -13,7 +13,7 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_with tests
+%bcond_with make_check
 %bcond_with xio
 %bcond_without tcmalloc
 %bcond_with lowmem_builder
@@ -660,7 +660,7 @@ fi
 
 make "$PARALLEL_BUILD"
 
-%if 0%{with tests}
+%if 0%{with make_check}
 %check
 # run in-tree unittests
 make CHECK_ULIMIT=false %{?_smp_mflags} check
