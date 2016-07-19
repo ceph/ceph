@@ -20,6 +20,7 @@ source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 function report_failure() {
     local dir=$1
 
+    ps aux
     netstat -nlp
     kill_daemons $dir TERM mon
     echo "================ mon.a.log"
@@ -45,8 +46,14 @@ function run() {
         report_failure
         return 1
     fi
+    ps aux
+    netstat -nlp
     run_osd $dir 0 || return 1
+    ps aux
+    netstat -nlp
     run_osd $dir 1 || return 1
+    ps aux
+    netstat -nlp
     run_osd $dir 2 || return 1
 
     # create toyfile
