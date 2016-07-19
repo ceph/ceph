@@ -112,7 +112,8 @@ void TestMockFixture::expect_commit_op_event(librbd::MockImageCtx &mock_image_ct
   if (mock_image_ctx.journal != nullptr) {
     expect_is_journal_replaying(*mock_image_ctx.journal);
     expect_is_journal_ready(*mock_image_ctx.journal);
-    EXPECT_CALL(*mock_image_ctx.journal, commit_op_event(1U, r));
+    EXPECT_CALL(*mock_image_ctx.journal, commit_op_event(1U, r, _))
+                  .WillOnce(WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 }
 
