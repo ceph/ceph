@@ -152,7 +152,7 @@ void install_standard_sighandlers(void)
 #include "common/Thread.h"
 #include <errno.h>
 
-void get_name_by_pid(pid_t pid, char *task_name)
+string get_name_by_pid(pid_t pid)
 {
   char proc_pid_path[PATH_MAX] = {0};
   snprintf(proc_pid_path, PATH_MAX, "/proc/%d/cmdline", pid);
@@ -163,18 +163,21 @@ void get_name_by_pid(pid_t pid, char *task_name)
     derr << "Fail to open '" << proc_pid_path 
          << "' error = " << cpp_strerror(fd) 
          << dendl;
-    return;
+    return "<unknown>";
   }
 
-  int ret = read(fd, task_name, PATH_MAX-1);
+  char buf[PATH_MAX] = {0};
+  int ret = read(fd, buf, sizeof(buf));
   if (ret < 0) {
     ret = -errno;
-    derr << "Fail to read '" << proc_pid_path 
-         << "' error = " << cpp_strerror(ret) 
+    derr << "Fail to read '" << proc_pid_path
+         << "' error = " << cpp_strerror(ret)
          << dendl;
+    return "<unknown>";
   }
-   
   close(fd);
+  std::replace(buf, buf + ret, '\0', ' ');
+  return string(buf, ret);
 }
 
  
@@ -283,14 +286,13 @@ struct SignalHandler : public Thread {
 	  if (handlers[signum]) {
 	    r = read(handlers[signum]->pipefd[0], &v, 1);
 	    if (r == 1) {
-	      char task_name[PATH_MAX] = "unknown";
 	      siginfo_t * siginfo = &handlers[signum]->info_t;
-             get_name_by_pid(siginfo->si_pid, task_name);
-             derr << "received  signal: " << sys_siglist[signum] 
-                  << " from " << " PID: " << siginfo->si_pid 
-                  << " task name: " << task_name 
-                  << " UID: " << siginfo->si_uid 
-                  << dendl;
+	      string task_name = get_name_by_pid(siginfo->si_pid);
+	      derr << "received  signal: " << sys_siglist[signum]
+		   << " from " << " PID: " << siginfo->si_pid
+		   << " task name: " << task_name
+		   << " UID: " << siginfo->si_uid
+		   << dendl;
 	      handlers[signum]->handler(signum);
 	    }
 	  }

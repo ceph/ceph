@@ -786,8 +786,9 @@ int Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
-
+  dout(2) << "init bootstreap" << dendl;
   bootstrap();
+  dout(2) << "init bootstreap done" << dendl;
 
   // encode command sets
   const MonCommand *cmds;
@@ -796,6 +797,7 @@ int Monitor::init()
   MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
   get_classic_monitor_commands(&cmds, &cmdsize);
   MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
+  dout(2) << "init done" << dendl;
 
   return 0;
 }
