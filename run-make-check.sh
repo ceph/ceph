@@ -69,8 +69,7 @@ function run() {
         $DRY_RUN ./do_cmake.sh || return 1
         cd build
         $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-        $DRY_RUN ctest -L Racing -j1 --output-on-failure || return 1
-        $DRY_RUN ctest -LE Racing $CHECK_MAKEOPTS --output-on-failure || return 1
+        $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
     else
         $DRY_RUN ./autogen.sh || return 1
         $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \

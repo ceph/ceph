@@ -507,12 +507,9 @@ add_dependencies(tests
   cython_modules)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
-add_ceph_test(ceph_objectstore_tool.py ${CMAKE_CURRENT_SOURCE_DIR}/ceph_objectstore_tool.py)
-set_property(TEST test-ceph-helpers.sh ceph_objectstore_tool.py
-  PROPERTY LABELS Racing LongRunning)
-
 add_ceph_test(erasure-decode-non-regression.sh ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
 
+add_ceph_test(ceph_objectstore_tool.py ${CMAKE_CURRENT_SOURCE_DIR}/ceph_objectstore_tool.py)
 add_ceph_test(cephtool-test-mds.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mds.sh)
 add_ceph_test(cephtool-test-mon.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mon.sh)
 add_ceph_test(cephtool-test-osd.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-osd.sh)
