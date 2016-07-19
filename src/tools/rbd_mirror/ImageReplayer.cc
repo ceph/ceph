@@ -640,6 +640,7 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
 {
   dout(20) << "on_finish=" << on_finish << dendl;
 
+  image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
   bool running = true;
   {
@@ -651,7 +652,8 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
 	if (m_state == STATE_STARTING) {
 	  dout(20) << "canceling start" << dendl;
 	  if (m_bootstrap_request) {
-	    m_bootstrap_request->cancel();
+            bootstrap_request = m_bootstrap_request;
+            bootstrap_request->get();
 	  }
 	} else {
 	  dout(20) << "interrupting replay" << dendl;
@@ -664,6 +666,12 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
         m_manual_stop = manual;
       }
     }
+  }
+
+  // avoid holding lock since bootstrap request will update status
+  if (bootstrap_request != nullptr) {
+    bootstrap_request->cancel();
+    bootstrap_request->put();
   }
 
   if (!running) {
@@ -1180,9 +1188,12 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     {
       Context *on_req_finish = new FunctionContext(
         [this](int r) {
+          dout(20) << "replay status ready: r=" << r << dendl;
           if (r >= 0) {
-            dout(20) << "replay status ready" << dendl;
             send_mirror_status_update(boost::none);
+          } else if (r == -EAGAIN) {
+            // decrement in-flight status update counter
+            handle_mirror_status_update(r);
           }
         });
 
