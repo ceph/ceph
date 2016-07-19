@@ -1003,7 +1003,7 @@ namespace librados
      */
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectWriteOperation *op, snap_t seq,
-		    std::vector<snap_t>& snaps);
+		    std::vector<snap_t>& snaps, const blkin_trace_info *trace_info = nullptr);
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 

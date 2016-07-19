@@ -570,7 +570,7 @@ void AbstractAioObjectWrite::send_write_op(bool write_guard)
   librados::AioCompletion *rados_completion =
     util::create_rados_safe_callback(this);
   int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-                                       m_snap_seq, m_snaps);
+					 m_snap_seq, m_snaps, m_trace_info);
   assert(r == 0);
   rados_completion->release();
 }
