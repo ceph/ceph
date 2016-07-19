@@ -5,6 +5,7 @@ if(${WITH_CEPHFS})
     caps.cc
     multiclient.cc
     flock.cc
+    recordlock.cc
     acl.cc
     access.cc
   )
