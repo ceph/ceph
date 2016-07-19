@@ -547,7 +547,6 @@ add_library(librados_objs OBJECT
   librados/RadosClient.cc)
 add_library(librados ${CEPH_SHARED}
   librados/librados.cc
-  $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:librados_objs>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
@@ -1100,8 +1099,7 @@ if(WITH_LIBCEPHFS)
   add_library(client STATIC ${libclient_srcs})
   target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
-    $<TARGET_OBJECTS:common_util_obj>)
+  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs LINK_PRIVATE client
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
