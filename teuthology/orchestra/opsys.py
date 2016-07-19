@@ -159,6 +159,36 @@ class OS(object):
 
         return obj
 
+
+    @classmethod
+    def version_codename(cls, name, version_or_codename):
+        """
+        Return (version, codename) based on one input, trying to infer
+        which we're given
+        """
+        codename = None
+        version = None
+
+        try:
+            codename = OS._version_to_codename(name, version_or_codename)
+        except KeyError:
+            pass
+
+        try:
+            version = OS._codename_to_version(name, version_or_codename)
+        except (KeyError, RuntimeError):
+            pass
+
+        if version:
+            codename = version_or_codename
+        elif codename:
+            version = version_or_codename
+        else:
+            raise KeyError('%s not a %s version or codename' %
+                           (version_or_codename, name))
+        return version, codename
+
+
     @staticmethod
     def _get_value(str_, name):
         regex = '^%s[:=](.+)' % name
