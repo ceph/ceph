@@ -23,6 +23,10 @@ set(osd_srcs
   ECUtil.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osdc_osd_srcs})
+if(HAS_VTA)
+  set_source_files_properties(osdcap.cc
+    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
 add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>
