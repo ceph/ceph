@@ -2161,8 +2161,8 @@ public:
 done:
       /* update marker */
       set_status() << "calling marker_tracker->finish(" << entry_marker << ")";
-      yield call(marker_tracker->finish(entry_marker));
       if (sync_status == 0) {
+        yield call(marker_tracker->finish(entry_marker));
         sync_status = retcode;
       }
       if (sync_status < 0) {
@@ -2190,6 +2190,8 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   RGWModifyOp op;
 
   int total_entries;
+
+  int sync_status{0};
 
   RGWContinuousLeaseCR *lease_cr;
   RGWCoroutinesStack *lease_stack;
@@ -2285,32 +2287,40 @@ int RGWBucketShardFullSyncCR::operate()
           while (collect(&ret, lease_stack)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+              sync_status = ret;
               /* we have reported this error */
             }
           }
         }
       }
-    } while (list_result.is_truncated);
+    } while (list_result.is_truncated && sync_status == 0);
     set_status("done iterating over all objects");
     /* wait for all operations to complete */
     drain_all_but_stack(lease_stack); /* still need to hold lease cr */
     /* update sync state to incremental */
-    yield {
-      rgw_bucket_shard_sync_info sync_status;
-      sync_status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
-      map<string, bufferlist> attrs;
-      sync_status.encode_state_attr(attrs);
-      string oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
-      RGWRados *store = sync_env->store;
-      call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, store->get_zone_params().log_pool,
-                                          oid, attrs));
+    if (sync_status == 0) {
+      yield {
+        rgw_bucket_shard_sync_info sync_status;
+        sync_status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
+        map<string, bufferlist> attrs;
+        sync_status.encode_state_attr(attrs);
+        string oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
+        RGWRados *store = sync_env->store;
+        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, store->get_zone_params().log_pool,
+                                            oid, attrs));
+      }
+    } else {
+      ldout(sync_env->cct, 0) << "ERROR: failure in sync, backing out (sync_status=" << sync_status<< ")" << dendl;
     }
     yield lease_cr->go_down();
     drain_all();
-    if (retcode < 0) {
+    if (retcode < 0 && sync_status == 0) { /* actually tried to set incremental state and failed */
       ldout(sync_env->cct, 0) << "ERROR: failed to set sync state on bucket "
           << bucket_shard_str{bs} << " retcode=" << retcode << dendl;
       return set_cr_error(retcode);
+    }
+    if (sync_status < 0) {
+      return set_cr_error(sync_status);
     }
     return set_cr_done();
   }
@@ -2341,6 +2351,8 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   string cur_id;
 
   RGWDataSyncDebugLogger logger;
+
+  int sync_status{0};
 
 public:
   RGWBucketShardIncrementalSyncCR(RGWDataSyncEnv *_sync_env,
@@ -2514,13 +2526,18 @@ int RGWBucketShardIncrementalSyncCR::operate()
           while (collect(&ret, lease_stack)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+              sync_status = ret;
               /* we have reported this error */
             }
             /* not waiting for child here */
           }
         }
       }
-    } while (!list_result.empty());
+    } while (!list_result.empty() && sync_status == 0);
+
+    if (sync_status < 0) {
+      ldout(sync_env->cct, 0) << "ERROR: failure in sync, backing out (sync_status=" << sync_status<< ")" << dendl;
+    }
 
     yield {
       call(marker_tracker->flush());
@@ -2537,6 +2554,10 @@ int RGWBucketShardIncrementalSyncCR::operate()
     lease_cr->go_down();
     /* wait for all operations to complete */
     drain_all();
+
+    if (sync_status < 0) {
+      return set_cr_error(sync_status);
+    }
 
     return set_cr_done();
   }
