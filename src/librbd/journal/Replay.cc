@@ -15,7 +15,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::journal::Replay: "
+#define dout_prefix *_dout << "librbd::journal::Replay: " << this << " "
 
 namespace librbd {
 namespace journal {
@@ -38,40 +38,40 @@ struct ExecuteOp : public Context {
   }
 
   void execute(const journal::SnapCreateEvent &_) {
-    image_ctx.operations->execute_snap_create(event.snap_name.c_str(),
+    image_ctx.operations->execute_snap_create(event.snap_name,
                                               on_op_complete,
                                               event.op_tid, false);
   }
 
   void execute(const journal::SnapRemoveEvent &_) {
-    image_ctx.operations->execute_snap_remove(event.snap_name.c_str(),
+    image_ctx.operations->execute_snap_remove(event.snap_name,
                                               on_op_complete);
   }
 
   void execute(const journal::SnapRenameEvent &_) {
     image_ctx.operations->execute_snap_rename(event.snap_id,
-                                              event.snap_name.c_str(),
+                                              event.snap_name,
                                               on_op_complete);
   }
 
   void execute(const journal::SnapProtectEvent &_) {
-    image_ctx.operations->execute_snap_protect(event.snap_name.c_str(),
+    image_ctx.operations->execute_snap_protect(event.snap_name,
                                                on_op_complete);
   }
 
   void execute(const journal::SnapUnprotectEvent &_) {
-    image_ctx.operations->execute_snap_unprotect(event.snap_name.c_str(),
+    image_ctx.operations->execute_snap_unprotect(event.snap_name,
                                                  on_op_complete);
   }
 
   void execute(const journal::SnapRollbackEvent &_) {
-    image_ctx.operations->execute_snap_rollback(event.snap_name.c_str(),
+    image_ctx.operations->execute_snap_rollback(event.snap_name,
                                                 no_op_progress_callback,
                                                 on_op_complete);
   }
 
   void execute(const journal::RenameEvent &_) {
-    image_ctx.operations->execute_rename(event.image_name.c_str(),
+    image_ctx.operations->execute_rename(event.image_name,
                                          on_op_complete);
   }
 
@@ -92,12 +92,12 @@ struct ExecuteOp : public Context {
   virtual void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     if (r < 0) {
-      lderr(cct) << "ExecuteOp: " << __func__ << ": r=" << r << dendl;
+      lderr(cct) << ": ExecuteOp::" << __func__ << ": r=" << r << dendl;
       on_op_complete->complete(r);
       return;
     }
 
-    ldout(cct, 20) << "ExecuteOp: " << __func__ << dendl;
+    ldout(cct, 20) << ": ExecuteOp::" << __func__ << dendl;
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
     execute(event);
   }
@@ -121,13 +121,13 @@ struct C_RefreshIfRequired : public Context {
     on_finish = nullptr;
 
     if (r < 0) {
-      lderr(cct) << "C_RefreshIfRequired: " << __func__ << ": r=" << r << dendl;
+      lderr(cct) << ": C_RefreshIfRequired::" << __func__ << ": r=" << r << dendl;
       image_ctx.op_work_queue->queue(ctx, r);
       return;
     }
 
     if (image_ctx.state->is_refresh_required()) {
-      ldout(cct, 20) << "C_RefreshIfRequired: " << __func__ << ": "
+      ldout(cct, 20) << ": C_RefreshIfRequired::" << __func__ << ": "
                      << "refresh required" << dendl;
       image_ctx.state->refresh(ctx);
       return;
@@ -138,6 +138,10 @@ struct C_RefreshIfRequired : public Context {
 };
 
 } // anonymous namespace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::journal::Replay: " << this << " " \
+                           << __func__
 
 template <typename I>
 Replay<I>::Replay(I &image_ctx)
@@ -155,22 +159,23 @@ Replay<I>::~Replay() {
 }
 
 template <typename I>
-void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
-                        Context *on_safe) {
+int Replay<I>::decode(bufferlist::iterator *it, EventEntry *event_entry) {
+  try {
+    ::decode(*event_entry, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+template <typename I>
+void Replay<I>::process(const EventEntry &event_entry,
+                        Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": "
-                 << "on_ready=" << on_ready << ", on_safe=" << on_safe << dendl;
+  ldout(cct, 20) << ": on_ready=" << on_ready << ", on_safe=" << on_safe
+                 << dendl;
 
   on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
-
-  journal::EventEntry event_entry;
-  try {
-    ::decode(event_entry, *it);
-  } catch (const buffer::error &err) {
-    lderr(cct) << "failed to decode event entry: " << err.what() << dendl;
-    on_ready->complete(-EINVAL);
-    return;
-  }
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   boost::apply_visitor(EventVisitor(this, on_ready, on_safe),
@@ -180,7 +185,7 @@ void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
 template <typename I>
 void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << dendl;
+  ldout(cct, 20) << dendl;
 
   AioCompletion *flush_comp = nullptr;
   on_finish = util::create_async_context_callback(
@@ -248,7 +253,7 @@ void Replay<I>::flush(Context *on_finish) {
 template <typename I>
 void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": op_tid=" << op_tid << dendl;
+  ldout(cct, 20) << ": op_tid=" << op_tid << dendl;
 
   Mutex::Locker locker(m_lock);
   auto op_it = m_op_events.find(op_tid);
@@ -288,7 +293,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
                              Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": AIO discard event" << dendl;
+  ldout(cct, 20) << ": AIO discard event" << dendl;
 
   bool flush_required;
   AioCompletion *aio_comp = create_aio_modify_completion(on_ready, on_safe,
@@ -308,7 +313,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::AioWriteEvent &event,
                              Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": AIO write event" << dendl;
+  ldout(cct, 20) << ": AIO write event" << dendl;
 
   bufferlist data = event.data;
   bool flush_required;
@@ -329,7 +334,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::AioFlushEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": AIO flush event" << dendl;
+  ldout(cct, 20) << ": AIO flush event" << dendl;
 
   AioCompletion *aio_comp;
   {
@@ -345,7 +350,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::OpFinishEvent &event,
                              Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Op finish event: "
+  ldout(cct, 20) << ": Op finish event: "
                  << "op_tid=" << event.op_tid << dendl;
 
   bool op_in_progress;
@@ -356,7 +361,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
     Mutex::Locker locker(m_lock);
     auto op_it = m_op_events.find(event.op_tid);
     if (op_it == m_op_events.end()) {
-      ldout(cct, 10) << "unable to locate associated op: assuming previously "
+      ldout(cct, 10) << ": unable to locate associated op: assuming previously "
                      << "committed." << dendl;
       on_ready->complete(0);
       m_image_ctx.op_work_queue->queue(on_safe, 0);
@@ -400,7 +405,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap create event" << dendl;
+  ldout(cct, 20) << ": Snap create event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -429,7 +434,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapRemoveEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap remove event" << dendl;
+  ldout(cct, 20) << ": Snap remove event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -453,7 +458,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapRenameEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap rename event" << dendl;
+  ldout(cct, 20) << ": Snap rename event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -477,7 +482,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapProtectEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap protect event" << dendl;
+  ldout(cct, 20) << ": Snap protect event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -501,8 +506,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap unprotect event"
-                 << dendl;
+  ldout(cct, 20) << ": Snap unprotect event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -530,8 +534,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapRollbackEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap rollback start event"
-                 << dendl;
+  ldout(cct, 20) << ": Snap rollback start event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -553,7 +556,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::RenameEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Rename event" << dendl;
+  ldout(cct, 20) << ": Rename event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -577,7 +580,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::ResizeEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Resize start event" << dendl;
+  ldout(cct, 20) << ": Resize start event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -602,7 +605,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::FlattenEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Flatten start event" << dendl;
+  ldout(cct, 20) << ": Flatten start event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -626,7 +629,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::DemoteEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Demote event" << dendl;
+  ldout(cct, 20) << ": Demote event" << dendl;
   on_ready->complete(0);
   on_safe->complete(0);
 }
@@ -635,8 +638,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": Snap limit event"
-                 << dendl;
+  ldout(cct, 20) << ": Snap limit event" << dendl;
 
   Mutex::Locker locker(m_lock);
   OpEvent *op_event;
@@ -658,7 +660,7 @@ template <typename I>
 void Replay<I>::handle_event(const journal::UnknownEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": unknown event" << dendl;
+  ldout(cct, 20) << ": unknown event" << dendl;
   on_ready->complete(0);
   on_safe->complete(0);
 }
@@ -668,14 +670,14 @@ void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
                                            int r) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": on_ready=" << on_ready << ", "
+  ldout(cct, 20) << ": on_ready=" << on_ready << ", "
                  << "on_safe=" << on_safe << ", r=" << r << dendl;
 
   if (on_ready != nullptr) {
     on_ready->complete(0);
   }
   if (r < 0) {
-    lderr(cct) << "AIO modify op failed: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": AIO modify op failed: " << cpp_strerror(r) << dendl;
     on_safe->complete(r);
     return;
   }
@@ -688,10 +690,10 @@ template <typename I>
 void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
                                           Contexts &on_safe_ctxs, int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": " << "r=" << r << dendl;
+  ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "AIO flush failed: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": AIO flush failed: " << cpp_strerror(r) << dendl;
   }
 
   Context *on_aio_ready = nullptr;
@@ -720,7 +722,7 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
   }
 
   if (on_aio_ready != nullptr) {
-    ldout(cct, 10) << "resuming paused AIO" << dendl;
+    ldout(cct, 10) << ": resuming paused AIO" << dendl;
     on_aio_ready->complete(0);
   }
 
@@ -728,12 +730,12 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
     on_safe_ctxs.push_back(on_flush_safe);
   }
   for (auto ctx : on_safe_ctxs) {
-    ldout(cct, 20) << "completing safe context: " << ctx << dendl;
+    ldout(cct, 20) << ": completing safe context: " << ctx << dendl;
     ctx->complete(r);
   }
 
   if (on_flush != nullptr) {
-    ldout(cct, 20) << "completing flush context: " << on_flush << dendl;
+    ldout(cct, 20) << ": completing flush context: " << on_flush << dendl;
     on_flush->complete(r);
   }
 }
@@ -747,7 +749,7 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
 
   assert(m_lock.is_locked());
   if (m_op_events.count(op_tid) != 0) {
-    lderr(cct) << "duplicate op tid detected: " << op_tid << dendl;
+    lderr(cct) << ": duplicate op tid detected: " << op_tid << dendl;
 
     // on_ready is already async but on failure invoke on_safe async
     // as well
@@ -768,7 +770,7 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
 template <typename I>
 void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": op_tid=" << op_tid << ", "
+  ldout(cct, 20) << ": op_tid=" << op_tid << ", "
                  << "r=" << r << dendl;
 
   OpEvent op_event;
@@ -850,7 +852,7 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   *flush_required = (m_aio_modify_unsafe_contexts.size() ==
                        IN_FLIGHT_IO_LOW_WATER_MARK);
   if (*flush_required) {
-    ldout(cct, 10) << "hit AIO replay low-water mark: scheduling flush"
+    ldout(cct, 10) << ": hit AIO replay low-water mark: scheduling flush"
                    << dendl;
   }
 
@@ -860,7 +862,7 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   //   shrink has adjusted clip boundary, etc) -- should have already been
   //   flagged not-ready
   if (m_in_flight_aio_modify == IN_FLIGHT_IO_HIGH_WATER_MARK) {
-    ldout(cct, 10) << "hit AIO replay high-water mark: pausing replay"
+    ldout(cct, 10) << ": hit AIO replay high-water mark: pausing replay"
                    << dendl;
     assert(m_on_aio_ready == nullptr);
     std::swap(m_on_aio_ready, on_ready);
