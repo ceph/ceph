@@ -41,7 +41,7 @@ Provided Utilities
 * ``teuthology-results`` - Examing a finished run and email results
 * ``teuthology-schedule`` - Schedule a single job
 * ``teuthology-suite`` - Schedule a full run based on a suite (see `suites` in `ceph-qa-suite <https://github.com/ceph/ceph-qa-suite>`__)
-* ``teuthology-updatekeys`` - Update SSH host keys for a mchine
+* ``teuthology-updatekeys`` - Update SSH host keys for a machine
 * ``teuthology-worker`` - Worker daemon to monitor the queue and execute jobs
 
 For a description of the distinct services that utilities interact with see
