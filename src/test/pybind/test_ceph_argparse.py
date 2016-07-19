@@ -482,6 +482,10 @@ class TestMDS(TestArgparse):
 
 
 class TestFS(TestArgparse):
+    
+    def test_dump(self):
+        self.check_0_or_1_natural_arg('fs', 'dump')
+    
     def test_fs_new(self):
         self.assert_valid_command(['fs', 'new', 'default', 'metadata', 'data'])
 
