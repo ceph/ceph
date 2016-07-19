@@ -348,7 +348,7 @@ class TestMDS(TestArgparse):
         self.check_no_arg('mds', 'stat')
 
     def test_dump(self):
-        self.check_0_or_1_natural_arg('mds', 'dump')
+        self.check_0_or_1_natural_arg('fs', 'dump')
 
     def test_tell(self):
         self.assert_valid_command(['mds', 'tell',
