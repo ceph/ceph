@@ -1,424 +1,223 @@
 from cStringIO import StringIO
 
-import fudge
-import logging
 import socket
+
+from mock import MagicMock, patch
+from pytest import raises
 
 from .. import run
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
                                    ConnectionLostError)
 
-from .util import assert_raises
-
 
 class TestRun(object):
-    @fudge.with_fakes
-    def test_run_log_simple(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo 'bar baz'")
-        in_ = fudge.Fake('ChannelFile(stdin)')
-        out = fudge.Fake('ChannelFile(stdout)')
-        err = fudge.Fake('ChannelFile(stderr)')
-        cmd.returns((in_, out, err))
-        in_.expects('close').with_args()
-        in_chan = fudge.Fake('channel')
-        in_chan.expects('shutdown_write').with_args()
-        in_.has_attr(channel=in_chan)
-        out.expects('xreadlines').with_args().returns(['foo', 'bar'])
-        err.expects('xreadlines').with_args().returns(['bad'])
-        logger = fudge.Fake('logger')
-        log_host = fudge.Fake('log_host')
-        logger.expects('getChild').with_args('HOST').returns(log_host)
-        log_err = fudge.Fake('log_err')
-        log_host.expects('getChild').with_args('stderr').returns(log_err)
-        log_err.expects('log').with_args(logging.INFO, 'bad')
-        log_out = fudge.Fake('log_out')
-        log_host.expects('getChild').with_args('stdout').returns(log_out)
-        log_out.expects('log').with_args(logging.INFO, 'foo')
-        log_out.expects('log').with_args(logging.INFO, 'bar')
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(0)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def setup(self):
+        self.start_patchers()
+
+    def teardown(self):
+        self.stop_patchers()
+
+    def start_patchers(self):
+        self.m_remote_process = MagicMock(wraps=run.RemoteProcess)
+        self.patcher_remote_proc = patch(
+            'teuthology.orchestra.run.RemoteProcess',
+            self.m_remote_process,
+        )
+        self.m_channelfile = MagicMock(spec=run.ChannelFile)
+        self.m_ssh = MagicMock()
+        self.m_stdin_buf = self.m_channelfile()
+        self.m_stdout_buf = self.m_channelfile()
+        self.m_stderr_buf = self.m_channelfile()
+        self.m_ssh.exec_command.return_value = (
+            self.m_stdin_buf,
+            self.m_stdout_buf,
+            self.m_stderr_buf,
+        )
+        self.m_transport = MagicMock()
+        self.m_transport.getpeername.return_value = ('name', 22)
+        self.m_ssh.get_transport.return_value = self.m_transport
+        self.patcher_ssh = patch(
+            'teuthology.orchestra.connection.paramiko.SSHClient',
+            self.m_ssh,
+        )
+        self.patcher_ssh.start()
+        # Tests must start this if they wish to use it
+        # self.patcher_remote_proc.start()
+
+    def stop_patchers(self):
+        # If this patcher wasn't started, it's ok
+        try:
+            self.patcher_remote_proc.stop()
+        except RuntimeError:
+            pass
+        self.patcher_ssh.stop()
+
+    def test_exitstatus(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 0
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo', 'bar baz'],
-            )
-        assert r.exitstatus == 0
+        )
+        assert proc.exitstatus == 0
 
-    @fudge.with_fakes
-    def test_run_capture_stdout(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo 'bar baz'")
-        in_ = fudge.Fake('ChannelFile(stdin)')
-        out = fudge.Fake('ChannelFile(stdout)')
-        err = fudge.Fake('ChannelFile(stderr)')
-        cmd.returns((in_, out, err))
-        in_.expects('close').with_args()
-        in_chan = fudge.Fake('channel')
-        in_chan.expects('shutdown_write').with_args()
-        in_.has_attr(channel=in_chan)
-        out.remember_order()
-        out.expects('read').with_args().returns('foo\nb')
-        out.expects('read').with_args().returns('ar\n')
-        out.expects('read').with_args().returns('')
-        err.expects('xreadlines').with_args().returns(['bad'])
-        logger = fudge.Fake('logger')
-        log_host = fudge.Fake('log_host')
-        logger.expects('getChild').with_args('HOST').returns(log_host)
-        log_err = fudge.Fake('log_err')
-        log_host.expects('getChild').with_args('stderr').returns(log_err)
-        log_err.expects('log').with_args(logging.INFO, 'bad')
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(0)
-        out_f = StringIO()
-        r = run.run(
-            client=ssh,
-            logger=logger,
-            args=['foo', 'bar baz'],
-            stdout=out_f,
-            )
-        assert r.exitstatus == 0
-        assert r.stdout is out_f
-        assert r.stdout.getvalue() == 'foo\nbar\n'
+    def test_capture_stdout(self):
+        output = 'foo\nbar'
 
-    @fudge.with_fakes
-    def test_run_status_bad(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(42)
-        e = assert_raises(
-            CommandFailedError,
-            run.run,
-            client=ssh,
-            logger=logger,
-            args=['foo'],
-            )
-        assert e.command == 'foo'
-        assert e.exitstatus == 42
-        assert str(e) == "Command failed on HOST with status 42: 'foo'"
+        def m_copyfileobj(src, dest):
+            print output
+            print dest
+            dest.write(output)
 
-    @fudge.with_fakes
-    def test_run_status_bad_nocheck(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(42)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 0
+        with patch(
+            'teuthology.orchestra.run.shutil.copyfileobj',
+            m_copyfileobj,
+        ):
+            proc = run.run(
+                client=self.m_ssh,
+                args=['foo', 'bar baz'],
+                stdout=StringIO(),
+            )
+        assert proc.stdout.getvalue() == output
+
+    def test_status_bad(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 42
+        with raises(CommandFailedError) as exc:
+            run.run(
+                client=self.m_ssh,
+                args=['foo'],
+            )
+        assert str(exc.value) == "Command failed on name with status 42: 'foo'"
+
+    def test_status_bad_nocheck(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 42
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             check_status=False,
-            )
-        assert r.exitstatus == 42
+        )
+        assert proc.exitstatus == 42
 
-    @fudge.with_fakes
-    def test_run_status_crash(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        transport.expects('is_active').with_args().returns(True)
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(-1)
-        e = assert_raises(
-            CommandCrashedError,
-            run.run,
-            client=ssh,
-            logger=logger,
-            args=['foo'],
+    def test_status_crash(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = -1
+        with raises(CommandCrashedError) as exc:
+            run.run(
+                client=self.m_ssh,
+                args=['foo'],
             )
-        assert e.command == 'foo'
-        assert str(e) == "Command crashed: 'foo'"
+        assert str(exc.value) == "Command crashed: 'foo'"
 
-    @fudge.with_fakes
-    def test_run_status_crash_nocheck(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(-1)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def test_status_crash_nocheck(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = -1
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             check_status=False,
+        )
+        assert proc.exitstatus is None
+
+    def test_status_lost(self):
+        m_transport = MagicMock()
+        m_transport.getpeername.return_value = ('name', 22)
+        m_transport.is_active.return_value = False
+        self.m_stdout_buf.channel.recv_exit_status.return_value = -1
+        self.m_ssh.get_transport.return_value = m_transport
+        with raises(ConnectionLostError) as exc:
+            run.run(
+                client=self.m_ssh,
+                args=['foo'],
             )
-        assert r.exitstatus is None
+        assert str(exc.value) == "SSH connection to name was lost: 'foo'"
 
-    @fudge.with_fakes
-    def test_run_status_lost(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(-1)
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        transport.expects('is_active').with_args().returns(False)
-        e = assert_raises(
-            ConnectionLostError,
-            run.run,
-            client=ssh,
-            logger=logger,
-            args=['foo'],
+    def test_status_lost_socket(self):
+        m_transport = MagicMock()
+        m_transport.getpeername.side_effect = socket.error
+        self.m_ssh.get_transport.return_value = m_transport
+        with raises(ConnectionLostError) as exc:
+            run.run(
+                client=self.m_ssh,
+                args=['foo'],
             )
+        assert str(exc.value) == "SSH connection was lost: 'foo'"
 
-        assert e.command == 'foo'
-        assert str(e) == "SSH connection to HOST was lost: 'foo'"
-
-    @fudge.with_fakes
-    def test_run_status_lost_socket(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().raises(socket.error)
-        e = assert_raises(
-            ConnectionLostError,
-            run.run,
-            client=ssh,
-            logger=logger,
-            args=['foo'],
-            )
-
-        assert e.command == 'foo'
-        assert str(e) == "SSH connection was lost: 'foo'"
-
-    @fudge.with_fakes
-    def test_run_status_lost_nocheck(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(-1)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def test_status_lost_nocheck(self):
+        m_transport = MagicMock()
+        m_transport.getpeername.return_value = ('name', 22)
+        m_transport.is_active.return_value = False
+        self.m_stdout_buf.channel.recv_exit_status.return_value = -1
+        self.m_ssh.get_transport.return_value = m_transport
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             check_status=False,
-            )
-        assert r.exitstatus is None
+        )
+        assert proc.exitstatus is None
 
-    @fudge.with_fakes
-    def test_run_nowait(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('recv_exit_status').with_args().returns(42)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def test_status_bad_nowait(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 42
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             wait=False,
-            )
-        assert r.command == 'foo'
-        e = assert_raises(
-            CommandFailedError,
-            r.wait,
-            )
-        assert r.returncode == 42
-        assert str(e) == "Command failed on HOST with status 42: 'foo'"
+        )
+        with raises(CommandFailedError) as exc:
+            proc.wait()
+        assert proc.returncode == 42
+        assert str(exc.value) == "Command failed on name with status 42: 'foo'"
 
-    @fudge.with_fakes
-    def test_run_stdin_pipe(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('exit_status_ready').with_args().returns(False)
-        channel.expects('recv_exit_status').with_args().returns(0)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def test_stdin_pipe(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 0
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             stdin=run.PIPE,
-            wait=False,
-            )
-        r.stdin.write('bar')
-        assert r.command == 'foo'
-        assert r.poll() is None
-        got = r.wait()
-        assert isinstance(r.returncode, int)
-        assert got == 0
+            wait=False
+        )
+        assert proc.poll() is None
+        code = proc.wait()
+        assert code == 0
+        assert proc.exitstatus == 0
 
-    @fudge.with_fakes
-    def test_run_stdout_pipe(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('read').with_args().returns('one')
-        out.expects('read').with_args().returns('two')
-        out.expects('read').with_args().returns('')
-        err.expects('xreadlines').with_args().returns([])
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('exit_status_ready').with_args().returns(False)
-        channel.expects('recv_exit_status').with_args().returns(0)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def test_stdout_pipe(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 0
+        self.m_stdout_buf.read.side_effect = [
+            'one', 'two', '',
+        ]
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             stdout=run.PIPE,
-            wait=False,
-            )
-        assert r.exitstatus is None
-        assert r.command == 'foo'
-        assert r.poll() is None
-        assert r.stdout.read() == 'one'
-        assert r.stdout.read() == 'two'
-        assert r.stdout.read() == ''
-        got = r.wait()
-        assert isinstance(r.exitstatus, int)
-        assert got == 0
+            wait=False
+        )
+        assert proc.poll() is None
+        assert proc.stdout.read() == 'one'
+        assert proc.stdout.read() == 'two'
+        assert proc.stdout.read() == ''
+        code = proc.wait()
+        assert code == 0
+        assert proc.exitstatus == 0
 
-    @fudge.with_fakes
-    def test_run_stderr_pipe(self):
-        fudge.clear_expectations()
-        ssh = fudge.Fake('SSHConnection')
-        transport = ssh.expects('get_transport').with_args().returns_fake()
-        transport.expects('getpeername').with_args().returns(('HOST', 22))
-        cmd = ssh.expects('exec_command')
-        cmd.with_args("foo")
-        in_ = fudge.Fake('ChannelFile').is_a_stub()
-        out = fudge.Fake('ChannelFile').is_a_stub()
-        err = fudge.Fake('ChannelFile').is_a_stub()
-        cmd.returns((in_, out, err))
-        out.expects('xreadlines').with_args().returns([])
-        err.expects('read').with_args().returns('one')
-        err.expects('read').with_args().returns('two')
-        err.expects('read').with_args().returns('')
-        logger = fudge.Fake('logger').is_a_stub()
-        channel = fudge.Fake('channel')
-        out.has_attr(channel=channel)
-        channel.expects('exit_status_ready').with_args().returns(False)
-        channel.expects('recv_exit_status').with_args().returns(0)
-        r = run.run(
-            client=ssh,
-            logger=logger,
+    def test_stderr_pipe(self):
+        self.m_stdout_buf.channel.recv_exit_status.return_value = 0
+        self.m_stderr_buf.read.side_effect = [
+            'one', 'two', '',
+        ]
+        proc = run.run(
+            client=self.m_ssh,
             args=['foo'],
             stderr=run.PIPE,
-            wait=False,
-            )
-        assert r.exitstatus is None
-        assert r.command == 'foo'
-        assert r.poll() is None
-        assert r.stderr.read() == 'one'
-        assert r.stderr.read() == 'two'
-        assert r.stderr.read() == ''
-        got = r.wait()
-        assert isinstance(r.exitstatus, int)
-        assert got == 0
+            wait=False
+        )
+        assert proc.poll() is None
+        assert proc.stderr.read() == 'one'
+        assert proc.stderr.read() == 'two'
+        assert proc.stderr.read() == ''
+        code = proc.wait()
+        assert code == 0
+        assert proc.exitstatus == 0
 
+
+class TestQuote(object):
     def test_quote_simple(self):
         got = run.quote(['a b', ' c', 'd e '])
         assert got == "'a b' ' c' 'd e '"
