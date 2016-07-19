@@ -54,19 +54,16 @@ protected:
   }
 
   bool append_op_event();
-  void commit_op_event(int r);
 
   // NOTE: temporary until converted to new state machine format
-  Context *create_context_finisher() {
-    return util::create_context_callback<
-      Request<ImageCtxT>, &Request<ImageCtxT>::finish>(this);
-  }
+  Context *create_context_finisher(int r);
+  virtual void finish_and_destroy(int r) override;
 
 private:
-  struct C_OpEventSafe : public Context {
+  struct C_AppendOpEvent : public Context {
     Request *request;
     Context *on_safe;
-    C_OpEventSafe(Request *request, Context *on_safe)
+    C_AppendOpEvent(Request *request, Context *on_safe)
       : request(request), on_safe(on_safe) {
     }
     virtual void finish(int r) override {
@@ -77,6 +74,18 @@ private:
     }
   };
 
+  struct C_CommitOpEvent : public Context {
+    Request *request;
+    int ret_val;
+    C_CommitOpEvent(Request *request, int ret_val)
+      : request(request), ret_val(ret_val) {
+    }
+    virtual void finish(int r) override {
+      request->handle_commit_op_event(r, ret_val);
+      delete request;
+    }
+  };
+
   uint64_t m_op_tid = 0;
   bool m_appended_op_event = false;
   bool m_committed_op_event = false;
@@ -84,6 +93,9 @@ private:
   void replay_op_ready(Context *on_safe);
   void append_op_event(Context *on_safe);
   void handle_op_event_safe(int r);
+
+  bool commit_op_event(int r);
+  void handle_commit_op_event(int r, int original_ret_val);
 
 };
 
