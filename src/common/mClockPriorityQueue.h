@@ -23,7 +23,7 @@
 #include "common/Formatter.h"
 #include "common/OpQueue.h"
 
-#include "dmclock_server.h"
+#include "dmclock/src/dmclock_server.h"
 
 // the following is done to unclobber _ASSERT_H so it returns to the
 // way ceph likes it
