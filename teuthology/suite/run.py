@@ -13,6 +13,7 @@ from ..exceptions import (
     BranchNotFoundError, CommitNotFoundError, VersionNotFoundError
 )
 from ..misc import deep_merge, get_results_url
+from ..orchestra.opsys import OS
 
 from . import util
 from .build_matrix import combine_path, build_matrix
@@ -86,6 +87,9 @@ class Run(object):
         suite_branch = self.choose_suite_branch()
         suite_hash = self.choose_suite_hash(suite_branch)
 
+        if self.args.distro_version:
+            self.args.distro_version, _ = \
+                OS.version_codename(self.args.distro, self.args.distro_version)
         self.config_input = dict(
             suite=self.args.suite,
             suite_branch=suite_branch,

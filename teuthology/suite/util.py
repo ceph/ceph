@@ -375,7 +375,6 @@ def get_package_versions(sha1, os_type, os_version, flavor,
 
     os_types = package_versions.get(sha1, dict())
     os_versions = os_types.get(os_type, dict())
-    # XXX alternate ways of specifying version?
     flavors = os_versions.get(os_version, dict())
     if flavor not in flavors:
         package_version = package_version_for_hash(

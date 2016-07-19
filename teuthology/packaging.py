@@ -473,6 +473,10 @@ class GitbuilderProject(object):
         self.flavor = self.job_config.get("flavor")
         self.codename = self.job_config.get("codename")
         self.os_version = self._get_version()
+        # if os_version is given, prefer version/codename derived from it
+        if self.os_version:
+            self.os_version, self.codename = \
+                OS.version_codename(self.os_type, self.os_version)
         self.branch = self.job_config.get("branch")
         self.tag = self.job_config.get("tag")
         self.ref = self.job_config.get("ref")
