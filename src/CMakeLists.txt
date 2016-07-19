@@ -748,8 +748,7 @@ add_library(parse_secret_objs OBJECT ${parse_secret_files})
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
-    $<TARGET_OBJECTS:common_util_obj>)
+  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs LINK_PRIVATE client
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
