@@ -225,7 +225,7 @@ public:
       session_autoclose(0),
       max_file_size(0),
       cas_pool(-1),
-      metadata_pool(0),
+      metadata_pool(-1),
       max_mds(0),
       ever_allowed_features(0),
       explicitly_allowed_features(0),
