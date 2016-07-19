@@ -2554,7 +2554,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 
   /* nothing left in the prefetch buffer */
 
-  if (len > (size_t)recv_max_prefetch) {
+  if (left > (size_t)recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     ssize_t ret = do_recv(buf, left, flags );
     if (ret < 0) {
