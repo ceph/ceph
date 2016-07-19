@@ -83,7 +83,8 @@ def get_worker(machine_type):
 
 
 def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
-                        machine_type='plana', distro='ubuntu'):
+                        machine_type='plana', distro='ubuntu',
+                        distroversion='14.04'):
     """
     Find the hash representing the head of the project's repository via
     querying a gitbuilder repo.
@@ -104,6 +105,7 @@ def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
             branch=branch,
             flavor=flavor,
             os_type=distro,
+            os_version=distroversion,
             arch=arch,
         ),
     )
@@ -250,8 +252,8 @@ def get_branch_info(project, branch, project_owner='ceph'):
         return resp.json()
 
 
-def package_version_for_hash(hash, kernel_flavor='basic',
-                             distro='rhel', machine_type='plana'):
+def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
+                             distroversion='7.0', machine_type='smithi'):
     """
     Does what it says on the tin. Uses gitbuilder repos.
 
@@ -265,6 +267,7 @@ def package_version_for_hash(hash, kernel_flavor='basic',
         dict(
             flavor=kernel_flavor,
             os_type=distro,
+            os_version=distroversion,
             arch=arch,
             sha1=hash,
         ),
@@ -321,10 +324,11 @@ def get_install_task_flavor(job_config):
     return get_flavor(first_install_config)
 
 
-def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
+def get_package_versions(sha1, os_type, os_version, flavor,
+                         package_versions=None):
     """
-    Will retrieve the package versions for the given sha1, os_type and
-    kernel_flavor from gitbuilder.
+    Will retrieve the package versions for the given sha1, os_type/version,
+    and flavor from gitbuilder.
 
     Optionally, a package_versions dict can be provided
     from previous calls to this function to avoid calling gitbuilder for
@@ -335,8 +339,13 @@ def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
         {
             "sha1": {
                 "ubuntu": {
-                    "basic": "version",
+                    "14.04": {
+                        "basic": "version",
                     }
+                    "15.04": {
+                        "notcmalloc": "version",
+                    }
+                }
                 "rhel": {
                     "basic": "version",
                     }
@@ -351,12 +360,13 @@ def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
     :param sha1:             The sha1 hash of the ceph version.
     :param os_type:          The distro we want to get packages for, given
                              the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
-    :param kernel_flavor:    The kernel flavor
+    :param os_version:       The distro's version, e.g. '14.04', '7.0'
+    :param flavor:           Package flavor ('testing', 'notcmalloc', etc.)
     :param package_versions: Use this optionally to use cached results of
                              previous calls to gitbuilder.
     :returns:                A dict of package versions. Will return versions
-                             for all hashs and distros, not just for the given
-                             hash and distro.
+                             for all hashes/distros/vers, not just for the given
+                             hash/distro/ver.
     """
     if package_versions is None:
         package_versions = dict()
@@ -364,47 +374,31 @@ def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
     os_type = str(os_type)
 
     os_types = package_versions.get(sha1, dict())
-    package_versions_for_flavor = os_types.get(os_type, dict())
-    if kernel_flavor not in package_versions_for_flavor:
+    os_versions = os_types.get(os_type, dict())
+    # XXX alternate ways of specifying version?
+    flavors = os_versions.get(os_version, dict())
+    if flavor not in flavors:
         package_version = package_version_for_hash(
             sha1,
-            kernel_flavor,
-            distro=os_type
+            flavor,
+            distro=os_type,
+            distroversion=os_version,
         )
-        package_versions_for_flavor[kernel_flavor] = package_version
-        os_types[os_type] = package_versions_for_flavor
+        flavors[flavor] = package_version
+        os_versions[os_version] = flavors
+        os_types[os_type] = os_versions
         package_versions[sha1] = os_types
 
     return package_versions
 
 
-def has_packages_for_distro(sha1, os_type, kernel_flavor,
+def has_packages_for_distro(sha1, os_type, os_version, flavor,
                             package_versions=None):
     """
     Checks to see if gitbuilder has packages for the given sha1, os_type and
     kernel_flavor.
 
-    Optionally, a package_versions dict can be provided
-    from previous calls to this function to avoid calling gitbuilder for
-    information we've already retrieved.
-
-    The package_versions dict will be in the following format::
-
-        {
-            "sha1": {
-                "ubuntu": {
-                    "basic": "version",
-                    }
-                "rhel": {
-                    "basic": "version",
-                    }
-            },
-            "another-sha1": {
-                "ubuntu": {
-                    "basic": "version",
-                    }
-            }
-        }
+    See above for package_versions description.
 
     :param sha1:             The sha1 hash of the ceph version.
     :param os_type:          The distro we want to get packages for, given
@@ -416,12 +410,14 @@ def has_packages_for_distro(sha1, os_type, kernel_flavor,
     """
     os_type = str(os_type)
     if package_versions is None:
-        package_versions = get_package_versions(sha1, os_type, kernel_flavor)
+        package_versions = get_package_versions(
+            sha1, os_type, os_version, flavor)
 
-    package_versions_for_hash = package_versions.get(sha1, dict()).get(
-        os_type, dict())
+    flavors = package_versions.get(sha1, dict()).get(
+            os_type, dict()).get(
+            os_version, dict())
     # we want to return a boolean here, not the actual package versions
-    return bool(package_versions_for_hash.get(kernel_flavor, None))
+    return bool(flavors.get(flavor, None))
 
 
 def teuthology_schedule(args, verbose, dry_run, log_prefix=''):

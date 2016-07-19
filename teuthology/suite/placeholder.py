@@ -52,6 +52,7 @@ dict_templ = {
     'machine_type': Placeholder('machine_type'),
     'nuke-on-error': True,
     'os_type': Placeholder('distro'),
+    'os_version': Placeholder('distroversion'),
     'overrides': {
         'admin_socket': {
             'branch': Placeholder('ceph_branch'),
