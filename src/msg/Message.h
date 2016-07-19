@@ -223,7 +223,7 @@ protected:
 
   ConnectionRef connection;
 
-  uint32_t magic;
+  uint32_t magic = 0;
 
   bi::list_member_hook<> dispatch_q;
 
@@ -243,42 +243,30 @@ public:
 				     &Message::dispatch_q > > Queue;
 
 protected:
-  CompletionHook* completion_hook; // owned by Messenger
+  CompletionHook* completion_hook = nullptr; // owned by Messenger
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *byte_throttler;
+  Throttle *byte_throttler = nullptr;
 
   // release a count back to this throttler when we are destroyed
-  Throttle *msg_throttler;
+  Throttle *msg_throttler = nullptr;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
   // later.  this is necessary because messages can enter the dispatch
   // queue locally (not via read_message()), and those are not
   // currently throttled.
-  uint64_t dispatch_throttle_size;
+  uint64_t dispatch_throttle_size = 0;
 
   friend class Messenger;
 
 public:
-  Message()
-    : connection(NULL),
-      magic(0),
-      completion_hook(NULL),
-      byte_throttler(NULL),
-      msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+  Message() {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   }
-  Message(int t, int version=1, int compat_version=0)
-    : connection(NULL),
-      magic(0),
-      completion_hook(NULL),
-      byte_throttler(NULL),
-      msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+  Message(int t, int version=1, int compat_version=0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = version;
