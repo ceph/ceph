@@ -63,7 +63,6 @@ Group:         System/Filesystems
 URL:		http://ceph.com/
 Source0:	%{name}-%{version}.tar.bz2
 Source99:       ceph-rpmlintrc
-ExcludeArch:    i586
 #################################################################################
 # dependencies that apply across all distro families
 #################################################################################
