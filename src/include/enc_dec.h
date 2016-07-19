@@ -46,7 +46,7 @@
     struct simple {
       int a;
       float b;
-      string c;
+      std::string c;
       set<int> d;
     };
   
@@ -126,20 +126,19 @@ We create a struct called "enc_dec_traits". This struct contains per-type inform
 // A key optimization for containers is whether the ESTIMATE operation is required to walk the container or not.
 // For types like "int32" that serialize into a small number of bytes -- worst-case -- we're happy if the estimation operation for a 
 // container just uses that max-size * container.size(), which is O(1) and avoids that walk. We use this member of this traits struct
-// to control this operation.
+// to control this machinery.
 //
 // Generally, it is assumed that all types are unbounded in size (i.e., not subject to the optimization)
 // Currently, the primitive types (int, char, short, long long, etc.) are automatically enabled for this optimization by the infrastructure.
-// When you declare a complex type serializer using the macro 
+// When you declare a complex type serializer usage of the appropriate macro (see below) automatically sets this for you.
+//
 template<typename t> struct enc_dec_traits;
-
-using namespace std;
 
 //
 // Just like the existing encode/decode machinery. The environment provides a rich set of 
 // pre-defined encodes for primitive types and containers
 //
-// These macros all handle byte-ordering automatically for you :)
+// These macros all handle byte-ordering automatically for you :) All external serializations are in little endian order
 //
 // itype == internal type
 // otype == external type, i.e., the type on the wire
@@ -164,12 +163,12 @@ DEFINE_ENC_DEC_SIMPLE(long long,long long);
 DEFINE_ENC_DEC_SIMPLE(unsigned long long,long long);
 
 //
-// String encode/decode
+// std::string encode/decode
 //
-template<> struct enc_dec_traits<string> { enum { is_bounded_size = false }; };
-inline size_t enc_dec(size_t p,string& s) { return p + sizeof(size_t) + s.size(); }
-inline char * enc_dec(char * p,string& s) { *(size_t *)p = s.size(); memcpy(p+sizeof(size_t),s.c_str(),s.size()); return p + sizeof(size_t) + s.size(); }
-inline const char *enc_dec(const char *p,string& s) { s = string(p + sizeof(size_t),*(size_t *)p); return p + sizeof(size_t) + s.size(); }
+template<> struct enc_dec_traits<std::string> { enum { is_bounded_size = false }; };
+inline size_t enc_dec(size_t p,std::string& s) { return p + sizeof(size_t) + s.size(); }
+inline char * enc_dec(char * p,std::string& s) { *(size_t *)p = s.size(); memcpy(p+sizeof(size_t),s.c_str(),s.size()); return p + sizeof(size_t) + s.size(); }
+inline const char *enc_dec(const char *p,std::string& s) { s = std::string(p + sizeof(size_t),*(size_t *)p); return p + sizeof(size_t) + s.size(); }
 
 //
 // unsigned VarInt
@@ -178,7 +177,7 @@ inline const char *enc_dec(const char *p,string& s) { s = string(p + sizeof(size
 //
 #define ENABLE_IF_UNSIGNED(x,r) typename std::enable_if<not std::is_signed<x>::value,r>::type
 template<typename t> ENABLE_IF_UNSIGNED(t,size_t)
-inline enc_dec_varint(size_t p,t& o) { return p + sizeof(t) + 1; } // one extra byte is maximum growth due to encoding
+inline enc_dec_varint(size_t p,t& o) { return p + sizeof(t) + 2; } // two extra bytes is maximum growth due to encoding
 
 template<typename t> ENABLE_IF_UNSIGNED(t,char *)
 inline enc_dec_varint(char * p,t& o) {
@@ -194,10 +193,12 @@ inline enc_dec_varint(char * p,t& o) {
 template<typename t> ENABLE_IF_UNSIGNED(t,const char *)
 inline enc_dec_varint(const char *p,t& o) {
    t v = 0;
+   int shift = 0;
    while (1) {
       char temp = *p++;
-      v = (v << 7) | (temp & 0x7F);
+      v |= t(temp & 0x7F) << shift;
       if (temp & 0x80) break;
+      shift += 7;
    }
    o = v;
    return p;
@@ -217,13 +218,14 @@ inline enc_dec_varint(size_t p,t& o) { return p + sizeof(t) + 2; } // two extra 
 template<typename t> ENABLE_IF_SIGNED(t,char *)
 inline enc_dec_varint(char * p,t& o) {
    char flag;
-   t v;
+   typedef typename std::make_unsigned<t>::type us_t;
+   us_t v;
    if (o < 0) {
       flag = 0xC0;
-      v = -o;
+      v = us_t(-o);
    } else {
       flag = 0x80;
-      v = o;
+      v = us_t(o);
    }
    while (v >= 0x40) {
       *p++ = v & 0x7F;
@@ -236,11 +238,11 @@ inline enc_dec_varint(char * p,t& o) {
 template<typename t> ENABLE_IF_SIGNED(t,const char *)
 inline enc_dec_varint(const char *p,t& o) {
    t v = 0;
+   int shift = 0;
    while (1) {
       char temp = *p++;
-      v <<= 7;
       if (temp & 0x80) {
-         v |= temp & 0x3F;
+         v |= t(temp & 0x3F) << shift;
          if (temp & 0x40) {
 	    o = -v;
          } else {
@@ -248,10 +250,10 @@ inline enc_dec_varint(const char *p,t& o) {
          }
          break;
       } else {
-         v |= temp & 0x7F;
+         v |= t(temp & 0x7F) << shift;
+         shift += 7;
       }
    }
-   o = v;
    return p;
 }
 
@@ -289,7 +291,10 @@ inline const char *enc_dec_pair(const char *p,f& first,s& second) {
 //
 // As described earlier, we also have the optimization of whether the size estimation function needs to crawl the entire container
 // accumulating the size of each element OR whether a worst-case estimate can be made by use the O(1) size() member of the container
-// multiplied by the worst-case size of an encoded elements (which is determined by serializing a "ghost" element of that type)
+// multiplied by the worst-case size of an encoded elements (which is determined by serializing a "ghost" element of that type, this
+//    is done by calling the standard size estimation function but passing in a null pointer (as reference ;-) for the data. Meaning
+//    that this call will fault out if the size estimation function actually tries to access the data (i.e., is data dependent in it's result)
+//
 //
 // For example:
 //
@@ -299,28 +304,27 @@ inline const char *enc_dec_pair(const char *p,f& first,s& second) {
 //
 //   in the serialization function we can do this:
 //
-//      p = ::enc_dec(p,x);  // use default encoding for <int> and use default is_bounded_size<int> [true].
+//      p = enc_dec(p,x);  // use default encoding for <int> and use default is_bounded_size<int> [true].
 //
 //   An alternate would be:
 //
-//      p = ::enc_dec(p,x,enc_dec_varint); //use varint encoding and default is_bounded_size<int> [true].
+//      p = enc_dec(p,x,enc_dec_varint); //use varint encoding and default is_bounded_size<int> [true].
 //
 //
-//      
-//
-//   
-//
+
 template<typename t> 
 inline size_t enc_dec(
    size_t p,
    set<t>& s,
    size_t (*delegate)(size_t,t&) = &enc_dec,
    bool is_bounded_size = enc_dec_traits<t>::is_bounded_size) {
+   size_t sz;
+   p = enc_dec(p,sz);
    if (is_bounded_size) {
       p += s.size() * (*delegate)(size_t(0),*(t *) 0);
    } else {
       for (const t&e : s) {
-         p = ::enc_dec(p,const_cast<t&>(e));
+         p = enc_dec(p,const_cast<t&>(e));
       }
    }
    return p;
@@ -349,19 +353,19 @@ inline const char *enc_dec(const char *p,set<t>&s, const char *(*delegate)(const
 }
 
 //
-// Now encode a map .
+// Now encode a std::map .
 //
 template<typename k,typename v> 
 inline size_t enc_dec(
    size_t p,
-   map<k,v>&s,
-   size_t (*delegate)(size_t,k&,v&) = &::enc_dec_pair,
+   std::map<k,v>&s,
+   size_t (*delegate)(size_t,k&,v&) = &enc_dec_pair,
    bool is_bounded_size = enc_dec_traits<k>::is_bounded_size && enc_dec_traits<v>::is_bounded_size
    ) {
    size_t sz;
-   p = ::enc_dec(p,sz); 
+   p = enc_dec(p,sz); 
    if (is_bounded_size) {
-      p += s.size() * (*delegate)(p,*(k *)0,*(v *)0);
+      p += s.size() * (*delegate)(size_t(0),*(k *)0,*(v *)0);
    } else {
       for (auto &e : s) {
          p = (*delegate)(p,const_cast<k&>(e.first),e.second);
@@ -373,8 +377,8 @@ inline size_t enc_dec(
 template<typename k, typename v>
 inline char *enc_dec(
    char *p,
-   map<k,v>& s,
-   char *(*delegate)(char *p,k&,v&) = ::enc_dec_pair) {
+   std::map<k,v>& s,
+   char *(*delegate)(char *p,k&,v&) = enc_dec_pair) {
    size_t sz = s.size();
    p = enc_dec(p,sz);
    for (auto& e : s) {
@@ -386,8 +390,8 @@ inline char *enc_dec(
 template<typename k, typename v>
 inline const char *enc_dec(
    const char *p,
-   map<k,v>&s,
-   const char *(*delegate)(const char *,k&,v&) = ::enc_dec_pair
+   std::map<k,v>&s,
+   const char *(*delegate)(const char *,k&,v&) = enc_dec_pair
    ) {
    size_t sz;
    p = enc_dec(p,sz);
@@ -401,13 +405,13 @@ inline const char *enc_dec(
 }
 
 //
-// Now a vector
+// Now a std::vector
 //
 template<typename e>
 inline size_t enc_dec(
    size_t p,
-   vector<e>& v,
-   size_t (*delegate)(size_t,e&) = &::enc_dec,
+   std::vector<e>& v,
+   size_t (*delegate)(size_t,e&) = &enc_dec,
    bool is_bounded_size = enc_dec_traits<e>::is_bounded_size) {
    size_t size;
    p = enc_dec(p,size);
@@ -422,8 +426,8 @@ inline size_t enc_dec(
 template<typename e>
 inline char *enc_dec(
    char *p,
-   vector<e>& v,
-   char * (*delegate)(char *,e&) = &::enc_dec) {
+   std::vector<e>& v,
+   char * (*delegate)(char *,e&) = &enc_dec) {
    size_t size = v.size();
    p = enc_dec(p,size);
    for (auto& o : v) p = (*delegate)(p,o);
@@ -433,8 +437,8 @@ inline char *enc_dec(
 template<typename e>
 inline const char *enc_dec(
    const char * p,
-   vector<e>& v,
-   const char *(*delegate)(const char *,e&) = &::enc_dec) {
+   std::vector<e>& v,
+   const char *(*delegate)(const char *,e&) = &enc_dec) {
    size_t len;
    p = enc_dec(p,len);
    v.reserve(len);
@@ -513,21 +517,21 @@ template<> struct serial_type<DECODE>   { typedef const char *type; };
 //
 // Normally you use this macro.
 //
-#define DEFINE_ENC_DEC_CLASS(x)         DEFINE_ENC_DEC_CLASS_HELPER(x,false)
+#define DECLARE_ENC_DEC_CLASS(x)         DEFINE_ENC_DEC_CLASS_HELPER(x,false)
 
 //
 // Use this macro when you want to enable the optimization that containers of this type don't need
 // to walk the container to estimate their size
 //
-#define DEFINE_ENC_DEC_CLASS_BOUNDED(x) DEFINE_ENC_DEC_CLASS_HELPER(x,true)
+#define DECLARE_ENC_DEC_CLASS_BOUNDED(x) DEFINE_ENC_DEC_CLASS_HELPER(x,true)
 
 #define DEFINE_ENC_DEC_CLASS_HELPER(s,bounded) \
 template<> struct enc_dec_traits<s> { enum { is_bounded_size = bounded }; }; \
-inline size_t      enc_dec(size_t p, s &o)      { return o.enc_dec<ESTIMATE>(p); } \
-inline char *      enc_dec(char *p , s &o)      { return o.enc_dec<ENCODE>(p); } \
-inline const char *enc_dec(const char *p,s &o)  { return o.enc_dec<DECODE>(p); }
+inline size_t      enc_dec(size_t p, s &o)      { return o.enc_dec_member<ESTIMATE>(p); } \
+inline char *      enc_dec(char *p , s &o)      { return o.enc_dec_member<ENCODE>(p); } \
+inline const char *enc_dec(const char *p,s &o)  { return o.enc_dec_member<DECODE>(p); }
 
-#define DECLARE_ENC_DEC_MEMBER_FUNCTION() template<enum SERIAL_TYPE s> typename serial_type<s>::type enc_dec(typename serial_type<s>::type p) 
+#define DECLARE_ENC_DEC_MEMBER_FUNCTION() template<enum SERIAL_TYPE s> typename serial_type<s>::type enc_dec_member(typename serial_type<s>::type p) 
 
 /*
 
@@ -548,22 +552,22 @@ struct astruct {
    unsigned unsigned_var_int;
    long long signed_var_ll;
    unsigned long long unsigned_var_ll;
-   map<string,string> m0;
-   map<int,int> m1;
+   std::map<std::string,std::string> m0;
+   std::map<int,int> m1;
    //
    // <<<<< You need to provide this function just one.
    //
    DECLARE_ENC_DEC_MEMBER_FUNCTION() {
-      p = ::enc_dec(p,a);
-      p = ::enc_dec(p,b);
-      p = ::enc_dec_lba(p,lba);
-      p = ::enc_dec_range(p,start,end);
-      p = ::enc_dec_varint(p,signed_var_int);
-      p = ::enc_dec_varint(p,unsigned_var_int);
-      p = ::enc_dec_varint(p,signed_var_ll);
-      p = ::enc_dec_varint(p,unsigned_var_ll);
-      p = ::enc_dec(p,m0);
-      p = ::enc_dec(p,m1);
+      p = enc_dec(p,a);
+      p = enc_dec(p,b);
+      p = enc_dec_lba(p,lba);
+      p = enc_dec_range(p,start,end);
+      p = enc_dec_varint(p,signed_var_int);
+      p = enc_dec_varint(p,unsigned_var_int);
+      p = enc_dec_varint(p,signed_var_ll);
+      p = enc_dec_varint(p,unsigned_var_ll);
+      p = enc_dec(p,m0);
+      p = enc_dec(p,m1);
       return p;
    }
 };
