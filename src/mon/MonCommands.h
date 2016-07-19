@@ -302,10 +302,6 @@ COMMAND("mon metadata name=id,type=CephString,req=false",
  */
 
 COMMAND("mds stat", "show MDS status", "mds", "r", "cli,rest")
-COMMAND("mds dump " 
-	"name=epoch,type=CephInt,req=false,range=0", \
-	"dump legacy MDS cluster info, optionally from epoch",
-        "mds", "r", "cli,rest")
 COMMAND("fs dump "
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"dump all CephFS status, optionally from epoch", "mds", "r", "cli,rest")

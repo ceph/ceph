@@ -930,53 +930,6 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       ds << fsmap;
     }
     r = 0;
-  } else if (prefix == "mds dump") {
-    int64_t epocharg;
-    epoch_t epoch;
-
-    FSMap *p = &fsmap;
-    if (cmd_getval(g_ceph_context, cmdmap, "epoch", epocharg)) {
-      epoch = epocharg;
-      bufferlist b;
-      int err = get_version(epoch, b);
-      if (err == -ENOENT) {
-	p = 0;
-	r = -ENOENT;
-      } else {
-	assert(err == 0);
-	assert(b.length());
-	p = new FSMap;
-	p->decode(b);
-      }
-    }
-    if (p) {
-      stringstream ds;
-      const MDSMap *mdsmap = nullptr;
-      MDSMap blank;
-      blank.epoch = fsmap.epoch;
-      if (fsmap.legacy_client_fscid != FS_CLUSTER_ID_NONE) {
-        mdsmap = &(fsmap.filesystems[fsmap.legacy_client_fscid]->mds_map);
-      } else {
-        mdsmap = &blank;
-      }
-      if (f != NULL) {
-	f->open_object_section("mdsmap");
-	mdsmap->dump(f.get());
-	f->close_section();
-	f->flush(ds);
-	r = 0;
-      } else {
-	mdsmap->print(ds);
-	r = 0;
-      } 
-      if (r == 0) {
-	rdata.append(ds);
-	ss << "dumped fsmap epoch " << p->get_epoch();
-      }
-      if (p != &fsmap) {
-	delete p;
-      }
-    }
   } else if (prefix == "fs dump") {
     int64_t epocharg;
     epoch_t epoch;
