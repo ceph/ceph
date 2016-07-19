@@ -181,6 +181,15 @@ private:
   rbd_image_options_t opts;
 };
 
+class CEPH_RBD_API UpdateWatchCtx {
+public:
+  virtual ~UpdateWatchCtx() {}
+  /**
+   * Callback activated when we receive a notify event.
+   */
+  virtual void handle_notify() = 0;
+};
+
 class CEPH_RBD_API Image
 {
 public:
@@ -191,6 +200,7 @@ public:
   int aio_close(RBD::AioCompletion *c);
 
   int resize(uint64_t size);
+  int resize2(uint64_t size, bool allow_shrink, ProgressContext& pctx);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);
   int parent_info(std::string *parent_poolname, std::string *parent_name,
@@ -364,6 +374,9 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+
+  int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
+  int update_unwatch(uint64_t handle);
 
 private:
   friend class RBD;

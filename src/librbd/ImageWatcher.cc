@@ -213,7 +213,7 @@ void ImageWatcher::notify_flatten(uint64_t request_id,
 }
 
 void ImageWatcher::notify_resize(uint64_t request_id, uint64_t size,
-				 ProgressContext &prog_ctx,
+				 bool allow_shrink, ProgressContext &prog_ctx,
                                  Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.exclusive_lock &&
@@ -222,7 +222,7 @@ void ImageWatcher::notify_resize(uint64_t request_id, uint64_t size,
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
   bufferlist bl;
-  ::encode(NotifyMessage(ResizePayload(size, async_request_id)), bl);
+  ::encode(NotifyMessage(ResizePayload(size, allow_shrink, async_request_id)), bl);
   notify_async_request(async_request_id, std::move(bl), prog_ctx, on_finish);
 }
 
@@ -553,6 +553,10 @@ bool ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
 
   m_image_ctx.state->handle_update_notification();
   m_image_ctx.perfcounter->inc(l_librbd_notify);
+  if (ack_ctx != nullptr) {
+    m_image_ctx.state->flush_update_watchers(new C_ResponseMessage(ack_ctx));
+    return false;
+  }
   return true;
 }
 
@@ -711,8 +715,9 @@ bool ImageWatcher::handle_payload(const ResizePayload &payload,
       if (new_request) {
         ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
 				   << payload.async_request_id << " "
-				   << payload.size << dendl;
-        m_image_ctx.operations->execute_resize(payload.size, *prog_ctx, ctx, 0);
+				   << payload.size << " "
+				   << payload.allow_shrink << dendl;
+        m_image_ctx.operations->execute_resize(payload.size, payload.allow_shrink, *prog_ctx, ctx, 0);
       }
 
       ::encode(ResponseMessage(r), ack_ctx->out);

@@ -2329,9 +2329,9 @@ int buffer::list::write_fd_zero_copy(int fd) const
    */
   int64_t offset = ::lseek(fd, 0, SEEK_CUR);
   int64_t *off_p = &offset;
-  if (offset < 0 && offset != ESPIPE)
-    return (int) offset;
-  if (offset == ESPIPE)
+  if (offset < 0 && errno != ESPIPE)
+    return -errno;
+  if (errno == ESPIPE)
     off_p = NULL;
   for (std::list<ptr>::const_iterator it = _buffers.begin();
        it != _buffers.end(); ++it) {

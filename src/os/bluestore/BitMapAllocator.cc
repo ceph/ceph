@@ -23,9 +23,17 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   : m_num_uncommitted(0),
     m_num_committing(0)
 {
+  assert(ISP2(block_size));
+  if (!ISP2(block_size)) {
+    derr << __func__ << " block_size " << block_size
+         << " not power of 2 aligned!"
+         << dendl;
+    return;
+  }
+
   int64_t zone_size_blks = g_conf->bluestore_bitmapallocator_blocks_per_zone;
-  assert((zone_size_blks & (zone_size_blks - 1)) == 0);
-  if (zone_size_blks & (zone_size_blks - 1)) {
+  assert(ISP2(zone_size_blks));
+  if (!ISP2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
          << " not power of 2 aligned!"
          << dendl;
@@ -33,8 +41,8 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   }
 
   int64_t span_size = g_conf->bluestore_bitmapallocator_span_size;
-  assert((span_size & (span_size - 1)) == 0);
-  if (span_size & (span_size - 1)) {
+  assert(ISP2(span_size));
+  if (!ISP2(span_size)) {
     derr << __func__ << " span_size " << span_size
          << " not power of 2 aligned!"
          << dendl;

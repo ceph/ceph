@@ -138,8 +138,8 @@ public:
 
   void expect_resize(MockReplayImageCtx &mock_image_ctx, Context **on_finish,
                      uint64_t size, uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_resize(size, _, _, op_tid))
-                  .WillOnce(DoAll(SaveArg<2>(on_finish),
+    EXPECT_CALL(*mock_image_ctx.operations, execute_resize(size, _, _, _, op_tid))
+                  .WillOnce(DoAll(SaveArg<3>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 

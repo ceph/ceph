@@ -197,7 +197,7 @@ else(INTEL_SSE4_1)
 endif(INTEL_SSE4_1)
 
 
-set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -491,7 +491,7 @@ endif(ENABLE_SHARED)
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common ${CMAKE_DL_LIBS})
+target_link_libraries(common ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -525,8 +525,7 @@ set(global_common_files
 add_library(global_common_objs OBJECT ${global_common_files})
 add_library(global STATIC ${libglobal_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
-target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
-  ${EXTRALIBS})
+target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${EXTRALIBS})
 
 # rados object classes
 add_subdirectory(cls)
@@ -615,7 +614,7 @@ add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
+target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse ${CMAKE_DL_LIBS})
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -945,7 +944,7 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(osd dl leveldb ${ALLOC_LIBS})
+target_link_libraries(osd ${CMAKE_DL_LIBS} leveldb ${ALLOC_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp)
 endif()
@@ -1030,44 +1029,7 @@ set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
 
 add_subdirectory(compressor)
-
-add_executable(ceph-client-debug tools/ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs librados global common)
-install(TARGETS ceph-client-debug DESTINATION bin)
-
-add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
-target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
-install(TARGETS ceph-kvstore-tool DESTINATION bin)
-
-set(ceph_conf_srcs
-  tools/ceph_conf.cc)
-add_executable(ceph-conf ${ceph_conf_srcs})
-target_link_libraries(ceph-conf global)
-install(TARGETS ceph-conf DESTINATION bin)
-
-set(monmaptool_srcs
-  tools/monmaptool.cc)
-add_executable(monmaptool ${monmaptool_srcs})
-target_link_libraries(monmaptool global)
-install(TARGETS monmaptool DESTINATION bin)
-
-set(osdomaptool_srcs
-  tools/osdmaptool.cc)
-add_executable(osdmaptool ${osdomaptool_srcs})
-target_link_libraries(osdmaptool global)
-install(TARGETS osdmaptool DESTINATION bin)
-
-set(ceph_psim_srcs
-  tools/psim.cc)
-add_executable(ceph_psim ${ceph_psim_srcs})
-target_link_libraries(ceph_psim global)
-install(TARGETS ceph_psim DESTINATION bin)
-
-set(ceph_authtool_srcs
-  tools/ceph_authtool.cc)
-add_executable(ceph-authtool ${ceph_authtool_srcs})
-target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
-install(TARGETS ceph-authtool DESTINATION bin)
+add_subdirectory(tools)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
@@ -1205,37 +1167,6 @@ if(${WITH_RBD})
     include/rbd/librbd.hpp
     DESTINATION include/rbd)
 
-  add_executable(rbd-nbd tools/rbd_nbd/rbd-nbd.cc
-    $<TARGET_OBJECTS:parse_secret_objs>)
-  target_link_libraries(rbd-nbd librbd librados global keyutils
-    ${Boost_REGEX_LIBRARY})
-
-  set(rbd_mirror_internal
-    tools/rbd_mirror/ClusterWatcher.cc
-    tools/rbd_mirror/ImageReplayer.cc
-    tools/rbd_mirror/ImageDeleter.cc
-    tools/rbd_mirror/ImageSync.cc
-    tools/rbd_mirror/ImageSyncThrottler.cc
-    tools/rbd_mirror/Mirror.cc
-    tools/rbd_mirror/PoolWatcher.cc
-    tools/rbd_mirror/Replayer.cc
-    tools/rbd_mirror/Threads.cc
-    tools/rbd_mirror/types.cc
-    tools/rbd_mirror/image_replayer/BootstrapRequest.cc
-    tools/rbd_mirror/image_replayer/CloseImageRequest.cc
-    tools/rbd_mirror/image_replayer/CreateImageRequest.cc
-    tools/rbd_mirror/image_replayer/OpenImageRequest.cc
-    tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc
-    tools/rbd_mirror/image_replayer/ReplayStatusFormatter.cc
-    tools/rbd_mirror/image_sync/ImageCopyRequest.cc
-    tools/rbd_mirror/image_sync/ObjectCopyRequest.cc
-    tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc
-    tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc
-    tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
-    tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
-  add_library(rbd_mirror_internal STATIC
-    ${rbd_mirror_internal})
-
   if(WITH_FUSE)
     add_executable(rbd-fuse
       rbd_fuse/rbd-fuse.cc)
@@ -1244,70 +1175,6 @@ if(${WITH_RBD})
     install(TARGETS rbd-fuse DESTINATION bin)
   endif()
 
-  add_executable(rbd-mirror
-    tools/rbd_mirror/main.cc
-    common/ContextCompletion.cc)
-  target_link_libraries(rbd-mirror
-    rbd_mirror_internal
-    rbd_internal
-    rbd_api
-    rbd_types
-    journal
-    librados
-    osdc
-    cls_rbd_client
-    cls_lock_client
-    cls_journal_client
-    global)
-
-  set(rbd_srcs
-    tools/rbd/rbd.cc
-    tools/rbd/ArgumentTypes.cc
-    tools/rbd/IndentStream.cc
-    tools/rbd/OptionPrinter.cc
-    tools/rbd/Shell.cc
-    tools/rbd/Utils.cc
-    tools/rbd/action/Bench.cc
-    tools/rbd/action/Children.cc
-    tools/rbd/action/Clone.cc
-    tools/rbd/action/Copy.cc
-    tools/rbd/action/Create.cc
-    tools/rbd/action/Diff.cc
-    tools/rbd/action/DiskUsage.cc
-    tools/rbd/action/Export.cc
-    tools/rbd/action/ExportDiff.cc
-    tools/rbd/action/Feature.cc
-    tools/rbd/action/Flatten.cc
-    tools/rbd/action/Group.cc
-    tools/rbd/action/ImageMeta.cc
-    tools/rbd/action/Import.cc
-    tools/rbd/action/ImportDiff.cc
-    tools/rbd/action/Info.cc
-    tools/rbd/action/Journal.cc
-    tools/rbd/action/Kernel.cc
-    tools/rbd/action/List.cc
-    tools/rbd/action/Lock.cc
-    tools/rbd/action/MergeDiff.cc
-    tools/rbd/action/MirrorPool.cc
-    tools/rbd/action/MirrorImage.cc
-    tools/rbd/action/Nbd.cc
-    tools/rbd/action/ObjectMap.cc
-    tools/rbd/action/Remove.cc
-    tools/rbd/action/Rename.cc
-    tools/rbd/action/Resize.cc
-    tools/rbd/action/Snap.cc
-    tools/rbd/action/Status.cc
-    tools/rbd/action/Watch.cc)
-  add_executable(rbd ${rbd_srcs}
-    $<TARGET_OBJECTS:common_util_obj>
-    $<TARGET_OBJECTS:parse_secret_objs>
-    $<TARGET_OBJECTS:common_texttable_obj>
-    $<TARGET_OBJECTS:krbd_objs>)
-  set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
-  target_link_libraries(rbd librbd librados global common keyutils udev
-    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-  install(TARGETS rbd rbd-nbd rbd-mirror DESTINATION bin)
   install(PROGRAMS
     ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer
     ${CMAKE_SOURCE_DIR}/src/rbd-replay-many
@@ -1413,7 +1280,8 @@ if(${WITH_RADOSGW})
   target_include_directories(rgw_a PUBLIC ${FCGI_INCLUDE_DIR})
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
-    cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS})
+    cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS}
+    ${CRYPTO_LIBS})
 
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
