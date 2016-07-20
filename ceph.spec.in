@@ -93,6 +93,7 @@ BuildRequires:	hdparm
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
+BuildRequires:	libatomic_ops-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
@@ -130,7 +131,6 @@ BuildRequires:	libbz2-devel
 BuildRequires:  btrfsprogs
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
-BuildRequires:	libatomic_ops-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
@@ -142,7 +142,6 @@ BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
-BuildRequires:	libatomic_ops-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
