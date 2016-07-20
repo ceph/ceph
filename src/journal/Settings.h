@@ -11,6 +11,7 @@ namespace journal {
 struct Settings {
   double commit_interval = 5;         ///< commit position throttle (in secs)
   uint64_t max_fetch_bytes = 0;       ///< 0 implies no limit
+  uint64_t max_payload_bytes = 0;     ///< 0 implies object size limit
 };
 
 } // namespace journal
