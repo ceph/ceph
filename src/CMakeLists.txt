@@ -503,11 +503,11 @@ if(${HAVE_GPERFTOOLS})
   target_link_libraries(common profiler)
 endif(${HAVE_GPERFTOOLS})
 
-if(${HAVE_ARMV8_CRC})
+if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
   target_link_libraries(common common_crc_aarch64)
-endif(${HAVE_ARMV8_CRC})
+endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
 
