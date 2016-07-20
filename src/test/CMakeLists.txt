@@ -439,7 +439,7 @@ install(TARGETS
   ceph_test_stress_watch
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(${HAVE_FUSE})
+if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -449,7 +449,7 @@ if(${HAVE_FUSE})
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${HAVE_FUSE})
+endif(WITH_FUSE)
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers
