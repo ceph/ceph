@@ -20,4 +20,12 @@
 ## $1 day of the week (0-6)
 ## /28 for 4 weeks
 
-teuthology-suite -v -c $2 -m $3 -k distro -s rados --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 -e $4 ~/vps.yaml $5
+echo "Scheduling " $2 " branch"
+if [ $2 = "master" ] ; then
+        # run master branch with --newest option looking for good sha1 7 builds back
+        teuthology-suite -v -c $2 -m $3 -k distro -s rados --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 --newest 7 -e $4 ~/vps.yaml $5
+else
+        # run NON master branches without --newest 
+        teuthology-suite -v -c $2 -m $3 -k distro -s rados --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 -e $4 ~/vps.yaml $5
+fi
+
