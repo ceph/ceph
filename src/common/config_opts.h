@@ -1248,6 +1248,7 @@ OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pendi
 OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
+OPTION(rbd_journal_max_payload_bytes, OPT_U32, 16384) // maximum journal payload size before splitting
 
 /**
  * RBD Mirror options
