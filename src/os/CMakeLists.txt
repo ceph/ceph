@@ -41,7 +41,7 @@ set(libos_srcs
   fs/FS.cc
   ${libos_xfs_srcs})
 
-if(HAVE_LIBFUSE)
+if(WITH_FUSE)
   list(APPEND libos_srcs
     FuseStore.cc)
 endif()

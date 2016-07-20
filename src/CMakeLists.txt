@@ -662,9 +662,9 @@ add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
-if(${HAVE_LIBFUSE})
+if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
-endif(${HAVE_LIBFUSE})
+endif()
 install(TARGETS ceph-osd DESTINATION bin)
 
 add_subdirectory(mds)
