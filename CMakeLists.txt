@@ -17,7 +17,7 @@ if (POLICY CMP0023)
 cmake_policy(SET CMP0023 OLD)
 endif (POLICY CMP0023)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
