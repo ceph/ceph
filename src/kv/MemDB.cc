@@ -96,9 +96,8 @@ void MemDB::_load()
   int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY));
   if (fd < 0) {
     int err = errno;
-    std::ostringstream oss;
-    oss << "can't open " << _get_data_fn().c_str() << ": "
-        << cpp_strerror(err) << std::endl;
+    cerr << "can't open " << _get_data_fn().c_str() << ": "
+         << cpp_strerror(err) << std::endl;
     return;
   }
 
@@ -106,9 +105,8 @@ void MemDB::_load()
   memset(&st, 0, sizeof(st));
   if (::fstat(fd, &st) < 0) {
     int err = errno;
-    std::ostringstream oss;
-    oss << "can't stat file " << _get_data_fn().c_str() << ": "
-        << cpp_strerror(err) << std::endl;
+    cerr << "can't stat file " << _get_data_fn().c_str() << ": "
+         << cpp_strerror(err) << std::endl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return;
   }
