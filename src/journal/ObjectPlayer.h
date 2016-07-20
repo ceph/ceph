@@ -30,6 +30,12 @@ public:
   typedef std::list<Entry> Entries;
   typedef interval_set<uint64_t> InvalidRanges;
 
+  enum RefetchState {
+    REFETCH_STATE_NONE,
+    REFETCH_STATE_REQUIRED,
+    REFETCH_STATE_IMMEDIATE
+  };
+
   ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
                uint64_t object_num, SafeTimer &timer, Mutex &timer_lock,
                uint8_t order, uint64_t max_fetch_bytes);
@@ -63,13 +69,13 @@ public:
   }
 
   inline bool refetch_required() const {
-    return m_refetch_required;
+    return (get_refetch_state() != REFETCH_STATE_NONE);
   }
-  inline void set_refetch_required() {
-    m_refetch_required = true;
+  inline RefetchState get_refetch_state() const {
+    return m_refetch_state;
   }
-  inline void clear_refetch_required() {
-    m_refetch_required = false;
+  inline void set_refetch_state(RefetchState refetch_state) {
+    m_refetch_state = refetch_state;
   }
 
 private:
@@ -124,7 +130,7 @@ private:
   Context *m_watch_ctx = nullptr;
 
   bool m_unwatched = false;
-  bool m_refetch_required = true;
+  RefetchState m_refetch_state = REFETCH_STATE_IMMEDIATE;
 
   int handle_fetch_complete(int r, const bufferlist &bl, bool *refetch);
 

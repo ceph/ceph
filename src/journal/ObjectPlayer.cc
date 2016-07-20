@@ -122,7 +122,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
   assert(m_fetch_in_progress);
   m_read_off += bl.length();
   m_read_bl.append(bl);
-  m_refetch_required = true;
+  m_refetch_state = REFETCH_STATE_REQUIRED;
 
   bool full_fetch = (m_max_fetch_bytes == 2U << m_order);
   bool partial_entry = false;
