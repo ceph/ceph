@@ -9,6 +9,7 @@
 #include "common/RefCountedObj.h"
 #include "journal/Future.h"
 #include <list>
+#include <map>
 #include <boost/noncopyable.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include "include/assert.h"
@@ -76,6 +77,7 @@ public:
 private:
   friend std::ostream &operator<<(std::ostream &, const FutureImpl &);
 
+  typedef std::map<FlushHandlerPtr, FutureImplPtr> FlushHandlers;
   typedef std::list<Context *> Contexts;
 
   enum FlushState {
@@ -109,6 +111,8 @@ private:
 
   C_ConsistentAck m_consistent_ack;
   Contexts m_contexts;
+
+  FutureImplPtr prepare_flush(FlushHandlers *flush_handlers);
 
   void consistent(int r);
   void finish_unlock();
