@@ -148,6 +148,88 @@ int BitMapAllocator::allocate(
   return 0;
 }
 
+int BitMapAllocator::alloc_extents(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+{
+  assert(!(alloc_unit % m_block_size));
+  assert(alloc_unit);
+
+  assert(!max_alloc_size || max_alloc_size >= alloc_unit);
+
+  dout(10) << __func__ <<" instance "<< (uint64_t) this
+     << " want_size " << want_size
+     << " alloc_unit " << alloc_unit
+     << " hint " << hint
+     << dendl;
+
+  if (alloc_unit > (uint64_t) m_block_size) {
+    return alloc_extents_cont(want_size, alloc_unit, max_alloc_size, hint, extents, count);     
+  } else {
+    return alloc_extents_dis(want_size, alloc_unit, max_alloc_size, hint, extents, count); 
+  }
+}
+
+/*
+ * Allocator extents with min alloc unit > bitmap block size.
+ */
+int BitMapAllocator::alloc_extents_cont(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size, int64_t hint,
+  std::vector<AllocExtent> *extents, int *count)
+{
+  *count = 0;
+  assert(alloc_unit);
+  assert(!(alloc_unit % m_block_size));
+  assert(!(max_alloc_size % m_block_size));
+
+  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
+  int64_t start_blk = 0;
+  int64_t need_blks = nblks;
+  int64_t max_blks = max_alloc_size / m_block_size;
+
+  ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
+
+  while (need_blks > 0) {
+    int64_t count = 0;
+    count = m_bit_alloc->alloc_blocks_res(need_blks > max_blks? max_blks: need_blks,
+                                          &start_blk);
+    if (count == 0) {
+      break;
+    }
+    dout(30) << __func__ <<" instance "<< (uint64_t) this
+      << " offset " << start_blk << " length " << count << dendl;
+    need_blks -= count;
+    block_list.add_extents(start_blk, count);
+  }
+
+  if (need_blks > 0) {
+    m_bit_alloc->free_blocks_dis(nblks - need_blks, &block_list);
+    return -ENOSPC;
+  }
+  *count = block_list.get_extent_count();
+
+  return 0;
+}
+
+int BitMapAllocator::alloc_extents_dis(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+{
+  ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
+  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
+  int64_t num = 0;
+  *count = 0;
+
+  num = m_bit_alloc->alloc_blocks_dis_res(nblks, &block_list);
+  if (num < nblks) {
+    m_bit_alloc->free_blocks_dis(num, &block_list);
+    return -ENOSPC;
+  }
+  *count = block_list.get_extent_count();
+
+  return 0;
+}
+
 int BitMapAllocator::release(
   uint64_t offset, uint64_t length)
 {

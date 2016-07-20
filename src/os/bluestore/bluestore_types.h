@@ -56,18 +56,73 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
-/// pextent: physical extent
-struct bluestore_pextent_t {
-  const static uint64_t INVALID_OFFSET = ~0ull;
+class AllocExtent {
+public:
+  uint64_t offset;
+  uint32_t length;
 
-  uint64_t offset, length;    ///< location on device
+  AllocExtent() { 
+    offset = 0;
+    length = 0;
+  }
 
-  bluestore_pextent_t() : offset(0), length(0) {}
-  bluestore_pextent_t(uint64_t o, uint64_t l) : offset(o), length(l) {}
-
+  AllocExtent(int64_t off, int32_t len) : offset(off), length(len) { }
   uint64_t end() const {
     return offset + length;
   }
+};
+
+class ExtentList {
+  std::vector<AllocExtent> *m_extents;
+  int64_t m_num_extents;
+  int64_t m_block_size;
+  uint64_t m_max_alloc_size;
+
+public:
+  void init(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+    m_extents = extents;
+    m_num_extents = 0;
+    m_block_size = block_size;
+    m_max_alloc_size = max_alloc_size;
+  }
+
+  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size) {
+    init(extents, block_size, 0);
+  }
+
+  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+    init(extents, block_size, max_alloc_size);
+  }
+
+  void reset() {
+    m_num_extents = 0;
+  }
+
+  void add_extents(int64_t start, int64_t count);
+
+  std::vector<AllocExtent> *get_extents() {
+    return m_extents;
+  }
+
+  std::pair<int64_t, int64_t> get_nth_extent(int index) {
+      return std::make_pair
+            ((*m_extents)[index].offset / m_block_size,
+             (*m_extents)[index].length / m_block_size);
+  }
+
+  int64_t get_extent_count() {
+    return m_num_extents;
+  }
+};
+
+
+/// pextent: physical extent
+struct bluestore_pextent_t : public AllocExtent{
+  const static uint64_t INVALID_OFFSET = ~0ull;
+
+  bluestore_pextent_t() : AllocExtent() {}
+  bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
+  bluestore_pextent_t(AllocExtent &ext) : AllocExtent(ext.offset, ext.length) { }
 
   bool is_valid() const {
     return offset != INVALID_OFFSET;
