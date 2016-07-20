@@ -1189,6 +1189,7 @@ void Journal<I>::create_journaler() {
   transition_state(STATE_INITIALIZING, 0);
   ::journal::Settings settings;
   settings.commit_interval = m_image_ctx.journal_commit_age;
+  settings.max_payload_bytes = m_image_ctx.journal_max_payload_bytes;
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
