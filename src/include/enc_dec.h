@@ -154,13 +154,13 @@ typedef unsigned int uint32;
 
 DEFINE_ENC_DEC_SIMPLE(char,char);
 DEFINE_ENC_DEC_SIMPLE(unsigned char,char);
-DEFINE_ENC_DEC_SIMPLE(short,short);		 // __le16
-DEFINE_ENC_DEC_SIMPLE(unsigned short,short);     // __le16
-DEFINE_ENC_DEC_SIMPLE(int,int);                  // __le32.
-DEFINE_ENC_DEC_SIMPLE(unsigned int,int);	 // __le32
-DEFINE_ENC_DEC_SIMPLE(size_t,uint32);	         // __le32, we never encode anything larger than 2^32 :)
-DEFINE_ENC_DEC_SIMPLE(long long,long long);
-DEFINE_ENC_DEC_SIMPLE(unsigned long long,long long);
+DEFINE_ENC_DEC_SIMPLE(short,__le16);
+DEFINE_ENC_DEC_SIMPLE(unsigned short,__le16);
+DEFINE_ENC_DEC_SIMPLE(int,__le32);
+DEFINE_ENC_DEC_SIMPLE(unsigned int,__le32);
+DEFINE_ENC_DEC_SIMPLE(size_t,__le32);	         // __le32, we never encode anything larger than 2^32 :)
+DEFINE_ENC_DEC_SIMPLE(long long,__le64);
+DEFINE_ENC_DEC_SIMPLE(unsigned long long,__le64);
 
 //
 // std::string encode/decode
