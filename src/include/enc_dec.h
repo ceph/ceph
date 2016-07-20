@@ -546,18 +546,26 @@ inline const char *enc_dec(
 //
 // Now a std::vector
 //
+template<typename k>
+struct enc_dec_vector_context {
+   virtual size_t      operator()(size_t      p,k& key) { return enc_dec(p,key); }
+   virtual char *      operator()(char       *p,k& key) { return enc_dec(p,key); }
+   virtual const char *operator()(const char *p,k& key) { return enc_dec(p,key); }
+   virtual ~enc_dec_vector_context() {}
+};
+
 template<typename e>
 inline size_t enc_dec(
    size_t p,
    std::vector<e>& v,
-   size_t (*delegate)(size_t,e&) = &enc_dec,
+   enc_dec_vector_context<e> c = enc_dec_vector_context<e>(),
    bool is_bounded_size = enc_dec_traits<e>::is_bounded_size) {
    size_t size;
    p = enc_dec(p,size);
    if (is_bounded_size) {
-      p += v.size() * (*delegate)(size_t(0),*(e *)0);
+      p += v.size() * c(size_t(0),*(e *)0);
    } else {
-     for (auto& o : v) p = (*delegate)(p,o);
+     for (auto& o : v) p = c(p,o);
    }
    return p;
 }
@@ -566,10 +574,11 @@ template<typename e>
 inline char *enc_dec(
    char *p,
    std::vector<e>& v,
-   char * (*delegate)(char *,e&) = &enc_dec) {
+   enc_dec_vector_context<e> c = enc_dec_vector_context<e>()
+   ) {
    size_t size = v.size();
    p = enc_dec(p,size);
-   for (auto& o : v) p = (*delegate)(p,o);
+   for (auto& o : v) p = c(p,o);
    return p;
 }
 
@@ -577,60 +586,17 @@ template<typename e>
 inline const char *enc_dec(
    const char * p,
    std::vector<e>& v,
-   const char *(*delegate)(const char *,e&) = &enc_dec) {
+   enc_dec_vector_context<e> c = enc_dec_vector_context<e>()
+   ) {
    size_t len;
    p = enc_dec(p,len);
    v.reserve(len);
    while (len--) {
       e temp;
-      p = (*delegate)(p,temp);
+      p = c(p,temp);
       v.push_back(temp);
    }
    return p;
-}
-
-//
-// The default versions
-//
-
-
-//
-// Specialized encode/decode for a single data type. These are invoked explicitly...
-//
-inline size_t enc_dec_lba(size_t p,int& lba) {
-   return p + sizeof(lba); // Max....
-}
-
-inline char * enc_dec_lba(char *p,int& lba) {
-   *p = 15;
-   return p + 1; // blah blah
-}
-
-inline const char *enc_dec_lba(const char *p,int& lba) {
-   lba = *p;
-   return p+1;
-}
-
-//
-// Specialized encode/decode for more sophisticated things primitives.
-//
-// Here's an example of a encode/decoder for a pair of fields
-//
-inline size_t enc_dec_range(size_t p,short& start,short& end) {
-   return p + 2 * sizeof(short);
-}
-
-inline char *enc_dec_range(char *p, short& start, short& end) {
-   short *s = (short *) p;
-   s[0] = start;
-   s[1] = end;
-   return p + sizeof(short) * 2;
-}
-
-inline const char *enc_dec_range(const char *p,short& start, short& end) {
-   start = *(short *)p;
-   end   = *(short *)(p + sizeof(short));
-   return p + 2*sizeof(short);
 }
 
 //

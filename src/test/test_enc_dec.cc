@@ -268,6 +268,70 @@ TEST(test_enc_dec, map_context) {
    EXPECT_EQ(m,m2);
 }
 
+struct set_context_test : public enc_dec_set_context<int> {
+   int index;
+   size_t      operator()(size_t p,int& i) { EXPECT_EQ(index,1); return enc_dec(p,i); }
+   char *      operator()(char * p,int& i) { EXPECT_EQ(index,i); ++i; return enc_dec(p,i); }
+   const char *operator()(const char *p,int&i) {p = enc_dec(p,i); EXPECT_EQ(index,i); ++index; return p; }
+};
+
+
+TEST(test_enc_dec, set_context) {
+   set_context_test t;
+   set<int> s,s2;
+   t.index = 1;
+   
+   s.insert(1);
+   s.insert(2);
+   s.insert(3);
+
+   char buffer[100];
+
+   size_t sz = enc_dec(size_t(0),s,t);
+
+   char *end = enc_dec(buffer,s,t);
+
+   EXPECT_EQ(sz,size_t(end-buffer));
+
+   const char *dec_end = enc_dec((const char *)buffer,s2,t);
+
+   EXPECT_EQ(dec_end,end);
+
+   EXPECT_EQ(s,s2);
+}
+
+struct vector_context_test : public enc_dec_vector_context<int> {
+   int index;
+   size_t      operator()(size_t p,int& i) { EXPECT_EQ(index,1); return enc_dec(p,i); }
+   char *      operator()(char * p,int& i) { EXPECT_EQ(index,i); ++i; return enc_dec(p,i); }
+   const char *operator()(const char *p,int&i) {p = enc_dec(p,i); EXPECT_EQ(index,i); ++index; return p; }
+};
+
+
+TEST(test_enc_dec, vector_context) {
+   vector_context_test t;
+   vector<int> s,s2;
+   t.index = 1;
+   
+   s.push_back(1);
+   s.push_back(2);
+   s.push_back(3);
+
+   char buffer[100];
+
+   size_t sz = enc_dec(size_t(0),s,t);
+
+   char *end = enc_dec(buffer,s,t);
+
+   EXPECT_EQ(sz,size_t(end-buffer));
+
+   const char *dec_end = enc_dec((const char *)buffer,s2,t);
+
+   EXPECT_EQ(dec_end,end);
+
+   EXPECT_EQ(s,s2);
+}
+
 
 int main(int argc, char **argv)
 {
