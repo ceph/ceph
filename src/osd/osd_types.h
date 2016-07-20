@@ -2800,7 +2800,7 @@ public:
   template <typename F>
   void get_changed(F &&f) const {}
   void flush() {}
-  void clean() {
+  bool is_clean() const {
     return true;
   }
 };
