@@ -42,7 +42,7 @@ target_link_libraries(ceph-client-debug cephfs librados global common)
 install(TARGETS ceph-client-debug DESTINATION bin)
 
 add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
-target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
 set(ceph_conf_srcs ceph_conf.cc)
