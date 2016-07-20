@@ -197,6 +197,7 @@ start_mirror()
 	--pid-file=$(daemon_pid_file "${cluster}") \
 	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.\$pid.log \
 	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.asok \
+	--rbd-mirror-journal-poll-age=1 \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true
