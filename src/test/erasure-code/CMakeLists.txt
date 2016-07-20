@@ -143,9 +143,7 @@ endif(HAVE_BETTER_YASM_ELF64)
 
 # unittest_erasure_code_lrc
 add_executable(unittest_erasure_code_lrc
-  TestErasureCodeLrc.cc
-  ${lrc_srcs}
-  )
+  TestErasureCodeLrc.cc)
 add_ceph_unittest(unittest_erasure_code_lrc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_erasure_code_lrc)
 target_link_libraries(unittest_erasure_code_lrc
   global
