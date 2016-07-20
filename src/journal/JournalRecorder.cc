@@ -8,7 +8,7 @@
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
-#define dout_prefix *_dout << "JournalRecorder: "
+#define dout_prefix *_dout << "JournalRecorder: " << this << " "
 
 namespace journal {
 
