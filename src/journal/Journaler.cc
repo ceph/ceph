@@ -19,7 +19,7 @@
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
-#define dout_prefix *_dout << "Journaler: "
+#define dout_prefix *_dout << "Journaler: " << this << " "
 
 namespace journal {
 
