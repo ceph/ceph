@@ -199,9 +199,10 @@ endif(INTEL_SSE4_1)
 
 set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
-if(${WITH_PROFILER})
+option(WITH_PROFILER "build extra profiler binaries" OFF)
+if(WITH_PROFILER)
   list(APPEND EXTRALIBS profiler)
-endif(${WITH_PROFILER})
+endif(WITH_PROFILER)
 
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
@@ -475,13 +476,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(${HAVE_GPERFTOOLS})
+if(WITH_PROFILER AND HAVE_GPERFTOOLS)
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(${HAVE_GPERFTOOLS})
+endif(WITH_PROFILER AND HAVE_GPERFTOOLS)
 
 if(ENABLE_SHARED)
   list(APPEND libcommon_files
