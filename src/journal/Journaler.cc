@@ -395,7 +395,13 @@ void Journaler::stop_append(Context *on_safe) {
 }
 
 uint64_t Journaler::get_max_append_size() const {
-  return m_metadata->get_object_size() - Entry::get_fixed_size();
+  uint64_t max_payload_size = m_metadata->get_object_size() -
+                              Entry::get_fixed_size();
+  if (m_metadata->get_settings().max_payload_bytes > 0) {
+    max_payload_size = MIN(max_payload_size,
+                           m_metadata->get_settings().max_payload_bytes);
+  }
+  return max_payload_size;
 }
 
 Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {
