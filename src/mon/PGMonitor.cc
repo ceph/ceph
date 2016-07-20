@@ -243,7 +243,9 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
       int r = get_version(pg_map.version + 1, bl);
       if (r == -ENOENT) {
 	dout(10) << __func__ << " failed to read_incremental, read_full" << dendl;
-	read_pgmap_full();
+       // reset pg map
+	pg_map = PGMap();
+       read_pgmap_full();
 	goto out;
       }
       assert(r == 0);
