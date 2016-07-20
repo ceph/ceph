@@ -91,8 +91,8 @@ int KernelDevice::open(string p)
   // disable readahead as it will wreak havoc on our mix of
   // directio/aio and buffered io.
   r = posix_fadvise(fd_buffered, 0, 0, POSIX_FADV_RANDOM);
-  if (r < 0) {
-    r = -errno;
+  if (r) {
+    r = -r;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
@@ -578,8 +578,8 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
-  if (r < 0) {
-    r = -errno;
+  if (r) {
+    r = -r;
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	 << " error: " << cpp_strerror(r) << dendl;
   }
