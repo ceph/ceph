@@ -76,6 +76,11 @@ def check_sanity():
     """
     Test if development headers and library for rados is available by compiling a dummy C program.
     """
+    CEPH_SRC_DIR = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        '..',
+        '..'
+    )
 
     tmp_dir = tempfile.mkdtemp(dir=os.environ.get('TMPDIR', os.path.dirname(__file__)))
     tmp_file = os.path.join(tmp_dir, 'rados_dummy.c')
@@ -95,22 +100,21 @@ def check_sanity():
     compiler = new_compiler()
     customize_compiler(compiler)
 
-    if set(['MAKEFLAGS', 'MFLAGS', 'MAKELEVEL']).issubset(set(os.environ.keys())):
+    if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
-        CEPH_SRC_DIR = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '..',
-            '..'
-        )
 
-        compiler.add_include_dir(os.path.join(CEPH_SRC_DIR, 'include'))
-        compiler.add_library_dir(os.environ.get('CEPH_LIBDIR'))
+        compiler.set_include_dirs([os.path.join(CEPH_SRC_DIR, 'include')])
+        compiler.set_library_dirs([os.environ.get('CEPH_LIBDIR')])
 
     try:
+        link_objects = compiler.compile(
+            sources=[tmp_file],
+            output_dir=tmp_dir
+        )
         compiler.link_executable(
-            compiler.compile([tmp_file], tmp_dir),
-            os.path.join(tmp_dir, 'rados_dummy'),
+            objects=link_objects,
+            output_progname=os.path.join(tmp_dir, 'rados_dummy'),
             libraries=['rados'],
             output_dir=tmp_dir,
         )
@@ -134,6 +138,7 @@ cmdclass = {}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
+
     cmdclass = {'build_ext': build_ext}
 except ImportError:
     print("WARNING: Cython is not installed.")
@@ -144,6 +149,7 @@ except ImportError:
     else:
         def cythonize(x, **kwargs):
             return x
+
         source = "rados.c"
 else:
     source = "rados.pyx"
@@ -160,9 +166,9 @@ flags = get_python_flags()
 setup(
     name='rados',
     version=__version__,
-    description="Python libraries for the Ceph librados library",
+    description="Python bindings for the Ceph librados library",
     long_description=(
-        "This package contains Python libraries for interacting with Ceph's "
+        "This package contains Python bindings for interacting with Ceph's "
         "RADOS library. RADOS is a reliable, autonomic distributed object "
         "storage cluster developed as part of the Ceph distributed storage "
         "system. This is a shared library allowing applications to access "
