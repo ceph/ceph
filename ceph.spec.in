@@ -86,6 +86,9 @@ BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
 BuildRequires:	gcc-c++
 BuildRequires:	gdbm
+%if 0%{with tcmalloc}
+BuildRequires:	gperftools-devel
+%endif
 BuildRequires:	hdparm
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
@@ -124,9 +127,6 @@ BuildRequires:	systemd
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-%if 0%{with tcmalloc}
-BuildRequires:	gperftools-devel
-%endif
 BuildRequires:  btrfsprogs
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
@@ -143,9 +143,6 @@ BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
-%if 0%{with tcmalloc}
-BuildRequires:	gperftools-devel
-%endif
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
