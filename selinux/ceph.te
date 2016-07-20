@@ -75,6 +75,8 @@ corecmd_exec_shell(ceph_t)
 
 dev_read_urand(ceph_t)
 
+domain_read_all_domains_state(ceph_t)
+
 fs_getattr_all_fs(ceph_t)
 
 auth_use_nsswitch(ceph_t)
