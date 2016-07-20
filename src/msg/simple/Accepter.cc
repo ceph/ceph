@@ -147,7 +147,10 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   // It seems that binding completely failed, return with that exit status
   if (rc < 0) {
-      lderr(msgr->cct) << "accepter.bind was unable to bind after " << conf->ms_bind_retry_count << " attempts: " << cpp_strerror(errno) << dendl;
+      lderr(msgr->cct) << "accepter.bind was unable to bind after " << conf->ms_bind_retry_count
+                       << " attempts: " << cpp_strerror(errno) << dendl;
+      ::close(listen_sd);
+      listen_sd = -1;
       return r;
   }
 
@@ -158,6 +161,8 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   if (rc < 0) {
     rc = -errno;
     lderr(msgr->cct) << "accepter.bind failed getsockname: " << cpp_strerror(rc) << dendl;
+    ::close(listen_sd);
+    listen_sd = -1;
     return rc;
   }
   listen_addr.set_sockaddr((sockaddr*)&ss);
@@ -167,7 +172,10 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (rc < 0)  {
       rc = -errno;
-      lderr(msgr->cct) << "accepter.bind failed to set SO_RCVBUF to " << size << ": " << cpp_strerror(rc) << dendl;
+      lderr(msgr->cct) << "accepter.bind failed to set SO_RCVBUF to " << size
+                       << ": " << cpp_strerror(rc) << dendl;
+      ::close(listen_sd);
+      listen_sd = -1;
       return rc;
     }
   }
@@ -179,7 +187,9 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   if (rc < 0) {
     rc = -errno;
     lderr(msgr->cct) << "accepter.bind unable to listen on " << listen_addr
-		     << ": " << cpp_strerror(rc) << dendl;
+	 	     << ": " << cpp_strerror(rc) << dendl;
+    ::close(listen_sd);
+    listen_sd = -1;
     return rc;
   }
   
