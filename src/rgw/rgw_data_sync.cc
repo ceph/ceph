@@ -2067,6 +2067,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   RGWDataSyncDebugLogger logger;
 
+
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
                              RGWBucketInfo *_bucket_info,
@@ -2159,9 +2160,9 @@ public:
         yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", error_ss.str(), retcode, "failed to sync object"));
       }
 done:
-      /* update marker */
-      set_status() << "calling marker_tracker->finish(" << entry_marker << ")";
       if (sync_status == 0) {
+        /* update marker */
+        set_status() << "calling marker_tracker->finish(" << entry_marker << ")";
         yield call(marker_tracker->finish(entry_marker));
         sync_status = retcode;
       }
@@ -2284,7 +2285,9 @@ int RGWBucketShardFullSyncCR::operate()
         }
         while ((int)num_spawned() > spawn_window) {
           yield wait_for_child();
-          while (collect(&ret, lease_stack)) {
+          bool again = true;
+          while (again) {
+            again = collect(&ret, lease_stack);
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
               sync_status = ret;
@@ -2296,7 +2299,18 @@ int RGWBucketShardFullSyncCR::operate()
     } while (list_result.is_truncated && sync_status == 0);
     set_status("done iterating over all objects");
     /* wait for all operations to complete */
-    drain_all_but_stack(lease_stack); /* still need to hold lease cr */
+    while ((int)num_spawned() > 1) {
+      yield wait_for_child();
+      bool again = true;
+      while (again) {
+        again = collect(&ret, lease_stack);
+        if (ret < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+          sync_status = ret;
+          /* we have reported this error */
+        }
+      }
+    }
     /* update sync state to incremental */
     if (sync_status == 0) {
       yield {
@@ -2491,9 +2505,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
           }
           ldout(sync_env->cct, 5) << *this << ": [inc sync] can't do op on key=" << key << " need to wait for conflicting operation to complete" << dendl;
           yield wait_for_child();
-          while (collect(&ret, lease_stack)) {
+          bool again = true;
+          while (again) {
+            again = collect(&ret, lease_stack);
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a child operation returned error (ret=" << ret << ")" << dendl;
+              sync_status = ret;
               /* we have reported this error */
             }
           }
@@ -2523,7 +2540,9 @@ int RGWBucketShardIncrementalSyncCR::operate()
         while ((int)num_spawned() > spawn_window) {
           set_status() << "num_spawned() > spawn_window";
           yield wait_for_child();
-          while (collect(&ret, lease_stack)) {
+          bool again = true;
+          while (again) {
+            again = collect(&ret, lease_stack);
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
               sync_status = ret;
@@ -2535,8 +2554,18 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
     } while (!list_result.empty() && sync_status == 0);
 
-    if (sync_status < 0) {
-      ldout(sync_env->cct, 0) << "ERROR: failure in sync, backing out (sync_status=" << sync_status<< ")" << dendl;
+    while ((int)num_spawned() > 1) {
+      yield wait_for_child();
+      bool again = true;
+      while (again) {
+        again = collect(&ret, lease_stack);
+        if (ret < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+          sync_status = ret;
+          /* we have reported this error */
+        }
+        /* not waiting for child here */
+      }
     }
 
     yield {
@@ -2544,13 +2573,14 @@ int RGWBucketShardIncrementalSyncCR::operate()
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "ERROR: marker_tracker->flush() returned retcode=" << retcode << dendl;
-      drain_all_but_stack(lease_stack);
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
     }
+    if (sync_status < 0) {
+      ldout(sync_env->cct, 0) << "ERROR: failure in sync, backing out (sync_status=" << sync_status<< ")" << dendl;
+    }
 
-    drain_all_but_stack(lease_stack);
     lease_cr->go_down();
     /* wait for all operations to complete */
     drain_all();
