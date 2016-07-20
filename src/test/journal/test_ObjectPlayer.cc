@@ -26,7 +26,8 @@ public:
   int fetch(journal::ObjectPlayerPtr object_player) {
     while (true) {
       C_SaferCond ctx;
-      object_player->clear_refetch_required();
+      object_player->set_refetch_state(
+        journal::ObjectPlayer::REFETCH_STATE_NONE);
       object_player->fetch(&ctx);
       int r = ctx.wait();
       if (r < 0 || !object_player->refetch_required()) {

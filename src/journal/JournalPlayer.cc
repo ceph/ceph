@@ -300,7 +300,7 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
     if (object_player->empty() && object_player->refetch_required()) {
       ldout(m_cct, 10) << "refetching potentially partially decoded object"
                        << dendl;
-      object_player->clear_refetch_required();
+      object_player->set_refetch_state(ObjectPlayer::REFETCH_STATE_NONE);
       fetch(object_player);
     } else if (!remove_empty_object_player(object_player)) {
       ldout(m_cct, 10) << "prefetch of object complete" << dendl;
@@ -482,6 +482,7 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
     m_prune_tag_tid = tag_tid;
   }
 
+  bool pruned = false;
   for (auto &player_pair : m_object_players) {
     ObjectPlayerPtr object_player(player_pair.second);
     ldout(m_cct, 15) << __func__ << ": checking " << object_player->get_oid()
@@ -492,12 +493,25 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
       if (entry.get_tag_tid() == tag_tid) {
         ldout(m_cct, 20) << __func__ << ": pruned " << entry << dendl;
         object_player->pop_front();
+        pruned = true;
       } else {
         break;
       }
     }
+  }
 
-    // trim empty player to prefetch the next available object
+  // avoid watch delay when pruning stale tags from journal objects
+  if (pruned) {
+    ldout(m_cct, 15) << __func__ << ": reseting refetch state to immediate"
+                     << dendl;
+    for (auto &player_pair : m_object_players) {
+      ObjectPlayerPtr object_player(player_pair.second);
+      object_player->set_refetch_state(ObjectPlayer::REFETCH_STATE_IMMEDIATE);
+    }
+  }
+
+  // trim empty player to prefetch the next available object
+  for (auto &player_pair : m_object_players) {
     remove_empty_object_player(player_pair.second);
   }
 }
@@ -565,7 +579,7 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
                      << "require refetch" << dendl;
     m_active_set = active_set;
     for (auto &pair : m_object_players) {
-      pair.second->set_refetch_required();
+      pair.second->set_refetch_state(ObjectPlayer::REFETCH_STATE_IMMEDIATE);
     }
     return false;
   }
@@ -641,7 +655,7 @@ void JournalPlayer::refetch(bool immediate) {
 
   ObjectPlayerPtr object_player = get_object_player();
   if (object_player->refetch_required()) {
-    object_player->clear_refetch_required();
+    object_player->set_refetch_state(ObjectPlayer::REFETCH_STATE_NONE);
     fetch(object_player);
     return;
   }
@@ -684,11 +698,13 @@ void JournalPlayer::schedule_watch(bool immediate) {
       uint64_t active_set = m_journal_metadata->get_active_set();
       uint64_t object_set = object_player->get_object_number() / splay_width;
       if (immediate ||
+          (object_player->get_refetch_state() ==
+             ObjectPlayer::REFETCH_STATE_IMMEDIATE) ||
           (object_set < active_set && object_player->refetch_required())) {
-        ldout(m_cct, 20) << __func__ << ": refetching "
+        ldout(m_cct, 20) << __func__ << ": immediately refetching "
                          << object_player->get_oid()
                          << dendl;
-        object_player->clear_refetch_required();
+        object_player->set_refetch_state(ObjectPlayer::REFETCH_STATE_NONE);
         watch_interval = 0;
       }
     }
