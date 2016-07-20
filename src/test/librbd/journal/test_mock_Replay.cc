@@ -65,6 +65,7 @@ using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::SaveArg;
+using ::testing::StrEq;
 using ::testing::WithArgs;
 
 MATCHER_P(CStrEq, str, "") {
@@ -131,7 +132,7 @@ public:
 
   void expect_rename(MockReplayImageCtx &mock_image_ctx, Context **on_finish,
                      const char *image_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_rename(CStrEq(image_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_rename(StrEq(image_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
@@ -146,7 +147,7 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(CStrEq(snap_name), _,
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _,
                                                                 op_tid, false))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
@@ -154,7 +155,7 @@ public:
 
   void expect_snap_remove(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
@@ -162,28 +163,28 @@ public:
   void expect_snap_rename(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, uint64_t snap_id,
                           const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rename(snap_id, CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rename(snap_id, StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_protect(MockReplayImageCtx &mock_image_ctx,
                            Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_unprotect(MockReplayImageCtx &mock_image_ctx,
                              Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_rollback(MockReplayImageCtx &mock_image_ctx,
                             Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(CStrEq(snap_name), _, _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(StrEq(snap_name), _, _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
@@ -211,7 +212,11 @@ public:
   void when_process(MockJournalReplay &mock_journal_replay,
                     bufferlist::iterator *it, Context *on_ready,
                     Context *on_safe) {
-    mock_journal_replay.process(it, on_ready, on_safe);
+    EventEntry event_entry;
+    int r = mock_journal_replay.decode(it, &event_entry);
+    ASSERT_EQ(0, r);
+
+    mock_journal_replay.process(event_entry, on_ready, on_safe);
   }
 
   void when_complete(MockReplayImageCtx &mock_image_ctx, AioCompletion *aio_comp,
@@ -828,7 +833,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEvent) {
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
   when_process(mock_journal_replay,
-               EventEntry{SnapRenameEvent(123, 234, "snap")},
+               EventEntry{SnapRenameEvent(123, 234, "snap1", "snap")},
                &on_start_ready, &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
@@ -861,7 +866,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEventExists) {
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
   when_process(mock_journal_replay,
-               EventEntry{SnapRenameEvent(123, 234, "snap")},
+               EventEntry{SnapRenameEvent(123, 234, "snap1", "snap")},
                &on_start_ready, &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 

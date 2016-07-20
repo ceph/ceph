@@ -1018,24 +1018,32 @@ void BlueStore::BufferSpace::read(
 void BlueStore::BufferSpace::finish_write(uint64_t seq)
 {
   std::lock_guard<std::mutex> l(cache->lock);
-  auto i = writing.begin();
-  while (i != writing.end()) {
-    Buffer *b = &*i;
-    dout(20) << __func__ << " " << *b << dendl;
-    assert(b->is_writing());
-    if (b->seq <= seq) {
+
+  auto i = writing_map.begin();
+  while (i != writing_map.end()) {
+    if (i->first > seq)
+      break;
+
+    auto l = i->second.begin();
+    while (l != i->second.end()) {
+      Buffer *b = &*l;
+      dout(20) << __func__ << " " << *b << dendl;
+      assert(b->is_writing());
+
       if (b->flags & Buffer::FLAG_NOCACHE) {
-	++i;
-	_rm_buffer(b);
+        i->second.erase(l++);
+        buffer_map.erase(b->offset);
       } else {
-	b->state = Buffer::STATE_CLEAN;
-	writing.erase(i++);
-	cache->_add_buffer(b, 1, nullptr);
+        b->state = Buffer::STATE_CLEAN;
+        i->second.erase(l++);
+        cache->_add_buffer(b, 1, nullptr);
       }
-    } else {
-      ++i;
     }
+
+    assert(i->second.empty());
+    writing_map.erase(i++);
   }
+
   cache->_audit("finish_write end");
 }
 
@@ -2333,20 +2341,24 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
     int r = alloc->reserve(gift);
     assert(r == 0);
 
-    uint64_t eoffset;
-    uint32_t elength;
-    r = alloc->allocate(gift, min_alloc_size, 0, &eoffset, &elength);
-    if (r < 0) {
-      assert(0 == "allocate failed, wtf");
-      return r;
-    }
-    if (elength < gift) {
-      alloc->unreserve(gift - elength);
-    }
+    uint64_t hint = 0;
+    while (gift > 0) {
+      uint64_t eoffset;
+      uint32_t elength;
+      r = alloc->allocate(gift, min_alloc_size, hint, &eoffset, &elength);
+      if (r < 0) {
+        assert(0 == "allocate failed, wtf");
+        return r;
+      }
 
-    bluestore_pextent_t e(eoffset, elength);
-    dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-    extents->push_back(e);
+      bluestore_pextent_t e(eoffset, elength);
+      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      extents->push_back(e);
+      gift -= e.length;
+      hint = e.end();
+    }
+    assert(gift == 0); // otherwise there is a reservation leak
+
     ret = 1;
   }
 
@@ -2360,18 +2372,23 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
 
-    uint64_t offset = 0;
-    uint32_t length = 0;
+    while (reclaim > 0) {
+      uint64_t offset = 0;
+      uint32_t length = 0;
 
-    // NOTE: this will block and do IO.
-    int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
+      // NOTE: this will block and do IO.
+      int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
 				   &offset, &length);
-    assert(r >= 0);
+      assert(r >= 0);
 
-    bluefs_extents.erase(offset, length);
+      bluefs_extents.erase(offset, length);
 
-    fm->release(offset, length, t);
-    alloc->release(offset, length);
+      fm->release(offset, length, t);
+      alloc->release(offset, length);
+
+      reclaim -= length;
+    }
+
     ret = 1;
   }
 
@@ -2434,7 +2451,7 @@ int BlueStore::_setup_block_symlink_or_file(
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {
-    if (!epath.compare(0, sizeof(SPDK_PREFIX)-1, SPDK_PREFIX)) {
+    if (!epath.compare(0, strlen(SPDK_PREFIX), SPDK_PREFIX)) {
       r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
       if (r < 0) {
         r = -errno;
@@ -2449,7 +2466,7 @@ int BlueStore::_setup_block_symlink_or_file(
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      string serial_number = epath.substr(sizeof(SPDK_PREFIX)-1);
+      string serial_number = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
       dout(1) << __func__ << " created " << name << " file with " << dendl;
@@ -2485,12 +2502,11 @@ int BlueStore::_setup_block_symlink_or_file(
 	if (g_conf->bluestore_block_preallocate_file) {
 #ifdef HAVE_POSIX_FALLOCATE
 	  r = ::posix_fallocate(fd, 0, size);
-	  if (r < 0) {
-	    r = -errno;
+	  if (r) {
 	    derr << __func__ << " failed to prefallocate " << name << " file to "
 	      << size << ": " << cpp_strerror(r) << dendl;
 	    VOID_TEMP_FAILURE_RETRY(::close(fd));
-	    return r;
+	    return -r;
 	  }
 #else
 	  char data[1024*128];
@@ -3089,18 +3105,12 @@ int BlueStore::fsck()
   it = db->get_iterator(PREFIX_OBJ);
   if (it) {
     CollectionRef c;
-    bool expecting_objects = false;
     shard_id_t expecting_shard;
     int64_t expecting_pool;
     uint32_t expecting_hash;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       ghobject_t oid;
       if (is_bnode_key(it->key())) {
-	if (expecting_objects) {
-	  dout(30) << __func__ << "  had bnode but no objects for 0x"
-		   << std::hex << expecting_hash << std::dec << dendl;
-	  ++errors;
-	}
 	int r = get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
 		      &expecting_hash);
         if (r < 0) {
@@ -3110,6 +3120,7 @@ int BlueStore::fsck()
         }
 	continue;
       }
+
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
 	dout(30) << __func__ << "  bad object key "
@@ -3117,14 +3128,7 @@ int BlueStore::fsck()
 	++errors;
 	continue;
       }
-      if (expecting_objects) {
-	if (oid.hobj.get_bitwise_key_u32() != expecting_hash) {
-	  dout(30) << __func__ << "  had bnode but no objects for 0x"
-		   << std::hex << expecting_hash << std::dec << dendl;
-	  ++errors;
-	}
-	expecting_objects = false;
-      }
+
       if (!c || !c->contains(oid)) {
 	c = NULL;
 	for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
@@ -3143,12 +3147,6 @@ int BlueStore::fsck()
 	  continue;
 	}
       }
-    }
-    if (expecting_objects) {
-      dout(30) << __func__ << "  had bnode but no objects for 0x"
-	       << std::hex << expecting_hash << std::dec << dendl;
-      ++errors;
-      expecting_objects = false;
     }
   }
 

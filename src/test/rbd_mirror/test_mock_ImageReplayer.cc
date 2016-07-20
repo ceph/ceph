@@ -6,6 +6,7 @@
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -34,7 +35,8 @@ namespace journal {
 
 template<>
 struct Replay<MockTestImageCtx> {
-  MOCK_METHOD3(process, void(bufferlist::iterator *, Context *, Context *));
+  MOCK_METHOD2(decode, int(bufferlist::iterator *, EventEntry *));
+  MOCK_METHOD3(process, void(const EventEntry &, Context *, Context *));
   MOCK_METHOD1(flush, void(Context*));
   MOCK_METHOD2(shut_down, void(bool, Context*));
 };
@@ -116,6 +118,28 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
 };
 
 template<>
+struct EventPreprocessor<librbd::MockTestImageCtx> {
+  static EventPreprocessor *s_instance;
+
+  static EventPreprocessor *create(librbd::MockTestImageCtx &local_image_ctx,
+                                   ::journal::MockJournalerProxy &remote_journaler,
+                                   const std::string &local_mirror_uuid,
+                                   librbd::journal::MirrorPeerClientMeta *client_meta,
+                                   ContextWQ *work_queue) {
+    assert(s_instance != nullptr);
+    return s_instance;
+  }
+
+  EventPreprocessor() {
+    assert(s_instance == nullptr);
+    s_instance = this;
+  }
+
+  MOCK_METHOD1(is_required, bool(const librbd::journal::EventEntry &));
+  MOCK_METHOD2(preprocess, void(librbd::journal::EventEntry *, Context *));
+};
+
+template<>
 struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
   static ReplayStatusFormatter* s_instance;
 
@@ -135,6 +159,7 @@ struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
 
 BootstrapRequest<librbd::MockTestImageCtx>* BootstrapRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 CloseImageRequest<librbd::MockTestImageCtx>* CloseImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+EventPreprocessor<librbd::MockTestImageCtx>* EventPreprocessor<librbd::MockTestImageCtx>::s_instance = nullptr;
 ReplayStatusFormatter<librbd::MockTestImageCtx>* ReplayStatusFormatter<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image_replayer

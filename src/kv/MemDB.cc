@@ -14,7 +14,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-using std::string;
 #include "common/perf_counters.h"
 #include "common/debug.h"
 #include "include/str_list.h"
@@ -25,6 +24,7 @@ using std::string;
 #include "include/assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_memdb
 #undef dout_prefix
@@ -83,7 +83,7 @@ void MemDB::_save()
     iter++;
   }
 
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
 void MemDB::_load()
@@ -95,16 +95,21 @@ void MemDB::_load()
    */
   int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY));
   if (fd < 0) {
+    int err = errno;
     std::ostringstream oss;
-    oss << "can't open " << _get_data_fn().c_str() << ": " << std::endl;
+    oss << "can't open " << _get_data_fn().c_str() << ": "
+        << cpp_strerror(err) << std::endl;
     return;
   }
 
   struct stat st;
   memset(&st, 0, sizeof(st));
   if (::fstat(fd, &st) < 0) {
+    int err = errno;
     std::ostringstream oss;
-    oss << "can't stat file " << _get_data_fn().c_str() << ": " << std::endl;
+    oss << "can't stat file " << _get_data_fn().c_str() << ": "
+        << cpp_strerror(err) << std::endl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return;
   }
 
@@ -120,7 +125,7 @@ void MemDB::_load()
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_btree[key] = datap;
   }
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
 int MemDB::_init(bool create)
@@ -129,8 +134,10 @@ int MemDB::_init(bool create)
   if (create) {
     int r = ::mkdir(m_db_path.c_str(), 0700);
     if (r < 0) {
-      if (r != EEXIST) {
+      r = -errno;
+      if (r != -EEXIST) {
         derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
+        return r;
       }
     }
  } else {
@@ -393,7 +400,6 @@ void
 MemDB::MDBWholeSpaceIteratorImpl::free_last()
 {
   m_key_value.first.clear();
-  assert(m_key_value.first.empty());
   m_key_value.second.clear();
 }
 
