@@ -360,14 +360,6 @@ public:
     return _get_cf_iterator(cf_name);
   }
 
-  WholeSpaceIterator get_snapshot_iterator() {
-    return _get_snapshot_iterator();
-  }
-
-  ColumnFamilyIterator get_cf_snapshot_iterator(const std::string& cf_name) {
-    return _get_cf_snapshot_iterator(cf_name);
-  }
-
   void add_column_family(const std::string& cf_name, void *handle) {
     cf_handles.insert(std::make_pair(cf_name, handle));
   }
@@ -389,12 +381,6 @@ public:
     return is_column_family(prefix) ?
              std::make_shared<IteratorImpl>(prefix, get_cf_iterator(prefix)) :
              std::make_shared<IteratorImpl>(prefix, get_iterator());
-  }
-
-  Iterator get_snapshot_iterator(const std::string &prefix) {
-    return is_column_family(prefix) ?
-             std::make_shared<IteratorImpl>(prefix, get_cf_snapshot_iterator(prefix)) :
-             std::make_shared<IteratorImpl>(prefix, get_snapshot_iterator());
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -457,10 +443,7 @@ protected:
   std::unordered_map<std::string, void *> cf_handles;
 
   virtual WholeSpaceIterator _get_iterator() = 0;
-  virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
   virtual ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name) {
-    assert(0 == "Not implemented"); }
-  virtual ColumnFamilyIterator _get_cf_snapshot_iterator(const std::string& cf_name) {
     assert(0 == "Not implemented"); }
 };
 

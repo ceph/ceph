@@ -372,17 +372,6 @@ public:
     int status();
   };
 
-  class RocksDBCFSnapshotIteratorImpl : public RocksDBCFIteratorImpl{
-    rocksdb::DB *db;
-    const rocksdb::Snapshot *snapshot;
-  public:
-    RocksDBCFSnapshotIteratorImpl(rocksdb::DB *db, const rocksdb::Snapshot *s,
-				rocksdb::Iterator *iter) :
-      RocksDBCFIteratorImpl(iter), db(db), snapshot(s) { }
-
-    ~RocksDBCFSnapshotIteratorImpl();
-  };
-
   /// Utility
   static string combine_strings(const string &prefix, const string &value) {
     string out = prefix;
@@ -489,9 +478,7 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() override;
-  WholeSpaceIterator _get_snapshot_iterator();
   ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name);
-  ColumnFamilyIterator _get_cf_snapshot_iterator(const std::string& cf_name);
 };
 
 
