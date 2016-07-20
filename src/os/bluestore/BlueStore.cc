@@ -1488,12 +1488,14 @@ void BlueStore::_set_compression()
 
 void BlueStore::_set_csum()
 {
-  int t = bluestore_blob_t::get_csum_string_type(
-    g_conf->bluestore_csum_type);
-  if (t < 0 || !g_conf->bluestore_csum) {
-    t = bluestore_blob_t::CSUM_NONE;
+  csum_type = bluestore_blob_t::CSUM_NONE;
+  if (g_conf->bluestore_csum) {
+    int t = bluestore_blob_t::get_csum_string_type(
+            g_conf->bluestore_csum_type);
+    if (t > bluestore_blob_t::CSUM_NONE)
+      csum_type = t;
   }
-  csum_type = t;
+
   dout(10) << __func__ << " csum_type "
 	   << bluestore_blob_t::get_csum_type_string(csum_type)
 	   << dendl;
@@ -3266,6 +3268,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
 
   buf->reset();
   buf->total = bdev->get_size();
+  assert(alloc->get_free() >= bluefs_len);
   buf->available = (alloc->get_free() - bluefs_len);
 
   bufferlist bl;
@@ -4077,6 +4080,9 @@ int BlueStore::collection_list(
     *pnext = ghobject_t::get_max();
   }
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << c->cid
 	   << " start " << start << " end " << end << " max " << max
 	   << " = " << r << ", ls.size() = " << ls->size()
