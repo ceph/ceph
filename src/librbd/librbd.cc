@@ -12,9 +12,9 @@
  *
  */
 #include "include/int_types.h"
-
 #include <errno.h>
 
+#include "acconfig.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/TracepointProvider.h"
@@ -55,7 +55,7 @@ using librados::IoCtx;
 
 namespace {
 
-TracepointProvider::Traits tracepoint_traits("librbd_tp.so", "rbd_tracing");
+TracepointProvider::Traits tracepoint_traits(LIBRBD_TP_SONAME, "rbd_tracing");
 
 CephContext* get_cct(IoCtx &io_ctx) {
   return reinterpret_cast<CephContext*>(io_ctx.cct());

@@ -276,4 +276,10 @@
 /* Defined if pthread_getname_np() is available */
 #cmakedefine HAVE_PTHREAD_GETNAME_NP 1
 
+/* Name of librbd tracing point shared library */
+#cmakedefine LIBRBD_TP_SONAME "@LIBRBD_TP_SONAME@"
+
+/* Name of librados tracing point shared library */
+#cmakedefine LIBRADOS_TP_SONAME "@LIBRADOS_TP_SONAME@"
+
 #endif /* CONFIG_H */

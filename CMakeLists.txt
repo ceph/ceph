@@ -329,6 +329,9 @@ if(${WITH_LTTNG})
   find_package(lttng-ust REQUIRED)
 endif(${WITH_LTTNG})
 
+set(LIBRBD_TP_SONAME "librbd_tp.so.1")
+set(LIBRADOS_TP_SONAME "librados_tp.so.2")
+
 #option for Babeltrace
 option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
 if(${HAVE_BABELTRACE})
