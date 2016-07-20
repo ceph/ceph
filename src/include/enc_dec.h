@@ -797,5 +797,35 @@ inline void dec(bufferlist::iterator& i,t& o) {
    }
 }
 
+//
+// Use these variants to encode/decode with no prefix. Usually because it's the only thing in the bufferlist and the framing
+// of the bufferlist is provided externally.
+//
+template<typename t>
+inline void enc_noprefix(bufferlist& b,const t& o) {
+   //
+   // Compute size, be sure to leave space for our overall size sentinal
+   //
+   size_t sz = enc_dec(sizeof(0),const_cast<t&>(o));
+   //
+   // Allocate the space and serialize the object, leave space for the sentinal
+   //
+   char *data_start = b.push_back(sz);
+   char *end = enc_dec(data_start,const_cast<t&>(o));
+   assert(size_t(end-data_start) <= sz); // If you fail here, you've lied about an encoded size somewhere and you've corrupted memory!!!!
+   //
+   // give back and unused space
+   //
+   b.pop_back(sz - (end-data_start));
+}
+
+template<typename t>
+inline void dec_noprefix(bufferlist::iterator& i,t& o) {
+   unique_ptr<char> buf1; // Incase we have to allocate a buffer
+   const char *p = straighten_iterator(i,i.get_remaining(),buf1);
+   const char *end = enc_dec(p,o);
+   i.advance(end-p);
+}
+
 #endif
 
