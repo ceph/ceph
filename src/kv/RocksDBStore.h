@@ -55,8 +55,11 @@ namespace rocksdb{
   class WriteBatch;
   class Iterator;
   class Logger;
+  class ColumnFamilyHandle;
   struct Options;
   struct BlockBasedTableOptions;
+  struct DBOptions;
+  struct ColumnFamilyOptions;
 }
 
 extern rocksdb::Logger *create_rocksdb_ceph_logger();
@@ -78,7 +81,10 @@ class RocksDBStore : public KeyValueDB {
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
 
-  int do_open(ostream &out, bool create_if_missing);
+  int create_db_dir();
+
+  int do_open(ostream &out, bool create_if_missing,
+	      const vector<ColumnFamily>* cfs = nullptr);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -150,8 +156,13 @@ public:
   int open(ostream &out) override {
     return do_open(out, false);
   }
+  int open(ostream &out, const vector<ColumnFamily>& cfs) {
+    return do_open(out, false, &cfs);
+  }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) override;
+  int create_and_open(ostream &out, const vector<ColumnFamily>& cfs);
+  int drop_column_family(const string &cf_name);
 
   void close() override;
 
@@ -249,7 +260,6 @@ public:
 
   };
 
-
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;
@@ -338,6 +348,39 @@ public:
     int status() override;
     size_t key_size() override;
     size_t value_size() override;
+  };
+
+  class RocksDBCFIteratorImpl :
+    public KeyValueDB::ColumnFamilyIteratorImpl{
+  protected:
+    rocksdb::Iterator *dbiter;
+  public:
+    explicit RocksDBCFIteratorImpl(rocksdb::Iterator *iter) :
+      dbiter(iter) { }
+    ~RocksDBCFIteratorImpl();
+
+    int seek_to_first();
+    int seek_to_last();
+    int upper_bound(const string &after);
+    int lower_bound(const string &to);
+    bool valid();
+    int next();
+    int prev();
+    string key();
+    bufferlist value();
+    bufferptr value_as_ptr();
+    int status();
+  };
+
+  class RocksDBCFSnapshotIteratorImpl : public RocksDBCFIteratorImpl{
+    rocksdb::DB *db;
+    const rocksdb::Snapshot *snapshot;
+  public:
+    RocksDBCFSnapshotIteratorImpl(rocksdb::DB *db, const rocksdb::Snapshot *s,
+				rocksdb::Iterator *iter) :
+      RocksDBCFIteratorImpl(iter), db(db), snapshot(s) { }
+
+    ~RocksDBCFSnapshotIteratorImpl();
   };
 
   /// Utility
@@ -446,6 +489,9 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() override;
+  WholeSpaceIterator _get_snapshot_iterator();
+  ColumnFamilyIterator _get_cf_iterator(const std::string& cf_name);
+  ColumnFamilyIterator _get_cf_snapshot_iterator(const std::string& cf_name);
 };
 
 
