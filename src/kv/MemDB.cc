@@ -36,6 +36,7 @@
 static void split_key(const string& raw_key, string *prefix, string *key)
 {
   size_t pos = raw_key.find(KEY_DELIM, 0);
+  assert(pos != std::string::npos);
   *prefix = raw_key.substr(0, pos);
   *key = raw_key.substr(pos + 1, raw_key.length());
 }
@@ -258,6 +259,7 @@ int MemDB::_setkey(ms_op_t &op)
     /*
      * delete and free existing key.
      */
+    assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
     m_btree.erase(key);
   }
@@ -274,6 +276,7 @@ int MemDB::_rmkey(ms_op_t &op)
 
   bufferlist bl_old;
   if (_get(op.first.first, op.first.second, &bl_old)) {
+    assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
   }
   /*
@@ -331,6 +334,7 @@ int MemDB::_merge(ms_op_t &op)
     bl_old.clear();
   }
 
+  assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
   m_total_bytes += bytes_adjusted;
   return 0;
 }
