@@ -236,6 +236,39 @@ TEST(test_enc_dec, buff1) {
 
 }
 
+struct map_context_test : public enc_dec_map_context<string,int> {
+   int index;
+   size_t      operator()(size_t p,string& s, int& i) { EXPECT_EQ(index,1); return enc_dec_pair(p,s,i); }
+   char *      operator()(char * p,string& s, int& i) { EXPECT_EQ(index,i); ++i; return enc_dec_pair(p,s,i); }
+   const char *operator()(const char *p,string&s,int&i) {p = enc_dec_pair(p,s,i); EXPECT_EQ(index,i); ++index; return p; }
+};
+
+
+TEST(test_enc_dec, map_context) {
+   map_context_test t;
+   map<string,int> m,m2;
+   t.index = 1;
+   
+   m["a"] = 1;
+   m["b"] = 2;
+   m["c"] = 3;
+
+   char buffer[100];
+
+   size_t sz = enc_dec(size_t(0),m,t);
+
+   char *end = enc_dec(buffer,m,t);
+
+   EXPECT_EQ(sz,size_t(end-buffer));
+
+   const char *dec_end = enc_dec((const char *)buffer,m2,t);
+
+   EXPECT_EQ(dec_end,end);
+
+   EXPECT_EQ(m,m2);
+}
+
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;

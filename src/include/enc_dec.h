@@ -312,63 +312,148 @@ inline const char *enc_dec_pair(const char *p,f& first,s& second) {
 //
 //
 
+//
+// context.
+//
+// This functions as a "global" parameter to the set and multiset container encode operations
+//
+// If you want to have an encode of the key that is dependent on some external
+// global information, create a derived type that overrides the three enc_dec functions as well as
+// having whatever global information you want to include.
+//
+// Note: the global information in this context is NOT encoded into the buffer itself, that's your problem!
+//
+// Note: this object is passed by value into the enc_dec functions (i.e., copied). Plan accordingly.
+//
+template<typename k>
+struct enc_dec_set_context {
+   virtual size_t      operator()(size_t      p,k& key) { return enc_dec(p,key); }
+   virtual char *      operator()(char       *p,k& key) { return enc_dec(p,key); }
+   virtual const char *operator()(const char *p,k& key) { return enc_dec(p,key); }
+   virtual ~enc_dec_set_context() {}
+};
+
 template<typename t> 
 inline size_t enc_dec(
    size_t p,
    set<t>& s,
-   size_t (*delegate)(size_t,t&) = &enc_dec,
+   enc_dec_set_context<t> c = enc_dec_set_context<t>(),
    bool is_bounded_size = enc_dec_traits<t>::is_bounded_size) {
    size_t sz;
    p = enc_dec(p,sz);
    if (is_bounded_size) {
-      p += s.size() * (*delegate)(size_t(0),*(t *) 0);
+      p += s.size() * c(size_t(0),*(t *) 0);
    } else {
       for (const t&e : s) {
-         p = enc_dec(p,const_cast<t&>(e));
+         p = c(p,const_cast<t&>(e));
       }
    }
    return p;
 }
 
 template<typename t>
-inline char *enc_dec(char *p,set<t>& s, char *(*delegate)(char *,t&) = &enc_dec) {
+inline char *enc_dec(
+   char *p,
+   set<t>& s,
+   enc_dec_set_context<t> c = enc_dec_set_context<t>()
+   ) {
    size_t sz = s.size();
    p = enc_dec(p,sz);
    for (const t& e : s) {
-      p = (*delegate)(p,const_cast<t&>(e));
+      p = c(p,const_cast<t&>(e));
    }
    return p;
 }
 
 template<typename t>
-inline const char *enc_dec(const char *p,set<t>&s, const char *(*delegate)(const char *,t&) = &enc_dec) {
+inline const char *enc_dec(
+   const char *p,
+   set<t>&s,
+   enc_dec_set_context<t> c = enc_dec_set_context<t>()
+   ) {
    size_t sz;
    p = enc_dec(p,sz);
    while (sz--) {
       t temp;
-      p = (*delegate)(p,temp);
+      p = c(p,temp);
+      s.insert(temp);
+   }
+   return p;
+}
+
+template<typename t> 
+inline size_t enc_dec(
+   size_t p,
+   multiset<t>& s,
+   enc_dec_set_context<t> c = enc_dec_set_context<t>(),
+   bool is_bounded_size = enc_dec_traits<t>::is_bounded_size) {
+   size_t sz;
+   p = enc_dec(p,sz);
+   if (is_bounded_size) {
+      p += s.size() * c(size_t(0),*(t *) 0);
+   } else {
+      for (const t&e : s) {
+         p = c(p,const_cast<t&>(e));
+      }
+   }
+   return p;
+}
+
+template<typename t>
+inline char *enc_dec(
+   char *p,
+   multiset<t>& s,
+   enc_dec_set_context<t> c = enc_dec_set_context<t>()
+   ) {
+   size_t sz = s.size();
+   p = enc_dec(p,sz);
+   for (const t& e : s) {
+      p = c(p,const_cast<t&>(e));
+   }
+   return p;
+}
+
+template<typename t>
+inline const char *enc_dec(
+   const char *p,
+   multiset<t>&s,
+   enc_dec_set_context<t> c = enc_dec_set_context<t>()
+   ) {
+   size_t sz;
+   p = enc_dec(p,sz);
+   while (sz--) {
+      t temp;
+      p = c(p,temp);
       s.insert(temp);
    }
    return p;
 }
 
 //
-// Now encode a std::map .
+// Now the maps
 //
+template<typename k,typename v>
+struct enc_dec_map_context {
+   virtual size_t operator()(size_t      p,k& key,v& value) { return enc_dec_pair(p,key,value); }
+   virtual char * operator()(char       *p,k& key,v& value) { return enc_dec_pair(p,key,value); }
+   virtual const char *operator()(const char *p,k& key,v& value) { return enc_dec_pair(p,key,value); }
+   virtual ~enc_dec_map_context() {}
+};
+
 template<typename k,typename v> 
 inline size_t enc_dec(
    size_t p,
    std::map<k,v>&s,
-   size_t (*delegate)(size_t,k&,v&) = &enc_dec_pair,
+   enc_dec_map_context<k,v> c = enc_dec_map_context<k,v>(),
    bool is_bounded_size = enc_dec_traits<k>::is_bounded_size && enc_dec_traits<v>::is_bounded_size
    ) {
    size_t sz;
    p = enc_dec(p,sz); 
    if (is_bounded_size) {
-      p += s.size() * (*delegate)(size_t(0),*(k *)0,*(v *)0);
+      p += s.size() * c(size_t(0),*(k *)0,*(v *)0);
    } else {
       for (auto &e : s) {
-         p = (*delegate)(p,const_cast<k&>(e.first),e.second);
+         p = c(p,const_cast<k&>(e.first),e.second);
       }
    }
    return p;    
@@ -378,11 +463,12 @@ template<typename k, typename v>
 inline char *enc_dec(
    char *p,
    std::map<k,v>& s,
-   char *(*delegate)(char *p,k&,v&) = enc_dec_pair) {
+   enc_dec_map_context<k,v> c = enc_dec_map_context<k,v>() 
+   ){
    size_t sz = s.size();
    p = enc_dec(p,sz);
    for (auto& e : s) {
-      p = (*delegate)(p,const_cast<k&>(e.first),e.second);
+      p = c(p,const_cast<k&>(e.first),e.second);
    }
    return p;
 }
@@ -391,15 +477,68 @@ template<typename k, typename v>
 inline const char *enc_dec(
    const char *p,
    std::map<k,v>&s,
-   const char *(*delegate)(const char *,k&,v&) = enc_dec_pair
+   enc_dec_map_context<k,v> c = enc_dec_map_context<k,v>()
    ) {
    size_t sz;
    p = enc_dec(p,sz);
    while (sz--) {
       k key;
       v value;
-      p = (*delegate)(p,key,value);
+      p = c(p,key,value);
       s[key] = value;
+   }
+   return p;
+}
+
+//
+// And a multimap
+//
+template<typename k,typename v> 
+inline size_t enc_dec(
+   size_t p,
+   std::multimap<k,v>&s,
+   enc_dec_map_context<k,v> c = enc_dec_map_context<k,v>(),
+   bool is_bounded_size = enc_dec_traits<k>::is_bounded_size && enc_dec_traits<v>::is_bounded_size
+   ) {
+   size_t sz;
+   p = enc_dec(p,sz); 
+   if (is_bounded_size) {
+      p += s.size() * c(size_t(0),*(k *)0,*(v *)0);
+   } else {
+      for (auto &e : s) {
+         p = c(p,const_cast<k&>(e.first),e.second);
+      }
+   }
+   return p;    
+}
+
+template<typename k, typename v>
+inline char *enc_dec(
+   char *p,
+   std::multimap<k,v>& s,
+   enc_dec_map_context<k,v> c = enc_dec_map_context<k,v>() 
+   ){
+   size_t sz = s.size();
+   p = enc_dec(p,sz);
+   for (auto& e : s) {
+      p = c(p,const_cast<k&>(e.first),e.second);
+   }
+   return p;
+}
+
+template<typename k, typename v>
+inline const char *enc_dec(
+   const char *p,
+   std::multimap<k,v>&s,
+   enc_dec_map_context<k,v> c = enc_dec_map_context<k,v>()
+   ) {
+   size_t sz;
+   p = enc_dec(p,sz);
+   while (sz--) {
+      k key;
+      v value;
+      p = c(p,key,value);
+      s.insert(key,value);
    }
    return p;
 }
