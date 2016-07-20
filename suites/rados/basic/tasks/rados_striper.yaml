@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+- exec:
+   client.0:
+   - ceph_test_rados_striper_api_io
+   - ceph_test_rados_striper_api_aio
+   - ceph_test_rados_striper_api_striping
+
