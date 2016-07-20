@@ -22,8 +22,43 @@
 #include "gtest/gtest.h"
 #include "include/enc_dec.h"
 
+static size_t break_point = 0;
 
-  char buf[1000];
+void dumpbuf(string s,bufferlist& b) {
+  cout << s;
+  for (size_t i = 0; i < b.length(); ++i) cout << " " << hex << (int)(b[i]) << dec;
+  cout << "\n";
+}
+
+template<typename t> void enc_dec_buffer(t v) {
+
+   bufferlist b;
+   enc(b,v);
+   //
+   // Now decode :)
+   //
+   t d;
+
+   break_point = (break_point + 1) % 7;
+
+   bufferlist b1,b2,b3;
+   bufferlist::iterator it = b.begin();
+
+   if (break_point == 0 || break_point >= b.length()) {
+     it = b.begin();
+   } else {
+     it.copy(break_point,b1);
+     it.copy(b.length()-break_point,b2);
+     b3.claim_append(b1);
+     b3.claim_append(b2);
+     it = b3.begin();
+   }
+
+   dec(it,d);
+   EXPECT_EQ(v,d);
+}
+
+char buf[1000];
 
 template<typename t> bool enc_dec_scalar(t v) {
 
@@ -51,6 +86,7 @@ template<typename t> bool enc_dec_scalar(t v) {
 
    return estimate == actual;
 }
+
 
 template<typename t> bool enc_dec_varint(t v) {
 
@@ -80,6 +116,7 @@ template<typename t> bool enc_dec_varint(t v) {
 }
 
 template<typename t> bool enc_dec_int(t v) {
+   enc_dec_buffer(v);
    EXPECT_TRUE(enc_dec_scalar(v)); // always true
    return enc_dec_varint(v); // sometimes true
 }
@@ -177,6 +214,24 @@ TEST(test_enc_dec, set)
    set<string> s;
    s.insert("b");
    EXPECT_TRUE(enc_dec_scalar(s));   
+
+}
+
+
+TEST(test_enc_dec, buff1) {
+   int i = 42;
+   bufferlist b;
+   enc(b,i);
+
+   //
+   // decode it
+   //
+
+   bufferlist::iterator it = b.begin();
+
+   int z;
+   dec(it,z);
+   EXPECT_EQ(z,i);
 
 }
 

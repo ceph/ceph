@@ -531,7 +531,8 @@ inline size_t      enc_dec(size_t p, s &o)      { return o.enc_dec_member<ESTIMA
 inline char *      enc_dec(char *p , s &o)      { return o.enc_dec_member<ENCODE>(p); } \
 inline const char *enc_dec(const char *p,s &o)  { return o.enc_dec_member<DECODE>(p); }
 
-#define DECLARE_ENC_DEC_MEMBER_FUNCTION() template<enum SERIAL_TYPE s> typename serial_type<s>::type enc_dec_member(typename serial_type<s>::type p) 
+#define DECLARE_ENC_DEC_MEMBER_FUNCTION() \
+   template<enum SERIAL_TYPE _stype> typename serial_type<_stype>::type enc_dec_member(typename serial_type<_stype>::type p) 
 
 /*
 
@@ -585,7 +586,100 @@ DEFINE_ENC_DEC_CLASS(astruct);
 
 (a) define the three functional variants of enc_dec to perform the action: see enc_dec_varint or enc_dec_range for examples
 
+------------------------------------------------------------
+
+(3) How do I create a versioned serialization?
+
+Here's the easy way :)
+
+    struct versioned_object {
+       type field1;
+       type field2;
+       type field3;        //   <<<<<------- Only present for version > 1
+       DECLARE_ENC_DEC_MEMBER_FUNCTION() {
+          //
+          // Create a version field. This can be local OR could be part of the struct/class
+          //  If you make the version field as part of the class, you get the advantage of being able to refer to it later
+          //  however, you'll need to make sure it's initialized correctly for encode operations...
+          //
+          __u8 version = 2; // 2 is current version
+          p = enc_dec(p,version);
+          p = enc_dec(p,field1);
+          p = enc_dec(p,field2);
+          if (_stype != DECODE || verion > 1) p = enc_dec(p,field3);
+          return p;
+       }
+    };
+
+
+
 
 */
+
+/*
+
+Now, glue this into the bufferlist world
+
+The biggest issue betwee
+
+*/
+
+template<typename t>
+inline void enc(bufferlist& b,const t& o) {
+   //
+   // Compute size, be sure to leave space for our overall size sentinal
+   //
+   size_t sz = enc_dec(sizeof(__le32),const_cast<t&>(o));
+   //
+   // Allocate the space and serialize the object, leave space for the sentinal
+   //
+   char *buffer_start = b.push_back(sz);
+   char *data_start = buffer_start + sizeof(__le32);
+   char *end = enc_dec(data_start,const_cast<t&>(o));
+   assert(size_t(end-buffer_start) <= sz); // If you fail here, you've lied about an encoded size somewhere and you've corrupted memory!!!!
+   
+   *(__le32 *)buffer_start = __le32(end-data_start);
+
+   //
+   // give back and unused space
+   //
+   b.pop_back(sz - (end-buffer_start));
+}
+
+//
+// Helper for decode
+//
+inline const char *straighten_iterator(bufferlist::iterator& i,size_t wanted,unique_ptr<char>& temp_buffer) {
+   const char *p;
+   size_t actual = i.get_ptr_and_advance(wanted,&p);
+   if (actual == wanted) return p; // done :)
+   //
+   // Ugly case :(
+   //
+   temp_buffer.reset(new char[wanted]);
+   memcpy(temp_buffer.get(),p,actual);
+   i.copy(wanted - actual,temp_buffer.get() + actual);
+   return temp_buffer.get();
+}
+
+template<typename t>
+inline void dec(bufferlist::iterator& i,t& o) {
+   unique_ptr<char> buf0;
+   unique_ptr<char> buf1; // Incase we have to allocate a buffer
+   //
+   // Read the sentinal
+   //
+   const char *p = straighten_iterator(i,sizeof(__le32),buf0);
+   size_t buf_sz = *(__le32 *)p;
+   //
+   // Now the data itself
+   //
+   p = straighten_iterator(i,buf_sz,buf1);
+   const char *end = enc_dec(p,o);
+   if (end != (p + buf_sz)) {
+      throw buffer::malformed_input(__PRETTY_FUNCTION__);
+   }
+}
+
 #endif
 

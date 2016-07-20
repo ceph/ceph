@@ -983,13 +983,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     assert(_raw);
     assert(len <= unused_tail_length());
 
-    char *c = _raw->data + _off + len;
+    char *c = _raw->data + _off;
     _len += len;
     return c;
   }
 
   void buffer::ptr::pop_back(unsigned len) {
-    assert(len >= _len);
+    assert(len <= _len);
     _len -= len;
   }
 
@@ -1771,7 +1771,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       // put what we can into the existing append_buffer.
       unsigned remain = append_buffer.unused_tail_length();
       if (remain >= len) {
-        return append_buffer.push_back(len);
+        char *result = append_buffer.push_back(len);
+        append(append_buffer, append_buffer.end()-len, len);
+        return result;
       }
       // make a new append_buffer.  fill out a complete page, factoring in the
       // raw_combined overhead.
@@ -1784,7 +1786,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   void buffer::list::pop_back(unsigned len) {
-     append_buffer.pop_back(len);
+    assert(!_buffers.empty());
+    assert(_buffers.back().get_raw() == append_buffer.get_raw());
+    assert(_buffers.back().length()  == append_buffer.length());
+    
+    _buffers.back().pop_back(len);
+    append_buffer.pop_back(len);
   }
 
   void buffer::list::append(const ptr& bp)

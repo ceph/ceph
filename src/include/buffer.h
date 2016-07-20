@@ -570,14 +570,9 @@ namespace buffer CEPH_BUFFER_API {
     void append(std::istream& in);
     void append_zero(unsigned len);
 
-    //
-    // Push onto back contiguous chunk of memory, returned pointer is to start of memory block
-    //
-    char *push_back(unsigned len);
-    //
-    // Drop the last "len" bytes
-    //
-    void pop_back(unsigned len);
+    // Stuff for new enc/dec framework
+    char *push_back(unsigned len); // push onto back contiguous chunk of memory, return pointer to start of contiguous block
+    void pop_back(unsigned len);   // drop last "len" bytes (must be part of contiguous range)
     
     /*
      * get a char
