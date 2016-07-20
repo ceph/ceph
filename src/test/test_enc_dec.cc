@@ -175,14 +175,15 @@ TEST(test_enc_dec, string)
 
  struct set_temp {
     set<int> s1;
-    DECLARE_ENC_DEC_MEMBER_FUNCTION() {
-       p = enc_dec(p,s1);
-       return p;
-    }
+    DECLARE_ENC_DEC_MEMBER_FUNCTION();
     bool operator==(const set_temp& s) const { return s.s1 == s1; }
  };
 
 DECLARE_ENC_DEC_CLASS(set_temp)
+DEFINE_ENC_DEC_MEMBER_FUNCTION(set_temp) {
+   p = enc_dec(p,s1);
+   return p;
+}
 
 TEST(test_enc_dec, map) 
 {

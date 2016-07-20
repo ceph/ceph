@@ -531,8 +531,19 @@ inline size_t      enc_dec(size_t p, s &o)      { return o.enc_dec_member<ESTIMA
 inline char *      enc_dec(char *p , s &o)      { return o.enc_dec_member<ENCODE>(p); } \
 inline const char *enc_dec(const char *p,s &o)  { return o.enc_dec_member<DECODE>(p); }
 
+//
+// Macros to help declare member enc_dec functions
+//
+// This macro is used for an inline definition of an enc_dec function OR to declare an out-of-line function
+//
 #define DECLARE_ENC_DEC_MEMBER_FUNCTION() \
    template<enum SERIAL_TYPE _stype> typename serial_type<_stype>::type enc_dec_member(typename serial_type<_stype>::type p) 
+
+//
+// This macro is used to define an out-of-line enc_dec function
+//
+#define DEFINE_ENC_DEC_MEMBER_FUNCTION(class) \
+template<enum SERIAL_TYPE _stype> inline typename serial_type<_stype>::type class::enc_dec_member(typename serial_type<_stype>::type p) 
 
 /*
 
