@@ -152,7 +152,7 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
-find_package(execinfo)
+find_package(Backtrace)
 
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
