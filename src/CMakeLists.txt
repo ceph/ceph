@@ -528,6 +528,7 @@ add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
 add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
 
+add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(libradosstriper)
 
