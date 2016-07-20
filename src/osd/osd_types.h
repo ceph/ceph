@@ -2884,13 +2884,10 @@ public:
     return item.have;
   }
 
-  void swap(pg_missing_set& o) {
-    for (auto &&i: missing)
-      tracker.changed(i.first);
+  void claim(pg_missing_set& o) {
+    static_assert(!TrackChanges, "Can't use claim with TrackChanges");
     missing.swap(o.missing);
     rmissing.swap(o.rmissing);
-    for (auto &&i: missing)
-      tracker.changed(i.first);
   }
 
   /*

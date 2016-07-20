@@ -749,7 +749,7 @@ TEST(pg_missing_t, have_missing)
   EXPECT_TRUE(missing.have_missing());
 }
 
-TEST(pg_missing_t, swap)
+TEST(pg_missing_t, claim)
 {
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
@@ -760,8 +760,7 @@ TEST(pg_missing_t, swap)
   pg_missing_t other;
   EXPECT_FALSE(other.have_missing());
 
-  other.swap(missing);
-  EXPECT_FALSE(missing.have_missing());
+  other.claim(missing);
   EXPECT_TRUE(other.have_missing());
 }
 
