@@ -878,3 +878,5 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
     COMMAND git submodule update --force --init --recursive
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 endif()
+
+add_subdirectory(script)
