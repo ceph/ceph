@@ -191,8 +191,8 @@ int BitMapAllocator::alloc_extents_cont(
 
   while (need_blks > 0) {
     int64_t count = 0;
-    count = m_bit_alloc->alloc_blocks_res(need_blks > max_blks? max_blks: need_blks,
-                                          &start_blk);
+    count = m_bit_alloc->alloc_blocks_res(
+      (max_blks && need_blks > max_blks) ? max_blks : need_blks, &start_blk);
     if (count == 0) {
       break;
     }
