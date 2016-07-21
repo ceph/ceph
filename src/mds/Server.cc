@@ -3779,7 +3779,6 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       mds->locker->drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
       cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-      mds->mdlog->flush();
       return;
     }
   }
