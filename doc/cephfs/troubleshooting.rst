@@ -2,6 +2,17 @@
  Troubleshooting
 =================
 
+Debugging ceph-fuse
+===================
+
+To get more debugging information from ceph-fuse, try running in the foreground
+with logging to the console (``-d``) and enabling client debug
+(``--debug-client=20``), enabling prints for each message sent
+(``--debug-ms=1``).
+
+If you suspect a potential monitor issue, enable monitor debugging as well
+(``--debug-monc=20``).
+
 
 Mount 5 Error
 =============
