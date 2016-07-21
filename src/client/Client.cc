@@ -1797,10 +1797,11 @@ void Client::put_request(MetaRequest *request)
     request->take_other_inode(&other_in);
     delete request;
 
-    if (other_in) {
-      if (other_in->dir &&
-	  (op == CEPH_MDS_OP_RMDIR || op == CEPH_MDS_OP_RENAME))
-	_try_to_trim_inode(other_in.get());
+    if (other_in &&
+	(op == CEPH_MDS_OP_RMDIR ||
+	 op == CEPH_MDS_OP_RENAME ||
+	 op == CEPH_MDS_OP_RMSNAP)) {
+      _try_to_trim_inode(other_in.get(), false);
     }
   }
 }
@@ -1993,6 +1994,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   session->inst = mdsmap->get_inst(mds);
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
+  session->mds_state = MDSMap::STATE_NULL;
   mds_sessions[mds] = session;
 
   // Maybe skip sending a request to open if this MDS daemon
@@ -2572,9 +2574,9 @@ void Client::handle_mds_map(MMDSMap* m)
     } else if (oldstate == newstate)
       continue;  // no change
     
-    if (newstate == MDSMap::STATE_RECONNECT &&
-	mds_sessions.count(p->first)) {
-      MetaSession *session = mds_sessions[p->first];
+    MetaSession *session = p->second;
+    session->mds_state = newstate;
+    if (newstate == MDSMap::STATE_RECONNECT) {
       session->inst = mdsmap->get_inst(p->first);
       session->con = messenger->get_connection(session->inst);
       send_reconnect(session);
@@ -2583,11 +2585,11 @@ void Client::handle_mds_map(MMDSMap* m)
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
 	// kick new requests
-	kick_requests(p->second);
-	kick_flushing_caps(p->second);
-	signal_context_list(p->second->waiting_for_open);
-	kick_maxsize_requests(p->second);
-	wake_inode_waiters(p->second);
+	kick_requests(session);
+	kick_flushing_caps(session);
+	signal_context_list(session->waiting_for_open);
+	kick_maxsize_requests(session);
+	wake_inode_waiters(session);
       }
       connect_mds_targets(p->first);
     }
@@ -2649,19 +2651,25 @@ void Client::send_reconnect(MetaSession *session)
       cap->issue_seq = 0;  // reset seq.
       cap->mseq = 0;  // reset seq.
       cap->issued = cap->implemented;
+
+      snapid_t snap_follows = 0;
+      if (!in->cap_snaps.empty())
+	snap_follows = in->cap_snaps.begin()->first;
+
       m->add_cap(p->first.ino, 
 		 cap->cap_id,
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
 		 cap->issued,     // issued
 		 in->snaprealm->ino,
+		 snap_follows,
 		 flockbl);
 
       if (did_snaprealm.count(in->snaprealm->ino) == 0) {
 	ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 	m->add_snaprealm(in->snaprealm->ino, in->snaprealm->seq, in->snaprealm->parent);
 	did_snaprealm.insert(in->snaprealm->ino);
-      }	
+      }
     }
   }
 
@@ -2839,7 +2847,10 @@ void Client::put_inode(Inode *in, int n)
 
     in->cap_item.remove_myself();
     in->snaprealm_item.remove_myself();
-    in->snapdir_parent.reset();
+    if (in->snapdir_parent) {
+      in->snapdir_parent->flags &= ~I_SNAPDIR_OPEN;
+      in->snapdir_parent.reset();
+    }
     if (in == root) {
       root = 0;
       root_ancestor = 0;
@@ -3358,6 +3369,19 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
 
   ack:
+    // re-send old cap/snapcap flushes first.
+    if (session->mds_state >= MDSMap::STATE_RECONNECT &&
+	session->mds_state < MDSMap::STATE_ACTIVE &&
+	session->early_flushing_caps.count(in) == 0) {
+      ldout(cct, 20) << " reflushing caps (check_caps) on " << *in
+		     << " to mds." << session->mds_num << dendl;
+      session->early_flushing_caps.insert(in);
+      if (in->cap_snaps.size())
+	flush_snaps(in, true);
+      if (in->flushing_caps)
+	flush_caps(in, session);
+    }
+
     int flushing;
     ceph_tid_t flush_tid;
     if (in->auth_cap == cap && in->dirty_caps) {
@@ -3443,11 +3467,9 @@ void Client::_flushed_cap_snap(Inode *in, snapid_t seq)
   flush_snaps(in);
 }
 
-void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
+void Client::flush_snaps(Inode *in, bool all_again)
 {
-  ldout(cct, 10) << "flush_snaps on " << *in
-		 << " all_again " << all_again
-		 << " again " << again << dendl;
+  ldout(cct, 10) << "flush_snaps on " << *in << " all_again " << all_again << dendl;
   assert(in->cap_snaps.size());
 
   // pick auth mds
@@ -3457,13 +3479,9 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
 
   for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin(); p != in->cap_snaps.end(); ++p) {
     CapSnap *capsnap = p->second;
-    if (again) {
-      // only one capsnap
-      if (again != capsnap)
-	continue;
-    } else if (!all_again) {
+    if (!all_again) {
       // only flush once per session
-      if (capsnap->flushing_item.is_on_list())
+      if (capsnap->flush_tid > 0)
 	continue;
     }
 
@@ -3477,9 +3495,13 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     if (capsnap->dirty_data || capsnap->writing)
       continue;
     
-    in->auth_cap->session->flushing_capsnaps.push_back(&capsnap->flushing_item);
+    if (capsnap->flush_tid == 0) {
+      capsnap->flush_tid = ++last_flush_tid;
+      if (!in->flushing_cap_item.is_on_list())
+	session->flushing_caps.push_back(&in->flushing_cap_item);
+      session->flushing_caps_tids.insert(capsnap->flush_tid);
+    }
 
-    capsnap->flush_tid = ++last_flush_tid;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
 				     cap_epoch_barrier);
     if (user_id >= 0)
@@ -3511,6 +3533,9 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
       m->inline_version = in->inline_version;
       m->inline_data = in->inline_data;
     }
+
+    assert(!session->flushing_caps_tids.empty());
+    m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
 
     session->con->send_message(m);
   }
@@ -4015,8 +4040,8 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
   in->flushing_caps |= flushing;
   in->dirty_caps = 0;
  
-
-  session->flushing_caps.push_back(&in->flushing_cap_item);
+  if (!in->flushing_cap_item.is_on_list())
+    session->flushing_caps.push_back(&in->flushing_cap_item);
   session->flushing_caps_tids.insert(flush_tid);
 
   *ptid = flush_tid;
@@ -4025,6 +4050,13 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
 
 void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSession *new_s)
 {
+  for (auto p = in->cap_snaps.begin(); p != in->cap_snaps.end(); ++p) {
+    CapSnap *capsnap = p->second;
+    if (capsnap->flush_tid > 0) {
+      old_s->flushing_caps_tids.erase(capsnap->flush_tid);
+      new_s->flushing_caps_tids.insert(capsnap->flush_tid);
+    }
+  }
   for (map<ceph_tid_t, int>::iterator it = in->flushing_cap_tids.begin();
        it != in->flushing_cap_tids.end();
        ++it) {
@@ -4063,8 +4095,6 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
        p != in->flushing_cap_tids.end();
        ++p) {
-    if (session->kicked_flush_tids.count(p->first))
-	continue;
     send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
 	     in->caps_wanted(), (cap->issued | cap->implemented),
 	     p->second, p->first);
@@ -4111,33 +4141,27 @@ void Client::kick_flushing_caps(MetaSession *session)
   mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << "kick_flushing_caps mds." << mds << dendl;
 
-  for (xlist<CapSnap*>::iterator p = session->flushing_capsnaps.begin(); !p.end(); ++p) {
-    CapSnap *capsnap = *p;
-    InodeRef& in = capsnap->in;
-    ldout(cct, 20) << " reflushing capsnap " << capsnap
-		   << " on " << *in << " to mds." << mds << dendl;
-    flush_snaps(in.get(), false, capsnap);
-  }
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
+    if (session->early_flushing_caps.count(in))
+      continue;
     ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
+    if (in->cap_snaps.size())
+      flush_snaps(in, true);
     if (in->flushing_caps)
       flush_caps(in, session);
   }
 
-  session->kicked_flush_tids.clear();
+  session->early_flushing_caps.clear();
 }
 
 void Client::early_kick_flushing_caps(MetaSession *session)
 {
-  session->kicked_flush_tids.clear();
+  session->early_flushing_caps.clear();
 
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
-    if (!in->flushing_caps)
-      continue;
     assert(in->auth_cap);
-    Cap *cap = in->auth_cap;
 
     // if flushing caps were revoked, we re-send the cap flush in client reconnect
     // stage. This guarantees that MDS processes the cap flush message before issuing
@@ -4145,17 +4169,16 @@ void Client::early_kick_flushing_caps(MetaSession *session)
     if ((in->flushing_caps & in->auth_cap->issued) == in->flushing_caps)
       continue;
 
-    ldout(cct, 20) << " reflushing caps (revoked) on " << *in
+    ldout(cct, 20) << " reflushing caps (early_kick) on " << *in
 		   << " to mds." << session->mds_num << dendl;
 
-    for (map<ceph_tid_t,int>::iterator q = in->flushing_cap_tids.begin();
-	 q != in->flushing_cap_tids.end();
-	 ++q) {
-      send_cap(in, session, cap, (get_caps_used(in) | in->caps_dirty()),
-	       in->caps_wanted(), (cap->issued | cap->implemented),
-	       q->second, q->first);
-      session->kicked_flush_tids.insert(q->first);
-    }
+    session->early_flushing_caps.insert(in);
+
+    if (in->cap_snaps.size())
+      flush_snaps(in, true);
+    if (in->flushing_caps)
+      flush_caps(in, session);
+
   }
 }
 
@@ -4692,8 +4715,9 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
       in->flushing_caps &= ~cleaned;
       if (in->flushing_caps == 0) {
 	ldout(cct, 10) << " " << *in << " !flushing" << dendl;
-	in->flushing_cap_item.remove_myself();
 	num_flushing_caps--;
+	if (in->cap_snaps.empty())
+	  in->flushing_cap_item.remove_myself();
       }
       if (!in->caps_dirty())
 	put_inode(in);
@@ -4718,7 +4742,10 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
       ldout(cct, 5) << "handle_cap_flushedsnap mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
       in->cap_snaps.erase(follows);
-      capsnap->flushing_item.remove_myself();
+      if (in->flushing_caps == 0 && in->cap_snaps.empty())
+	in->flushing_cap_item.remove_myself();
+      session->flushing_caps_tids.erase(capsnap->flush_tid);
+
       delete capsnap;
     }
   } else {
@@ -4771,7 +4798,7 @@ void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
     async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn, del));
 }
 
-void Client::_try_to_trim_inode(Inode *in)
+void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
 {
   int ref = in->get_num_ref();
 
@@ -4780,22 +4807,37 @@ void Client::_try_to_trim_inode(Inode *in)
 	 p != in->dir->dentries.end(); ) {
       Dentry *dn = p->second;
       ++p;
+      /* rmsnap removes whole subtree, need trim inodes recursively.
+       * we don't need to invalidate dentries recursively. because
+       * invalidating a directory dentry effectively invalidate
+       * whole subtree */
+      if (in->snapid != CEPH_NOSNAP && dn->inode && dn->inode->is_dir())
+	_try_to_trim_inode(dn->inode.get(), false);
+
       if (dn->lru_is_expireable())
-	unlink(dn, false, false);  // close dir, drop dentry
+	unlink(dn, true, false);  // keep dir, drop dentry
     }
+    if (in->dir->dentries.empty()) {
+      close_dir(in->dir);
+      --ref;
+    }
+  }
+
+  if (ref > 0 && (in->flags & I_SNAPDIR_OPEN)) {
+    InodeRef snapdir = open_snapdir(in);
+    _try_to_trim_inode(snapdir.get(), false);
     --ref;
   }
-  // make sure inode was not freed when closing dir
-  if (ref == 0)
-    return;
 
-  set<Dentry*>::iterator q = in->dn_set.begin();
-  while (q != in->dn_set.end()) {
-    Dentry *dn = *q++;
-    // FIXME: we play lots of unlink/link tricks when handling MDS replies,
-    //        so in->dn_set doesn't always reflect the state of kernel's dcache.
-    _schedule_invalidate_dentry_callback(dn, true);
-    unlink(dn, true, true);
+  if (ref > 0 && in->ll_ref > 0 && sched_inval) {
+    set<Dentry*>::iterator q = in->dn_set.begin();
+    while (q != in->dn_set.end()) {
+      Dentry *dn = *q++;
+      // FIXME: we play lots of unlink/link tricks when handling MDS replies,
+      //        so in->dn_set doesn't always reflect the state of kernel's dcache.
+      _schedule_invalidate_dentry_callback(dn, true);
+      unlink(dn, true, true);
+    }
   }
 }
 
@@ -4906,7 +4948,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
   // may drop inode's last ref
   if (deleted_inode)
-    _try_to_trim_inode(in);
+    _try_to_trim_inode(in, true);
 
   m->put();
 }
@@ -9365,6 +9407,7 @@ Inode *Client::open_snapdir(Inode *diri)
 
     in->dirfragtree.clear();
     in->snapdir_parent = diri;
+    diri->flags |= I_SNAPDIR_OPEN;
     inode_map[vino] = in;
     if (use_faked_inos())
       _assign_faked_ino(in);
@@ -10789,6 +10832,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
     req->set_other_inode(in.get());
   } else {
     unlink(de, true, true);
+    req->set_other_inode(in.get());
   }
 
   res = make_request(req, uid, gid);

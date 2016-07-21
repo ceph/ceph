@@ -21,6 +21,7 @@
 
 #include "mds/CInode.h"
 #include "mds/CDir.h"
+#include "mds/mdstypes.h"
 
 // sent from replica to auth
 
@@ -163,7 +164,7 @@ class MMDSCacheRejoin : public Message {
   map<vinodeno_t, inode_strong> strong_inodes;
 
   // open
-  map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
+  map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
   map<client_t, entity_inst_t> client_map;
   bufferlist imported_caps;
 

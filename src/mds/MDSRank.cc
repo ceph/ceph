@@ -1226,6 +1226,7 @@ void MDSRank::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
+  mdcache->start_files_to_recover();
   queue_one_replay();
 }
 
@@ -1259,6 +1260,7 @@ void MDSRank::active_start()
   mdcache->clean_open_file_lists();
   mdcache->export_remaining_imported_caps();
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
+  mdcache->start_files_to_recover();
 
   mdcache->reissue_all_caps();
 
