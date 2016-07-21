@@ -421,6 +421,8 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   int tries;
 
+  bool error_injection;
+
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker,
@@ -431,6 +433,7 @@ public:
                                                       op_status(_op_status),
                                                       pos(0), sync_status(0),
                                                       marker_tracker(_marker_tracker), tries(0) {
+    error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
   }
 
   int operate();

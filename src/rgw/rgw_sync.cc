@@ -1108,6 +1108,12 @@ int RGWMetaSyncSingleEntryCR::operate() {
   reenter(this) {
 #define NUM_TRANSIENT_ERROR_RETRIES 10
 
+    if (error_injection &&
+        rand() % 10000 < cct->_conf->rgw_sync_meta_inject_err_probability * 10000.0) {
+      ldout(sync_env->cct, 0) << __FILE__ << ":" << __LINE__ << ": injecting meta sync error on key=" << raw_key << dendl;
+      return set_cr_error(-EIO);
+    }
+
     if (op_status != MDLOG_STATUS_COMPLETE) {
       ldout(sync_env->cct, 20) << "skipping pending operation" << dendl;
       yield call(marker_tracker->finish(entry_marker));
