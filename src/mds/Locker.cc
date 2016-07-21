@@ -1276,7 +1276,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
 void Locker::nudge_log(SimpleLock *lock)
 {
   dout(10) << "nudge_log " << *lock << " on " << *lock->get_parent() << dendl;
-  if (lock->get_parent()->is_auth() && !lock->is_stable())    // as with xlockdone, or cap flush
+  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked())    // as with xlockdone, or cap flush
     mds->mdlog->flush();
 }
 
@@ -1814,10 +1814,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [auth] twiddle mode?
     eval(in, CEPH_CAP_LOCKS);
 
-    if (!in->filelock.is_stable() ||
-	!in->authlock.is_stable() ||
-	!in->linklock.is_stable() ||
-	!in->xattrlock.is_stable())
+    if (_need_flush_mdlog(in, my_want))
       mds->mdlog->flush();
 
   } else {
@@ -2345,6 +2342,22 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
   }
 }
 
+bool Locker::_need_flush_mdlog(CInode *in, int wanted)
+{
+  /* flush log if caps are wanted by client but corresponding lock is unstable and locked by
+   * pending mutations. */
+  if (((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
+       in->filelock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL)) &&
+       in->authlock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL)) &&
+       in->linklock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) &&
+       in->xattrlock.is_unstable_and_locked()))
+    return true;
+  return false;
+}
+
 void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 {
   if (ceph_seq_cmp(issue_seq, cap->get_last_issue()) == 0) {
@@ -2636,7 +2649,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       assert(in->last != CEPH_NOSNAP);
       if (in->is_auth() && m->get_dirty()) {
 	dout(10) << " updating intermediate snapped inode " << *in << dendl;
-	_do_cap_update(in, NULL, m->get_dirty(), follows, m, NULL);
+	_do_cap_update(in, NULL, m->get_dirty(), follows, m);
       }
       in = mdcache->pick_inode_snap(head_in, in->last);
     }
@@ -2682,26 +2695,24 @@ void Locker::handle_client_caps(MClientCaps *m)
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)
+    bool need_flush = false;
     int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
     if (new_wanted != cap->wanted()) {
-      if (new_wanted & ~cap->wanted()) {
+      if (new_wanted & ~cap->pending()) {
 	// exapnding caps.  make sure we aren't waiting for a log flush
-	if (!in->filelock.is_stable() ||
-	    !in->authlock.is_stable() ||
-	    !in->xattrlock.is_stable())
-	  mds->mdlog->flush();
+	need_flush = _need_flush_mdlog(head_in, new_wanted & ~cap->pending());
       }
 
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
       
     if (in->is_auth() &&
-	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
+	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack, &need_flush)) {
       // updated
       eval(in, CEPH_CAP_LOCKS);
-      
-      if (cap->wanted() & ~cap->pending())
-	mds->mdlog->flush();
+
+      if (!need_flush && (cap->wanted() & ~cap->pending()))
+	need_flush = _need_flush_mdlog(in, cap->wanted() & ~cap->pending());
     } else {
       // no update, ack now.
       if (ack)
@@ -2710,12 +2721,16 @@ void Locker::handle_client_caps(MClientCaps *m)
       bool did_issue = eval(in, CEPH_CAP_LOCKS);
       if (!did_issue && (cap->wanted() & ~cap->pending()))
 	issue_caps(in, cap);
+
       if (cap->get_last_seq() == 0 &&
 	  (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER))) {
 	cap->issue_norevoke(cap->issued());
 	share_inode_max_size(in, cap);
       }
     }
+
+    if (need_flush)
+      mds->mdlog->flush();
   }
 
  out:
@@ -3049,8 +3064,9 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
  * if we update, return true; otherwise, false (no updated needed).
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
-			    int dirty, snapid_t follows, MClientCaps *m,
-			    MClientCaps *ack)
+			    int dirty, snapid_t follows,
+			    MClientCaps *m, MClientCaps *ack,
+			    bool *need_flush)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " issued " << ccap_string(cap ? cap->issued() : 0)
@@ -3222,15 +3238,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 								 change_max,
 								 client, cap,
 								 ack));
-  // only flush immediately if the lock is unstable, or unissued caps are wanted, or max_size is 
-  // changing
-  if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
-      ((dirty & CEPH_CAP_AUTH_EXCL) && !in->authlock.is_stable()) ||
-      ((dirty & CEPH_CAP_XATTR_EXCL) && !in->xattrlock.is_stable()) ||
-      (!dirty && (!in->filelock.is_stable() || !in->authlock.is_stable() || !in->xattrlock.is_stable())) ||  // nothing dirty + unstable lock -> probably a revoke?
-      (change_max && new_max) ||         // max INCREASE
-      (cap && (cap->wanted() & ~cap->pending())))
-    mds->mdlog->flush();
+  if (need_flush && !*need_flush &&
+      ((change_max && new_max) || // max INCREASE
+       _need_flush_mdlog(in, dirty)))
+    *need_flush = true;
 
   return true;
 }

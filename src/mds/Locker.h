@@ -189,13 +189,14 @@ public:
   bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
 
  protected:
+  bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
   void _do_null_snapflush(CInode *head_in, client_t client);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
-		      MClientCaps *ack=0);
+		      MClientCaps *ack=0, bool *need_flush=NULL);
   void handle_client_cap_release(class MClientCapRelease *m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
