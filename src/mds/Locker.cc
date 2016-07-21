@@ -2126,27 +2126,22 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
 class C_MDL_CheckMaxSize : public LockerContext {
   CInode *in;
-  bool update_size;
-  uint64_t newsize;
-  bool update_max;
   uint64_t new_max_size;
+  uint64_t newsize;
   utime_t mtime;
 
 public:
-  C_MDL_CheckMaxSize(Locker *l, CInode *i, bool _update_size, uint64_t _newsize,
-                     bool _update_max, uint64_t _new_max_size, utime_t _mtime) :
+  C_MDL_CheckMaxSize(Locker *l, CInode *i, uint64_t _new_max_size,
+                     uint64_t _newsize, utime_t _mtime) :
     LockerContext(l), in(i),
-    update_size(_update_size), newsize(_newsize),
-    update_max(_update_max), new_max_size(_new_max_size),
-    mtime(_mtime)
+    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime)
   {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
     in->put(CInode::PIN_PTRWAITER);
     if (in->is_auth())
-      locker->check_inode_max_size(in, false, update_size, newsize,
-                                   update_max, new_max_size, mtime);
+      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
   }
 };
 
@@ -2187,8 +2182,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
 }
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
-				  bool update_size, uint64_t new_size,
-				  bool update_max, uint64_t new_max_size,
+				  uint64_t new_max_size, uint64_t new_size,
 				  utime_t new_mtime)
 {
   assert(in->is_auth());
@@ -2197,7 +2191,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   inode_t *latest = in->get_projected_inode();
   map<client_t, client_writeable_range_t> new_ranges;
   uint64_t size = latest->size;
-  bool new_max = update_max;
+  bool update_size = new_size > 0;
+  bool update_max = false;
   bool max_increased = false;
 
   if (update_size) {
@@ -2207,13 +2202,12 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       update_size = false;
   }
 
-  uint64_t client_range_size = update_max ? new_max_size : size;
-  calc_new_client_ranges(in, client_range_size, &new_ranges, &max_increased);
+  calc_new_client_ranges(in, max(new_max_size, size), &new_ranges, &max_increased);
 
   if (max_increased || latest->client_ranges != new_ranges)
-    new_max = true;
+    update_max = true;
 
-  if (!update_size && !new_max) {
+  if (!update_size && !update_max) {
     dout(20) << "check_inode_max_size no-op on " << *in << dendl;
     return false;
   }
@@ -2225,8 +2219,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (in->is_frozen()) {
     dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
     C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-                                                     update_size, new_size,
-                                                     update_max, new_max_size,
+                                                     new_max_size,
+                                                     new_size,
                                                      new_mtime);
     in->add_waiter(CInode::WAIT_UNFREEZE, cms);
     return false;
@@ -2242,8 +2236,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     if (!in->filelock.can_wrlock(in->get_loner())) {
       // try again later
       C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-                                                       update_size, new_size,
-                                                       update_max, new_max_size,
+                                                       new_max_size,
+                                                       new_size,
                                                        new_mtime);
 
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
@@ -2258,7 +2252,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
 
-  if (new_max) {
+  if (update_max) {
     dout(10) << "check_inode_max_size client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
     pi->client_ranges = new_ranges;
   }
@@ -3138,10 +3132,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       if (!in->filelock.can_wrlock(client) &&
 	  !in->filelock.can_force_wrlock(client)) {
 	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-	                                                 false, 0,
-	                                                 forced_change_max,
-	                                                 new_max,
-	                                                 utime_t());
+	                                                 forced_change_max ? new_max : 0,
+	                                                 0, utime_t());
 
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
 	change_max = false;
