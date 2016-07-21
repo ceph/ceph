@@ -34,7 +34,10 @@ install(PROGRAMS
 add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
   RadosDump.cc)
-target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} ${CMAKE_DL_LIBS} fuse)
+target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} ${CMAKE_DL_LIBS})
+if(WITH_FUSE)
+  target_link_libraries(ceph-objectstore-tool fuse)
+endif(WITH_FUSE)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 add_executable(ceph-client-debug ceph-client-debug.cc)
