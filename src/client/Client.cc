@@ -1441,7 +1441,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
     ldout(cct, 20) << "choose_target_mds " << *in << " is_hash=" << is_hash
              << " hash=" << hash << dendl;
   
-    if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
+    if (is_hash && S_ISDIR(in->mode) && !in->fragmap.empty()) {
       frag_t fg = in->dirfragtree[hash];
       if (in->fragmap.count(fg)) {
         mds = in->fragmap[fg];
