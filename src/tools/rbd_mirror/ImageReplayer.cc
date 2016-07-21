@@ -895,7 +895,7 @@ void ImageReplayer<I>::replay_flush() {
         ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
       m_local_journal->start_external_replay(&m_local_replay, ctx, stop_ctx);
     });
-  m_local_replay->shut_down(true, ctx);
+  m_local_replay->shut_down(false, ctx);
 }
 
 template <typename I>
