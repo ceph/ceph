@@ -2151,7 +2151,9 @@ public:
 };
 
 
-void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,client_writeable_range_t>& new_ranges)
+void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
+				    map<client_t,client_writeable_range_t> *new_ranges,
+				    bool *max_increased)
 {
   inode_t *latest = in->get_projected_inode();
   uint64_t ms;
@@ -2168,10 +2170,12 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,clie
        p != in->client_caps.end();
        ++p) {
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
-      client_writeable_range_t& nr = new_ranges[p->first];
+      client_writeable_range_t& nr = (*new_ranges)[p->first];
       nr.range.first = 0;
       if (latest->client_ranges.count(p->first)) {
 	client_writeable_range_t& oldr = latest->client_ranges[p->first];
+	if (ms > oldr.range.last)
+	  *max_increased = true;
 	nr.range.last = MAX(ms, oldr.range.last);
 	nr.follows = oldr.follows;
       } else {
@@ -2194,6 +2198,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   map<client_t, client_writeable_range_t> new_ranges;
   uint64_t size = latest->size;
   bool new_max = update_max;
+  bool max_increased = false;
 
   if (update_size) {
     new_size = size = MAX(size, new_size);
@@ -2203,10 +2208,9 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   }
 
   uint64_t client_range_size = update_max ? new_max_size : size;
+  calc_new_client_ranges(in, client_range_size, &new_ranges, &max_increased);
 
-  calc_new_client_ranges(in, client_range_size, new_ranges);
-
-  if (latest->client_ranges != new_ranges)
+  if (max_increased || latest->client_ranges != new_ranges)
     new_max = true;
 
   if (!update_size && !new_max) {
@@ -2299,7 +2303,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   mut->auth_pin(in);
 
   // make max_size _increase_ timely
-  if (new_max)
+  if (max_increased)
     mds->mdlog->flush();
 
   return true;

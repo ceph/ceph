@@ -252,7 +252,9 @@ protected:
   void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t, client_writeable_range_t>& new_ranges);
+  void calc_new_client_ranges(CInode *in, uint64_t size,
+			      map<client_t, client_writeable_range_t>* new_ranges,
+			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             bool update_size=false, uint64_t newsize=0,
                             bool update_max=false, uint64_t newmax=0,
