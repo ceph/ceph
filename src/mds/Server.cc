@@ -1045,7 +1045,6 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 
   if (mdr->has_more() && mdr->more()->has_journaled_slaves) {
     dout(10) << "early_reply - there are journaled slaves, not allowed." << dendl;
-    mds->mdlog->flush();
     return; 
   }
 
@@ -1061,7 +1060,6 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 
   if (req->is_replay()) {
     dout(10) << " no early reply on replay op" << dendl;
-    mds->mdlog->flush();
     return;
   }
 
