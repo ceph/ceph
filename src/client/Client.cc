@@ -1811,10 +1811,11 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
       caps->issued &= ~drop;
       caps->implemented &= ~drop;
       released = 1;
-      force = 1;
       ldout(cct, 25) << "Now have: " << ccap_string(caps->issued) << dendl;
+    } else {
+      released = force;
     }
-    if (force) {
+    if (released) {
       ceph_mds_request_release rel;
       rel.ino = in->ino;
       rel.cap_id = caps->cap_id;
