@@ -775,7 +775,7 @@ namespace crimson {
 #endif
 
 	resv_heap.demote(top);
-	limit_heap.demote(top);
+	limit_heap.adjust(top);
 #if USE_PROP_HEAP
 	prop_heap.demote(top);
 #endif
