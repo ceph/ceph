@@ -256,8 +256,7 @@ public:
 			      map<client_t, client_writeable_range_t>* new_ranges,
 			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
-                            bool update_size=false, uint64_t newsize=0,
-                            bool update_max=false, uint64_t newmax=0,
+                            uint64_t newmax=0, uint64_t newsize=0,
 			    utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
