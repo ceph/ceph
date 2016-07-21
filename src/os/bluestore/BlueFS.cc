@@ -1357,7 +1357,7 @@ void BlueFS::flush_bdev()
   }
 }
 
-int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
+int BlueFS::_allocate(uint8_t id, uint64_t len, vector<bluefs_extent_t> *ev)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << id << dendl;
