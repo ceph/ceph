@@ -744,6 +744,14 @@ void MonClient::tick()
 
 void MonClient::schedule_tick()
 {
+  struct C_Tick : public Context {
+    MonClient *monc;
+    explicit C_Tick(MonClient *m) : monc(m) {}
+    void finish(int r) {
+      monc->tick();
+    }
+  };
+
   if (hunting)
     timer.add_event_after(cct->_conf->mon_client_hunt_interval
                           * reopen_interval_multiplier, new C_Tick(this));
