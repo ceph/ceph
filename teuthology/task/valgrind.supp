@@ -44,7 +44,7 @@
    obj:/usr/lib64/libunwind.so.8.0.1
    obj:/usr/lib64/libunwind.so.8.0.1
    ...
-   fun:_ZN8tcmalloc11ThreadCache
+   fun:*tcmalloc*ThreadCache*
    ...
    obj:/usr/lib64/libboost_thread-mt.so.1.53.0
 }
