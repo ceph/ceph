@@ -420,28 +420,29 @@ TEST(BitAllocator, test_bmap_alloc)
       alloc->free_blocks(i, 1);
     }
 
-		int64_t blk_size = 1024;
-		std::vector<AllocExtent> extents = std::vector<AllocExtent>
-					(alloc->size(), AllocExtent(-1, -1));
+    int64_t blk_size = 1024;
+    auto extents = std::vector<AllocExtent>
+          (alloc->size(), AllocExtent(-1, -1));
 
-		ExtentList *block_list = new ExtentList(&extents, blk_size);
+    ExtentList *block_list = new ExtentList(&extents, blk_size);
 
-		allocated = alloc->alloc_blocks_dis(alloc->size()/2, block_list);
-		bmap_test_assert(allocated == alloc->size() / 2);
+    allocated = alloc->alloc_blocks_dis(alloc->size()/2, block_list);
+    ASSERT_EQ(alloc->size()/2, allocated);
 
-		block_list->reset();
-		allocated = alloc->alloc_blocks_dis(1, block_list);
-		bmap_test_assert(allocated == 0);
+    block_list->reset();
+    allocated = alloc->alloc_blocks_dis(1, block_list);
+    bmap_test_assert(allocated == 0);
 
-		alloc->free_blocks(alloc->size()/2, 1);
+    alloc->free_blocks(alloc->size()/2, 1);
 
-		block_list->reset();
-		allocated = alloc->alloc_blocks_dis(1, block_list);
-		bmap_test_assert(allocated == 1);
+    block_list->reset();
+    allocated = alloc->alloc_blocks_dis(1, block_list);
+    bmap_test_assert(allocated == 1);
 
-		bmap_test_assert((int64_t) extents[0].offset == alloc->size()/2 * blk_size);
+    bmap_test_assert((int64_t) extents[0].offset == alloc->size()/2 * blk_size);
 
-		delete alloc;
+    delete block_list;
+    delete alloc;
 
     // unaligned zones
     total_blocks = zone_size * 2 + 11;
