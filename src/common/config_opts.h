@@ -1454,6 +1454,10 @@ OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notificati
 OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
 OPTION(rgw_sync_lease_period, OPT_INT, 120) // time in second for lease that rgw takes on a specific log (or log shard)
 
+OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
+OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
+
+
 OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
