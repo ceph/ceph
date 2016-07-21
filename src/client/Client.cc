@@ -996,7 +996,7 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
   utime_t dttl = from;
   dttl += (float)dlease->duration_ms / 1000.0;
   
-  assert(dn && dn->inode);
+  assert(dn);
 
   if (dlease->mask & CEPH_LOCK_DN) {
     if (dttl > dn->lease_ttl) {
@@ -1311,13 +1311,21 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session,
                           (op == CEPH_MDS_OP_RENAME) ? request->old_dentry() : NULL);
     } else {
+      Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
-	Dentry *dn = diri->dir->dentries[dname];
+	dn = diri->dir->dentries[dname];
 	if (dn->inode) {
 	  diri->dir_ordered_count++;
 	  clear_dir_complete_and_ordered(diri, false);
 	  unlink(dn, true, true);  // keep dir, dentry
 	}
+      }
+      if (dlease.duration_ms > 0) {
+	if (!dn) {
+	  Dir *dir = diri->open_dir();
+	  dn = link(dir, dname, NULL, NULL);
+	}
+	update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       }
     }
   } else if (op == CEPH_MDS_OP_LOOKUPSNAP ||
