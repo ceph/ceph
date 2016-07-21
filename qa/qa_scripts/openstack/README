@@ -10,9 +10,23 @@ If further development is necessary in the future, these templates should
 probably be removed and direct editing of the OpenStack conf files should
 probably be performed.
 
-These scripts also assume that there is a  rhel iso file named
-rhel-server-7.2-x86_64-boot.iso and a ceph iso file named
-rhceph-1.3.1-rhel-7-x86_64-dvd.iso in the files directory.  These iso files
-can be obtained from the rhel site and are not stored with these scripts.
+These scripts also assume that either there is a rhel iso file named
+rhel-server-7.2-x86_64-boot.iso in the user's home directory, or the
+exported variable RHEL_ISO is set to point at an existing rhel iso file.
+If one is also running the ceph-deploy based ceph_install.sh, this script
+also assumes that there is a file named rhceph-1.3.1-rhel-7-x86_64-dvd.iso
+in the files directory.  These iso files can be obtained from the rhel site
+and are not stored with these scripts.
 
+To install openstack:
+./openstack.sh <openstack-admin-node> <ceph-monitor-node>
+
+This assumes that the ceph cluster is already set up.
+
+To setup a ceph-cluster using an iso and ceph-deploy:
+./ceph_install.sh <admin-node> <mon-node> <osd-node> <osd-node> <osd-node>
+
+To setup a ceph-cluster using the cdn and ceph-ansible:
+cd ceph_install_w_ansible
+./ceph_install.sh <admin-node> <mon-node> <osd-node> <osd-node> <osd-node>
 
