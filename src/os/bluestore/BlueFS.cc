@@ -1397,13 +1397,12 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
 
   r = alloc[id]->alloc_extents(left, min_alloc_size,
                                hint, &extents, &count);
-  assert(r == 0);
+  if (r < 0) {
+    assert(0 == "allocate failed... wtf");
+    return r;
+  }
   for (int i = 0; i < count; i++) {
     bluefs_extent_t e = bluefs_extent_t(id, extents[i].offset, extents[i].length);
-    if (r < 0) {
-      assert(0 == "allocate failed... wtf");
-      return r;
-    }
     if (!ev->empty() && ev->back().end() == (uint64_t) e.offset) {
       ev->back().length += e.length;
     } else {
