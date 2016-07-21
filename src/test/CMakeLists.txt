@@ -1,6 +1,6 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS} ${CMAKE_DL_LIBS})
+set(UNITTEST_LIBS gmock_main gmock gtest ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/googletest/googlemock/include -I${CMAKE_BINARY_DIR}/src/googletest/googlemock/include -I${CMAKE_SOURCE_DIR}/src/googletest/googletest/include -I${CMAKE_BINARY_DIR}/src/googletest/googletest/include -fno-strict-aliasing")
 
 add_subdirectory(bench)
@@ -439,7 +439,7 @@ install(TARGETS
   ceph_test_stress_watch
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(${HAVE_FUSE})
+if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -449,7 +449,7 @@ if(${HAVE_FUSE})
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${HAVE_FUSE})
+endif(WITH_FUSE)
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers

@@ -199,9 +199,10 @@ endif(INTEL_SSE4_1)
 
 set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
-if(${WITH_PROFILER})
+option(WITH_PROFILER "build extra profiler binaries" OFF)
+if(WITH_PROFILER)
   list(APPEND EXTRALIBS profiler)
-endif(${WITH_PROFILER})
+endif(WITH_PROFILER)
 
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
@@ -475,13 +476,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(${HAVE_GPERFTOOLS})
+if(WITH_PROFILER AND HAVE_GPERFTOOLS)
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(${HAVE_GPERFTOOLS})
+endif(WITH_PROFILER AND HAVE_GPERFTOOLS)
 
 if(ENABLE_SHARED)
   list(APPEND libcommon_files
@@ -502,15 +503,15 @@ if(${HAVE_GPERFTOOLS})
   target_link_libraries(common profiler)
 endif(${HAVE_GPERFTOOLS})
 
-if(${HAVE_ARMV8_CRC})
+if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
   target_link_libraries(common common_crc_aarch64)
-endif(${HAVE_ARMV8_CRC})
+endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
 
-target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
+target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -661,9 +662,9 @@ add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
-if(${HAVE_LIBFUSE})
+if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
-endif(${HAVE_LIBFUSE})
+endif()
 install(TARGETS ceph-osd DESTINATION bin)
 
 add_subdirectory(mds)
