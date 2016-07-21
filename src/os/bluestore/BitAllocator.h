@@ -529,7 +529,7 @@ public:
   void free_blocks_dis(int64_t num_blocks, ExtentList *block_list);
   bool is_allocated_dis(ExtentList *blocks, int64_t num_blocks);
 
-  int64_t size() {
+  int64_t total_blocks() const {
     return m_total_blocks - m_extra_blocks;
   }
   int64_t get_used_blocks() {
