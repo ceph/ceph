@@ -1234,6 +1234,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
     gc_invalidate_time = start_time;
     gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
   }
+
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
@@ -1332,6 +1333,28 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare(&new_ofs, &new_end);
   if (op_ret < 0)
     goto done_err;
+
+  /* start gettorrent */
+  if (torrent.get_flag())
+  {
+    torrent.init(s, store);
+    torrent.get_torrent_file(op_ret, read_op, total_len, bl, obj);
+    if (op_ret < 0)
+    {
+      ldout(s->cct, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
+                       << dendl;
+      goto done_err;
+    }
+    op_ret = send_response_data(bl, 0, total_len);
+    if (op_ret < 0)
+    {
+      ldout(s->cct, 0) << "ERROR: failed to send_response_data ret= " << op_ret 
+                       << dendl;
+      goto done_err;
+    }
+    return;
+  }
+  /* end gettorrent */
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
@@ -2676,6 +2699,9 @@ void RGWPutObj::execute()
       len = data.length();
     }
 
+    /* save data for producing torrent data */
+    torrent.save_data(data_in);
+
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
      */
@@ -2828,6 +2854,18 @@ void RGWPutObj::execute()
 
   op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
 			      if_match, if_nomatch);
+  /* produce torrent */
+  if (ofs == torrent.get_data_len())
+  {
+    torrent.init(s, store);
+    torrent.set_create_date(mtime);
+    op_ret =  torrent.handle_data();
+    if (0 != op_ret)
+    {
+      ldout(s->cct, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
+      goto done;
+    }
+  }
 
 done:
   dispose_processor(processor);
