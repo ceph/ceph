@@ -2068,6 +2068,8 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   RGWDataSyncDebugLogger logger;
 
+  bool error_injection;
+
 
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
@@ -2094,6 +2096,8 @@ public:
     set_status("init");
 
     logger.init(sync_env, "Object", ss.str());
+
+    error_injection = (sync_env->cct->_conf->rgw_sync_data_inject_err_probability > 0);
   }
 
   int operate() {
@@ -2111,8 +2115,12 @@ public:
             ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): entry with empty obj name, skipping" << dendl;
             goto done;
           }
-          if (op == CLS_RGW_OP_ADD ||
-              op == CLS_RGW_OP_LINK_OLH) {
+          if (error_injection &&
+              rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
+            ldout(sync_env->cct, 0) << __func__ << ": injecting data sync error on key=" << key.name << dendl;
+            retcode = -EIO;
+          } else if (op == CLS_RGW_OP_ADD ||
+                     op == CLS_RGW_OP_LINK_OLH) {
             if (op == CLS_RGW_OP_ADD && !key.instance.empty() && key.instance != "null") {
               set_status("skipping entry");
               ldout(sync_env->cct, 10) << "bucket skipping sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh" << dendl;
