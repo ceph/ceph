@@ -186,6 +186,15 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   return 0;
 }
 
+uint64_t BlueFS::get_fs_usage()
+{
+  uint64_t total_bytes = 0;
+  for (auto& p : file_map) {
+    total_bytes += p.second->fnode.get_allocated();
+  }
+  return total_bytes;
+}
+
 uint64_t BlueFS::get_total(unsigned id)
 {
   std::lock_guard<std::mutex> l(lock);
