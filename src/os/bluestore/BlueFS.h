@@ -207,6 +207,11 @@ private:
   bool log_flushing = false;   ///< true while flushing the log
   std::condition_variable log_cond;
 
+  uint64_t new_log_jump_to = 0;
+  uint64_t old_log_jump_to = 0;
+  FileRef new_log = nullptr;
+  FileWriter *new_log_writer = nullptr;
+
   /*
    * There are up to 3 block devices:
    *
@@ -245,6 +250,7 @@ private:
   bool _should_compact_log();
   void _compact_log_dump_metadata(bluefs_transaction_t *t);
   void _compact_log_sync();
+  void _compact_log_async(std::unique_lock<std::mutex>& l);
 
   //void _aio_finish(void *priv);
 
@@ -292,7 +298,6 @@ public:
   int mkfs(uuid_d osd_uuid);
   int mount();
   void umount();
-  void dump_logfile(ostream &out);
 
   int fsck();
 
