@@ -346,12 +346,7 @@ public:
   void compact_log();
 
   /// sync any uncommitted state to disk
-  int sync();
-
   void sync_metadata();
-
-  /// compact metadata
-  int compact();
 
   int add_block_device(unsigned bdev, string path);
   uint64_t get_block_device_size(unsigned bdev);
