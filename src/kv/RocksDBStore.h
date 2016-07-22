@@ -82,7 +82,7 @@ class RocksDBStore : public KeyValueDB {
   bool set_cache_flag = false;
 
   int create_db_dir();
-
+  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int do_open(ostream &out, bool create_if_missing,
 	      const vector<ColumnFamily>* cfs = nullptr);
 
