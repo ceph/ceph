@@ -1521,18 +1521,12 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
   data_sync_cr->wakeup(shard_id, keys);
 }
 
-int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status)
+int RGWRemoteDataLog::run_sync(int num_shards)
 {
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, &sync_status));
-  if (r < 0 && r != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: failed to read sync status from source_zone=" << sync_env.source_zone << " r=" << r << dendl;
-    return r;
-  }
-  
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
   lock.unlock();
-  r = run(data_sync_cr);
+  int r = run(data_sync_cr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
     return r;
