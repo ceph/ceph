@@ -54,7 +54,7 @@ endif()
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 
 if(HAVE_LIBAIO)
-  target_link_libraries(os aio)
+  target_link_libraries(os ${AIO_LIBRARIES})
 endif()
 
 if(HAVE_LIBFUSE)
