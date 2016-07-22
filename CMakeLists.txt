@@ -57,21 +57,23 @@ endif(WITH_MANPAGE)
 
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
-  ${OFED_PREFIX}/include
-  ${LEVELDB_PREFIX}/include
-  ${PROJECT_SOURCE_DIR}/src
-)
+  ${PROJECT_SOURCE_DIR}/src)
 
-link_directories(
-  ${OFED_PREFIX}/lib
-  ${LEVELDB_PREFIX}/lib
-)
+if(LEVELDB_PREFIX)
+  include_directories(${LEVELDB_PREFIX}/include)
+  link_directories(${LEVELDB_PREFIX}/lib)
+endif()
+
+if(OFED_PREFIX)
+  include_directories(${OFED_PREFIX}/include)
+  link_directories(${OFED_PREFIX}/lib)
+endif()
+
 if(FREEBSD)
   include_directories(/usr/local/include)
   link_directories(/usr/local/lib)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
-
 
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
