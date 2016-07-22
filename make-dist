@@ -37,10 +37,11 @@ src/make_version -g src/.git_version -c src/ceph_ver.h
 
 rpm_version=`echo $version | cut -d - -f 1-1`
 rpm_release=`echo $version | cut -d - -f 2- | sed 's/-/./'`
+
 cat ceph.spec.in | \
     sed "s/@VERSION@/$rpm_version/g" | \
-    sed "s/@RPM_RELEASE@/$rpm_release/g" > ceph.spec
-
+    sed "s/@RPM_RELEASE@/$rpm_release/g" |
+    sed "s/@TARBALL_BASENAME@/ceph-$version/g" > ceph.spec
 ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/src/ceph_ver.h $outfile/ceph.spec
 tar --concatenate -f $outfile.both.tar $outfile.version.tar
