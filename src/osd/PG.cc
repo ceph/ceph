@@ -68,7 +68,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-// prefix pgmeta_oid keys with _ so that PGLog::read_log() can
+// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
 const string infover_key("_infover");
 const string info_key("_info");
@@ -337,8 +337,9 @@ void PG::proc_replica_log(
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator i = omissing.missing.begin();
-       i != omissing.missing.end();
+  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i =
+	 omissing.get_items().begin();
+       i != omissing.get_items().end();
        ++i) {
     dout(20) << " after missing " << i->first << " need " << i->second.need
 	     << " have " << i->second.have << dendl;
@@ -502,7 +503,7 @@ void PG::MissingLoc::add_batch_sources_info(
 {
   dout(10) << __func__ << ": adding sources in batch " << sources.size() << dendl;
   unsigned loop = 0;
-  for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
+  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
     if (handle && ++loop >= g_conf->osd_loop_before_reset_tphandle) {
@@ -524,7 +525,7 @@ bool PG::MissingLoc::add_source_info(
   bool found_missing = false;
   unsigned loop = 0;
   // found items?
-  for (map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
+  for (map<hobject_t,pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
@@ -580,7 +581,7 @@ bool PG::MissingLoc::add_source_info(
 
 void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
 {
-  const pg_missing_t &missing = pg_log.get_missing();
+  auto &missing = pg_log.get_missing();
   assert(have_unfound());
 
   dout(10) << __func__ << " "
@@ -641,7 +642,7 @@ bool PG::needs_recovery() const
 {
   assert(is_primary());
 
-  const pg_missing_t &missing = pg_log.get_missing();
+  auto &missing = pg_log.get_missing();
 
   if (missing.num_missing()) {
     dout(10) << __func__ << " primary has " << missing.num_missing()
@@ -1579,7 +1580,7 @@ void PG::activate(ObjectStore::Transaction& t,
       info.last_epoch_started = activation_epoch;
   }
 
-  const pg_missing_t &missing = pg_log.get_missing();
+  auto &missing = pg_log.get_missing();
 
   if (is_primary()) {
     last_update_ondisk = info.last_update;
@@ -2927,7 +2928,7 @@ void PG::write_if_dirty(ObjectStore::Transaction& t)
   map<string,bufferlist> km;
   if (dirty_big_info || dirty_info)
     prepare_write_info(&km);
-  pg_log.write_log(t, &km, coll, pgmeta_oid, pool.info.require_rollback());
+  pg_log.write_log_and_missing(t, &km, coll, pgmeta_oid, pool.info.require_rollback());
   if (!km.empty())
     t.omap_setkeys(coll, pgmeta_oid, km);
 }
@@ -3118,11 +3119,14 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   assert(r >= 0);
 
   ostringstream oss;
-  pg_log.read_log(store,
-		  coll,
-		  info_struct_v < 8 ? coll_t::meta() : coll,
-		  ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
-		  info, oss);
+  pg_log.read_log_and_missing(
+    store,
+    coll,
+    info_struct_v < 8 ? coll_t::meta() : coll,
+    ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
+    info,
+    oss,
+    cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
 
@@ -7014,7 +7018,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->dirty_big_info = true;  // maybe.
 
     PGLogEntryHandler rollbacker;
-    pg->pg_log.claim_log_and_clear_rollback_info(msg->log, &rollbacker);
+    pg->pg_log.reset_backfill_claim_log(msg->log, &rollbacker);
     rollbacker.apply(pg, t);
 
     pg->pg_log.reset_backfill();

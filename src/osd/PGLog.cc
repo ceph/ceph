@@ -147,12 +147,9 @@ ostream& PGLog::IndexedLog::print(ostream& out) const
 void PGLog::reset_backfill()
 {
   missing.clear();
-  divergent_priors.clear();
-  dirty_divergent_priors = true;
 }
 
 void PGLog::clear() {
-  divergent_priors.clear();
   missing.clear();
   log.clear();
   log_keys_debug.clear();
@@ -173,10 +170,6 @@ void PGLog::trim(
 {
   // trim?
   if (trim_to > log.tail) {
-    /* If we are trimming, we must be complete up to trim_to, time
-     * to throw out any divergent_priors
-     */
-    divergent_priors.clear();
     // We shouldn't be trimming the log past last_complete
     assert(trim_to <= info.last_complete);
 
@@ -216,8 +209,8 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = omissing.missing.begin();
-       i != omissing.missing.end();
+  for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i = omissing.get_items().begin();
+       i != omissing.get_items().end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
 	     << " have " << i->second.have << dendl;
@@ -283,7 +276,6 @@ void PGLog::proc_replica_log(
     olog.can_rollback_to,
     omissing,
     0,
-    0,
     this);
 
   if (lu < oinfo.last_update) {
@@ -293,7 +285,7 @@ void PGLog::proc_replica_log(
 
   if (omissing.have_missing()) {
     eversion_t first_missing =
-      omissing.missing[omissing.rmissing.begin()->second].need;
+      omissing.get_items().at(omissing.get_rmissing().begin()->second).need;
     oinfo.last_complete = eversion_t();
     list<pg_log_entry_t>::const_iterator i = olog.log.begin();
     for (;
@@ -306,194 +298,6 @@ void PGLog::proc_replica_log(
     }
   } else {
     oinfo.last_complete = oinfo.last_update;
-  }
-}
-
-/**
- * _merge_object_divergent_entries
- *
- * There are 5 distinct cases:
- * 1) There is a more recent update: in this case we assume we adjusted the
- *    store and missing during merge_log
- * 2) The first entry in the divergent sequence is a create.  This might
- *    either be because the object is a clone or because prior_version is
- *    eversion_t().  In this case the object does not exist and we must
- *    adjust missing and the store to match.
- * 3) We are currently missing the object.  In this case, we adjust the
- *    missing to our prior_version taking care to add a divergent_prior
- *    if necessary
- * 4) We can rollback all of the entries.  In this case, we do so using
- *    the rollbacker and return -- the object does not go into missing.
- * 5) We cannot rollback at least 1 of the entries.  In this case, we
- *    clear the object out of the store and add a missing entry at
- *    prior_version taking care to add a divergent_prior if
- *    necessary.
- */
-void PGLog::_merge_object_divergent_entries(
-  const IndexedLog &log,
-  const hobject_t &hoid,
-  const list<pg_log_entry_t> &entries,
-  const pg_info_t &info,
-  eversion_t olog_can_rollback_to,
-  pg_missing_t &missing,
-  boost::optional<pair<eversion_t, hobject_t> > *new_divergent_prior,
-  LogEntryHandler *rollbacker,
-  const DoutPrefixProvider *dpp
-  )
-{
-  ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
-		     << " entries: " << entries << dendl;
-
-  if (cmp(hoid, info.last_backfill, info.last_backfill_bitwise) > 0) {
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " after last_backfill"
-		       << dendl;
-    return;
-  }
-
-  // entries is non-empty
-  assert(!entries.empty());
-  eversion_t last;
-  for (list<pg_log_entry_t>::const_iterator i = entries.begin();
-       i != entries.end();
-       ++i) {
-    // all entries are on hoid
-    assert(i->soid == hoid);
-    if (i != entries.begin() && i->prior_version != eversion_t()) {
-      // in increasing order of version
-      assert(i->version > last);
-      // prior_version correct
-      assert(i->prior_version == last);
-    }
-    last = i->version;
-
-    if (rollbacker)
-      rollbacker->trim(*i);
-  }
-
-  const eversion_t prior_version = entries.begin()->prior_version;
-  const eversion_t first_divergent_update = entries.begin()->version;
-  const eversion_t last_divergent_update = entries.rbegin()->version;
-  const bool object_not_in_store =
-    !missing.is_missing(hoid) &&
-    entries.rbegin()->is_delete();
-  ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		     << " prior_version: " << prior_version
-		     << " first_divergent_update: " << first_divergent_update
-		     << " last_divergent_update: " << last_divergent_update
-		     << dendl;
-
-  ceph::unordered_map<hobject_t, pg_log_entry_t*>::const_iterator objiter =
-    log.objects.find(hoid);
-  if (objiter != log.objects.end() &&
-      objiter->second->version >= first_divergent_update) {
-    /// Case 1)
-    assert(objiter->second->version > last_divergent_update);
-
-    ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
-		       << *objiter->second << ", already merged" << dendl;
-
-    // ensure missing has been updated appropriately
-    if (objiter->second->is_update()) {
-      assert(missing.is_missing(hoid) &&
-	     missing.missing[hoid].need == objiter->second->version);
-    } else {
-      assert(!missing.is_missing(hoid));
-    }
-    missing.revise_have(hoid, eversion_t());
-    if (rollbacker && !object_not_in_store)
-      rollbacker->remove(hoid);
-    return;
-  }
-
-  ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		     <<" has no more recent entries in log" << dendl;
-  if (prior_version == eversion_t() || entries.front().is_clone()) {
-    /// Case 2)
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       << " prior_version or op type indicates creation,"
-		       << " deleting"
-		       << dendl;
-    if (missing.is_missing(hoid))
-      missing.rm(missing.missing.find(hoid));
-    if (rollbacker && !object_not_in_store)
-      rollbacker->remove(hoid);
-    return;
-  }
-
-  if (missing.is_missing(hoid)) {
-    /// Case 3)
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       << " missing, " << missing.missing[hoid]
-		       << " adjusting" << dendl;
-
-    if (missing.missing[hoid].have == prior_version) {
-      ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-	       << " missing.have is prior_version " << prior_version
-	       << " removing from missing" << dendl;
-      missing.rm(missing.missing.find(hoid));
-    } else {
-      ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " missing.have is " << missing.missing[hoid].have
-			 << ", adjusting" << dendl;
-      missing.revise_need(hoid, prior_version);
-      if (prior_version <= info.log_tail) {
-	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			   << " prior_version " << prior_version
-			   << " <= info.log_tail "
-			   << info.log_tail << dendl;
-	if (new_divergent_prior)
-	  *new_divergent_prior = make_pair(prior_version, hoid);
-      }
-    }
-    return;
-  }
-
-  ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		     << " must be rolled back or recovered,"
-		     << " attempting to rollback"
-		     << dendl;
-  bool can_rollback = true;
-  /// Distinguish between 4) and 5)
-  for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
-       i != entries.rend();
-       ++i) {
-    if (!i->mod_desc.can_rollback() || i->version <= olog_can_rollback_to) {
-      ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot rollback "
-			 << *i << dendl;
-      can_rollback = false;
-      break;
-    }
-  }
-
-  if (can_rollback) {
-    /// Case 4)
-    for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
-	 i != entries.rend();
-	 ++i) {
-      assert(i->mod_desc.can_rollback() && i->version > olog_can_rollback_to);
-      ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " rolling back " << *i << dendl;
-      if (rollbacker)
-	rollbacker->rollback(*i);
-    }
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       << " rolled back" << dendl;
-    return;
-  } else {
-    /// Case 5)
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot roll back, "
-		       << "removing and adding to missing" << dendl;
-    if (rollbacker && !object_not_in_store)
-      rollbacker->remove(hoid);
-    missing.add(hoid, prior_version, eversion_t());
-    if (prior_version <= info.log_tail) {
-      ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " prior_version " << prior_version
-			 << " <= info.log_tail "
-			 << info.log_tail << dendl;
-      if (new_divergent_prior)
-	*new_divergent_prior = make_pair(prior_version, hoid);
-    }
   }
 }
 
@@ -542,71 +346,20 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
 
   log.index();
 
-  map<eversion_t, hobject_t> new_priors;
   _merge_divergent_entries(
     log,
     divergent,
     info,
     log.can_rollback_to,
     missing,
-    &new_priors,
     rollbacker,
     this);
-  for (map<eversion_t, hobject_t>::iterator i = new_priors.begin();
-       i != new_priors.end();
-       ++i) {
-    add_divergent_prior(
-      i->first,
-      i->second);
-  }
 
   if (info.last_update < log.can_rollback_to)
     log.can_rollback_to = info.last_update;
 
   dirty_info = true;
   dirty_big_info = true;
-}
-
-bool PGLog::append_log_entries_update_missing(
-  const hobject_t &last_backfill,
-  bool last_backfill_bitwise,
-  const list<pg_log_entry_t> &entries,
-  IndexedLog *log,
-  pg_missing_t &missing,
-  LogEntryHandler *rollbacker,
-  const DoutPrefixProvider *dpp)
-{
-  bool invalidate_stats = false;
-  if (log && !entries.empty()) {
-    assert(log->head < entries.begin()->version);
-    log->head = entries.rbegin()->version;
-  }
-  for (list<pg_log_entry_t>::const_iterator p = entries.begin();
-       p != entries.end();
-       ++p) {
-    invalidate_stats = invalidate_stats || !p->is_error();
-    if (log) {
-      log->log.push_back(*p);
-      pg_log_entry_t &ne = log->log.back();
-      ldpp_dout(dpp, 20) << "update missing, append " << ne << dendl;
-      log->index(ne);
-    }
-    if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0 &&
-	!p->is_error()) {
-      missing.add_next_event(*p);
-      if (rollbacker) {
-	// hack to match PG::mark_all_unfound_lost
-	if (p->is_lost_delete() && p->mod_desc.can_rollback()) {
-	  rollbacker->try_stash(p->soid, p->version.version);
-	} else if (p->is_delete()) {
-	  rollbacker->remove(p->soid);
-	}
-      }
-    }
-  }
-  if (log)
-    log->reset_rollback_info_trimmed_to_riter();
-  return invalidate_stats;
 }
 
 void PGLog::merge_log(ObjectStore::Transaction& t,
@@ -624,8 +377,8 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = missing.missing.begin();
-       i != missing.missing.end();
+  for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i = missing.get_items().begin();
+       i != missing.get_items().end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
   }
@@ -733,23 +486,14 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     info.last_user_version = oinfo.last_user_version;
     info.purged_snaps = oinfo.purged_snaps;
 
-    map<eversion_t, hobject_t> new_priors;
     _merge_divergent_entries(
       log,
       divergent,
       info,
       log.can_rollback_to,
       missing,
-      &new_priors,
       rollbacker,
       this);
-    for (map<eversion_t, hobject_t>::iterator i = new_priors.begin();
-	 i != new_priors.end();
-	 ++i) {
-      add_divergent_prior(
-	i->first,
-	i->second);
-    }
 
     // We cannot rollback into the new log entries
     log.can_rollback_to = log.head;
@@ -791,31 +535,30 @@ void PGLog::check() {
   }
 }
 
-void PGLog::write_log(
+void PGLog::write_log_and_missing(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
   const coll_t& coll, const ghobject_t &log_oid,
   bool require_rollback)
 {
   if (is_dirty()) {
-    dout(5) << "write_log with: "
+    dout(5) << "write_log_and_missing with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
-	     << ", dirty_divergent_priors: "
-	     << (dirty_divergent_priors ? "true" : "false")
-	     << ", divergent_priors: " << divergent_priors.size()
 	     << ", writeout_from: " << writeout_from
 	     << ", trimmed: " << trimmed
+	     << ", clear_divergent_priors: " << clear_divergent_priors
 	     << dendl;
-    _write_log(
-      t, km, log, coll, log_oid, divergent_priors,
+    _write_log_and_missing(
+      t, km, log, coll, log_oid,
       dirty_to,
       dirty_from,
       writeout_from,
       trimmed,
-      dirty_divergent_priors,
+      missing,
       !touched_log,
       require_rollback,
+      clear_divergent_priors,
       (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
@@ -823,7 +566,7 @@ void PGLog::write_log(
   }
 }
 
-void PGLog::write_log(
+void PGLog::write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
     map<string,bufferlist> *km,
     pg_log_t &log,
@@ -831,14 +574,33 @@ void PGLog::write_log(
     map<eversion_t, hobject_t> &divergent_priors,
     bool require_rollback)
 {
-  _write_log(
+  _write_log_and_missing_wo_missing(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
     true, true, require_rollback, 0);
 }
 
-void PGLog::_write_log(
+void PGLog::write_log_and_missing(
+    ObjectStore::Transaction& t,
+    map<string,bufferlist> *km,
+    pg_log_t &log,
+    const coll_t& coll,
+    const ghobject_t &log_oid,
+    const pg_missing_tracker_t &missing,
+    bool require_rollback)
+{
+  _write_log_and_missing(
+    t, km, log, coll, log_oid,
+    eversion_t::max(),
+    eversion_t(),
+    eversion_t(),
+    set<eversion_t>(),
+    missing,
+    true, require_rollback, false, 0);
+}
+
+void PGLog::_write_log_and_missing_wo_missing(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
   pg_log_t &log,
@@ -865,7 +627,7 @@ void PGLog::_write_log(
     }
   }
 
-//dout(10) << "write_log, clearing up to " << dirty_to << dendl;
+//dout(10) << "write_log_and_missing, clearing up to " << dirty_to << dendl;
   if (touch_log)
     t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
@@ -875,7 +637,7 @@ void PGLog::_write_log(
     clear_up_to(log_keys_debug, dirty_to.get_key_name());
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
-    //   dout(10) << "write_log, clearing from " << dirty_from << dendl;
+    //   dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
@@ -912,7 +674,7 @@ void PGLog::_write_log(
   }
 
   if (dirty_divergent_priors) {
-    //dout(10) << "write_log: writing divergent_priors" << dendl;
+    //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
     ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
   if (require_rollback) {
@@ -924,138 +686,96 @@ void PGLog::_write_log(
     t.omap_rmkeys(coll, log_oid, to_remove);
 }
 
-void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
-		     coll_t log_coll,
-		     ghobject_t log_oid,
-		     const pg_info_t &info,
-		     map<eversion_t, hobject_t> &divergent_priors,
-		     IndexedLog &log,
-		     pg_missing_t &missing,
-		     ostringstream &oss,
-		     const DoutPrefixProvider *dpp,
-		     set<string> *log_keys_debug)
-{
-  ldpp_dout(dpp, 20) << "read_log coll " << pg_coll
-		     << " log_oid " << log_oid << dendl;
-
-  // legacy?
-  struct stat st;
-  int r = store->stat(log_coll, log_oid, &st);
-  assert(r == 0);
-  assert(st.st_size == 0);
-
-  log.tail = info.log_tail;
-  // will get overridden below if it had been recorded
-  log.can_rollback_to = info.last_update;
-  log.rollback_info_trimmed_to = eversion_t();
-  ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
-  if (p) {
-    for (p->seek_to_first(); p->valid() ; p->next(false)) {
-      // non-log pgmeta_oid keys are prefixed with _; skip those
-      if (p->key()[0] == '_')
-        continue;
-      bufferlist bl = p->value();//Copy bufferlist before creating iterator
-      bufferlist::iterator bp = bl.begin();
-      if (p->key() == "divergent_priors") {
-	::decode(divergent_priors, bp);
-	ldpp_dout(dpp, 20) << "read_log " << divergent_priors.size()
-			   << " divergent_priors" << dendl;
-      } else if (p->key() == "can_rollback_to") {
-        ::decode(log.can_rollback_to, bp);
-      } else if (p->key() == "rollback_info_trimmed_to") {
-        ::decode(log.rollback_info_trimmed_to, bp);
-      } else {
-	pg_log_entry_t e;
-	e.decode_with_checksum(bp);
-	ldpp_dout(dpp, 20) << "read_log " << e << dendl;
-	if (!log.log.empty()) {
-	  pg_log_entry_t last_e(log.log.back());
-	  assert(last_e.version.version < e.version.version);
-	  assert(last_e.version.epoch <= e.version.epoch);
-	}
-	log.log.push_back(e);
-	log.head = e.version;
-	if (log_keys_debug)
-	  log_keys_debug->insert(e.get_key_name());
-      }
+void PGLog::_write_log_and_missing(
+  ObjectStore::Transaction& t,
+  map<string,bufferlist>* km,
+  pg_log_t &log,
+  const coll_t& coll, const ghobject_t &log_oid,
+  eversion_t dirty_to,
+  eversion_t dirty_from,
+  eversion_t writeout_from,
+  const set<eversion_t> &trimmed,
+  const pg_missing_tracker_t &missing,
+  bool touch_log,
+  bool require_rollback,
+  bool clear_divergent_priors,
+  set<string> *log_keys_debug
+  ) {
+  set<string> to_remove;
+  for (set<eversion_t>::const_iterator i = trimmed.begin();
+       i != trimmed.end();
+       ++i) {
+    to_remove.insert(i->get_key_name());
+    if (log_keys_debug) {
+      assert(log_keys_debug->count(i->get_key_name()));
+      log_keys_debug->erase(i->get_key_name());
     }
   }
-  log.head = info.last_update;
-  log.reset_rollback_info_trimmed_to_riter();
 
-  // build missing
-  if (info.last_complete < info.last_update) {
-    ldpp_dout(dpp, 10) << "read_log checking for missing items over interval ("
-		       << info.last_complete
-		       << "," << info.last_update << "]" << dendl;
+  if (touch_log)
+    t.touch(coll, log_oid);
+  if (dirty_to != eversion_t()) {
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      eversion_t().get_key_name(), dirty_to.get_key_name());
+    clear_up_to(log_keys_debug, dirty_to.get_key_name());
+  }
+  if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
+    //   dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      dirty_from.get_key_name(), eversion_t::max().get_key_name());
+    clear_after(log_keys_debug, dirty_from.get_key_name());
+  }
 
-    set<hobject_t, hobject_t::BitwiseComparator> did;
-    for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
-	 i != log.log.rend();
+  for (list<pg_log_entry_t>::iterator p = log.log.begin();
+       p != log.log.end() && p->version <= dirty_to;
+       ++p) {
+    bufferlist bl(sizeof(*p) * 2);
+    p->encode_with_checksum(bl);
+    (*km)[p->get_key_name()].claim(bl);
+  }
+
+  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+       p != log.log.rend() &&
+	 (p->version >= dirty_from || p->version >= writeout_from) &&
+	 p->version >= dirty_to;
+       ++p) {
+    bufferlist bl(sizeof(*p) * 2);
+    p->encode_with_checksum(bl);
+    (*km)[p->get_key_name()].claim(bl);
+  }
+
+  if (log_keys_debug) {
+    for (map<string, bufferlist>::iterator i = (*km).begin();
+	 i != (*km).end();
 	 ++i) {
-      if (i->version <= info.last_complete) break;
-      if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+      if (i->first[0] == '_')
 	continue;
-      if (i->is_error())
-	continue;
-      if (did.count(i->soid)) continue;
-      did.insert(i->soid);
-      
-      if (i->is_delete()) continue;
-      
-      bufferlist bv;
-      int r = store->getattr(
-	pg_coll,
-	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
-	OI_ATTR,
-	bv);
-      if (r >= 0) {
-	object_info_t oi(bv);
-	if (oi.version < i->version) {
-	  ldpp_dout(dpp, 15) << "read_log  missing " << *i
-			     << " (have " << oi.version << ")" << dendl;
-	  missing.add(i->soid, i->version, oi.version);
-	}
-      } else {
-	ldpp_dout(dpp, 15) << "read_log  missing " << *i << dendl;
-	missing.add(i->soid, i->version, eversion_t());
-      }
-    }
-    for (map<eversion_t, hobject_t>::reverse_iterator i =
-	   divergent_priors.rbegin();
-	 i != divergent_priors.rend();
-	 ++i) {
-      if (i->first <= info.last_complete) break;
-      if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
-	continue;
-      if (did.count(i->second)) continue;
-      did.insert(i->second);
-      bufferlist bv;
-      int r = store->getattr(
-	pg_coll,
-	ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
-	OI_ATTR,
-	bv);
-      if (r >= 0) {
-	object_info_t oi(bv);
-	/**
-	 * 1) we see this entry in the divergent priors mapping
-	 * 2) we didn't see an entry for this object in the log
-	 *
-	 * From 1 & 2 we know that either the object does not exist
-	 * or it is at the version specified in the divergent_priors
-	 * map since the object would have been deleted atomically
-	 * with the addition of the divergent_priors entry, an older
-	 * version would not have been recovered, and a newer version
-	 * would show up in the log above.
-	 */
-	assert(oi.version == i->first);
-      } else {
-	ldpp_dout(dpp, 15) << "read_log  missing " << *i << dendl;
-	missing.add(i->second, i->first, eversion_t());
-      }
+      assert(!log_keys_debug->count(i->first));
+      log_keys_debug->insert(i->first);
     }
   }
-  ldpp_dout(dpp, 10) << "read_log done" << dendl;
+
+  if (clear_divergent_priors) {
+    //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
+    to_remove.insert("divergent_priors");
+  }
+  missing.get_changed(
+    [&](const hobject_t &obj) {
+      string key = string("missing/") + obj.to_str();
+      pg_missing_item item;
+      if (!missing.is_missing(obj, &item)) {
+	to_remove.insert(key);
+      } else {
+	::encode(make_pair(obj, item), (*km)[key]);
+      }
+    });
+  if (require_rollback) {
+    ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+    ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  }
+
+  if (!to_remove.empty())
+    t.omap_rmkeys(coll, log_oid, to_remove);
 }
-

@@ -123,10 +123,10 @@ public:
       fulldiv.tail = divinfo.log_tail;
       divinfo.last_backfill = hobject_t::get_max();
 
-      if (init.missing.empty()) {
+      if (init.get_items().empty()) {
 	divinfo.last_complete = divinfo.last_update;
       } else {
-	eversion_t fmissing = init.missing[init.rmissing.begin()->second].need;
+	eversion_t fmissing = init.get_items().at(init.get_rmissing().begin()->second).need;
 	for (list<pg_log_entry_t>::const_iterator i = fulldiv.log.begin();
 	     i != fulldiv.log.end();
 	     ++i) {
@@ -173,18 +173,20 @@ public:
       const pg_log_entry_t &entry) {}
   };
 
+  template <typename missing_t>
   void verify_missing(
     const TestCase &tcase,
-    const pg_missing_t &missing) {
-    ASSERT_EQ(tcase.final.missing.size(), missing.missing.size());
-    for (map<hobject_t, pg_missing_t::item>::const_iterator i =
-	   missing.missing.begin();
-	 i != missing.missing.end();
+    const missing_t &missing) {
+    ASSERT_EQ(tcase.final.get_items().size(), missing.get_items().size());
+    for (auto i = missing.get_items().begin();
+	 i != missing.get_items().end();
 	 ++i) {
-      EXPECT_TRUE(tcase.final.missing.count(i->first));
-      EXPECT_EQ(tcase.final.missing.find(i->first)->second.need, i->second.need);
-      EXPECT_EQ(tcase.final.missing.find(i->first)->second.have, i->second.have);
+      EXPECT_TRUE(tcase.final.get_items().count(i->first));
+      EXPECT_EQ(tcase.final.get_items().find(i->first)->second.need, i->second.need);
+      EXPECT_EQ(tcase.final.get_items().find(i->first)->second.have, i->second.have);
     }
+    bool correct = missing.debug_verify_from_init(tcase.init, &(std::cout));
+    ASSERT_TRUE(correct);
   }
 
   void verify_sideeffects(
@@ -217,6 +219,7 @@ public:
     pg_info_t info = tcase.get_divinfo();
 
     missing = tcase.init;
+    missing.flush();
 
     IndexedLog olog;
     olog = tcase.get_fullauth();
@@ -484,7 +487,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     rewind_divergent_log(t, eversion_t(1, 5), info, &h,
 			 dirty_info, dirty_big_info);
     pg_log_t log;
-    claim_log_and_clear_rollback_info(log, &h);
+    reset_backfill_claim_log(log, &h);
   }
 }
 
@@ -567,6 +570,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       missing.rm(ne.soid, ne.version);
     }
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -636,6 +640,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     missing.add_next_event(oe);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -645,6 +650,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     TestHandler h(remove_snap);
     merge_old_entry(t, oe, info, &h);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.size() > 0);
     EXPECT_TRUE(t.empty());
@@ -670,6 +676,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.prior_version = eversion_t(2,1);
     missing_add(oe.soid, oe.prior_version, eversion_t());
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -678,6 +685,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     TestHandler h(remove_snap);
     merge_old_entry(t, oe, info, &h);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -720,7 +728,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
   // there is no new entry (from the logs) and
@@ -758,7 +765,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
 
@@ -785,6 +791,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     missing.add(oe.soid, eversion_t(1,1), eversion_t());
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -794,6 +801,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     TestHandler h(remove_snap);
     merge_old_entry(t, oe, info, &h);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
@@ -1515,7 +1523,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(eversion_t(1, 2), omissing.missing[divergent_object].need);
+    EXPECT_EQ(eversion_t(1, 2), omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(eversion_t(1, 6), oinfo.last_update);
     EXPECT_EQ(eversion_t(1, 1), oinfo.last_complete);
   }
@@ -1604,8 +1612,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
-    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
   }
 
@@ -1687,7 +1695,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(eversion_t(1, 3), omissing.missing[divergent_object].need);
+    EXPECT_EQ(eversion_t(1, 3), omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
@@ -1696,8 +1704,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
-    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
   }
 
@@ -1783,7 +1791,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(divergent_version, omissing.missing[divergent_object].need);
+    EXPECT_EQ(divergent_version, omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
@@ -1791,7 +1799,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
-    EXPECT_TRUE(omissing.missing.begin()->second.need == eversion_t(1, 1));
+    EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
     EXPECT_EQ(eversion_t(0, 0), oinfo.last_complete);
   }
