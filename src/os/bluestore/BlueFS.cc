@@ -127,7 +127,7 @@ int BlueFS::add_block_device(unsigned id, string path)
 
 uint64_t BlueFS::get_block_device_size(unsigned id)
 {
-  if (bdev[id])
+  if (id < bdev.size() && bdev[id])
     return bdev[id]->get_size();
   return 0;
 }
