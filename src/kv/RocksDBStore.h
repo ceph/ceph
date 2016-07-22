@@ -67,6 +67,7 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::Env *env;
   string options_str;
   int create_db_dir();
+  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int do_open(ostream &out, bool create_if_missing,
 	      const vector<ColumnFamily>* cfs = nullptr);
 
