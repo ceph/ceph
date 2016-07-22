@@ -126,7 +126,8 @@ int MonClient::get_monmap_privately()
   while (monmap.fsid.is_zero()) {
     mon = _pick_random_mon();
 
-    con = messenger->get_connection(monmap.get_inst(mon));
+    con = messenger->get_connection(monmap.get_inst(mon));   
+
     if (con) {
       ldout(cct, 10) << "querying mon." << mon << " "
 		     << con->get_peer_addr() << dendl;
@@ -268,34 +269,50 @@ bool MonClient::ms_dispatch(Message *m)
   Mutex::Locker lock(monc_lock);
   entity_addr_t addr = m->get_connection()->get_peer_addr();
 
-  ldout(cct, 20) << __func__ << " incoming msg " << *m << " from " << addr 
-    << dendl;
+  ldout(cct, 10) << __func__ << " incoming msg " << *m << " from " << addr 
+    << dendl; //TODO change back to logging level 20
 
   // ignore any messages outside our current session except some auth replies
-  if ((m->get_connection() != cur_con) && (m->get_type() == CEPH_MSG_MON_MAP)) {
-    if (state_map.find(addr) == state_map.end()) {
-      //this is not a monmap magic we are prepared to receive
-      ldout(cct, 10) << __func__ << " discarding stray monmap message" << dendl;
-      return true;
+  if (m->get_connection() != cur_con) {
+    switch (m->get_type()) {
+      case CEPH_MSG_MON_MAP:
+	if (state_map.count(addr) == 0) {
+	  //we've never talked to this mon before
+	  ldout(cct, 10) << __func__ << " discarding stray mon map" << dendl;
+	  m->put();
+	  return true;
+	} else if (!_check_state(m->get_connection(), MC_STATE_HAVE_SESSION)) { //removed && !want_monmap
+	  ldout(cct, 10) << __func__ << " discarding unsessioned mon map" << dendl;
+	  m->put();
+	  return true;
+	}
+	break;
+      case CEPH_MSG_AUTH_REPLY:
+	if (_check_state(cur_con, MC_STATE_HAVE_SESSION) || !hunting) { //changed to or from
+	  ldout(cct, 10) << __func__ << " discarding auth reply during session" << dendl;
+	  m->put();
+	  return true;
+	}
+	if (state_map.count(addr) == 0) {
+	  //we've never talked to this mon before
+	  ldout(cct, 10) << __func__ << " discarding stray auth reply" << dendl;
+	  m->put();
+	  return true;
+	} //TODO what if we're not hunting?
+	break;
+      default:
+	ldout(cct, 10) << __func__ << " discarding stray monitor message " << *m
+	  << dendl;
+	m->put();
+	return true;
     }
   }
-
-  if ((m->get_connection() != cur_con) && 
-      (m->get_type() != CEPH_MSG_AUTH_REPLY || 
-	m->get_type() != CEPH_MSG_MON_MAP)) {
-    ldout(cct, 10) << __func__ << " discarding stray monitor message [" << *m
-      << "] from [" << m->get_connection()->get_peer_addr() << "]" << dendl;
-    m->put();
-    return true;
-  }
-
-  if (m->get_type() == CEPH_MSG_AUTH_REPLY && !hunting) {
-    if (_check_state(addr, MC_STATE_NONE)) {
-      ldout(cct, 10) << __func__ << " discarding stray auth reply message " 
-	<< *m << dendl;
-      m->put();
-      return true;
-    }
+  
+  if (m->get_connection() != cur_con) {
+    ldout(cct, 10) << __func__ << " msg from unsessioned connection" << dendl;
+  } else {
+    ldout(cct, 10) << __func__ << " msg from current connection" << dendl;
+    assert(cur_con);
   }
 
   switch (m->get_type()) {
@@ -533,7 +550,7 @@ void MonClient::handle_auth(MAuthReply *m)
       }
       auth->set_want_keys(want_keys);
       auth->init(entity_name);
-      auth->set_global_id(global_id);
+      //auth->set_global_id(global_id);
     } else {
       auth->reset();
     }
@@ -547,6 +564,9 @@ void MonClient::handle_auth(MAuthReply *m)
     global_id = m->global_id;
     auth->set_global_id(global_id);
     ldout(cct, 10) << __func__ << " my global_id is " << m->global_id << dendl;
+  } else {
+    auth->set_global_id(global_id);
+    ldout(cct, 10) << __func__ << " my global_id defaults to " << global_id << dendl;
   }
 
   int ret = auth->handle_response(m->result, p);
@@ -557,6 +577,8 @@ void MonClient::handle_auth(MAuthReply *m)
     ma->protocol = auth->get_protocol();
     auth->prepare_build_request();
     ret = auth->build_request(ma->auth_payload);
+
+    ldout(cct, 10) << __func__ << " need to send MAuth again" << dendl;
     _send_mon_message(ma, m->get_connection(), true);
     return;
   }
@@ -613,7 +635,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
   if (force || 
       (cur_con && _check_state(cur_con->get_peer_addr(), MC_STATE_HAVE_SESSION))) {
     assert(cur_con);
-    ldout(cct, 10) << "_send_mon_message to mon." << cur_mon
+    ldout(cct, 10) << "_send_mon_message " << *m << " to mon." << cur_mon
 		   << " at " << cur_con->get_peer_addr() << dendl;
     cur_con->send_message(m);
   } else {
@@ -626,7 +648,7 @@ void MonClient::_send_mon_message(Message *m, ConnectionRef con, bool force)
   assert(monc_lock.is_locked());
   if (force || _check_state(con->get_peer_addr(), MC_STATE_HAVE_SESSION)) {
     assert(con);
-    ldout(cct, 10) << __func__ << " to mon over con at "
+    ldout(cct, 10) << __func__ << " " << *m << " to mon over con at "
       << con->get_peer_addr() << dendl;
     con->send_message(m);
   }
@@ -734,7 +756,7 @@ void MonClient::_reopen_session(int rank, string name)
 
   //TODO for current compatibility issues, save the initial (mon, con) set
   cur_mon = mon;
-  cur_con = conns[0];
+  //cur_con = conns[0];
 
   for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
        p != sub_sent.end();
@@ -751,7 +773,7 @@ bool MonClient::ms_handle_reset(Connection *con)
   Mutex::Locker lock(monc_lock);
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    if (cur_mon.empty() || con != cur_con) {
+    if (cur_mon.empty() || con != cur_con) { //added check
       ldout(cct, 10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
       return true;
     } else {
@@ -791,7 +813,7 @@ void MonClient::tick()
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
-    if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
+    if (cur_con && !cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) { //change
       ldout(cct, 10) << "renew subs? (now: " << now
 		     << "; renew after: " << sub_renew_after << ") -- "
 		     << (now > sub_renew_after ? "yes" : "no")
@@ -800,9 +822,22 @@ void MonClient::tick()
 	_renew_subs();
     }
 
-    cur_con->send_keepalive();
+    if (cur_con) {
+      //have a session, keep it alive
+      cur_con->send_keepalive();
+    } else {
+      //otherwise we have to keepalive our negotiating connections
+      for (auto t = state_map.begin(); t != state_map.end(); ++t) {
+	if (_check_state(t->first, MC_STATE_NEGOTIATING) ||
+	      _check_state(t->first, MC_STATE_AUTHENTICATING)) {
+	  entity_inst_t inst = monmap.get_inst(monmap.get_name(t->first));
+	  ConnectionRef con = messenger->get_connection(inst);
+	  con->send_keepalive();
+	}
+      }
+    }
 
-    if (_check_state(cur_con->get_peer_addr(), MC_STATE_HAVE_SESSION)) {
+    if (cur_con && _check_state(cur_con->get_peer_addr(), MC_STATE_HAVE_SESSION)) {
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
