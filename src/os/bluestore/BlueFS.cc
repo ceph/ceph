@@ -966,7 +966,6 @@ uint64_t BlueFS::_estimate_log_size()
   return ROUND_UP_TO(size, super.block_size);
 }
 
-
 bool BlueFS::_should_compact_log()
 {
   uint64_t current = log_writer->file->fnode.size;
@@ -1016,10 +1015,6 @@ void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t)
 
 void BlueFS::_compact_log_sync()
 {
-  // FIXME: we currently hold the lock while writing out the compacted log,
-  // which may mean a latency spike.  we could drop the lock while writing out
-  // the big compacted log, while continuing to log at the end of the old log
-  // file, and once it's done swap out the old log extents for the new ones.
   dout(10) << __func__ << dendl;
   File *log_file = log_writer->file.get();
 
@@ -1067,6 +1062,139 @@ void BlueFS::_compact_log_sync()
   for (auto& r : old_extents) {
     alloc[r.bdev]->release(r.offset, r.length);
   }
+
+  logger->inc(l_bluefs_log_compactions);
+}
+
+/*
+ * 1. Check whether log needs compaction or not. It depends on
+ * bluefs_log_compact_min_size and bluefs_log_compact_min_ratio.
+ * This can be a simple heuristic that compares the estimated
+ * space we need (number of fnodes * some average size) vs the actual log size.
+ *
+ * 2. Allocate a new extent to continue the log, and then log an event
+ * that jumps the log write position to the new extent.  At this point, the
+ * old extent(s) won't be written to, and reflect everything should compact.
+ *
+ * 3. While still holding the lock, encode a bufferlist that dumps all of the
+ * in-memory fnodes and names.  This will become the new beginning of the
+ * log.  The last event will jump to the log continuation extent from #2.
+ *
+ * 4. Queue a write to a new extent for the new beginnging of the log.
+ *
+ * 5. Drop lock and wait
+ *
+ * 6. Retake the lock.
+ *
+ * 7. Update the log_fnode to splice in the new beginning.  Queue an io to
+ * update the superblock.  Drop the lock.
+ *
+ * 8. Wait for things to flush.  Retake the lock, and release the old log
+ * beginnging extents to the allocator for reuse.
+ */
+void BlueFS::_compact_log_async()
+{
+  dout(10) << __func__ << dendl;
+  File *log_file = log_writer->file.get();
+
+  // 2. allocate new log space and jump to it.
+  old_log_jump_to = log_file->fnode.get_allocated();
+  uint64_t need = old_log_jump_to + g_conf->bluefs_max_log_runway;
+  dout(10) << __func__ << " old_log_jump_to " << old_log_jump_to
+           << " need " << need << dendl;
+  while (log_file->fnode.get_allocated() < need) {
+    int r = _allocate(log_file->fnode.prefer_bdev,
+		      g_conf->bluefs_max_log_runway,
+		      &log_file->fnode.extents);
+    assert(r == 0);
+  }
+  // update the log file change and log a jump to the offset where we want to
+  // write the new entries
+  log_t.op_file_update(log_file->fnode);
+  log_t.op_jump(log_seq, old_log_jump_to);
+
+  // 3. prepare compacted log
+  bluefs_transaction_t t;
+  _compact_log_dump_metadata(&t);
+
+  bufferlist bl;
+  ::encode(t, bl);
+  _pad_bl(bl);
+
+  new_log_jump_to = ROUND_UP_TO(bl.length() + super.block_size,
+                                g_conf->bluefs_alloc_size);
+  bluefs_transaction_t t2;
+  t2.op_jump(log_seq, new_log_jump_to);
+  ::encode(t2, bl);
+  _pad_bl(bl);
+  dout(10) << __func__ << " new_log_jump_to " << new_log_jump_to << dendl;
+
+  // allocate some space for it too
+  new_log = new File;
+  int r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
+                    &new_log->fnode.extents);
+  assert(r == 0);
+
+  // include our new runway above, too
+
+  new_log_writer = _create_writer(new_log);
+  new_log_writer->append(bl);
+
+  // 4. flush
+  _flush(new_log_writer, true);
+  lock.unlock();
+
+  // 5. wait
+  dout(10) << __func__ << " waiting for compacted log to sync" << dendl;
+  wait_for_aio(new_log_writer);
+  flush_bdev();
+
+  // 6. retake lock
+  lock.lock();
+
+  // 7. update our log fnode
+  // discard first old_log_jump_to extents
+  uint64_t discarded = 0;
+  vector<bluefs_extent_t> old_extents;
+  while (discarded < old_log_jump_to) {
+    bluefs_extent_t& e = log_file->fnode.extents.front();
+    dout(10) << __func__ << " discard old log extent " << e << dendl;
+    discarded += e.length;
+    bluefs_extent_t temp = log_file->fnode.extents[0];
+    log_file->fnode.extents.erase(log_file->fnode.extents.begin());
+    old_extents.push_back(temp);
+  }
+  new_log->fnode.extents.insert(new_log->fnode.extents.end(),
+				log_file->fnode.extents.begin(),
+				log_file->fnode.extents.end());
+
+  //clear the extents from old log file, they are added to new log
+  log_file->fnode.extents.clear();
+
+  // swap the log files. New log file is the log file now.
+  log_file->fnode.extents.swap(new_log->fnode.extents);
+  log_writer->pos = log_writer->file->fnode.size = log_writer->file->fnode.get_allocated();
+
+  //write the super block to reflect the changes
+
+  dout(10) << __func__ << " writing super" << dendl;
+  super.log_fnode = log_file->fnode;
+  ++super.version;
+  _write_super();
+  flush_bdev();
+
+  dout(10) << __func__ << " release old log extents " << old_extents << dendl;
+  for (auto& r : old_extents) {
+    alloc[r.bdev]->release(r.offset, r.length);
+  }
+
+  //delete the new log
+  _close_writer(new_log_writer);
+
+  // remove from the dirty files list( seems not correct to do it this way, any
+  // clean way?)
+  dirty_files.erase(dirty_files.iterator_to(*new_log));
+  dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
   logger->inc(l_bluefs_log_compactions);
 }
@@ -1152,19 +1280,18 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
       File *file = &(*p);
       assert(file->dirty_seq > 0);
       if (file->dirty_seq <= log_seq_stable) {
-	dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
-	file->dirty_seq = 0;
-	dirty_files.erase(p++);
+         dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
+         file->dirty_seq = 0;
+         dirty_files.erase(p++);
       } else {
-	++p;
+        ++p;
       }
     }
   } else {
     dout(20) << __func__ << " log_seq_stable " << log_seq_stable
-	     << " already > out seq " << seq
-	     << ", we lost a race against another log flush, done" << dendl;
+             << " already > out seq " << seq
+             << ", we lost a race against another log flush, done" << dendl;
   }
-
   _update_logger_stats();
 
   return 0;
@@ -1198,8 +1325,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     int r = _allocate(h->file->fnode.prefer_bdev,
 		      offset + length - allocated,
 		      &h->file->fnode.extents);
-    if (r < 0)
+    if (r < 0) {
+      derr << __func__ << " allocated: " << allocated << \
+               " offset: " << offset << " length: " << length << dendl;
       return r;
+    }
     must_dirty = true;
   }
   if (h->file->fnode.size < offset + length) {
@@ -1503,9 +1633,15 @@ void BlueFS::sync_metadata()
       p->commit_finish();
     }
   }
+
   if (_should_compact_log()) {
-    _compact_log_sync();
+    if (g_conf->bluefs_compact_log_sync) {
+      _compact_log_sync();
+    } else {
+      _compact_log_async();
+    }
   }
+
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
   dout(10) << __func__ << " done in " << dur << dendl;
