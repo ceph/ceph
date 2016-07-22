@@ -966,6 +966,16 @@ uint64_t BlueFS::_estimate_log_size()
   return ROUND_UP_TO(size, super.block_size);
 }
 
+void BlueFS::compact_log()
+{
+  std::unique_lock<std::mutex> l(lock);
+  if (g_conf->bluefs_compact_log_sync) {
+     _compact_log_sync();
+  } else {
+    _compact_log_async();
+  }
+}
+
 bool BlueFS::_should_compact_log()
 {
   uint64_t current = log_writer->file->fnode.size;
@@ -1207,6 +1217,12 @@ void BlueFS::_pad_bl(bufferlist& bl)
 	     << " zeros" << dendl;
     bl.append_zero(super.block_size - partial);
   }
+}
+
+void BlueFS::flush_log()
+{
+  std::unique_lock<std::mutex> l(lock);
+  _flush_and_sync_log(l);
 }
 
 int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,

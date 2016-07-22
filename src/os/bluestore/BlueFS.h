@@ -340,6 +340,9 @@ public:
   int lock_file(const string& dirname, const string& filename, FileLock **p);
   int unlock_file(FileLock *l);
 
+  void flush_log();
+  void compact_log();
+
   /// sync any uncommitted state to disk
   int sync();
 
