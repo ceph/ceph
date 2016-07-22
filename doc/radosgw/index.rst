@@ -37,7 +37,7 @@ you may write data with one API and retrieve it with the other.
 	:maxdepth: 1
 
 	Manual Install <../../install/install-ceph-gateway>
-	Simple Configuration <config>
+	Simple Configuration with FastCGI <config-fcgi>
 	Federated Configuration <federated-config>
 	Multisite Configuration <multisite>
 	Config Reference <config-ref>
