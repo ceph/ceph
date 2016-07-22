@@ -95,6 +95,10 @@ struct OnReadComplete : public Context {
 void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
   inflightreads = 1;
+  obc->ondisk_read_lock();
+  for (map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+    p->second->ondisk_read_lock();
+  }
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
     pending_async_reads,
@@ -108,6 +112,10 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
   if (async_reads_complete()) {
     assert(pg->in_progress_async_reads.size());
     assert(pg->in_progress_async_reads.front().second == this);
+    obc->ondisk_read_unlock();
+    for (map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+      p->second->ondisk_read_unlock();
+    }
     pg->in_progress_async_reads.pop_front();
     pg->complete_read_ctx(async_read_result, this);
   }
@@ -629,9 +637,7 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
     if (r != 0) {
       derr << "Error opening class '" << class_name << "': "
            << cpp_strerror(r) << dendl;
-      if (r != -EPERM) // propogate permission error
-        r = -EINVAL;
-      return r;
+      return -EINVAL;
     } else {
       assert(cls);
     }
