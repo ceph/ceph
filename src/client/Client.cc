@@ -1602,7 +1602,7 @@ int Client::verify_reply_trace(int r,
 int Client::make_request(MetaRequest *request, 
 			 int uid, int gid, 
 			 InodeRef *ptarget, bool *pcreated,
-			 int use_mds,
+			 mds_rank_t use_mds,
 			 bufferlist *pdirbl)
 {
   int r = 0;
