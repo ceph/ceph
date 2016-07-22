@@ -320,7 +320,7 @@ void PG::proc_master_log(
   assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	 info.last_epoch_started >= info.history.last_epoch_started);
 
-  peer_missing[from].swap(omissing);
+  peer_missing[from].claim(omissing);
 }
     
 void PG::proc_replica_log(
@@ -344,7 +344,7 @@ void PG::proc_replica_log(
     dout(20) << " after missing " << i->first << " need " << i->second.need
 	     << " have " << i->second.have << dendl;
   }
-  peer_missing[from].swap(omissing);
+  peer_missing[from].claim(omissing);
 }
 
 bool PG::proc_replica_info(
@@ -7709,7 +7709,7 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& lo
 {
   dout(10) << "Noting missing from osd." << logevt.from << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  pg->peer_missing[logevt.from].swap(logevt.msg->missing);
+  pg->peer_missing[logevt.from].claim(logevt.msg->missing);
   pg->peer_info[logevt.from] = logevt.msg->info;
   return discard_event();
 }
