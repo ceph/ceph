@@ -13,7 +13,9 @@ bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
 if WITH_MON
 ceph_monstore_update_crushdir = $(libdir)/ceph
+if WITH_TESTS
 ceph_monstore_update_crush_SCRIPTS = tools/ceph-monstore-update-crush.sh
+endif
 endif
 
 if WITH_OSD

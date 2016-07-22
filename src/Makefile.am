@@ -106,7 +106,6 @@ EXTRA_DIST += \
 	$(srcdir)/make_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
-	$(srcdir)/tools/ceph-monstore-update-crush.sh \
 	$(srcdir)/script/subman \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-disk.conf \
@@ -137,6 +136,10 @@ EXTRA_DIST += \
 	rbdmap \
 	etc-rbdmap \
 	yasm-wrapper
+
+if WITH_TESTS
+EXTRA_DIST += $(srcdir)/tools/ceph-monstore-update-crush.sh
+endif
 
 EXTRA_DIST += \
 	unittest_bufferlist.sh

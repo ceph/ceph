@@ -4,8 +4,11 @@ dist_man_MANS += \
 	ceph-run.8 \
 	mount.ceph.8 \
 	ceph-create-keys.8 \
-	ceph-rest-api.8 \
-	ceph-debugpack.8
+	ceph-rest-api.8
+
+if WITH_TESTS
+dist_man_MANS += ceph-debugpack.8
+endif
 
 if WITH_SELINUX
 dist_man_MANS += \

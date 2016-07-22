@@ -33,11 +33,13 @@ install-data-local::
 	-install -m 600 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
 
 all-local::
+if WITH_TESTS
 if WITH_DEBUG
 #	We need gtest to build the rados-api tests. We only build those in
 #	a debug build, though.
 	@cd src/gmock/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
+endif
 endif
 
 CHECK_ULIMIT := true

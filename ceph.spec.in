@@ -13,7 +13,12 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_with tests
+%if 0%{?suse_version}
+%bcond_with ceph_test_package
+%else
+%bcond_without ceph_test_package
+%endif
+%bcond_with make_check
 %bcond_with xio
 %bcond_without tcmalloc
 %bcond_with lowmem_builder
@@ -509,6 +514,7 @@ Obsoletes:	python-ceph < %{version}-%{release}
 This package contains Python libraries for interacting with Cephs distributed
 file system.
 
+%if 0%{with ceph_test_package}
 %package -n ceph-test
 Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
@@ -517,6 +523,7 @@ Requires:	ceph-common
 Requires:	xmlstarlet
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
+%endif
 
 %if 0%{with cephfs_java}
 
@@ -611,6 +618,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--with-nss \
 		--without-cryptopp \
 		--with-debug \
+%if 0%{without ceph_test_package}
+                --without-tests \
+%endif
 %if 0%{with cephfs_java}
 		--enable-cephfs-java \
 %endif
@@ -660,7 +670,7 @@ fi
 
 make "$PARALLEL_BUILD"
 
-%if 0%{with tests}
+%if 0%{with make_check}
 %check
 # run in-tree unittests
 make CHECK_ULIMIT=false %{?_smp_mflags} check
@@ -730,7 +740,6 @@ rm -rf %{buildroot}
 %{_bindir}/ceph-run
 %{_bindir}/ceph-dencoder
 %{_bindir}/ceph-detect-init
-%{_bindir}/ceph-client-debug
 %{_bindir}/cephfs
 %{_bindir}/cephfs-data-scan
 %{_bindir}/cephfs-journal-tool
@@ -1344,8 +1353,10 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python_sitelib}/ceph_volume_client.py*
 
 #################################################################################
+%if 0%{with ceph_test_package}
 %files -n ceph-test
 %defattr(-,root,root,-)
+%{_bindir}/ceph-client-debug
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
@@ -1379,6 +1390,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
+%endif
 
 #################################################################################
 %if 0%{with cephfs_java}

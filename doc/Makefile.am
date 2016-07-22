@@ -3,7 +3,6 @@ EXTRA_DIST = \
 	man/8/ceph-clsinfo.rst	\
 	man/8/ceph-conf.rst	\
 	man/8/ceph-create-keys.rst	\
-	man/8/ceph-debugpack.rst	\
 	man/8/ceph-dencoder.rst	\
 	man/8/ceph-deploy.rst	\
 	man/8/ceph-detect-init.rst	\
@@ -35,3 +34,7 @@ EXTRA_DIST = \
 	man/8/rbd-replay.rst	\
 	man/8/rbd.rst           \
 	man/8/rbdmap.rst
+
+if WITH_TESTS
+EXTRA_DIST += man/8/ceph-debugpack.rst
+endif

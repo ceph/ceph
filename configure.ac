@@ -488,6 +488,13 @@ AC_ARG_WITH([debug],
             [with_debug=no])
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
+# exclude ceph-test files from build?
+AC_ARG_WITH([tests],
+            [AS_HELP_STRING([--without-tests], [disable the build of ceph-test package scripts/binaries])],
+            [],
+            [with_tests=yes])
+AM_CONDITIONAL(WITH_TESTS, test "$with_tests" = "yes")
+
 AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
 
 # code coverage?
