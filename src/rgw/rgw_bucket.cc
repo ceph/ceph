@@ -2135,11 +2135,13 @@ public:
       bci.info.bucket.tenant = bucket.tenant;
       bci.info.bucket.data_pool = bucket.data_pool;
       bci.info.bucket.index_pool = bucket.index_pool;
+      bci.info.bucket.data_extra_pool = bucket.data_extra_pool;
       bci.info.index_type = rule_info.index_type;
     } else {
       /* existing bucket, keep its placement pools */
       bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
+      bci.info.bucket.data_extra_pool = old_bci.info.bucket.data_extra_pool;
       bci.info.index_type = old_bci.info.index_type;
     }
 
