@@ -36,6 +36,8 @@ set_target_properties(ec_jerasure_generic PROPERTIES VERSION 2.0.0 SOVERSION 2)
 install(TARGETS ec_jerasure_generic DESTINATION ${erasure_plugin_dir})
 
 # ec_jerasure_neon
+include(CheckCompileTargets)
+
 #TODO:build libec_jerasure_neon library on an ARM machine
 if(ARM_NEON OR ARM_NEON2)
   set(neon_objs_srcs
@@ -45,6 +47,8 @@ if(ARM_NEON OR ARM_NEON2)
     gf-complete/src/neon/gf_w32_neon.c
     gf-complete/src/neon/gf_w64_neon.c)
   add_library(neon_objs OBJECT ${neon_objs_srcs})
+  set_target_properties(neon_objs PROPERTIES VERSION 2.0.0 SOVERSION 2
+    COMPILE_FLAGS ${COMPILE_TARGETS_FLAGS})
 
   set(jerasure_neon_srcs
     $<TARGET_OBJECTS:ec_jerasure_objs>
@@ -56,7 +60,7 @@ if(ARM_NEON OR ARM_NEON2)
   add_dependencies(ec_jerasure_neon ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
   target_link_libraries(ec_jerasure_neon crush pthread ${EXTRALIBS})
   set_target_properties(ec_jerasure_neon PROPERTIES VERSION 2.0.0 SOVERSION 2
-    COMPILE_FLAGS ${ARM_NEON_FLAGS})
+    COMPILE_FLAGS ${COMPILE_TARGETS_FLAGS})
   install(TARGETS ec_jerasure_neon DESTINATION ${erasure_plugin_dir})
 endif(ARM_NEON OR ARM_NEON2)
 
@@ -70,7 +74,7 @@ if(INTEL_SSE)
   add_dependencies(ec_jerasure_sse3 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
   target_link_libraries(ec_jerasure_sse3 crush ${EXTRALIBS})
   set_target_properties(ec_jerasure_sse3 PROPERTIES VERSION 2.0.0 SOVERSION 2
-    COMPILE_FLAGS ${SSE3_FLAGS})
+    COMPILE_FLAGS ${COMPILE_TARGETS_FLAGS})
   install(TARGETS ec_jerasure_sse3 DESTINATION ${erasure_plugin_dir})
 endif(INTEL_SSE)
 
@@ -84,7 +88,7 @@ if(INTEL_SSE4_1)
   add_dependencies(ec_jerasure_sse4 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
   target_link_libraries(ec_jerasure_sse4 crush ${EXTRALIBS})
   set_target_properties(ec_jerasure_sse4 PROPERTIES VERSION 2.0.0 SOVERSION 2
-    COMPILE_FLAGS ${SSE4_FLAGS})
+    COMPILE_FLAGS ${COMPILE_TARGETS_FLAGS})
   install(TARGETS ec_jerasure_sse4 DESTINATION ${erasure_plugin_dir})
 endif(INTEL_SSE4_1)
 
