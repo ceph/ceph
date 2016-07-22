@@ -1582,6 +1582,8 @@ public:
 WRITE_CLASS_ENCODER(RGWPeriod)
 
 class RGWDataChangesLog;
+class RGWMetaSyncStatusManager;
+class RGWDataSyncStatusManager;
 class RGWReplicaLogger;
 class RGWCoroutinesManagerRegistry;
   
@@ -2664,6 +2666,9 @@ public:
   bool is_syncing_bucket_meta(rgw_bucket& bucket);
   void wakeup_meta_sync_shards(set<int>& shard_ids);
   void wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids);
+
+  RGWMetaSyncStatusManager* get_meta_sync_manager();
+  RGWDataSyncStatusManager* get_data_sync_manager(const std::string& source_zone);
 
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);

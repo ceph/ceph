@@ -2996,6 +2996,7 @@ public:
       sync.wakeup(*iter);
     }
   }
+  RGWMetaSyncStatusManager* get_manager() { return &sync; }
 
   int init() {
     int ret = sync.init();
@@ -3039,7 +3040,7 @@ public:
       sync.wakeup(iter->first, iter->second);
     }
   }
-
+  RGWDataSyncStatusManager* get_manager() { return &sync; }
 
   int init() {
     return 0;
@@ -3084,6 +3085,25 @@ void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<s
   RGWDataSyncProcessorThread *thread = iter->second;
   assert(thread);
   thread->wakeup_sync_shards(shard_ids);
+}
+
+RGWMetaSyncStatusManager* RGWRados::get_meta_sync_manager()
+{
+  Mutex::Locker l(meta_sync_thread_lock);
+  if (meta_sync_processor_thread) {
+    return meta_sync_processor_thread->get_manager();
+  }
+  return nullptr;
+}
+
+RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const std::string& source_zone)
+{
+  Mutex::Locker l(data_sync_thread_lock);
+  auto thread = data_sync_processor_threads.find(source_zone);
+  if (thread == data_sync_processor_threads.end()) {
+    return nullptr;
+  }
+  return thread->second->get_manager();
 }
 
 int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
