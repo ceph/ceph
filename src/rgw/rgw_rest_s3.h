@@ -12,6 +12,7 @@
 #include "rgw_http_errors.h"
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
+#include "rgw_lc_s3.h"
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
@@ -257,6 +258,33 @@ public:
   int get_params();
 };
 
+class RGWGetLC_ObjStore_S3 : public RGWGetLC_ObjStore {
+protected:
+  RGWLifecycleConfiguration_S3  config;
+public:
+  RGWGetLC_ObjStore_S3() {}
+  ~RGWGetLC_ObjStore_S3() {}
+  virtual void execute();
+
+ void send_response();
+};
+
+class RGWPutLC_ObjStore_S3 : public RGWPutLC_ObjStore {
+public:
+  RGWPutLC_ObjStore_S3() {}
+  ~RGWPutLC_ObjStore_S3() {}
+  
+ void send_response();
+};
+
+class RGWDeleteLC_ObjStore_S3 : public RGWDeleteLC_ObjStore {
+public:
+  RGWDeleteLC_ObjStore_S3() {}
+  ~RGWDeleteLC_ObjStore_S3() {}
+  
+ void send_response();
+};
+
 class RGWGetCORS_ObjStore_S3 : public RGWGetCORS_ObjStore {
 public:
   RGWGetCORS_ObjStore_S3() {}
@@ -496,6 +524,9 @@ protected:
   }
   bool is_cors_op() {
       return s->info.args.exists("cors");
+  }
+  bool is_lc_op() {
+      return s->info.args.exists("lifecycle");
   }
   bool is_obj_update_op() {
     return is_acl_op() || is_cors_op();
