@@ -28,6 +28,8 @@ librgw_la_SOURCES = \
 	rgw/rgw_auth.cc \
 	rgw/rgw_coroutine.cc \
 	rgw/rgw_cr_rados.cc \
+	rgw/rgw_lc.cc \
+	rgw/rgw_lc_s3.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_basic_types.cc \
 	rgw/rgw_bucket.cc \
@@ -194,6 +196,8 @@ noinst_HEADERS += \
 	rgw/rgw_auth.h \
 	rgw/rgw_auth_decoimpl.h \
 	rgw/rgw_b64.h \
+	rgw/rgw_lc.h \
+	rgw/rgw_lc_s3.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
 	rgw/rgw_cr_rados.h \

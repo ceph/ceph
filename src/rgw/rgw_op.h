@@ -34,6 +34,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_lc.h"
 
 #include "include/assert.h"
 
@@ -1002,6 +1003,75 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "put_acls"; }
   virtual RGWOpType get_type() { return RGW_OP_PUT_ACLS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetLC : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWGetLC() : ret(0) { }
+  virtual ~RGWGetLC() { }
+
+  int verify_permission();
+  void pre_exec();
+  virtual void execute() = 0;
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutLC : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWPutLC() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWPutLC() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+//  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWDeleteLC : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWDeleteLC() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWDeleteLC() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_lifecycle"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
