@@ -53,7 +53,7 @@ Build-Depends: btrfs-tools,
                pkg-config,
                python (>= 2.6.6-3~),
                python-argparse | libpython2.7-stdlib,
-               python-dev,
+               python-all-dev,
                python-nose,
 	       python-setuptools,
                python-sphinx,
@@ -89,9 +89,7 @@ Depends: binutils,
          grep,
          logrotate,
          lsb-release,
-         python,
-         python-argparse | libpython2.7-stdlib,
-         python-pkg-resources,
+         ${python:Depends},
          sdparm | hdparm,
          xfsprogs,
          ${misc:Depends},
@@ -179,6 +177,7 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          parted,
          ${misc:Depends},
+         ${python:Depends},
          ${shlibs:Depends}
 Recommends: ceph-common (= ${binary:Version})
 Replaces: ceph (<< 10)
@@ -319,6 +318,7 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-rados (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
+         ${python:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
@@ -656,7 +656,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 Description: Python libraries for the Ceph librados library
@@ -670,7 +670,7 @@ Description: Python libraries for the Ceph librados library
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 Description: Python libraries for the Ceph librbd library
@@ -684,7 +684,7 @@ Description: Python libraries for the Ceph librbd library
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 Description: Python libraries for the Ceph libcephfs library
