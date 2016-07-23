@@ -440,11 +440,9 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
 {
   PerfCounters::perf_counter_data_vec_t::const_iterator d = m_perf_counters->m_data.begin();
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
-  for (; d != d_end; ++d) {
-    if (d->type == PERFCOUNTER_NONE) {
-      assert(d->type != PERFCOUNTER_NONE);
-    }
-  }
+  for (; d != d_end; ++d) 
+    assert(d->type != PERFCOUNTER_NONE);
+
   PerfCounters *ret = m_perf_counters;
   m_perf_counters = NULL;
   return ret;
