@@ -1274,6 +1274,25 @@ there::
 This will keep the teuthology machine, the logs and the packages-repository
 instance but nuke everything else.
 
+Upload logs to archive server
+-----------------------------
+
+Since the teuthology instance in OpenStack is only semi-permanent, with limited
+space for storing logs, ``teuthology-openstack`` provides an ``--upload``
+option which, if included in the ``ceph-workbench ceph-qa-suite`` command,
+will cause logs from all failed jobs to be uploaded to the log archive server
+maintained by the Ceph project. The logs will appear at the URL::
+
+    http://teuthology-logs.public.ceph.com/$RUN
+
+where ``$RUN`` is the name of the run. It will be a string like this::
+
+    ubuntu-2016-07-23_16:08:12-rados-hammer-backports---basic-openstack
+
+Even if you don't providing the ``--upload`` option, however, all the logs can
+still be found on the teuthology machine in the directory
+``/usr/share/nginx/html``.
+
 Deploy a cluster for manual testing
 -----------------------------------
 
