@@ -4358,8 +4358,8 @@ struct PromoteCounter {
 };
 
 /** store_statfs_t
-+* ObjectStore full statfs information
-+*/
+ * ObjectStore full statfs information
+ */
 struct store_statfs_t
 {
   uint64_t total = 0;                  // Total bytes
