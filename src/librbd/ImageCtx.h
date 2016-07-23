@@ -259,7 +259,7 @@ namespace librbd {
 			   uint64_t *overlap) const;
     void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
 			     size_t len, uint64_t off, Context *onfinish,
-			     int fadvise_flags);
+			     int fadvise_flags, const blkin_trace_info *trace_info = nullptr);
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
 			uint64_t off, Context *onfinish, int fadvise_flags,
                         uint64_t journal_tid, const blkin_trace_info *trace_info = nullptr);

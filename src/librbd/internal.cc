@@ -3841,7 +3841,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   };
 
   void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents)
+                 const vector<pair<uint64_t,uint64_t> >& image_extents,
+                 const struct blkin_trace_info *trace_info)
   {
     uint64_t total_bytes = 0;
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
@@ -3880,7 +3881,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	  ictx->readahead.inc_pending();
 	  ictx->aio_read_from_cache(q->oid, q->objectno, NULL,
 				    q->length, q->offset,
-				    req_comp, 0);
+				    req_comp, 0, trace_info);
 	}
       }
       ictx->perfcounter->inc(l_librbd_readahead);

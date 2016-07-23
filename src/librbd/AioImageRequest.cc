@@ -152,16 +152,18 @@ template <typename I>
 void AioImageRequest<I>::aio_read(
     I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-    char *buf, bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags);
+    char *buf, bufferlist *pbl, int op_flags,
+    const blkin_trace_info *trace_info) {
+  AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags, trace_info);
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                   uint64_t off, size_t len, char *buf,
-                                  bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags);
+                                  bufferlist *pbl, int op_flags,
+                                  const blkin_trace_info *trace_info) {
+  AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags, trace_info);
   req.send();
 }
 
@@ -216,7 +218,7 @@ void AioImageRead<I>::send_request() {
 
   if (image_ctx.object_cacher && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), m_image_extents);
+    readahead(&m_image_ctx, m_image_extents, m_trace_info);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -273,13 +275,14 @@ void AioImageRead<I>::send_request() {
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
         extent.length, extent.buffer_extents, snap_id, true, req_comp,
         m_op_flags);
+                                             true, req_comp, m_op_flags, m_trace_info);
       req_comp->set_req(req);
 
       if (image_ctx.object_cacher) {
         C_CacheRead<I> *cache_comp = new C_CacheRead<I>(image_ctx, req);
         image_ctx.aio_read_from_cache(extent.oid, extent.objectno,
                                       &req->data(), extent.length,
-                                      extent.offset, cache_comp, m_op_flags);
+                                        extent.offset, cache_comp, m_op_flags, m_trace_info);
       } else {
         req->send();
       }

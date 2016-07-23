@@ -1014,7 +1014,7 @@ namespace librados
 
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, int flags,
-		    bufferlist *pbl);
+		    bufferlist *pbl, const blkin_trace_info *trace_info = nullptr);
 
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,

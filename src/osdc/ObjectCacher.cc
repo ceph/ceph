@@ -217,7 +217,8 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
                                    map<loff_t, BufferHead*>& hits,
                                    map<loff_t, BufferHead*>& missing,
                                    map<loff_t, BufferHead*>& rx,
-				   map<loff_t, BufferHead*>& errors)
+                                   map<loff_t, BufferHead*>& errors,
+                                   const blkin_trace_info *trace_info)
 {
   assert(oc->lock.is_locked());
   ldout(oc->cct, 10) << "map_read " << ex.oid 
@@ -232,7 +233,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
     // at end?
     if (p == data.end()) {
       // rest is a miss.
-      BufferHead *n = new BufferHead(this);
+      BufferHead *n = new BufferHead(this, trace_info);
       n->set_start(cur);
       n->set_length(left);
       oc->bh_add(this, n);
@@ -248,7 +249,6 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
       assert(cur == (loff_t)ex.offset + (loff_t)ex.length);
       break;  // no more.
     }
-    
     if (p->first <= cur) {
       // have it (or part of it)
       BufferHead *e = p->second;
@@ -278,7 +278,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
     } else if (p->first > cur) {
       // gap.. miss
       loff_t next = p->first;
-      BufferHead *n = new BufferHead(this);
+      BufferHead *n = new BufferHead(this, trace_info);
       loff_t len = MIN(next - cur, left);
       n->set_start(cur);
       n->set_length(len);
@@ -687,7 +687,7 @@ void ObjectCacher::bh_read(BufferHead *bh, int op_flags)
 			 bh->ob->get_oloc(), bh->start(), bh->length(),
 			 bh->ob->get_snap(), &onfinish->bl,
 			 bh->ob->truncate_size, bh->ob->truncate_seq,
-			 op_flags, onfinish);
+			 op_flags, onfinish, bh->b_trace_info);
 
   ++reads_outstanding;
 }
@@ -1238,13 +1238,13 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
  *           must delete it)
  * returns 0 if doing async read
  */
-int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
+int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish, const blkin_trace_info *trace_info)
 {
-  return _readx(rd, oset, onfinish, true);
+  return _readx(rd, oset, onfinish, true, trace_info);
 }
 
 int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-			 bool external_call)
+			 bool external_call, const blkin_trace_info *trace_info)
 {
   assert(lock.is_locked());
   bool success = true;
@@ -1308,7 +1308,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid
 			 << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(
-	    new C_RetryRead(this,rd, oset, onfinish));
+	    new C_RetryRead(this,rd, oset, onfinish, trace_info));
 	  // FIXME: perfcounter!
 	  return 0;
 	}
@@ -1337,7 +1337,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     // map extent into bufferheads
     map<loff_t, BufferHead*> hits, missing, rx, errors;
-    o->map_read(*ex_it, hits, missing, rx, errors);
+    o->map_read(*ex_it, hits, missing, rx, errors, trace_info);
     if (external_call) {
       // retry reading error buffers
       missing.insert(errors.begin(), errors.end());
@@ -1384,7 +1384,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	ldout(cct, 10) << "readx missed, waiting on " << *last->second
 	  << " off " << last->first << dendl;
 	last->second->waitfor_read[last->first].push_back(
-	  new C_RetryRead(this, rd, oset, onfinish) );
+	  new C_RetryRead(this, rd, oset, onfinish, trace_info) );
 
       }
 
@@ -1397,7 +1397,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
 			 << " off " << bh_it->first << dendl;
 	  bh_it->second->waitfor_read[bh_it->first].push_back(
-	    new C_RetryRead(this, rd, oset, onfinish) );
+	    new C_RetryRead(this, rd, oset, onfinish, trace_info) );
 	}
 	bytes_not_in_cache += bh_it->second->length();
 	success = false;

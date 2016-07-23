@@ -62,7 +62,8 @@ void FakeWriteback::read(const object_t& oid, uint64_t object_no,
 			 const object_locator_t& oloc,
 			 uint64_t off, uint64_t len, snapid_t snapid,
 			 bufferlist *pbl, uint64_t trunc_size,
-			 __u32 trunc_seq, int op_flags, Context *onfinish)
+			 __u32 trunc_seq, int op_flags, Context *onfinish,
+       const blkin_trace_info *trace_info)
 {
   C_Delay *wrapper = new C_Delay(m_cct, onfinish, m_lock, off, pbl,
 				 m_delay_ns);

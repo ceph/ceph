@@ -348,7 +348,8 @@ class ObjectCacher {
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
                  map<loff_t, BufferHead*>& rx,
-		 map<loff_t, BufferHead*>& errors);
+		 map<loff_t, BufferHead*>& errors,
+     const blkin_trace_info *trace_info = nullptr);
     BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid,
       const blkin_trace_info *trace_info = nullptr);
     
@@ -548,7 +549,7 @@ class ObjectCacher {
   Cond read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call);
+	     bool external_call, const blkin_trace_info *trace_info = nullptr);
   void retry_waiting_reads();
 
  public:
@@ -628,16 +629,18 @@ class ObjectCacher {
     OSDRead *rd;
     ObjectSet *oset;
     Context *onfinish;
+    const blkin_trace_info *trace_info;
   public:
-    C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c)
-      : oc(_oc), rd(r), oset(os), onfinish(c) {}
+    C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c,
+      const blkin_trace_info *trace_info = nullptr)
+      : oc(_oc), rd(r), oset(os), onfinish(c), trace_info(trace_info) {}
     void finish(int r) {
       if (r < 0) {
 	if (onfinish)
 	  onfinish->complete(r);
 	return;
       }
-      int ret = oc->_readx(rd, oset, onfinish, false);
+      int ret = oc->_readx(rd, oset, onfinish, false, trace_info);
       if (ret != 0 && onfinish) {
 	onfinish->complete(ret);
       }
@@ -652,7 +655,8 @@ class ObjectCacher {
    * @note total read size must be <= INT_MAX, since
    * the return value is total bytes read
    */
-  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
+  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+    const blkin_trace_info *trace_info = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     const blkin_trace_info *trace_info = nullptr);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,

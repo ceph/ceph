@@ -743,16 +743,22 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  ::ObjectOperation *o,
 					  AioCompletionImpl *c,
 					  int flags,
-					  bufferlist *pbl)
+					  bufferlist *pbl,
+            const blkin_trace_info *trace_info)
 {
   Context *onack = new C_aio_Ack(c);
 
   c->is_read = true;
   c->io = this;
 
+  ZTracer::Trace trace;
+  if (trace_info) {
+    trace.init("rados read", &objecter->trace_endpoint, trace_info);
+  }
+
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
-		 onack, &c->objver);
+		 onack, &c->objver, NULL, 0, &trace);
   objecter->op_submit(objecter_op, &c->tid);
   return 0;
 }

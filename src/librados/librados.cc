@@ -1515,11 +1515,11 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 librados::ObjectReadOperation *o,
-				 int flags, bufferlist *pbl)
+				 int flags, bufferlist *pbl, const blkin_trace_info *trace_info)
 {
   object_t obj(oid);
   return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
-				       translate_flags(flags), pbl);
+				       translate_flags(flags), pbl, trace_info);
 }
 
 

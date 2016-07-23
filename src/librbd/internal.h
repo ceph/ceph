@@ -186,7 +186,8 @@ namespace librbd {
 		   int (*cb)(uint64_t, size_t, int, void *),
 		   void *arg);
   void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents);
+                 const vector<pair<uint64_t,uint64_t> >& image_extents,
+                 const struct blkin_trace_info *trace_info = nullptr);
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

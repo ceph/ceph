@@ -93,7 +93,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
 
 void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                                  char *buf, bufferlist *pbl, int op_flags,
-                                 bool native_async) {
+                                 bool native_async, const blkin_trace_info *trace_info) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_READ);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "aio_read: ictx=" << &m_image_ctx << ", "
@@ -120,10 +120,10 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       lock_required) {
-    queue(new AioImageRead<>(m_image_ctx, c, off, len, buf, pbl, op_flags));
+    queue(new AioImageRead(m_image_ctx, c, off, len, buf, pbl, op_flags, trace_info));
   } else {
     c->start_op();
-    AioImageRequest<>::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
+    AioImageRequest<>::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags, trace_info);
     finish_in_flight_op();
   }
 }

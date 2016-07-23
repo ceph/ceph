@@ -24,7 +24,8 @@ namespace librbd {
     virtual void read(const object_t& oid, uint64_t object_no,
 		      const object_locator_t& oloc, uint64_t off, uint64_t len,
 		      snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
-		      __u32 trunc_seq, int op_flags, Context *onfinish);
+		      __u32 trunc_seq, int op_flags, Context *onfinish,
+          const blkin_trace_info *trace_info = nullptr);
 
     // Determine whether a read to this extent could be affected by a
     // write-triggered copy-on-write

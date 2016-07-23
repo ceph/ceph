@@ -599,6 +599,8 @@ CEPH_RBD_API int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
  */
 CEPH_RBD_API int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
                                char *buf, rbd_completion_t c, int op_flags);
+CEPH_RBD_API int rbd_aio_read_traced(rbd_image_t image, uint64_t off, size_t len,
+                              char *buf, rbd_completion_t c, const struct blkin_trace_info *trace_info);
 CEPH_RBD_API int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
                                  rbd_completion_t c);
 

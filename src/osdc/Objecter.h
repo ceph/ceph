@@ -2198,7 +2198,8 @@ public:
     snapid_t snapid, bufferlist *pbl, int flags,
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
-    uint64_t features = 0) {
+    uint64_t features = 0,
+    ZTracer::Trace *parent_trace = nullptr) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
 		   CEPH_OSD_FLAG_READ, onack, NULL, objver, data_offset);
     o->priority = op.priority;

@@ -145,9 +145,9 @@ AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
                                 uint64_t len,
                                 vector<pair<uint64_t,uint64_t> >& be,
                                 librados::snap_t snap_id, bool sparse,
-                                Context *completion, int op_flags)
+                               Context *completion, int op_flags,
   : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
-                        snap_id, completion, false),
+                        snap_id, completion, false, trace_info),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_parent_completion(NULL),
     m_state(LIBRBD_AIO_READ_FLAT) {
@@ -291,7 +291,7 @@ void AioObjectRead<I>::send() {
   librados::AioCompletion *rados_completion =
     util::create_rados_ack_callback(this);
   int r = image_ctx->data_ctx.aio_operate(this->m_oid, rados_completion, &op,
-                                          flags, nullptr);
+                                        flags, nullptr, m_trace_info);
   assert(r == 0);
 
   rados_completion->release();
