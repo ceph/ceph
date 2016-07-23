@@ -3130,7 +3130,7 @@ void RGWPutMetadataBucket::execute()
   if (has_cors) {
     buffer::list bl;
     cors_config.encode(bl);
-    emplace_attr(RGW_ATTR_CORS, std::move(bl));
+    attrs[RGW_ATTR_CORS] = std::move(bl);
   }
 
   /* It's supposed that following functions WILL NOT change any special
