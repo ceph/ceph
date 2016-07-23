@@ -1132,12 +1132,27 @@ We assume that:
 1. you are the only person using the tenant
 2. you have the credentials
 3. the tenant supports the ``nova`` and ``cinder`` APIs
-4. you have not tried to use ``ceph-workbench`` with this tenant before
 
-Caveat: be aware that, as of this writing (March 2016), testing in
+Caveat: be aware that, as of this writing (July 2016), testing in
 OpenStack clouds is a new feature. Things may not work as advertised.
 If you run into trouble, ask for help on `IRC`_ or the `Mailing list`_, or
 open a bug report at `ceph-workbench bug tracker URL`_.
+
+Prepare tenant
+--------------
+
+If you have not tried to use ``ceph-workbench`` with this tenant before,
+proceed to the next step.
+
+To start with a clean slate, login to your tenant via the Horizon dashboard and
+delete all of the following:
+
+* ``teuthology`` and ``packages-repository`` instances, if any
+* ``teuthology`` security group
+* ``teuthology`` and ``teuthology-myself`` key pairs
+
+Also do the above if you ever get key-related errors ("invalid key", etc.) when
+trying to schedule suites.
 
 Getting ceph-workbench
 ----------------------
