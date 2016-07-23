@@ -26,8 +26,12 @@
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
-
 #include "include/assert.h"
+#include "common/debug.h"
+
+#include <tuple>
+#include <unordered_map>
+#include <boost/variant.hpp>
 
 #include <errno.h>
 #include <sstream>
@@ -146,6 +150,8 @@ md_config_t::md_config_t()
   lock("md_config_t", true, false)
 {
   init_subsys();
+  //--
+  reset_ceph_settings_table();
 }
 
 void md_config_t::init_subsys()
@@ -946,83 +952,165 @@ int md_config_t::set_val_impl(const char *val, const config_option *opt)
 
 int md_config_t::set_val_raw(const char *val, const config_option *opt)
 {
+  const int CEPH_SETTING_SAFE = 1;
+  std::string ceph_setting_name(ConfFile::normalize_key_name(opt->name));
+  std::string ceph_setting_value(val);
+
   assert(lock.is_locked());
   switch (opt->type) {
     case OPT_INT: {
       std::string err;
       int f = strict_si_cast<int>(val, &err);
-      if (!err.empty())
-	return -EINVAL;
-      *(int*)opt->conf_ptr(this) = f;
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<int>(ceph_setting_name, f));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(int *)opt->conf_ptr(this) = f;
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
     }
     case OPT_LONGLONG: {
       std::string err;
       long long f = strict_si_cast<long long>(val, &err);
-      if (!err.empty())
-	return -EINVAL;
-      *(long long*)opt->conf_ptr(this) = f;
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<long long>(ceph_setting_name, f));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(long long *)opt->conf_ptr(this) = f;
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
     }
-    case OPT_STR:
-      *(std::string*)opt->conf_ptr(this) = val ? val : "";
+    case OPT_STR: {
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<std::string>(ceph_setting_name, val));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(std::string *)opt->conf_ptr(this) = val ? val : "";
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
+    }
     case OPT_FLOAT: {
       std::string err;
       float f = strict_strtof(val, &err);
-      if (!err.empty())
-	return -EINVAL;
-      *(float*)opt->conf_ptr(this) = f;
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<float>(ceph_setting_name, f));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(float *)opt->conf_ptr(this) = f;
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
     }
     case OPT_DOUBLE: {
       std::string err;
       double f = strict_strtod(val, &err);
-      if (!err.empty())
-	return -EINVAL;
-      *(double*)opt->conf_ptr(this) = f;
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<double>(ceph_setting_name, f));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(double *)opt->conf_ptr(this) = f;
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
     }
-    case OPT_BOOL:
-      if (strcasecmp(val, "false") == 0)
-	*(bool*)opt->conf_ptr(this) = false;
-      else if (strcasecmp(val, "true") == 0)
-	*(bool*)opt->conf_ptr(this) = true;
-      else {
-	std::string err;
-	int b = strict_strtol(val, 10, &err);
-	if (!err.empty())
-	  return -EINVAL;
-	*(bool*)opt->conf_ptr(this) = !!b;
+    case OPT_BOOL: {
+      if (strcasecmp(val, "false") == 0) {
+        //-- We check the guards for the setting first and apply it if it is ok. 
+        int ceph_setting_upd_ret = (start_ceph_setting_update<bool>(ceph_setting_name, false));
+        assert(ceph_setting_upd_ret != EINVAL);
+        //-- 
+        if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+          *(bool *)opt->conf_ptr(this) = false;
+        } // -if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
+      } else if (strcasecmp(val, "true") == 0) {
+        //-- We check the guards for the setting first and apply it if it is ok. 
+        int ceph_setting_upd_ret = (start_ceph_setting_update<bool>(ceph_setting_name, true));
+        assert(ceph_setting_upd_ret != EINVAL);
+        //-- 
+        if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+          *(bool *)opt->conf_ptr(this) = true;
+        } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
+      } else {
+        std::string err;
+        int b = strict_strtol(val, 10, &err);
+        if (!err.empty()) {
+          return -EINVAL;
+        }
+        //-- We check the guards for the setting first and apply it if it is ok. 
+        int ceph_setting_upd_ret = (start_ceph_setting_update<bool>(ceph_setting_name, !!b));
+        assert(ceph_setting_upd_ret != EINVAL);
+        //-- 
+        if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+          *(bool *)opt->conf_ptr(this) = !!b;
+        } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) 
       }
       return 0;
+    }
     case OPT_U32: {
       std::string err;
       int f = strict_si_cast<uint32_t>(val, &err);
-      if (!err.empty())
-	return -EINVAL;
-      *(uint32_t*)opt->conf_ptr(this) = f;
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok.
+      int ceph_setting_upd_ret = (start_ceph_setting_update<uint32_t>(ceph_setting_name, f));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(uint32_t *)opt->conf_ptr(this) = f;
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
     }
     case OPT_U64: {
       std::string err;
       uint64_t f = strict_si_cast<uint64_t>(val, &err);
-      if (!err.empty())
-	return -EINVAL;
-      *(uint64_t*)opt->conf_ptr(this) = f;
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<uint64_t>(ceph_setting_name, f));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
+      if (ceph_setting_upd_ret == CEPH_SETTING_SAFE) {
+        *(uint64_t *)opt->conf_ptr(this) = f;
+      } //-- if (ceph_setting_upd_ret == CEPH_SETTING_SAFE)
       return 0;
     }
     case OPT_ADDR: {
       entity_addr_t *addr = (entity_addr_t*)opt->conf_ptr(this);
       if (!addr->parse(val)) {
-	return -EINVAL;
+        return -EINVAL;
       }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<entity_addr_t>(ceph_setting_name, *addr));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
       return 0;
     }
     case OPT_UUID: {
       uuid_d *u = (uuid_d*)opt->conf_ptr(this);
-      if (!u->parse(val))
-	return -EINVAL;
+      if (!u->parse(val)) {
+        return -EINVAL;
+      }
+      //-- We check the guards for the setting first and apply it if it is ok. 
+      int ceph_setting_upd_ret = (start_ceph_setting_update<uuid_d>(ceph_setting_name, *u));
+      assert(ceph_setting_upd_ret != EINVAL);
+      //-- 
       return 0;
     }
   }
@@ -1235,3 +1323,118 @@ void md_config_t::complain_about_parse_errors(CephContext *cct)
 {
   ::complain_about_parse_errors(cct, &parse_errors);
 }
+
+//-- Check if a negative was stored in an unsigned int var. 
+bool is_uint_negative (const int value) 
+{
+  const int BITS = 8;
+  return ((unsigned) (value >> ((sizeof(int) * BITS) - 1)));
+}   //-- bool is_uint_negative (const int value)
+
+void md_config_t::copydata_to_ceph_settings_table(const config_option ceph_config_opts[], ceph_settings_table_t& settings_tbl)
+{
+  //-- For performance reason, lets reserve what we need. 
+  settings_tbl.clear();
+  settings_tbl.reserve(NUM_CONFIG_OPTIONS);
+
+  //-- 
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
+    //-- In key names, leading and trailing whitespace are not significant.
+    std::string ceph_setting(ConfFile::normalize_key_name(ceph_config_opts[i].name));
+    const config_option *opt = &ceph_config_opts[i];
+
+    std::ostringstream ossValue;
+    std::string strErr;
+    switch (opt->type) {
+      case OPT_INT: {
+        ossValue << *(int*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        int optValue = strict_si_cast<int>(strValue.c_str(), &strErr);
+        update_ceph_settings_table<int>(settings_tbl, ceph_setting, (int)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_INT:
+      case OPT_LONGLONG: {
+        ossValue << *(long long*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        long long optValue = strict_si_cast<long long>(strValue.c_str(), &strErr);
+        update_ceph_settings_table<long long>(settings_tbl, ceph_setting, (long long)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_LONGLONG:
+      case OPT_STR: {
+        ossValue << *((std::string*)opt->conf_ptr(this));
+        std::string strValue(ossValue.str());
+        update_ceph_settings_table<std::string>(settings_tbl, ceph_setting, (std::string)(strValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_STR:
+      case OPT_FLOAT: {
+        ossValue << *(float*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        float optValue = strict_strtof(strValue.c_str(), &strErr);
+        update_ceph_settings_table<float>(settings_tbl, ceph_setting, (float)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_FLOAT:
+      case OPT_DOUBLE: {
+        ossValue << *(double*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        double optValue = strict_strtod(strValue.c_str(), &strErr);
+        update_ceph_settings_table<double>(settings_tbl, ceph_setting, (double)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_DOUBLE:
+      case OPT_BOOL: {
+        ossValue << *(bool*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        int optValue = strict_strtol(strValue.c_str(), 10, &strErr);
+        bool optValueBool = !!optValue;
+        update_ceph_settings_table<bool>(settings_tbl, ceph_setting, (bool)(optValueBool), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_BOOL:
+      case OPT_U32: {
+        ossValue << *(uint32_t*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        uint32_t optValue = strict_si_cast<uint32_t>(strValue.c_str(), &strErr);
+        update_ceph_settings_table<uint32_t>(settings_tbl, ceph_setting, (uint32_t)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_U32:
+      case OPT_U64: {
+        ossValue << *(uint64_t*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        uint64_t optValue = strict_si_cast<uint64_t>(strValue.c_str(), &strErr);
+        update_ceph_settings_table<uint64_t>(settings_tbl, ceph_setting, (uint64_t)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_U64:
+      case OPT_ADDR: {
+        ossValue << *(entity_addr_t*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        entity_addr_t optValue = *(entity_addr_t *)opt->conf_ptr(this);
+        update_ceph_settings_table<entity_addr_t>(settings_tbl, ceph_setting, (entity_addr_t)(optValue), ceph_config_opts[i].type);
+        break;
+      } //-- case OPT_U64:
+      case OPT_UUID: {
+        ossValue << *(uuid_d*)opt->conf_ptr(this);
+        std::string strValue(ossValue.str());
+        uuid_d optValue = *(uuid_d*)opt->conf_ptr(this);
+        update_ceph_settings_table<uuid_d>(settings_tbl, ceph_setting, (uuid_d)(optValue), ceph_config_opts[i].type);
+        break;
+      }  //-- case OPT_UUID:
+    }   //-- switch ((opt->type))
+  }   //-- for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i)
+}   //-- void md_config_t::copydata_to_ceph_settings_table(const config_option *opt, ceph_settings_table_t &settings_tbl) 
+
+void md_config_t::reset_ceph_settings_table() 
+{
+  //--
+  if (ceph_use_guard_system()) {
+      copydata_to_ceph_settings_table(config_optionsp, m_ceph_config_params);
+  } //-- if (ceph_use_guard_system())
+}   //-- void md_config_t::reset_ceph_settings_table() 
+
+bool md_config_t::valid_ceph_setting(const std::string& ceph_setting_name, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  auto iter = m_ceph_config_params.find(ceph_setting_name);
+  if (iter != m_ceph_config_params.end()) {
+    ceph_settings_tbl_iter = iter;
+  } //-- if (iter != m_ceph_config_params.end())
+  return (iter != m_ceph_config_params.end()) ? true : false;
+}   //-- bool md_config_t::find_ceph_setting(const std::string& ceph_setting_name)
+
+

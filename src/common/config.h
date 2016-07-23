@@ -19,6 +19,11 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <tuple>
+#include <iostream>
+#include <unordered_map>
+#include <boost/variant.hpp>
+
 
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
@@ -41,11 +46,31 @@ enum {
 struct config_option;
 class CephContext;
 
+//--
+enum class ceph_conversion_behavior_t; 
+enum class ceph_guard_behavior_t; 
+bool is_uint_negative (const int);
+
 extern const char *CEPH_CONF_FILE_DEFAULT;
 
 #define LOG_TO_STDERR_NONE 0
 #define LOG_TO_STDERR_SOME 1
 #define LOG_TO_STDERR_ALL 2
+
+typedef enum {
+  OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
+  OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
+} opt_type_t;
+
+//--
+enum class ceph_conversion_behavior_t {
+  ABORT_ON_ERROR, WARNING_ON_ERROR, DEFAULT_ON_ERROR, CONVERT_IF_POSSIBLE
+};  //-- enum class ceph_conversion_behavior_t
+
+enum class ceph_guard_behavior_t {
+  DO_NOTHING, UNSIGNED_NO_NEGATIVE
+};  //-- enum class ceph_guard_behavior_t
+
 
 /** This class represents the current Ceph configuration.
  *
@@ -204,19 +229,27 @@ private:
   ConfFile cf;
 public:
   std::deque<std::string> parse_errors;
-private:
 
+private:
   obs_map_t observers;
   changed_set_t changed;
 
 public:
   ceph::log::SubsystemMap subsys;
-
   EntityName name;
   string data_dir_option;  ///< data_dir config option, if any
-
   /// cluster name
   string cluster;
+
+  //-- 
+  using ceph_param_data_t = boost::variant<std::string, int, long long, float, double, bool, uint32_t, uint64_t, entity_addr_t, uuid_d>;      //-- same data types as in set_val_raw().
+  using ceph_behavior_t = std::tuple<ceph_conversion_behavior_t, ceph_param_data_t, ceph_guard_behavior_t, opt_type_t, ceph_param_data_t>;    //-- The last 'ceph_param_data_t' is the default value. The first is what it's set to.
+  using ceph_settings_table_t = std::unordered_map<std::string, ceph_behavior_t>;
+  using ceph_settings_tbl_const_iter = ceph_settings_table_t::const_iterator;
+  using ceph_settings_tbl_iter = ceph_settings_table_t::iterator;
+  bool ceph_use_guard_system() { return m_ceph_use_guard_system; }
+  bool valid_ceph_setting(const string&, ceph_settings_table_t::const_iterator&); 
+
 
 #define OPTION_OPT_INT(name) const int name;
 #define OPTION_OPT_LONGLONG(name) const long long name;
@@ -259,12 +292,37 @@ public:
   mutable Mutex lock;
 
   friend class test_md_config_t;
+
+private:
+  //-- 
+  bool m_ceph_use_guard_system = true;
+  ceph_param_data_t m_ceph_params_type;
+  ceph_conversion_behavior_t m_ceph_behavior_type;
+  ceph_guard_behavior_t m_ceph_guard_type;
+  ceph_settings_table_t m_ceph_config_params;
+
+  void copydata_to_ceph_settings_table(const config_option[], ceph_settings_table_t&);
+  void reset_ceph_settings_table();
+
+  template<typename Type>
+  void update_ceph_settings_table(ceph_settings_table_t&, const std::string&, const Type&,
+                                  const opt_type_t, const ceph_conversion_behavior_t& behavior_type=ceph_conversion_behavior_t::DEFAULT_ON_ERROR,
+                                  const ceph_guard_behavior_t& guard_type=ceph_guard_behavior_t::DO_NOTHING);
+  
+  template<typename Type>
+  int start_ceph_setting_update(const std::string&, const Type&);
+
+  template<typename Type>
+  int update_ceph_setting(const std::string&, const Type&, ceph_settings_tbl_const_iter&);
+
+  template<typename Type>
+  int update_ceph_setting_value(const std::string&, const Type&, const opt_type_t, const ceph_conversion_behavior_t&, const ceph_guard_behavior_t&);
+
+  template<typename Type>
+  Type get_ceph_default_setting_value(const std::string&); 
+
 };
 
-typedef enum {
-	OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-	OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
-} opt_type_t;
 
 int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result);
@@ -280,6 +338,340 @@ struct config_option {
 
   const void *conf_ptr(const md_config_t *conf) const;
 };
+                                                    
+template<typename Type>
+void md_config_t::update_ceph_settings_table(ceph_settings_table_t& settings_tbl, const std::string& ceph_setting_name, const Type& ceph_setting_value,
+                                             const opt_type_t option_type, const ceph_conversion_behavior_t& behavior_type,
+                                             const ceph_guard_behavior_t& guard_type) 
+{
+  //-- The last 'ceph_param_data_t' is the default value. The first is what it's set to.
+  settings_tbl.emplace(ceph_setting_name, std::make_tuple(behavior_type, (Type)ceph_setting_value, guard_type, option_type, (Type)ceph_setting_value));
+}		/* template<typename Type>
+        void md_config_t::update_ceph_settings_table(ceph_settings_table_t& settings_tbl, const std::string& ceph_setting_name, const Type& ceph_setting_value,
+                                             const opt_type_t option_type, const ceph_conversion_behavior_t& behavior_type,
+                                             const ceph_guard_behavior_t& guard_type) 
+		*/
+
+template<typename Type>
+int md_config_t::update_ceph_setting_value(const std::string& ceph_setting_name, const Type& ceph_setting_value, 
+                                           const opt_type_t option_type, const ceph_conversion_behavior_t& behavior_type, 
+                                           const ceph_guard_behavior_t& guard_type)
+{
+  auto iter = m_ceph_config_params.find(ceph_setting_name);
+  if (iter != m_ceph_config_params.end()) {
+    //-- Retrieve the default.
+    ceph_param_data_t ceph_params_type;
+    ceph_param_data_t ceph_params_type_default;
+    ceph_conversion_behavior_t ceph_behavior_type;
+    ceph_guard_behavior_t ceph_guard_type;
+    opt_type_t ceph_param_type; 
+
+    //-- The last 'ceph_param_data_t' is the default value. The first is what it's set to.
+    std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = iter->second;
+    auto defaultValue = boost::get<Type>(ceph_params_type_default);
+    //-- Update it the tuple.  
+    iter->second = std::make_tuple(behavior_type, (Type)ceph_setting_value, guard_type, option_type, defaultValue);
+    return (1);
+  }	//-- if (iter != m_ceph_config_params.end())
+  //-- Could not find the 'ceph_setting_name'.
+  return -ENOENT; 
+}	/* template<typename Type>
+     int md_config_t::update_ceph_setting_value(const std::string& ceph_setting_name, const Type& ceph_setting_value, 
+                                                const opt_type_t option_type, const ceph_conversion_behavior_t& behavior_type, 
+                                                const ceph_guard_behavior_t& guard_type, const Type& ceph_setting_default_value) 
+	*/
+
+template<typename Type>
+Type md_config_t::get_ceph_default_setting_value(const std::string& ceph_setting_name)
+{
+  auto iter = m_ceph_config_params.find(ceph_setting_name);
+  if (iter != m_ceph_config_params.end()) {
+    //-- Retrieve the default.
+    ceph_param_data_t ceph_params_type;
+    ceph_param_data_t ceph_params_type_default;
+    ceph_conversion_behavior_t ceph_behavior_type;
+    ceph_guard_behavior_t ceph_guard_type;
+    opt_type_t ceph_param_type; 
+
+    //-- The last 'ceph_param_data_t' is the default value. The first is what it's set to.
+    std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = iter->second;
+    auto defaultValue = boost::get<Type>(ceph_params_type_default);
+    //-- 
+    return defaultValue;
+  }	//-- if (iter != m_ceph_config_params.end())
+  //-- Could not find the 'ceph_setting_name'.
+  return -ENOENT; 
+} /* auto md_config_t::get_ceph_default_setting_value(const std::string& ceph_setting_name)
+	*/
+
+template<typename Type>
+int md_config_t::start_ceph_setting_update(const std::string& ceph_setting_name, const Type& ceph_setting_value) 
+{
+  //-- If guard is enabled.
+  if (ceph_use_guard_system()) {
+    auto iter = m_ceph_config_params.find(ceph_setting_name);
+    if (iter != m_ceph_config_params.end()) {
+      //-- 
+      ceph_param_data_t ceph_params_type;
+      ceph_conversion_behavior_t ceph_behavior_type;
+      ceph_guard_behavior_t ceph_guard_type;
+      opt_type_t ceph_param_type; 
+
+      //-- Dispatch it to the proper data type. 
+      ceph_settings_tbl_const_iter ceph_settings_tbl_iter(iter);
+      //std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type) = iter->second;
+      return (update_ceph_setting<Type>(ceph_setting_name, ceph_setting_value, ceph_settings_tbl_iter));
+      //-- 
+    }   //--   if (iter != m_ceph_config_params.end()) {
+    //-- Could not find the 'ceph_setting_name'.
+    return -ENOENT;
+  } //-- if (ceph_use_guard_system())
+  //-- if not enabled, we don't do anything. 
+  return (1);
+}  /* template<typename Type>
+      int md_config_t::start_ceph_setting_update(const std::string& ceph_setting_name, const Type& ceph_setting_value)
+   */
+
+//-- Once just 1 big switch with all the cases and calls to function templates can be a problem, just specializing them here with their specific test case. 
+template<>
+inline int md_config_t::update_ceph_setting<int>(const std::string& ceph_setting_name, const int& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type;
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_INT) {
+    //auto oldValue = boost::get<int>(ceph_params_type);
+    int optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for INT.
+    return (update_ceph_setting_value<int>(ceph_setting_name, (int)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_INT)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<int>(const std::string& ceph_setting_name, const int& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<long long>(const std::string& ceph_setting_name, const long long& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_LONGLONG) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    long long optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for LONGLONG. 
+    return (update_ceph_setting_value<long long>(ceph_setting_name, (long long)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- case OPT_LONGLONG:
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<long long>(const std::string& ceph_setting_name, const long long& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<std::string>(const std::string& ceph_setting_name, const std::string& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_STR) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    std::string optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for STRING. 
+    return (update_ceph_setting_value<std::string>(ceph_setting_name, (std::string)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_STR)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<std::string>(const std::string& ceph_setting_name, const std::string& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<float>(const std::string& ceph_setting_name, const float& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_FLOAT) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    float optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for FLOAT. 
+    return (update_ceph_setting_value<float>(ceph_setting_name, (float)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_FLOAT)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<float>(const std::string& ceph_setting_name, const float& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<double>(const std::string& ceph_setting_name, const double& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_DOUBLE) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    double optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for DOUBLE. 
+    return (update_ceph_setting_value<double>(ceph_setting_name, (double)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_DOUBLE)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<double>(const std::string& ceph_setting_name, const double& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<bool>(const std::string& ceph_setting_name, const bool& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_BOOL) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    bool optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for BOOL. 
+    return (update_ceph_setting_value<bool>(ceph_setting_name, (bool)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_BOOL)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<bool>(const std::string& ceph_setting_name, const bool& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<uint32_t>(const std::string& ceph_setting_name, const uint32_t& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_U32) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    uint32_t optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. 
+    //-- If a negative value was passed into the unsigned int (valid bitwise).
+    if (is_uint_negative(ceph_setting_value)) {
+      std::cerr << "ERROR: An invalid value (negative) was passed to parameter (" << ceph_setting_name << " [unsigned]). aborting..." << std::endl;
+      if (ceph_behavior_type == ceph_conversion_behavior_t::DEFAULT_ON_ERROR) {
+        auto defaultValue = get_ceph_default_setting_value<uint32_t>(ceph_setting_name);
+        std::cerr << "WARNING: Using the default value for parameter (" << ceph_setting_name << ") -> [ " << defaultValue << " ]."  << std::endl;
+        return (update_ceph_setting_value<uint32_t>(ceph_setting_name, (uint32_t)(defaultValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+      } //-- if (ceph_behavior_type == ceph_conversion_behavior_t::DEFAULT_ON_ERROR)
+      return EINVAL;
+    } //-- if (is_uint_negative(ceph_setting_value))
+    return (update_ceph_setting_value<uint32_t>(ceph_setting_name, (uint32_t)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_U32) 
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<uint32_t>(const std::string& ceph_setting_name, const uint32_t& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<uint64_t>(const std::string& ceph_setting_name, const uint64_t& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_U64) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    uint64_t optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. 
+    //-- If a negative value was passed into the unsigned int (valid bitwise).
+    if (is_uint_negative(ceph_setting_value)) {
+      std::cerr << "ERROR: An invalid value (negative) was passed to parameter (" << ceph_setting_name << " [unsigned]). aborting..." << std::endl;
+      if (ceph_behavior_type == ceph_conversion_behavior_t::DEFAULT_ON_ERROR) {
+        auto defaultValue = get_ceph_default_setting_value<uint64_t>(ceph_setting_name);
+        std::cerr << "WARNING: Using the default value for parameter (" << ceph_setting_name << ") -> [ " << defaultValue << " ]."  << std::endl;
+        return (update_ceph_setting_value<uint64_t>(ceph_setting_name, (uint64_t)(defaultValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+      } //-- if (ceph_behavior_type == ceph_conversion_behavior_t::DEFAULT_ON_ERROR)
+      return EINVAL;
+    } //-- if (is_uint_negative(ceph_setting_value))
+    return (update_ceph_setting_value<uint64_t>(ceph_setting_name, (uint64_t)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_U64) 
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<uint64_t>(const std::string& ceph_setting_name, const uint64_t& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<entity_addr_t>(const std::string& ceph_setting_name, const entity_addr_t& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_ADDR) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    entity_addr_t optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for ADDR. 
+    return (update_ceph_setting_value<entity_addr_t>(ceph_setting_name, (entity_addr_t)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_ADDR)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<entity_addr_t>(const std::string& ceph_setting_name, const entity_addr_t& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
+
+template<>
+inline int md_config_t::update_ceph_setting<uuid_d>(const std::string& ceph_setting_name, const uuid_d& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+{
+  //-- 
+  ceph_param_data_t ceph_params_type;
+  ceph_param_data_t ceph_params_type_default;
+  ceph_conversion_behavior_t ceph_behavior_type;
+  ceph_guard_behavior_t ceph_guard_type;
+  opt_type_t ceph_param_type; 
+  std::tie(ceph_behavior_type, ceph_params_type, ceph_guard_type, ceph_param_type, ceph_params_type_default) = ceph_settings_tbl_iter->second;
+  if (ceph_param_type == OPT_UUID) {
+    //auto oldValue = boost::get<Type>(ceph_params_type);
+    uuid_d optValue = (ceph_setting_value);
+    //-- We check for guards here and return an EINVAL if not allowed. We don't have any as of now for UUID. 
+    return (update_ceph_setting_value<uuid_d>(ceph_setting_name, (uuid_d)(optValue), ceph_param_type, ceph_behavior_type, ceph_guard_type));
+  } //-- if (ceph_param_type == OPT_UUID)
+  //-- Could not find the 'ceph_setting_name' with proper syntax.
+  return -ENOENT;
+} /* template<>
+     int md_config_t::update_ceph_setting<uuid_d>(const std::string& ceph_setting_name, const uuid_d& ceph_setting_value, ceph_settings_tbl_const_iter& ceph_settings_tbl_iter) 
+  */
 
 enum config_subsys_id {
   ceph_subsys_,   // default
@@ -295,3 +687,4 @@ enum config_subsys_id {
 };
 
 #endif
+
