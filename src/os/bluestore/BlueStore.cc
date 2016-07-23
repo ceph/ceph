@@ -739,7 +739,9 @@ void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
       Buffer *b = &*p;
       assert(b->is_clean());
       dout(20) << __func__ << " buffer_warm_in -> out " << *b << dendl;
+      assert(buffer_bytes >= b->length);
       buffer_bytes -= b->length;
+      assert(buffer_list_bytes[BUFFER_WARM_IN] >= b->length);
       buffer_list_bytes[BUFFER_WARM_IN] -= b->length;
       to_evict_bytes -= b->length;
       evicted += b->length;
