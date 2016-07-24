@@ -18,7 +18,9 @@ The following setup will get things running for FreeBSD:
 
 Building Ceph
 =============
- - Go and start building
+ - Go and start building using Cmake
+	./do_freebsd-cmake.sh
+ - Go and start building using Autobuild (soon depricated)
 	./do_freebsd.sh
 
 Parts not (yet) included:
@@ -57,3 +59,9 @@ Things to investigate:
 
  - ceph-{osd,mon} need 2 signals before they actually terminate.
 
+Things to improve upon:
+=======================
+
+ - Scheduler information is not used atm, because the schedulers work rather different.
+   But a a certain point in time, this would need some attention:
+     in: ./src/common/Thread.cc
