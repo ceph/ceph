@@ -17,11 +17,27 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 
 add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
-add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
+add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
+  set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -Wl,-export-dynamic -export-dynamic")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-inconsistent-missing-override")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-mismatched-tags -Wno-unused-function")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-local-typedef -Wno-inconsistent-missing-override")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-private-field -Wno-varargs")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-designator -Wno-mismatched-tags")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-parentheses -Wno-deprecated-register")
+endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
@@ -38,16 +54,18 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
 endif()
 
 include(CheckCCompilerFlag)
-CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-if(HAS_FORTIFY_SOURCE)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
-endif()
-endif()
-CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
-if (HAS_STACK_PROTECT)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
-endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
+  if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+    if(HAS_FORTIFY_SOURCE)
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
+    endif()
+  endif()
+  CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
+  if (HAS_STACK_PROTECT)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
+  endif()
+endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
@@ -94,8 +112,11 @@ else(no_yasm)
   endif(arch STREQUAL "x86_64")
 endif(no_yasm)
 
-
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor -Woverloaded-virtual")
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel")
+endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 # require c++11
 if(CMAKE_VERSION VERSION_LESS "3.1")
@@ -422,7 +443,6 @@ set(libcommon_files
   msg/async/AsyncConnection.cc
   msg/async/AsyncMessenger.cc
   msg/async/Event.cc
-  msg/async/EventEpoll.cc
   msg/async/EventSelect.cc
   msg/async/net_handler.cc
   ${xio_common_srcs}
@@ -477,6 +497,14 @@ set(libcommon_files
   ${auth_files}
   $<TARGET_OBJECTS:compressor_objs>
   ${mds_files})
+if(LINUX)
+  list(APPEND libcommon_files msg/async/EventEpoll.cc)
+  message(STATUS " Using EventEpoll for events.")
+elseif(FREEBSD OR APPLE)
+  list(APPEND libcommon_files msg/async/EventKqueue.cc)
+  message(STATUS " Using EventKqueue for events.")
+endif(LINUX)
+
 set(mon_common_files
   auth/AuthSessionHandler.cc
   auth/cephx/CephxSessionHandler.cc
