@@ -687,11 +687,11 @@ TEST_F(TestLibRBD, TestCreateLsDeletePP)
     int order = 0;
     std::string name = get_temp_image_name();
     std::string name2 = get_temp_image_name();
-    uint64_t size = 2 << 20;  
-    
+    uint64_t size = 2 << 20;
+
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name.c_str()));
-    ASSERT_EQ(0, rbd.create(ioctx, name2.c_str(), size, &order));
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name2.c_str(), size, &order));
     ASSERT_EQ(2, test_ls_pp(rbd, ioctx, 2, name.c_str(), name2.c_str()));
     ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
     ASSERT_EQ(1, test_ls_pp(rbd, ioctx, 1, name2.c_str()));
