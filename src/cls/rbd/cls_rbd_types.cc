@@ -211,5 +211,110 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status) {
   return os;
 }
 
+void GroupImageSpec::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(image_id, bl);
+  ::encode(pool_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void GroupImageSpec::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  ::decode(image_id, it);
+  ::decode(pool_id, it);
+  DECODE_FINISH(it);
+}
+
+void GroupImageSpec::dump(Formatter *f) const {
+  f->dump_string("image_id", image_id);
+  f->dump_int("pool_id", pool_id);
+}
+
+int GroupImageSpec::from_key(const std::string &image_key,
+				    GroupImageSpec *spec) {
+  if (nullptr == spec) return -EINVAL;
+  int prefix_len = cls::rbd::RBD_GROUP_IMAGE_KEY_PREFIX.size();
+  std::string data_string = image_key.substr(prefix_len,
+					     image_key.size() - prefix_len);
+  size_t p = data_string.find("_");
+  if (std::string::npos == p) {
+    return -EIO;
+  }
+  data_string[p] = ' ';
+
+  istringstream iss(data_string);
+  uint64_t pool_id;
+  string image_id;
+  iss >> std::hex >> pool_id >> image_id;
+
+  spec->image_id = image_id;
+  spec->pool_id = pool_id;
+  return 0;
+}
+
+std::string GroupImageSpec::image_key() {
+  if (-1 == pool_id)
+    return "";
+  else {
+    ostringstream oss;
+    oss << RBD_GROUP_IMAGE_KEY_PREFIX << std::setw(16)
+	<< std::setfill('0') << std::hex << pool_id << "_" << image_id;
+    return oss.str();
+  }
+}
+
+void GroupImageStatus::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(spec, bl);
+  ::encode(state, bl);
+  ENCODE_FINISH(bl);
+}
+
+void GroupImageStatus::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  ::decode(spec, it);
+  ::decode(state, it);
+  DECODE_FINISH(it);
+}
+
+std::string GroupImageStatus::state_to_string() const {
+  std::stringstream ss;
+  if (state == GROUP_IMAGE_LINK_STATE_INCOMPLETE) {
+    ss << "incomplete";
+  }
+  if (state == GROUP_IMAGE_LINK_STATE_ATTACHED) {
+    ss << "attached";
+  }
+  return ss.str();
+}
+
+void GroupImageStatus::dump(Formatter *f) const {
+  spec.dump(f);
+  f->dump_string("state", state_to_string());
+}
+
+void GroupSpec::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(pool_id, bl);
+  ::encode(group_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void GroupSpec::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  ::decode(pool_id, it);
+  ::decode(group_id, it);
+  DECODE_FINISH(it);
+}
+
+void GroupSpec::dump(Formatter *f) const {
+  f->dump_string("group_id", group_id);
+  f->dump_int("pool_id", pool_id);
+}
+
+bool GroupSpec::is_valid() const {
+  return (!group_id.empty()) && (pool_id != -1);
+}
+
 } // namespace rbd
 } // namespace cls

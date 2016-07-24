@@ -7,9 +7,12 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/stringify.h"
 #include "include/utime.h"
 #include <iosfwd>
 #include <string>
+
+#define RBD_GROUP_REF "rbd_group_ref"
 
 namespace ceph { class Formatter; }
 
@@ -17,12 +20,31 @@ namespace cls {
 namespace rbd {
 
 static const uint32_t MAX_OBJECT_MAP_OBJECT_COUNT = 256000000;
+static const string RBD_GROUP_IMAGE_KEY_PREFIX = "image_";
 
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
   MIRROR_MODE_POOL     = 2
 };
+
+enum GroupImageLinkState {
+  GROUP_IMAGE_LINK_STATE_ATTACHED,
+  GROUP_IMAGE_LINK_STATE_INCOMPLETE
+};
+
+inline void encode(const GroupImageLinkState &state, bufferlist& bl,
+		   uint64_t features=0)
+{
+  ::encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(GroupImageLinkState &state, bufferlist::iterator& it)
+{
+  uint8_t int_state;
+  ::decode(int_state, it);
+  state = static_cast<GroupImageLinkState>(int_state);
+}
 
 struct MirrorPeer {
   MirrorPeer() {
@@ -133,6 +155,66 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
+
+struct GroupImageSpec {
+  GroupImageSpec() {}
+
+  GroupImageSpec(const std::string &image_id, int64_t pool_id)
+    : image_id(image_id), pool_id(pool_id) {}
+
+  static int from_key(const std::string &image_key, GroupImageSpec *spec);
+
+  std::string image_id;
+  int64_t pool_id = -1;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  std::string image_key();
+
+};
+
+WRITE_CLASS_ENCODER(GroupImageSpec);
+
+struct GroupImageStatus {
+  GroupImageStatus() {}
+  GroupImageStatus(const std::string &image_id,
+		   int64_t pool_id,
+		   GroupImageLinkState state)
+    : spec(image_id, pool_id), state(state) {}
+
+  GroupImageStatus(GroupImageSpec spec,
+		   GroupImageLinkState state)
+    : spec(spec), state(state) {}
+
+  GroupImageSpec spec;
+  GroupImageLinkState state = GROUP_IMAGE_LINK_STATE_INCOMPLETE;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  std::string state_to_string() const;
+};
+
+WRITE_CLASS_ENCODER(GroupImageStatus);
+
+struct GroupSpec {
+  GroupSpec() {}
+  GroupSpec(const std::string &group_id, int64_t pool_id)
+    : group_id(group_id), pool_id(pool_id) {}
+
+  std::string group_id;
+  int64_t pool_id = -1;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+  bool is_valid() const;
+};
+
+WRITE_CLASS_ENCODER(GroupSpec);
 
 } // namespace rbd
 } // namespace cls
