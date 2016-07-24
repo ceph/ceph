@@ -1106,7 +1106,7 @@ void MDSDaemon::suicide()
     mds_rank->shutdown();
   } else {
 
-    if (objecter->initialized.read()) {
+    if (objecter->initialized) {
       objecter->shutdown();
     }
     timer.shutdown();
