@@ -19,9 +19,6 @@ add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
 
-set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-set(CMAKE_ASM_FLAGS "-f elf64")
-
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
 
@@ -67,6 +64,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
+set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+set(CMAKE_ASM_FLAGS "-f elf64")
+
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
   RESULT_VARIABLE no_yasm
@@ -79,7 +79,7 @@ else(no_yasm)
     COMMAND uname -m
     OUTPUT_VARIABLE arch
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(arch STREQUAL "x86_64")
+  if(arch MATCHES "amd64|x86_64")
     message(STATUS " we are x84_64")
     set(save_quiet ${CMAKE_REQUIRED_QUIET})
     set(CMAKE_REQUIRED_QUIET true)
@@ -107,9 +107,9 @@ else(no_yasm)
     else(not_arch_x32)
       message(STATUS " we are x32; no yasm for you")
     endif(not_arch_x32)
-  else(arch STREQUAL "x86_64")
+  else(arch MATCHES "amd64|x86_64")
     message(STATUS " we are not x86_64 && !x32")
-  endif(arch STREQUAL "x86_64")
+  endif(arch MATCHES "amd64|x86_64")
 endif(no_yasm)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
