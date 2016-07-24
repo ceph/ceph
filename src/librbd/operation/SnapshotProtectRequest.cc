@@ -47,7 +47,11 @@ bool SnapshotProtectRequest<I>::should_complete(int r) {
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
   if (r < 0) {
-    lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
+    if (r == -EBUSY) {
+      ldout(cct, 1) << "snapshot is already protected" << dendl;
+    } else {
+      lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
+    }
   }
   return true;
 }
