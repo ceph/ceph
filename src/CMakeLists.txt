@@ -217,8 +217,11 @@ else(INTEL_SSE4_1)
   message(STATUS "Skipping target ec_jerasure_sse4 & ec_shec_sse4: -msse4.1 not supported")
 endif(INTEL_SSE4_1)
 
-
 set(EXTRALIBS rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+if(LINUX)
+  set(LIB_RESOLV resolv)
+  list(APPEND EXTRALIBS ${LIB_RESOLV})
+endif(LINUX)
 
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 if(WITH_PROFILER)
