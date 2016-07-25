@@ -446,6 +446,40 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
+
+  // Test for 13965
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    list<hobject_t> remove_snap;
+    pg_info_t info;
+    info.log_tail = log.tail = eversion_t(1, 5);
+    info.last_update = eversion_t(1, 6);
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    {
+      pg_log_entry_t e;
+      e.mod_desc.mark_unrollbackable();
+      e.version = eversion_t(1, 5);
+      e.soid.set_hash(0x9);
+      add(e);
+    }
+    {
+      pg_log_entry_t e;
+      e.mod_desc.mark_unrollbackable();
+      e.version = eversion_t(1, 6);
+      e.soid.set_hash(0x10);
+      add(e);
+    }
+    TestHandler h(remove_snap);
+    trim_rollback_info(eversion_t(1, 6), &h);
+    rewind_divergent_log(t, eversion_t(1, 5), info, &h,
+			 dirty_info, dirty_big_info);
+    pg_log_t log;
+    claim_log_and_clear_rollback_info(log, &h);
+  }
 }
 
 TEST_F(PGLogTest, merge_old_entry) {
