@@ -88,6 +88,7 @@ public:
 
   int proc_message(Message *m);
   
+  int localize_balancer(string const balancer);
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
 
@@ -99,6 +100,7 @@ public:
   //set up the rebalancing targets for export and do one if the
   //MDSMap is up to date
   void prep_rebalance(int beat);
+  int mantle_prep_rebalance();
   /*check if the monitor has recorded the current export targets;
     if it has then do the actual export. Otherwise send off our
     export targets message again*/
