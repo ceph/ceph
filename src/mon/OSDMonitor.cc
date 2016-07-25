@@ -2028,6 +2028,21 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
       continue;
     }
 
+    int acting_primary = -1;
+    osdmap.pg_to_up_acting_osds(
+      p->first, NULL, NULL, NULL, &acting_primary);
+    if (acting_primary != from) {
+      /* If the source isn't the primary based on the current osdmap, we know
+       * that the interval changed and that we can discard this message.
+       * Indeed, we must do so to avoid 16127 since we can't otherwise determine
+       * which of two pg temp mappings on the same pg is more recent.
+       */
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+	       << ": primary has changed" << dendl;
+      ignore_cnt++;
+      continue;
+    }
+
     // removal?
     if (p->second.empty() && (osdmap.pg_temp->count(p->first) ||
 			      osdmap.primary_temp->count(p->first)))
