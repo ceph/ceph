@@ -1,3 +1,4 @@
+
 ceph (0.94.6-1) stable; urgency=low
 
   * New upstream release
@@ -22,6 +23,15 @@ ceph (0.94.3-1) stable; urgency=low
 
  -- Alfredo Deza <adeza@redhat.com>  Wed, 26 Aug 2015 10:39:37 -0700
 
+ceph (0.94.2-1~bpo70+1.fk1) stable; urgency=low
+
+  * Flipkart New upstream release
+    - multipart upload bug patch ceph http://tracker.ceph.com/issues/15886
+    - erasure code bug patch http://tracker.ceph.com/issues/15745
+    - civetweb make listen queue configurable https://github.com/agsha/civetweb/pull/2
+  
+ -- Sharath Gururaj <sharath.g@flipkart.com>  Tue, 25 Jul 2016 12:32:34 -0700
+   
 ceph (0.94.2-1) stable; urgency=low
 
   * New upstream release
