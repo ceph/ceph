@@ -7241,7 +7241,7 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_heap, last.get_heap());
   mds->mlogger->set(l_mdm_malloc, last.malloc);
 
-  if (num_inodes_with_caps > g_conf->mds_cache_size) {
+  if (static_cast<uint32_t>(num_inodes_with_caps) > g_conf->mds_cache_size) {
     float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);

@@ -314,7 +314,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c)
     // disambiguate imports. Because the ESubtreeMap reflects the subtree
     // state when all EImportFinish events are replayed.
   } else if (ls->end/period != ls->offset/period ||
-	     ls->num_events >= g_conf->mds_log_events_per_segment) {
+         static_cast<uint32_t>(ls->num_events) >= g_conf->mds_log_events_per_segment) {
     dout(10) << "submit_entry also starting new segment: last = "
 	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
     _start_new_segment();
@@ -580,7 +580,7 @@ void MDLog::trim(int m)
   }
 
   // Clamp max_events to not be smaller than events per segment
-  if (max_events > 0 && max_events <= g_conf->mds_log_events_per_segment) {
+  if (max_events > 0 && static_cast<uint32_t>(max_events) <= g_conf->mds_log_events_per_segment) {
     max_events = g_conf->mds_log_events_per_segment + 1;
   }
 
@@ -613,7 +613,7 @@ void MDLog::trim(int m)
       break;
 
     int num_expiring_segments = (int)expiring_segments.size();
-    if (num_expiring_segments >= g_conf->mds_log_max_expiring)
+    if (static_cast<uint32_t>(num_expiring_segments) >= g_conf->mds_log_max_expiring)
       break;
 
     int op_prio = CEPH_MSG_PRIO_LOW +

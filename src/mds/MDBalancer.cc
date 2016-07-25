@@ -796,9 +796,9 @@ bool MDBalancer::check_targets()
       continue;
     }
     dout(20) << " target mds." << p->first << " has been non-target for " << p->second << dendl;
-    if (p->second < g_conf->mds_bal_target_removal_min)
+    if (static_cast<uint32_t>(p->second) < g_conf->mds_bal_target_removal_min)
       want_targets.insert(p->first);
-    if (p->second >= g_conf->mds_bal_target_removal_max)
+    if (static_cast<uint32_t>(p->second) >= g_conf->mds_bal_target_removal_max)
       send = true;
     ++p;
   }

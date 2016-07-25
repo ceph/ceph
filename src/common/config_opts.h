@@ -440,10 +440,10 @@ OPTION(journaler_batch_interval, OPT_DOUBLE, .001)   // seconds.. max add latenc
 OPTION(journaler_batch_max, OPT_U64, 0)  // max bytes we'll delay flushing; disable, for now....
 OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
-OPTION(mds_cache_size, OPT_INT, 100000)
+OPTION(mds_cache_size, OPT_U32, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
 OPTION(mds_max_file_recover, OPT_U32, 32)
-OPTION(mds_dir_max_commit_size, OPT_INT, 10) // MB
+OPTION(mds_dir_max_commit_size, OPT_U32, 10) // MB
 OPTION(mds_decay_halflife, OPT_FLOAT, 5)
 OPTION(mds_beacon_interval, OPT_FLOAT, 4)
 OPTION(mds_beacon_grace, OPT_FLOAT, 15)
@@ -455,52 +455,52 @@ OPTION(mds_revoke_cap_timeout, OPT_FLOAT, 60)    // detect clients which aren't 
 OPTION(mds_recall_state_timeout, OPT_FLOAT, 60)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT, 300) // autoclose idle session
-OPTION(mds_health_summarize_threshold, OPT_INT, 10) // collapse N-client health metrics to a single 'many'
+OPTION(mds_health_summarize_threshold, OPT_U32, 10) // collapse N-client health metrics to a single 'many'
 OPTION(mds_reconnect_timeout, OPT_FLOAT, 45)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT, 5)
 OPTION(mds_dirstat_min_interval, OPT_FLOAT, 1)    // try to avoid propagating more often than this
 OPTION(mds_scatter_nudge_interval, OPT_FLOAT, 5)  // how quickly dirstat changes propagate up the hierarchy
-OPTION(mds_client_prealloc_inos, OPT_INT, 1000)
+OPTION(mds_client_prealloc_inos, OPT_U32, 1000)
 OPTION(mds_early_reply, OPT_BOOL, true)
 OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
 OPTION(mds_log, OPT_BOOL, true)
 OPTION(mds_log_pause, OPT_BOOL, false)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
-OPTION(mds_log_events_per_segment, OPT_INT, 1024)
-OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log, default to default file_layout_t
+OPTION(mds_log_events_per_segment, OPT_U32, 1024)
+OPTION(mds_log_segment_size, OPT_U32, 0)  // segment size for mds log, default to default file_layout_t
 OPTION(mds_log_max_segments, OPT_U32, 30)
-OPTION(mds_log_max_expiring, OPT_INT, 20)
+OPTION(mds_log_max_expiring, OPT_U32, 20)
 OPTION(mds_bal_sample_interval, OPT_FLOAT, 3.0)  // every 5 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT, 0)
 OPTION(mds_bal_frag, OPT_BOOL, false)
-OPTION(mds_bal_split_size, OPT_INT, 10000)
+OPTION(mds_bal_split_size, OPT_U32, 10000)
 OPTION(mds_bal_split_rd, OPT_FLOAT, 25000)
 OPTION(mds_bal_split_wr, OPT_FLOAT, 10000)
-OPTION(mds_bal_split_bits, OPT_INT, 3)
-OPTION(mds_bal_merge_size, OPT_INT, 50)
+OPTION(mds_bal_split_bits, OPT_U32, 3)
+OPTION(mds_bal_merge_size, OPT_U32, 50)
 OPTION(mds_bal_merge_rd, OPT_FLOAT, 1000)
 OPTION(mds_bal_merge_wr, OPT_FLOAT, 1000)
-OPTION(mds_bal_interval, OPT_INT, 10)           // seconds
-OPTION(mds_bal_fragment_interval, OPT_INT, 5)      // seconds
+OPTION(mds_bal_interval, OPT_U32, 10)           // seconds
+OPTION(mds_bal_fragment_interval, OPT_U32, 5)      // seconds
 OPTION(mds_bal_idle_threshold, OPT_FLOAT, 0)
 OPTION(mds_bal_max, OPT_INT, -1)
 OPTION(mds_bal_max_until, OPT_INT, -1)
-OPTION(mds_bal_mode, OPT_INT, 0)
+OPTION(mds_bal_mode, OPT_U32, 0)
 OPTION(mds_bal_min_rebalance, OPT_FLOAT, .1)  // must be this much above average before we export anything
 OPTION(mds_bal_min_start, OPT_FLOAT, .2)      // if we need less than this, we don't do anything
 OPTION(mds_bal_need_min, OPT_FLOAT, .8)       // take within this range of what we need
 OPTION(mds_bal_need_max, OPT_FLOAT, 1.2)
 OPTION(mds_bal_midchunk, OPT_FLOAT, .3)       // any sub bigger than this taken in full
 OPTION(mds_bal_minchunk, OPT_FLOAT, .001)     // never take anything smaller than this
-OPTION(mds_bal_target_removal_min, OPT_INT, 5) // min balance iterations before old target is removed
-OPTION(mds_bal_target_removal_max, OPT_INT, 10) // max balance iterations before old target is removed
+OPTION(mds_bal_target_removal_min, OPT_U32, 5) // min balance iterations before old target is removed
+OPTION(mds_bal_target_removal_max, OPT_U32, 10) // max balance iterations before old target is removed
 OPTION(mds_replay_interval, OPT_FLOAT, 1.0) // time to wait before starting replay again
-OPTION(mds_shutdown_check, OPT_INT, 0)
-OPTION(mds_thrash_exports, OPT_INT, 0)
-OPTION(mds_thrash_fragments, OPT_INT, 0)
+OPTION(mds_shutdown_check, OPT_U32, 0)
+OPTION(mds_thrash_exports, OPT_U32, 0)
+OPTION(mds_thrash_fragments, OPT_U32, 0)
 OPTION(mds_dump_cache_on_map, OPT_BOOL, false)
 OPTION(mds_dump_cache_after_rejoin, OPT_BOOL, false)
 OPTION(mds_verify_scatter, OPT_BOOL, false)
@@ -508,24 +508,24 @@ OPTION(mds_debug_scatterstat, OPT_BOOL, false)
 OPTION(mds_debug_frag, OPT_BOOL, false)
 OPTION(mds_debug_auth_pins, OPT_BOOL, false)
 OPTION(mds_debug_subtrees, OPT_BOOL, false)
-OPTION(mds_kill_mdstable_at, OPT_INT, 0)
-OPTION(mds_kill_export_at, OPT_INT, 0)
-OPTION(mds_kill_import_at, OPT_INT, 0)
-OPTION(mds_kill_link_at, OPT_INT, 0)
-OPTION(mds_kill_rename_at, OPT_INT, 0)
-OPTION(mds_kill_openc_at, OPT_INT, 0)
-OPTION(mds_kill_journal_at, OPT_INT, 0)
-OPTION(mds_kill_journal_expire_at, OPT_INT, 0)
-OPTION(mds_kill_journal_replay_at, OPT_INT, 0)
+OPTION(mds_kill_mdstable_at, OPT_U32, 0)
+OPTION(mds_kill_export_at, OPT_U32, 0)
+OPTION(mds_kill_import_at, OPT_U32, 0)
+OPTION(mds_kill_link_at, OPT_U32, 0)
+OPTION(mds_kill_rename_at, OPT_U32, 0)
+OPTION(mds_kill_openc_at, OPT_U32, 0)
+OPTION(mds_kill_journal_at, OPT_U32, 0)
+OPTION(mds_kill_journal_expire_at, OPT_U32, 0)
+OPTION(mds_kill_journal_replay_at, OPT_U32, 0)
 OPTION(mds_journal_format, OPT_U32, 1)  // Default to most recent JOURNAL_FORMAT_*
-OPTION(mds_kill_create_at, OPT_INT, 0)
+OPTION(mds_kill_create_at, OPT_U32, 0)
 OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 				of MDS modify replies to skip sending the
 				client a trace on [0-1]*/
 OPTION(mds_wipe_sessions, OPT_BOOL, 0)
 OPTION(mds_wipe_ino_prealloc, OPT_BOOL, 0)
-OPTION(mds_skip_ino, OPT_INT, 0)
-OPTION(max_mds, OPT_INT, 1)
+OPTION(mds_skip_ino, OPT_U32, 0)
+OPTION(max_mds, OPT_U32, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_for_fscid, OPT_INT, -1)
@@ -534,7 +534,7 @@ OPTION(mds_enable_op_tracker, OPT_BOOL, true) // enable/disable MDS op tracking
 OPTION(mds_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(mds_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
-OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
+OPTION(mds_op_log_threshold, OPT_U32, 5) // how many op log messages to show in one go
 OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a snapshot
 OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
 OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapshot
@@ -553,13 +553,13 @@ OPTION(mds_max_purge_ops, OPT_U32, 8192)
 // Maximum number of concurrent RADOS ops to issue in purging, scaled by PG count
 OPTION(mds_max_purge_ops_per_pg, OPT_FLOAT, 0.5)
 
-OPTION(mds_root_ino_uid, OPT_INT, 0) // The UID of / on new filesystems
-OPTION(mds_root_ino_gid, OPT_INT, 0) // The GID of / on new filesystems
+OPTION(mds_root_ino_uid, OPT_U32, 0) // The UID of / on new filesystems
+OPTION(mds_root_ino_gid, OPT_U32, 0) // The GID of / on new filesystems
 
-OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous scrubs allowed
+OPTION(mds_max_scrub_ops_in_progress, OPT_U32, 5) // the number of simultaneous scrubs allowed
 
 // Maximum number of damaged frags/dentries before whole MDS rank goes damaged
-OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
+OPTION(mds_damage_table_max_entries, OPT_U32, 10000)
 
 // verify backend can support configured max object name length
 OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL, true)

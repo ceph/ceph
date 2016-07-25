@@ -453,7 +453,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   /*double el = now - start;
   if (el > 30.0 &&
     el < 60.0)*/
-  for (int i=0; i<g_conf->mds_thrash_exports; i++) {
+  for (uint32_t i=0; i<g_conf->mds_thrash_exports; i++) {
     set<mds_rank_t> s;
     if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
@@ -487,7 +487,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     }
   }
   // hack: thrash fragments
-  for (int i=0; i<g_conf->mds_thrash_fragments; i++) {
+  for (uint32_t i=0; i<g_conf->mds_thrash_fragments; i++) {
     if (!is_active()) break;
     if (mdcache->get_num_fragmenting_dirs() > 5) break;
     dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf->mds_thrash_fragments << dendl;

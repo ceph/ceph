@@ -84,7 +84,7 @@ void ScrubStack::kick_off_scrubs()
               "progress and " << stack_size << " in the stack" << dendl;
   bool can_continue = true;
   elist<CInode*>::iterator i = inode_stack.begin();
-  while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress &&
+  while (g_conf->mds_max_scrub_ops_in_progress > static_cast<uint32_t>(scrubs_in_progress) &&
       can_continue && !i.end()) {
     CInode *curi = *i;
     ++i; // we have our reference, push iterator forward
@@ -159,7 +159,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 	     << " scrubbing cdirs" << dendl;
 
     list<CDir*>::iterator i = scrubbing_cdirs.begin();
-    while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress) {
+    while (g_conf->mds_max_scrub_ops_in_progress > static_cast<uint32_t>(scrubs_in_progress)) {
       // select next CDir
       CDir *cur_dir = NULL;
       if (i != scrubbing_cdirs.end()) {
