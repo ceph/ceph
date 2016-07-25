@@ -2269,6 +2269,7 @@ public:
   void queue_recovery(bool front = false);
   bool queue_scrub();
   unsigned get_scrub_priority();
+  unsigned get_requested_scrub_priority();
 
   /// share pg info after a pg is active
   void share_pg_info();
