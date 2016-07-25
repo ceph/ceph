@@ -49,14 +49,13 @@ MDSRank::MDSRank(
     MDSMap *& mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
-    Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
   :
     whoami(whoami_), incarnation(0),
     mds_lock(mds_lock_), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
-    objecter(objecter_),
+    objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
     balancer(NULL), scrubstack(NULL),
     damage_table(whoami_),
@@ -77,6 +76,8 @@ MDSRank::MDSRank(
     standby_replaying(false)
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
+
+  objecter->unset_honor_osdmap_full();
 
   finisher = new Finisher(msgr->cct);
 
@@ -136,10 +137,18 @@ MDSRank::~MDSRank()
 
   delete respawn_hook;
   respawn_hook = NULL;
+
+  delete objecter;
+  objecter = nullptr;
 }
 
 void MDSRankDispatcher::init()
 {
+  objecter->init();
+  messenger->add_dispatcher_head(objecter);
+
+  objecter->start();
+
   update_log_config();
   create_logger();
 
@@ -1060,11 +1069,9 @@ void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 
 inline void MDSRank::standby_replay_restart()
 {
-  dout(1) << "standby_replay_restart"
-	  << (standby_replaying ? " (as standby)":" (final takeover pass)")
-	  << dendl;
   if (standby_replaying) {
     /* Go around for another pass of replaying in standby */
+    dout(4) << "standby_replay_restart (as standby)" << dendl;
     mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(
         this,
@@ -1072,6 +1079,7 @@ inline void MDSRank::standby_replay_restart()
   } else {
     /* We are transitioning out of standby: wait for OSD map update
        before making final pass */
+    dout(1) << "standby_replay_restart (final takeover pass)" << dendl;
     Context *fin = new C_OnFinisher(new C_IO_Wrapper(this,
           new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG)),
       finisher);
@@ -2553,11 +2561,10 @@ MDSRankDispatcher::MDSRankDispatcher(
     MDSMap *& mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
-    Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
   : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
-      msgr, monc_, objecter_, respawn_hook_, suicide_hook_)
+      msgr, monc_, respawn_hook_, suicide_hook_)
 {}
 
 bool MDSRankDispatcher::handle_command(
@@ -2626,3 +2633,9 @@ bool MDSRankDispatcher::handle_command(
     return false;
   }
 }
+
+epoch_t MDSRank::get_osd_epoch() const
+{
+  return objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));  
+}
+
