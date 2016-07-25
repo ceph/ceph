@@ -2440,7 +2440,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
-      AioCompletion *comp = AioCompletion::create(ctx);
+      AioCompletion *comp = AioCompletion::create_and_start(ctx, src,
+                                                            AIO_TYPE_READ);
       AioImageRequest<>::aio_read(src, comp, offset, len, NULL, bl,
                                   fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
@@ -2665,7 +2666,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       bufferlist bl;
 
       C_SaferCond ctx;
-      AioCompletion *c = AioCompletion::create(&ctx);
+      AioCompletion *c = AioCompletion::create_and_start(&ctx, ictx,
+                                                         AIO_TYPE_READ);
       AioImageRequest<>::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
 
       int ret = ctx.wait();
