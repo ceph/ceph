@@ -380,7 +380,7 @@ OPTION(client_mountpoint, OPT_STR, "/")
 OPTION(client_mount_uid, OPT_INT, -1)
 OPTION(client_mount_gid, OPT_INT, -1)
 OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
-OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
+OPTION(osd_client_watch_timeout, OPT_U32, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
 OPTION(client_quota, OPT_BOOL, false)
 OPTION(client_quota_df, OPT_BOOL, true) // use quota for df on subdir mounts
@@ -571,7 +571,7 @@ OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 OPTION(osd_max_backfills, OPT_U64, 1)
 
 // Minimum recovery priority (255 = max, smaller = lower)
-OPTION(osd_min_recovery_priority, OPT_INT, 0)
+OPTION(osd_min_recovery_priority, OPT_U32, 0)
 
 // Refuse backfills when OSD full ratio is above this value
 OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
@@ -580,8 +580,8 @@ OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
 OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
 // max agent flush ops
-OPTION(osd_agent_max_ops, OPT_INT, 4)
-OPTION(osd_agent_max_low_ops, OPT_INT, 2)
+OPTION(osd_agent_max_ops, OPT_U32, 4)
+OPTION(osd_agent_max_low_ops, OPT_U32, 2)
 OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
@@ -590,7 +590,7 @@ OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
 OPTION(osd_find_best_info_ignore_history_les, OPT_BOOL, false)
 
 // decay atime and hist histograms after how many objects go by
-OPTION(osd_agent_hist_halflife, OPT_INT, 1000)
+OPTION(osd_agent_hist_halflife, OPT_U32, 1000)
 
 // must be this amount over the threshold to enable,
 // this amount below the threshold to disable.
@@ -599,31 +599,31 @@ OPTION(osd_agent_slop, OPT_FLOAT, .02)
 OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
-OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
+OPTION(osd_journal_size, OPT_U32, 5120)         // in mb
 // flags for specific control purpose during osd mount() process. 
 // e.g., can be 1 to skip over replaying journal
 // or 2 to skip over mounting omap or 3 to skip over both.
 // This might be helpful in case the journal is totally corrupted
 // and we still want to bring the osd daemon back normally, etc.
 OPTION(osd_os_flags, OPT_U32, 0)
-OPTION(osd_max_write_size, OPT_INT, 90)
+OPTION(osd_max_write_size, OPT_U32, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
 OPTION(osd_client_message_cap, OPT_U64, 100)              // num client messages allowed in-memory
 OPTION(osd_pg_op_threshold_ratio, OPT_U64, 2)             // the expected maximum op over the average number of ops per pg
-OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
-OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
-OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
+OPTION(osd_pg_bits, OPT_U32, 6)  // bits per osd
+OPTION(osd_pgp_bits, OPT_U32, 6)  // bits per osd
+OPTION(osd_crush_chooseleaf_type, OPT_U32, 1) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
 OPTION(osd_crush_update_on_start, OPT_BOOL, true)
 OPTION(osd_crush_initial_weight, OPT_DOUBLE, -1) // if >=0, the initial weight is for newly added osds.
 OPTION(osd_pool_default_crush_rule, OPT_INT, -1) // deprecated for osd_pool_default_crush_replicated_ruleset
-OPTION(osd_pool_default_crush_replicated_ruleset, OPT_INT, CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
+OPTION(osd_pool_default_crush_replicated_ruleset, OPT_U32, CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
 OPTION(osd_pool_erasure_code_stripe_width, OPT_U32, OSD_POOL_ERASURE_CODE_STRIPE_WIDTH) // in bytes
-OPTION(osd_pool_default_size, OPT_INT, 3)
-OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
-OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
-OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
+OPTION(osd_pool_default_size, OPT_U32, 3)
+OPTION(osd_pool_default_min_size, OPT_U32, 0)  // 0 means no specific default; ceph will use size-size/2
+OPTION(osd_pool_default_pg_num, OPT_U32, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
+OPTION(osd_pool_default_pgp_num, OPT_U32, 8) // number of PGs for placement purposes. Should be equal to pg_num
 OPTION(osd_compression_plugins, OPT_STR,
        "zlib"
        " snappy"
@@ -646,7 +646,7 @@ OPTION(osd_erasure_code_plugins, OPT_STR,
 // Allows the "peered" state for recovery and backfill below min_size
 OPTION(osd_allow_recovery_below_min_size, OPT_BOOL, true)
 
-OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
+OPTION(osd_pool_default_flags, OPT_U32, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_flag_nodelete, OPT_BOOL, false) // pool can't be deleted
 OPTION(osd_pool_default_flag_nopgchange, OPT_BOOL, false) // pool's pg and pgp num can't be changed
@@ -655,11 +655,11 @@ OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
 OPTION(osd_pool_default_cache_target_dirty_ratio, OPT_FLOAT, .4)
 OPTION(osd_pool_default_cache_target_dirty_high_ratio, OPT_FLOAT, .6)
 OPTION(osd_pool_default_cache_target_full_ratio, OPT_FLOAT, .8)
-OPTION(osd_pool_default_cache_min_flush_age, OPT_INT, 0)  // seconds
-OPTION(osd_pool_default_cache_min_evict_age, OPT_INT, 0)  // seconds
-OPTION(osd_pool_default_cache_max_evict_check_size, OPT_INT, 10)  // max size to check for eviction
-OPTION(osd_hit_set_min_size, OPT_INT, 1000)  // min target size for a HitSet
-OPTION(osd_hit_set_max_size, OPT_INT, 100000)  // max target size for a HitSet
+OPTION(osd_pool_default_cache_min_flush_age, OPT_U32, 0)  // seconds
+OPTION(osd_pool_default_cache_min_evict_age, OPT_U32, 0)  // seconds
+OPTION(osd_pool_default_cache_max_evict_check_size, OPT_U32, 10)  // max size to check for eviction
+OPTION(osd_hit_set_min_size, OPT_U32, 1000)  // min target size for a HitSet
+OPTION(osd_hit_set_max_size, OPT_U32, 100000)  // max target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
 
 // conservative default throttling values
@@ -667,36 +667,36 @@ OPTION(osd_tier_promote_max_objects_sec, OPT_U64, 25)
 OPTION(osd_tier_promote_max_bytes_sec, OPT_U64, 5 * 1024*1024)
 
 OPTION(osd_tier_default_cache_mode, OPT_STR, "writeback")
-OPTION(osd_tier_default_cache_hit_set_count, OPT_INT, 4)
-OPTION(osd_tier_default_cache_hit_set_period, OPT_INT, 1200)
+OPTION(osd_tier_default_cache_hit_set_count, OPT_U32, 4)
+OPTION(osd_tier_default_cache_hit_set_period, OPT_U32, 1200)
 OPTION(osd_tier_default_cache_hit_set_type, OPT_STR, "bloom")
-OPTION(osd_tier_default_cache_min_read_recency_for_promote, OPT_INT, 1) // number of recent HitSets the object must appear in to be promoted (on read)
-OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT, 1) // number of recent HitSets the object must appear in to be promoted (on write)
-OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT, 20)
-OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT, 1)
+OPTION(osd_tier_default_cache_min_read_recency_for_promote, OPT_U32, 1) // number of recent HitSets the object must appear in to be promoted (on read)
+OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_U32, 1) // number of recent HitSets the object must appear in to be promoted (on write)
+OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_U32, 20)
+OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_U32, 1)
 
 OPTION(osd_map_dedup, OPT_BOOL, true)
-OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
-OPTION(osd_map_cache_size, OPT_INT, 200)
-OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
-OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
+OPTION(osd_map_max_advance, OPT_U32, 150) // make this < cache_size!
+OPTION(osd_map_cache_size, OPT_U32, 200)
+OPTION(osd_map_message_max, OPT_U32, 100)  // max maps per MOSDMap message
+OPTION(osd_map_share_max_epochs, OPT_U32, 100)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 // shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
-OPTION(osd_max_markdown_period , OPT_INT, 600)
-OPTION(osd_max_markdown_count, OPT_INT, 5)
+OPTION(osd_max_markdown_period , OPT_U32, 600)
+OPTION(osd_max_markdown_count, OPT_U32, 5)
 
-OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
+OPTION(osd_op_threads, OPT_U32, 2)    // 0 == no threading
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
-OPTION(osd_disk_threads, OPT_INT, 1)
+OPTION(osd_disk_threads, OPT_U32, 1)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
-OPTION(osd_recovery_threads, OPT_INT, 1)
+OPTION(osd_recovery_threads, OPT_U32, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
-OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
-OPTION(osd_op_num_shards, OPT_INT, 5)
+OPTION(osd_op_num_threads_per_shard, OPT_U32, 2)
+OPTION(osd_op_num_shards, OPT_U32, 5)
 OPTION(osd_op_queue, OPT_STR, "prio") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
@@ -707,25 +707,25 @@ OPTION(osd_read_ec_check_for_errors, OPT_BOOL, false) // return error if any ec 
 
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
-OPTION(osd_recover_clone_overlap_limit, OPT_INT, 10)
+OPTION(osd_recover_clone_overlap_limit, OPT_U32, 10)
 
-OPTION(osd_backfill_scan_min, OPT_INT, 64)
-OPTION(osd_backfill_scan_max, OPT_INT, 512)
-OPTION(osd_op_thread_timeout, OPT_INT, 15)
-OPTION(osd_op_thread_suicide_timeout, OPT_INT, 150)
-OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
-OPTION(osd_recovery_thread_suicide_timeout, OPT_INT, 300)
+OPTION(osd_backfill_scan_min, OPT_U32, 64)
+OPTION(osd_backfill_scan_max, OPT_U32, 512)
+OPTION(osd_op_thread_timeout, OPT_U32, 15)
+OPTION(osd_op_thread_suicide_timeout, OPT_U32, 150)
+OPTION(osd_recovery_thread_timeout, OPT_U32, 30)
+OPTION(osd_recovery_thread_suicide_timeout, OPT_U32, 300)
 OPTION(osd_recovery_sleep, OPT_FLOAT, 0)         // seconds to sleep between recovery ops
 OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL, true)
-OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
-OPTION(osd_remove_thread_suicide_timeout, OPT_INT, 10*60*60)
-OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
-OPTION(osd_command_thread_suicide_timeout, OPT_INT, 15*60)
+OPTION(osd_remove_thread_timeout, OPT_U32, 60*60)
+OPTION(osd_remove_thread_suicide_timeout, OPT_U32, 10*60*60)
+OPTION(osd_command_thread_timeout, OPT_U32, 10*60)
+OPTION(osd_command_thread_suicide_timeout, OPT_U32, 15*60)
 OPTION(osd_heartbeat_addr, OPT_ADDR, entity_addr_t())
-OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping peers
-OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
-OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
+OPTION(osd_heartbeat_interval, OPT_U32, 6)       // (seconds) how often we ping peers
+OPTION(osd_heartbeat_grace, OPT_U32, 20)         // (seconds) how long before we decide a peer has failed
+OPTION(osd_heartbeat_min_peers, OPT_U32, 10)     // minimum number of peers
 OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbeat tcp socket and set dscp as CS6 on it if true
 
 // max number of parallel snap trims/pg
@@ -735,15 +735,15 @@ OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
 // back up after being wrongly marked down.
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)
 
-OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping monitor if no peers
-OPTION(osd_mon_report_interval_max, OPT_INT, 600)
-OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
-OPTION(osd_mon_report_max_in_flight, OPT_INT, 2)  // max updates in flight
-OPTION(osd_pg_stat_report_interval_max, OPT_INT, 500)  // report pg stats for any given pg at least this often
-OPTION(osd_mon_ack_timeout, OPT_INT, 30) // time out a mon if it doesn't ack stats
+OPTION(osd_mon_heartbeat_interval, OPT_U32, 30)  // (seconds) how often to ping monitor if no peers
+OPTION(osd_mon_report_interval_max, OPT_U32, 600)
+OPTION(osd_mon_report_interval_min, OPT_U32, 5)  // pg stats, failures, up_thru, boot.
+OPTION(osd_mon_report_max_in_flight, OPT_U32, 2)  // max updates in flight
+OPTION(osd_pg_stat_report_interval_max, OPT_U32, 500)  // report pg stats for any given pg at least this often
+OPTION(osd_mon_ack_timeout, OPT_U32, 30) // time out a mon if it doesn't ack stats
 OPTION(osd_stats_ack_timeout_factor, OPT_DOUBLE, 2.0) // multiples of mon_ack_timeout
 OPTION(osd_stats_ack_timeout_decay, OPT_DOUBLE, .9)
-OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
+OPTION(osd_default_data_pool_replay_window, OPT_U32, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
@@ -755,22 +755,22 @@ OPTION(osd_push_per_object_cost, OPT_U64, 1000)  // push cost per object
 OPTION(osd_max_push_cost, OPT_U64, 8<<20)  // max size of push message
 OPTION(osd_max_push_objects, OPT_U64, 10)  // max objects in single push op
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
-OPTION(osd_max_scrubs, OPT_INT, 1)
-OPTION(osd_scrub_begin_hour, OPT_INT, 0)
-OPTION(osd_scrub_end_hour, OPT_INT, 24)
+OPTION(osd_max_scrubs, OPT_U32, 1)
+OPTION(osd_scrub_begin_hour, OPT_U32, 0)
+OPTION(osd_scrub_end_hour, OPT_U32, 24)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
 OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
 OPTION(osd_scrub_interval_randomize_ratio, OPT_FLOAT, 0.5) // randomize the scheduled scrub in the span of [min,min*(1+randomize_radio))
-OPTION(osd_scrub_chunk_min, OPT_INT, 5)
-OPTION(osd_scrub_chunk_max, OPT_INT, 25)
+OPTION(osd_scrub_chunk_min, OPT_U32, 5)
+OPTION(osd_scrub_chunk_max, OPT_U32, 25)
 OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
 OPTION(osd_scrub_auto_repair, OPT_BOOL, false)   // whether auto-repair inconsistencies upon deep-scrubbing
 OPTION(osd_scrub_auto_repair_num_errors, OPT_U32, 5)   // only auto-repair when number of errors is below this threshold
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_randomize_ratio, OPT_FLOAT, 0.15) // scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs are deep)
-OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
-OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT, 2*60*60)   // objects must be this old (seconds) before we update the whole-object digest on scrub
+OPTION(osd_deep_scrub_stride, OPT_U32, 524288)
+OPTION(osd_deep_scrub_update_digest_min_age, OPT_U32, 2*60*60)   // objects must be this old (seconds) before we update the whole-object digest on scrub
 OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
 OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL, true)
@@ -778,7 +778,7 @@ OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
 OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
 OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in seconds
-OPTION(osd_kill_backfill_at, OPT_INT, 0)
+OPTION(osd_kill_backfill_at, OPT_U32, 0)
 
 // Bounds how infrequently a new map epoch will be persisted for a pg
 OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
@@ -787,12 +787,12 @@ OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in t
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
 OPTION(osd_pg_log_trim_min, OPT_U32, 100)
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
-OPTION(osd_command_max_records, OPT_INT, 256)
+OPTION(osd_command_max_records, OPT_U32, 256)
 OPTION(osd_max_pg_blocked_by, OPT_U32, 16)    // max peer osds to report that are blocking our progress
-OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
+OPTION(osd_op_log_threshold, OPT_U32, 5) // how many op log messages to show in one go
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL, false)  // read fiemap-reported holes and verify they are zeros
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
-OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
+OPTION(osd_debug_drop_ping_duration, OPT_U32, 0)
 OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
 OPTION(osd_debug_scrub_chance_rewrite_digest, OPT_U64, 0)
@@ -806,11 +806,11 @@ OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
-OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
+OPTION(osd_target_transaction_size, OPT_U32, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
 
-OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
+OPTION(osd_pg_object_context_cache_count, OPT_U32, 64)
 OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
 // determines whether PGLog::check() compares written out log to stored log

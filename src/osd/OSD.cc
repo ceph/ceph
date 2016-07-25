@@ -1055,7 +1055,7 @@ bool OSDService::can_inc_scrubs_pending()
   bool can_inc = false;
   Mutex::Locker l(sched_scrub_lock);
 
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
+  if (static_cast<uint32_t>(scrubs_pending + scrubs_active) < cct->_conf->osd_max_scrubs) {
     dout(20) << __func__ << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     can_inc = true;
@@ -1071,7 +1071,7 @@ bool OSDService::inc_scrubs_pending()
   bool result = false;
 
   sched_scrub_lock.Lock();
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
+  if (static_cast<uint32_t>(scrubs_pending + scrubs_active) < cct->_conf->osd_max_scrubs) {
     dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     result = true;
@@ -3500,7 +3500,7 @@ void OSD::build_past_intervals_parallel()
   // the previous past_intervals and rebuilding from scratch, or we
   // can just do this and commit all our work at the end.
   ObjectStore::Transaction t;
-  int num = 0;
+  uint32_t num = 0;
   for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
     PG *pg = i->first;
     pg->lock();
@@ -3933,7 +3933,7 @@ void OSD::maybe_update_heartbeat_peers()
   // too few?
   int start = osdmap->get_next_up_osd_after(whoami);
   for (int n = start; n >= 0; ) {
-    if ((int)heartbeat_peers.size() >= cct->_conf->osd_heartbeat_min_peers)
+    if (heartbeat_peers.size() >= cct->_conf->osd_heartbeat_min_peers)
       break;
     if (!extras.count(n) && !want.count(n) && n != whoami) {
       dout(10) << " adding random peer osd." << n << dendl;
@@ -3947,7 +3947,7 @@ void OSD::maybe_update_heartbeat_peers()
 
   // too many?
   for (set<int>::iterator p = extras.begin();
-       (int)heartbeat_peers.size() > cct->_conf->osd_heartbeat_min_peers && p != extras.end();
+       heartbeat_peers.size() > cct->_conf->osd_heartbeat_min_peers && p != extras.end();
        ++p) {
     if (want.count(*p))
       continue;
@@ -4391,7 +4391,7 @@ void OSD::tick_without_osd_lock()
     if (now - last_pg_stats_sent > max) {
       osd_stat_updated = true;
       report = true;
-    } else if ((int)outstanding_pg_stats.size() >=
+    } else if (outstanding_pg_stats.size() >=
 	       cct->_conf->osd_mon_report_max_in_flight) {
       dout(20) << __func__ << " have max " << outstanding_pg_stats
 	       << " stats updates in flight" << dendl;
@@ -6456,11 +6456,11 @@ bool OSD::scrub_time_permit(utime_t now)
   localtime_r(&tt, &bdt);
   bool time_permit = false;
   if (cct->_conf->osd_scrub_begin_hour < cct->_conf->osd_scrub_end_hour) {
-    if (bdt.tm_hour >= cct->_conf->osd_scrub_begin_hour && bdt.tm_hour < cct->_conf->osd_scrub_end_hour) {
+    if (static_cast<uint32_t>(bdt.tm_hour) >= cct->_conf->osd_scrub_begin_hour && static_cast<uint32_t>(bdt.tm_hour) < cct->_conf->osd_scrub_end_hour) {
       time_permit = true;
     }
   } else {
-    if (bdt.tm_hour >= cct->_conf->osd_scrub_begin_hour || bdt.tm_hour < cct->_conf->osd_scrub_end_hour) {
+    if (static_cast<uint32_t>(bdt.tm_hour) >= cct->_conf->osd_scrub_begin_hour || static_cast<uint32_t>(bdt.tm_hour) < cct->_conf->osd_scrub_end_hour) {
       time_permit = true;
     }
   }
@@ -6641,7 +6641,7 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
   if (min <= superblock.oldest_map)
     return;
 
-  int num = 0;
+  uint32_t num = 0;
   ObjectStore::Transaction t;
   for (epoch_t e = superblock.oldest_map; e < min; ++e) {
     dout(20) << " removing old osdmap epoch " << e << dendl;
@@ -6649,7 +6649,7 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
     t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
     superblock.oldest_map = e + 1;
     num++;
-    if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
+    if (num >= cct->_conf->osd_target_transaction_size && num >= static_cast<uint32_t>(nreceived)) {
       service.publish_superblock(superblock);
       write_superblock(t);
       store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
@@ -7033,7 +7033,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	while (!osd_markdown_log.empty() &&
 	       osd_markdown_log.front() + grace < now)
 	  osd_markdown_log.pop_front();
-	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
+    if (osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
 	  dout(10) << __func__ << " marked down "
 		   << osd_markdown_log.size()
 		   << " > osd_max_markdown_count "
@@ -9126,7 +9126,7 @@ void OSD::check_config()
 		<< " is not > osd_map_max_advance ("
 		<< g_conf->osd_map_max_advance << ")";
   }
-  if (g_conf->osd_map_cache_size <= (int)g_conf->osd_pg_epoch_persisted_max_stale + 2) {
+  if (g_conf->osd_map_cache_size <= g_conf->osd_pg_epoch_persisted_max_stale + 2) {
     clog->warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
 		<< " is not > osd_pg_epoch_persisted_max_stale ("
 		<< g_conf->osd_pg_epoch_persisted_max_stale << ")";

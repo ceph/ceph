@@ -809,7 +809,7 @@ int ReplicatedPG::do_command(
       needs_recovery_map.upper_bound(offset);
     {
       f->open_array_section("objects");
-      int32_t num = 0;
+      uint32_t num = 0;
       for (; p != needs_recovery_map.end() && num < cct->_conf->osd_command_max_records; ++p) {
         if (missing_loc.is_unfound(p->first)) {
 	  f->open_object_section("object");
@@ -11954,7 +11954,7 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
     }
   }
 
-  if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
+  if (static_cast<uint32_t>(++agent_state->hist_age) > g_conf->osd_agent_hist_halflife) {
     dout(20) << __func__ << " resetting atime and temp histograms" << dendl;
     agent_state->hist_age = 0;
     agent_state->temp_hist.decay();
