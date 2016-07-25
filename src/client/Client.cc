@@ -5689,9 +5689,10 @@ void Client::unmount()
   
   while (!ll_unclosed_fh_set.empty()) {
     set<Fh*>::iterator it = ll_unclosed_fh_set.begin();
-    ll_unclosed_fh_set.erase(*it);
-    ldout(cct, 0) << " destroyed lost open file " << *it << " on " << *((*it)->inode) << dendl;
-    _release_fh(*it);
+    Fh *fh = *it;
+    ll_unclosed_fh_set.erase(fh);
+    ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *(fh->inode) << dendl;
+    _release_fh(fh);
   }
 
   while (!opened_dirs.empty()) {
