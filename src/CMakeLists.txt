@@ -682,11 +682,6 @@ add_subdirectory(erasure-code)
 add_subdirectory(googletest/googlemock)
 
 add_subdirectory(test)
-set(cephfs_srcs cephfs.cc)
-add_executable(cephfstool ${cephfs_srcs})
-target_link_libraries(cephfstool common ${EXTRALIBS})
-set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
-install(TARGETS cephfstool DESTINATION bin)
 
 add_subdirectory(compressor)
 add_subdirectory(tools)

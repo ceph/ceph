@@ -74,10 +74,6 @@ endif # WITH_FUSE
 
 
 if WITH_CEPHFS
-cephfs_SOURCES = cephfs.cc
-cephfs_LDADD = $(LIBCOMMON)
-bin_PROGRAMS += cephfs
-
 mount_ceph_SOURCES = mount/mount.ceph.c
 mount_ceph_LDADD = $(LIBSECRET) $(LIBCOMMON)
 if LINUX
