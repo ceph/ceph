@@ -211,36 +211,36 @@ OPTION(inject_early_sigterm, OPT_BOOL, false)
 
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
 OPTION(mon_initial_members, OPT_STR, "")    // list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
-OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
+OPTION(mon_sync_fs_threshold, OPT_U32, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_compact_on_start, OPT_BOOL, false)  // compact leveldb on ceph-mon start
 OPTION(mon_compact_on_bootstrap, OPT_BOOL, false)  // trigger leveldb compaction on bootstrap
 OPTION(mon_compact_on_trim, OPT_BOOL, true)       // compact (a prefix) when we trim old states
-OPTION(mon_osd_cache_size, OPT_INT, 10)  // the size of osdmaps cache, not to rely on underlying store's cache
+OPTION(mon_osd_cache_size, OPT_U32, 10)  // the size of osdmaps cache, not to rely on underlying store's cache
 
-OPTION(mon_tick_interval, OPT_INT, 5)
-OPTION(mon_session_timeout, OPT_INT, 300)    // must send keepalive or subscribe
+OPTION(mon_tick_interval, OPT_U32, 5)
+OPTION(mon_session_timeout, OPT_U32, 300)    // must send keepalive or subscribe
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 24*3600)  // for legacy clients only
 OPTION(mon_delta_reset_interval, OPT_DOUBLE, 10)   // seconds of inactivity before we reset the pg delta to 0
-OPTION(mon_osd_laggy_halflife, OPT_INT, 60*60)        // (seconds) how quickly our laggy estimations decay
+OPTION(mon_osd_laggy_halflife, OPT_U32, 60*60)        // (seconds) how quickly our laggy estimations decay
 OPTION(mon_osd_laggy_weight, OPT_DOUBLE, .3)          // weight for new 'samples's in laggy estimations
-OPTION(mon_osd_laggy_max_interval, OPT_INT, 300)      // maximum value of laggy_interval in laggy estimations
+OPTION(mon_osd_laggy_max_interval, OPT_U32, 300)      // maximum value of laggy_interval in laggy estimations
 OPTION(mon_osd_adjust_heartbeat_grace, OPT_BOOL, true)    // true if we should scale based on laggy estimations
 OPTION(mon_osd_adjust_down_out_interval, OPT_BOOL, true)  // true if we should scale based on laggy estimations
 OPTION(mon_osd_auto_mark_in, OPT_BOOL, false)         // mark any booting osds 'in'
 OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL, true) // mark booting auto-marked-out osds 'in'
 OPTION(mon_osd_auto_mark_new_in, OPT_BOOL, true)      // mark booting new osds 'in'
-OPTION(mon_osd_down_out_interval, OPT_INT, 300) // seconds
+OPTION(mon_osd_down_out_interval, OPT_U32, 300) // seconds
 OPTION(mon_osd_down_out_subtree_limit, OPT_STR, "rack")   // smallest crush unit/type that we will not automatically mark out
 OPTION(mon_osd_min_up_ratio, OPT_DOUBLE, .3)    // min osds required to be up to mark things down
 OPTION(mon_osd_min_in_ratio, OPT_DOUBLE, .3)   // min osds required to be in to mark things out
 OPTION(mon_osd_max_op_age, OPT_DOUBLE, 32)     // max op age before we get concerned (make it a power of 2)
-OPTION(mon_osd_max_split_count, OPT_INT, 32) // largest number of PGs per "involved" OSD to let split create
+OPTION(mon_osd_max_split_count, OPT_U32, 32) // largest number of PGs per "involved" OSD to let split create
 OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be set in the osdmap
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, true)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
-OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
+OPTION(mon_stat_smooth_intervals, OPT_U32, 2)  // smooth stats over last N PGMap maps
 OPTION(mon_election_timeout, OPT_FLOAT, 5)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
 OPTION(mon_lease_renew_interval_factor, OPT_FLOAT, .6) // on leader, to renew the lease
@@ -252,20 +252,20 @@ OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for cl
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT, 30.0) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
-OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
+OPTION(mon_pg_stuck_threshold, OPT_U32, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64, 1) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
-OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
-OPTION(mon_pg_warn_max_per_osd, OPT_INT, 300)  // max # pgs per (in) osd before we warn the admin
+OPTION(mon_pg_warn_min_per_osd, OPT_U32, 30)  // min # pgs per (in) osd before we warn the admin
+OPTION(mon_pg_warn_max_per_osd, OPT_U32, 300)  // max # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT, 10.0) // max skew few average in objects per pg
-OPTION(mon_pg_warn_min_objects, OPT_INT, 10000)  // do not warn below this object #
-OPTION(mon_pg_warn_min_pool_objects, OPT_INT, 1000)  // do not warn on pools below this object #
+OPTION(mon_pg_warn_min_objects, OPT_U32, 10000)  // do not warn below this object #
+OPTION(mon_pg_warn_min_pool_objects, OPT_U32, 1000)  // do not warn on pools below this object #
 OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT, .5) // threshold of down osds after which we check all pgs
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_allow_pool_delete, OPT_BOOL, true) // allow pool deletion
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
-OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
+OPTION(mon_osd_report_timeout, OPT_U32, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
 OPTION(mon_warn_on_old_mons, OPT_BOOL, true) // should mons set health to WARN if part of quorum is old?
 OPTION(mon_warn_on_legacy_crush_tunables, OPT_BOOL, true) // warn if crush tunables are too old (older than mon_min_crush_required_version)
@@ -274,36 +274,36 @@ OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL, true) // warn if cru
 OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL, true) // warn if 'mon_osd_down_out_interval == 0'
 OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL, true)
 OPTION(mon_warn_on_no_sortbitwise, OPT_BOOL, true)  // warn when sortbitwise not set
-OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
-OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
-OPTION(mon_max_log_epochs, OPT_INT, 500)
-OPTION(mon_max_mdsmap_epochs, OPT_INT, 500)
-OPTION(mon_max_osd, OPT_INT, 10000)
+OPTION(mon_min_osdmap_epochs, OPT_U32, 500)
+OPTION(mon_max_pgmap_epochs, OPT_U32, 500)
+OPTION(mon_max_log_epochs, OPT_U32, 500)
+OPTION(mon_max_mdsmap_epochs, OPT_U32, 500)
+OPTION(mon_max_osd, OPT_U32, 10000)
 OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
 OPTION(mon_slurp_timeout, OPT_DOUBLE, 10.0)
-OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
+OPTION(mon_slurp_bytes, OPT_U32, 256*1024)    // limit size of slurp messages
 OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
 OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
-OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
+OPTION(mon_max_log_entries_per_event, OPT_U32, 4096)
 OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for reweight-by-pg command
 OPTION(mon_reweight_min_bytes_per_osd, OPT_U64, 100*1024*1024)   // min bytes per osd for reweight-by-utilization command
-OPTION(mon_reweight_max_osds, OPT_INT, 4)   // max osds to change per reweight-by-* command
+OPTION(mon_reweight_max_osds, OPT_U32, 4)   // max osds to change per reweight-by-* command
 OPTION(mon_reweight_max_change, OPT_DOUBLE, 0.05)
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_health_to_clog, OPT_BOOL, true)
-OPTION(mon_health_to_clog_interval, OPT_INT, 3600)
+OPTION(mon_health_to_clog_interval, OPT_U32, 3600)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE, 60.0)
-OPTION(mon_data_avail_crit, OPT_INT, 5)
-OPTION(mon_data_avail_warn, OPT_INT, 30)
+OPTION(mon_data_avail_crit, OPT_U32, 5)
+OPTION(mon_data_avail_warn, OPT_U32, 30)
 OPTION(mon_data_size_warn, OPT_U64, 15*1024*1024*1024) // issue a warning when the monitor's data store goes over 15GB (in bytes)
-OPTION(mon_warn_not_scrubbed, OPT_INT, 0)
-OPTION(mon_warn_not_deep_scrubbed, OPT_INT, 0)
-OPTION(mon_scrub_interval, OPT_INT, 3600*24) // once a day
-OPTION(mon_scrub_timeout, OPT_INT, 60*5) // let's give it 5 minutes; why not.
-OPTION(mon_scrub_max_keys, OPT_INT, 100) // max number of keys to scrub each time
+OPTION(mon_warn_not_scrubbed, OPT_U32, 0)
+OPTION(mon_warn_not_deep_scrubbed, OPT_U32, 0)
+OPTION(mon_scrub_interval, OPT_U32, 3600*24) // once a day
+OPTION(mon_scrub_timeout, OPT_U32, 60*5) // let's give it 5 minutes; why not.
+OPTION(mon_scrub_max_keys, OPT_U32, 100) // max number of keys to scrub each time
 OPTION(mon_scrub_inject_crc_mismatch, OPT_DOUBLE, 0.0) // probability of injected crc mismatch [0.0, 1.0]
 OPTION(mon_scrub_inject_missing_keys, OPT_DOUBLE, 0.0) // probability of injected missing keys [0.0, 1.0]
-OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
+OPTION(mon_config_key_max_entry_size, OPT_U32, 4096) // max num bytes per config-key entry
 OPTION(mon_sync_timeout, OPT_DOUBLE, 60.0)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
 OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
@@ -311,10 +311,10 @@ OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync lea
 OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE, 0)  // inject N second delay on each get_chunk request
-OPTION(mon_osd_min_down_reporters, OPT_INT, 2)   // number of OSDs from different subtrees who need to report a down OSD for it to count
+OPTION(mon_osd_min_down_reporters, OPT_U32, 2)   // number of OSDs from different subtrees who need to report a down OSD for it to count
 OPTION(mon_osd_reporter_subtree_level , OPT_STR, "host")   // in which level of parent bucket the reporters are counted
-OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
-OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
+OPTION(mon_osd_force_trim_to, OPT_U32, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
+OPTION(mon_mds_force_trim_to, OPT_U32, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
 OPTION(mon_mds_skip_sanity, OPT_BOOL, false)  // skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 
 // monitor debug options
@@ -327,8 +327,8 @@ OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
-OPTION(mon_sync_provider_kill_at, OPT_INT, 0)  // kill the sync provider at a specific point in the work flow
-OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
+OPTION(mon_sync_provider_kill_at, OPT_U32, 0)  // kill the sync provider at a specific point in the work flow
+OPTION(mon_sync_requester_kill_at, OPT_U32, 0) // kill the sync requester at a specific point in the work flow
 OPTION(mon_force_quorum_join, OPT_BOOL, false) // force monitor to join quorum even if it has been previously removed from the map
 OPTION(mon_keyvaluedb, OPT_STR, "leveldb")   // type of keyvaluedb backend
 
@@ -362,10 +362,10 @@ OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_ping_timeout, OPT_DOUBLE, 30.0)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE, 2.0) // each time we reconnect to a monitor, double our timeout
 OPTION(mon_client_hunt_interval_max_multiple, OPT_DOUBLE, 10.0) // up to a max of 10*default (30 seconds)
-OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
-OPTION(mon_max_pool_pg_num, OPT_INT, 65536)
-OPTION(mon_pool_quota_warn_threshold, OPT_INT, 0) // percent of quota at which to issue warnings
-OPTION(mon_pool_quota_crit_threshold, OPT_INT, 0) // percent of quota at which to issue errors
+OPTION(mon_client_max_log_entries_per_message, OPT_U32, 1000)
+OPTION(mon_max_pool_pg_num, OPT_U32, 65536)
+OPTION(mon_pool_quota_warn_threshold, OPT_U32, 0) // percent of quota at which to issue warnings
+OPTION(mon_pool_quota_crit_threshold, OPT_U32, 0) // percent of quota at which to issue errors
 OPTION(client_cache_size, OPT_INT, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)

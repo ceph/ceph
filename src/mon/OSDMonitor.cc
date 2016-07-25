@@ -1327,7 +1327,7 @@ version_t OSDMonitor::get_trim_to()
     epoch_t floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     if (g_conf->mon_osd_force_trim_to > 0 &&
-	g_conf->mon_osd_force_trim_to < (int)get_last_committed()) {
+    g_conf->mon_osd_force_trim_to < get_last_committed()) {
       floor = g_conf->mon_osd_force_trim_to;
       dout(10) << " explicit mon_osd_force_trim_to = " << floor << dendl;
     }
@@ -1792,7 +1792,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << dendl;
 
   if (failed_for >= grace &&
-      (int)reporters_by_subtree.size() >= g_conf->mon_osd_min_down_reporters) {
+      static_cast<uint32_t>(reporters_by_subtree.size()) >= g_conf->mon_osd_min_down_reporters) {
     dout(1) << " we have enough reporters to mark osd." << target_osd
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
@@ -2171,7 +2171,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     } else {
       if (xi.down_stamp.sec()) {
         int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
-        if (g_conf->mon_osd_laggy_max_interval && (interval > g_conf->mon_osd_laggy_max_interval)) {
+        if (g_conf->mon_osd_laggy_max_interval && (static_cast<uint32_t>(interval) > g_conf->mon_osd_laggy_max_interval)) {
           interval =  g_conf->mon_osd_laggy_max_interval;
         }
         xi.laggy_interval =

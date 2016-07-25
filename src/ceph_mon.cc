@@ -480,7 +480,7 @@ int main(int argc, const char **argv)
            << std::endl;
       exit(-err);
     }
-    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
+    if (static_cast<uint32_t>(stats.avail_percent) <= g_conf->mon_data_avail_crit) {
       cerr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
            << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)

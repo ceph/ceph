@@ -2649,7 +2649,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
       if (*end != '\0')
 	continue;
 
-      if (o > cct->_conf->mon_max_osd) {
+    if (static_cast<uint32_t>(o) > cct->_conf->mon_max_osd) {
 	lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
 	return -ERANGE;
       }

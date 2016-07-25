@@ -82,10 +82,10 @@ void DataHealthService::get_health(
 
     health_status_t health_status = HEALTH_OK;
     string health_detail;
-    if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
+    if (static_cast<uint32_t>(stats.fs_stats.avail_percent) <= g_conf->mon_data_avail_crit) {
       health_status = HEALTH_ERR;
       health_detail = "low disk space, shutdown imminent";
-    } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
+    } else if (static_cast<uint32_t>(stats.fs_stats.avail_percent) <= g_conf->mon_data_avail_warn) {
       health_status = HEALTH_WARN;
       health_detail = "low disk space";
     }
@@ -204,7 +204,7 @@ void DataHealthService::service_tick()
 
   DataStats &ours = stats[mon->messenger->get_myinst()];
 
-  if (ours.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
+  if (static_cast<uint32_t>(ours.fs_stats.avail_percent) <= g_conf->mon_data_avail_crit) {
     derr << "reached critical levels of available space on local monitor storage"
          << " -- shutdown!" << dendl;
     force_shutdown();
@@ -215,7 +215,7 @@ void DataHealthService::service_tick()
   // consumed in-between reports to assess if it's worth to log this info,
   // otherwise we may very well contribute to the consumption of the
   // already low available disk space.
-  if (ours.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
+  if (static_cast<uint32_t>(ours.fs_stats.avail_percent) <= g_conf->mon_data_avail_warn) {
     if (ours.fs_stats.avail_percent != last_warned_percent)
       mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
