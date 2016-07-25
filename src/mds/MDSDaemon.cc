@@ -122,6 +122,7 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   name(n),
   messenger(m),
   monc(mc),
+  mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
   tick_event(0),
@@ -470,7 +471,8 @@ int MDSDaemon::init()
   // get monmap
   monc->set_messenger(messenger);
 
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD |
+                      CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_MGR);
   int r = 0;
   r = monc->init();
   if (r < 0) {
@@ -509,6 +511,9 @@ int MDSDaemon::init()
     return -ETIMEDOUT;
   }
 
+  mgrc.init();
+  messenger->add_dispatcher_head(&mgrc);
+
   mds_lock.Lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
@@ -517,6 +522,7 @@ int MDSDaemon::init()
   }
 
   monc->sub_want("mdsmap", 0, 0);
+  monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
   mds_lock.Unlock();
@@ -1089,6 +1095,7 @@ void MDSDaemon::suicide()
   } else {
     timer.shutdown();
 
+    mgrc.shutdown();
     monc->shutdown();
     messenger->shutdown();
   }
