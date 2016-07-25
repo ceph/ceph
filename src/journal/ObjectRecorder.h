@@ -37,9 +37,10 @@ public:
   };
 
   ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
-                 uint64_t object_number, SafeTimer &timer, Mutex &timer_lock,
-                 Handler *handler, uint8_t order, uint32_t flush_interval,
-                 uint64_t flush_bytes, double flush_age);
+                 uint64_t object_number, std::shared_ptr<Mutex> lock,
+                 SafeTimer &timer, Mutex &timer_lock, Handler *handler,
+                 uint8_t order, uint32_t flush_interval, uint64_t flush_bytes,
+                 double flush_age);
   ~ObjectRecorder();
 
   inline uint64_t get_object_number() const {
@@ -49,14 +50,15 @@ public:
     return m_oid;
   }
 
-  bool append(const AppendBuffers &append_buffers);
+  bool append_unlock(const AppendBuffers &append_buffers);
+  bool append(const AppendBuffers &append_buffers, bool unlock);
   void flush(Context *on_safe);
   void flush(const FutureImplPtr &future);
 
   void claim_append_buffers(AppendBuffers *append_buffers);
 
   bool is_closed() const {
-    Mutex::Locker locker(m_lock);
+    assert(m_lock->is_locked());
     return (m_object_closed && m_in_flight_appends.empty());
   }
   bool close();
@@ -66,7 +68,7 @@ public:
   }
 
   inline size_t get_pending_appends() const {
-    Mutex::Locker locker(m_lock);
+    Mutex::Locker locker(*m_lock);
     return m_append_buffers.size();
   }
 
@@ -129,7 +131,7 @@ private:
 
   C_AppendTask *m_append_task;
 
-  mutable Mutex m_lock;
+  mutable std::shared_ptr<Mutex> m_lock;
   AppendBuffers m_append_buffers;
   uint64_t m_append_tid;
   uint32_t m_pending_bytes;
