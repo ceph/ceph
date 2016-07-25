@@ -9,10 +9,7 @@ if(GPERFTOOLS_INCLUDE_DIR AND GPERFTOOLS_LIBRARIES)
 	set(GPERFTOOLS_FIND_QUIETLY TRUE)
 endif(GPERFTOOLS_INCLUDE_DIR AND GPERFTOOLS_LIBRARIES)
 
-INCLUDE(CheckCXXSymbolExists)
-
 # include dir
-
 find_path(GPERFTOOLS_INCLUDE_DIR profiler.h NO_DEFAULT_PATH PATHS
   /usr/include
   /usr/include/gperftools
@@ -21,10 +18,8 @@ find_path(GPERFTOOLS_INCLUDE_DIR profiler.h NO_DEFAULT_PATH PATHS
   /usr/local/include
 )
 
-
 # finally the library itself
 find_library(LIBPROFILER NAMES profiler)
-CHECK_INCLUDE_FILES("google/profiler.h" HAVE_PROFILER_H)
 set(GPERFTOOLS_LIBRARIES ${LIBPROFILER})
 
 # handle the QUIETLY and REQUIRED arguments and set GPERFTOOLS_FOUND to TRUE if
