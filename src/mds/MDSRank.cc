@@ -1409,28 +1409,7 @@ void MDSRankDispatcher::handle_mds_map(
   }
 
   // Validate state transitions while I hold a rank
-  bool state_valid = true;
-  if (state != oldstate) {
-    if (oldstate == MDSMap::STATE_REPLAY) {
-      if (state != MDSMap::STATE_RESOLVE && state != MDSMap::STATE_RECONNECT) {
-        state_valid = false;
-      }
-    } else if (oldstate == MDSMap::STATE_REJOIN) {
-      if (state != MDSMap::STATE_ACTIVE
-          && state != MDSMap::STATE_CLIENTREPLAY
-          && state != MDSMap::STATE_STOPPED) {
-        state_valid = false;
-      }
-    } else if (oldstate >= MDSMap::STATE_RECONNECT && oldstate < MDSMap::STATE_ACTIVE) {
-      // Once I have entered replay, the only allowable transitions are to
-      // the next state along in the sequence.
-      if (state != oldstate + 1) {
-        state_valid = false;
-      }
-    }
-  }
-
-  if (!state_valid) {
+  if (!MDSMap::state_transition_valid(oldstate, state)) {
     derr << "Invalid state transition " << ceph_mds_state_name(oldstate)
       << "->" << ceph_mds_state_name(state) << dendl;
     respawn();
