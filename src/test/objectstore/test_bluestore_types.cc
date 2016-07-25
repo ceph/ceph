@@ -195,10 +195,10 @@ TEST(bluestore_blob_t, put_ref)
   unsigned mrs = 8192;
 
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(0, mas*2));
-    b.ref_map.get(0, mas*2);
+    b.get_ref(0, mas*2);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     b.put_ref(0, mas*2, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
@@ -212,10 +212,10 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(mas*2, b.extents[0].length);
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(123, mas*2));
-    b.ref_map.get(0, mas*2);
+    b.get_ref(0, mas*2);
     b.put_ref(0, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -230,13 +230,13 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(mas*2, b.extents[0].length);
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
     b.extents.push_back(bluestore_pextent_t(4, mas));
-    b.ref_map.get(0, mas*4);
+    b.get_ref(0, mas*4);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -262,7 +262,7 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(3u, b.extents.size());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
@@ -270,7 +270,7 @@ TEST(bluestore_blob_t, put_ref)
     b.extents.push_back(bluestore_pextent_t(4, mas));
     b.extents.push_back(bluestore_pextent_t(5, mas));
     b.extents.push_back(bluestore_pextent_t(6, mas));
-    b.ref_map.get(0, mas*6);
+    b.get_ref(0, mas*6);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -297,10 +297,10 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_TRUE(b.extents[4].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 6));
-    b.ref_map.get(0, mas*6);
+    b.get_ref(0, mas*6);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -323,12 +323,12 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_TRUE(b.extents[2].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
-    b.ref_map.get(0, mas*12);
+    b.get_ref(0, mas*12);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -355,12 +355,12 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_TRUE(b.extents[2].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
-    b.ref_map.get(0, mas*12);
+    b.get_ref(0, mas*12);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -402,12 +402,12 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_FALSE(b.extents[0].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
-    b.ref_map.get(0, mas*12);
+    b.get_ref(0, mas*12);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -449,10 +449,10 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_FALSE(b.extents[0].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 8));
-    b.ref_map.get(0, mas*8);
+    b.get_ref(0, mas*8);
     b.put_ref(0, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -484,11 +484,11 @@ TEST(bluestore_blob_t, put_ref)
   }
   // verify csum chunk size if factored in properly
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
     b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, mas * 4);
-    b.ref_map.get(0, mas*4);
+    b.get_ref(0, mas*4);
     ASSERT_TRUE(b.is_allocated(0, mas*4));
     b.put_ref(0, mas*3, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
