@@ -249,17 +249,6 @@ if(NOT ${ATOMIC_OPS_FOUND})
   set(NO_ATOMIC_OPS 1)
 endif(NOT ${ATOMIC_OPS_FOUND})
 
-option(WITH_GPERFTOOLS "gperftools is here" ON)
-if(${WITH_GPERFTOOLS})
-	find_package(gperftools)
-	set(HAVE_GPERFTOOLS ${GPERFTOOLS_FOUND})
-	if(${HAVE_GPERFTOOLS})
-		find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h PATHS /usr/include/gperftools)
-	endif(${HAVE_GPERFTOOLS})
-endif(${WITH_GPERFTOOLS})
-
 find_package(snappy REQUIRED)
 
 #if allocator is set on command line make sure it matches below strings
