@@ -57,6 +57,7 @@ protected:
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp) {}
 
   virtual void send_request() = 0;
+  virtual aio_type_t get_aio_type() const = 0;
   virtual const char *get_request_type() const = 0;
 };
 
@@ -78,6 +79,9 @@ public:
 
 protected:
   virtual void send_request();
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_READ;
+  }
   virtual const char *get_request_type() const {
     return "aio_read";
   }
@@ -142,6 +146,9 @@ public:
   }
 
 protected:
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_WRITE;
+  }
   virtual const char *get_request_type() const {
     return "aio_write";
   }
@@ -174,6 +181,9 @@ public:
   }
 
 protected:
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_DISCARD;
+  }
   virtual const char *get_request_type() const {
     return "aio_discard";
   }
@@ -203,6 +213,9 @@ public:
 
 protected:
   virtual void send_request();
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_FLUSH;
+  }
   virtual const char *get_request_type() const {
     return "aio_flush";
   }
