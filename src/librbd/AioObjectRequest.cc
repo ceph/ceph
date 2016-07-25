@@ -268,7 +268,8 @@ namespace librbd {
   void AioObjectRead::read_from_parent(const vector<pair<uint64_t,uint64_t> >& parent_extents)
   {
     assert(!m_parent_completion);
-    m_parent_completion = AioCompletion::create<AioObjectRequest>(this);
+    m_parent_completion = AioCompletion::create_and_start<AioObjectRequest>(
+      this, m_ictx, AIO_TYPE_READ);
 
     // prevent the parent image from being deleted while this
     // request is still in-progress
