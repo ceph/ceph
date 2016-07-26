@@ -131,7 +131,7 @@ void ImageCopyRequest<I>::send_object_copies() {
   bool complete;
   {
     Mutex::Locker locker(m_lock);
-    for (int i = 0; i < cct->_conf->rbd_concurrent_management_ops; ++i) {
+    for (uint32_t i = 0; i < cct->_conf->rbd_concurrent_management_ops; ++i) {
       send_next_object_copy();
       if (m_ret_val < 0 && m_current_ops == 0) {
         break;

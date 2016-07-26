@@ -95,7 +95,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     size = 1ULL << order;
   } else {
     throttle.reset(new SimpleThrottle(
-      max(g_conf->rbd_concurrent_management_ops, 1), false));
+        max(g_conf->rbd_concurrent_management_ops, (1U)), false));
     if ((fd = open(path, O_RDONLY)) < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;

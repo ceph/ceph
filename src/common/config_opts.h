@@ -1162,8 +1162,8 @@ OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a re
 OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
-OPTION(rbd_op_threads, OPT_INT, 1)
-OPTION(rbd_op_thread_timeout, OPT_INT, 60)
+OPTION(rbd_op_threads, OPT_U32, 1)
+OPTION(rbd_op_thread_timeout, OPT_U32, 60)
 OPTION(rbd_non_blocking_aio, OPT_BOOL, true) // process AIO ops from a worker thread to prevent blocking
 OPTION(rbd_cache, OPT_BOOL, true) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
 OPTION(rbd_cache_writethrough_until_flush, OPT_BOOL, true) // whether to make writeback caching writethrough until flush is called, to be sure the user of librbd will send flushs so that writeback is safe
@@ -1171,20 +1171,20 @@ OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
 OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - set to 0 for write-through caching
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
-OPTION(rbd_cache_max_dirty_object, OPT_INT, 0)       // dirty limit for objects - set to 0 for auto calculate from rbd_cache_size
+OPTION(rbd_cache_max_dirty_object, OPT_U32, 0)       // dirty limit for objects - set to 0 for auto calculate from rbd_cache_size
 OPTION(rbd_cache_block_writes_upfront, OPT_BOOL, false) // whether to block writes to the cache before the aio_write call completes (true), or block before the aio completion is called (false)
-OPTION(rbd_concurrent_management_ops, OPT_INT, 10) // how many operations can be in flight for a management operation like deleting or resizing an image
+OPTION(rbd_concurrent_management_ops, OPT_U32, 10) // how many operations can be in flight for a management operation like deleting or resizing an image
 OPTION(rbd_balance_snap_reads, OPT_BOOL, false)
 OPTION(rbd_localize_snap_reads, OPT_BOOL, false)
 OPTION(rbd_balance_parent_reads, OPT_BOOL, false)
 OPTION(rbd_localize_parent_reads, OPT_BOOL, true)
-OPTION(rbd_readahead_trigger_requests, OPT_INT, 10) // number of sequential requests necessary to trigger readahead
+OPTION(rbd_readahead_trigger_requests, OPT_U32, 10) // number of sequential requests necessary to trigger readahead
 OPTION(rbd_readahead_max_bytes, OPT_LONGLONG, 512 * 1024) // set to 0 to disable readahead
 OPTION(rbd_readahead_disable_after_bytes, OPT_LONGLONG, 50 * 1024 * 1024) // how many bytes are read in total before readahead is disabled
 OPTION(rbd_clone_copy_on_read, OPT_BOOL, false)
 OPTION(rbd_blacklist_on_break_lock, OPT_BOOL, true) // whether to blacklist clients whose lock was broken
-OPTION(rbd_blacklist_expire_seconds, OPT_INT, 0) // number of seconds to blacklist - set to 0 for OSD default
-OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before maint request times out
+OPTION(rbd_blacklist_expire_seconds, OPT_U32, 0) // number of seconds to blacklist - set to 0 for OSD default
+OPTION(rbd_request_timed_out_seconds, OPT_U32, 30) // number of seconds before maint request times out
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
@@ -1207,11 +1207,11 @@ OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be vali
  * rbd_create3()/RBD::create3() and rbd_clone2/RBD::clone2() are only
  * affected by rbd_default_order.
  */
-OPTION(rbd_default_format, OPT_INT, 2)
-OPTION(rbd_default_order, OPT_INT, 22)
+OPTION(rbd_default_format, OPT_U32, 2)
+OPTION(rbd_default_order, OPT_U32, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
-OPTION(rbd_default_features, OPT_INT, 61)   // only applies to format 2 images
+OPTION(rbd_default_features, OPT_U32, 61)   // only applies to format 2 images
 					    // +1 for layering, +2 for stripingv2,
 					    // +4 for exclusive lock, +8 for object map
 					    // +16 for fast-diff, +32 for deep-flatten,
@@ -1225,8 +1225,8 @@ OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 OPTION(rbd_journal_order, OPT_U32, 24) // bits to shift to compute journal object max size, between 12 and 64
 OPTION(rbd_journal_splay_width, OPT_U32, 4) // number of active journal objects
 OPTION(rbd_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
-OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pending commits per journal object
-OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
+OPTION(rbd_journal_object_flush_interval, OPT_U32, 0) // maximum number of pending commits per journal object
+OPTION(rbd_journal_object_flush_bytes, OPT_U32, 0) // maximum number of pending bytes per journal object
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 
