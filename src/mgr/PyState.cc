@@ -173,6 +173,19 @@ ceph_config_set(PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static entity_type_t svc_type_from_str(const std::string &type_str)
+{
+  if (type_str == std::string("mds")) {
+    return CEPH_ENTITY_TYPE_MDS;
+  } else if (type_str == std::string("osd")) {
+    return CEPH_ENTITY_TYPE_OSD;
+  } else if (type_str == std::string("mon")) {
+    return CEPH_ENTITY_TYPE_MON;
+  } else {
+    return CEPH_ENTITY_TYPE_ANY;
+  }
+}
+
 static PyObject*
 get_metadata(PyObject *self, PyObject *args)
 {
@@ -183,17 +196,12 @@ get_metadata(PyObject *self, PyObject *args)
     return nullptr;
   }
 
-  entity_type_t svc_type;
-  if (type_str == std::string("mds")) {
-    svc_type = CEPH_ENTITY_TYPE_MDS;
-  } else if (type_str == std::string("osd")) {
-    svc_type = CEPH_ENTITY_TYPE_OSD;
-  } else if (type_str == std::string("mon")) {
-    svc_type = CEPH_ENTITY_TYPE_MON;
-  } else {
+  entity_type_t svc_type = svc_type_from_str(type_str);
+  if (svc_type == CEPH_ENTITY_TYPE_ANY) {
     // FIXME: form a proper exception
     return nullptr;
   }
+
 
   return global_handle->get_metadata_python(handle, svc_type, svc_id);
 }
@@ -213,7 +221,27 @@ ceph_log(PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+get_counter(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *type_str = nullptr;
+  char *svc_id = nullptr;
+  char *counter_path = nullptr;
+  if (!PyArg_ParseTuple(args, "ssss:get_counter", &handle, &type_str,
+                                                  &svc_id, &counter_path)) {
+    return nullptr;
+  }
 
+  entity_type_t svc_type = svc_type_from_str(type_str);
+  if (svc_type == CEPH_ENTITY_TYPE_ANY) {
+    // FIXME: form a proper exception
+    return nullptr;
+  }
+
+  return global_handle->get_counter_python(
+      handle, svc_type, svc_id, counter_path);
+}
 
 PyMethodDef CephStateMethods[] = {
     {"get", ceph_state_get, METH_VARARGS,
@@ -228,6 +256,8 @@ PyMethodDef CephStateMethods[] = {
      "Get a configuration value"},
     {"set_config", ceph_config_set, METH_VARARGS,
      "Set a configuration value"},
+    {"get_counter", get_counter, METH_VARARGS,
+      "Get a performance counter"},
     {"log", ceph_log, METH_VARARGS,
      "Emit a (local) log message"},
     {NULL, NULL, 0, NULL}

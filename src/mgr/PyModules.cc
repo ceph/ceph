@@ -454,3 +454,50 @@ void PyModules::log(const std::string &handle,
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 }
+
+PyObject* PyModules::get_counter_python(
+    const std::string &handle,
+    entity_type_t svc_type,
+    const std::string &svc_id,
+    const std::string &path)
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  PyFormatter f;
+  f.open_array_section(path.c_str());
+
+  auto metadata = daemon_state.get(DaemonKey(svc_type, svc_id));
+
+  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
+  // lock or put a lock on individual DaemonStates
+  if (metadata) {
+    if (metadata->perf_counters.instances.count(path)) {
+      auto counter_instance = metadata->perf_counters.instances.at(path);
+      const auto &data = counter_instance.get_data();
+      for (const auto &datapoint : data) {
+        f.open_array_section("datapoint");
+        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("v", datapoint.v);
+        f.close_section();
+
+      }
+    } else {
+      dout(4) << "Missing counter: '" << path << "' ("
+              << ceph_entity_type_name(svc_type) << "."
+              << svc_id << ")" << dendl;
+      dout(20) << "Paths are:" << dendl;
+      for (const auto &i : metadata->perf_counters.instances) {
+        dout(20) << i.first << dendl;
+      }
+    }
+  } else {
+    dout(4) << "No daemon state for "
+              << ceph_entity_type_name(svc_type) << "."
+              << svc_id << ")" << dendl;
+  }
+  f.close_section();
+  return f.get();
+}
+
