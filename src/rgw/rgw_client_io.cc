@@ -22,7 +22,7 @@ void RGWClientIO::init(CephContext *cct) {
   }
 }
 
-int RGWStreamIO::print(const char *format, ...)
+int RGWStreamIOBase::print(const char *format, ...)
 {
 #define LARGE_ENOUGH 128
   int size = LARGE_ENOUGH;
@@ -48,34 +48,51 @@ int RGWStreamIO::print(const char *format, ...)
   /* not reachable */
 }
 
-int RGWStreamIO::write(const char *buf, int len)
+int RGWStreamIOBase::write(const char *buf, int len)
 {
   if (len == 0) {
     return 0;
   }
 
-  int ret = write_data(buf, len);
-  if (ret < 0)
+  const auto ret = write_data(buf, len);
+  if (ret < 0) {
     return ret;
-
-  if (account())
-    bytes_sent += ret;
-
-  if (ret < len) {
+  } else if (ret < len) {
     /* sent less than tried to send, error out */
     return -EIO;
+  } else {
+    return ret;
+  }
+}
+
+int RGWStreamIOBase::read(char *buf, int max, int *actual, bool hash /* = false */)
+{
+  int ret = read_data(buf, max);
+  if (ret < 0) {
+    return ret;
   }
 
+  *actual = ret;
   return 0;
+}
+
+int RGWStreamIO::write(const char* const buf, const int len)
+{
+  const auto ret = RGWStreamIOBase::write(buf, len);
+
+  if (ret >= 0 && account()) {
+    bytes_sent += ret;
+  }
+
+  return ret;
 }
 
 int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
 {
-  int ret = read_data(buf, max);
-  if (ret < 0)
+  int ret = RGWStreamIOBase::read(buf, max, actual, hash);
+  if (ret < 0) {
     return ret;
-
-  *actual = ret;
+  }
 
   bytes_received += *actual;
 
@@ -86,7 +103,7 @@ int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
     calc_hash_sha256_update_stream(sha256_hash, buf, *actual);
   }
 
-  return 0;
+  return ret;
 }
 
 string RGWStreamIO::grab_aws4_sha256_hash()

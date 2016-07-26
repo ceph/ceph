@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
+#include <string>
 #include <streambuf>
 #include <istream>
 #include <stdlib.h>
@@ -19,6 +20,7 @@ protected:
   RGWEnv env;
 
   virtual void init_env(CephContext *cct) = 0;
+  bool account() { return _account; }
 
 public:
   virtual ~RGWClientIO() {}
@@ -27,7 +29,6 @@ public:
   void init(CephContext *cct);
   RGWEnv& get_env() { return env; }
 
-  bool account() { return _account; }
   void set_account(bool _accnt) {
     _account = _accnt;
   }
@@ -38,33 +39,43 @@ public:
   virtual uint64_t get_bytes_received() { return 0; }
 }; /* RGWClient IO */
 
-/* HTTP IO */
-class RGWStreamIO : public RGWClientIO {
-
-  size_t bytes_sent;
-  size_t bytes_received;
-
-  SHA256 *sha256_hash;
-
+class RGWStreamIOBase : public RGWClientIO {
 protected:
   virtual int write_data(const char *buf, int len) = 0;
   virtual int read_data(char *buf, int max) = 0;
 
 public:
-  virtual ~RGWStreamIO() {}
-  RGWStreamIO() : bytes_sent(0), bytes_received(0), sha256_hash(nullptr) {}
-
-  int print(const char *format, ...);
-  int write(const char *buf, int len);
+  virtual int print(const char *format, ...);
+  virtual int write(const char *buf, int len);
   virtual void flush() = 0;
-  int read(char *buf, int max, int *actual, bool hash = false);
-
-  string grab_aws4_sha256_hash();
+  virtual int read(char *buf, int max, int *actual, bool hash = false);
 
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual int complete_header() = 0;
   virtual int send_content_length(uint64_t len) = 0;
+};
+
+
+/* HTTP IO */
+class RGWStreamIO : public RGWStreamIOBase {
+  size_t bytes_sent;
+  size_t bytes_received;
+
+  SHA256 *sha256_hash;
+
+public:
+  virtual ~RGWStreamIO() {}
+  RGWStreamIO()
+    : bytes_sent(0),
+      bytes_received(0),
+      sha256_hash(nullptr) {
+  }
+
+  int write(const char *buf, int len) override;
+  int read(char *buf, int max, int *actual, bool hash = false) override;
+
+  std::string grab_aws4_sha256_hash();
 
   uint64_t get_bytes_sent() { return bytes_sent; }
   uint64_t get_bytes_received() { return bytes_received; }
