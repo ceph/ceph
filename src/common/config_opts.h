@@ -42,8 +42,8 @@ OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default loca
 OPTION(compression_dir, OPT_STR, CEPH_PKGLIBDIR"/compressor") // default location for compression plugins
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
-OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
-OPTION(log_max_recent, OPT_INT, 10000) // default changed by common_preinit()
+OPTION(log_max_new, OPT_U32, 1000) // default changed by common_preinit()
+OPTION(log_max_recent, OPT_U32, 10000) // default changed by common_preinit()
 OPTION(log_to_stderr, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(err_to_stderr, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(log_to_syslog, OPT_BOOL, false)
@@ -53,7 +53,7 @@ OPTION(log_stop_at_utilization, OPT_FLOAT, .97)  // stop logging at (near) full
 OPTION(log_to_graylog, OPT_BOOL, false)
 OPTION(err_to_graylog, OPT_BOOL, false)
 OPTION(log_graylog_host, OPT_STR, "127.0.0.1")
-OPTION(log_graylog_port, OPT_INT, 12201)
+OPTION(log_graylog_port, OPT_U32, 12201)
 
 // options will take k/v pairs, or single-item that will be assumed as general
 // default for all, regardless of channel.
