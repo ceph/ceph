@@ -57,21 +57,23 @@ endif(WITH_MANPAGE)
 
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
-  ${OFED_PREFIX}/include
-  ${LEVELDB_PREFIX}/include
-  ${PROJECT_SOURCE_DIR}/src
-)
+  ${PROJECT_SOURCE_DIR}/src)
 
-link_directories(
-  ${OFED_PREFIX}/lib
-  ${LEVELDB_PREFIX}/lib
-)
+if(LEVELDB_PREFIX)
+  include_directories(${LEVELDB_PREFIX}/include)
+  link_directories(${LEVELDB_PREFIX}/lib)
+endif()
+
+if(OFED_PREFIX)
+  include_directories(${OFED_PREFIX}/include)
+  link_directories(${OFED_PREFIX}/lib)
+endif()
+
 if(FREEBSD)
   include_directories(/usr/local/include)
   link_directories(/usr/local/lib)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
-
 
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -197,7 +199,6 @@ option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(${WITH_OPENLDAP})
 find_package(OpenLdap REQUIRED)
 set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
-message(STATUS "${OPENLDAP_LIBS}")
 endif(${WITH_OPENLDAP})
 
 option(WITH_FUSE "Fuse is here" ON)
@@ -248,17 +249,6 @@ if(NOT ${ATOMIC_OPS_FOUND})
   set(NO_ATOMIC_OPS 1)
 endif(NOT ${ATOMIC_OPS_FOUND})
 
-option(WITH_GPERFTOOLS "gperftools is here" ON)
-if(${WITH_GPERFTOOLS})
-	find_package(gperftools)
-	set(HAVE_GPERFTOOLS ${GPERFTOOLS_FOUND})
-	if(${HAVE_GPERFTOOLS})
-		find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h PATHS /usr/include/gperftools)
-	endif(${HAVE_GPERFTOOLS})
-endif(${WITH_GPERFTOOLS})
-
 find_package(snappy REQUIRED)
 
 #if allocator is set on command line make sure it matches below strings
@@ -291,8 +281,6 @@ if(NOT FREEBSD)
   # XXX keyutils is available, but not yet recognised
   find_package(keyutils REQUIRED)
 endif(NOT FREEBSD)
-
-find_package(libuuid REQUIRED)
 
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
