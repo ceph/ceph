@@ -1233,7 +1233,7 @@ OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 
-OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
+OPTION(rgw_max_chunk_size, OPT_U32, 512 * 1024)
 OPTION(rgw_max_put_size, OPT_U64, 5ULL*1024*1024*1024)
 
 /**
@@ -1261,7 +1261,7 @@ OPTION(rgw_enable_gc_threads, OPT_BOOL, true)
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, s3website, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
-OPTION(rgw_cache_lru_size, OPT_INT, 10000)   // num of entries in rgw cache
+OPTION(rgw_cache_lru_size, OPT_U32, 10000)   // num of entries in rgw cache
 OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
 OPTION(rgw_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
 OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
@@ -1284,10 +1284,10 @@ OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user passwor
 OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant (for keystone v2.0)
 OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project (for keystone v3)
 OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
-OPTION(rgw_keystone_api_version, OPT_INT, 2) // Version of Keystone API to use (2 or 3)
+OPTION(rgw_keystone_api_version, OPT_U32, 2) // Version of Keystone API to use (2 or 3)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
-OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
-OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
+OPTION(rgw_keystone_token_cache_size, OPT_U32, 10000)  // max number of entries in keystone token cache
+OPTION(rgw_keystone_revocation_interval, OPT_U32, 15 * 60)  // seconds between tokens revocation check
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL, true) // should we try to verify keystone's ssl
 OPTION(rgw_keystone_implicit_tenants, OPT_BOOL, false)  // create new users in their own tenants of the same name
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL, true)  // should we try to use the internal credentials for s3?
@@ -1309,13 +1309,13 @@ OPTION(rgw_s3_auth_use_ldap, OPT_BOOL, false)
 
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
-OPTION(rgw_swift_token_expiration, OPT_INT, 24 * 3600) // time in seconds for swift token expiration
+OPTION(rgw_swift_token_expiration, OPT_U32, 24 * 3600) // time in seconds for swift token expiration
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
-OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
-OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
-OPTION(rgw_thread_pool_size, OPT_INT, 100)
-OPTION(rgw_num_control_oids, OPT_INT, 8)
+OPTION(rgw_op_thread_timeout, OPT_U32, 10*60)
+OPTION(rgw_op_thread_suicide_timeout, OPT_U32, 0)
+OPTION(rgw_thread_pool_size, OPT_U32, 100)
+OPTION(rgw_num_control_oids, OPT_U32, 8)
 OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
 /* The following are tunables for caches of RGW NFS (and other file
@@ -1327,10 +1327,10 @@ OPTION(rgw_num_rados_handles, OPT_U32, 1)
  * prime, the cache size something larger but less than 5K, the total
  * size of the cache is n_part * cache_size.
  */
-OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
-OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
-OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
-OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+OPTION(rgw_nfs_lru_lanes, OPT_U32, 5)
+OPTION(rgw_nfs_lru_lane_hiwat, OPT_U32, 911)
+OPTION(rgw_nfs_fhcache_partitions, OPT_U32, 3)
+OPTION(rgw_nfs_fhcache_size, OPT_U32, 2017) /* 3*2017=6051 */
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
@@ -1348,49 +1348,49 @@ OPTION(rgw_period_latest_epoch_info_oid, OPT_STR, ".latest_epoch") // oid where 
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
-OPTION(rgw_usage_max_shards, OPT_INT, 32)
-OPTION(rgw_usage_max_user_shards, OPT_INT, 1)
+OPTION(rgw_usage_max_shards, OPT_U32, 32)
+OPTION(rgw_usage_max_user_shards, OPT_U32, 1)
 OPTION(rgw_enable_ops_log, OPT_BOOL, false) // enable logging every rgw operation
 OPTION(rgw_enable_usage_log, OPT_BOOL, false) // enable logging bandwidth usage
 OPTION(rgw_ops_log_rados, OPT_BOOL, true) // whether ops log should go to rados
 OPTION(rgw_ops_log_socket_path, OPT_STR, "") // path to unix domain socket where ops log can go
-OPTION(rgw_ops_log_data_backlog, OPT_INT, 5 << 20) // max data backlog for ops log
-OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pending log data
-OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
+OPTION(rgw_ops_log_data_backlog, OPT_U32, 5 << 20) // max data backlog for ops log
+OPTION(rgw_usage_log_flush_threshold, OPT_U32, 1024) // threshold to flush pending log data
+OPTION(rgw_usage_log_tick_interval, OPT_U32, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
 OPTION(rgw_intent_log_object_name_utc, OPT_BOOL, false)
-OPTION(rgw_init_timeout, OPT_INT, 300) // time in seconds
+OPTION(rgw_init_timeout, OPT_U32, 300) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR, "/etc/mime.types")
-OPTION(rgw_gc_max_objs, OPT_INT, 32)
-OPTION(rgw_gc_obj_min_wait, OPT_INT, 2 * 3600)    // wait time before object may be handled by gc
-OPTION(rgw_gc_processor_max_time, OPT_INT, 3600)  // total run time for a single gc processor work
-OPTION(rgw_gc_processor_period, OPT_INT, 3600)  // gc processor cycle time
-OPTION(rgw_s3_success_create_obj_status, OPT_INT, 0) // alternative success status response for create-obj (0 - default)
+OPTION(rgw_gc_max_objs, OPT_U32, 32)
+OPTION(rgw_gc_obj_min_wait, OPT_U32, 2 * 3600)    // wait time before object may be handled by gc
+OPTION(rgw_gc_processor_max_time, OPT_U32, 3600)  // total run time for a single gc processor work
+OPTION(rgw_gc_processor_period, OPT_U32, 3600)  // gc processor cycle time
+OPTION(rgw_s3_success_create_obj_status, OPT_U32, 0) // alternative success status response for create-obj (0 - default)
 OPTION(rgw_resolve_cname, OPT_BOOL, false)  // should rgw try to resolve hostname as a dns cname record
-OPTION(rgw_obj_stripe_size, OPT_INT, 4 << 20)
+OPTION(rgw_obj_stripe_size, OPT_U32, 4 << 20)
 OPTION(rgw_extended_http_attrs, OPT_STR, "") // list of extended attrs that can be set on objects (beyond the default)
-OPTION(rgw_exit_timeout_secs, OPT_INT, 120) // how many seconds to wait for process to go down before exiting unconditionally
-OPTION(rgw_get_obj_window_size, OPT_INT, 16 << 20) // window size in bytes for single get obj request
-OPTION(rgw_get_obj_max_req_size, OPT_INT, 4 << 20) // max length of a single get obj rados op
+OPTION(rgw_exit_timeout_secs, OPT_U32, 120) // how many seconds to wait for process to go down before exiting unconditionally
+OPTION(rgw_get_obj_window_size, OPT_U32, 16 << 20) // window size in bytes for single get obj request
+OPTION(rgw_get_obj_max_req_size, OPT_U32, 4 << 20) // max length of a single get obj rados op
 OPTION(rgw_relaxed_s3_bucket_names, OPT_BOOL, false) // enable relaxed bucket name rules for US region buckets
 OPTION(rgw_defer_to_bucket_acls, OPT_STR, "") // if the user has bucket perms, use those before key perms (recurse and full_control)
-OPTION(rgw_list_buckets_max_chunk, OPT_INT, 1000) // max buckets to retrieve in a single op when listing user buckets
-OPTION(rgw_md_log_max_shards, OPT_INT, 64) // max shards for metadata log
-OPTION(rgw_num_zone_opstate_shards, OPT_INT, 128) // max shards for keeping inter-region copy progress info
-OPTION(rgw_opstate_ratelimit_sec, OPT_INT, 30) // min time between opstate updates on a single upload (0 for disabling ratelimit)
-OPTION(rgw_curl_wait_timeout_ms, OPT_INT, 1000) // timeout for certain curl calls
+OPTION(rgw_list_buckets_max_chunk, OPT_U32, 1000) // max buckets to retrieve in a single op when listing user buckets
+OPTION(rgw_md_log_max_shards, OPT_U32, 64) // max shards for metadata log
+OPTION(rgw_num_zone_opstate_shards, OPT_U32, 128) // max shards for keeping inter-region copy progress info
+OPTION(rgw_opstate_ratelimit_sec, OPT_U32, 30) // min time between opstate updates on a single upload (0 for disabling ratelimit)
+OPTION(rgw_curl_wait_timeout_ms, OPT_U32, 1000) // timeout for certain curl calls
 OPTION(rgw_copy_obj_progress, OPT_BOOL, true) // should dump progress during long copy operations?
-OPTION(rgw_copy_obj_progress_every_bytes, OPT_INT, 1024 * 1024) // min bytes between copy progress output
+OPTION(rgw_copy_obj_progress_every_bytes, OPT_U32, 1024 * 1024) // min bytes between copy progress output
 
-OPTION(rgw_data_log_window, OPT_INT, 30) // data log entries window (in seconds)
-OPTION(rgw_data_log_changes_size, OPT_INT, 1000) // number of in-memory entries to hold for data changes log
-OPTION(rgw_data_log_num_shards, OPT_INT, 128) // number of objects to keep data changes log on
+OPTION(rgw_data_log_window, OPT_U32, 30) // data log entries window (in seconds)
+OPTION(rgw_data_log_changes_size, OPT_U32, 1000) // number of in-memory entries to hold for data changes log
+OPTION(rgw_data_log_num_shards, OPT_U32, 128) // number of objects to keep data changes log on
 OPTION(rgw_data_log_obj_prefix, OPT_STR, "data_log") //
 OPTION(rgw_replica_log_obj_prefix, OPT_STR, "replica_log") //
 
-OPTION(rgw_bucket_quota_ttl, OPT_INT, 600) // time for cached bucket stats to be cached within rgw instance
+OPTION(rgw_bucket_quota_ttl, OPT_U32, 600) // time for cached bucket stats to be cached within rgw instance
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE, 0.95) // threshold from which we don't rely on cached info for quota decisions
-OPTION(rgw_bucket_quota_cache_size, OPT_INT, 10000) // number of entries in bucket quota cache
+OPTION(rgw_bucket_quota_cache_size, OPT_U32, 10000) // number of entries in bucket quota cache
 OPTION(rgw_bucket_default_quota_max_objects, OPT_INT, -1) // number of objects allowed
 OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in kB
 
@@ -1398,19 +1398,19 @@ OPTION(rgw_expose_bucket, OPT_BOOL, false) // Return the bucket name in the 'Buc
 
 OPTION(rgw_frontends, OPT_STR, "fastcgi, civetweb port=7480") // rgw front ends
 
-OPTION(rgw_user_quota_bucket_sync_interval, OPT_INT, 180) // time period for accumulating modified buckets before syncing stats
-OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accumulating modified buckets before syncing entire user stats
+OPTION(rgw_user_quota_bucket_sync_interval, OPT_U32, 180) // time period for accumulating modified buckets before syncing stats
+OPTION(rgw_user_quota_sync_interval, OPT_U32, 3600 * 24) // time period for accumulating modified buckets before syncing entire user stats
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL, false) // whether stats for idle users be fully synced
-OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats sync for non-idle users
+OPTION(rgw_user_quota_sync_wait_time, OPT_U32, 3600 * 24) // min time between two full stats sync for non-idle users
 OPTION(rgw_user_default_quota_max_objects, OPT_INT, -1) // number of objects allowed
 OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in kB
 
-OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
-OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
+OPTION(rgw_multipart_min_part_size, OPT_U32, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
+OPTION(rgw_multipart_part_upload_limit, OPT_U32, 10000) // parts limit in multipart upload
 
-OPTION(rgw_max_slo_entries, OPT_INT, 1000) // default number of max entries in slo
+OPTION(rgw_max_slo_entries, OPT_U32, 1000) // default number of max entries in slo
 
-OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
+OPTION(rgw_olh_pending_timeout_sec, OPT_U32, 3600) // time until we retire a pending olh change
 OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user
 
 OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round of expired objects garbage collecting
@@ -1420,10 +1420,10 @@ OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a si
 
 OPTION(rgw_enable_static_website, OPT_BOOL, false) // enable static website feature
 
-OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
-OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notification interval to followers
+OPTION(rgw_num_async_rados_threads, OPT_U32, 32) // num of threads to use for async rados operations
+OPTION(rgw_md_notify_interval_msec, OPT_U32, 200) // metadata changes notification interval to followers
 OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
-OPTION(rgw_sync_lease_period, OPT_INT, 120) // time in second for lease that rgw takes on a specific log (or log shard)
+OPTION(rgw_sync_lease_period, OPT_U32, 120) // time in second for lease that rgw takes on a specific log (or log shard)
 
 OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
@@ -1431,7 +1431,7 @@ OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after e
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
-OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
+OPTION(rgw_list_bucket_min_readahead, OPT_U32, 1000) // minimum number of entries to read from rados for bucket listing
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

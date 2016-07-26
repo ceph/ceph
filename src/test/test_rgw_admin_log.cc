@@ -725,7 +725,8 @@ TEST(TestRGWAdmin, datalog_list) {
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   JSONParser parser;
-  int num_objects;
+  //int num_objects;
+  uint32_t num_objects;
   EXPECT_EQ (parse_json_resp(parser), 0);
   JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
   ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_data_log_num_shards);
@@ -1053,7 +1054,7 @@ TEST(TestRGWAdmin, mdlog_list) {
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   JSONParser parser;
-  int num_objects;
+  uint32_t num_objects;
   EXPECT_EQ (parse_json_resp(parser), 0);
   JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
   ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_md_log_max_shards);

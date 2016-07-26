@@ -88,7 +88,7 @@ class UsageLogger {
   RGWRados *store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
   Mutex lock;
-  int32_t num_entries;
+  uint32_t num_entries;
   Mutex timer_lock;
   SafeTimer timer;
   utime_t round_timestamp;

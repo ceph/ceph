@@ -4869,7 +4869,7 @@ next:
     if (ret < 0)
       return -ret;
 
-    int i = (specified_shard_id ? shard_id : 0);
+    uint32_t i = (specified_shard_id ? shard_id : 0);
 
     if (period_id.empty()) {
       int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
@@ -4915,7 +4915,8 @@ next:
   }
 
   if (opt_cmd == OPT_MDLOG_STATUS) {
-    int i = (specified_shard_id ? shard_id : 0);
+    //int i = (specified_shard_id ? shard_id : 0);
+    uint32_t i = (specified_shard_id ? shard_id : 0);
 
     if (period_id.empty()) {
       int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
@@ -5428,7 +5429,7 @@ next:
   
   if (opt_cmd == OPT_DATALOG_STATUS) {
     RGWDataChangesLog *log = store->data_log;
-    int i = (specified_shard_id ? shard_id : 0);
+    uint32_t i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {

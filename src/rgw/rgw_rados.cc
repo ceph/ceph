@@ -1275,7 +1275,7 @@ int RGWPeriod::update_sync_status()
 
   // gather the markers for each shard
   // TODO: use coroutines to read them in parallel
-  for (int i = 0; i < num_shards; i++) {
+  for (uint32_t i = 0; i < num_shards; i++) {
     RGWMetadataLogInfo info;
     int r = mdlog->get_info(i, &info);
     if (r < 0) {
@@ -4296,12 +4296,12 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
   uint32_t val = index;
 
   if (!name.empty()) {
-    int max_user_shards = max(cct->_conf->rgw_usage_max_user_shards, 1);
+    uint32_t max_user_shards = max(cct->_conf->rgw_usage_max_user_shards, (1U));
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[16];
-  int max_shards = max(cct->_conf->rgw_usage_max_shards, 1);
+  uint32_t max_shards = max(cct->_conf->rgw_usage_max_shards, (1U));
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
@@ -4817,11 +4817,11 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
   rgw_bucket& bucket = target->get_bucket();
-  int shard_id = target->get_shard_id();
+  uint32_t shard_id = target->get_shard_id();
 
   int count = 0;
   bool truncated = true;
-  int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead,max);
+  uint32_t read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead,static_cast<uint32_t>(max));
 
   result->clear();
 
