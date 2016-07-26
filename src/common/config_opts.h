@@ -433,9 +433,9 @@ OPTION(objecter_inject_no_watch_ping, OPT_BOOL, false)   // suppress watch pings
 OPTION(filer_max_purge_ops, OPT_U32, 10)
 
 OPTION(journaler_allow_split_entries, OPT_BOOL, true)
-OPTION(journaler_write_head_interval, OPT_INT, 15)
-OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
-OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
+OPTION(journaler_write_head_interval, OPT_U32, 15)
+OPTION(journaler_prefetch_periods, OPT_U32, 10)   // * journal object size
+OPTION(journaler_prezero_periods, OPT_U32, 5)     // * journal object size
 OPTION(journaler_batch_interval, OPT_DOUBLE, .001)   // seconds.. max add latency we artificially incur
 OPTION(journaler_batch_max, OPT_U64, 0)  // max bytes we'll delay flushing; disable, for now....
 OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
@@ -1134,14 +1134,14 @@ OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)
 OPTION(journal_force_aio, OPT_BOOL, false)
-OPTION(journal_block_size, OPT_INT, 4096)
+OPTION(journal_block_size, OPT_U32, 4096)
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
 OPTION(journal_block_align, OPT_BOOL, true)
 OPTION(journal_write_header_frequency, OPT_U64, 0)
-OPTION(journal_max_write_bytes, OPT_INT, 10 << 20)
-OPTION(journal_max_write_entries, OPT_INT, 100)
+OPTION(journal_max_write_bytes, OPT_U32, 10 << 20)
+OPTION(journal_max_write_entries, OPT_U32, 100)
 
 /// Target range for journal fullness
 OPTION(journal_throttle_low_threshhold, OPT_DOUBLE, 0.6)
@@ -1152,8 +1152,8 @@ OPTION(journal_throttle_high_multiple, OPT_DOUBLE, 0)
 /// Multiple over expected at max.  Defaults to 0 (disabled).
 OPTION(journal_throttle_max_multiple, OPT_DOUBLE, 0)
 
-OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= this.
-OPTION(journal_replay_from, OPT_INT, 0)
+OPTION(journal_align_min_size, OPT_U32, 64 << 10)  // align data payloads >= this.
+OPTION(journal_replay_from, OPT_U32, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(journal_ignore_corruption, OPT_BOOL, false) // assume journal is not corrupt
 OPTION(journal_discard, OPT_BOOL, false) //using ssd disk as journal, whether support discard nouse journal-data.
