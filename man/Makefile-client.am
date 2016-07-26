@@ -24,11 +24,6 @@ dist_man_MANS += \
 	rbdmap.8
 endif
 
-if WITH_CEPHFS
-dist_man_MANS += \
-	cephfs.8
-endif
-
 if WITH_FUSE
 dist_man_MANS += \
 	rbd-fuse.8 \
