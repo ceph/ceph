@@ -66,7 +66,7 @@ int RGWStreamIOBase::write(const char *buf, int len)
   }
 }
 
-int RGWStreamIOBase::read(char *buf, int max, int *actual, bool hash /* = false */)
+int RGWStreamIOBase::read(char *buf, int max, int *actual)
 {
   int ret = read_data(buf, max);
   if (ret < 0) {
@@ -89,16 +89,21 @@ int RGWStreamIO::write(const char* const buf, const int len)
   return ret;
 }
 
-int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
+int RGWStreamIO::read(char *buf, int max, int *actual)
 {
-  int ret = RGWStreamIOBase::read(buf, max, actual, hash);
-  if (ret < 0) {
-    return ret;
+  const auto ret = RGWStreamIOBase::read(buf, max, actual);
+  if (ret >= 0) {
+    bytes_received += *actual;
   }
 
-  bytes_received += *actual;
+  return ret;
+}
 
-  if (hash) {
+int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
+{
+  const auto ret = read(buf, max, actual);
+
+  if (ret >= 0 && hash) {
     if (!sha256_hash) {
       sha256_hash = calc_hash_sha256_open_stream();
     }
