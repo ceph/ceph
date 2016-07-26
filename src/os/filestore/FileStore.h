@@ -557,7 +557,7 @@ public:
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 	     const SequencerPosition& spos);
-  int _clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+  int _clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
 		   const SequencerPosition& spos);
   int _merge_delete_srcobj(const coll_t& temp_cid, const ghobject_t& temp_oid, const coll_t& cid, const ghobject_t& oid,
