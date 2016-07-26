@@ -79,6 +79,14 @@ namespace rgw {
       return 0;
     };
 
+    uint64_t get_bytes_sent() override {
+      return 0;
+    }
+
+    uint64_t get_bytes_received() override {
+      return 0;
+    }
+
   }; /* RGWLibIO */
 
 /* XXX */
