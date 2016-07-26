@@ -23,12 +23,14 @@ public:
   virtual ~RGWClientIO() {}
 
   void init(CephContext *cct);
-  RGWEnv& get_env() { return env; }
+  RGWEnv& get_env() {
+    return env;
+  }
 
   virtual int complete_request() = 0; /* XXX signature likely changing */
 
-  virtual uint64_t get_bytes_sent() = 0;
-  virtual uint64_t get_bytes_received() = 0;
+  virtual uint64_t get_bytes_sent() const = 0;
+  virtual uint64_t get_bytes_received() const = 0;
 }; /* RGWClient IO */
 
 class RGWStreamIOBase : public RGWClientIO {
@@ -57,7 +59,9 @@ class RGWStreamIO : public RGWStreamIOBase {
 
   SHA256 *sha256_hash;
 
-  bool account() { return _account; }
+  bool account() const {
+    return _account;
+  }
 
 public:
   virtual ~RGWStreamIO() {}
@@ -77,11 +81,11 @@ public:
     _account = _accnt;
   }
 
-  uint64_t get_bytes_sent() override {
+  uint64_t get_bytes_sent() const override {
     return bytes_sent;
   }
 
-  uint64_t get_bytes_received() override {
+  uint64_t get_bytes_received() const override {
     return bytes_received;
   }
 }; /* RGWStreamIO */

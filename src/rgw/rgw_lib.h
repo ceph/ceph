@@ -60,7 +60,7 @@ namespace rgw {
     RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    virtual void init_env(CephContext *cct) {}
+    virtual void init_env(CephContext *cct) override {}
 
     const RGWUserInfo& get_user() {
       return user_info;
@@ -75,15 +75,15 @@ namespace rgw {
     int complete_header();
     int send_content_length(uint64_t len);
 
-    int complete_request() { /* XXX */
+    int complete_request() override { /* XXX */
       return 0;
     };
 
-    uint64_t get_bytes_sent() override {
+    uint64_t get_bytes_sent() const override {
       return 0;
     }
 
-    uint64_t get_bytes_received() override {
+    uint64_t get_bytes_received() const override {
       return 0;
     }
 
