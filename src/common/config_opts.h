@@ -1037,7 +1037,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
-OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
+OPTION(filestore_omap_header_cache_size, OPT_U32, 1024)
 
 // Use omap for xattrs for attrs over
 // filestore_max_inline_xattr_size or
@@ -1065,7 +1065,7 @@ OPTION(filestore_max_xattr_value_size_btrfs, OPT_U32, 64<<10)
 OPTION(filestore_max_xattr_value_size_other, OPT_U32, 1<<10)
 
 OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
-OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
+OPTION(filestore_sloppy_crc_block_size, OPT_U32, 65536)
 
 OPTION(filestore_max_alloc_hint_size, OPT_U64, 1ULL << 20) // bytes
 
@@ -1097,7 +1097,7 @@ OPTION(filestore_journal_trailing, OPT_BOOL, false)
 OPTION(filestore_queue_max_ops, OPT_U64, 50)
 OPTION(filestore_queue_max_bytes, OPT_U64, 100 << 20)
 
-OPTION(filestore_caller_concurrency, OPT_INT, 10)
+OPTION(filestore_caller_concurrency, OPT_U32, 10)
 
 /// Expected filestore throughput in B/s
 OPTION(filestore_expected_throughput_bytes, OPT_DOUBLE, 200 << 20)
@@ -1113,22 +1113,22 @@ OPTION(filestore_queue_high_delay_multiple, OPT_DOUBLE, 0)
 OPTION(filestore_queue_low_threshhold, OPT_DOUBLE, 0.3)
 OPTION(filestore_queue_high_threshhold, OPT_DOUBLE, 0.9)
 
-OPTION(filestore_op_threads, OPT_INT, 2)
-OPTION(filestore_op_thread_timeout, OPT_INT, 60)
-OPTION(filestore_op_thread_suicide_timeout, OPT_INT, 180)
+OPTION(filestore_op_threads, OPT_U32, 2)
+OPTION(filestore_op_thread_timeout, OPT_U32, 60)
+OPTION(filestore_op_thread_suicide_timeout, OPT_U32, 180)
 OPTION(filestore_commit_timeout, OPT_FLOAT, 600)
-OPTION(filestore_fiemap_threshold, OPT_INT, 4096)
+OPTION(filestore_fiemap_threshold, OPT_U32, 4096)
 OPTION(filestore_merge_threshold, OPT_INT, 10)
-OPTION(filestore_split_multiple, OPT_INT, 2)
-OPTION(filestore_update_to, OPT_INT, 1000)
+OPTION(filestore_split_multiple, OPT_U32, 2)
+OPTION(filestore_update_to, OPT_U32, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
-OPTION(filestore_fd_cache_size, OPT_INT, 128)    // FD lru size
-OPTION(filestore_fd_cache_shards, OPT_INT, 16)   // FD number of shards
-OPTION(filestore_ondisk_finisher_threads, OPT_INT, 1)
-OPTION(filestore_apply_finisher_threads, OPT_INT, 1)
+OPTION(filestore_fd_cache_size, OPT_U32, 128)    // FD lru size
+OPTION(filestore_fd_cache_shards, OPT_U32, 16)   // FD number of shards
+OPTION(filestore_ondisk_finisher_threads, OPT_U32, 1)
+OPTION(filestore_apply_finisher_threads, OPT_U32, 1)
 OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
-OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
-OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
+OPTION(filestore_kill_at, OPT_U32, 0)            // inject a failure at the n'th opportunity
+OPTION(filestore_inject_stall, OPT_U32, 0)       // artificially stall for N seconds in op queue thread
 OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
 OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
