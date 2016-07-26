@@ -1008,6 +1008,8 @@ void BlueStore::BufferSpace::read(
       } else {
 	res[offset].append(b->data);
 	res_intervals.insert(offset, b->length);
+        if (b->length == length)
+          break;
 	offset += b->length;
 	length -= b->length;
       }
