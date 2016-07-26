@@ -1,5 +1,6 @@
 from textwrap import dedent
 from ..opsys import OS
+import pytest
 
 
 class TestOS(object):
@@ -158,6 +159,16 @@ class TestOS(object):
         assert os.version == '7.0'
         assert os.codename == 'maipo'
         assert os.package_type == 'rpm'
+
+    def test_version_codename_success(self):
+        assert OS.version_codename('ubuntu', '14.04') == ('14.04', 'trusty')
+        assert OS.version_codename('ubuntu', 'trusty') == ('14.04', 'trusty')
+
+    def test_version_codename_failure(self):
+        with pytest.raises(KeyError) as excinfo:
+            OS.version_codename('ubuntu', 'frog')
+        assert excinfo.type == KeyError
+        assert 'frog' in excinfo.value.args[0]
 
     def test_repr(self):
         os = OS(name='NAME', version='0.1.2', codename='code')

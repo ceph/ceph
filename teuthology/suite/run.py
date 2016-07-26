@@ -13,6 +13,7 @@ from ..exceptions import (
     BranchNotFoundError, CommitNotFoundError, VersionNotFoundError
 )
 from ..misc import deep_merge, get_results_url
+from ..orchestra.opsys import OS
 
 from . import util
 from .build_matrix import combine_path, build_matrix
@@ -86,6 +87,9 @@ class Run(object):
         suite_branch = self.choose_suite_branch()
         suite_hash = self.choose_suite_hash(suite_branch)
 
+        if self.args.distro_version:
+            self.args.distro_version, _ = \
+                OS.version_codename(self.args.distro, self.args.distro_version)
         self.config_input = dict(
             suite=self.args.suite,
             suite_branch=suite_branch,
@@ -95,6 +99,7 @@ class Run(object):
             teuthology_branch=teuthology_branch,
             machine_type=self.args.machine_type,
             distro=self.args.distro,
+            distro_version=self.args.distro_version,
             archive_upload=config.archive_upload,
             archive_upload_key=config.archive_upload_key,
         )
@@ -156,7 +161,7 @@ class Run(object):
             try:
                 ceph_version = util.package_version_for_hash(
                     ceph_hash, self.args.kernel_flavor, self.args.distro,
-                    self.args.machine_type,
+                    self.args.distro_version, self.args.machine_type,
                 )
             except Exception as exc:
                 util.schedule_fail(str(exc), self.name)
@@ -313,6 +318,7 @@ class Run(object):
 
             parsed_yaml = yaml.load(raw_yaml)
             os_type = parsed_yaml.get('os_type') or self.base_config.os_type
+            os_version = parsed_yaml.get('os_version') or self.base_config.os_version
             exclude_arch = parsed_yaml.get('exclude_arch')
             exclude_os_type = parsed_yaml.get('exclude_os_type')
 
@@ -353,13 +359,15 @@ class Run(object):
                     self.package_versions = util.get_package_versions(
                         sha1,
                         os_type,
+                        os_version,
                         flavor,
                         self.package_versions
                     )
                 except VersionNotFoundError:
                     pass
-                if not util.has_packages_for_distro(sha1, os_type, flavor,
-                                                    self.package_versions):
+                if not util.has_packages_for_distro(
+                    sha1, os_type, os_version, flavor, self.package_versions
+                ):
                     m = "Packages for os_type '{os}', flavor {flavor} and " + \
                         "ceph hash '{ver}' not found"
                     log.error(m.format(os=os_type, flavor=flavor, ver=sha1))

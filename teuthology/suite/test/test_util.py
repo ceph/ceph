@@ -187,19 +187,22 @@ class TestMissingPackages(object):
     scheduled job will have missing packages in gitbuilder.
     """
     def setup(self):
-        package_versions = dict(
-            sha1=dict(
-                ubuntu=dict(
-                    basic="1.0",
-                )
-            )
-        )
+        package_versions = {
+            'sha1': {
+                'ubuntu': {
+                    '14.04': {
+                        'basic': '1.0'
+                    }
+                }
+            }
+        }
         self.pv = package_versions
 
     def test_os_in_package_versions(self):
         assert self.pv == util.get_package_versions(
             "sha1",
             "ubuntu",
+            "14.04",
             "basic",
             package_versions=self.pv
         )
@@ -210,11 +213,20 @@ class TestMissingPackages(object):
         result = util.get_package_versions(
             "sha1",
             "rhel",
+            "7.0",
             "basic",
             package_versions=self.pv
         )
         expected = deepcopy(self.pv)
-        expected['sha1'].update(dict(rhel=dict(basic="1.1")))
+        expected['sha1'].update(
+            {
+                'rhel': {
+                    '7.0': {
+                        'basic': '1.1'
+                    }
+                }
+            }
+        )
         assert result == expected
 
     @patch("teuthology.suite.util.package_version_for_hash")
@@ -224,6 +236,7 @@ class TestMissingPackages(object):
         result = util.get_package_versions(
             "sha1",
             "rhel",
+            "7.0",
             "basic",
             package_versions=self.pv
         )
@@ -235,6 +248,7 @@ class TestMissingPackages(object):
         result = util.get_package_versions(
             "sha1",
             "ubuntu",
+            "14.04",
             "basic",
         )
         expected = deepcopy(self.pv)
@@ -244,6 +258,7 @@ class TestMissingPackages(object):
         result = util.has_packages_for_distro(
             "sha1",
             "ubuntu",
+            "14.04",
             "basic",
             package_versions=self.pv,
         )
@@ -253,6 +268,7 @@ class TestMissingPackages(object):
         result = util.has_packages_for_distro(
             "sha1",
             "rhel",
+            "7.0",
             "basic",
             package_versions=self.pv,
         )
@@ -264,8 +280,8 @@ class TestMissingPackages(object):
         result = util.has_packages_for_distro(
             "sha1",
             "rhel",
-            "basic",
-        )
+            "7.0",
+            "basic",)
         assert not result
 
 

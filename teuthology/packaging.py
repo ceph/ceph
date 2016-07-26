@@ -473,6 +473,10 @@ class GitbuilderProject(object):
         self.flavor = self.job_config.get("flavor")
         self.codename = self.job_config.get("codename")
         self.os_version = self._get_version()
+        # if os_version is given, prefer version/codename derived from it
+        if self.os_version:
+            self.os_version, self.codename = \
+                OS.version_codename(self.os_type, self.os_version)
         self.branch = self.job_config.get("branch")
         self.tag = self.job_config.get("tag")
         self.ref = self.job_config.get("ref")
@@ -652,11 +656,16 @@ class GitbuilderProject(object):
             sha1 = self.sha1
 
         def warn(attrname):
-            if len([b for b in ref, tag, branch, sha1]) > 1:
+            names = ('ref', 'tag', 'branch', 'sha1')
+            vars = (ref, tag, branch, sha1)
+            # filter(None,) filters for truth
+            if len(filter(None, vars)) > 1:
                 log.warning(
                     'More than one of ref, tag, branch, or sha1 supplied; using %s',
                      attrname
                 )
+                for n, v in zip(names, vars):
+                    log.info('%s: %s' % (n, v))
 
         if ref:
             uri = 'ref'/ + ref

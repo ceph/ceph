@@ -15,6 +15,7 @@ class TestPlaceholder(object):
             teuthology_branch='teuthology_branch',
             machine_type='machine_type',
             distro='distro',
+            distro_version='distro_version',
             archive_upload='archive_upload',
             archive_upload_key='archive_upload_key',
         )
@@ -38,6 +39,7 @@ class TestPlaceholder(object):
             archive_upload='archive_upload',
             archive_upload_key='archive_upload_key',
             distro=None,
+            distro_version=None,
         )
         output_dict = substitute_placeholders(dict_templ, input_dict)
         assert 'os_type' not in output_dict
