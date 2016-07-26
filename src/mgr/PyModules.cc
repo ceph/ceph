@@ -446,7 +446,7 @@ void PyModules::insert_config(const std::map<std::string,
 }
 
 void PyModules::log(const std::string &handle,
-    unsigned level, const std::string &record)
+    int level, const std::string &record)
 {
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[" << handle << "] "

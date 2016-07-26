@@ -83,7 +83,7 @@ public:
       const std::string &key, const std::string &val);
 
   void log(const std::string &handle,
-           unsigned level, const std::string &record);
+           int level, const std::string &record);
 };
 
 #endif
