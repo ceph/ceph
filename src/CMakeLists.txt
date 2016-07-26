@@ -201,8 +201,18 @@ set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 if(WITH_PROFILER)
+  find_package(gperftools REQUIRED)
   list(APPEND EXTRALIBS profiler)
 endif(WITH_PROFILER)
+
+if(WITH_PROFILER AND ALLOCATOR STREQUAL "tcmalloc")
+  find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h
+    PATHS ${GPERFTOOLS_INCLUDE_DIR})
+  find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h
+    PATHS ${GPERFTOOLS_INCLUDE_DIR})
+  find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h
+    PATHS ${GPERFTOOLS_INCLUDE_DIR})
+endif()
 
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
@@ -304,7 +314,8 @@ list(APPEND mds_files
   mds/FSMap.cc
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
-  mds/mdstypes.cc)
+  mds/mdstypes.cc
+  mds/flock.cc)
 
 set(crush_srcs
   crush/builder.c
@@ -476,13 +487,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(WITH_PROFILER AND HAVE_GPERFTOOLS)
+if(WITH_PROFILER)
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(WITH_PROFILER AND HAVE_GPERFTOOLS)
+endif()
 
 if(ENABLE_SHARED)
   list(APPEND libcommon_files
@@ -498,10 +509,6 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
-
-if(${HAVE_GPERFTOOLS})
-  target_link_libraries(common profiler)
-endif(${HAVE_GPERFTOOLS})
 
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
@@ -873,3 +880,5 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
     COMMAND git submodule update --force --init --recursive
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 endif()
+
+add_subdirectory(script)

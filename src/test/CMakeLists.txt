@@ -338,7 +338,7 @@ set_target_properties(test_rgw_ldap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rgw_ldap
   librados
-  ${OPENLDAP_LIBS}
+  ${OPENLDAP_LIBRARIES}
   ${Boost_LIBRARIES}
   ${UNITTEST_LIBS}
   )
