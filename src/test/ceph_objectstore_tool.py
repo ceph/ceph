@@ -171,7 +171,9 @@ def test_failure(cmd, errmsg, tty=False):
         logging.info("Correctly failed with message \"" + matched[0] + "\"")
         return 0
     else:
+        logging.error("Command: " + cmd )
         logging.error("Bad messages to stderr \"" + str(lines) + "\"")
+        logging.error("Expected \"" + errmsg + "\"")
         return 1
 
 
