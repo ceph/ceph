@@ -350,6 +350,9 @@ if(HAVE_GOOD_YASM_ELF64)
     common/crc32c_intel_fast_zero_asm.S)
 endif(HAVE_GOOD_YASM_ELF64)
 
+add_library(common_buffer_obj OBJECT
+  common/buffer.cc)
+
 add_library(common_texttable_obj OBJECT
   common/TextTable.cc)
 
@@ -399,6 +402,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
+  $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
   log/Log.cc
   log/SubsystemMap.cc
@@ -432,7 +436,6 @@ set(libcommon_files
   common/pipe.c
   common/ceph_argparse.cc
   common/ceph_context.cc
-  common/buffer.cc
   common/code_environment.cc
   common/dout.cc
   common/signal.cc
@@ -762,10 +765,14 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
+    foreach(name common client osdc)
+      set(CEPHFS_LINK_FLAGS "${CEPHFS_LINK_FLAGS} -Wl,--exclude-libs,lib${name}.a")
+    endforeach()
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
       VERSION 1.0.0
-      SOVERSION 1)
+      SOVERSION 1
+      LINK_FLAGS ${CEPHFS_LINK_FLAGS})
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
