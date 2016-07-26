@@ -99,9 +99,9 @@ OPTION(xio_max_send_inline, OPT_INT, 512) // xio maximum threshold to send inlin
 
 OPTION(async_compressor_enabled, OPT_BOOL, false)
 OPTION(async_compressor_type, OPT_STR, "snappy")
-OPTION(async_compressor_threads, OPT_INT, 2)
-OPTION(async_compressor_thread_timeout, OPT_INT, 5)
-OPTION(async_compressor_thread_suicide_timeout, OPT_INT, 30)
+OPTION(async_compressor_threads, OPT_U32, 2)
+OPTION(async_compressor_thread_timeout, OPT_U32, 5)
+OPTION(async_compressor_thread_suicide_timeout, OPT_U32, 30)
 
 DEFAULT_SUBSYS(0, 5)
 SUBSYS(lockdep, 0, 1)
