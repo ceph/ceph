@@ -335,16 +335,16 @@ OPTION(mon_keyvaluedb, OPT_STR, "leveldb")   // type of keyvaluedb backend
 // UNSAFE -- TESTING ONLY! Allows addition of a cache tier with preexisting snaps
 OPTION(mon_debug_unsafe_allow_tier_with_nonempty_snaps, OPT_BOOL, false)
 
-OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
-OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
+OPTION(paxos_stash_full_interval, OPT_U32, 25)   // how often (in commits) to stash a full copy of the PaxosService state
+OPTION(paxos_max_join_drift, OPT_U32, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
-OPTION(paxos_min, OPT_INT, 500)       // minimum number of paxos states to keep around
-OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
-OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
-OPTION(paxos_service_trim_min, OPT_INT, 250) // minimum amount of versions to trigger a trim (0 disables it)
-OPTION(paxos_service_trim_max, OPT_INT, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
-OPTION(paxos_kill_at, OPT_INT, 0)
+OPTION(paxos_min, OPT_U32, 500)       // minimum number of paxos states to keep around
+OPTION(paxos_trim_min, OPT_U32, 250)  // number of extra proposals tolerated before trimming
+OPTION(paxos_trim_max, OPT_U32, 500) // max number of extra proposals to trim at a time
+OPTION(paxos_service_trim_min, OPT_U32, 250) // minimum amount of versions to trigger a trim (0 disables it)
+OPTION(paxos_service_trim_max, OPT_U32, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
+OPTION(paxos_kill_at, OPT_U32, 0)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
