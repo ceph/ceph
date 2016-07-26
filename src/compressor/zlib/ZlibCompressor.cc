@@ -99,12 +99,9 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   return 0;
 }
 
+#if __x86_64__
 int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
 {
-#if (__arm__)
-  derr << "Unsupported architecture" << dendl;
-  return -1;
-#else
   int ret;
   unsigned have;
   isal_zstream strm;
@@ -152,15 +149,19 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
   }
 
   return 0;  
-#endif
 }
+#endif
 
 int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 {
+#if __x86_64__
   if (isal_enabled)
     return isal_compress(in, out);
   else
     return zlib_compress(in, out);
+#else
+  return zlib_compress(in, out);
+#endif
 }
 
 int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, bufferlist &out)
