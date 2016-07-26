@@ -314,7 +314,8 @@ list(APPEND mds_files
   mds/FSMap.cc
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
-  mds/mdstypes.cc)
+  mds/mdstypes.cc
+  mds/flock.cc)
 
 set(crush_srcs
   crush/builder.c
