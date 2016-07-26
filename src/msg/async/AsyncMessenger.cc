@@ -342,8 +342,6 @@ class WorkerPool {
     return coreids[id % coreids.size()];
   }
   void barrier();
-  // uniq name for CephContext to distinguish differnt object
-  static const string name;
 };
 
 void *Worker::entry()
@@ -376,8 +374,6 @@ void *Worker::entry()
 /*******************
  * WorkerPool
  *******************/
-const string WorkerPool::name = "AsyncMessenger::WorkerPool";
-
 WorkerPool::WorkerPool(CephContext *c): cct(c), started(false),
                                         barrier_lock("WorkerPool::WorkerPool::barrier_lock"),
                                         barrier_count(0), pending(0)
@@ -521,7 +517,8 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
-  cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
+  // uniq name for CephContext to distinguish from other objects
+  cct->lookup_or_create_singleton_object<WorkerPool>(pool, "AsyncMessenger::WorkerPool");
   local_worker = pool->get_worker();
   local_connection = new AsyncConnection(cct, this, &dispatch_queue, local_worker);
   local_features = features;
