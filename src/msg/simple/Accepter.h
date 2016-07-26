@@ -15,10 +15,10 @@
 #ifndef CEPH_MSG_ACCEPTER_H
 #define CEPH_MSG_ACCEPTER_H
 
-#include "msg/msg_types.h"
 #include "common/Thread.h"
 
 class SimpleMessenger;
+struct entity_addr_t;
 
 /**
  * If the SimpleMessenger binds to a specific address, the Accepter runs
