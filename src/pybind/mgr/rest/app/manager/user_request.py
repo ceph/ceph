@@ -2,13 +2,13 @@ import json
 import logging
 import uuid
 
-from calamari_rest.types import OsdMap, PgSummary, USER_REQUEST_COMPLETE, USER_REQUEST_SUBMITTED
-from calamari_rest.util import now
+from rest.app.types import OsdMap, PgSummary, USER_REQUEST_COMPLETE, USER_REQUEST_SUBMITTED
+from rest.app.util import now
 from mgr_module import CommandResult
 
-from rest import logger
+from rest.logger import logger
 log = logger()
-from rest import global_instance as rest_plugin
+from rest.module import global_instance as rest_plugin
 
 
 class UserRequestBase(object):

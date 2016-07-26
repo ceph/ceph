@@ -1,7 +1,7 @@
 from collections import namedtuple
-from calamari_rest.util import memoize
+from rest.app.util import memoize
 
-from rest import logger
+from rest.logger import logger
 log = logger()
 
 
