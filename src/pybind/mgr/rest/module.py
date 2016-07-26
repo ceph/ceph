@@ -12,12 +12,6 @@ def global_instance():
     return _global_instance['plugin']
 
 
-def logger():
-    # The logger name corresponds to the module name (courtesy of
-    # MgrModule.__init__
-    return logging.getLogger("rest")
-
-
 import os
 import logging
 import logging.config
@@ -31,11 +25,13 @@ from django.core.servers.basehttp import get_internal_wsgi_application
 
 from mgr_module import MgrModule
 
-from calamari_rest.manager.request_collection import RequestCollection
-from calamari_rest.types import OsdMap, NotFound, Config, FsMap, MonMap, \
+from rest.app.manager.request_collection import RequestCollection
+from rest.app.types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "calamari_rest.settings")
+from logger import logger
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "rest.app.settings")
 
 django_log = logging.getLogger("django.request")
 django_log.addHandler(logging.StreamHandler())

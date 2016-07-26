@@ -12,7 +12,7 @@ urlpatterns = patterns(
     # finds the views by name.
     url(r'^api/rest_framework/', include('rest_framework.urls', namespace='rest_framework')),
 
-    url(r'^api/v2/', include('calamari_rest.urls.v2')),
+    url(r'^api/v2/', include('rest.app.urls.v2')),
 )
 
 #handler500 = 'calamari_web.views.server_error'

@@ -11,16 +11,16 @@ from rest_framework import status
 from django.contrib.auth.decorators import login_required
 
 
-from calamari_rest.serializers.v2 import PoolSerializer, CrushRuleSetSerializer, CrushRuleSerializer, \
+from rest.app.serializers.v2 import PoolSerializer, CrushRuleSetSerializer, CrushRuleSerializer, \
     ServerSerializer, SaltKeySerializer, RequestSerializer, \
     ClusterSerializer, EventSerializer, LogTailSerializer, OsdSerializer, ConfigSettingSerializer, MonSerializer, OsdConfigSerializer, \
     CliSerializer
-#from calamari_rest.views.database_view_set import DatabaseViewSet
-from calamari_rest.views.exceptions import ServiceUnavailable
-#from calamari_rest.views.paginated_mixin import PaginatedMixin
-#from calamari_rest.views.remote_view_set import RemoteViewSet
-from calamari_rest.views.rpc_view import RPCViewSet, DataObject
-from calamari_rest.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, USER_REQUEST_SUBMITTED, \
+#from rest.app.views.database_view_set import DatabaseViewSet
+from rest.app.views.exceptions import ServiceUnavailable
+#from rest.app.views.paginated_mixin import PaginatedMixin
+#from rest.app.views.remote_view_set import RemoteViewSet
+from rest.app.views.rpc_view import RPCViewSet, DataObject
+from rest.app.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, USER_REQUEST_SUBMITTED, \
     OSD_IMPLEMENTED_COMMANDS, MON, OSD_MAP, SYNC_OBJECT_TYPES, ServiceId, severity_from_str, SEVERITIES, \
     OsdMap, Config, MonMap, MonStatus
 
@@ -28,7 +28,7 @@ from calamari_rest.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, US
 class Event(object):
     pass
 
-from rest import logger
+from rest.logger import logger
 log = logger()
 
 

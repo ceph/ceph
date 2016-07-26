@@ -1,10 +1,10 @@
 
 from threading import RLock
-from calamari_rest.manager.user_request import UserRequest
-from rest import logger
+from rest.app.manager.user_request import UserRequest
+from rest.logger import logger
 log = logger()
 
-from rest import global_instance as rest_plugin
+from rest.module import global_instance as rest_plugin
 
 TICK_PERIOD = 20
 

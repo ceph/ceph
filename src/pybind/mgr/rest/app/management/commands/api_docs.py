@@ -3,7 +3,7 @@
 # the ceph source tree:
 #
 #   PYTHONPATH=src/pybind/mgr \
-#   DJANGO_SETTINGS_MODULE=calamari_rest.settings \
+#   DJANGO_SETTINGS_MODULE=rest.app.settings \
 #   CALAMARI_CONFIG=src/pybind/mgr/calamari.conf \
 #       django-admin api_docs
 #
@@ -33,9 +33,9 @@ class ceph_state:
 sys.modules["ceph_state"] = ceph_state
 
 # Needed to avoid weird import loops
-from rest import global_instance
+from rest.module import global_instance
 
-from calamari_rest.serializers.v2 import ValidatingSerializer
+from rest.app.serializers.v2 import ValidatingSerializer
 
 GENERATED_PREFIX = "."
 
@@ -215,7 +215,7 @@ class ApiIntrospector(object):
                             continue
                         view_to_url_patterns[view_cls].append(url_pattern)
 
-        self.prefix = _find_prefix("calamari_rest.urls", url_module)
+        self.prefix = _find_prefix("rest.app.urls", url_module)
         parse_urls(importlib.import_module(url_module).urlpatterns)
 
         self.view_to_url_patterns = sorted(view_to_url_patterns.items(), cmp=lambda x, y: cmp(x[0].__name__, y[0].__name__))
@@ -388,7 +388,7 @@ class Command(NoArgsCommand):
     )
 
     def handle_noargs(self, list_urls, **options):
-        introspector = ApiIntrospector("calamari_rest.urls.v2")
+        introspector = ApiIntrospector("rest.app.urls.v2")
         if list_urls:
             # TODO: this just prints an empty array (not sure why)
             print json.dumps(introspector.get_url_list())
