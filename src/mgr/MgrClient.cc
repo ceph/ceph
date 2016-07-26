@@ -96,6 +96,7 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
                     << session->con->get_peer_addr() << dendl;
       delete session;
       session = nullptr;
+      stats_period = 0;
       if (report_callback != nullptr) {
         timer.cancel_event(report_callback);
         report_callback = nullptr;
