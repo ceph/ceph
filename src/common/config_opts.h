@@ -366,7 +366,7 @@ OPTION(mon_client_max_log_entries_per_message, OPT_U32, 1000)
 OPTION(mon_max_pool_pg_num, OPT_U32, 65536)
 OPTION(mon_pool_quota_warn_threshold, OPT_U32, 0) // percent of quota at which to issue warnings
 OPTION(mon_pool_quota_crit_threshold, OPT_U32, 0) // percent of quota at which to issue errors
-OPTION(client_cache_size, OPT_INT, 16384)
+OPTION(client_cache_size, OPT_U32, 16384)
 OPTION(client_cache_mid, OPT_FLOAT, .75)
 OPTION(client_use_random_mds, OPT_BOOL, false)
 OPTION(client_mount_timeout, OPT_DOUBLE, 300.0)
@@ -379,20 +379,20 @@ OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
 OPTION(client_mount_uid, OPT_INT, -1)
 OPTION(client_mount_gid, OPT_INT, -1)
-OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
+OPTION(client_notify_timeout, OPT_U32, 10) // in seconds
 OPTION(osd_client_watch_timeout, OPT_U32, 30) // in seconds
-OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
+OPTION(client_caps_release_delay, OPT_U32, 5) // in seconds
 OPTION(client_quota, OPT_BOOL, false)
 OPTION(client_quota_df, OPT_BOOL, true) // use quota for df on subdir mounts
 OPTION(client_oc, OPT_BOOL, true)
-OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
-OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
-OPTION(client_oc_target_dirty, OPT_INT, 1024*1024* 8) // target dirty (keep this smallish)
+OPTION(client_oc_size, OPT_U32, 1024*1024* 200)    // MB * n
+OPTION(client_oc_max_dirty, OPT_U32, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
+OPTION(client_oc_target_dirty, OPT_U32, 1024*1024* 8) // target dirty (keep this smallish)
 OPTION(client_oc_max_dirty_age, OPT_DOUBLE, 5.0)      // max age in cache before writeback
-OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
+OPTION(client_oc_max_objects, OPT_U32, 1000)      // max objects in cache
 OPTION(client_debug_getattr_caps, OPT_BOOL, false) // check if MDS reply contains wanted caps
 OPTION(client_debug_force_sync_read, OPT_BOOL, false)     // always read synchronously (go to osds)
-OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for a number of seconds
+OPTION(client_debug_inject_tick_delay, OPT_U32, 0) // delay the client tick for a number of seconds
 OPTION(client_max_inline_size, OPT_U64, 4096)
 OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug for testing
