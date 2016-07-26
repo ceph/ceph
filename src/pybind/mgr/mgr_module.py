@@ -102,6 +102,18 @@ class MgrModule(object):
         """
         return ceph_state.get_server(self._handle, hostname)
 
+    def get_counter(self, svc_type, svc_name, path):
+        """
+        Called by the plugin to fetch data for a particular perf counter
+        on a particular service.
+
+        :param svc_type:
+        :param svc_name:
+        :param path:
+        :return: A list of two-element lists containing time and value
+        """
+        return ceph_state.get_counter(self._handle, svc_type, svc_name, path)
+
     def list_servers(self):
         """
         Like ``get_server``, but instead of returning information
