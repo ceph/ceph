@@ -85,17 +85,17 @@ OPTION(plugin_dir, OPT_STR, CEPH_PKGLIBDIR)
 OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
 OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
 OPTION(xio_trace_xcon, OPT_BOOL, false) // Xio message encode/decode trace
-OPTION(xio_queue_depth, OPT_INT, 128) // depth of Accelio msg queue
-OPTION(xio_mp_min, OPT_INT, 128) // default min mempool size
-OPTION(xio_mp_max_64, OPT_INT, 65536) // max 64-byte chunks (buffer is 40)
-OPTION(xio_mp_max_256, OPT_INT, 8192) // max 256-byte chunks
-OPTION(xio_mp_max_1k, OPT_INT, 8192) // max 1K chunks
-OPTION(xio_mp_max_page, OPT_INT, 4096) // max 1K chunks
-OPTION(xio_mp_max_hint, OPT_INT, 4096) // max size-hint chunks
-OPTION(xio_portal_threads, OPT_INT, 2) // xio portal threads per messenger
-OPTION(xio_max_conns_per_portal, OPT_INT, 32) // max xio_connections per portal/ctx
+OPTION(xio_queue_depth, OPT_U32, 128) // depth of Accelio msg queue
+OPTION(xio_mp_min, OPT_U32, 128) // default min mempool size
+OPTION(xio_mp_max_64, OPT_U32, 65536) // max 64-byte chunks (buffer is 40)
+OPTION(xio_mp_max_256, OPT_U32, 8192) // max 256-byte chunks
+OPTION(xio_mp_max_1k, OPT_U32, 8192) // max 1K chunks
+OPTION(xio_mp_max_page, OPT_U32, 4096) // max 1K chunks
+OPTION(xio_mp_max_hint, OPT_U32, 4096) // max size-hint chunks
+OPTION(xio_portal_threads, OPT_U32, 2) // xio portal threads per messenger
+OPTION(xio_max_conns_per_portal, OPT_U32, 32) // max xio_connections per portal/ctx
 OPTION(xio_transport_type, OPT_STR, "rdma") // xio transport type: {rdma or tcp}
-OPTION(xio_max_send_inline, OPT_INT, 512) // xio maximum threshold to send inline
+OPTION(xio_max_send_inline, OPT_U32, 512) // xio maximum threshold to send inline
 
 OPTION(async_compressor_enabled, OPT_BOOL, false)
 OPTION(async_compressor_type, OPT_STR, "snappy")
