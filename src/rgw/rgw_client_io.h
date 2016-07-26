@@ -42,7 +42,7 @@ public:
   virtual int print(const char *format, ...);
   virtual int write(const char *buf, int len);
   virtual void flush() = 0;
-  virtual int read(char *buf, int max, int *actual, bool hash = false);
+  virtual int read(char *buf, int max, int *actual);
 
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
@@ -73,7 +73,9 @@ public:
   }
 
   int write(const char *buf, int len) override;
-  int read(char *buf, int max, int *actual, bool hash = false) override;
+
+  int read(char *buf, int max, int *actual) override;
+  virtual int read(char *buf, int max, int *actual, bool hash);
 
   std::string grab_aws4_sha256_hash();
 
