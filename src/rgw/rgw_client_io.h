@@ -14,29 +14,21 @@
 #include "rgw_common.h"
 
 class RGWClientIO {
-  bool _account;
-
 protected:
   RGWEnv env;
 
   virtual void init_env(CephContext *cct) = 0;
-  bool account() { return _account; }
 
 public:
   virtual ~RGWClientIO() {}
-  RGWClientIO() : _account(false) {}
 
   void init(CephContext *cct);
   RGWEnv& get_env() { return env; }
 
-  void set_account(bool _accnt) {
-    _account = _accnt;
-  }
-
   virtual int complete_request() = 0; /* XXX signature likely changing */
 
-  virtual uint64_t get_bytes_sent() { return 0; }
-  virtual uint64_t get_bytes_received() { return 0; }
+  virtual uint64_t get_bytes_sent() = 0;
+  virtual uint64_t get_bytes_received() = 0;
 }; /* RGWClient IO */
 
 class RGWStreamIOBase : public RGWClientIO {
@@ -59,15 +51,19 @@ public:
 
 /* HTTP IO */
 class RGWStreamIO : public RGWStreamIOBase {
+  bool _account;
   size_t bytes_sent;
   size_t bytes_received;
 
   SHA256 *sha256_hash;
 
+  bool account() { return _account; }
+
 public:
   virtual ~RGWStreamIO() {}
   RGWStreamIO()
-    : bytes_sent(0),
+    : _account(false),
+      bytes_sent(0),
       bytes_received(0),
       sha256_hash(nullptr) {
   }
@@ -77,8 +73,17 @@ public:
 
   std::string grab_aws4_sha256_hash();
 
-  uint64_t get_bytes_sent() { return bytes_sent; }
-  uint64_t get_bytes_received() { return bytes_received; }
+  void set_account(bool _accnt) {
+    _account = _accnt;
+  }
+
+  uint64_t get_bytes_sent() override {
+    return bytes_sent;
+  }
+
+  uint64_t get_bytes_received() override {
+    return bytes_received;
+  }
 }; /* RGWStreamIO */
 
 
