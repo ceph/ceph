@@ -232,7 +232,7 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _allocate(unsigned bdev, uint64_t len, vector<bluefs_extent_t> *ev);
+  int _allocate(uint8_t bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
