@@ -594,6 +594,7 @@ def main(argv):
     if len(argv) > 0 and argv[0] == 'large':
         PG_COUNT = 12
         NUM_REP_OBJECTS = 800
+        NUM_CLONED_REP_OBJECTS = 100
         NUM_EC_OBJECTS = 12
         NUM_NSPACES = 4
         # Larger data sets for first object per namespace
@@ -603,6 +604,7 @@ def main(argv):
     else:
         PG_COUNT = 4
         NUM_REP_OBJECTS = 2
+        NUM_CLONED_REP_OBJECTS = 2
         NUM_EC_OBJECTS = 2
         NUM_NSPACES = 2
         # Larger data sets for first object per namespace
@@ -730,7 +732,7 @@ def main(argv):
     logging.debug(cmd)
     call(cmd, shell=True)
 
-    objects = range(1, NUM_REP_OBJECTS + 1)
+    objects = range(1, NUM_CLONED_REP_OBJECTS + 1)
     nspaces = range(NUM_NSPACES)
     for n in nspaces:
         nspace = get_nspace(n)
@@ -1376,6 +1378,8 @@ def main(argv):
                     fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
                               and f.split("_")[0] == basename and f.split("_")[4] == nspace]
                     if not fnames:
+                        continue
+                    if int(basename.split(REP_NAME)[1]) > int(NUM_CLONED_REP_OBJECTS):
                         continue
                     cmd = (CFSD_PREFIX + " '{json}' dump | grep '\"snap\": 1,' > /dev/null").format(osd=osd, json=JSON)
                     logging.debug(cmd)
