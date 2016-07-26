@@ -728,14 +728,14 @@ bool BootstrapRequest<I>::decode_client_meta() {
     ::decode(client_data, it);
   } catch (const buffer::error &err) {
     derr << ": failed to decode client meta data: " << err.what() << dendl;
-    return true;
+    return false;
   }
 
   librbd::journal::MirrorPeerClientMeta *client_meta =
     boost::get<librbd::journal::MirrorPeerClientMeta>(&client_data.client_meta);
   if (client_meta == nullptr) {
     derr << ": unknown peer registration" << dendl;
-    return true;
+    return false;
   } else if (!client_meta->image_id.empty()) {
     // have an image id -- use that to open the image
     m_local_image_id = client_meta->image_id;
