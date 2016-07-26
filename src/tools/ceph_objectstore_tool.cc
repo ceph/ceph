@@ -15,6 +15,7 @@
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/scoped_ptr.hpp>
+#include <boost/optional.hpp>
 
 #include <stdlib.h>
 
@@ -256,15 +257,17 @@ struct pgid_object_list {
 struct lookup_ghobject : public action_on_object_t {
   pgid_object_list _objects;
   const string _name;
+  const boost::optional<std::string> _namespace;
   bool _need_snapset;
 
-  lookup_ghobject(const string& name, bool need_snapset = false) : _name(name),
-		  _need_snapset(need_snapset) { }
+  lookup_ghobject(const string& name, const boost::optional<std::string>& nspace, bool need_snapset = false) : _name(name),
+		  _namespace(nspace), _need_snapset(need_snapset) { }
 
   virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
     if (_need_snapset && !ghobj.hobj.has_snapset())
       return 0;
-    if (_name.length() == 0 || ghobj.hobj.oid.name == _name)
+    if ((_name.length() == 0 || ghobj.hobj.oid.name == _name) &&
+        (!_namespace || ghobj.hobj.nspace == _namespace))
       _objects.insert(coll, ghobj);
     return 0;
   }
@@ -1396,11 +1399,11 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   return 0;
 }
 
-int do_list(ObjectStore *store, string pgidstr, string object,
+int do_list(ObjectStore *store, string pgidstr, string object, boost::optional<std::string> nspace,
 	    Formatter *formatter, bool debug, bool human_readable, bool head)
 {
   int r;
-  lookup_ghobject lookup(object, head);
+  lookup_ghobject lookup(object, nspace, head);
   if (pgidstr.length() > 0) {
     r = action_on_all_objects_in_pg(store, pgidstr, lookup, debug);
   } else {
@@ -1416,7 +1419,8 @@ int do_list(ObjectStore *store, string pgidstr, string object,
 int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug, bool human_readable)
 {
   int r;
-  lookup_ghobject lookup(object);
+  boost::optional<std::string> nspace; // Not specified
+  lookup_ghobject lookup(object, nspace);
   r = action_on_all_objects_in_exact_pg(store, coll_t::meta(), lookup, debug);
   if (r)
     return r;
@@ -2193,7 +2197,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format;
+  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format, argnspace;
+  boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
   ghobject_t ghobj;
@@ -2230,6 +2235,7 @@ int main(int argc, char **argv)
     ("skip-mount-omap", "Disable mounting of omap")
     ("head", "Find head/snapdir when searching for objects by name")
     ("dry-run", "Don't modify the objectstore")
+    ("namespace", po::value<string>(&argnspace), "Specify namespace when searching for objects")
     ;
 
   po::options_description positional("Positional options");
@@ -2277,6 +2283,9 @@ int main(int argc, char **argv)
   } else {
     force = true;
   }
+
+  if (vm.count("namespace"))
+    nspace = argnspace;
 
   if (vm.count("dry-run"))
     dry_run = true;
@@ -2540,7 +2549,7 @@ int main(int argc, char **argv)
         // Special: Need head/snapdir so set even if user didn't specify
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;
-	lookup_ghobject lookup(object, head);
+	lookup_ghobject lookup(object, nspace, head);
 	if (action_on_all_objects(fs, lookup, debug)) {
 	  throw std::runtime_error("Internal error");
 	} else {
@@ -2741,7 +2750,8 @@ int main(int argc, char **argv)
   }
 
   if (op == "list") {
-    ret = do_list(fs, pgidstr, object, formatter, debug, human_readable, head);
+    ret = do_list(fs, pgidstr, object, nspace, formatter, debug,
+                  human_readable, head);
     if (ret < 0) {
       cerr << "do_list failed: " << cpp_strerror(ret) << std::endl;
     }
