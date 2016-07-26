@@ -1040,18 +1040,78 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
 
 int RGWPutObj_ObjStore_S3::get_params()
 {
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  map<string, bufferlist> src_attrs;
+  size_t pos;
+  int ret;
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  int r = create_s3_policy(s, store, s3policy, s->owner);
-  if (r < 0)
-    return r;
+  ret = create_s3_policy(s, store, s3policy, s->owner);
+  if (ret < 0)
+    return ret;
 
   policy = s3policy;
 
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  copy_source_range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
+
+  /* handle x-amz-copy-source */
+
+  if (copy_source) {
+    copy_source_bucket_name = copy_source;
+    pos = copy_source_bucket_name.find("/");
+    if (pos == std::string::npos) {
+      ret = -EINVAL;
+      ldout(s->cct, 0) << "x-amz-copy-source bad format" << dendl;
+      return ret;
+    }
+    copy_source_object_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
+    copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
+    pos = copy_source_bucket_name.find(":");
+    if (pos == std::string::npos) {
+       copy_source_tenant_name = s->src_tenant_name;
+    } else {
+       copy_source_tenant_name = copy_source_bucket_name.substr(0, pos);
+       copy_source_bucket_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
+    }
+    ret = store->get_bucket_info(obj_ctx,
+                                 copy_source_tenant_name,
+                                 copy_source_bucket_name,
+                                 copy_source_bucket_info,
+                                 NULL, &src_attrs);
+    if (ret < 0) {
+      return ret;
+    }
+
+    /* handle x-amz-copy-source-range */
+
+    if (copy_source_range) {
+      string range = copy_source_range;
+      pos = range.find("=");
+      if (pos == std::string::npos) {
+        ret = -EINVAL;
+        ldout(s->cct, 0) << "x-amz-copy-source-range bad format" << dendl;
+        return ret;
+      }
+      range = range.substr(pos + 1, range.size());
+      pos = range.find("-");
+      if (pos == std::string::npos) {
+        ret = -EINVAL;
+        ldout(s->cct, 0) << "x-amz-copy-source-range bad format" << dendl;
+        return ret;
+      }
+      string first = range.substr(0, pos);
+      string last = range.substr(pos + 1, range.size());
+      copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
+      copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
+    }
+
+  } /* copy_source */
 
   return RGWPutObj_ObjStore::get_params();
 }
@@ -1237,8 +1297,28 @@ void RGWPutObj_ObjStore_S3::send_response()
 	s->cct->_conf->rgw_s3_success_create_obj_status);
       set_req_state_err(s, op_ret);
     }
-    dump_etag(s, etag.c_str());
-    dump_content_length(s, 0);
+    if (!s->info.env->get("HTTP_X_AMZ_COPY_SOURCE")) {
+      dump_etag(s, etag.c_str());
+      dump_content_length(s, 0);
+    } else {
+      dump_errno(s);
+      end_header(s, this, "application/xml");
+      dump_start(s);
+      struct tm tmp;
+      utime_t ut(mtime);
+      time_t secs = (time_t)ut.sec();
+      gmtime_r(&secs, &tmp);
+      char buf[TIME_BUF_SIZE];
+      s->formatter->open_object_section_in_ns("CopyPartResult",
+          "http://s3.amazonaws.com/doc/2006-03-01/");
+      if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
+        s->formatter->dump_string("LastModified", buf);
+      }
+      s->formatter->dump_string("ETag", etag);
+      s->formatter->close_section();
+      rgw_flush_formatter_and_reset(s, s->formatter);
+      return;
+    }
   }
   if (s->system_request && !real_clock::is_zero(mtime)) {
     dump_epoch_header(s, "Rgwx-Mtime", mtime);
@@ -2113,10 +2193,6 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
 
 int RGWCopyObj_ObjStore_S3::get_params()
 {
-  if (s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) {
-    return -ERR_NOT_IMPLEMENTED;
-  }
-
   if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
@@ -3077,15 +3153,16 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
-  const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
-  if (copy_source) {
-    ret = RGWCopyObj::parse_copy_location(copy_source,
-					  s->init_state.src_bucket,
-					  s->src_object);
-    if (!ret) {
-      ldout(s->cct, 0) << "failed to parse copy location" << dendl;
-      return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
-    }
+  if (!s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE") &&
+       s->info.env->get("HTTP_X_AMZ_COPY_SOURCE")) {
+
+      ret = RGWCopyObj::parse_copy_location(s->copy_source,
+                                            s->init_state.src_bucket,
+                                            s->src_object);
+      if (!ret) {
+          ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+          return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
+      }
   }
 
   return RGWHandler_REST::init(store, s, cio);
