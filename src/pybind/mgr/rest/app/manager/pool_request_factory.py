@@ -1,12 +1,12 @@
 
-from calamari_rest.manager.request_factory import RequestFactory
-from calamari_rest.types import OsdMap, Config
-from calamari_rest.manager.user_request import OsdMapModifyingRequest, \
+from rest.app.manager.request_factory import RequestFactory
+from rest.app.types import OsdMap, Config
+from rest.app.manager.user_request import OsdMapModifyingRequest, \
     PgCreatingRequest, PoolCreatingRequest
 
-from rest import global_instance as rest_plugin
+from rest.module import global_instance as rest_plugin
 
-from rest import logger
+from rest.logger import logger
 log = logger()
 
 # Valid values for the 'var' argument to 'ceph osd pool set'

@@ -1,8 +1,8 @@
-from calamari_rest.manager.request_factory import RequestFactory
-from calamari_rest.types import OsdMap, OSD_IMPLEMENTED_COMMANDS, OSD_FLAGS
-from calamari_rest.manager.user_request import OsdMapModifyingRequest, RadosRequest
+from rest.app.manager.request_factory import RequestFactory
+from rest.app.types import OsdMap, OSD_IMPLEMENTED_COMMANDS, OSD_FLAGS
+from rest.app.manager.user_request import OsdMapModifyingRequest, RadosRequest
 
-from rest import global_instance as rest_plugin
+from rest.module import global_instance as rest_plugin
 
 class OsdRequestFactory(RequestFactory):
     """

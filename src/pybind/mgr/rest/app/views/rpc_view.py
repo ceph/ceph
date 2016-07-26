@@ -6,20 +6,20 @@ their data from cthulhu with zeroRPC
 """
 
 
-from calamari_rest.manager.osd_request_factory import OsdRequestFactory
-from calamari_rest.manager.pool_request_factory import PoolRequestFactory
+from rest.app.manager.osd_request_factory import OsdRequestFactory
+from rest.app.manager.pool_request_factory import PoolRequestFactory
 
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 
 from rest_framework.response import Response
 
-from calamari_rest.types import OsdMap, SYNC_OBJECT_STR_TYPE, OSD, OSD_MAP, POOL, CLUSTER, CRUSH_RULE, ServiceId,\
+from rest.app.types import OsdMap, SYNC_OBJECT_STR_TYPE, OSD, OSD_MAP, POOL, CLUSTER, CRUSH_RULE, ServiceId,\
     NotFound, SERVER
 
-from rest import global_instance as rest_plugin
+from rest.module import global_instance as rest_plugin
 
-from rest import logger
+from rest.logger import logger
 log = logger()
 
 

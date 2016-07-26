@@ -100,10 +100,10 @@ MIDDLEWARE_CLASSES = (
     # 'django.middleware.clickjacking.XFrameOptionsMiddleware',
 )
 
-ROOT_URLCONF = 'calamari_rest.urls'
+ROOT_URLCONF = 'rest.app.urls'
 
 # Python dotted path to the WSGI application used by Django's runserver.
-#WSGI_APPLICATION = 'calamari_rest.wsgi.application'
+#WSGI_APPLICATION = 'rest.app.wsgi.application'
 
 INSTALLED_APPS = (
     #'django.contrib.auth',
@@ -113,7 +113,7 @@ INSTALLED_APPS = (
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'calamari_rest'
+    'rest.app'
 )
 
 # A sample logging configuration. The only tangible logging
