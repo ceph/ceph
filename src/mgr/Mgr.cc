@@ -89,20 +89,29 @@ public:
           return;
         }
 
-
         json_spirit::mObject daemon_meta = json_result.get_obj();
-        DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-        dm->key = key;
-        dm->hostname = daemon_meta.at("hostname").get_str();
 
-        daemon_meta.erase("name");
-        daemon_meta.erase("hostname");
+        DaemonStatePtr state;
+        if (daemon_state.exists(key)) {
+          state = daemon_state.get(key);
+          // TODO lock state
+          daemon_meta.erase("name");
+          daemon_meta.erase("hostname");
+          state->metadata.clear();
+          for (const auto &i : daemon_meta) {
+            state->metadata[i.first] = i.second.get_str();
+          }
+        } else {
+          state = std::make_shared<DaemonState>(daemon_state.types);
+          state->key = key;
+          state->hostname = daemon_meta.at("hostname").get_str();
 
-        for (const auto &i : daemon_meta) {
-          dm->metadata[i.first] = i.second.get_str();
+          for (const auto &i : daemon_meta) {
+            state->metadata[i.first] = i.second.get_str();
+          }
+
+          daemon_state.insert(state);
         }
-
-        daemon_state.insert(dm);
       } else if (key.first == CEPH_ENTITY_TYPE_OSD) {
       } else {
         assert(0);
@@ -463,16 +472,16 @@ void Mgr::handle_fs_map(MFSMap* m)
       // FIXME: nothing stopping old daemons being here, they won't have
       // addr: need to handle case of pre-ceph-mgr daemons that don't have
       // the fields we expect
-      auto metadata_addr = metadata->metadata.at("addr");
-      const auto map_addr = info.addr;
-
-      if (metadata_addr != stringify(map_addr)) {
-        dout(4) << "MDS[" << info.name << "] addr change " << metadata_addr
-                << " != " << stringify(map_addr) << dendl;
+      if (metadata->metadata.empty()) {
         update = true;
       } else {
-        dout(20) << "MDS[" << info.name << "] addr unchanged: "
-                 << metadata_addr << dendl;
+        auto metadata_addr = metadata->metadata.at("addr");
+        const auto map_addr = info.addr;
+        update = metadata_addr != stringify(map_addr);
+        if (update) {
+          dout(4) << "MDS[" << info.name << "] addr change " << metadata_addr
+                  << " != " << stringify(map_addr) << dendl;
+        }
       }
     } else {
       update = true;

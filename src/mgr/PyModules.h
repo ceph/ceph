@@ -56,6 +56,9 @@ public:
   PyObject *list_servers_python();
   PyObject *get_metadata_python(std::string const &handle,
       entity_type_t svc_type, const std::string &svc_id);
+  PyObject *get_counter_python(std::string const &handle,
+      entity_type_t svc_type, const std::string &svc_id,
+      const std::string &path);
 
   std::map<std::string, std::string> config_cache;
 

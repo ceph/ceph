@@ -18,6 +18,7 @@
 #include <string>
 #include <memory>
 #include <set>
+#include <boost/circular_buffer.hpp>
 
 #include "common/Mutex.h"
 
@@ -34,10 +35,27 @@ typedef std::pair<entity_type_t, std::string> DaemonKey;
 // a particular daemon.
 class PerfCounterInstance
 {
-  // TODO: store some short history or whatever
-  uint64_t current;
+  class DataPoint
+  {
+    public:
+    utime_t t;
+    uint64_t v;
+    DataPoint(utime_t t_, uint64_t v_)
+      : t(t_), v(v_)
+    {}
+  };
+
+  boost::circular_buffer<DataPoint> buffer;
+  uint64_t get_current() const;
+
   public:
-  void push(uint64_t const &v) {current = v;}
+  const boost::circular_buffer<DataPoint> & get_data() const
+  {
+    return buffer;
+  }
+  void push(utime_t t, uint64_t const &v);
+  PerfCounterInstance()
+    : buffer(20) {}
 };
 
 
@@ -63,6 +81,12 @@ class DaemonPerfCounters
   std::set<std::string> declared_types;
 
   void update(MMgrReport *report);
+
+  void clear()
+  {
+    instances.clear();
+    declared_types.clear();
+  }
 };
 
 // The state that we store about one daemon

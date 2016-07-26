@@ -153,6 +153,11 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   configure->stats_period = 5;
   m->get_connection()->send_message(configure);
 
+  if (daemon_state.exists(key)) {
+    dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
+    daemon_state.get(key)->perf_counters.clear();
+  }
+
   m->put();
   return true;
 }
@@ -168,8 +173,10 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
+    dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     daemon = daemon_state.get(key);
   } else {
+    dout(4) << "constructing new DaemonState for " << m->daemon_name << dendl;
     daemon = std::make_shared<DaemonState>(daemon_state.types);
     // FIXME: crap, we don't know the hostname at this stage.
     daemon->key = key;
@@ -177,7 +184,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
   }
 
   assert(daemon != nullptr);
-  auto daemon_counters = daemon->perf_counters;
+  auto &daemon_counters = daemon->perf_counters;
   daemon_counters.update(m);
   
   m->put();
