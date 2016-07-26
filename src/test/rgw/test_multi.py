@@ -16,6 +16,11 @@ import boto.s3.connection
 import inspect
 
 from nose.tools import eq_ as eq
+from nose.plugins.attrib import attr
+
+# test-suite for rgw multisite, the last test destroys a zone,
+# so in order to use this as a dev cluster, do
+# $nosetests -a '!destructive' /path/to/test_multi.py
 
 log_level = 20
 
@@ -788,7 +793,7 @@ def test_multi_period_incremental_sync():
 
             check_bucket_eq(source_zone, target_zone, bucket)
 
-# TODO: test this in isolation, so it doesn't have side effects on other tests
+@attr('destructive')
 def test_zonegroup_remove():
     z1 = realm.get_zone('us-1')
 
