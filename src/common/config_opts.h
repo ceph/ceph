@@ -825,8 +825,8 @@ OPTION(leveldb_log_to_ceph_log, OPT_BOOL, true)
 OPTION(leveldb_write_buffer_size, OPT_U64, 8 *1024*1024) // leveldb write buffer size
 OPTION(leveldb_cache_size, OPT_U64, 128 *1024*1024) // leveldb cache size
 OPTION(leveldb_block_size, OPT_U64, 0) // leveldb block size
-OPTION(leveldb_bloom_size, OPT_INT, 0) // leveldb bloom bits per entry
-OPTION(leveldb_max_open_files, OPT_INT, 0) // leveldb max open files
+OPTION(leveldb_bloom_size, OPT_U32, 0) // leveldb bloom bits per entry
+OPTION(leveldb_max_open_files, OPT_U32, 0) // leveldb max open files
 OPTION(leveldb_compression, OPT_BOOL, true) // leveldb uses compression
 OPTION(leveldb_paranoid, OPT_BOOL, false) // leveldb paranoid flag
 OPTION(leveldb_log, OPT_STR, "/dev/null")  // enable leveldb log file
