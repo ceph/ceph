@@ -41,7 +41,7 @@ endif(WITH_FUSE)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 add_executable(ceph-client-debug ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs librados global common)
+target_link_libraries(ceph-client-debug cephfs global client)
 install(TARGETS ceph-client-debug DESTINATION bin)
 
 add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
