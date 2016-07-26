@@ -5450,8 +5450,8 @@ void BlueStore::_pad_zeros(
 bool BlueStore::_can_overlay_write(OnodeRef o, uint64_t length)
 {
   return
-    (int)o->onode.overlay_map.size() < g_conf->bluestore_overlay_max &&
-    (int)length <= g_conf->bluestore_overlay_max_length;
+    o->onode.overlay_map.size() < g_conf->bluestore_overlay_max &&
+    length <= g_conf->bluestore_overlay_max_length;
 }
 
 void BlueStore::_do_write_small(
