@@ -114,16 +114,14 @@ class RemoteProcess(object):
             # Log the stream
             host_log = self.logger.getChild(self.hostname)
             stream_log = host_log.getChild(stream_name)
-            # If stream_obj is an actual stream, have the logging module write
-            # to it as well
-            if stream_obj is not None:
-                stream_log.addHandler(logging.StreamHandler(stream_obj))
-            greenlet = gevent.spawn(
-                copy_file_to,
-                getattr(self, stream_name),
-                stream_log,
+            self.add_greenlet(
+                gevent.spawn(
+                    copy_file_to,
+                    getattr(self, stream_name),
+                    stream_log,
+                    stream_obj,
+                )
             )
-            self.add_greenlet(greenlet)
             setattr(self, stream_name, stream_obj)
         elif self._wait:
             # FIXME: Is this actually true?
@@ -267,20 +265,19 @@ def copy_and_close(src, fdst):
     fdst.close()
 
 
-def copy_file_to(f, dst):
+def copy_file_to(src, logger, stream=None):
     """
     Copy file
-    :param f: file to be copied.
-    :param dst: destination
-    :param host: original host location
+    :param src: file to be copied.
+    :param logger: the logger object
+    :param stream: an optional file-like object which will receive a copy of
+                   src.
     """
-    if hasattr(dst, 'log'):
-        # looks like a Logger to me; not using isinstance to make life
-        # easier for unit tests
-        handler = copy_to_log
-    else:
-        handler = shutil.copyfileobj
-    return handler(f, dst)
+    if stream is not None:
+        shutil.copyfileobj(src, stream)
+        stream.seek(0)
+        src = stream
+    copy_to_log(src, logger)
 
 
 def spawn_asyncresult(fn, *args, **kwargs):
