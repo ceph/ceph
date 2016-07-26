@@ -172,14 +172,10 @@ public:
 
   int get_statfs(struct store_statfs_t *buf) {
     std::lock_guard<std::mutex> l(m_lock);
-    store_statfs_t s;
-    s.total = m_total_bytes;
-    s.allocated = m_allocated_bytes;
-    s.stored = m_total_bytes;
-    s.compressed = 0;
-    s.compressed_allocated = 0;
-    s.compressed_original = 0;
-    *buf = s;
+    buf->reset();
+    buf->total = m_total_bytes;
+    buf->allocated = m_allocated_bytes;
+    buf->stored = m_total_bytes;
     return 0;
   }
 
