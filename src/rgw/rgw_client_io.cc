@@ -22,6 +22,7 @@ void RGWClientIO::init(CephContext *cct) {
   }
 }
 
+
 int RGWStreamIOBase::print(const char *format, ...)
 {
 #define LARGE_ENOUGH 128
@@ -75,6 +76,7 @@ int RGWStreamIOBase::read(char *buf, int max, int *actual, bool hash /* = false 
   *actual = ret;
   return 0;
 }
+
 
 int RGWStreamIO::write(const char* const buf, const int len)
 {
