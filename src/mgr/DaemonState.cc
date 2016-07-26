@@ -117,6 +117,8 @@ void DaemonPerfCounters::update(MMgrReport *report)
     declared_types.insert(t.path);
   }
 
+  const auto now = ceph_clock_now(g_ceph_context);
+
   // Parse packed data according to declared set of types
   bufferlist::iterator p = report->packed.begin();
   DECODE_START(1, p);
@@ -131,12 +133,19 @@ void DaemonPerfCounters::update(MMgrReport *report)
       ::decode(avgcount, p);
       ::decode(avgcount2, p);
     }
-    // TODO: interface for insertion of avgs, add timestamp
-    instances[t_path].push(val);
+    // TODO: interface for insertion of avgs
+    instances[t_path].push(now, val);
   }
-  // TODO: handle badly encoded things without asserting out
   DECODE_FINISH(p);
 }
 
+uint64_t PerfCounterInstance::get_current() const
+{
+  return buffer.front().v;
+}
 
+void PerfCounterInstance::push(utime_t t, uint64_t const &v)
+{
+  buffer.push_back({t, v});
+}
 
