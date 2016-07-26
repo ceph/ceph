@@ -454,7 +454,8 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
   }
   ret = 0;
  out:
-  VOID_TEMP_FAILURE_RETRY(close(fd));
+  if (fd != STDOUT_FILENO)
+    VOID_TEMP_FAILURE_RETRY(close(fd));
   delete[] buf;
   return ret;
 }
@@ -3348,6 +3349,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ret = PoolDump(file_fd).dump(&io_ctx);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
     if (ret < 0) {
       cerr << "error from export: "
 	   << cpp_strerror(ret) << std::endl;
@@ -3393,6 +3399,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ret = RadosImport(file_fd, 0, dry_run).import(io_ctx, no_overwrite);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
     if (ret < 0) {
       cerr << "error from import: "
 	   << cpp_strerror(ret) << std::endl;
