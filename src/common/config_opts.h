@@ -168,8 +168,8 @@ OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
 OPTION(ms_type, OPT_STR, "simple")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
-OPTION(ms_tcp_rcvbuf, OPT_INT, 0)
-OPTION(ms_tcp_prefetch_max_size, OPT_INT, 4096) // max prefetch size, we limit this to avoid extra memcpy
+OPTION(ms_tcp_rcvbuf, OPT_U32, 0)
+OPTION(ms_tcp_prefetch_max_size, OPT_U32, 4096) // max prefetch size, we limit this to avoid extra memcpy
 OPTION(ms_initial_backoff, OPT_DOUBLE, .2)
 OPTION(ms_max_backoff, OPT_DOUBLE, 15.0)
 OPTION(ms_crc_data, OPT_BOOL, true)
@@ -180,10 +180,10 @@ OPTION(ms_die_on_old_message, OPT_BOOL, false)     // assert if we get a dup inc
 OPTION(ms_die_on_skipped_message, OPT_BOOL, false)  // assert if we skip a seq (kernel client does this intentionally)
 OPTION(ms_dispatch_throttle_bytes, OPT_U64, 100 << 20)
 OPTION(ms_bind_ipv6, OPT_BOOL, false)
-OPTION(ms_bind_port_min, OPT_INT, 6800)
-OPTION(ms_bind_port_max, OPT_INT, 7300)
-OPTION(ms_bind_retry_count, OPT_INT, 3) // If binding fails, how many times do we retry to bind
-OPTION(ms_bind_retry_delay, OPT_INT, 5) // Delay between attemps to bind
+OPTION(ms_bind_port_min, OPT_U32, 6800)
+OPTION(ms_bind_port_max, OPT_U32, 7300)
+OPTION(ms_bind_retry_count, OPT_U32, 3) // If binding fails, how many times do we retry to bind
+OPTION(ms_bind_retry_delay, OPT_U32, 5) // Delay between attemps to bind
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
@@ -196,8 +196,8 @@ OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
 OPTION(ms_dump_on_send, OPT_BOOL, false)           // hexdump msg to log on send
 OPTION(ms_dump_corrupt_message_level, OPT_INT, 1)  // debug level to hexdump undecodeable messages at
-OPTION(ms_async_op_threads, OPT_INT, 3)            // number of worker processing threads for async messenger created on init
-OPTION(ms_async_max_op_threads, OPT_INT, 5)        // max number of worker processing threads for async messenger
+OPTION(ms_async_op_threads, OPT_U32, 3)            // number of worker processing threads for async messenger created on init
+OPTION(ms_async_max_op_threads, OPT_U32, 5)        // max number of worker processing threads for async messenger
 OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // example: ms_async_affinity_cores = 0,1
 // The number of coreset is expected to equal to ms_async_op_threads, otherwise

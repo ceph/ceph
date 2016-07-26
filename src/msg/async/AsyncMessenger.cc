@@ -98,7 +98,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   int rc = -1;
   r = -1;
 
-  for (int i = 0; i < conf->ms_bind_retry_count; i++) {
+  for (uint32_t i = 0; i < conf->ms_bind_retry_count; i++) {
     if (i > 0) {
       lderr(msgr->cct) << __func__ << " was unable to bind. Trying again in "
                        << conf->ms_bind_retry_delay << " seconds " << dendl;
@@ -126,7 +126,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
       }
     } else {
       // try a range of ports
-      for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
+      for (uint32_t port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
         if (avoid_ports.count(port))
           continue;
 
@@ -319,7 +319,7 @@ WorkerPool::WorkerPool(CephContext *c): cct(c), started(false),
   // make sure user won't try to force some crazy number of worker threads
   assert(cct->_conf->ms_async_max_op_threads >= cct->_conf->ms_async_op_threads && 
          cct->_conf->ms_async_op_threads <= 32);
-  for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
+  for (uint32_t i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
     Worker *w = new Worker(cct, this, i);
     workers.push_back(w);
   }

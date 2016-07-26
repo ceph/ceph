@@ -71,7 +71,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   int rc = -1;
   int r = -1;
 
-  for (int i = 0; i < conf->ms_bind_retry_count; i++) {
+  for (uint32_t i = 0; i < conf->ms_bind_retry_count; i++) {
 
     if (i > 0) {
         lderr(msgr->cct) << "accepter.bind was unable to bind. Trying again in " << conf->ms_bind_retry_delay << " seconds " << dendl;
@@ -101,7 +101,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
         }
     } else {
         // try a range of ports
-        for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
+        for (uint32_t port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
             if (avoid_ports.count(port))
                 continue;
 
