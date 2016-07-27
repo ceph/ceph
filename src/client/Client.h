@@ -796,7 +796,8 @@ private:
 	       const UserPerm& perms, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
-  int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
+  int _do_setattr(Inode *in, struct stat *attr, int mask, const UserPerm& perms,
+		  InodeRef *inp);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _setattr(Inode *in, struct stat *attr, int mask, const UserPerm& perms,
 	       InodeRef *inp = 0) {
@@ -819,14 +820,12 @@ private:
   int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
-  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
+  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
+		   int flags, const UserPerm& perms);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len,
-		int flags, int uid=-1, int gid=-1);
-  int _setxattr(Inode *in, const char *name, const void *value, size_t len,
-		int flags, const UserPerm& perms) {
-    return _setxattr(in, name, value, len, flags, perms.uid(), perms.gid());
-  }
-  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len, int flags);
+		int flags, const UserPerm& perms);
+  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,
+		int flags, const UserPerm& perms);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _removexattr(Inode *in, const char *nm, const UserPerm& perms) {
     return _removexattr(in, nm, perms.uid(), perms.gid());
@@ -1113,9 +1112,12 @@ public:
   int removexattr(const char *path, const char *name);
   int lremovexattr(const char *path, const char *name);
   int fremovexattr(int fd, const char *name);
-  int setxattr(const char *path, const char *name, const void *value, size_t size, int flags);
-  int lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags);
-  int fsetxattr(int fd, const char *name, const void *value, size_t size, int flags);
+  int setxattr(const char *path, const char *name, const void *value,
+	       size_t size, int flags, const UserPerm& perms);
+  int lsetxattr(const char *path, const char *name, const void *value,
+		size_t size, int flags, const UserPerm& perms);
+  int fsetxattr(int fd, const char *name, const void *value, size_t size,
+		int flags, const UserPerm& perms);
 
   int sync_fs();
   int64_t drop_caches();

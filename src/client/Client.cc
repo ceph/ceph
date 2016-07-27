@@ -6405,8 +6405,8 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
   return res;
 }
 
-int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
-			InodeRef *inp)
+int Client::_do_setattr(Inode *in, struct stat *attr, int mask,
+			const UserPerm& perms, InodeRef *inp)
 {
   int issued = in->caps_issued();
 
@@ -6422,15 +6422,10 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
     return -EDQUOT;
   }
 
-  if (uid < 0) {
-    uid = get_uid();
-    gid = get_gid();
-  }
-
   // make the change locally?
-  if ((in->cap_dirtier_uid >= 0 && uid != in->cap_dirtier_uid) ||
-      (in->cap_dirtier_gid >= 0 && gid != in->cap_dirtier_gid)) {
-    ldout(cct, 10) << __func__ << " caller " << uid << ":" << gid
+  if ((in->cap_dirtier_uid >= 0 && perms.uid() != in->cap_dirtier_uid) ||
+      (in->cap_dirtier_gid >= 0 && perms.gid() != in->cap_dirtier_gid)) {
+    ldout(cct, 10) << __func__ << " caller " << perms.uid() << ":" << perms.gid()
 		   << " != cap dirtier " << in->cap_dirtier_uid << ":"
 		   << in->cap_dirtier_gid << ", forcing sync setattr"
 		   << dendl;
@@ -6453,8 +6448,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
   if (!mask) {
     // caller just needs us to bump the ctime
     in->ctime = ceph_clock_now(cct);
-    in->cap_dirtier_uid = uid;
-    in->cap_dirtier_gid = gid;
+    in->cap_dirtier_uid = perms.uid();
+    in->cap_dirtier_gid = perms.gid();
     if (issued & CEPH_CAP_AUTH_EXCL)
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
     else if (issued & CEPH_CAP_FILE_EXCL)
@@ -6468,8 +6463,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
       in->ctime = ceph_clock_now(cct);
-      in->cap_dirtier_uid = uid;
-      in->cap_dirtier_gid = gid;
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
       in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
@@ -6477,8 +6472,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
     }
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
-      in->cap_dirtier_uid = uid;
-      in->cap_dirtier_gid = gid;
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
@@ -6486,8 +6481,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
     }
     if (mask & CEPH_SETATTR_GID) {
       in->ctime = ceph_clock_now(cct);
-      in->cap_dirtier_uid = uid;
-      in->cap_dirtier_gid = gid;
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
@@ -6501,8 +6496,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid
       if (mask & CEPH_SETATTR_ATIME)
         in->atime = utime_t(stat_get_atime_sec(attr), stat_get_atime_nsec(attr));
       in->ctime = ceph_clock_now(cct);
-      in->cap_dirtier_uid = uid;
-      in->cap_dirtier_gid = gid;
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
       in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
@@ -6560,7 +6555,7 @@ force_request:
 
   req->regetattr_mask = mask;
 
-  int res = make_request(req, uid, gid, inp);
+  int res = make_request(req, perms, inp);
   ldout(cct, 10) << "_setattr result=" << res << dendl;
   return res;
 }
@@ -6568,11 +6563,13 @@ force_request:
 int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
 		     InodeRef *inp)
 {
-  int ret = _do_setattr(in, attr, mask, uid, gid, inp);
+  // FIXME
+  UserPerm perms(uid, gid);
+  int ret = _do_setattr(in, attr, mask, perms, inp);
   if (ret < 0)
    return ret;
   if (mask & CEPH_SETATTR_MODE)
-    ret = _posix_acl_chmod(in, attr->st_mode, uid, gid);
+    ret = _posix_acl_chmod(in, attr->st_mode, perms.uid(), perms.gid());
   return ret;
 }
 
@@ -9832,33 +9829,36 @@ int Client::fremovexattr(int fd, const char *name)
   return _removexattr(f->inode, name);
 }
 
-int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+int Client::setxattr(const char *path, const char *name, const void *value,
+		     size_t size, int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, true);
+  int r = Client::path_walk(path, &in, perms, true);
   if (r < 0)
     return r;
-  return _setxattr(in, name, value, size, flags);
+  return _setxattr(in, name, value, size, flags, perms);
 }
 
-int Client::lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+int Client::lsetxattr(const char *path, const char *name, const void *value,
+		      size_t size, int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, false);
+  int r = Client::path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  return _setxattr(in, name, value, size, flags);
+  return _setxattr(in, name, value, size, flags, perms);
 }
 
-int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, int flags)
+int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
+		      int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return _setxattr(f->inode, name, value, size, flags);
+  return _setxattr(f->inode, name, value, size, flags, perms);
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
@@ -10002,7 +10002,7 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size,
 }
 
 int Client::_do_setxattr(Inode *in, const char *name, const void *value,
-			 size_t size, int flags, int uid, int gid)
+			 size_t size, int flags, const UserPerm& perms)
 {
 
   int xattr_flags = 0;
@@ -10025,7 +10025,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   bl.append((const char*)value, size);
   req->set_data(bl);
 
-  int res = make_request(req, uid, gid);
+  int res = make_request(req, perms);
 
   trim_cache();
   ldout(cct, 3) << "_setxattr(" << in->ino << ", \"" << name << "\") = " <<
@@ -10034,7 +10034,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
 }
 
 int Client::_setxattr(Inode *in, const char *name, const void *value,
-		      size_t size, int flags, int uid, int gid)
+		      size_t size, int flags, const UserPerm& perms)
 {
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
@@ -10065,7 +10065,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	if (new_mode != in->mode) {
 	  struct stat attr;
 	  attr.st_mode = new_mode;
-	  ret = _do_setattr(in, &attr, CEPH_SETATTR_MODE, uid, gid, NULL);
+	  ret = _do_setattr(in, &attr, CEPH_SETATTR_MODE, perms, NULL);
 	  if (ret < 0)
 	    return ret;
 	}
@@ -10091,18 +10091,17 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
       return -EOPNOTSUPP;
   }
 
-  return _do_setxattr(in, name, value, size, flags, uid, gid);
+  return _do_setxattr(in, name, value, size, flags, perms);
 }
 
 int Client::_setxattr(InodeRef &in, const char *name, const void *value,
-		      size_t size, int flags)
+		      size_t size, int flags, const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_WRITE);
+    int r = xattr_permission(in.get(), name, MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
-  UserPerm perms(0, 0); // FIXME
   return _setxattr(in.get(), name, value, size, flags, perms);
 }
 
@@ -10181,7 +10180,6 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
     if (r < 0)
       return r;
   }
-
   return _setxattr(in, name, value, size, flags, perms);
 }
 
@@ -12402,7 +12400,9 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid)
       r = posix_acl_access_chmod(acl, mode);
       if (r < 0)
 	goto out;
-      r = _do_setxattr(in, ACL_EA_ACCESS, acl.c_str(), acl.length(), 0, uid, gid);
+      // FIXME
+      UserPerm perms(uid, gid);
+      r = _do_setxattr(in, ACL_EA_ACCESS, acl.c_str(), acl.length(), 0, perms);
     } else {
       r = 0;
     }
