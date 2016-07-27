@@ -18,8 +18,20 @@ class Context;
 namespace librbd {
 
 struct AioCompletion;
+class AioObjectRemove;
+class AioObjectTruncate;
+class AioObjectWrite;
+class AioObjectZero;
 struct ImageCtx;
 class CopyupRequest;
+
+struct AioObjectRequestHandle {
+  virtual ~AioObjectRequestHandle() {
+  }
+
+  virtual void complete(int r) = 0;
+  virtual void send() = 0;
+};
 
 /**
  * This class represents an I/O operation to a single RBD data object.
@@ -27,8 +39,33 @@ class CopyupRequest;
  * for I/O due to layering.
  */
 template <typename ImageCtxT = ImageCtx>
-class AioObjectRequest {
+class AioObjectRequest : public AioObjectRequestHandle {
 public:
+  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
+
+  static AioObjectRequest* create_remove(ImageCtxT *ictx,
+                                         const std::string &oid,
+                                         uint64_t object_no,
+                                         const ::SnapContext &snapc,
+                                         Context *completion);
+  static AioObjectRequest* create_truncate(ImageCtxT *ictx,
+                                           const std::string &oid,
+                                           uint64_t object_no,
+                                           uint64_t object_off,
+                                           const ::SnapContext &snapc,
+                                           Context *completion);
+  static AioObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
+                                        uint64_t object_no,
+                                        uint64_t object_off,
+                                        const ceph::bufferlist &data,
+                                        const ::SnapContext &snapc,
+                                        Context *completion, int op_flags);
+  static AioObjectRequest* create_zero(ImageCtxT *ictx, const std::string &oid,
+                                       uint64_t object_no, uint64_t object_off,
+                                       uint64_t object_len,
+                                       const ::SnapContext &snapc,
+                                       Context *completion);
+
   AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                    uint64_t objectno, uint64_t off, uint64_t len,
                    librados::snap_t snap_id,
@@ -54,7 +91,7 @@ protected:
   uint64_t m_object_no, m_object_off, m_object_len;
   librados::snap_t m_snap_id;
   Context *m_completion;
-  std::vector<std::pair<uint64_t,uint64_t> > m_parent_extents;
+  Extents m_parent_extents;
   bool m_hide_enoent;
 };
 
@@ -64,7 +101,16 @@ public:
   typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
   typedef std::map<uint64_t, uint64_t> ExtentMap;
 
-  AioObjectRead(ImageCtx *ictx, const std::string &oid,
+  static AioObjectRead* create(ImageCtxT *ictx, const std::string &oid,
+                               uint64_t objectno, uint64_t offset,
+                               uint64_t len, Extents &buffer_extents,
+                               librados::snap_t snap_id, bool sparse,
+                               Context *completion, int op_flags) {
+    return new AioObjectRead(ictx, oid, objectno, offset, len, buffer_extents,
+                             snap_id, sparse, completion, op_flags);
+  }
+
+  AioObjectRead(ImageCtxT *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t offset, uint64_t len,
                 Extents& buffer_extents, librados::snap_t snap_id, bool sparse,
                 Context *completion, int op_flags);
@@ -212,15 +258,13 @@ class AioObjectWrite : public AbstractAioObjectWrite {
 public:
   AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                  uint64_t object_off, const ceph::bufferlist &data,
-                 const ::SnapContext &snapc, Context *completion)
+                 const ::SnapContext &snapc, Context *completion,
+                 int op_flags)
     : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
                              snapc, completion, false),
-      m_write_data(data), m_op_flags(0) {
+      m_write_data(data), m_op_flags(op_flags) {
   }
 
-  void set_op_flags(int op_flags) {
-    m_op_flags = op_flags;
-  }
 protected:
   virtual void add_write_ops(librados::ObjectWriteOperation *wr);
 
