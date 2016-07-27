@@ -655,7 +655,9 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
       s->formatter->close_section();
     }
     s->formatter->output_footer();
-    dump_content_length(s, s->formatter->get_len());
+    if (s->obj_size) {
+      dump_content_length(s, s->formatter->get_len());
+    }
   } else {
     if (proposed_content_length != NO_CONTENT_LENGTH) {
       dump_content_length(s, proposed_content_length);
@@ -769,8 +771,13 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end,
 
   /* dumping range into temp buffer first, as libfcgi will fail to digest
    * %lld */
-  snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs,
-	   (long long)end, (long long)total);
+
+  if (!total) {
+    snprintf(range_buf, sizeof(range_buf), "*/%lld", (long long)total);
+  } else {
+    snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs,
+		(long long)end, (long long)total);
+  }
   int r = STREAM_IO(s)->print("Content-Range: bytes %s\r\n", range_buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
