@@ -60,6 +60,13 @@ writing, but there is insufficient testing to provide stability guarantees and
 every expansion of testing has generally revealed new issues. If you do enable
 snapshots and experience failure, manual intervention will be needed.
 
+Snapshots are known not to work properly with multiple filesystems (below) in
+some cases. Specifically, if you share a pool for multiple FSes and delete
+a snapshot in one FS, expect to lose snapshotted file data in any other FS using
+snapshots. See the :doc:`/dev/cephfs-snapshots` page for more information.
+
+Snapshots are known not to work with multi-MDS filesystems.
+
 Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
 
 Multiple filesystems within a Ceph cluster
@@ -76,6 +83,9 @@ active filesystems in your cluster will require manual intervention and, so far,
 will not have been experienced by anybody else -- knowledgeable help will be
 extremely limited. You also probably do not have the security or isolation
 guarantees you want or think you have upon doing so.
+
+Note that snapshots and multiple filesystems are *not* tested in combination
+and may not work together; see above.
 
 Multiple filesystems were available starting in the Jewel release candidates
 but were protected behind the "enable_multiple" flag before the final release.
