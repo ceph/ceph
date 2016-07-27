@@ -907,7 +907,7 @@ int SyntheticClient::run()
 	string base = get_sarg(0);
 	string name = get_sarg(0);
 	if (run_me())
-	  rmsnap(base.c_str(), name.c_str());
+	  rmsnap(base.c_str(), name.c_str(), perms);
 	did_run_me();
       }
       break;
@@ -3414,9 +3414,9 @@ void SyntheticClient::mksnap(const char *base, const char *name, const UserPerm&
   client->mksnap(base, name, perms);
 }
 
-void SyntheticClient::rmsnap(const char *base, const char *name)
+void SyntheticClient::rmsnap(const char *base, const char *name, const UserPerm& perms)
 {
-  client->rmsnap(base, name);
+  client->rmsnap(base, name, perms);
 }
 
 void SyntheticClient::mksnapfile(const char *dir)

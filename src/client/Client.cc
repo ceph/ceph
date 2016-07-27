@@ -9435,12 +9435,11 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
   Inode *snapdir = open_snapdir(in.get());
   return _mkdir(snapdir, name, 0, perm);
 }
-int Client::rmsnap(const char *relpath, const char *name)
+int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
 {
   Mutex::Locker l(client_lock);
   filepath path(relpath);
   InodeRef in;
-  UserPerm perms = pick_my_perms();
   int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
