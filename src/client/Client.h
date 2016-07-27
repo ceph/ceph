@@ -1072,9 +1072,9 @@ public:
 
   int setattr(const char *relpath, struct stat *attr, int mask, const UserPerm& perms);
   int fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms);
-  int chmod(const char *path, mode_t mode);
-  int fchmod(int fd, mode_t mode);
-  int lchmod(const char *path, mode_t mode);
+  int chmod(const char *path, mode_t mode, const UserPerm& perms);
+  int fchmod(int fd, mode_t mode, const UserPerm& perms);
+  int lchmod(const char *path, mode_t mode, const UserPerm& perms);
   int chown(const char *path, int uid, int gid);
   int fchown(int fd, int uid, int gid);
   int lchown(const char *path, int uid, int gid);
