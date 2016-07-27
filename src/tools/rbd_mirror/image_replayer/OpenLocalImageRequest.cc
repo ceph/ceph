@@ -53,13 +53,6 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
     // rbd-mirror will manually create tags by copying them from the peer
     work_queue->queue(on_finish, 0);
   }
-
-  virtual void cancel_external_replay(Context *on_finish) {
-    // TODO: journal is being closed due to a comms error.  This means
-    // the journal is being closed and the exclusive lock is being released.
-    // ImageReplayer needs to restart.
-  }
-
 };
 
 } // anonymous namespace
