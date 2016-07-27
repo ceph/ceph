@@ -7,10 +7,15 @@
 #include "gmock/gmock.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
+#include <list>
 
 namespace librbd {
 
+struct AioObjectRequest;
+
 struct MockJournal {
+  typedef std::list<AioObjectRequest *> AioObjectRequests;
+
   static MockJournal *s_instance;
   static MockJournal *get_instance() {
     assert(s_instance != nullptr);
@@ -48,6 +53,21 @@ struct MockJournal {
 
   MOCK_METHOD0(allocate_op_tid, uint64_t());
 
+  MOCK_METHOD5(append_write_event, uint64_t(uint64_t, size_t,
+                                            const bufferlist &,
+                                            const AioObjectRequests &, bool));
+  MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
+                                              const AioObjectRequests &,
+                                              uint64_t, size_t, bool));
+  uint64_t append_io_event(journal::EventEntry &&event_entry,
+                           const AioObjectRequests &requests,
+                           uint64_t offset, size_t length,
+                           bool flush_entry) {
+    // googlemock doesn't support move semantics
+    return append_io_event_mock(event_entry, requests, offset, length,
+                                flush_entry);
+  }
+
   MOCK_METHOD3(append_op_event_mock, void(uint64_t, const journal::EventEntry&,
                                           Context *));
   void append_op_event(uint64_t op_tid, journal::EventEntry &&event_entry,
@@ -55,6 +75,9 @@ struct MockJournal {
     // googlemock doesn't support move semantics
     append_op_event_mock(op_tid, event_entry, on_safe);
   }
+
+  MOCK_METHOD2(flush_event, void(uint64_t, Context *));
+  MOCK_METHOD2(wait_event, void(uint64_t, Context *));
 
   MOCK_METHOD3(commit_op_event, void(uint64_t, int, Context *));
   MOCK_METHOD2(replay_op_ready, void(uint64_t, Context *));
