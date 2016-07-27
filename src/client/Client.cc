@@ -6560,11 +6560,9 @@ force_request:
   return res;
 }
 
-int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
-		     InodeRef *inp)
+int Client::_setattr(Inode *in, struct stat *attr, int mask,
+		     const UserPerm& perms, InodeRef *inp)
 {
-  // FIXME
-  UserPerm perms(uid, gid);
   int ret = _do_setattr(in, attr, mask, perms, inp);
   if (ret < 0)
    return ret;
@@ -6573,21 +6571,23 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   return ret;
 }
 
-int Client::_setattr(InodeRef &in, struct stat *attr, int mask)
+int Client::_setattr(InodeRef &in, struct stat *attr, int mask,
+		     const UserPerm& perms)
 {
   mask &= (CEPH_SETATTR_MODE | CEPH_SETATTR_UID |
 	   CEPH_SETATTR_GID | CEPH_SETATTR_MTIME |
 	   CEPH_SETATTR_ATIME | CEPH_SETATTR_SIZE |
 	   CEPH_SETATTR_CTIME);
   if (cct->_conf->client_permissions) {
-    int r = may_setattr(in.get(), attr, mask);
+    int r = may_setattr(in.get(), attr, mask, perms);
     if (r < 0)
       return r;
   }
-  return _setattr(in.get(), attr, mask);
+  return _setattr(in.get(), attr, mask, perms);
 }
 
-int Client::setattr(const char *relpath, struct stat *attr, int mask)
+int Client::setattr(const char *relpath, struct stat *attr, int mask,
+		    const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "setattr" << std::endl;
@@ -6596,13 +6596,14 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask)
 
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
-  return _setattr(in, attr, mask);
+  return _setattr(in, attr, mask, perms);
 }
 
-int Client::fsetattr(int fd, struct stat *attr, int mask)
+int Client::fsetattr(int fd, struct stat *attr, int mask,
+		     const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "fsetattr" << std::endl;
@@ -6616,7 +6617,7 @@ int Client::fsetattr(int fd, struct stat *attr, int mask)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
-  return _setattr(f->inode, attr, mask);
+  return _setattr(f->inode, attr, mask, perms);
 }
 
 int Client::stat(const char *relpath, struct stat *stbuf,
@@ -8705,7 +8706,9 @@ int Client::truncate(const char *relpath, loff_t length)
 {
   struct stat attr;
   attr.st_size = length;
-  return setattr(relpath, &attr, CEPH_SETATTR_SIZE);
+  // FIXME
+  UserPerm perms(get_uid(), get_gid());
+  return setattr(relpath, &attr, CEPH_SETATTR_SIZE, perms);
 }
 
 int Client::ftruncate(int fd, loff_t length) 
