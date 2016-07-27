@@ -511,7 +511,9 @@ static int do_export_journal(librados::IoCtx& io_ctx,
       std::cerr << "rbd: error creating " << path << std::endl;
       return r;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   JournalExporter exporter(io_ctx, journal_id, fd, no_error, verbose);
@@ -719,7 +721,9 @@ static int do_import_journal(librados::IoCtx& io_ctx,
       std::cerr << "rbd: error opening " << path << std::endl;
       return r;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   JournalImporter importer(io_ctx, journal_id, fd, no_error, verbose);
