@@ -1245,7 +1245,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	client->ll_getattr(i1, &attr);
+	client->ll_getattr(i1, &attr, perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_setattr") == 0) {
@@ -1261,7 +1261,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int mask = t.get_int();
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	client->ll_setattr(i1, &attr, mask);
+	client->ll_setattr(i1, &attr, mask, perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_readlink") == 0) {
@@ -1269,7 +1269,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       if (ll_inos.count(i)) {
         char buf[PATH_MAX];
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	client->ll_readlink(i1, buf, sizeof(buf));
+	client->ll_readlink(i1, buf, sizeof(buf), perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_mknod") == 0) {
@@ -1281,7 +1281,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	if (client->ll_mknod(i1, n, m, r, &attr, &i2) == 0)
+	if (client->ll_mknod(i1, n, m, r, &attr, &i2, perms) == 0)
 	  ll_inos[ri] = attr.st_ino;
 	client->ll_put(i1);
       }
@@ -1305,7 +1305,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	if (client->ll_symlink(i1, n, v, &attr, &i2) == 0)
+	if (client->ll_symlink(i1, n, v, &attr, &i2, perms) == 0)
 	  ll_inos[ri] = attr.st_ino;
 	client->ll_put(i1);
       }
@@ -1322,7 +1322,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *n = t.get_string(buf, p);
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	client->ll_rmdir(i1, n);
+	client->ll_rmdir(i1, n, perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_rename") == 0) {

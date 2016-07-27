@@ -143,10 +143,11 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
   struct stat stbuf;
+  UserPerm perms(ctx->uid, ctx->gid);
   
   (void) fi; // XXX
 
-  if (cfuse->client->ll_getattr(in, &stbuf, ctx->uid, ctx->gid)
+  if (cfuse->client->ll_getattr(in, &stbuf, perms)
       == 0) {
     stbuf.st_ino = cfuse->make_fake_ino(stbuf.st_ino, stbuf.st_dev);
     stbuf.st_rdev = new_encode_dev(stbuf.st_rdev);
@@ -163,6 +164,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
+  UserPerm perms(ctx->uid, ctx->gid);
 
   int mask = 0;
   if (to_set & FUSE_SET_ATTR_MODE) mask |= CEPH_SETATTR_MODE;
@@ -176,7 +178,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   if (to_set & FUSE_SET_ATTR_ATIME_NOW) mask |= CEPH_SETATTR_ATIME_NOW;
 #endif
 
-  int r = cfuse->client->ll_setattr(in, attr, mask, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_setattr(in, attr, mask, perms);
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
   else
@@ -198,9 +200,9 @@ static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_setxattr(in, name, value, size, flags, ctx->uid,
-				     ctx->gid);
+  int r = cfuse->client->ll_setxattr(in, name, value, size, flags, perms);
   fuse_reply_err(req, -r);
 
   cfuse->iput(in); // iput required
@@ -212,8 +214,9 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
   char buf[size];
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_listxattr(in, buf, size, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_listxattr(in, buf, size, perms);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0) 
@@ -235,8 +238,9 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
   char buf[size];
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_getxattr(in, name, buf, size, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_getxattr(in, name, buf, size, perms);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
   else if (r >= 0)
@@ -253,9 +257,9 @@ static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino,
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_removexattr(in, name, ctx->uid,
-					ctx->gid);
+  int r = cfuse->client->ll_removexattr(in, name, perms);
   fuse_reply_err(req, -r);
 
   cfuse->iput(in); // iput required
@@ -289,8 +293,9 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
   char buf[PATH_MAX + 1];  // leave room for a null terminator
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_readlink(in, buf, sizeof(buf) - 1, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_readlink(in, buf, sizeof(buf) - 1, perms);
   if (r >= 0) {
     buf[r] = '\0';
     fuse_reply_readlink(req, buf);
@@ -308,11 +313,12 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
+  UserPerm perms(ctx->uid, ctx->gid);
 
   memset(&fe, 0, sizeof(fe));
 
   int r = cfuse->client->ll_mknod(i1, name, mode, new_decode_dev(rdev),
-				  &fe.attr, &i2, ctx->uid, ctx->gid);
+				  &fe.attr, &i2, perms);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
@@ -390,8 +396,9 @@ static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_rmdir(in, name, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_rmdir(in, name, perms);
   fuse_reply_err(req, -r);
 
   cfuse->iput(in); // iput required
@@ -404,11 +411,11 @@ static void fuse_ll_symlink(fuse_req_t req, const char *existing,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i2, *i1 = cfuse->iget(parent);
   struct fuse_entry_param fe;
+  UserPerm perms(ctx->uid, ctx->gid);
 
   memset(&fe, 0, sizeof(fe));
 
-  int r = cfuse->client->ll_symlink(i1, name, existing, &fe.attr, &i2, ctx->uid,
-				    ctx->gid);
+  int r = cfuse->client->ll_symlink(i1, name, existing, &fe.attr, &i2, perms);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
