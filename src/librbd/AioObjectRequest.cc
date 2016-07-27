@@ -27,10 +27,11 @@
 
 namespace librbd {
 
-AioObjectRequest::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
-                                   uint64_t objectno, uint64_t off,
-                                   uint64_t len, librados::snap_t snap_id,
-                                   Context *completion, bool hide_enoent)
+template <typename I>
+AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
+                                      uint64_t objectno, uint64_t off,
+                                      uint64_t len, librados::snap_t snap_id,
+                                      Context *completion, bool hide_enoent)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
     m_hide_enoent(hide_enoent) {
@@ -43,7 +44,8 @@ AioObjectRequest::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
   compute_parent_extents();
 }
 
-void AioObjectRequest::complete(int r)
+template <typename I>
+void AioObjectRequest<I>::complete(int r)
 {
   if (should_complete(r)) {
     ldout(m_ictx->cct, 20) << "complete " << this << dendl;
@@ -55,7 +57,8 @@ void AioObjectRequest::complete(int r)
   }
 }
 
-bool AioObjectRequest::compute_parent_extents() {
+template <typename I>
+bool AioObjectRequest<I>::compute_parent_extents() {
   assert(m_ictx->snap_lock.is_locked());
   assert(m_ictx->parent_lock.is_locked());
 
@@ -93,13 +96,15 @@ static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
 
 /** read **/
 
-AioObjectRead::AioObjectRead(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno, uint64_t offset, uint64_t len,
-                             vector<pair<uint64_t,uint64_t> >& be,
-                             librados::snap_t snap_id, bool sparse,
-                             Context *completion, int op_flags)
-  : AioObjectRequest(ictx, oid, objectno, offset, len, snap_id, completion,
-                     false),
+template <typename I>
+AioObjectRead<I>::AioObjectRead(ImageCtx *ictx, const std::string &oid,
+                                uint64_t objectno, uint64_t offset,
+                                uint64_t len,
+                                vector<pair<uint64_t,uint64_t> >& be,
+                                librados::snap_t snap_id, bool sparse,
+                                Context *completion, int op_flags)
+  : AioObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, completion,
+                        false),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_parent_completion(NULL),
     m_state(LIBRBD_AIO_READ_FLAT) {
@@ -107,38 +112,43 @@ AioObjectRead::AioObjectRead(ImageCtx *ictx, const std::string &oid,
   guard_read();
 }
 
-void AioObjectRead::guard_read()
+template <typename I>
+void AioObjectRead<I>::guard_read()
 {
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  RWLock::RLocker parent_locker(m_ictx->parent_lock);
+  ImageCtx *image_ctx = this->m_ictx;
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  RWLock::RLocker parent_locker(image_ctx->parent_lock);
 
-  if (has_parent()) {
-    ldout(m_ictx->cct, 20) << __func__ << " guarding read" << dendl;
+  if (this->has_parent()) {
+    ldout(image_ctx->cct, 20) << __func__ << " guarding read" << dendl;
     m_state = LIBRBD_AIO_READ_GUARD;
   }
 }
 
-bool AioObjectRead::should_complete(int r)
+template <typename I>
+bool AioObjectRead<I>::should_complete(int r)
 {
-  ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len
-                         << " r = " << r << dendl;
+  ImageCtx *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << "should_complete " << this << " "
+                            << this->m_oid << " "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << " r = " << r << dendl;
 
   bool finished = true;
 
   switch (m_state) {
   case LIBRBD_AIO_READ_GUARD:
-    ldout(m_ictx->cct, 20) << "should_complete " << this
-                           << " READ_CHECK_GUARD" << dendl;
+    ldout(image_ctx->cct, 20) << "should_complete " << this
+                              << " READ_CHECK_GUARD" << dendl;
 
     // This is the step to read from parent
     if (!m_tried_parent && r == -ENOENT) {
       {
-        RWLock::RLocker owner_locker(m_ictx->owner_lock);
-        RWLock::RLocker snap_locker(m_ictx->snap_lock);
-        RWLock::RLocker parent_locker(m_ictx->parent_lock);
-        if (m_ictx->parent == NULL) {
-          ldout(m_ictx->cct, 20) << "parent is gone; do nothing" << dendl;
+        RWLock::RLocker owner_locker(image_ctx->owner_lock);
+        RWLock::RLocker snap_locker(image_ctx->snap_lock);
+        RWLock::RLocker parent_locker(image_ctx->parent_lock);
+        if (image_ctx->parent == NULL) {
+          ldout(image_ctx->cct, 20) << "parent is gone; do nothing" << dendl;
           m_state = LIBRBD_AIO_READ_FLAT;
           finished = false;
           break;
@@ -146,20 +156,21 @@ bool AioObjectRead::should_complete(int r)
 
         // calculate reverse mapping onto the image
         vector<pair<uint64_t,uint64_t> > parent_extents;
-        Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
-                                m_object_off, m_object_len, parent_extents);
+        Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
+                                this->m_object_no, this->m_object_off,
+                                this->m_object_len, parent_extents);
 
         uint64_t parent_overlap = 0;
         uint64_t object_overlap = 0;
-        r = m_ictx->get_parent_overlap(m_snap_id, &parent_overlap);
+        r = image_ctx->get_parent_overlap(this->m_snap_id, &parent_overlap);
         if (r == 0) {
-          object_overlap = m_ictx->prune_parent_extents(parent_extents,
-                                                        parent_overlap);
+          object_overlap = image_ctx->prune_parent_extents(parent_extents,
+                                                           parent_overlap);
         }
 
         if (object_overlap > 0) {
           m_tried_parent = true;
-          if (is_copy_on_read(m_ictx, m_snap_id)) {
+          if (is_copy_on_read(image_ctx, this->m_snap_id)) {
             m_state = LIBRBD_AIO_READ_COPYUP;
           }
 
@@ -178,8 +189,8 @@ bool AioObjectRead::should_complete(int r)
     }
     break;
   case LIBRBD_AIO_READ_COPYUP:
-    ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_COPYUP"
-                           << dendl;
+    ldout(image_ctx->cct, 20) << "should_complete " << this << " READ_COPYUP"
+                              << dendl;
     // This is the extra step for copy-on-read: kick off an asynchronous copyup.
     // It is different from copy-on-write as asynchronous copyup will finish
     // by itself so state won't go back to LIBRBD_AIO_READ_GUARD.
@@ -193,94 +204,103 @@ bool AioObjectRead::should_complete(int r)
     }
     break;
   case LIBRBD_AIO_READ_FLAT:
-    ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_FLAT"
-                           << dendl;
+    ldout(image_ctx->cct, 20) << "should_complete " << this << " READ_FLAT"
+                              << dendl;
     // The read content should be deposit in m_read_data
     break;
   default:
-    lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
+    lderr(image_ctx->cct) << "invalid request state: " << m_state << dendl;
     assert(0);
   }
 
   return finished;
 }
 
-void AioObjectRead::send() {
-  ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len << dendl;
+template <typename I>
+void AioObjectRead<I>::send() {
+  ImageCtx *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << "send " << this << " " << this->m_oid << " "
+                            << this->m_object_off << "~" << this->m_object_len
+                            << dendl;
 
   {
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
+    RWLock::RLocker snap_locker(image_ctx->snap_lock);
 
     // send read request to parent if the object doesn't exist locally
-    if (m_ictx->object_map != nullptr &&
-        !m_ictx->object_map->object_may_exist(m_object_no)) {
-      m_ictx->op_work_queue->queue(util::create_context_callback<
-        AioObjectRequest>(this), -ENOENT);
+    if (image_ctx->object_map != nullptr &&
+        !image_ctx->object_map->object_may_exist(this->m_object_no)) {
+      image_ctx->op_work_queue->queue(util::create_context_callback<
+        AioObjectRequest<I> >(this), -ENOENT);
       return;
     }
   }
 
   librados::ObjectReadOperation op;
-  int flags = m_ictx->get_read_flags(m_snap_id);
+  int flags = image_ctx->get_read_flags(this->m_snap_id);
   if (m_sparse) {
-    op.sparse_read(m_object_off, m_object_len, &m_ext_map, &m_read_data,
-                   NULL);
+    op.sparse_read(this->m_object_off, this->m_object_len, &m_ext_map,
+                   &m_read_data, nullptr);
   } else {
-    op.read(m_object_off, m_object_len, &m_read_data, NULL);
+    op.read(this->m_object_off, this->m_object_len, &m_read_data, nullptr);
   }
   op.set_op_flags2(m_op_flags);
 
   librados::AioCompletion *rados_completion =
     util::create_rados_ack_callback(this);
-  int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &op, flags,
-                                       NULL);
+  int r = image_ctx->data_ctx.aio_operate(this->m_oid, rados_completion, &op,
+                                          flags, nullptr);
   assert(r == 0);
 
   rados_completion->release();
 }
 
-void AioObjectRead::send_copyup()
+template <typename I>
+void AioObjectRead<I>::send_copyup()
 {
+  ImageCtx *image_ctx = this->m_ictx;
   {
-    RWLock::RLocker owner_locker(m_ictx->owner_lock);
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    RWLock::RLocker parent_locker(m_ictx->parent_lock);
-    if (!compute_parent_extents() ||
-        (m_ictx->exclusive_lock != nullptr &&
-         !m_ictx->exclusive_lock->is_lock_owner())) {
+    RWLock::RLocker owner_locker(image_ctx->owner_lock);
+    RWLock::RLocker snap_locker(image_ctx->snap_lock);
+    RWLock::RLocker parent_locker(image_ctx->parent_lock);
+    if (!this->compute_parent_extents() ||
+        (image_ctx->exclusive_lock != nullptr &&
+         !image_ctx->exclusive_lock->is_lock_owner())) {
       return;
     }
   }
 
-  Mutex::Locker copyup_locker(m_ictx->copyup_list_lock);
+  Mutex::Locker copyup_locker(image_ctx->copyup_list_lock);
   map<uint64_t, CopyupRequest*>::iterator it =
-    m_ictx->copyup_list.find(m_object_no);
-  if (it == m_ictx->copyup_list.end()) {
+    image_ctx->copyup_list.find(this->m_object_no);
+  if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
-    CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid, m_object_no,
-                                               m_parent_extents);
-    m_ictx->copyup_list[m_object_no] = new_req;
+    CopyupRequest *new_req = new CopyupRequest(image_ctx, this->m_oid,
+                                               this->m_object_no,
+                                               this->m_parent_extents);
+    image_ctx->copyup_list[this->m_object_no] = new_req;
     new_req->send();
   }
 }
 
-void AioObjectRead::read_from_parent(const Extents& parent_extents)
+template <typename I>
+void AioObjectRead<I>::read_from_parent(const Extents& parent_extents)
 {
+  ImageCtx *image_ctx = this->m_ictx;
   assert(!m_parent_completion);
-  m_parent_completion = AioCompletion::create_and_start<AioObjectRequest>(
-    this, m_ictx, AIO_TYPE_READ);
+  m_parent_completion = AioCompletion::create_and_start<AioObjectRequest<I> >(
+    this, image_ctx, AIO_TYPE_READ);
 
   // prevent the parent image from being deleted while this
   // request is still in-progress
   m_parent_completion->get();
   m_parent_completion->block();
 
-  ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
-                         << " parent completion " << m_parent_completion
-                         << " extents " << parent_extents << dendl;
-  RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
-  AioImageRequest<>::aio_read(m_ictx->parent, m_parent_completion,
+  ldout(image_ctx->cct, 20) << "read_from_parent this = " << this
+                            << " parent completion " << m_parent_completion
+                            << " extents " << parent_extents
+                            << dendl;
+  RWLock::RLocker owner_locker(image_ctx->parent->owner_lock);
+  AioImageRequest<>::aio_read(image_ctx->parent, m_parent_completion,
                               parent_extents, NULL, &m_read_data, 0);
 }
 
@@ -582,3 +602,6 @@ void AioObjectTruncate::send_write() {
 }
 
 } // namespace librbd
+
+template class librbd::AioObjectRequest<librbd::ImageCtx>;
+template class librbd::AioObjectRead<librbd::ImageCtx>;

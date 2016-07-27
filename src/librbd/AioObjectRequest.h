@@ -26,8 +26,8 @@ class CopyupRequest;
  * Its subclasses encapsulate logic for dealing with special cases
  * for I/O due to layering.
  */
-class AioObjectRequest
-{
+template <typename ImageCtxT = ImageCtx>
+class AioObjectRequest {
 public:
   AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                    uint64_t objectno, uint64_t off, uint64_t len,
@@ -58,7 +58,8 @@ protected:
   bool m_hide_enoent;
 };
 
-class AioObjectRead : public AioObjectRequest {
+template <typename ImageCtxT = ImageCtx>
+class AioObjectRead : public AioObjectRequest<ImageCtxT> {
 public:
   typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
   typedef std::map<uint64_t, uint64_t> ExtentMap;
@@ -73,10 +74,10 @@ public:
   void guard_read();
 
   inline uint64_t get_offset() const {
-    return m_object_off;
+    return this->m_object_off;
   }
   inline uint64_t get_length() const {
-    return m_object_len;
+    return this->m_object_len;
   }
   ceph::bufferlist &data() {
     return m_read_data;
@@ -125,7 +126,7 @@ private:
   void read_from_parent(const Extents& image_extents);
 };
 
-class AbstractAioObjectWrite : public AioObjectRequest {
+class AbstractAioObjectWrite : public AioObjectRequest<> {
 public:
   AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
                          uint64_t object_no, uint64_t object_off,
@@ -361,5 +362,8 @@ protected:
 };
 
 } // namespace librbd
+
+extern template class librbd::AioObjectRequest<librbd::ImageCtx>;
+extern template class librbd::AioObjectRead<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_AIO_OBJECT_REQUEST_H

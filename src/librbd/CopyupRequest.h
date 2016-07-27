@@ -11,6 +11,8 @@
 namespace librbd {
 
 struct AioCompletion;
+template <typename I> class AioObjectRequest;
+struct ImageCtx;
 
 class CopyupRequest {
 public:
@@ -18,7 +20,7 @@ public:
                 vector<pair<uint64_t,uint64_t> >& image_extents);
   ~CopyupRequest();
 
-  void append_request(AioObjectRequest *req);
+  void append_request(AioObjectRequest<ImageCtx> *req);
 
   void send();
 
@@ -64,7 +66,7 @@ private:
   vector<pair<uint64_t,uint64_t> > m_image_extents;
   State m_state;
   ceph::bufferlist m_copyup_data;
-  vector<AioObjectRequest *> m_pending_requests;
+  vector<AioObjectRequest<ImageCtx> *> m_pending_requests;
   atomic_t m_pending_copyups;
 
   AsyncOperation m_async_op;

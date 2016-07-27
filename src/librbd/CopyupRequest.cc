@@ -92,15 +92,15 @@ CopyupRequest::~CopyupRequest() {
   m_async_op.finish_op();
 }
 
-void CopyupRequest::append_request(AioObjectRequest *req) {
+void CopyupRequest::append_request(AioObjectRequest<> *req) {
   ldout(m_ictx->cct, 20) << __func__ << " " << this << ": " << req << dendl;
   m_pending_requests.push_back(req);
 }
 
 void CopyupRequest::complete_requests(int r) {
   while (!m_pending_requests.empty()) {
-    vector<AioObjectRequest *>::iterator it = m_pending_requests.begin();
-    AioObjectRequest *req = *it;
+    vector<AioObjectRequest<> *>::iterator it = m_pending_requests.begin();
+    AioObjectRequest<> *req = *it;
     ldout(m_ictx->cct, 20) << __func__ << " completing request " << req
                            << dendl;
     req->complete(r);
@@ -162,7 +162,7 @@ bool CopyupRequest::send_copyup() {
 
     // merge all pending write ops into this single RADOS op
     for (size_t i=0; i<m_pending_requests.size(); ++i) {
-      AioObjectRequest *req = m_pending_requests[i];
+      AioObjectRequest<> *req = m_pending_requests[i];
       ldout(m_ictx->cct, 20) << __func__ << " add_copyup_ops " << req
                              << dendl;
       req->add_copyup_ops(&write_op);

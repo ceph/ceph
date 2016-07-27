@@ -31,7 +31,7 @@ namespace librados {
 
 namespace librbd {
 
-class AioObjectRequest;
+template <typename I> class AioObjectRequest;
 class ImageCtx;
 
 namespace journal { template <typename> class Replay; }
@@ -87,7 +87,7 @@ public:
   static const std::string LOCAL_MIRROR_UUID;
   static const std::string ORPHAN_MIRROR_UUID;
 
-  typedef std::list<AioObjectRequest *> AioObjectRequests;
+  typedef std::list<AioObjectRequest<ImageCtx> *> AioObjectRequests;
 
   Journal(ImageCtxT &image_ctx);
   ~Journal();

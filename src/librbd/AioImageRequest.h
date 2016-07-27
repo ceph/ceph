@@ -15,9 +15,9 @@
 
 namespace librbd {
 
-class AioObjectRequest;
-class ImageCtx;
 class AioCompletion;
+template <typename I> class AioObjectRequest;
+class ImageCtx;
 
 template <typename ImageCtxT = ImageCtx>
 class AioImageRequest {
@@ -49,7 +49,7 @@ public:
   void fail(int r);
 
 protected:
-  typedef std::list<AioObjectRequest *> AioObjectRequests;
+  typedef std::list<AioObjectRequest<ImageCtx> *> AioObjectRequests;
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
@@ -135,7 +135,7 @@ protected:
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
                                     AioObjectRequests *aio_object_requests);
-  virtual AioObjectRequest *create_object_request(
+  virtual AioObjectRequest<ImageCtx> *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) = 0;
 
@@ -175,7 +175,7 @@ protected:
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
                                     AioObjectRequests *aio_object_requests);
-  virtual AioObjectRequest *create_object_request(
+  virtual AioObjectRequest<ImageCtx> *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish);
 
@@ -211,7 +211,7 @@ protected:
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
 
-  virtual AioObjectRequest *create_object_request(
+  virtual AioObjectRequest<ImageCtx> *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish);
 
