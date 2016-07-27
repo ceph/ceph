@@ -39,6 +39,7 @@ struct MockImageCtx {
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
+      perfcounter(image_ctx.perfcounter),
       snap_name(image_ctx.snap_name),
       snap_id(image_ctx.snap_id),
       snap_exists(image_ctx.snap_exists),
@@ -47,6 +48,7 @@ struct MockImageCtx {
       snap_info(image_ctx.snap_info),
       snap_ids(image_ctx.snap_ids),
       object_cacher(image_ctx.object_cacher),
+      object_set(image_ctx.object_set),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
       lockers(image_ctx.lockers),
@@ -70,9 +72,11 @@ struct MockImageCtx {
       id(image_ctx.id),
       name(image_ctx.name),
       parent_md(image_ctx.parent_md),
+      format_string(image_ctx.format_string),
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
+      readahead_max_bytes(image_ctx.readahead_max_bytes),
       parent(NULL), operations(new MockOperations()),
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
@@ -145,6 +149,7 @@ struct MockImageCtx {
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
   MOCK_METHOD1(flush, void(Context *));
+  MOCK_METHOD1(flush_async_operations, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
   MOCK_METHOD1(invalidate_cache, void(Context *));
@@ -165,8 +170,14 @@ struct MockImageCtx {
 
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
 
+  MOCK_METHOD7(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
+                                         size_t, uint64_t, Context *, int));
+  MOCK_METHOD7(write_to_cache, void(object_t, const bufferlist&, size_t,
+                                    uint64_t, Context *, int, uint64_t));
+
   ImageCtx *image_ctx;
   CephContext *cct;
+  PerfCounters *perfcounter;
 
   std::string snap_name;
   uint64_t snap_id;
@@ -178,6 +189,7 @@ struct MockImageCtx {
   std::map<std::string, librados::snap_t> snap_ids;
 
   ObjectCacher *object_cacher;
+  ObjectCacher::ObjectSet *object_set;
 
   bool old_format;
   bool read_only;
@@ -209,6 +221,7 @@ struct MockImageCtx {
   std::string id;
   std::string name;
   parent_info parent_md;
+  char *format_string;
 
   file_layout_t layout;
 
@@ -221,6 +234,7 @@ struct MockImageCtx {
   MockContextWQ *op_work_queue;
 
   MockReadahead readahead;
+  uint64_t readahead_max_bytes;
 
   MockImageCtx *parent;
   MockOperations *operations;
