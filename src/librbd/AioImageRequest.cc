@@ -269,14 +269,10 @@ void AioImageRead<I>::send_request() {
                      << dendl;
 
       C_AioRead<I> *req_comp = new C_AioRead<I>(aio_comp);
-      AioObjectRead<I> *req = new AioObjectRead<I>(get_image_ctx(&image_ctx),
-                                                   extent.oid.name,
-                                                   extent.objectno,
-                                                   extent.offset,
-                                                   extent.length,
-                                                   extent.buffer_extents,
-                                                   snap_id, true, req_comp,
-                                                   m_op_flags);
+      AioObjectRead<I> *req = AioObjectRead<I>::create(
+        &image_ctx, extent.oid.name, extent.objectno, extent.offset,
+        extent.length, extent.buffer_extents, snap_id, true, req_comp,
+        m_op_flags);
       req_comp->set_req(req);
 
       if (image_ctx.object_cacher) {
@@ -379,7 +375,8 @@ void AbstractAioImageWrite<I>::send_object_requests(
     ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
                    << " from " << p->buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    AioObjectRequest<> *request = create_object_request(*p, snapc, req_comp);
+    AioObjectRequestHandle *request = create_object_request(*p, snapc,
+                                                            req_comp);
 
     // if journaling, stash the request for later; otherwise send
     if (request != NULL) {
@@ -450,7 +447,7 @@ void AioImageWrite<I>::send_object_requests(
 }
 
 template <typename I>
-AioObjectRequest<> *AioImageWrite<I>::create_object_request(
+AioObjectRequestHandle *AioImageWrite<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
@@ -458,12 +455,9 @@ AioObjectRequest<> *AioImageWrite<I>::create_object_request(
 
   bufferlist bl;
   assemble_extent(object_extent, &bl);
-  AioObjectWrite *req = new AioObjectWrite(get_image_ctx(&image_ctx),
-                                           object_extent.oid.name,
-                                           object_extent.objectno,
-                                           object_extent.offset, bl,
-                                           snapc, on_finish);
-  req->set_op_flags(m_op_flags);
+  AioObjectRequest<I> *req = AioObjectRequest<I>::create_write(
+    &image_ctx, object_extent.oid.name, object_extent.objectno,
+    object_extent.offset, bl, snapc, on_finish, m_op_flags);
   return req;
 }
 
@@ -536,27 +530,25 @@ void AioImageDiscard<I>::send_cache_requests(const ObjectExtents &object_extents
 }
 
 template <typename I>
-AioObjectRequest<> *AioImageDiscard<I>::create_object_request(
+AioObjectRequestHandle *AioImageDiscard<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
-  AioObjectRequest<> *req;
+  AioObjectRequest<I> *req;
   if (object_extent.length == image_ctx.layout.object_size) {
-    req = new AioObjectRemove(get_image_ctx(&image_ctx),
-                              object_extent.oid.name,
-                              object_extent.objectno, snapc, on_finish);
+    req = AioObjectRequest<I>::create_remove(
+      &image_ctx, object_extent.oid.name, object_extent.objectno, snapc,
+      on_finish);
   } else if (object_extent.offset + object_extent.length ==
                image_ctx.layout.object_size) {
-    req = new AioObjectTruncate(get_image_ctx(&image_ctx),
-                                object_extent.oid.name,
-                                object_extent.objectno, object_extent.offset,
-                                snapc, on_finish);
+    req = AioObjectRequest<I>::create_truncate(
+      &image_ctx, object_extent.oid.name, object_extent.objectno,
+      object_extent.offset, snapc, on_finish);
   } else {
-    req = new AioObjectZero(get_image_ctx(&image_ctx),
-                            object_extent.oid.name,
-                            object_extent.objectno, object_extent.offset,
-                            object_extent.length, snapc, on_finish);
+    req = AioObjectRequest<I>::create_zero(
+      &image_ctx, object_extent.oid.name, object_extent.objectno,
+      object_extent.offset, object_extent.length, snapc, on_finish);
   }
   return req;
 }

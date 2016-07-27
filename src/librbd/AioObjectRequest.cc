@@ -28,6 +28,48 @@
 namespace librbd {
 
 template <typename I>
+AioObjectRequest<I>*
+AioObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
+                                   uint64_t object_no,
+                                   const ::SnapContext &snapc,
+                                   Context *completion) {
+  return new AioObjectRemove(util::get_image_ctx(ictx), oid, object_no, snapc,
+                             completion);
+}
+
+template <typename I>
+AioObjectRequest<I>*
+AioObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
+                                     uint64_t object_no, uint64_t object_off,
+                                     const ::SnapContext &snapc,
+                                     Context *completion) {
+  return new AioObjectTruncate(util::get_image_ctx(ictx), oid, object_no,
+                               object_off, snapc, completion);
+}
+
+template <typename I>
+AioObjectRequest<I>*
+AioObjectRequest<I>::create_write(I *ictx, const std::string &oid,
+                                  uint64_t object_no, uint64_t object_off,
+                                  const ceph::bufferlist &data,
+                                  const ::SnapContext &snapc,
+                                  Context *completion, int op_flags) {
+  return new AioObjectWrite(util::get_image_ctx(ictx), oid, object_no,
+                            object_off, data, snapc, completion, op_flags);
+}
+
+template <typename I>
+AioObjectRequest<I>*
+AioObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
+                                 uint64_t object_no, uint64_t object_off,
+                                 uint64_t object_len,
+                                 const ::SnapContext &snapc,
+                                 Context *completion) {
+  return new AioObjectZero(util::get_image_ctx(ictx), oid, object_no,
+                           object_off, object_len, snapc, completion);
+}
+
+template <typename I>
 AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                                       uint64_t objectno, uint64_t off,
                                       uint64_t len, librados::snap_t snap_id,
@@ -97,14 +139,14 @@ static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
 /** read **/
 
 template <typename I>
-AioObjectRead<I>::AioObjectRead(ImageCtx *ictx, const std::string &oid,
+AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
                                 uint64_t objectno, uint64_t offset,
                                 uint64_t len,
                                 vector<pair<uint64_t,uint64_t> >& be,
                                 librados::snap_t snap_id, bool sparse,
                                 Context *completion, int op_flags)
-  : AioObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, completion,
-                        false),
+  : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
+                        snap_id, completion, false),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_parent_completion(NULL),
     m_state(LIBRBD_AIO_READ_FLAT) {
