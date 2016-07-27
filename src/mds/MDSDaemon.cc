@@ -34,15 +34,9 @@
 #include "MDSDaemon.h"
 #include "Server.h"
 #include "Locker.h"
-#include "MDCache.h"
-#include "MDLog.h"
-#include "MDBalancer.h"
-#include "Migrator.h"
 
 #include "SnapServer.h"
 #include "SnapClient.h"
-
-#include "InoTable.h"
 
 #include "common/HeartbeatMap.h"
 
@@ -54,7 +48,6 @@
 #include "events/ESubtreeMap.h"
 
 #include "messages/MMDSMap.h"
-#include "messages/MMDSBeacon.h"
 
 #include "messages/MGenericMessage.h"
 
