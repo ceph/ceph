@@ -662,21 +662,24 @@ extern "C" int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, 
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->listxattr(path, list, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->listxattr(path, list, size, perms);
 }
 
 extern "C" int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->llistxattr(path, list, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->llistxattr(path, list, size, perms);
 }
 
 extern "C" int ceph_flistxattr(struct ceph_mount_info *cmount, int fd, char *list, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->flistxattr(fd, list, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->flistxattr(fd, list, size, perms);
 }
 
 extern "C" int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name)

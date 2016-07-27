@@ -818,10 +818,7 @@ private:
 		const UserPerm& perms);
   int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
-  int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
-  int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms) {
-    return _listxattr(in, names, len, perms.uid(), perms.gid());
-  }
+  int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len,
 		int flags, int uid=-1, int gid=-1);
@@ -1110,9 +1107,9 @@ public:
 		const UserPerm& perms);
   int fgetxattr(int fd, const char *name, void *value, size_t size,
 		const UserPerm& perms);
-  int listxattr(const char *path, char *list, size_t size);
-  int llistxattr(const char *path, char *list, size_t size);
-  int flistxattr(int fd, char *list, size_t size);
+  int listxattr(const char *path, char *list, size_t size, const UserPerm& perms);
+  int llistxattr(const char *path, char *list, size_t size, const UserPerm& perms);
+  int flistxattr(int fd, char *list, size_t size, const UserPerm& perms);
   int removexattr(const char *path, const char *name);
   int lremovexattr(const char *path, const char *name);
   int fremovexattr(int fd, const char *name);
