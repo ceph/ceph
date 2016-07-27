@@ -15,7 +15,6 @@ ceph:
   - librbd1
   - rbd-fuse
   - ceph-common-dbg
-  - ceph-fs-common-dbg
   - ceph-fuse-dbg
   - ceph-mds-dbg
   - ceph-mon-dbg
