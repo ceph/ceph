@@ -750,13 +750,16 @@ void ReplicatedBackend::be_deep_scrub(
   bufferlist bl, hdrbl;
   int r;
   __u64 pos = 0;
+
+  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
   while ( (r = store->read(
-	     coll,
-	     ghobject_t(
-	       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	     pos,
-	     cct->_conf->osd_deep_scrub_stride, bl,
-	     true)) > 0) {
+             coll,
+             ghobject_t(
+               poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+             pos,
+             cct->_conf->osd_deep_scrub_stride, bl,
+             fadvise_flags, true)) > 0) {
     handle.reset_tp_timeout();
     h << bl;
     pos += bl.length();
@@ -1526,6 +1529,7 @@ void ReplicatedBackend::prepare_pull(
   pi.head_ctx = headctx;
   pi.recovery_info = op.recovery_info;
   pi.recovery_progress = op.recovery_progress;
+  pi.cache_dont_need = h->cache_dont_need;
 }
 
 /*
@@ -1534,7 +1538,7 @@ void ReplicatedBackend::prepare_pull(
  */
 void ReplicatedBackend::prep_push_to_replica(
   ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
-  PushOp *pop)
+  PushOp *pop, bool cache_dont_need)
 {
   const object_info_t& oi = obc->obs.oi;
   uint64_t size = obc->obs.oi.size;
@@ -1590,7 +1594,7 @@ void ReplicatedBackend::prep_push_to_replica(
       data_subset, clone_subsets);
   }
 
-  prep_push(obc, soid, peer, oi.version, data_subset, clone_subsets, pop);
+  prep_push(obc, soid, peer, oi.version, data_subset, clone_subsets, pop, cache_dont_need);
 }
 
 void ReplicatedBackend::prep_push(ObjectContextRef obc,
@@ -1613,7 +1617,7 @@ void ReplicatedBackend::prep_push(
   eversion_t version,
   interval_set<uint64_t> &data_subset,
   map<hobject_t, interval_set<uint64_t> >& clone_subsets,
-  PushOp *pop)
+  PushOp *pop, bool cache_dont_need)
 {
   get_parent()->begin_peer_recover(peer, soid);
   // take note.
@@ -1635,7 +1639,7 @@ void ReplicatedBackend::prep_push(
 			pi.recovery_progress,
 			&new_progress,
 			pop,
-			&(pi.stat));
+			&(pi.stat), cache_dont_need);
   assert(r == 0);
   pi.recovery_progress = new_progress;
 }
@@ -1679,6 +1683,7 @@ void ReplicatedBackend::submit_push_data(
   ObjectRecoveryInfo &recovery_info,
   bool first,
   bool complete,
+  bool cache_dont_need,
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
   bufferlist omap_header,
@@ -1704,13 +1709,16 @@ void ReplicatedBackend::submit_push_data(
     t->omap_setheader(target_coll, recovery_info.soid, omap_header);
   }
   uint64_t off = 0;
+  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
+  if (cache_dont_need)
+    fadvise_flags |= CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
        p != intervals_included.end();
        ++p) {
     bufferlist bit;
     bit.substr_of(data_included, off, p.get_len());
-    t->write(target_coll, recovery_info.soid,
-	     p.get_start(), p.get_len(), bit);
+    t->write(target_coll, ghobject_t(recovery_info.soid),
+	     p.get_start(), p.get_len(), bit, fadvise_flags);
     off += p.get_len();
   }
 
@@ -1840,7 +1848,7 @@ bool ReplicatedBackend::handle_pull_response(
   bool complete = pi.is_complete();
 
   submit_push_data(pi.recovery_info, first,
-		   complete,
+		   complete, pi.cache_dont_need,
 		   data_included, data,
 		   pop.omap_header,
 		   pop.attrset,
@@ -1884,6 +1892,7 @@ void ReplicatedBackend::handle_push(
   submit_push_data(pop.recovery_info,
 		   first,
 		   complete,
+		   true, // must be replicate
 		   pop.data_included,
 		   data,
 		   pop.omap_header,
@@ -1987,7 +1996,8 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				     const ObjectRecoveryProgress &progress,
 				     ObjectRecoveryProgress *out_progress,
 				     PushOp *out_op,
-				     object_stat_sum_t *stat)
+				     object_stat_sum_t *stat,
+                                     bool cache_dont_need)
 {
   ObjectRecoveryProgress _new_progress;
   if (!out_progress)
@@ -2078,8 +2088,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
        p != out_op->data_included.end();
        ++p) {
     bufferlist bit;
-    store->read(coll, recovery_info.soid,
-		     p.get_start(), p.get_len(), bit);
+    store->read(coll, ghobject_t(recovery_info.soid),
+		p.get_start(), p.get_len(), bit,
+                cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
     if (p.get_len() != bit.length()) {
       dout(10) << " extent " << p.get_start() << "~" << p.get_len()
 	       << " is actually " << p.get_start() << "~" << bit.length()
@@ -2424,8 +2435,7 @@ int ReplicatedBackend::start_pushes(
       ++pushes;
       h->pushes[peer].push_back(PushOp());
       prep_push_to_replica(obc, soid, peer,
-			   &(h->pushes[peer].back())
-	);
+			   &(h->pushes[peer].back()), h->cache_dont_need);
     }
   }
   return pushes;
