@@ -9,7 +9,6 @@
 #include "common/perf_counters.h"
 #include "common/WorkQueue.h"
 
-#include "librbd/AioObjectRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
@@ -220,48 +219,6 @@ ssize_t AioCompletion::get_return_value() {
   lock.Unlock();
   tracepoint(librbd, aio_get_return_value_exit, r);
   return r;
-}
-
-void C_AioRead::finish(int r)
-{
-  m_completion->lock.Lock();
-  CephContext *cct = m_completion->ictx->cct;
-  ldout(cct, 10) << "C_AioRead::finish() " << this << " r = " << r << dendl;
-
-  if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
-    ldout(cct, 10) << " got " << m_req->m_ext_map
-                   << " for " << m_req->m_buffer_extents
-                   << " bl " << m_req->data().length() << dendl;
-    // reads from the parent don't populate the m_ext_map and the overlap
-    // may not be the full buffer.  compensate here by filling in m_ext_map
-    // with the read extent when it is empty.
-    if (m_req->m_ext_map.empty())
-      m_req->m_ext_map[m_req->m_object_off] = m_req->data().length();
-
-    m_completion->destriper.add_partial_sparse_result(
-        cct, m_req->data(), m_req->m_ext_map, m_req->m_object_off,
-        m_req->m_buffer_extents);
-    r = m_req->m_object_len;
-  }
-  m_completion->lock.Unlock();
-
-  C_AioRequest::finish(r);
-}
-
-void C_CacheRead::complete(int r) {
-  if (!m_enqueued) {
-    // cache_lock creates a lock ordering issue -- so re-execute this context
-    // outside the cache_lock
-    m_enqueued = true;
-    m_image_ctx.op_work_queue->queue(this, r);
-    return;
-  }
-  Context::complete(r);
-}
-
-void C_CacheRead::finish(int r)
-{
-  m_req->complete(r);
 }
 
 } // namespace librbd

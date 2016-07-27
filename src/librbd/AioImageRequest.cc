@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
+#include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -75,6 +76,72 @@ struct C_FlushJournalCommit : public Context {
                    << dendl;
     aio_comp->complete_request(r);
   }
+};
+
+class C_AioRead : public C_AioRequest {
+public:
+  C_AioRead(AioCompletion *completion)
+    : C_AioRequest(completion), m_req(nullptr) {
+  }
+
+  virtual void finish(int r) {
+    m_completion->lock.Lock();
+    CephContext *cct = m_completion->ictx->cct;
+    ldout(cct, 10) << "C_AioRead::finish() " << this << " r = " << r << dendl;
+
+    if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
+      ldout(cct, 10) << " got " << m_req->get_extent_map()
+                     << " for " << m_req->get_buffer_extents()
+                     << " bl " << m_req->data().length() << dendl;
+      // reads from the parent don't populate the m_ext_map and the overlap
+      // may not be the full buffer.  compensate here by filling in m_ext_map
+      // with the read extent when it is empty.
+      if (m_req->get_extent_map().empty()) {
+        m_req->get_extent_map()[m_req->get_offset()] = m_req->data().length();
+      }
+
+      m_completion->destriper.add_partial_sparse_result(
+          cct, m_req->data(), m_req->get_extent_map(), m_req->get_offset(),
+          m_req->get_buffer_extents());
+      r = m_req->get_length();
+    }
+    m_completion->lock.Unlock();
+
+    C_AioRequest::finish(r);
+  }
+
+  void set_req(AioObjectRead *req) {
+    m_req = req;
+  }
+private:
+  AioObjectRead *m_req;
+};
+
+class C_CacheRead : public Context {
+public:
+  explicit C_CacheRead(ImageCtx *ictx, AioObjectRead *req)
+    : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
+
+  virtual void complete(int r) {
+    if (!m_enqueued) {
+      // cache_lock creates a lock ordering issue -- so re-execute this context
+      // outside the cache_lock
+      m_enqueued = true;
+      m_image_ctx.op_work_queue->queue(this, r);
+      return;
+    }
+    Context::complete(r);
+  }
+
+protected:
+  virtual void finish(int r) {
+    m_req->complete(r);
+  }
+
+private:
+  ImageCtx &m_image_ctx;
+  AioObjectRead *m_req;
+  bool m_enqueued;
 };
 
 } // anonymous namespace

@@ -60,31 +60,41 @@ protected:
 
 class AioObjectRead : public AioObjectRequest {
 public:
+  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
+  typedef std::map<uint64_t, uint64_t> ExtentMap;
+
   AioObjectRead(ImageCtx *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t offset, uint64_t len,
-                vector<pair<uint64_t,uint64_t> >& be,
-                librados::snap_t snap_id, bool sparse,
+                Extents& buffer_extents, librados::snap_t snap_id, bool sparse,
                 Context *completion, int op_flags);
 
   virtual bool should_complete(int r);
   virtual void send();
   void guard_read();
 
+  inline uint64_t get_offset() const {
+    return m_object_off;
+  }
+  inline uint64_t get_length() const {
+    return m_object_len;
+  }
   ceph::bufferlist &data() {
     return m_read_data;
   }
-
-  std::map<uint64_t, uint64_t> m_ext_map;
-
-  friend class C_AioRead;
-
+  const Extents &get_buffer_extents() const {
+    return m_buffer_extents;
+  }
+  ExtentMap &get_extent_map() {
+    return m_ext_map;
+  }
 private:
-  vector<pair<uint64_t,uint64_t> > m_buffer_extents;
+  Extents m_buffer_extents;
   bool m_tried_parent;
   bool m_sparse;
   int m_op_flags;
   ceph::bufferlist m_read_data;
   AioCompletion *m_parent_completion;
+  ExtentMap m_ext_map;
 
   /**
    * Reads go through the following state machine to deal with
@@ -112,7 +122,7 @@ private:
 
   void send_copyup();
 
-  void read_from_parent(const vector<pair<uint64_t,uint64_t> >& image_extents);
+  void read_from_parent(const Extents& image_extents);
 };
 
 class AbstractAioObjectWrite : public AioObjectRequest {

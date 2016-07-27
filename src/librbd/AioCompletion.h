@@ -19,8 +19,6 @@ class CephContext;
 
 namespace librbd {
 
-class AioObjectRead;
-
 typedef enum {
   AIO_TYPE_NONE = 0,
   AIO_TYPE_OPEN,
@@ -233,33 +231,6 @@ public:
   }
 protected:
   AioCompletion *m_completion;
-};
-
-class C_AioRead : public C_AioRequest {
-public:
-  C_AioRead(AioCompletion *completion)
-    : C_AioRequest(completion), m_req(nullptr) {
-  }
-  virtual ~C_AioRead() {}
-  virtual void finish(int r);
-  void set_req(AioObjectRead *req) {
-    m_req = req;
-  }
-private:
-  AioObjectRead *m_req;
-};
-
-class C_CacheRead : public Context {
-public:
-  explicit C_CacheRead(ImageCtx *ictx, AioObjectRead *req)
-    : m_image_ctx(*ictx), m_req(req), m_enqueued(false) {}
-  virtual void complete(int r);
-protected:
-  virtual void finish(int r);
-private:
-  ImageCtx &m_image_ctx;
-  AioObjectRead *m_req;
-  bool m_enqueued;
 };
 
 } // namespace librbd
