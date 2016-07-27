@@ -794,7 +794,8 @@ extern "C" int ceph_truncate(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->truncate(path, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->truncate(path, size, perms);
 }
 
 // file ops
@@ -874,7 +875,8 @@ extern "C" int ceph_ftruncate(struct ceph_mount_info *cmount, int fd, int64_t si
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->ftruncate(fd, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->ftruncate(fd, size, perms);
 }
 
 extern "C" int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly)
