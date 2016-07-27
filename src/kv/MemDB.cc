@@ -227,7 +227,7 @@ void MemDB::MDBTransactionImpl::rmkey(const string &prefix,
   dtrace << __func__ << " " << prefix << " " << k << dendl;
   ops.push_back(make_pair(DELETE,
                           std::make_pair(std::make_pair(prefix, k),
-                          NULL)));
+                          bufferlist())));
 }
 
 void MemDB::MDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
