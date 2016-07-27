@@ -707,21 +707,24 @@ extern "C" int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, c
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->setxattr(path, name, value, size, flags);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->setxattr(path, name, value, size, flags, perms);
 }
 
 extern "C" int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->lsetxattr(path, name, value, size, flags);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->lsetxattr(path, name, value, size, flags, perms);
 }
 
 extern "C" int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->fsetxattr(fd, name, value, size, flags);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->fsetxattr(fd, name, value, size, flags, perms);
 }
 /* end xattr support */
 
