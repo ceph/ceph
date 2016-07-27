@@ -1212,6 +1212,7 @@
   
   rbd help snap remove
   usage: rbd snap remove [--pool <pool>] [--image <image>] [--snap <snap>] 
+                         [--no-progress] [--force] 
                          <snap-spec> 
   
   Deletes a snapshot.
@@ -1224,6 +1225,8 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+    --no-progress        disable progress output
+    --force              flatten children and unprotect snapshot if needed.
   
   rbd help snap rename
   usage: rbd snap rename [--pool <pool>] [--image <image>] [--snap <snap>] 

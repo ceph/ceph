@@ -257,6 +257,7 @@ public:
   int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
+  int snap_remove2(const char *snapname, uint32_t flags, ProgressContext& pctx);
   int snap_rollback(const char *snap_name);
   int snap_rollback_with_progress(const char *snap_name, ProgressContext& pctx);
   int snap_protect(const char *snap_name);
