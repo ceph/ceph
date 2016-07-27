@@ -1083,7 +1083,7 @@ public:
   int utime(const char *path, struct utimbuf *buf, const UserPerm& perms);
   int lutime(const char *path, struct utimbuf *buf, const UserPerm& perms);
   int flock(int fd, int operation, uint64_t owner);
-  int truncate(const char *path, loff_t size);
+  int truncate(const char *path, loff_t size, const UserPerm& perms);
 
   // file ops
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
@@ -1100,7 +1100,7 @@ public:
   int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
   int pwritev(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
   int fake_write_size(int fd, loff_t size);
-  int ftruncate(int fd, loff_t size);
+  int ftruncate(int fd, loff_t size, const UserPerm& perms);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf, int mask=CEPH_STAT_CAP_INODE_ALL);
   int fallocate(int fd, int mode, loff_t offset, loff_t length);

@@ -849,7 +849,7 @@ int SyntheticClient::run()
         sargs.push_front(file);
         int iarg1 = iargs.front();  iargs.pop_front();
 	if (run_me()) {
-	  client->truncate(file.c_str(), iarg1);
+	  client->truncate(file.c_str(), iarg1, perms);
 	}
 	did_run_me();
       }
@@ -1199,12 +1199,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "truncate") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t l = t.get_int();
-      client->truncate(a, l);
+      client->truncate(a, l, perms);
     } else if (strcmp(op, "ftruncate") == 0) {
       int64_t f = t.get_int();
       int fd = open_files[f];
       int64_t l = t.get_int();
-      client->ftruncate(fd, l);
+      client->ftruncate(fd, l, perms);
     } else if (strcmp(op, "fsync") == 0) {
       int64_t f = t.get_int();
       int64_t b = t.get_int();
@@ -3314,7 +3314,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	if (data) {
 	  client->write(fd, "", 0, size);
 	} else {
-	  client->truncate(f.c_str(), size);
+	  client->truncate(f.c_str(), size, perms);
 	}
 	client->close(fd);
 
