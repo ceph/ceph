@@ -655,9 +655,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
       s->formatter->close_section();
     }
     s->formatter->output_footer();
-    if (s->obj_size) {
-      dump_content_length(s, s->formatter->get_len());
-    }
+    dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length != NO_CONTENT_LENGTH) {
       dump_content_length(s, proposed_content_length);

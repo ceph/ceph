@@ -1206,13 +1206,14 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
 		    : op_ret);
   dump_errno(s);
-  if (s->err.is_err()) {
-    end_header(s, NULL);
-    return 0;
-  }
 
   if (range_str) {
     dump_range(s, ofs, end, s->obj_size);
+  }
+
+  if (s->err.is_err()) {
+    end_header(s, NULL);
+    return 0;
   }
 
   dump_content_length(s, total_len);
