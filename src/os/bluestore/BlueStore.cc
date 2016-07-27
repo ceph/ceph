@@ -1517,6 +1517,9 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_wal_cleanup_lat, "state_wal_cleanup_lat", "Average cleanup state latency");
   b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
+  b.add_time_avg(l_bluestore_compress_lat, "compress_lat", "Average compress latency");
+  b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat", "Average decompress latency");
+  b.add_u64(l_bluestore_compress_success_count, "compress_success_count", "Sum for beneficial compress ops");
 
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes", "Sum for write-op padded bytes");
   b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops", "Sum for wal write op");
@@ -3743,6 +3746,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
+  utime_t start = ceph_clock_now(g_ceph_context);
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
@@ -3760,6 +3764,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
+  logger->tinc(l_bluestore_decompress_lat, ceph_clock_now(g_ceph_context) - start);
   return r;
 }
 
@@ -6023,6 +6028,9 @@ int BlueStore::_do_alloc_write(
     if (wctx->compress &&
 	wi.blob_length > min_alloc_size &&
 	(c = compressor) != nullptr) {
+
+      utime_t start = ceph_clock_now(g_ceph_context);
+
       // compress
       assert(b_off == 0);
       assert(wi.blob_length == l->length());
@@ -6030,7 +6038,9 @@ int BlueStore::_do_alloc_write(
       chdr.type = bluestore_blob_t::get_comp_alg_type(c->get_type());
       // FIXME: memory alignment here is bad
       bufferlist t;
+
       c->compress(*l, t);
+
       chdr.length = t.length();
       ::encode(chdr, compressed_bl);
       compressed_bl.claim_append(t);
@@ -6057,6 +6067,7 @@ int BlueStore::_do_alloc_write(
 	csum_order = ctz(newlen);
 	b->blob.set_compressed(rawlen);
 	compressed = true;
+        logger->inc(l_bluestore_compress_success_count);
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
                  << " -> 0x" << rawlen << " with " << chdr.type
@@ -6064,6 +6075,7 @@ int BlueStore::_do_alloc_write(
                  << ", leaving uncompressed"
                  << dec << dendl;
       }
+      logger->tinc(l_bluestore_compress_lat, ceph_clock_now(g_ceph_context) - start);
     }
     if (!compressed) {
       b->blob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
