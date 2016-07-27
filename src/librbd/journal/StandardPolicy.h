@@ -21,7 +21,6 @@ public:
     return false;
   }
   virtual void allocate_tag_on_lock(Context *on_finish);
-  virtual void cancel_external_replay(Context *on_finish);
 
 private:
   ImageCtx *m_image_ctx;

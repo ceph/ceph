@@ -81,10 +81,6 @@ struct DeleteJournalPolicy : public librbd::journal::Policy {
   virtual void allocate_tag_on_lock(Context *on_finish) {
     on_finish->complete(0);
   }
-
-  virtual void cancel_external_replay(Context *on_finish) {
-    on_finish->complete(0);
-  }
 };
 
 } // anonymous namespace

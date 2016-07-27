@@ -16,7 +16,6 @@ struct Policy {
 
   virtual bool append_disabled() const = 0;
   virtual void allocate_tag_on_lock(Context *on_finish) = 0;
-  virtual void cancel_external_replay(Context *on_finish) = 0;
 };
 
 } // namespace journal
