@@ -16,28 +16,30 @@ set_target_properties(rbd_test PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
   test_main.cc
-  test_mock_fixture.cc 
-  test_mock_ExclusiveLock.cc 
-  test_mock_Journal.cc 
-  test_mock_ObjectWatcher.cc 
-  exclusive_lock/test_mock_AcquireRequest.cc 
-  exclusive_lock/test_mock_ReleaseRequest.cc 
+  test_mock_fixture.cc
+  test_mock_AioImageRequest.cc
+  test_mock_ExclusiveLock.cc
+  test_mock_Journal.cc
+  test_mock_ObjectWatcher.cc
+  exclusive_lock/test_mock_AcquireRequest.cc
+  exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
-  journal/test_mock_Replay.cc 
-  object_map/test_mock_InvalidateRequest.cc 
-  object_map/test_mock_LockRequest.cc 
-  object_map/test_mock_RefreshRequest.cc 
-  object_map/test_mock_ResizeRequest.cc 
-  object_map/test_mock_SnapshotCreateRequest.cc 
-  object_map/test_mock_SnapshotRemoveRequest.cc 
-  object_map/test_mock_SnapshotRollbackRequest.cc 
-  object_map/test_mock_UnlockRequest.cc 
-  object_map/test_mock_UpdateRequest.cc 
-  operation/test_mock_ResizeRequest.cc 
-  operation/test_mock_SnapshotCreateRequest.cc 
-  operation/test_mock_SnapshotProtectRequest.cc 
-  operation/test_mock_SnapshotRemoveRequest.cc 
-  operation/test_mock_SnapshotRollbackRequest.cc 
+  journal/test_mock_Replay.cc
+  object_map/test_mock_InvalidateRequest.cc
+  object_map/test_mock_LockRequest.cc
+  object_map/test_mock_RefreshRequest.cc
+  object_map/test_mock_ResizeRequest.cc
+  object_map/test_mock_SnapshotCreateRequest.cc
+  object_map/test_mock_SnapshotRemoveRequest.cc
+  object_map/test_mock_SnapshotRollbackRequest.cc
+  object_map/test_mock_UnlockRequest.cc
+  object_map/test_mock_UpdateRequest.cc
+  operation/test_mock_Request.cc
+  operation/test_mock_ResizeRequest.cc
+  operation/test_mock_SnapshotCreateRequest.cc
+  operation/test_mock_SnapshotProtectRequest.cc
+  operation/test_mock_SnapshotRemoveRequest.cc
+  operation/test_mock_SnapshotRollbackRequest.cc
   operation/test_mock_SnapshotUnprotectRequest.cc
   mock/MockImageCtx.cc
   mock/MockJournal.cc
