@@ -1141,6 +1141,11 @@ void Journal<I>::create_journaler() {
   ::journal::Settings settings;
   settings.commit_interval = m_image_ctx.journal_commit_age;
   settings.max_payload_bytes = m_image_ctx.journal_max_payload_bytes;
+  settings.max_concurrent_object_sets =
+    m_image_ctx.journal_max_concurrent_object_sets;
+  // TODO: a configurable filter to exclude certain peers from being
+  // disconnected.
+  settings.whitelisted_laggy_clients = {IMAGE_CLIENT_ID};
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
