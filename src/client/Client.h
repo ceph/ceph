@@ -1075,9 +1075,11 @@ public:
   int chmod(const char *path, mode_t mode, const UserPerm& perms);
   int fchmod(int fd, mode_t mode, const UserPerm& perms);
   int lchmod(const char *path, mode_t mode, const UserPerm& perms);
-  int chown(const char *path, int uid, int gid);
-  int fchown(int fd, int uid, int gid);
-  int lchown(const char *path, int uid, int gid);
+  int chown(const char *path, uid_t new_uid, gid_t new_gid,
+	    const UserPerm& perms);
+  int fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms);
+  int lchown(const char *path, uid_t new_uid, gid_t new_gid,
+	     const UserPerm& perms);
   int utime(const char *path, struct utimbuf *buf);
   int lutime(const char *path, struct utimbuf *buf);
   int flock(int fd, int operation, uint64_t owner);
