@@ -18,23 +18,7 @@ namespace po = boost::program_options;
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
                      const char *imgname, uint64_t size,
 		     librbd::ImageOptions& opts) {
-  int r;
-  uint64_t format;
-  r = opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
-  assert(r == 0);
-  if (format == 1) {
-    uint64_t order;
-    r = opts.get(RBD_IMAGE_OPTION_ORDER, &order);
-    assert(r == 0);
-    int order_ = order;
-    r = rbd.create(io_ctx, imgname, size, &order_);
-  } else {
-    r = rbd.create4(io_ctx, imgname, size, opts);
-  }
-  if (r < 0) {
-    return r;
-  }
-  return 0;
+  return rbd.create4(io_ctx, imgname, size, opts);
 }
 
 void get_arguments(po::options_description *positional,
