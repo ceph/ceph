@@ -4,7 +4,7 @@ import requests
 import yaml
 
 from datetime import datetime
-from mock import patch, call, ANY
+from mock import patch, call, ANY, DEFAULT
 from StringIO import StringIO
 
 from teuthology.config import config, YamlConfig
@@ -129,6 +129,45 @@ class TestRun(object):
         self.args.ceph_sha1 = 'ceph_hash_dne'
         with pytest.raises(ScheduleFailError):
             self.klass(self.args)
+
+    @patch('teuthology.suite.run.util.fetch_repos')
+    @patch('teuthology.suite.run.util.git_branch_exists')
+    @patch('teuthology.suite.run.util.package_version_for_hash')
+    @patch('teuthology.suite.run.util.git_ls_remote')
+    def test_regression(
+        self,
+        m_git_ls_remote,
+        m_package_version_for_hash,
+        m_git_branch_exists,
+        m_fetch_repos,
+    ):
+        config.gitbuilder_host = 'example.com'
+        m_package_version_for_hash.return_value = 'ceph_hash'
+        m_git_branch_exists.return_value = True
+        m_git_ls_remote.return_value = "suite_branch"
+        self.args_dict = {
+            'base_yaml_paths': [],
+            'ceph_branch': 'master',
+            'machine_type': 'smithi',
+            'kernel_flavor': 'basic',
+            'kernel_branch': 'testing',
+            'suite': 'krbd',
+        }
+        self.args = YamlConfig.from_dict(self.args_dict)
+        with patch.multiple(
+            'teuthology.suite.util.GitbuilderProject',
+            _get_package_sha1=DEFAULT,
+        ) as m:
+            assert m != dict()
+            m['_get_package_sha1'].return_value = 'SHA1'
+            conf = dict(
+                os_type='ubuntu',
+                os_version='16.04',
+            )
+            assert run.util.GitbuilderProject('ceph', conf).sha1 == 'SHA1'
+            run_ = self.klass(self.args)
+            assert run_.base_config['kernel']['sha1'] == 'SHA1'
+
 
 class TestScheduleSuite(object):
     klass = run.Run
