@@ -9772,33 +9772,35 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
   return _getxattr(f->inode, name, value, size, perms);
 }
 
-int Client::listxattr(const char *path, char *list, size_t size)
+int Client::listxattr(const char *path, char *list, size_t size,
+		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, true);
+  int r = Client::path_walk(path, &in, perms, true);
   if (r < 0)
     return r;
-  return Client::_listxattr(in.get(), list, size);
+  return Client::_listxattr(in.get(), list, size, perms);
 }
 
-int Client::llistxattr(const char *path, char *list, size_t size)
+int Client::llistxattr(const char *path, char *list, size_t size,
+		       const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, false);
+  int r = Client::path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  return Client::_listxattr(in.get(), list, size);
+  return Client::_listxattr(in.get(), list, size, perms);
 }
 
-int Client::flistxattr(int fd, char *list, size_t size)
+int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_listxattr(f->inode.get(), list, size);
+  return Client::_listxattr(f->inode.get(), list, size, perms);
 }
 
 int Client::removexattr(const char *path, const char *name)
@@ -9939,9 +9941,10 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
   return _getxattr(in, name, value, size, perms);
 }
 
-int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
+int Client::_listxattr(Inode *in, char *name, size_t size,
+		       const UserPerm& perms)
 {
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0);
   if (r == 0) {
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
