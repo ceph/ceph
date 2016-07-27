@@ -28,6 +28,7 @@ struct MockJournal {
 
   MOCK_CONST_METHOD0(is_journal_ready, bool());
   MOCK_CONST_METHOD0(is_journal_replaying, bool());
+  MOCK_CONST_METHOD0(is_journal_appending, bool());
 
   MOCK_METHOD1(wait_for_journal_ready, void(Context *));
 

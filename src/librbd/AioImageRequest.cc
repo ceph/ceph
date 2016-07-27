@@ -248,8 +248,8 @@ void AbstractAioImageWrite::send_request() {
                                object_extents);
     }
 
-    journaling = (m_image_ctx.journal != NULL &&
-                  !m_image_ctx.journal->is_journal_replaying());
+    journaling = (m_image_ctx.journal != nullptr &&
+                  m_image_ctx.journal->is_journal_appending());
   }
 
   prune_object_extents(object_extents);
@@ -449,8 +449,8 @@ void AioImageFlush::send_request() {
   bool journaling = false;
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    journaling = (m_image_ctx.journal != NULL &&
-                  !m_image_ctx.journal->is_journal_replaying());
+    journaling = (m_image_ctx.journal != nullptr &&
+                  m_image_ctx.journal->is_journal_appending());
   }
 
   if (journaling) {

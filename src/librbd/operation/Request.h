@@ -40,14 +40,16 @@ protected:
     assert(can_affect_io());
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.journal != NULL) {
-      Context *ctx = util::create_context_callback<T, MF>(request);
+    if (image_ctx.journal != nullptr) {
       if (image_ctx.journal->is_journal_replaying()) {
+        Context *ctx = util::create_context_callback<T, MF>(request);
         replay_op_ready(ctx);
-      } else {
+        return true;
+      } else if (image_ctx.journal->is_journal_appending()) {
+        Context *ctx = util::create_context_callback<T, MF>(request);
         append_op_event(ctx);
+        return true;
       }
-      return true;
     }
     return false;
   }

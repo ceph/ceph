@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
+#include "journal/Policy.h"
 #include "journal/ReplayEntry.h"
 #include "journal/Settings.h"
 #include "common/errno.h"
@@ -626,6 +627,14 @@ bool Journal<I>::is_journal_replaying() const {
           m_state == STATE_FLUSHING_REPLAY ||
           m_state == STATE_FLUSHING_RESTART ||
           m_state == STATE_RESTARTING_REPLAY);
+}
+
+template <typename I>
+bool Journal<I>::is_journal_appending() const {
+  assert(m_image_ctx.snap_lock.is_locked());
+  Mutex::Locker locker(m_lock);
+  return (m_state == STATE_READY &&
+          !m_image_ctx.get_journal_policy()->append_disabled());
 }
 
 template <typename I>
