@@ -111,9 +111,10 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   struct fuse_entry_param fe;
   Inode *i2, *i1 = cfuse->iget(parent); // see below
   int r;
+  UserPerm perms(ctx->uid, ctx->gid);
 
   memset(&fe, 0, sizeof(fe));
-  r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, ctx->uid, ctx->gid);
+  r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, perms);
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);

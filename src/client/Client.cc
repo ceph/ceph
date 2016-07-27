@@ -9508,7 +9508,7 @@ Inode *Client::open_snapdir(Inode *diri)
 }
 
 int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
-		      Inode **out, int uid, int gid)
+		      Inode **out, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "ll_lookup " << parent << " " << name << dendl;
@@ -9517,7 +9517,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 
   int r = 0;
   if (!cct->_conf->fuse_default_permissions) {
-    r = may_lookup(parent, uid, gid);
+    r = may_lookup(parent, perms);
     if (r < 0)
       return r;
   }
@@ -9525,7 +9525,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   string dname(name);
   InodeRef in;
 
-  r = _lookup(parent, dname, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
+  r = _lookup(parent, dname, CEPH_STAT_CAP_INODE_ALL, &in, perms);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;

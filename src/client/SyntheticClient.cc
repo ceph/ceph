@@ -1024,7 +1024,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     client->mkdir(prefix.c_str(), 0755, perms);
     struct stat attr;
     i1 = client->ll_get_inode(vinodeno_t(1, CEPH_NOSNAP));
-    if (client->ll_lookup(i1, prefix.c_str(), &attr, &i2) == 0) {
+    if (client->ll_lookup(i1, prefix.c_str(), &attr, &i2, perms) == 0) {
       ll_inos[1] = attr.st_ino;
       dout(5) << "'root' ino is " << inodeno_t(attr.st_ino) << dendl;
       client->ll_put(i1);
@@ -1229,7 +1229,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct stat attr;
       if (ll_inos.count(i)) {
 	  i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	  if (client->ll_lookup(i1, name, &attr, &i2) == 0)
+	  if (client->ll_lookup(i1, name, &attr, &i2, perms) == 0)
 	    ll_inos[r] = attr.st_ino;
 	  client->ll_put(i1);
       }

@@ -1383,7 +1383,8 @@ extern "C" int ceph_ll_lookup(class ceph_mount_info *cmount,
 			      struct stat *attr, Inode **out,
 			      int uid, int gid)
 {
-  return (cmount->get_client())->ll_lookup(parent, name, attr, out, uid, gid);
+  UserPerm perms(uid, gid);  
+  return (cmount->get_client())->ll_lookup(parent, name, attr, out, perms);
 }
 
 extern "C" int ceph_ll_put(class ceph_mount_info *cmount, Inode *in)

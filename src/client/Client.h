@@ -1137,7 +1137,7 @@ public:
   Inode *ll_get_inode(ino_t ino);
   Inode *ll_get_inode(vinodeno_t vino);
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
-		Inode **out, int uid = -1, int gid = -1);
+		Inode **out, const UserPerm& perms);
   bool ll_forget(Inode *in, int count);
   bool ll_put(Inode *in);
   int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
