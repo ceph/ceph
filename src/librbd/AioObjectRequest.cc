@@ -265,7 +265,7 @@ void AioObjectRead::send_copyup()
   }
 }
 
-void AioObjectRead::read_from_parent(const vector<pair<uint64_t,uint64_t> >& parent_extents)
+void AioObjectRead::read_from_parent(const Extents& parent_extents)
 {
   assert(!m_parent_completion);
   m_parent_completion = AioCompletion::create_and_start<AioObjectRequest>(
