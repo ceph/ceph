@@ -111,6 +111,7 @@ public:
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
+  bool is_journal_appending() const;
 
   void wait_for_journal_ready(Context *on_ready);
 
