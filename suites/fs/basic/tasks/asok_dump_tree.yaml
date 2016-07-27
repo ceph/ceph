@@ -1,6 +1,4 @@
 tasks:
-- install:
-- ceph:
 - ceph-fuse:
 - cephfs_test_runner:
     modules:
