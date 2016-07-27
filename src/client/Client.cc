@@ -9740,33 +9740,36 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
 // ----------
 // xattrs
 
-int Client::getxattr(const char *path, const char *name, void *value, size_t size)
+int Client::getxattr(const char *path, const char *name, void *value, size_t size,
+		     const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, true);
+  int r = Client::path_walk(path, &in, perms, true);
   if (r < 0)
     return r;
-  return _getxattr(in, name, value, size);
+  return _getxattr(in, name, value, size, perms);
 }
 
-int Client::lgetxattr(const char *path, const char *name, void *value, size_t size)
+int Client::lgetxattr(const char *path, const char *name, void *value, size_t size,
+		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, false);
+  int r = Client::path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  return _getxattr(in, name, value, size);
+  return _getxattr(in, name, value, size, perms);
 }
 
-int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
+int Client::fgetxattr(int fd, const char *name, void *value, size_t size,
+		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return _getxattr(f->inode, name, value, size);
+  return _getxattr(f->inode, name, value, size, perms);
 }
 
 int Client::listxattr(const char *path, char *list, size_t size)
@@ -9857,7 +9860,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, 
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
-		      int uid, int gid)
+		      const UserPerm& perms)
 {
   int r;
 
@@ -9885,11 +9888,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
-  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
+  r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0);
   if (r == 0) {
     string n(name);
     r = -ENODATA;
-    if (in->xattrs.count(n)) {
+   if (in->xattrs.count(n)) {
       r = in->xattrs[n].length();
       if (r > 0 && size != 0) {
 	if (size >= (unsigned)r)
@@ -9904,14 +9907,14 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   return r;
 }
 
-int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size)
+int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
+		      const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
     int r = xattr_permission(in.get(), name, MAY_READ);
     if (r < 0)
       return r;
   }
-  UserPerm perms(0, 0); // FIXME
   return _getxattr(in.get(), name, value, size, perms);
 }
 
