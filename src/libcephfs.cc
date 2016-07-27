@@ -628,7 +628,8 @@ extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->setattr(relpath, attr, mask);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->setattr(relpath, attr, mask, perms);
 }
 
 // *xattr() calls supporting samba/vfs

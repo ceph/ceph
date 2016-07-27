@@ -798,12 +798,19 @@ private:
 	     const UserPerm& perms, InodeRef *inp = 0);
   int _do_setattr(Inode *in, struct stat *attr, int mask, const UserPerm& perms,
 		  InodeRef *inp);
-  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _setattr(Inode *in, struct stat *attr, int mask, const UserPerm& perms,
+	       InodeRef *inp = 0);
+  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1,
 	       InodeRef *inp = 0) {
-    return _setattr(in, attr, mask, perms.uid(), perms.gid(), inp);
+    UserPerm perms(uid, gid);
+    return _setattr(in, attr, mask, perms, inp);
   }
-  int _setattr(InodeRef &in, struct stat *attr, int mask);
+  int _setattr(InodeRef &in, struct stat *attr, int mask,
+	       const UserPerm& perms);
+  int _setattr(InodeRef &in, struct stat *attr, int mask) {
+    UserPerm perms(get_uid(), get_gid());
+    return _setattr(in, attr, mask, perms);
+  }
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
@@ -1063,8 +1070,8 @@ public:
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
-  int setattr(const char *relpath, struct stat *attr, int mask);
-  int fsetattr(int fd, struct stat *attr, int mask);
+  int setattr(const char *relpath, struct stat *attr, int mask, const UserPerm& perms);
+  int fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms);
   int chmod(const char *path, mode_t mode);
   int fchmod(int fd, mode_t mode);
   int lchmod(const char *path, mode_t mode);
