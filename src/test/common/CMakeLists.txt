@@ -189,3 +189,12 @@ add_executable(unittest_shunique_lock
   )
 add_ceph_unittest(unittest_shunique_lock ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
+# unittest_global_doublefree
+if(WITH_CEPHFS)
+  add_executable(unittest_global_doublefree
+    test_global_doublefree.cc
+    )
+  add_ceph_unittest(unittest_global_doublefree ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_global_doublefree)
+  target_link_libraries(unittest_global_doublefree cephfs librados)
+endif(WITH_CEPHFS)
