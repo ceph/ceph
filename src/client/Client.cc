@@ -6294,15 +6294,16 @@ int Client::rmdir(const char *relpath)
   string name = path.last_dentry();
   path.pop_dentry();
   InodeRef dir;
-  int r = path_walk(path, &dir);
+  UserPerm perms = pick_my_perms();
+  int r = path_walk(path, &dir, perms);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    int r = may_delete(dir.get(), name.c_str());
+    int r = may_delete(dir.get(), name.c_str(), perms);
     if (r < 0)
       return r;
   }
-  return _rmdir(dir.get(), name.c_str());
+  return _rmdir(dir.get(), name.c_str(), perms);
 }
 
 int Client::mknod(const char *relpath, mode_t mode, dev_t rdev) 
@@ -6316,15 +6317,16 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
   string name = path.last_dentry();
   path.pop_dentry();
   InodeRef dir;
-  int r = path_walk(path, &dir);
+  UserPerm perms = pick_my_perms();
+  int r = path_walk(path, &dir, perms);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    int r = may_create(dir.get());
+    int r = may_create(dir.get(), perms);
     if (r < 0)
       return r;
   }
-  return _mknod(dir.get(), name.c_str(), mode, rdev);
+  return _mknod(dir.get(), name.c_str(), mode, rdev, perms);
 }
 
 // symlinks
@@ -6340,15 +6342,16 @@ int Client::symlink(const char *target, const char *relpath)
   string name = path.last_dentry();
   path.pop_dentry();
   InodeRef dir;
-  int r = path_walk(path, &dir);
+  UserPerm perms = pick_my_perms();
+  int r = path_walk(path, &dir, perms);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    int r = may_create(dir.get());
+    int r = may_create(dir.get(), perms);
     if (r < 0)
       return r;
   }
-  return _symlink(dir.get(), name.c_str(), target);
+  return _symlink(dir.get(), name.c_str(), target, perms);
 }
 
 int Client::readlink(const char *relpath, char *buf, loff_t size) 
@@ -9437,16 +9440,17 @@ int Client::rmsnap(const char *relpath, const char *name)
   Mutex::Locker l(client_lock);
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  UserPerm perms = pick_my_perms();
+  int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    r = may_delete(in.get(), NULL);
+    r = may_delete(in.get(), NULL, perms);
     if (r < 0)
       return r;
   }
   Inode *snapdir = open_snapdir(in.get());
-  return _rmdir(snapdir, name);
+  return _rmdir(snapdir, name, perms);
 }
 
 // =============================
@@ -9673,7 +9677,7 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
   return in;
 }
 
-int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
+int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -9687,15 +9691,16 @@ int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
   if (vino.snapid < CEPH_NOSNAP)
     res = 0;
   else
-    res = _getattr(in, CEPH_STAT_CAP_INODE_ALL, uid, gid);
+    res = _getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
   if (res == 0)
     fill_stat(in, attr);
   ldout(cct, 3) << "ll_getattr " << vino << " = " << res << dendl;
   return res;
 }
 
-int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
-		       int gid)
+int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
+		       const UserPerm& perms)
+
 {
   Mutex::Locker lock(client_lock);
 
@@ -9714,7 +9719,7 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
   tout(cct) << mask << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int res = may_setattr(in, attr, mask, uid, gid);
+    int res = may_setattr(in, attr, mask, perms);
     if (res < 0)
       return res;
   }
@@ -9722,7 +9727,7 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
   mask &= ~(CEPH_SETATTR_MTIME_NOW | CEPH_SETATTR_ATIME_NOW);
 
   InodeRef target(in);
-  int res = _setattr(in, attr, mask, uid, gid, &target);
+  int res = _setattr(in, attr, mask, perms, &target);
   if (res == 0) {
     assert(in == target.get());
     fill_stat(in, attr);
@@ -9912,7 +9917,7 @@ int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size)
 }
 
 int Client::ll_getxattr(Inode *in, const char *name, void *value,
-			size_t size, int uid, int gid)
+			size_t size, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -9929,7 +9934,7 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
       return r;
   }
 
-  return _getxattr(in, name, value, size, uid, gid);
+  return _getxattr(in, name, value, size, perms);
 }
 
 int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
@@ -9976,8 +9981,8 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
   return r;
 }
 
-int Client::ll_listxattr(Inode *in, char *names, size_t size, int uid,
-			 int gid)
+int Client::ll_listxattr(Inode *in, char *names, size_t size,
+			 const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -9988,7 +9993,7 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size, int uid,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << size << std::endl;
 
-  return _listxattr(in, names, size, uid, gid);
+  return _listxattr(in, names, size, perms);
 }
 
 int Client::_do_setxattr(Inode *in, const char *name, const void *value,
@@ -10137,7 +10142,7 @@ int Client::check_data_pool_exist(string name, string value, const OSDMap *osdma
 }
 
 int Client::ll_setxattr(Inode *in, const char *name, const void *value,
-			size_t size, int flags, int uid, int gid)
+			size_t size, int flags, const UserPerm& perms)
 {
   // For setting pool of layout, MetaRequest need osdmap epoch.
   // There is a race which create a new data pool but client and mds both don't have.
@@ -10167,12 +10172,12 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
   tout(cct) << name << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_WRITE, uid, gid);
+    int r = xattr_permission(in, name, MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
 
-  return _setxattr(in, name, value, size, flags, uid, gid);
+  return _setxattr(in, name, value, size, flags, perms);
 }
 
 int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
@@ -10218,7 +10223,7 @@ int Client::_removexattr(InodeRef &in, const char *name)
   return _removexattr(in.get(), name, perms);
 }
 
-int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
+int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10230,12 +10235,12 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
   tout(cct) << name << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_WRITE, uid, gid);
+    int r = xattr_permission(in, name, MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
 
-  return _removexattr(in, name, uid, gid);
+  return _removexattr(in, name, perms);
 }
 
 bool Client::_vxattrcb_quota_exists(Inode *in)
@@ -10456,7 +10461,7 @@ size_t Client::_vxattrs_calcu_name_size(const VXattr *vxattr)
   return len;
 }
 
-int Client::ll_readlink(Inode *in, char *buf, size_t buflen, int uid, int gid)
+int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10472,17 +10477,17 @@ int Client::ll_readlink(Inode *in, char *buf, size_t buflen, int uid, int gid)
     ++dn;
   }
 
-  int r = _readlink(in, buf, buflen);
+  int r = _readlink(in, buf, buflen); // FIXME: no permission checking!
   ldout(cct, 3) << "ll_readlink " << vino << " = " << r << dendl;
   return r;
 }
 
 int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
-		   int uid, int gid, InodeRef *inp)
+		   const UserPerm& perms, InodeRef *inp)
 {
   ldout(cct, 3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct
-		<< mode << dec << ", " << rdev << ", uid " << uid << ", gid "
-		<< gid << ")" << dendl;
+		<< mode << dec << ", " << rdev << ", uid " << perms.uid()
+		<< ", gid " << perms.gid() << ")" << dendl;
 
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
@@ -10506,7 +10511,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   bufferlist xattrs_bl;
-  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, perms.uid(), perms.gid());
   if (res < 0)
     goto fail;
   req->head.args.mknod.mode = mode;
@@ -10519,7 +10524,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
     goto fail;
   req->set_dentry(de);
 
-  res = make_request(req, uid, gid, inp);
+  res = make_request(req, perms, inp);
 
   trim_cache();
 
@@ -10533,7 +10538,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 
 int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
 		     dev_t rdev, struct stat *attr, Inode **out,
-		     int uid, int gid)
+		     const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10547,13 +10552,13 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   tout(cct) << rdev << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, uid, gid);
+    int r = may_create(parent, perms);
     if (r < 0)
       return r;
   }
 
   InodeRef in;
-  int r = _mknod(parent, name, mode, rdev, uid, gid, &in);
+  int r = _mknod(parent, name, mode, rdev, perms, &in);
   if (r == 0) {
     fill_stat(in, attr);
     _ll_get(in.get());
@@ -10746,11 +10751,12 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   return r;
 }
 
-int Client::_symlink(Inode *dir, const char *name, const char *target, int uid,
-		     int gid, InodeRef *inp)
+int Client::_symlink(Inode *dir, const char *name, const char *target,
+		     const UserPerm& perms, InodeRef *inp)
 {
   ldout(cct, 3) << "_symlink(" << dir->ino << " " << name << ", " << target
-	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
+		<< ", uid " << perms.uid() << ", gid " << perms.gid() << ")"
+		<< dendl;
 
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
@@ -10779,7 +10785,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid,
     goto fail;
   req->set_dentry(de);
 
-  res = make_request(req, uid, gid, inp);
+  res = make_request(req, perms, inp);
 
   trim_cache();
   ldout(cct, 3) << "_symlink(\"" << path << "\", \"" << target << "\") = " <<
@@ -10792,7 +10798,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid,
 }
 
 int Client::ll_symlink(Inode *parent, const char *name, const char *value,
-		       struct stat *attr, Inode **out, int uid, int gid)
+		       struct stat *attr, Inode **out, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10806,13 +10812,13 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << value << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, uid, gid);
+    int r = may_create(parent, perms);
     if (r < 0)
       return r;
   }
 
   InodeRef in;
-  int r = _symlink(parent, name, value, uid, gid, &in);
+  int r = _symlink(parent, name, value, perms, &in);
   if (r == 0) {
     fill_stat(in, attr);
     _ll_get(in.get());
@@ -10889,10 +10895,10 @@ int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
   return _unlink(in, name, perm);
 }
 
-int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
+int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 {
-  ldout(cct, 3) << "_rmdir(" << dir->ino << " " << name << " uid " << uid <<
-    " gid " << gid << ")" << dendl;
+  ldout(cct, 3) << "_rmdir(" << dir->ino << " " << name << " uid "
+		<< perms.uid() << " gid " << perms.gid() << ")" << dendl;
 
   if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
     return -EROFS;
@@ -10914,7 +10920,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  res = _lookup(dir, name, 0, &in, uid, gid);
+  res = _lookup(dir, name, 0, &in, perms);
   if (res < 0)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
@@ -10926,7 +10932,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
     req->set_other_inode(in.get());
   }
 
-  res = make_request(req, uid, gid);
+  res = make_request(req, perms);
 
   trim_cache();
   ldout(cct, 3) << "rmdir(" << path << ") = " << res << dendl;
@@ -10937,7 +10943,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   return res;
 }
 
-int Client::ll_rmdir(Inode *in, const char *name, int uid, int gid)
+int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10949,12 +10955,12 @@ int Client::ll_rmdir(Inode *in, const char *name, int uid, int gid)
   tout(cct) << name << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_delete(in, name, uid, gid);
+    int r = may_delete(in, name, perms);
     if (r < 0)
       return r;
   }
 
-  return _rmdir(in, name, uid, gid);
+  return _rmdir(in, name, perms);
 }
 
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, const UserPerm& perm)
