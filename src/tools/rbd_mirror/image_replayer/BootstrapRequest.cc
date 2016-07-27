@@ -370,6 +370,12 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     m_ret_val = r;
     close_remote_image();
     return;
+  } if (m_client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+    dout(10) << ": client flagged disconnected -- skipping bootstrap" << dendl;
+    // The caller is expected to detect disconnect initializing remote journal.
+    m_ret_val = 0;
+    close_remote_image();
+    return;
   }
 
   update_client_image();
