@@ -179,6 +179,20 @@ with::
 
 For more ``vstart.sh`` examples, see :doc:`/dev/quick_guide`.
 
+Backporting
+-----------
+
+All bugfixes should be merged to the ``master`` branch before being backported.
+To flag a bugfix for backporting, make sure it has a `tracker issue`_
+associated with it and set the ``Backport`` field to a comma-separated list of
+previous releases (e.g. "hammer,jewel") that you think need the backport.
+The rest (including the actual backporting) will be taken care of by the
+`Stable Releases and Backports`_ team.
+
+.. _`tracker issue`: http://tracker.ceph.com/
+.. _`Stable Releases and Backports`: http://tracker.ceph.com/projects/ceph-releases/wiki
+
+
 What is merged where and when ?
 ===============================
 
@@ -570,6 +584,7 @@ hardware. Tests designed for this purpose live in the `ceph-qa-suite
 repository`_ and are run via the `teuthology framework`_.
 
 .. _`ceph-qa-suite repository`: https://github.com/ceph/ceph-qa-suite/
+.. _`teuthology repository`: https://github.com/ceph/teuthology
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
 If you have access to an OpenStack tenant, you are encouraged to run the
@@ -659,11 +674,8 @@ command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
-When you fix a bug, it's a good idea to add a test. See the `Writing make
-check tests`_ chapter.
-
-Further sections
-----------------
+Future sections
+---------------
 
 * Principles of make check tests
 * Where to find test results
@@ -814,7 +826,7 @@ cause regressions, or to analyze test failures when they do occur.
 
 Every teuthology cluster, whether bare-metal or cloud-provisioned, has a
 so-called "teuthology machine" from which tests suites are triggered using the
-`teuthology-suite`_ command.
+``teuthology-suite`` command.
 
 A detailed and up-to-date description of each `teuthology-suite`_ option is
 available by running the following command on the teuthology machine::
@@ -1136,7 +1148,9 @@ We assume that:
 Caveat: be aware that, as of this writing (July 2016), testing in
 OpenStack clouds is a new feature. Things may not work as advertised.
 If you run into trouble, ask for help on `IRC`_ or the `Mailing list`_, or
-open a bug report at `ceph-workbench bug tracker URL`_.
+open a bug report at the `ceph-workbench bug tracker`_.
+
+.. _`ceph-workbench bug tracker`: http://ceph-workbench.dachary.org/root/ceph-workbench/issues
 
 Prepare tenant
 --------------
@@ -1213,7 +1227,7 @@ Subsequent runs of the same command will complete faster.
 
 Although ``dummy`` suite does not run any tests, in all other respects it
 behaves just like a teuthology suite and produces some of the same
-artifacts (see `Artifacts produced by teuthology-suite`_).
+artifacts.
 
 The last bit of output should look something like this::
 
@@ -1354,16 +1368,6 @@ testing is required. Use the teuthology machine as jump host.
 
 .. WIP
 .. ===
-..
-.. Artifacts produced by teuthology-suite
-.. --------------------------------------
-.. 
-.. This section examines the files (artifacts) produced by
-.. ``teuthology-suite``. These files are FIXME
-.. 
-..
-.. Backporting
-.. -----------
 ..
 .. Building RPM packages
 .. ---------------------
