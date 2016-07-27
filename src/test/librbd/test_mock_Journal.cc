@@ -305,7 +305,7 @@ public:
 
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
                                 MockJournal &mock_journal,
-                                AioObjectRequest *object_request = nullptr) {
+                                AioObjectRequest<> *object_request = nullptr) {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     MockJournal::AioObjectRequests object_requests;
     if (object_request != nullptr) {
