@@ -9800,33 +9800,35 @@ int Client::flistxattr(int fd, char *list, size_t size, const UserPerm& perms)
   return Client::_listxattr(f->inode.get(), list, size, perms);
 }
 
-int Client::removexattr(const char *path, const char *name)
+int Client::removexattr(const char *path, const char *name,
+			const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, true);
+  int r = Client::path_walk(path, &in, perms, true);
   if (r < 0)
     return r;
-  return _removexattr(in, name);
+  return _removexattr(in, name, perms);
 }
 
-int Client::lremovexattr(const char *path, const char *name)
+int Client::lremovexattr(const char *path, const char *name,
+			 const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, false);
+  int r = Client::path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  return _removexattr(in, name);
+  return _removexattr(in, name, perms);
 }
 
-int Client::fremovexattr(int fd, const char *name)
+int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return _removexattr(f->inode, name);
+  return _removexattr(f->inode, name, perms);
 }
 
 int Client::setxattr(const char *path, const char *name, const void *value,
@@ -10183,7 +10185,7 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
   return _setxattr(in, name, value, size, flags, perms);
 }
 
-int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
+int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
 {
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
@@ -10208,21 +10210,20 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   req->set_filepath2(name);
   req->set_inode(in);
  
-  int res = make_request(req, uid, gid);
+  int res = make_request(req, perms);
 
   trim_cache();
   ldout(cct, 3) << "_removexattr(" << in->ino << ", \"" << name << "\") = " << res << dendl;
   return res;
 }
 
-int Client::_removexattr(InodeRef &in, const char *name)
+int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_WRITE);
+    int r = xattr_permission(in.get(), name, MAY_WRITE, perms);
     if (r < 0)
       return r;
   }
-  UserPerm perms(0, 0); // FIXME
   return _removexattr(in.get(), name, perms);
 }
 

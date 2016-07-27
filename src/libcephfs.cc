@@ -686,21 +686,24 @@ extern "C" int ceph_removexattr(struct ceph_mount_info *cmount, const char *path
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->removexattr(path, name);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->removexattr(path, name, perms);
 }
 
 extern "C" int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->lremovexattr(path, name);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->lremovexattr(path, name, perms);
 }
 
 extern "C" int ceph_fremovexattr(struct ceph_mount_info *cmount, int fd, const char *name)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->fremovexattr(fd, name);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->fremovexattr(fd, name, perms);
 }
 
 extern "C" int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)

@@ -826,11 +826,8 @@ private:
 		int flags, const UserPerm& perms);
   int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,
 		int flags, const UserPerm& perms);
-  int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
-  int _removexattr(Inode *in, const char *nm, const UserPerm& perms) {
-    return _removexattr(in, nm, perms.uid(), perms.gid());
-  }
-  int _removexattr(InodeRef &in, const char *nm);
+  int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
+  int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
   int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
@@ -1109,9 +1106,9 @@ public:
   int listxattr(const char *path, char *list, size_t size, const UserPerm& perms);
   int llistxattr(const char *path, char *list, size_t size, const UserPerm& perms);
   int flistxattr(int fd, char *list, size_t size, const UserPerm& perms);
-  int removexattr(const char *path, const char *name);
-  int lremovexattr(const char *path, const char *name);
-  int fremovexattr(int fd, const char *name);
+  int removexattr(const char *path, const char *name, const UserPerm& perms);
+  int lremovexattr(const char *path, const char *name, const UserPerm& perms);
+  int fremovexattr(int fd, const char *name, const UserPerm& perms);
   int setxattr(const char *path, const char *name, const void *value,
 	       size_t size, int flags, const UserPerm& perms);
   int lsetxattr(const char *path, const char *name, const void *value,
