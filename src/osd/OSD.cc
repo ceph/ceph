@@ -8959,7 +8959,6 @@ void OSD::process_peering_events(
     }
     dispatch_context_transaction(rctx, pg, &handle);
     pg->unlock();
-    handle.reset_tp_timeout();
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);
