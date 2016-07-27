@@ -179,8 +179,8 @@ public:
           })));
       } else {
         expect.WillOnce(WithArg<5>(Invoke([&mock_image_ctx, snap_id, state, r](Context *ctx) {
-            RWLock::RLocker snap_locker(mock_image_ctx.image_ctx->snap_lock);
-            RWLock::WLocker object_map_locker(mock_image_ctx.image_ctx->object_map_lock);
+            assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
+            assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
             mock_image_ctx.image_ctx->object_map->aio_update(snap_id, 0, 1,
                                                              state,
                                                              boost::none, ctx);

@@ -54,13 +54,13 @@ struct MockImageCtx {
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
-      owner_lock("owner_lock"),
-      md_lock("md_lock"),
-      cache_lock("cache_lock"),
-      snap_lock("snap_lock"),
-      parent_lock("parent_lock"),
-      object_map_lock("object_map_lock"),
-      async_ops_lock("async_ops_lock"),
+      owner_lock(image_ctx.owner_lock),
+      md_lock(image_ctx.md_lock),
+      cache_lock(image_ctx.cache_lock),
+      snap_lock(image_ctx.snap_lock),
+      parent_lock(image_ctx.parent_lock),
+      object_map_lock(image_ctx.object_map_lock),
+      async_ops_lock(image_ctx.async_ops_lock),
       order(image_ctx.order),
       size(image_ctx.size),
       features(image_ctx.features),
@@ -202,13 +202,13 @@ struct MockImageCtx {
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;
 
-  RWLock owner_lock;
-  RWLock md_lock;
-  Mutex cache_lock;
-  RWLock snap_lock;
-  RWLock parent_lock;
-  RWLock object_map_lock;
-  Mutex async_ops_lock;
+  RWLock &owner_lock;
+  RWLock &md_lock;
+  Mutex &cache_lock;
+  RWLock &snap_lock;
+  RWLock &parent_lock;
+  RWLock &object_map_lock;
+  Mutex &async_ops_lock;
 
   uint8_t order;
   uint64_t size;
