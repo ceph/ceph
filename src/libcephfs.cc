@@ -777,7 +777,8 @@ extern "C" int ceph_utime(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->utime(path, buf);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->utime(path, buf, perms);
 }
 
 extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
