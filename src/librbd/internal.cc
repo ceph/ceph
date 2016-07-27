@@ -586,6 +586,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     {RBD_IMAGE_OPTION_JOURNAL_ORDER, UINT64},
     {RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, UINT64},
     {RBD_IMAGE_OPTION_JOURNAL_POOL, STR},
+    {RBD_IMAGE_OPTION_FEATURES_SET, UINT64},
+    {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -606,6 +608,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return "journal_splay_width";
     case RBD_IMAGE_OPTION_JOURNAL_POOL:
       return "journal_pool";
+    case RBD_IMAGE_OPTION_FEATURES_SET:
+      return "features_set";
+    case RBD_IMAGE_OPTION_FEATURES_CLEAR:
+      return "features_clear";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -1337,21 +1343,40 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     ldout(cct, 10) << __func__ << " name=" << imgname << ", "
                    << "size=" << size << ", opts=" << opts << dendl;
 
-    uint64_t format = cct->_conf->rbd_default_format;
-    opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+    uint64_t format;
+    if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
+      format = cct->_conf->rbd_default_format;
     bool old_format = format == 1;
 
     uint64_t features;
     if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
       features = old_format ? 0 : cct->_conf->rbd_default_features;
     }
+
+    uint64_t features_clear = 0;
+    uint64_t features_set = 0;
+    opts.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
+    opts.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
+
+    uint64_t conflict = features_clear & features_set;
+    features_clear &= ~conflict;
+    features_set &= ~conflict;
+
+    features |= features_set;
+    features &= ~features_clear;
+
     uint64_t stripe_unit = 0;
     uint64_t stripe_count = 0;
-    opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+    if (!old_format) {
+      if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0 || stripe_unit == 0)
+	stripe_unit = cct->_conf->rbd_default_stripe_unit;
+      if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0 || stripe_count == 0)
+	stripe_count = cct->_conf->rbd_default_stripe_count;
+    }
 
     uint64_t order = 0;
-    opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+    if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0)
+      order = cct->_conf->rbd_default_order;
 
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
@@ -1376,9 +1401,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EEXIST;
     }
 
-    if (!order)
-      order = cct->_conf->rbd_default_order;
-
     if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
@@ -1387,26 +1409,22 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     Rados rados(io_ctx);
     uint64_t bid = rados.get_instance_id();
 
-    // if striping is enabled, use possibly custom defaults
-    if (!old_format && (features & RBD_FEATURE_STRIPINGV2) &&
-	!stripe_unit && !stripe_count) {
-      stripe_unit = cct->_conf->rbd_default_stripe_unit;
-      stripe_count = cct->_conf->rbd_default_stripe_count;
+    if ((features & RBD_FEATURE_STRIPINGV2) == 0 &&
+	((stripe_unit && stripe_unit != (1ull << order)) ||
+	 (stripe_count && stripe_count != 1))) {
+      features |= RBD_FEATURE_STRIPINGV2;
     }
 
-    // normalize for default striping
-    if (stripe_unit == (1ull << order) && stripe_count == 1) {
-      stripe_unit = 0;
-      stripe_count = 0;
-    }
-    if ((stripe_unit || stripe_count) &&
-	(features & RBD_FEATURE_STRIPINGV2) == 0) {
-      lderr(cct) << "STRIPINGV2 and format 2 or later required for non-default striping" << dendl;
-      return -EINVAL;
-    }
     if ((stripe_unit && !stripe_count) ||
-	(!stripe_unit && stripe_count))
+	(!stripe_unit && stripe_count)) {
+      lderr(cct) << "must specify both (or neither) of stripe-unit and stripe-count" << dendl;
       return -EINVAL;
+    } else if (stripe_unit || stripe_count) {
+      if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
+	lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
+	return -EINVAL;
+      }
+    }
 
     if (old_format) {
       if (stripe_unit && stripe_unit != (1ull << order))
@@ -1589,7 +1607,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     }
 
     if (use_p_features) {
-      c_opts.set(RBD_IMAGE_OPTION_FEATURES, p_features);
+      features = p_features;
     }
 
     order = p_imctx->order;
@@ -1597,6 +1615,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
     }
 
+    if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+      lderr(cct) << "cloning image must support layering" << dendl;
+      return -ENOSYS;
+    }
+
+    c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
     r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
                primary_mirror_uuid);
     if (r < 0) {
@@ -2414,13 +2438,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t features = src->features;
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    }
-    if (features & ~RBD_FEATURES_ALL) {
-      lderr(cct) << "librbd does not support requested features" << dendl;
-      return -ENOSYS;
-    }
     uint64_t format = src->old_format ? 1 : 2;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
       opts.set(RBD_IMAGE_OPTION_FORMAT, format);
@@ -2436,6 +2453,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t order = src->order;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
       opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    }
+    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+    }
+    if (features & ~RBD_FEATURES_ALL) {
+      lderr(cct) << "librbd does not support requested features" << dendl;
+      return -ENOSYS;
     }
 
     int r = create(dest_md_ctx, destname, src_size, opts, "", "");
