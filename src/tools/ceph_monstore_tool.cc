@@ -697,9 +697,11 @@ int main(int argc, char **argv) {
     } else if (map_type == "crushmap") {
       bufferlist tmp;
       r = st.get("osdmap", st.combine_strings("full", v), tmp);
-      OSDMap osdmap;
-      osdmap.decode(tmp);
-      osdmap.crush->encode(bl);
+      if (r >= 0) {
+        OSDMap osdmap;
+        osdmap.decode(tmp);
+        osdmap.crush->encode(bl);
+      }
     } else {
       r = st.get(map_type, v, bl);
     }
