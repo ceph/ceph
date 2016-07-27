@@ -271,7 +271,7 @@ class SyntheticClient {
   int chunk_file(string &filename);
 
   void mksnap(const char *base, const char *name, const UserPerm& perms);
-  void rmsnap(const char *base, const char *name);
+  void rmsnap(const char *base, const char *name, const UserPerm& perms);
   void mksnapfile(const char *dir);
 
 };
