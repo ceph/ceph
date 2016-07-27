@@ -815,12 +815,9 @@ private:
   }
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
-		int uid=-1, int gid=-1);
-  int _getxattr(InodeRef &in, const char *name, void *value, size_t len);
-  int _getxattr(Inode *in, const char *name, void *value, size_t len,
-		const UserPerm& perms) {
-    return _getxattr(in, name, value, len, perms.uid(), perms.gid());
-  }
+		const UserPerm& perms);
+  int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
+		const UserPerm& perms);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms) {
     return _listxattr(in, names, len, perms.uid(), perms.gid());
@@ -1107,9 +1104,12 @@ public:
   int fallocate(int fd, int mode, loff_t offset, loff_t length);
 
   // full path xattr ops
-  int getxattr(const char *path, const char *name, void *value, size_t size);
-  int lgetxattr(const char *path, const char *name, void *value, size_t size);
-  int fgetxattr(int fd, const char *name, void *value, size_t size);
+  int getxattr(const char *path, const char *name, void *value, size_t size,
+	       const UserPerm& perms);
+  int lgetxattr(const char *path, const char *name, void *value, size_t size,
+		const UserPerm& perms);
+  int fgetxattr(int fd, const char *name, void *value, size_t size,
+		const UserPerm& perms);
   int listxattr(const char *path, char *list, size_t size);
   int llistxattr(const char *path, char *list, size_t size);
   int flistxattr(int fd, char *list, size_t size);

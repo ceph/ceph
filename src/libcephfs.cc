@@ -636,21 +636,25 @@ extern "C" int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, c
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->getxattr(path, name, value, size);
+
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->getxattr(path, name, value, size, perms);
 }
 
 extern "C" int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->lgetxattr(path, name, value, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->lgetxattr(path, name, value, size, perms);
 }
 
 extern "C" int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->fgetxattr(fd, name, value, size);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->fgetxattr(fd, name, value, size, perms);
 }
 
 
