@@ -116,6 +116,7 @@ class Run(object):
             kernel_hash = util.get_gitbuilder_hash(
                 'kernel', self.args.kernel_branch, self.args.kernel_flavor,
                 self.args.machine_type, self.args.distro,
+                self.args.distro_version,
             )
             if not kernel_hash:
                 util.schedule_fail(
