@@ -736,13 +736,15 @@ extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->chmod(path, mode);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->chmod(path, mode, perms);
 }
 extern "C" int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->fchmod(fd, mode);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->fchmod(fd, mode, perms);
 }
 extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 			  int uid, int gid)

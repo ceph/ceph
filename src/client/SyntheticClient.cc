@@ -836,7 +836,7 @@ int SyntheticClient::run()
 	  struct stat st;
 	  for (int i=0; i<count; i++) {
 	    client->lstat("test", &st);
-	    client->chmod("test", 0777);
+	    client->chmod("test", 0777, perms);
           }
         }
 	did_run_me();
@@ -1109,7 +1109,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "chmod") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
-      client->chmod(a, b);
+      client->chmod(a, b, perms);
     } else if (strcmp(op, "chown") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
@@ -2724,7 +2724,7 @@ int SyntheticClient::random_walk(int num_req)
       if (contents.empty())
         op = CEPH_MDS_OP_READDIR;
       else
-        r = client->chmod( get_random_sub(), rand() & 0755 );
+        r = client->chmod(get_random_sub(), rand() & 0755, perms);
     }
     
     if (op == CEPH_MDS_OP_CHOWN) {
@@ -3316,7 +3316,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	}
 	client->close(fd);
 
-	//client->chmod(f.c_str(), mode & 0777);
+	//client->chmod(f.c_str(), mode & 0777, perms);
 	client->chown(f.c_str(), uid, gid);
 
 	struct utimbuf ut;
