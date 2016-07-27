@@ -644,9 +644,15 @@ install(TARGETS ceph-mon DESTINATION bin)
 if(NOT ALLOCATOR STREQUAL "jemalloc")
   set(disable_jemalloc "DISABLE_JEMALLOC=1")
 endif()
+
+set(ROCKSDB_EXTRA_CXXFLAG -fPIC -Wno-unused-variable)
+if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+  set(ROCKSDB_EXTRA_CXXFLAG ${ROCKSDB_EXTRA_CXXFLAG} -DNDEBUG)
+endif(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+
 add_custom_target(build_rocksdb
     COMMAND
-    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
+    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib CXX="${CMAKE_CXX_COMPILER}" EXTRA_CXXFLAGS="${ROCKSDB_EXTRA_CXXFLAG}"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
