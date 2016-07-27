@@ -1122,7 +1122,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       struct utimbuf u;
       u.actime = b;
       u.modtime = c;
-      client->utime(a, &u);
+      client->utime(a, &u, perms);
     } else if (strcmp(op, "mknod") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
@@ -2737,9 +2737,9 @@ int SyntheticClient::random_walk(int num_req)
       struct utimbuf b;
       memset(&b, 1, sizeof(b));
       if (contents.empty()) 
-        r = client->utime( cwd.c_str(), &b );
+        r = client->utime(cwd.c_str(), &b, perms);
       else
-        r = client->utime( get_random_sub(), &b );
+        r = client->utime(get_random_sub(), &b, perms);
     }
     */
     if (op == CEPH_MDS_OP_LINK) {
@@ -3324,7 +3324,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	struct utimbuf ut;
 	ut.modtime = mtime;
 	ut.actime = mtime;
-	client->utime(f.c_str(), &ut);
+	client->utime(f.c_str(), &ut, perms);
       }
     }
   }
