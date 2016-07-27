@@ -16,6 +16,7 @@
  * it will just loop forever.
  */
 #include "include/compat.h"
+#include <pthread.h>
 #include "common/Cond.h"
 #include "obj_bencher.h"
 
@@ -217,7 +218,8 @@ void *ObjBencher::status_printer(void *_bencher) {
 
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
-  int concurrentios, size_t op_size, size_t object_size,
+  int concurrentios,
+  uint64_t op_size, uint64_t object_size,
   unsigned max_objects,
   bool cleanup, const std::string& run_name, bool no_verify) {
 
@@ -234,7 +236,7 @@ int ObjBencher::aio_bench(
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
-    size_t prev_op_size, prev_object_size;
+    uint64_t prev_op_size, prev_object_size;
     r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
 			     &num_objects, &prevPid);
     if (r < 0) {
@@ -351,7 +353,7 @@ static T vec_stddev(vector<T>& v)
 }
 
 int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
-				     size_t *op_size, size_t* object_size,
+				     uint64_t *op_size, uint64_t* object_size,
 				     int* num_objects, int* prevPid) {
   int r = 0;
   bufferlist object_data;
@@ -435,7 +437,7 @@ int ObjBencher::write_bench(int secondsToRun,
   pthread_t print_thread;
 
   pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
-  pthread_setname_np(print_thread, "write_stat");
+  ceph_pthread_setname(print_thread, "write_stat");
   lock.Lock();
   data.finished = 0;
   data.start_time = ceph_clock_now(cct);
@@ -671,7 +673,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
-  pthread_setname_np(print_thread, "seq_read_stat");
+  ceph_pthread_setname(print_thread, "seq_read_stat");
 
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
@@ -900,7 +902,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
-  pthread_setname_np(print_thread, "rand_read_stat");
+  ceph_pthread_setname(print_thread, "rand_read_stat");
 
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
@@ -1089,7 +1091,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
 int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, const std::string& run_name) {
   int r = 0;
-  size_t op_size, object_size;
+  uint64_t op_size, object_size;
   int num_objects;
   int prevPid;
 

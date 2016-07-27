@@ -12,8 +12,6 @@
  * 
  */
 
-#define FUSE_USE_VERSION 30
-
 #include <sys/file.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -35,9 +33,9 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#include "fuse_ll.h"
 #include <fuse.h>
 #include <fuse_lowlevel.h>
-#include "fuse_ll.h"
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
 #define FINO_STAG(x) ((x) >> 48)
@@ -172,8 +170,10 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   if (to_set & FUSE_SET_ATTR_MTIME) mask |= CEPH_SETATTR_MTIME;
   if (to_set & FUSE_SET_ATTR_ATIME) mask |= CEPH_SETATTR_ATIME;
   if (to_set & FUSE_SET_ATTR_SIZE) mask |= CEPH_SETATTR_SIZE;
+#if !defined(DARWIN)
   if (to_set & FUSE_SET_ATTR_MTIME_NOW) mask |= CEPH_SETATTR_MTIME_NOW;
   if (to_set & FUSE_SET_ATTR_ATIME_NOW) mask |= CEPH_SETATTR_ATIME_NOW;
+#endif
 
   int r = cfuse->client->ll_setattr(in, attr, mask, ctx->uid, ctx->gid);
   if (r == 0)
@@ -800,6 +800,7 @@ static int getgroups_cb(void *handle, gid_t **sgids)
 #endif
 }
 
+#if !defined(DARWIN)
 static mode_t umask_cb(void *handle)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
@@ -807,6 +808,7 @@ static mode_t umask_cb(void *handle)
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   return ctx->umask;
 }
+#endif
 
 static void ino_invalidate_cb(void *handle, vinodeno_t vino, int64_t off,
 			      int64_t len)
@@ -853,12 +855,14 @@ static void do_init(void *data, fuse_conn_info *conn)
   CephFuse::Handle *cfuse = (CephFuse::Handle *)data;
   Client *client = cfuse->client;
 
+#if !defined(DARWIN)
   if (!client->cct->_conf->fuse_default_permissions &&
       client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
     if(conn->capable & FUSE_CAP_DONT_MASK)
       conn->want |= FUSE_CAP_DONT_MASK;
   }
+#endif
 
   if (cfuse->fd_on_success) {
     //cout << "fuse init signaling on fd " << fd_on_success << std::endl;
@@ -1057,7 +1061,9 @@ int CephFuse::Handle::start()
     remount_cb: remount_cb,
 #endif
     getgroups_cb: getgroups_cb,
+#if !defined(DARWIN)
     umask_cb: umask_cb,
+#endif
   };
   client->ll_register_callbacks(&args);
 

@@ -12,6 +12,8 @@
  * 
  */
 
+#define FUSE_USE_VERSION 30
+
 class CephFuse {
 public:
   CephFuse(Client *c, int fd);

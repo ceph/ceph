@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <thread>
+#include <random>
+#include "include/Spinlock.h"
 #include "include/types.h"
 #include "Messenger.h"
 
@@ -19,15 +20,18 @@ Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 			   lname, nonce, 0);
 }
 
+static std::default_random_engine random_engine;
+static Spinlock random_lock;
+
 Messenger *Messenger::create(CephContext *cct, const string &type,
 			     entity_name_t name, string lname,
 			     uint64_t nonce, uint64_t features, uint64_t cflags)
 {
   int r = -1;
   if (type == "random") {
-    thread_local unsigned seed = (unsigned) time(nullptr) +
-      (unsigned) std::hash<std::thread::id>()(std::this_thread::get_id());
-    r = rand_r(&seed) % 2; // random does not include xio
+    std::lock_guard<Spinlock> lock(random_lock);
+    std::uniform_int_distribution<> dis(0, 1);
+    r = dis(random_engine);
   }
   if (r == 0 || type == "simple")
     return new SimpleMessenger(cct, name, lname, nonce, features);

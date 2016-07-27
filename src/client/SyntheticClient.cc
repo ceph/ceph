@@ -936,7 +936,7 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   assert(thread_id);
-  pthread_setname_np(thread_id, "client");
+  ceph_pthread_setname(thread_id, "client");
   return 0;
 }
 
