@@ -1114,7 +1114,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       int64_t c = t.get_int();
-      client->chown(a, b, c);
+      client->chown(a, b, c, perms);
     } else if (strcmp(op, "utime") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
@@ -2728,9 +2728,9 @@ int SyntheticClient::random_walk(int num_req)
     }
     
     if (op == CEPH_MDS_OP_CHOWN) {
-      if (contents.empty())         r = client->chown( cwd.c_str(), rand(), rand() );
+      if (contents.empty())         r = client->chown(cwd.c_str(), rand(), rand(), perms);
       else
-        r = client->chown( get_random_sub(), rand(), rand() );
+        r = client->chown(get_random_sub(), rand(), rand(), perms);
     }
      
     if (op == CEPH_MDS_OP_UTIME) {
@@ -3210,8 +3210,10 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
    *
    */
 
+  UserPerm process_perms = client->pick_my_perms();
+
   if (base[0] != '-') 
-    client->mkdir(base, 0755, client->pick_my_perms());
+    client->mkdir(base, 0755, process_perms);
 
   ifstream f(find);
   assert(f.is_open());
@@ -3316,8 +3318,8 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	}
 	client->close(fd);
 
-	//client->chmod(f.c_str(), mode & 0777, perms);
-	client->chown(f.c_str(), uid, gid);
+	//client->chmod(f.c_str(), mode & 0777, perms, process_perms);
+	client->chown(f.c_str(), uid, gid, process_perms);
 
 	struct utimbuf ut;
 	ut.modtime = mtime;

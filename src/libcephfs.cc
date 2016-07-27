@@ -751,21 +751,24 @@ extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->chown(path, uid, gid);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->chown(path, uid, gid, perms);
 }
 extern "C" int ceph_fchown(struct ceph_mount_info *cmount, int fd,
 			   int uid, int gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->fchown(fd, uid, gid);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->fchown(fd, uid, gid, perms);
 }
 extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
 			   int uid, int gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->lchown(path, uid, gid);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->lchown(path, uid, gid, perms);
 }
 
 
