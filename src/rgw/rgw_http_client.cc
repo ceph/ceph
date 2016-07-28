@@ -435,10 +435,10 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     return -EIO;
   }
 
-  if (wait_fd.revents > 0) {
+  if (wait_fd.fd > 0) {
     uint32_t buf;
     ret = read(signal_fd, (void *)&buf, sizeof(buf));
-    if (ret < 0) {
+    if (ret < 0 && ret!=EAGAIN) {
       ret = -errno;
       dout(0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
       return ret;
@@ -789,6 +789,18 @@ int RGWHTTPManager::set_threaded()
     r = -errno;
     ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
     return r;
+  }
+  r=fcntl(thread_pipe[0],F_SETFL,O_NONBLOCK);
+  if(r<0){
+  	r=-errno;
+  	ldout(cct, 0) << "ERROR: fcntl() returned errno=" << r << dendl;
+  	return r;
+  }
+  r=fcntl(thread_pipe[1],F_SETFL,O_NONBLOCK);
+  if(r<0){
+  	r=-errno;
+  	ldout(cct, 0) << "ERROR: fcntl() returned errno=" << r << dendl;
+  	return r;
   }
 
   is_threaded = true;
