@@ -47,7 +47,7 @@ class MemDB : public KeyValueDB
   std::string _get_data_fn();
   void _encode(btree::btree_map<string, bufferptr>:: iterator iter, bufferlist &bl);
   void _save();
-  void _load();
+  int _load();
 
 public:
   MemDB(CephContext *c, const string &path, void *p) :
