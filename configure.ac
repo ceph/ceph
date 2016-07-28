@@ -36,7 +36,7 @@ AM_CONDITIONAL(WITH_MAN_PAGES, test -n "$SPHINX_BUILD")
 
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_CONFIG_SUBDIRS([src/gmock])
+AC_CONFIG_SUBDIRS([src/googletest/googlemock])
 
 # Environment
 AC_CANONICAL_HOST
@@ -221,13 +221,27 @@ if test x"$with_cython" = xyes; then
     if test x"$CYTHON_CHECK" != xyes; then
         AC_MSG_FAILURE([cython not found])
     fi
-    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, python-config, yes)
-    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
-        AC_MSG_FAILURE([python-config not found])
+
+    # Check if we are running inside a Python virtual environment
+    # Both `virtualenv' as well as PEP 405 `pyvenv' set the VIRTUAL_ENV
+    # environment variable upon activation
+    if test x"$VIRTUAL_ENV" != x; then
+        PYTHON="python"
     fi
-    PYTHON_CFLAGS=`python-config --cflags`
+
+    # Set PYTHON to default system Python version if not specified
+    if test x"$PYTHON" = x; then
+        PYTHON="python"
+    fi
+
+    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, "$PYTHON"-config, yes)
+    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
+        AC_MSG_FAILURE(["$PYTHON"-config not found])
+    fi
+
+    PYTHON_CFLAGS=`"$PYTHON"-config --cflags`
     AC_SUBST(PYTHON_CFLAGS)
-    PYTHON_LDFLAGS=`python-config --ldflags`
+    PYTHON_LDFLAGS=`"$PYTHON"-config --ldflags`
     AC_SUBST(PYTHON_LDFLAGS)
 fi
 
@@ -1152,6 +1166,7 @@ LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
 AC_CHECK_FUNC([pthread_spin_init],
   [AC_DEFINE(HAVE_PTHREAD_SPINLOCK, 1, [Define if you have pthread_spin_init])])
+AC_CHECK_FUNCS([pthread_getname_np pthread_setname_np pthread_set_name_np])
 LIBS="$saved_LIBS"
 CFLAGS="$saved_CFLAGS"
 

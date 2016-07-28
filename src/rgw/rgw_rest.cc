@@ -790,6 +790,20 @@ int RGWGetObj_ObjStore::get_params()
     mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
   }
 
+  /* start gettorrent */
+  bool is_torrent = s->info.args.exists(GET_TORRENT);
+  bool torrent_flag = s->cct->_conf->rgw_torrent_flag;
+  if (torrent_flag && is_torrent)
+  {
+    int ret = 0;
+    ret = torrent.get_params();
+    if (ret < 0)
+    {
+      return ret;
+    }
+  }
+  /* end gettorrent */
+
   return 0;
 }
 
@@ -1008,11 +1022,25 @@ int RGWPutObj_ObjStore::get_params()
   if (multipart && partnumber && copy_source)
   {
     int ret = multipartcp.get_params();
+    if (ret < 0) 
+    {    
+      return ret; 
+    }
+  }    
+
+  /* start gettorrent */
+  if (s->cct->_conf->rgw_torrent_flag)
+  {
+    int ret = 0;
+    ret = torrent.get_params();
+    ldout(s->cct, 5) << "NOTICE:  open produce torrent file " << dendl;
     if (ret < 0)
     {
       return ret;
     }
+    torrent.set_info_name((s->object).name);
   }
+  /* end gettorrent */
 
   supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
@@ -1163,8 +1191,31 @@ int RGWPutACLs_ObjStore::get_params()
   return op_ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen,
-				  int max_read)
+int RGWPutLC_ObjStore::get_params()
+{
+  size_t cl = 0;
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       ret = -ENOMEM;
+       return ret;
+    }
+    int read_len;
+    int r = STREAM_IO(s)->read(data, cl, &read_len, s->aws4_auth_needs_complete);
+    len = read_len;
+    if (r < 0)
+      return r;
+    data[len] = '\0';
+  } else {
+    len = 0;
+  }
+
+  return ret;
+}
+
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
@@ -1228,7 +1279,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
     }
     data = (char *)malloc(cl + 1);
     if (!data) {
-       return -ENOMEM;
+      return -ENOMEM;
     }
     int ret = STREAM_IO(s)->read(data, cl, &len, s->aws4_auth_needs_complete);
     if (ret < 0) {
@@ -1562,7 +1613,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
   case OP_POST:
   case OP_COPY:
     /* is it a 'multi-object delete' request? */
-    if (s->info.request_params == "delete") {
+    if (s->info.args.exists("delete")) {
       only_bucket = true;
       break;
     }
@@ -1811,7 +1862,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
       s->info.domain = domain;
     }
 
-   ldout(s->cct, 20)
+    ldout(s->cct, 20)
       << "final domain/bucket"
       << " subdomain=" << subdomain
       << " domain=" << domain

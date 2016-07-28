@@ -888,13 +888,15 @@ namespace std {
 struct cap_reconnect_t {
   string path;
   mutable ceph_mds_cap_reconnect capinfo;
+  snapid_t snap_follows;
   bufferlist flockbl;
 
   cap_reconnect_t() {
     memset(&capinfo, 0, sizeof(capinfo));
+    snap_follows = 0;
   }
   cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i,
-		  inodeno_t sr, bufferlist& lb) :
+		  inodeno_t sr, snapid_t sf, bufferlist& lb) :
     path(p) {
     capinfo.cap_id = cap_id;
     capinfo.wanted = w;
@@ -902,6 +904,7 @@ struct cap_reconnect_t {
     capinfo.snaprealm = sr;
     capinfo.pathbase = pino;
     capinfo.flock_len = 0;
+    snap_follows = sf;
     flockbl.claim(lb);
   }
   void encode(bufferlist& bl) const;

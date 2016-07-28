@@ -90,6 +90,7 @@ authentication keyring.
 	File layouts <file-layouts>
 	Client eviction <eviction>
 	Handling full filesystems <full>
+    Health messages <health-messages>
 	Troubleshooting <troubleshooting>
 	Disaster recovery <disaster-recovery>
 	Client authentication <client-auth>

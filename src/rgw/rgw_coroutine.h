@@ -265,11 +265,11 @@ public:
 
   void call(RGWCoroutine *op); /* call at the same stack we're in */
   RGWCoroutinesStack *spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
-  bool collect(int *ret); /* returns true if needs to be called again */
+  bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
   int wait(const utime_t& interval);
-  bool drain_children(int num_cr_left); /* returns true if needed to be called again */
+  bool drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack = NULL); /* returns true if needed to be called again */
   void wakeup();
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
@@ -305,6 +305,10 @@ do {                            \
 #define drain_all_but(n) \
   drain_cr = boost::asio::coroutine(); \
   yield_until_true(drain_children(n))
+
+#define drain_all_but_stack(stack) \
+  drain_cr = boost::asio::coroutine(); \
+  yield_until_true(drain_children(1, stack))
 
 template <class T>
 class RGWConsumerCR : public RGWCoroutine {
@@ -371,7 +375,7 @@ protected:
   RGWCoroutinesStack *parent;
 
   RGWCoroutinesStack *spawn(RGWCoroutine *source_op, RGWCoroutine *next_op, bool wait);
-  bool collect(RGWCoroutine *op, int *ret); /* returns true if needs to be called again */
+  bool collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
@@ -442,7 +446,7 @@ public:
   int wait(const utime_t& interval);
   void wakeup();
 
-  bool collect(int *ret); /* returns true if needs to be called again */
+  bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
 
   RGWAioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();

@@ -108,6 +108,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
+    int ceph_fstat(ceph_mount_info *cmount, int fd, stat *stbuf)
     int ceph_stat(ceph_mount_info *cmount, const char *path, stat *stbuf)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
 
@@ -608,25 +609,30 @@ cdef class LibCephFS(object):
 
     def open(self, path, flags, mode=0):
         self.require_state("mounted")
-
         path = cstr(path, 'path')
-        flags = cstr(flags, 'flags')
+
         if not isinstance(mode, int):
             raise TypeError('mode must be an int')
-        cephfs_flags = 0
-        if flags == '':
-            cephfs_flags = os.O_RDONLY
+        if isinstance(flags, basestring):
+            flags = cstr(flags, 'flags')
+            cephfs_flags = 0
+            if flags == '':
+                cephfs_flags = os.O_RDONLY
+            else:
+                for c in flags:
+                    if c == 'r':
+                        cephfs_flags |= os.O_RDONLY
+                    elif c == 'w':
+                        cephfs_flags |= os.O_WRONLY | os.O_TRUNC | os.O_CREAT
+                    elif c == '+':
+                        cephfs_flags |= os.O_RDWR
+                    else:
+                        raise OperationNotSupported(
+                            "open flags doesn't support %s" % c)
+        elif isinstance(flags, int):
+            cephfs_flags = flags
         else:
-            for c in flags:
-                if c == 'r':
-                    cephfs_flags |= os.O_RDONLY
-                elif c == 'w':
-                    cephfs_flags |= os.O_WRONLY | os.O_TRUNC | os.O_CREAT
-                elif c == '+':
-                    cephfs_flags |= os.O_RDWR
-                else:
-                    raise OperationNotSupported(
-                        "open flags doesn't support %s" % c)
+            raise TypeError("flags must be a string or an integer")
 
         cdef:
             char* _path = path
@@ -785,6 +791,29 @@ cdef class LibCephFS(object):
             ret = ceph_stat(self.cluster, _path, &statbuf)
         if ret < 0:
             raise make_ex(ret, "error in stat: %s" % path)
+        return StatResult(st_dev=statbuf.st_dev, st_ino=statbuf.st_ino,
+                          st_mode=statbuf.st_mode, st_nlink=statbuf.st_nlink,
+                          st_uid=statbuf.st_uid, st_gid=statbuf.st_gid,
+                          st_rdev=statbuf.st_rdev, st_size=statbuf.st_size,
+                          st_blksize=statbuf.st_blksize,
+                          st_blocks=statbuf.st_blocks,
+                          st_atime=datetime.fromtimestamp(statbuf.st_atime),
+                          st_mtime=datetime.fromtimestamp(statbuf.st_mtime),
+                          st_ctime=datetime.fromtimestamp(statbuf.st_ctime))
+
+    def fstat(self, fd):
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+            stat statbuf
+
+        with nogil:
+            ret = ceph_fstat(self.cluster, _fd, &statbuf)
+        if ret < 0:
+            raise make_ex(ret, "error in fsat")
         return StatResult(st_dev=statbuf.st_dev, st_ino=statbuf.st_ino,
                           st_mode=statbuf.st_mode, st_nlink=statbuf.st_nlink,
                           st_uid=statbuf.st_uid, st_gid=statbuf.st_gid,

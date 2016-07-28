@@ -295,7 +295,7 @@ Commands
   Rollback image content to snapshot. This will iterate through the entire blocks
   array and update the data head content to the snapshotted version.
 
-:command:`snap rm` *snap-spec*
+:command:`snap rm` [--force] *snap-spec*
   Removes the specified snapshot.
 
 :command:`snap purge` *image-spec*

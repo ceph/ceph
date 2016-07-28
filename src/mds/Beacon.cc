@@ -462,6 +462,18 @@ void Beacon::notify_health(MDSRank const *mds)
                       "MDS in read-only mode");
     health.metrics.push_back(m);
   }
+
+  // Report if we have significantly exceeded our cache size limit
+  if (mds->mdcache->get_num_inodes() > g_conf->mds_cache_size * 1.5) {
+    std::ostringstream oss;
+    oss << "Too many inodes in cache (" << mds->mdcache->get_num_inodes()
+        << "/" << g_conf->mds_cache_size << "), "
+        << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
+        << mds->mdcache->get_num_strays() << " stray files";
+
+    MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, oss.str());
+    health.metrics.push_back(m);
+  }
 }
 
 MDSMap::DaemonState Beacon::get_want_state() const

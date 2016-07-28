@@ -586,6 +586,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     {RBD_IMAGE_OPTION_JOURNAL_ORDER, UINT64},
     {RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, UINT64},
     {RBD_IMAGE_OPTION_JOURNAL_POOL, STR},
+    {RBD_IMAGE_OPTION_FEATURES_SET, UINT64},
+    {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -606,6 +608,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return "journal_splay_width";
     case RBD_IMAGE_OPTION_JOURNAL_POOL:
       return "journal_pool";
+    case RBD_IMAGE_OPTION_FEATURES_SET:
+      return "features_set";
+    case RBD_IMAGE_OPTION_FEATURES_CLEAR:
+      return "features_clear";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -865,6 +871,76 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int flatten_children(ImageCtx *ictx, const char* snap_name, ProgressContext& pctx)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "children flatten " << ictx->name << dendl;
+
+    RWLock::RLocker l(ictx->snap_lock);
+    snap_t snap_id = ictx->get_snap_id(snap_name);
+    parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
+    map< pair<int64_t, string>, set<string> > image_info;
+
+    int r = list_children_info(ictx, parent_spec, image_info);
+    if (r < 0) {
+      return r;
+    }
+
+    size_t size = image_info.size();
+    if (size == 0)
+      return 0;
+
+    size_t i = 0;
+    Rados rados(ictx->md_ctx);
+    for ( auto &info : image_info){
+      string pool = info.first.second;
+      IoCtx ioctx;
+      r = rados.ioctx_create2(info.first.first, ioctx);
+      if (r < 0) {
+        lderr(cct) << "Error accessing child image pool " << pool
+                   << dendl;
+        return r;
+      }
+
+      for (auto &id_it : info.second) {
+	ImageCtx *imctx = new ImageCtx("", id_it, NULL, ioctx, false);
+	int r = imctx->state->open();
+	if (r < 0) {
+	  lderr(cct) << "error opening image: "
+		     << cpp_strerror(r) << dendl;
+	  return r;
+	}
+	librbd::NoOpProgressContext prog_ctx;
+	r = imctx->operations->flatten(prog_ctx);
+	if (r < 0) {
+	  lderr(cct) << "error to flatten image: " << pool << "/" << id_it
+		     << cpp_strerror(r) << dendl;
+	  return r;
+	}
+
+	if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+	    !imctx->snaps.empty()) {
+	  imctx->parent_lock.get_read();
+	  parent_info parent_info = imctx->parent_md;
+	  imctx->parent_lock.put_read();
+
+	  r = cls_client::remove_child(&imctx->md_ctx, RBD_CHILDREN,
+				       parent_info.spec, imctx->id);
+	  if (r < 0 && r != -ENOENT) {
+	    lderr(cct) << "error removing child from children list" << dendl;
+	    imctx->state->close();
+	    return r;
+	  }
+	}
+	imctx->state->close();
+      }
+      pctx.update_progress(++i, size);
+      assert(i <= size);
+    }
+    
+    return 0;
+  }
+
   int list_children(ImageCtx *ictx, set<pair<string, string> >& names)
   {
     CephContext *cct = ictx->cct;
@@ -874,7 +950,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
-    int r = list_children_info(ictx, parent_spec,image_info);
+    int r = list_children_info(ictx, parent_spec, image_info);
     if (r < 0) {
       return r;
     }
@@ -890,14 +966,14 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
 
       for (auto &id_it : info.second) {
-	    string name;
-	    r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
-	    if (r < 0) {
-	      lderr(cct) << "Error looking up name for image id " << id_it
-                         << " in pool " << info.first.second << dendl;
-	      return r;
-	    }
-	    names.insert(make_pair(info.first.second, name));
+	string name;
+	r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
+	if (r < 0) {
+	  lderr(cct) << "Error looking up name for image id " << id_it
+		     << " in pool " << info.first.second << dendl;
+	  return r;
+	}
+	names.insert(make_pair(info.first.second, name));
       }
     }
     
@@ -1267,21 +1343,40 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     ldout(cct, 10) << __func__ << " name=" << imgname << ", "
                    << "size=" << size << ", opts=" << opts << dendl;
 
-    uint64_t format = cct->_conf->rbd_default_format;
-    opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+    uint64_t format;
+    if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
+      format = cct->_conf->rbd_default_format;
     bool old_format = format == 1;
 
     uint64_t features;
     if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
       features = old_format ? 0 : cct->_conf->rbd_default_features;
     }
+
+    uint64_t features_clear = 0;
+    uint64_t features_set = 0;
+    opts.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
+    opts.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
+
+    uint64_t conflict = features_clear & features_set;
+    features_clear &= ~conflict;
+    features_set &= ~conflict;
+
+    features |= features_set;
+    features &= ~features_clear;
+
     uint64_t stripe_unit = 0;
     uint64_t stripe_count = 0;
-    opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+    if (!old_format) {
+      if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0 || stripe_unit == 0)
+	stripe_unit = cct->_conf->rbd_default_stripe_unit;
+      if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0 || stripe_count == 0)
+	stripe_count = cct->_conf->rbd_default_stripe_count;
+    }
 
     uint64_t order = 0;
-    opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+    if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0)
+      order = cct->_conf->rbd_default_order;
 
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
@@ -1306,9 +1401,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EEXIST;
     }
 
-    if (!order)
-      order = cct->_conf->rbd_default_order;
-
     if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
@@ -1317,26 +1409,22 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     Rados rados(io_ctx);
     uint64_t bid = rados.get_instance_id();
 
-    // if striping is enabled, use possibly custom defaults
-    if (!old_format && (features & RBD_FEATURE_STRIPINGV2) &&
-	!stripe_unit && !stripe_count) {
-      stripe_unit = cct->_conf->rbd_default_stripe_unit;
-      stripe_count = cct->_conf->rbd_default_stripe_count;
+    if ((features & RBD_FEATURE_STRIPINGV2) == 0 &&
+	((stripe_unit && stripe_unit != (1ull << order)) ||
+	 (stripe_count && stripe_count != 1))) {
+      features |= RBD_FEATURE_STRIPINGV2;
     }
 
-    // normalize for default striping
-    if (stripe_unit == (1ull << order) && stripe_count == 1) {
-      stripe_unit = 0;
-      stripe_count = 0;
-    }
-    if ((stripe_unit || stripe_count) &&
-	(features & RBD_FEATURE_STRIPINGV2) == 0) {
-      lderr(cct) << "STRIPINGV2 and format 2 or later required for non-default striping" << dendl;
-      return -EINVAL;
-    }
     if ((stripe_unit && !stripe_count) ||
-	(!stripe_unit && stripe_count))
+	(!stripe_unit && stripe_count)) {
+      lderr(cct) << "must specify both (or neither) of stripe-unit and stripe-count" << dendl;
       return -EINVAL;
+    } else if (stripe_unit || stripe_count) {
+      if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
+	lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
+	return -EINVAL;
+      }
+    }
 
     if (old_format) {
       if (stripe_unit && stripe_unit != (1ull << order))
@@ -1402,7 +1490,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     int r = p_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
-		 << cpp_strerror(-r) << dendl;
+		 << cpp_strerror(r) << dendl;
       delete p_imctx;
       return r;
     }
@@ -1503,8 +1591,23 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
+    if ((p_features & RBD_FEATURE_JOURNALING) != 0) {
+      bool force_non_primary = !non_primary_global_image_id.empty();
+      bool is_primary;
+      int r = Journal<>::is_tag_owner(p_imctx, &is_primary);
+      if (r < 0) {
+	lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+		   << dendl;
+	return r;
+      }
+      if (!is_primary && !force_non_primary) {
+	lderr(cct) << "parent is non-primary mirrored image" << dendl;
+	return -EINVAL;
+      }
+    }
+
     if (use_p_features) {
-      c_opts.set(RBD_IMAGE_OPTION_FEATURES, p_features);
+      features = p_features;
     }
 
     order = p_imctx->order;
@@ -1512,6 +1615,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
     }
 
+    if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+      lderr(cct) << "cloning image must support layering" << dendl;
+      return -ENOSYS;
+    }
+
+    c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
     r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
                primary_mirror_uuid);
     if (r < 0) {
@@ -2249,6 +2358,53 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx)
+  {
+    ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
+
+    int r = 0;
+
+    r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+
+    if (flags & RBD_SNAP_REMOVE_FLATTEN) {
+	r = flatten_children(ictx, snap_name, pctx);
+	if (r < 0) {
+	  return r;
+	}
+    }
+
+    bool is_protected;
+    r = snap_is_protected(ictx, snap_name, &is_protected);
+    if (r < 0) {
+      return r;
+    }
+
+    if (is_protected && flags & RBD_SNAP_REMOVE_UNPROTECT) {
+      r = ictx->operations->snap_unprotect(snap_name);
+      if (r < 0) {
+	lderr(ictx->cct) << "failed to unprotect snapshot: " << snap_name << dendl;
+	return r;
+      }
+
+      r = snap_is_protected(ictx, snap_name, &is_protected);
+      if (r < 0) {
+	return r;
+      }
+      if (is_protected) {
+	lderr(ictx->cct) << "snapshot is still protected after unprotection" << dendl;
+	assert(0);
+      }
+    }
+
+    C_SaferCond ctx;
+    ictx->operations->snap_remove(snap_name, &ctx);
+
+    r = ctx.wait();
+    return r;
+  }
+
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
   {
     return cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
@@ -2282,13 +2438,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t features = src->features;
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    }
-    if (features & ~RBD_FEATURES_ALL) {
-      lderr(cct) << "librbd does not support requested features" << dendl;
-      return -ENOSYS;
-    }
     uint64_t format = src->old_format ? 1 : 2;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
       opts.set(RBD_IMAGE_OPTION_FORMAT, format);
@@ -2304,6 +2453,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t order = src->order;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
       opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    }
+    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+    }
+    if (features & ~RBD_FEATURES_ALL) {
+      lderr(cct) << "librbd does not support requested features" << dendl;
+      return -ENOSYS;
     }
 
     int r = create(dest_md_ctx, destname, src_size, opts, "", "");

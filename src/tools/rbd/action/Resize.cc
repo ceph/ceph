@@ -15,10 +15,10 @@ namespace resize {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-static int do_resize(librbd::Image& image, uint64_t size, bool no_progress)
+static int do_resize(librbd::Image& image, uint64_t size, bool allow_shrink, bool no_progress)
 {
   utils::ProgressContext pc("Resizing image", no_progress);
-  int r = image.resize_with_progress(size, pc);
+  int r = image.resize2(size, allow_shrink, pc);
   if (r < 0) {
     pc.fail();
     return r;
@@ -70,14 +70,13 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  if (info.size > size && !vm["allow-shrink"].as<bool>()) {
-    std::cerr << "rbd: shrinking an image is only allowed with the "
-              << "--allow-shrink flag" << std::endl;
-    return -EINVAL;
-  }
-
-  r = do_resize(image, size, vm[at::NO_PROGRESS].as<bool>());
+  r = do_resize(image, size, vm["allow-shrink"].as<bool>(), vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
+    if (r == -EINVAL && !vm["allow-shrink"].as<bool>()) {
+      std::cerr << "rbd: shrinking an image is only allowed with the "
+                << "--allow-shrink flag" << std::endl;
+      return r;
+    }
     std::cerr << "rbd: resize error: " << cpp_strerror(r) << std::endl;
     return r;
   }

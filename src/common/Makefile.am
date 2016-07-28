@@ -106,6 +106,11 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
+if DARWIN
+libcommon_internal_la_SOURCES += \
+	common/darwin_errno.cc
+endif
+
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
 	common/address_helper.cc
@@ -169,8 +174,7 @@ LIBCOMMON_DEPS += \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
 	$(BOOST_RANDOM_LIBS) \
-	$(RESOLV_LIBS) \
-	-luuid
+	$(RESOLV_LIBS)
 
 if LINUX
 LIBCOMMON_DEPS += -lrt -lblkid

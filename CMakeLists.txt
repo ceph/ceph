@@ -17,7 +17,19 @@ if (POLICY CMP0023)
 cmake_policy(SET CMP0023 OLD)
 endif (POLICY CMP0023)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  set(LINUX ON)
+  FIND_PACKAGE(Threads)
+elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+  set(FREEBSD ON)
+  FIND_PACKAGE(Threads)
+elseif(APPLE)
+  set(OperatingSystem "Mac OS X")
+else()
+  message(STATUS "No systemtype selected for building")
+endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
@@ -45,15 +57,23 @@ endif(WITH_MANPAGE)
 
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
-  ${OFED_PREFIX}/include
-  ${LEVELDB_PREFIX}/include
-  ${PROJECT_SOURCE_DIR}/src
-)
+  ${PROJECT_SOURCE_DIR}/src)
 
-link_directories(
-  ${OFED_PREFIX}/lib
-  ${LEVELDB_PREFIX}/lib
-)
+if(LEVELDB_PREFIX)
+  include_directories(${LEVELDB_PREFIX}/include)
+  link_directories(${LEVELDB_PREFIX}/lib)
+endif()
+
+if(OFED_PREFIX)
+  include_directories(${OFED_PREFIX}/include)
+  link_directories(${OFED_PREFIX}/lib)
+endif()
+
+if(FREEBSD)
+  include_directories(/usr/local/include)
+  link_directories(/usr/local/lib)
+  list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
+endif(FREEBSD)
 
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -86,6 +106,9 @@ CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 CHECK_FUNCTION_EXISTS(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
+CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
 
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
@@ -100,7 +123,9 @@ CHECK_INCLUDE_FILES("sys/types.h" HAVE_SYS_TYPES_H)
 CHECK_INCLUDE_FILES("sys/vfs.h" HAVE_SYS_VFS_H)
 CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
 CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
-CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
+if(LINUX)
+  CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
+endif(LINUX)
 CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
 
 include(CheckTypeSize)
@@ -132,21 +157,12 @@ CHECK_CXX_SOURCE_COMPILES("
   #include <string.h>
   int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
   " STRERROR_R_CHAR_P)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <sys/stat.h>
-  #include <stdio.h>
-  int main() { struct stat foo = {}; foo.st_mtim.tv_nsec = 0;
-  return 0; } 
-  " HAVE_STAT_ST_MTIM_TV_NSEC)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <sys/stat.h>
-  #include <stdio.h>
-  int main() { struct stat foo = {}; foo.st_mtimespec.tv_nsec = 0;
-  return 0; } 
-  " HAVE_STAT_ST_MTIMESPEC_TV_NSEC)
-CHECK_CXX_SOURCE_COMPILES("
-  int main() { float f = 12.3; int n = static_cast<int>(f); return 0; }
-  " HAVE_STATIC_CAST)
+
+include(CheckStructHasMember)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
@@ -158,23 +174,31 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
-find_package(execinfo)
+find_package(Backtrace)
 
-find_package(udev REQUIRED)
-set(HAVE_UDEV ${UDEV_FOUND})
+if(LINUX)
+  find_package(udev REQUIRED)
+  set(HAVE_UDEV ${UDEV_FOUND})
 
-option(WITH_AIO "AIO is here ON" ON)
-if(${WITH_AIO})
-find_package(aio REQUIRED)
-set(HAVE_LIBAIO ${AIO_FOUND})
-message(STATUS "${AIO_LIBS}")
-endif(${WITH_AIO})
+  find_package(aio REQUIRED)
+  set(HAVE_LIBAIO ${AIO_FOUND})
+  message(STATUS "${AIO_LIBS}")
+
+  find_package(blkid REQUIRED)
+  set(HAVE_BLKID ${BLKID_FOUND})
+else()
+  set(HAVE_UDEV OFF)
+  message(STATUS "Not using udev")
+  set(HAVE_LIBAIO OFF)
+  message(STATUS "Not using AIO")
+  set(HAVE_BLKID OFF)
+  message(STATUS "Not using BLKID")
+endif(LINUX)
 
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(${WITH_OPENLDAP})
 find_package(OpenLdap REQUIRED)
 set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
-message(STATUS "${OPENLDAP_LIBS}")
 endif(${WITH_OPENLDAP})
 
 option(WITH_FUSE "Fuse is here" ON)
@@ -196,11 +220,6 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
-find_package(blkid REQUIRED)
-
-# probably fuse etc need this -- how to check? XXX
-option(WITH_MDS "MDS is here" ON)
-
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
@@ -218,7 +237,7 @@ endif(${WITH_LEVELDB})
 
 option(WITH_EXPAT "EXPAT is here" ON)
 if(${WITH_EXPAT})
-find_package(expat REQUIRED)
+find_package(EXPAT REQUIRED)
 endif(${WITH_EXPAT})
 
 find_package(Cython REQUIRED)
@@ -229,17 +248,6 @@ message(STATUS "${ATOMIC_OPS_LIBRARIES}")
 if(NOT ${ATOMIC_OPS_FOUND})
   set(NO_ATOMIC_OPS 1)
 endif(NOT ${ATOMIC_OPS_FOUND})
-
-option(WITH_GPERFTOOLS "gperftools is here" ON)
-if(${WITH_GPERFTOOLS})
-	find_package(gperftools)
-	set(HAVE_GPERFTOOLS ${GPERFTOOLS_FOUND})
-	if(${HAVE_GPERFTOOLS})
-		find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h PATHS /usr/include/gperftools)
-	endif(${HAVE_GPERFTOOLS})
-endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
@@ -269,11 +277,15 @@ else(ALLOCATOR)
   endif(Tcmalloc_FOUND)
 endif(ALLOCATOR)
 
-find_package(keyutils REQUIRED)
+if(NOT FREEBSD)
+  # XXX keyutils is available, but not yet recognised
+  find_package(keyutils REQUIRED)
+endif(NOT FREEBSD)
 
-find_package(libuuid REQUIRED)
-
-find_package(libcurl REQUIRED)
+find_package(CURL REQUIRED)
+set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
+CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
 # nss or cryptopp?
 option(WITH_NSS "Use NSS crypto and SSL implementations" ON)
@@ -350,7 +362,9 @@ option(HAVE_LIBZFS "LibZFS is enabled" OFF)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
-add_definitions(-D__linux__)
+if(LINUX)
+  add_definitions(-D__linux__)
+endif(LINUX)
 
 if(ENABLE_SHARED)
   set(Boost_USE_STATIC_LIBS   OFF)
@@ -375,22 +389,14 @@ if(WITH_SELINUX)
   add_subdirectory(selinux)
 endif(WITH_SELINUX)
 
-# find out which platform we are building on
-if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  set(LINUX ON)
-  set(UNIX ON)
-  FIND_PACKAGE(Threads)
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-
-# find out which platform we are building on
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-set(OperatingSystem "Mac OS X")
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-
 # enables testing and creates Make check command
+add_custom_target(tests
+  COMMENT "Building tests")
 enable_testing()
 set(CMAKE_CTEST_COMMAND ctest)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+add_custom_target(check
+  COMMAND ${CMAKE_CTEST_COMMAND}
+  DEPENDS tests)
 
 add_subdirectory(src)
 

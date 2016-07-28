@@ -144,7 +144,7 @@ TEST_F(TestImageSync, SnapshotStress) {
 
     librbd::NoOpProgressContext no_op_progress_ctx;
     uint64_t size = 1 + rand() % m_image_size;
-    ASSERT_EQ(0, m_remote_image_ctx->operations->resize(size,
+    ASSERT_EQ(0, m_remote_image_ctx->operations->resize(size, true,
                                                         no_op_progress_ctx));
     ASSERT_EQ(0, m_remote_image_ctx->state->refresh());
 

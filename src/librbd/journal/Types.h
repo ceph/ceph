@@ -43,11 +43,11 @@ struct AioDiscardEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_DISCARD;
 
   uint64_t offset;
-  size_t length;
+  uint64_t length;
 
   AioDiscardEvent() : offset(0), length(0) {
   }
-  AioDiscardEvent(uint64_t _offset, size_t _length)
+  AioDiscardEvent(uint64_t _offset, uint64_t _length)
     : offset(_offset), length(_length) {
   }
 
@@ -69,7 +69,7 @@ struct AioWriteEvent {
 
   AioWriteEvent() : offset(0), length(0) {
   }
-  AioWriteEvent(uint64_t _offset, size_t _length, const bufferlist &_data)
+  AioWriteEvent(uint64_t _offset, uint64_t _length, const bufferlist &_data)
     : offset(_offset), length(_length), data(_data) {
   }
 
@@ -162,12 +162,15 @@ struct SnapRenameEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_RENAME;
 
   uint64_t snap_id;
+  std::string src_snap_name;
 
   SnapRenameEvent() : snap_id(CEPH_NOSNAP) {
   }
   SnapRenameEvent(uint64_t op_tid, uint64_t src_snap_id,
+                  const std::string &src_snap_name,
                   const std::string &dest_snap_name)
-    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id) {
+    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id),
+      src_snap_name(src_snap_name) {
   }
 
   void encode(bufferlist& bl) const;

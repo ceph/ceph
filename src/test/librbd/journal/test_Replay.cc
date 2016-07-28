@@ -452,7 +452,8 @@ TEST_F(TestJournalReplay, SnapRename) {
   get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
-  inject_into_journal(ictx, librbd::journal::SnapRenameEvent(1, snap_id, "snap2"));
+  inject_into_journal(ictx, librbd::journal::SnapRenameEvent(1, snap_id, "snap",
+                                                             "snap2"));
   inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
   close_image(ictx);
 
@@ -617,7 +618,7 @@ TEST_F(TestJournalReplay, Resize) {
 
   // verify lock ordering constraints
   librbd::NoOpProgressContext no_op_progress;
-  ASSERT_EQ(0, ictx->operations->resize(0, no_op_progress));
+  ASSERT_EQ(0, ictx->operations->resize(0, true, no_op_progress));
 }
 
 TEST_F(TestJournalReplay, Flatten) {

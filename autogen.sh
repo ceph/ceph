@@ -45,5 +45,5 @@ aclocal -I m4 --install
 autoconf
 autoheader
 automake -a --add-missing -Wall
-( cd src/gmock && autoreconf -fvi; )
+( cd src/googletest/googlemock && autoreconf -fvi; )
 exit

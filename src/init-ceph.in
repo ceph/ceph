@@ -17,17 +17,12 @@ if [ -e /lib/lsb/init-functions ]; then
     . /lib/lsb/init-functions
 fi
 
-# detect systemd, also check whether the systemd-run binary exists
-SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
-grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
-
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     # looks like an autotools src dir build
     BINDIR=.
     SBINDIR=.
     LIBEXECDIR=.
     ETCDIR=.
-    SYSTEMD_RUN=""
     ASSUME_DEV=1
 else
     if [ -e CMakeCache.txt ] && [ -e bin/init-ceph ]; then
@@ -37,7 +32,6 @@ else
 	SBINDIR=bin
 	LIBEXECDIR=$CEPH_ROOT/src
 	ETCDIR=.
-	SYSTEMD_RUN=""
 	ASSUME_DEV=1
     else
 	BINDIR=@bindir@
@@ -53,7 +47,6 @@ if [ -n "$CEPH_BIN" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BUILD_DIR" ]; then
   SBINDIR=$CEPH_ROOT/src
   ETCDIR=$CEPH_BIN
   LIBEXECDIR=$CEPH_ROOT/src
-  SYSTEMD_RUN=""
   ASSUME_DEV=1
 fi
 
@@ -359,12 +352,7 @@ for name in $what; do
 
 	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
 
-	    if [ -n "$SYSTEMD_RUN" ]; then
-                time=`date +%s.%N` 
-		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
-	    else
-		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
-	    fi
+	    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"

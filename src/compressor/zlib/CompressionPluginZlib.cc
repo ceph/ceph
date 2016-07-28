@@ -16,7 +16,7 @@
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
 #include "compressor/CompressionPlugin.h"
-#include "CompressionZlib.h"
+#include "ZlibCompressor.h"
 #include "common/debug.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -32,7 +32,7 @@ public:
                       ostream *ss)
   {
     if (compressor == 0) {
-      CompressionZlib *interface = new CompressionZlib();
+      ZlibCompressor *interface = new ZlibCompressor();
       compressor = CompressorRef(interface);
     }
     *cs = compressor;

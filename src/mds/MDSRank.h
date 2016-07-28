@@ -19,6 +19,8 @@
 #include "common/LogClient.h"
 #include "common/Timer.h"
 
+#include "messages/MCommand.h"
+
 #include "Beacon.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
@@ -276,7 +278,6 @@ class MDSRank {
         MDSMap *& mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
-        Objecter *objecter_,
         Context *respawn_hook_,
         Context *suicide_hook_);
     ~MDSRank();
@@ -353,6 +354,7 @@ class MDSRank {
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
+    epoch_t get_osd_epoch() const;
 
     ceph_tid_t issue_tid() { return ++last_tid; }
 
@@ -496,15 +498,14 @@ public:
 
   bool handle_command(
     const cmdmap_t &cmdmap,
-    bufferlist const &inbl,
+    MCommand *m,
     int *r,
     std::stringstream *ds,
-    std::stringstream *ss);
+    std::stringstream *ss,
+    bool *need_reply);
 
-  void dump_sessions(
-      const SessionFilter &filter, Formatter *f) const;
-  std::vector<entity_name_t> evict_sessions(
-      const SessionFilter &filter);
+  void dump_sessions(const SessionFilter &filter, Formatter *f) const;
+  void evict_sessions(const SessionFilter &filter, MCommand *m);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(Message *m);
@@ -518,7 +519,6 @@ public:
       MDSMap *& mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
-      Objecter *objecter_,
       Context *respawn_hook_,
       Context *suicide_hook_);
 };

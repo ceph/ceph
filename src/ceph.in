@@ -81,13 +81,13 @@ if MYDIR.endswith('src') and \
 
     python_libpath = os.path.join(MYDIR, 'build', get_pythonlib_dir())
     respawn_in_path(os.path.join(MYDIR, '.libs'), 'pybind', python_libpath)
-    if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
+    if 'PATH' in os.environ and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
 elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
      and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
     src_path = None
-    for l in open("./CMakeCache.txt").readlines():
+    for l in open("./CMakeCache.txt"):
         if l.startswith("ceph_SOURCE_DIR:STATIC="):
             src_path = l.split("=")[1].strip()
 
@@ -109,7 +109,7 @@ elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
 
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
-        if os.environ.has_key('PATH') and bin_path not in os.environ['PATH']:
+        if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
             os.environ['PATH'] += ':' + bin_path
 
 import argparse
@@ -122,7 +122,7 @@ import string
 import subprocess
 
 from ceph_argparse import \
-    concise_sig, descsort, parse_json_funcsigs, \
+    concise_sig, descsort_key, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
     send_command, json_command, run_in_thread
 
@@ -134,10 +134,18 @@ verbose = False
 cluster_handle = None
 
 # Always use Unicode (UTF-8) for stdout
-raw_stdout = sys.__stdout__
-raw_stderr = sys.__stderr__
-sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
-sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
+if sys.version_info[0] >= 3:
+    raw_stdout = sys.stdout.buffer
+    raw_stderr = sys.stderr.buffer
+else:
+    raw_stdout = sys.__stdout__
+    raw_stderr = sys.__stderr__
+    sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
+    sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
+
+def raw_write(buf):
+    sys.stdout.flush()
+    raw_stdout.write(buf)
 
 ############################################################################
 
@@ -148,7 +156,7 @@ def osdids():
         ret, outbuf, outs = send_command(cluster_handle, cmd=['osd', 'ls'])
     if ret:
         raise RuntimeError('Can\'t contact mon for osd list')
-    return [i for i in outbuf.split('\n') if i != '']
+    return [line.decode('utf-8') for line in outbuf.split(b'\n') if line]
 
 def monids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='mon dump',
@@ -159,7 +167,7 @@ def monids():
                                          cmd=['mon', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mon list')
-    d = json.loads(outbuf)
+    d = json.loads(outbuf.decode('utf-8'))
     return [m['name'] for m in d['mons']]
 
 def mdsids():
@@ -171,7 +179,7 @@ def mdsids():
                                          cmd=['mds', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mds list')
-    d = json.loads(outbuf)
+    d = json.loads(outbuf.decode('utf-8'))
     l = []
     infodict = d['info']
     for mdsdict in infodict.values():
@@ -275,14 +283,14 @@ def do_extended_help(parser, args):
             print("couldn't get command descriptions for {0}: {1}".\
                 format(target, outs), file=sys.stderr)
         else:
-            help_for_sigs(outbuf, partial)
+            help_for_sigs(outbuf.decode('utf-8'), partial)
 
     partial = ' '.join(args)
     if (cluster_handle.state == "connected"):
         help_for_target(target=('mon', ''), partial=partial)
     return 0
 
-DONTSPLIT = string.letters + '{[<>]}'
+DONTSPLIT = string.ascii_letters + '{[<>]}'
 
 def wrap(s, width, indent):
     """
@@ -342,7 +350,7 @@ def format_help(cmddict, partial=None):
     """
 
     fullusage = ''
-    for cmd in sorted(cmddict.itervalues(), cmp=descsort):
+    for cmd in sorted(cmddict.values(), key=descsort_key):
 
         if not cmd['help']:
             continue
@@ -371,7 +379,7 @@ def ceph_conf(parsed_args, field, name):
         args.extend(['--name', name])
 
     # add any args in GLOBAL_ARGS
-    for key, val in GLOBAL_ARGS.iteritems():
+    for key, val in GLOBAL_ARGS.items():
         # ignore name in favor of argument name, if any
         if name and key == 'client_name':
             continue
@@ -499,7 +507,7 @@ def complete(sigdict, args, target):
 
     match_count = 0
     comps = []
-    for cmdtag, cmd in sigdict.iteritems():
+    for cmdtag, cmd in sigdict.items():
         sig = cmd['sig']
         j = 0
         # iterate over all arguments, except last one
@@ -639,7 +647,7 @@ def main():
         return 0
     elif sockpath:
         try:
-            print(admin_socket(sockpath, childargs, format))
+            raw_write(admin_socket(sockpath, childargs, format))
         except Exception as e:
             print('admin_socket: {0}'.format(e))
             print('admin_socket: {0}'.format(e), file=sys.stderr)
@@ -782,10 +790,10 @@ def main():
             return 0
 
     # read input file, if any
-    inbuf = ''
+    inbuf = b''
     if parsed_args.input_file:
         try:
-            with open(parsed_args.input_file, 'r') as f:
+            with open(parsed_args.input_file, 'rb') as f:
                 inbuf = f.read()
         except Exception as e:
             print('Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e), file=sys.stderr)
@@ -794,7 +802,7 @@ def main():
     # prepare output file, if any
     if parsed_args.output_file:
         try:
-            outf = open(parsed_args.output_file, 'w')
+            outf = open(parsed_args.output_file, 'wb')
         except Exception as e:
             print('Can\'t open output file {0}: {1}'.format(parsed_args.output_file, e), file=sys.stderr)
             return 1
@@ -872,7 +880,7 @@ def main():
                 if ret < 0:
                     outs = 'problem getting command descriptions from {0}.{1}'.format(*target)
             else:
-                sigdict = parse_json_funcsigs(outbuf, 'cli')
+                sigdict = parse_json_funcsigs(outbuf.decode('utf-8'), 'cli')
 
                 if parsed_args.completion:
                     return complete(sigdict, childargs, target)
@@ -919,17 +927,17 @@ def main():
             if parsed_args.output_format and \
                parsed_args.output_format.startswith('json') and \
                not compat:
-                raw_stdout.write('\n')
+                print()
 
             # if we are prettifying things, normalize newlines.  sigh.
-            if suffix != '':
+            if suffix:
                 outbuf = outbuf.rstrip()
-            if outbuf != '':
+            if outbuf:
                 try:
+                    print(prefix, end='')
                     # Write directly to binary stdout
-                    raw_stdout.write(prefix)
-                    raw_stdout.write(outbuf)
-                    raw_stdout.write(suffix)
+                    raw_write(outbuf)
+                    print(suffix, end='')
                 except IOError as e:
                     if e.errno != errno.EPIPE:
                         raise e

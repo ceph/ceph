@@ -274,7 +274,7 @@ struct ResizeTask {
   void operator()() {
     RWLock::RLocker l(ictx->owner_lock);
     C_SaferCond ctx;
-    ictx->image_watcher->notify_resize(0, 0, *progress_context, &ctx);
+    ictx->image_watcher->notify_resize(0, 0, true, *progress_context, &ctx);
     result = ctx.wait();
   }
 };

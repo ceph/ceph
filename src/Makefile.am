@@ -16,7 +16,7 @@ am__is_gnu_make = { \
 }
 
 SUBDIRS += ocf java
-DIST_SUBDIRS += gmock ocf java
+DIST_SUBDIRS += googletest/googlemock ocf java
 
 LOCAL_ALL =
 LOCAL_CLEAN =

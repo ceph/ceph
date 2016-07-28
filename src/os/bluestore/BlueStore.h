@@ -199,19 +199,19 @@ public:
 
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     Cache *cache;
-    state_list_t writing;
+    map<uint64_t, state_list_t> writing_map;
 
     BufferSpace(Cache *c) : cache(c) {}
     ~BufferSpace() {
       assert(buffer_map.empty());
-      assert(writing.empty());
+      assert(writing_map.empty());
     }
 
     void _add_buffer(Buffer *b, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-	writing.push_back(*b);
+        writing_map[b->seq].push_back(*b);
       } else {
 	cache->_add_buffer(b, level, near);
       }
@@ -223,7 +223,12 @@ public:
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
-	writing.erase(writing.iterator_to(*p->second));
+        uint64_t seq = (*p->second.get()).seq;
+        auto it = writing_map.find(seq);
+        assert(it != writing_map.end());
+        it->second.erase(it->second.iterator_to(*p->second));
+        if (it->second.empty())
+          writing_map.erase(it);
       } else {
 	cache->_rm_buffer(p->second.get());
       }

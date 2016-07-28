@@ -200,11 +200,12 @@ struct ResizePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RESIZE;
   static const bool CHECK_FOR_REFRESH = true;
 
-  ResizePayload() : size(0) {}
-  ResizePayload(uint64_t size_, const AsyncRequestId &id)
-    : AsyncRequestPayloadBase(id), size(size_) {}
+  ResizePayload() : size(0), allow_shrink(true) {}
+  ResizePayload(uint64_t size_, bool allow_shrink_, const AsyncRequestId &id)
+    : AsyncRequestPayloadBase(id), size(size_), allow_shrink(allow_shrink_) {}
 
   uint64_t size;
+  bool allow_shrink;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);

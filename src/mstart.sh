@@ -20,6 +20,9 @@ root_path=`(cd $root_path; pwd)`
 
 if [ -e CMakeCache.txt ]; then
     root_path=$PWD
+elif [ -e $root_path/../build/CMakeCache.txt ]; then
+    cd $root_path/../build
+    root_path=$PWD
 fi
 RUN_ROOT_PATH=${root_path}/run
 CLUSTERS_LIST=$RUN_ROOT_PATH/.clusters.list

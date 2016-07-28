@@ -18,6 +18,7 @@ add_executable(unittest_rbd_mirror
   test_mock_ImageSyncThrottler.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc
+  image_replayer/test_mock_EventPreprocessor.cc
   image_sync/test_mock_ImageCopyRequest.cc
   image_sync/test_mock_ObjectCopyRequest.cc
   image_sync/test_mock_SnapshotCopyRequest.cc
@@ -60,7 +61,6 @@ set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rbd_mirror
   rbd_mirror
-  rados_test_stub
   rbd_mirror_internal
   rbd_internal
   rbd_api

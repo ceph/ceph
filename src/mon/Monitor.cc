@@ -777,7 +777,7 @@ int Monitor::preinit()
 int Monitor::init()
 {
   dout(2) << "init" << dendl;
-  lock.Lock();
+  Mutex::Locker l(lock);
 
   // start ticker
   timer.init();
@@ -797,7 +797,6 @@ int Monitor::init()
   get_classic_monitor_commands(&cmds, &cmdsize);
   MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
 
-  lock.Unlock();
   return 0;
 }
 
@@ -1827,8 +1826,6 @@ void Monitor::start_election()
 
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
-
-  cancel_probe_timeout();
 
   clog->info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
@@ -4941,8 +4938,8 @@ int Monitor::check_fsid()
 int Monitor::write_fsid()
 {
   MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  int r = write_fsid(t);
-  store->apply_transaction(t);
+  write_fsid(t);
+  int r = store->apply_transaction(t);
   return r;
 }
 

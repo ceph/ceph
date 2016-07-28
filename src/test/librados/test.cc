@@ -8,8 +8,9 @@
 #include "include/stringify.h"
 #include "common/Formatter.h"
 #include "json_spirit/json_spirit.h"
-#include "errno.h"
+#include "common/errno.h"
 
+#include <errno.h>
 #include <sstream>
 #include <stdlib.h>
 #include <string>
@@ -260,7 +261,12 @@ std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster)
 
 std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
 {
-  std::string err = connect_cluster_pp(cluster);
+    return create_one_pool_pp(pool_name, cluster, {});
+}
+std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster,
+                               const std::map<std::string, std::string> &config)
+{
+  std::string err = connect_cluster_pp(cluster, config);
   if (err.length())
     return err;
   int ret = cluster.pool_create(pool_name.c_str());
@@ -375,7 +381,13 @@ std::string connect_cluster(rados_t *cluster)
   return "";
 }
 
-std::string connect_cluster_pp(Rados &cluster)
+std::string connect_cluster_pp(librados::Rados &cluster)
+{
+  return connect_cluster_pp(cluster, {});
+}
+
+std::string connect_cluster_pp(librados::Rados &cluster,
+                               const std::map<std::string, std::string> &config)
 {
   char *id = getenv("CEPH_CLIENT_ID");
   if (id) std::cerr << "Client id is: " << id << std::endl;
@@ -395,6 +407,17 @@ std::string connect_cluster_pp(Rados &cluster)
     return oss.str();
   }
   cluster.conf_parse_env(NULL);
+
+  for (auto &setting : config) {
+    ret = cluster.conf_set(setting.first.c_str(), setting.second.c_str());
+    if (ret) {
+      std::ostringstream oss;
+      oss << "failed to set config value " << setting.first << " to '"
+          << setting.second << "': " << cpp_strerror(ret);
+      return oss.str();
+    }
+  }
+
   ret = cluster.connect();
   if (ret) {
     cluster.shutdown();

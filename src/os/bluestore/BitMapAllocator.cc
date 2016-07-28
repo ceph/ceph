@@ -23,7 +23,31 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   : m_num_uncommitted(0),
     m_num_committing(0)
 {
-  int64_t zone_size_blks = 1024; // Change it later
+  assert(ISP2(block_size));
+  if (!ISP2(block_size)) {
+    derr << __func__ << " block_size " << block_size
+         << " not power of 2 aligned!"
+         << dendl;
+    return;
+  }
+
+  int64_t zone_size_blks = g_conf->bluestore_bitmapallocator_blocks_per_zone;
+  assert(ISP2(zone_size_blks));
+  if (!ISP2(zone_size_blks)) {
+    derr << __func__ << " zone_size " << zone_size_blks
+         << " not power of 2 aligned!"
+         << dendl;
+    return;
+  }
+
+  int64_t span_size = g_conf->bluestore_bitmapallocator_span_size;
+  assert(ISP2(span_size));
+  if (!ISP2(span_size)) {
+    derr << __func__ << " span_size " << span_size
+         << " not power of 2 aligned!"
+         << dendl;
+    return;
+  }
 
   m_block_size = block_size;
   m_bit_alloc = new BitAllocator(device_size / block_size,
@@ -62,7 +86,7 @@ int BitMapAllocator::reserve(uint64_t need)
   assert(!(need % m_block_size));
   dout(10) << __func__ << " instance " << (uint64_t) this
            << " num_used " << m_bit_alloc->get_used_blocks()
-           << " total " << m_bit_alloc->size()
+           << " total " << m_bit_alloc->total_blocks()
            << dendl;
 
   if (!m_bit_alloc->reserve_blocks(nblks)) {
@@ -79,7 +103,7 @@ void BitMapAllocator::unreserve(uint64_t unused)
   dout(10) << __func__ << " instance " << (uint64_t) this
            << " unused " << nblks
            << " num used " << m_bit_alloc->get_used_blocks()
-           << " total " << m_bit_alloc->size()
+           << " total " << m_bit_alloc->total_blocks()
            << dendl;
 
   m_bit_alloc->unreserve_blocks(nblks);
@@ -89,6 +113,8 @@ int BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
+  if (want_size == 0)
+    return 0;
 
   assert(!(alloc_unit % m_block_size));
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
@@ -122,6 +148,88 @@ int BitMapAllocator::allocate(
   return 0;
 }
 
+int BitMapAllocator::alloc_extents(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+{
+  assert(!(alloc_unit % m_block_size));
+  assert(alloc_unit);
+
+  assert(!max_alloc_size || max_alloc_size >= alloc_unit);
+
+  dout(10) << __func__ <<" instance "<< (uint64_t) this
+     << " want_size " << want_size
+     << " alloc_unit " << alloc_unit
+     << " hint " << hint
+     << dendl;
+
+  if (alloc_unit > (uint64_t) m_block_size) {
+    return alloc_extents_cont(want_size, alloc_unit, max_alloc_size, hint, extents, count);     
+  } else {
+    return alloc_extents_dis(want_size, alloc_unit, max_alloc_size, hint, extents, count); 
+  }
+}
+
+/*
+ * Allocator extents with min alloc unit > bitmap block size.
+ */
+int BitMapAllocator::alloc_extents_cont(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size, int64_t hint,
+  std::vector<AllocExtent> *extents, int *count)
+{
+  *count = 0;
+  assert(alloc_unit);
+  assert(!(alloc_unit % m_block_size));
+  assert(!(max_alloc_size % m_block_size));
+
+  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
+  int64_t start_blk = 0;
+  int64_t need_blks = nblks;
+  int64_t max_blks = max_alloc_size / m_block_size;
+
+  ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
+
+  while (need_blks > 0) {
+    int64_t count = 0;
+    count = m_bit_alloc->alloc_blocks_res(need_blks > max_blks? max_blks: need_blks,
+                                          &start_blk);
+    if (count == 0) {
+      break;
+    }
+    dout(30) << __func__ <<" instance "<< (uint64_t) this
+      << " offset " << start_blk << " length " << count << dendl;
+    need_blks -= count;
+    block_list.add_extents(start_blk, count);
+  }
+
+  if (need_blks > 0) {
+    m_bit_alloc->free_blocks_dis(nblks - need_blks, &block_list);
+    return -ENOSPC;
+  }
+  *count = block_list.get_extent_count();
+
+  return 0;
+}
+
+int BitMapAllocator::alloc_extents_dis(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+{
+  ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
+  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
+  int64_t num = 0;
+  *count = 0;
+
+  num = m_bit_alloc->alloc_blocks_dis_res(nblks, &block_list);
+  if (num < nblks) {
+    m_bit_alloc->free_blocks_dis(num, &block_list);
+    return -ENOSPC;
+  }
+  *count = block_list.get_extent_count();
+
+  return 0;
+}
+
 int BitMapAllocator::release(
   uint64_t offset, uint64_t length)
 {
@@ -136,8 +244,9 @@ int BitMapAllocator::release(
 
 uint64_t BitMapAllocator::get_free()
 {
+  assert(m_bit_alloc->total_blocks() >= m_bit_alloc->get_used_blocks());
   return ((
-    m_bit_alloc->size() - m_bit_alloc->get_used_blocks()) *
+    m_bit_alloc->total_blocks() - m_bit_alloc->get_used_blocks()) *
     m_block_size);
 }
 
