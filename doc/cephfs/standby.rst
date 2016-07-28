@@ -109,6 +109,9 @@ used as a standby for the rank that it is following.  If another rank
 fails, this standby replay daemon will not be used as a replacement,
 even if no other standbys are available.
 
+*Historical note:* In Ceph prior to v10.2.1, this setting (when ``false``) is
+always true when ``mds_standby_for_*`` is also set.
+
 mds_standby_for_name
 ~~~~~~~~~~~~~~~~~~~~
 
