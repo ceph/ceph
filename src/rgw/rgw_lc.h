@@ -179,6 +179,7 @@ class RGWLC {
   RGWRados *store;
   int max_objs;
   string *obj_names;
+  atomic_t down_flag;
 
   class LCWorker : public Thread {
     CephContext *cct;
