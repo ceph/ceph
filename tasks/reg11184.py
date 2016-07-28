@@ -230,13 +230,6 @@ def task(ctx, config):
 
     (remote,) = ctx.\
         cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
-    msg = "dirty_divergent_priors: true, divergent_priors: %d" \
-          % (DIVERGENT_WRITE + DIVERGENT_REMOVE)
-    cmd = 'grep "{msg}" /var/log/ceph/ceph-osd.{osd}.log'\
-          .format(msg=msg, osd=divergent)
-    proc = remote.run(args=cmd, wait=True, check_status=False)
-    assert proc.exitstatus == 0
-
     cmd = 'rm {file}'.format(file=expfile)
     remote.run(args=cmd, wait=True)
     log.info("success")
