@@ -365,6 +365,9 @@ void Inode::dump(Formatter *f) const
     ::dump(dir_layout, f);
     f->close_section();
 
+    f->dump_bool("complete", flags & I_COMPLETE);
+    f->dump_bool("ordered", flags & I_DIR_ORDERED);
+
     /* FIXME when wip-mds-encoding is merged ***
     f->open_object_section("dir_stat");
     dirstat.dump(f);
