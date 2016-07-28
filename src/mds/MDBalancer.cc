@@ -162,7 +162,9 @@ mds_load_t MDBalancer::get_load(utime_t now)
   ifstream cpu("/proc/loadavg");
   if (cpu.is_open())
     cpu >> load.cpu_load_avg;
-
+  else
+    derr << "input file '/proc/loadavg' not found" << dendl;
+  
   dout(15) << "get_load " << load << dendl;
   return load;
 }
