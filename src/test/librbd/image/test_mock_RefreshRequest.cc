@@ -447,7 +447,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
     }
 
     librbd::NoOpProgressContext no_op;
-    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name.c_str(), no_op));
+    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
     ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
   };
 
