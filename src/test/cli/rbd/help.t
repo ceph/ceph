@@ -585,7 +585,8 @@
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] [--no-progress] 
-                    [--pool <pool>] [--image <image>] 
+                    [--import-format <import-format>] [--pool <pool>] 
+                    [--image <image>] 
                     <path-name> <dest-image-spec> 
   
   Import image from file.
@@ -616,6 +617,7 @@
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
     --no-progress             disable progress output
+    --import-format arg       format of the file to be imported
     -p [ --pool ] arg         pool name (deprecated)
     --image arg               image name (deprecated)
   

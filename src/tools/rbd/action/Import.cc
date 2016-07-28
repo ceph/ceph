@@ -21,7 +21,7 @@ namespace rbd {
 namespace action {
 
 int do_import_diff_fd(librbd::Image &image, int fd,
-		   bool no_progress)
+		   bool no_progress, int format)
 {
   int r;
   struct stat stat_buf;
@@ -29,7 +29,8 @@ int do_import_diff_fd(librbd::Image &image, int fd,
   uint64_t size = 0;
   uint64_t off = 0;
   string from, to;
-  char buf[utils::RBD_DIFF_BANNER.size() + 1];
+  string banner = (format == 1 ? utils::RBD_DIFF_BANNER:utils::RBD_DIFF_BANNER_V2);
+  char buf[banner.size() + 1];
 
   bool from_stdin = (fd == 0);
   if (!from_stdin) {
@@ -39,13 +40,13 @@ int do_import_diff_fd(librbd::Image &image, int fd,
     size = (uint64_t)stat_buf.st_size;
   }
 
-  r = safe_read_exact(fd, buf, utils::RBD_DIFF_BANNER.size());
+  r = safe_read_exact(fd, buf, banner.size());
   if (r < 0)
     goto done;
-  buf[utils::RBD_DIFF_BANNER.size()] = '\0';
-  if (strcmp(buf, utils::RBD_DIFF_BANNER.c_str())) {
+  buf[banner.size()] = '\0';
+  if (strcmp(buf, banner.c_str())) {
     std::cerr << "invalid banner '" << buf << "', expected '"
-	     << utils::RBD_DIFF_BANNER << "'" << std::endl;
+	     << banner << "'" << std::endl;
     r = -EINVAL;
     goto done;
   }
@@ -178,7 +179,7 @@ int do_import_diff(librbd::Image &image, const char *path,
       return r;
     }
   }
-  r = do_import_diff_fd(image, fd, no_progress);
+  r = do_import_diff_fd(image, fd, no_progress, 1);
 
   if (fd != 0)
     close(fd);
@@ -290,8 +291,15 @@ private:
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
                      const char *imgname, const char *path,
-		     librbd::ImageOptions& opts, bool no_progress)
+		     librbd::ImageOptions& opts, bool no_progress,
+		     int import_format)
 {
+  // check current supported formats.
+  if (import_format != 1 && import_format != 2) {
+    std::cerr << "rbd: wrong file format to import" << std::endl;
+    return -EINVAL;
+  }
+
   int fd, r;
   struct stat stat_buf;
   utils::ProgressContext pc("Importing image", no_progress);
@@ -312,6 +320,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   size_t blklen = 0;            // amount accumulated from reads to fill blk
   librbd::Image image;
   uint64_t size = 0;
+  uint64_t snap_num;
+  char image_buf[utils::RBD_IMAGE_BANNER_V2.size() + 1];
 
   boost::scoped_ptr<SimpleThrottle> throttle;
   bool from_stdin = !strcmp(path, "-");
@@ -356,6 +366,28 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
 #endif
   }
+  
+  if (import_format == 2) {
+    if (from_stdin || size < utils::RBD_IMAGE_BANNER_V2.size()) {
+      r = -EINVAL;
+      goto done;
+    }
+    r = safe_read_exact(fd, image_buf, utils::RBD_IMAGE_BANNER_V2.size());
+    if (r < 0)
+      goto done;
+
+    image_buf[utils::RBD_IMAGE_BANNER_V2.size()] = '\0';
+    if (strcmp(image_buf, utils::RBD_IMAGE_BANNER_V2.c_str())) {
+      // Old format
+      r = -EINVAL;
+      goto done;
+    }
+
+    r = safe_read_exact(fd, &size, 8);
+    if (r < 0) {
+      goto done;
+    }
+  }
 
   r = rbd.create4(io_ctx, imgname, size, opts);
   if (r < 0) {
@@ -369,58 +401,89 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     goto err;
   }
 
-  // loop body handles 0 return, as we may have a block to flush
-  while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
-    if (throttle->pending_error()) {
-      break;
-    }
+  if (import_format == 2) {
+    char snap_buf[utils::RBD_IMAGE_SNAPS_BANNER_V2.size() + 1];
 
-    blklen += readlen;
-    // if read was short, try again to fill the block before writing
-    if (readlen && ((size_t)readlen < reqlen)) {
-      reqlen -= readlen;
-      continue;
-    }
-    if (!from_stdin)
-      pc.update_progress(image_pos, size);
-
-    bufferlist bl(blklen);
-    bl.append(p, blklen);
-    // resize output image by binary expansion as we go for stdin
-    if (from_stdin && (image_pos + (size_t)blklen) > size) {
-      size *= 2;
-      r = image.resize(size);
+    r = safe_read_exact(fd, snap_buf, utils::RBD_IMAGE_SNAPS_BANNER_V2.size());
+    if (r < 0)
+      goto done;
+    snap_buf[utils::RBD_IMAGE_SNAPS_BANNER_V2.size()] = '\0';
+    if (strcmp(snap_buf, utils::RBD_IMAGE_SNAPS_BANNER_V2.c_str())) {
+      cerr << "Incorrect RBD_IMAGE_SNAPS_BANNER." << std::endl;
+      return -EINVAL;
+    } else {
+      r = safe_read_exact(fd, &snap_num, 8);
       if (r < 0) {
-        std::cerr << "rbd: can't resize image during import" << std::endl;
         goto close;
       }
     }
 
-    // write as much as we got; perhaps less than imgblklen
-    // but skip writing zeros to create sparse images
-    if (!bl.is_zero()) {
-      C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
-      ctx->send();
+    for (size_t i = 0; i < snap_num; i++) {
+      r = do_import_diff_fd(image, fd, true, 2);
+      if (r < 0) {
+	pc.fail();
+	std::cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
+	return r;
+      }
+      pc.update_progress(i + 1, snap_num);
+    }
+  } else {
+    reqlen = min(reqlen, size);
+    // loop body handles 0 return, as we may have a block to flush
+    while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
+      if (throttle->pending_error()) {
+	break;
+      }
+
+      blklen += readlen;
+      // if read was short, try again to fill the block before writing
+      if (readlen && ((size_t)readlen < reqlen)) {
+	reqlen -= readlen;
+	continue;
+      }
+      if (!from_stdin)
+	pc.update_progress(image_pos, size);
+
+      bufferlist bl(blklen);
+      bl.append(p, blklen);
+      // resize output image by binary expansion as we go for stdin
+      if (from_stdin && (image_pos + (size_t)blklen) > size) {
+	size *= 2;
+	r = image.resize(size);
+	if (r < 0) {
+	  std::cerr << "rbd: can't resize image during import" << std::endl;
+	  goto close;
+	}
+      }
+
+      // write as much as we got; perhaps less than imgblklen
+      // but skip writing zeros to create sparse images
+      if (!bl.is_zero()) {
+	C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
+	ctx->send();
+      }
+
+      // done with whole block, whether written or not
+      image_pos += blklen;
+      if (!from_stdin && image_pos >= size)
+	break;
+      // if read had returned 0, we're at EOF and should quit
+      if (readlen == 0)
+	break;
+      blklen = 0;
+      reqlen = imgblklen;
+    }
+    r = throttle->wait_for_ret();
+    if (r < 0) {
+      goto close;
     }
 
-    // done with whole block, whether written or not
-    image_pos += blklen;
-    // if read had returned 0, we're at EOF and should quit
-    if (readlen == 0)
-      break;
-    blklen = 0;
-    reqlen = imgblklen;
-  }
-  r = throttle->wait_for_ret();
-  if (r < 0) {
-    goto close;
-  }
-
-  if (from_stdin) {
-    r = image.resize(image_pos);
-    if (r < 0) {
-      std::cerr << "rbd: final image resize failed" << std::endl;
-      goto close;
+    if (from_stdin) {
+      r = image.resize(image_pos);
+      if (r < 0) {
+	std::cerr << "rbd: final image resize failed" << std::endl;
+	goto close;
+      }
     }
   }
 
@@ -434,7 +497,8 @@ done:
     pc.fail();
   else
     pc.finish();
-  close(fd);
+  if (!from_stdin)
+    close(fd);
 done2:
   delete[] p;
   return r;
@@ -447,6 +511,8 @@ void get_arguments(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, true);
   at::add_no_progress_option(options);
+  options->add_options()
+    ("import-format", po::value<int>(), "format of the file to be imported");
 
   // TODO legacy rbd allowed import to accept both 'image'/'dest' and
   //      'pool'/'dest-pool'
@@ -509,9 +575,13 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  int format = 1;
+  if (vm.count("import-format"))
+    format = vm["import-format"].as<int>();
+
   librbd::RBD rbd;
   r = do_import(rbd, io_ctx, image_name.c_str(), path.c_str(),
-                opts, vm[at::NO_PROGRESS].as<bool>());
+                opts, vm[at::NO_PROGRESS].as<bool>(), format);
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;
