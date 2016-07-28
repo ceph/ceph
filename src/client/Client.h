@@ -800,17 +800,8 @@ private:
 		  InodeRef *inp);
   int _setattr(Inode *in, struct stat *attr, int mask, const UserPerm& perms,
 	       InodeRef *inp = 0);
-  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1,
-	       InodeRef *inp = 0) {
-    UserPerm perms(uid, gid);
-    return _setattr(in, attr, mask, perms, inp);
-  }
   int _setattr(InodeRef &in, struct stat *attr, int mask,
 	       const UserPerm& perms);
-  int _setattr(InodeRef &in, struct stat *attr, int mask) {
-    UserPerm perms(get_uid(), get_gid());
-    return _setattr(in, attr, mask, perms);
-  }
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
