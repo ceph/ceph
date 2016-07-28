@@ -3176,6 +3176,12 @@ void RGWRados::finalize()
   delete gc;
   gc = NULL;
 
+  if (use_lc_thread) {
+    lc->stop_processor();
+  }
+  delete lc;
+  lc = NULL;
+
   delete obj_expirer;
   obj_expirer = NULL;
 
