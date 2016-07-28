@@ -338,6 +338,7 @@ set_target_properties(test_rgw_ldap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rgw_ldap
   librados
+  common
   ${OPENLDAP_LIBRARIES}
   ${Boost_LIBRARIES}
   ${UNITTEST_LIBS}
@@ -558,14 +559,14 @@ add_executable(unittest_encoding
   encoding.cc
   )
 add_ceph_unittest(unittest_encoding ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_encoding)
-target_link_libraries(unittest_encoding librados pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_encoding common librados pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_addrs
 add_executable(unittest_addrs
   test_addrs.cc
   )
 add_ceph_unittest(unittest_addrs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_addrs)
-target_link_libraries(unittest_addrs librados pthread rt m ${BLKID_LIBRARIES}) 
+target_link_libraries(unittest_addrs common librados pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_workqueue
 add_executable(unittest_workqueue
@@ -740,7 +741,7 @@ add_executable(unittest_heartbeatmap
   heartbeat_map.cc
   )
 add_ceph_unittest(unittest_heartbeatmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_heartbeatmap)
-target_link_libraries(unittest_heartbeatmap global)
+target_link_libraries(unittest_heartbeatmap common global)
 
 if(${WITH_RADOSGW})
   # unittest_formatter
