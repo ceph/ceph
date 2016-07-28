@@ -75,14 +75,14 @@ void MemDB::_save()
          << cpp_strerror(err) << std::endl;
     return;
   }
+  bufferlist bl;
   btree::btree_map<string, bufferptr>::iterator iter = m_btree.begin();
   while (iter != m_btree.end()) {
-    bufferlist bl;
     dout(10) << __func__ << " Key:"<< iter->first << dendl;
     _encode(iter, bl);
-    bl.write_fd(fd);
     iter++;
   }
+  bl.write_fd(fd);
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
@@ -123,6 +123,7 @@ void MemDB::_load()
 
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_btree[key] = datap;
+    m_total_bytes += datap.length();
   }
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
