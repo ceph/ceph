@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_frontend.h"
+#include "rgw_client_io_decoimpl.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -18,7 +19,8 @@ static int civetweb_callback(struct mg_connection* conn) {
     OpsLogSocket* olog = pe->olog;
 
     RGWRequest req(store->get_new_req_id());
-    RGWMongoose client_io(conn, pe->port);
+    RGWMongoose real_client_io(conn, pe->port);
+    RGWStreamIOLegacyWrapper client_io(&real_client_io);
 
     int ret = process_request(pe->store, rest, &req, &client_io, olog);
     if (ret < 0) {

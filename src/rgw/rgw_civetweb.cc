@@ -28,7 +28,8 @@ int RGWMongoose::write_data(const char *buf, int len)
 }
 
 RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
-  : conn(_conn), port(_port), status_num(0), header_done(false),
+  : RGWStreamIOFacade(this),
+    conn(_conn), port(_port), status_num(0), header_done(false),
     sent_header(false), has_content_length(false),
     explicit_keepalive(false), explicit_conn_close(false)
 {
