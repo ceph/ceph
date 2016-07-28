@@ -523,7 +523,6 @@ class Filesystem(MDSCluster):
         Retrieve an object from the metadata pool and store it in a file.
         """
         temp_bin_path = '/tmp/' + object_id + '.bin'
-        object_type = "InoTable"
 
         self.client_remote.run(args=[
             'sudo', os.path.join(self._prefix, 'rados'), '-p', self.metadata_pool_name, 'get', object_id, temp_bin_path
