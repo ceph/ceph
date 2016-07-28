@@ -374,22 +374,21 @@ protected:
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
 
-  int make_request(MetaRequest *req, int uid, int gid,
-		   //MClientRequest *req, int uid, int gid,
+  int make_request(MetaRequest *req, const UserPerm& perms,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
-
-  int make_request(MetaRequest *req, const UserPerm& perm,
+  int make_request(MetaRequest *req, int uid, int gid,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0) {
-    return make_request(req, perm.uid(), perm.gid(), ptarget, pcreated,
-			use_mds, pdirbl);
+    UserPerm perms(uid, gid);
+    return make_request(req, perms, ptarget, pcreated, use_mds, pdirbl);
   }
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
   int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
-			 InodeRef *ptarget, bool *pcreated, int uid, int gid);
+			 InodeRef *ptarget, bool *pcreated,
+			 const UserPerm& perms);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
 			   mds_rank_t mds, int drop,

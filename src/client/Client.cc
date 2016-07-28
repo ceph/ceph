@@ -1509,14 +1509,13 @@ void Client::dump_mds_requests(Formatter *f)
 int Client::verify_reply_trace(int r,
 			       MetaRequest *request, MClientReply *reply,
 			       InodeRef *ptarget, bool *pcreated,
-			       int uid, int gid)
+			       const UserPerm& perms)
 {
   // check whether this request actually did the create, and set created flag
   bufferlist extra_bl;
   inodeno_t created_ino;
   bool got_created_ino = false;
   ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
-  UserPerm perms(uid, gid);
 
   extra_bl.claim(reply->get_extra_bl());
   if (extra_bl.length() >= 8) {
@@ -1594,15 +1593,14 @@ int Client::verify_reply_trace(int r,
  * a request).
  *
  * @param request the MetaRequest to execute
- * @param uid uid to execute as
- * @param gid gid to execute as
+ * @param perms The user uid/gid to execute as (eventually, full group lists?)
  * @param ptarget [optional] address to store a pointer to the target inode we want to create or operate on
  * @param pcreated [optional; required if ptarget] where to store a bool of whether our create atomically created a file
  * @param use_mds [optional] prefer a specific mds (-1 for default)
  * @param pdirbl [optional; disallowed if ptarget] where to pass extra reply payload to the caller
  */
-int Client::make_request(MetaRequest *request, 
-			 int uid, int gid, 
+int Client::make_request(MetaRequest *request,
+			 const UserPerm& perms,
 			 InodeRef *ptarget, bool *pcreated,
 			 int use_mds,
 			 bufferlist *pdirbl)
@@ -1621,13 +1619,8 @@ int Client::make_request(MetaRequest *request,
   if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)
     oldest_tid = tid;
 
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-
-  request->set_caller_uid(uid);
-  request->set_caller_gid(gid);
+  request->set_caller_uid(perms.uid());
+  request->set_caller_gid(perms.gid());
 
   if (cct->_conf->client_inject_fixed_oldest_tid) {
     ldout(cct, 20) << __func__ << " injecting fixed oldest_client_tid(1)" << dendl;
@@ -1731,7 +1724,7 @@ int Client::make_request(MetaRequest *request,
   request->dispatch_cond = 0;
   
   if (r >= 0 && ptarget)
-    r = verify_reply_trace(r, request, reply, ptarget, pcreated, uid, gid);
+    r = verify_reply_trace(r, request, reply, ptarget, pcreated, perms);
 
   if (pdirbl)
     pdirbl->claim(reply->get_extra_bl());
