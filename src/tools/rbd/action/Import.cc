@@ -201,7 +201,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   r = image.close();
 
- done:
+done:
   if (!from_stdin) {
     if (r < 0)
       pc.fail();
@@ -209,7 +209,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       pc.finish();
     close(fd);
   }
- done2:
+done2:
   delete[] p;
   return r;
 }
