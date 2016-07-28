@@ -6900,9 +6900,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     }
 
     osdmap = newmap;
-
-    had_map_since = ceph_clock_now(cct);
-
     epoch_t up_epoch;
     epoch_t boot_epoch;
     service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
@@ -6918,6 +6915,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       service.set_epochs(&boot_epoch, &up_epoch, NULL);
     }
   }
+
+  had_map_since = ceph_clock_now(cct);
 
   epoch_t _bind_epoch = service.get_bind_epoch();
   if (osdmap->is_up(whoami) &&
