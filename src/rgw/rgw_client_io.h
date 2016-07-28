@@ -34,7 +34,7 @@ public:
 }; /* RGWClient IO */
 
 
-class RGWStreamIOBase : public RGWClientIO {
+class RGWStreamIOEngine : public RGWClientIO {
   virtual int read_data(char *buf, int max) = 0;
   virtual int write_data(const char *buf, int len) = 0;
 public:
@@ -53,7 +53,7 @@ public:
 };
 
 /* HTTP IO: compatibility layer */
-class RGWStreamIO : public RGWStreamIOBase {
+class RGWStreamIO : public RGWStreamIOEngine {
   bool _account;
   size_t bytes_sent;
   size_t bytes_received;
