@@ -23,7 +23,7 @@ void RGWClientIO::init(CephContext *cct) {
 }
 
 
-int RGWStreamIOBase::print(const char *format, ...)
+int RGWStreamIOEngine::print(const char *format, ...)
 {
 #define LARGE_ENOUGH 128
   int size = LARGE_ENOUGH;
@@ -49,7 +49,7 @@ int RGWStreamIOBase::print(const char *format, ...)
   /* not reachable */
 }
 
-int RGWStreamIOBase::write(const char *buf, int len)
+int RGWStreamIOEngine::write(const char *buf, int len)
 {
   if (len == 0) {
     return 0;
@@ -66,7 +66,7 @@ int RGWStreamIOBase::write(const char *buf, int len)
   }
 }
 
-int RGWStreamIOBase::read(char *buf, int max, int *actual)
+int RGWStreamIOEngine::read(char *buf, int max, int *actual)
 {
   int ret = read_data(buf, max);
   if (ret < 0) {
@@ -80,7 +80,7 @@ int RGWStreamIOBase::read(char *buf, int max, int *actual)
 
 int RGWStreamIO::write(const char* const buf, const int len)
 {
-  const auto ret = RGWStreamIOBase::write(buf, len);
+  const auto ret = RGWStreamIOEngine::write(buf, len);
 
   if (ret >= 0 && account()) {
     bytes_sent += ret;
@@ -91,7 +91,7 @@ int RGWStreamIO::write(const char* const buf, const int len)
 
 int RGWStreamIO::read(char *buf, int max, int *actual)
 {
-  const auto ret = RGWStreamIOBase::read(buf, max, actual);
+  const auto ret = RGWStreamIOEngine::read(buf, max, actual);
   if (ret >= 0) {
     bytes_received += *actual;
   }
