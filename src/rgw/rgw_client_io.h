@@ -43,14 +43,30 @@ public:
 
 
 class RGWStreamIOEngine : public RGWClientIO {
+  friend class RGWStreamIOFacade;
+  friend class RGWStreamIOLegacyWrapper;
+
+protected:
   virtual int read_data(char *buf, int max) = 0;
   virtual int write_data(const char *buf, int len) = 0;
+
 public:
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual int complete_header() = 0;
   virtual int send_content_length(uint64_t len) = 0;
   virtual void flush() = 0;
+};
+
+
+class RGWStreamIOFacade {
+protected:
+  RGWStreamIOEngine& engine;
+
+public:
+  RGWStreamIOFacade(RGWStreamIOEngine* const engine)
+    : engine(*engine) {
+  }
 
   /* High-level utilities to move out to a client's facade. Those functions
    * are not intended for overriding by a front-end glue code. That's the
@@ -63,6 +79,7 @@ public:
 
 /* HTTP IO: compatibility layer */
 class RGWStreamIO : public RGWStreamIOEngine,
+                    public RGWStreamIOFacade,
                     public RGWClientIOAccounter {
   bool _account;
   size_t bytes_sent;
@@ -77,7 +94,8 @@ class RGWStreamIO : public RGWStreamIOEngine,
 public:
   virtual ~RGWStreamIO() {}
   RGWStreamIO()
-    : _account(false),
+    : RGWStreamIOFacade(this),
+      _account(false),
       bytes_sent(0),
       bytes_received(0),
       sha256_hash(nullptr) {
