@@ -7263,7 +7263,6 @@ void OSD::consume_map()
     _remove_pg(&**i);
     (*i)->unlock();
   }
-  to_remove.clear();
 
   service.expand_pg_num(service.get_osdmap(), osdmap);
 
