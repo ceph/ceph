@@ -122,6 +122,65 @@ public:
 }; /* RGWStreamIO */
 
 
+/* A class for preserving interface compatibility with RGWStreamIO clients
+ * while allowing front-end migration to the new API. We don't multi-inherit
+ * from RGWDecoratedStreamIO<> to avoid using virtual inheritance in engine.
+ * Should be removed after converting all clients. */
+class RGWStreamIOLegacyWrapper : public RGWStreamIO {
+  RGWStreamIOEngine * const engine;
+
+  RGWStreamIOEngine& get_decoratee() {
+    return *engine;
+  }
+
+protected:
+  void init_env(CephContext *cct) override {
+    return get_decoratee().init_env(cct);
+  }
+
+  int read_data(char* const buf, const int max) override {
+    return get_decoratee().read_data(buf, max);
+  }
+
+  int write_data(const char* const buf, const int len) override {
+    return get_decoratee().write_data(buf, len);
+  }
+
+public:
+  RGWStreamIOLegacyWrapper(RGWStreamIOEngine * const engine)
+    : engine(engine) {
+  }
+
+  int send_status(const int status, const char* const status_name) override {
+    return get_decoratee().send_status(status, status_name);
+  }
+
+  int send_100_continue() override {
+    return get_decoratee().send_100_continue();
+  }
+
+  int send_content_length(const uint64_t len) override {
+    return get_decoratee().send_content_length(len);
+  }
+
+  int complete_header() override {
+    return get_decoratee().complete_header();
+  }
+
+  void flush() override {
+    return get_decoratee().flush();
+  }
+
+  RGWEnv& get_env() override {
+    return get_decoratee().get_env();
+  }
+
+  int complete_request() override {
+    return get_decoratee().complete_request();
+  }
+};
+
+
 class RGWClientIOStreamBuf : public std::streambuf {
 protected:
   RGWStreamIO &sio;
