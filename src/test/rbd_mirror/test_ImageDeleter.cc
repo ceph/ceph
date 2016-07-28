@@ -102,7 +102,7 @@ public:
       promote_image();
     }
     NoOpProgressContext ctx;
-    int r = remove(m_local_io_ctx, m_image_name.c_str(), ctx, force);
+    int r = remove(m_local_io_ctx, m_image_name, "", ctx, force);
     EXPECT_EQ(1, r == 0 || r == -ENOENT);
   }
 

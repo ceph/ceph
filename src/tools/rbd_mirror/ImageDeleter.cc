@@ -407,8 +407,7 @@ bool ImageDeleter::process_image_delete() {
   }
 
   librbd::NoOpProgressContext ctx;
-  r = librbd::remove(ioctx, m_active_delete->local_image_name.c_str(), ctx,
-                     true);
+  r = librbd::remove(ioctx, "", m_active_delete->local_image_id, ctx, true);
   if (r < 0 && r != -ENOENT) {
     derr << "error removing image " << m_active_delete->local_image_name
          << " from local pool: " << cpp_strerror(r) << dendl;

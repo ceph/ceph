@@ -1554,7 +1554,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   err_close_child:
     c_imctx->state->close();
   err_remove:
-    partial_r = remove(c_ioctx, c_name, no_op);
+    partial_r = remove(c_ioctx, c_name, "", no_op);
     if (partial_r < 0) {
       lderr(cct) << "Error removing failed clone: "
 		 << cpp_strerror(partial_r) << dendl;
@@ -2008,16 +2008,20 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
-  int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx,
+  int remove(IoCtx& io_ctx, const std::string &image_name,
+             const std::string &image_id, ProgressContext& prog_ctx,
              bool force)
   {
     CephContext *cct((CephContext *)io_ctx.cct());
-    ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
+    ldout(cct, 20) << "remove " << &io_ctx << " "
+                   << (image_id.empty() ? image_name : image_id) << dendl;
 
-    string id;
+    std::string name(image_name);
+    std::string id(image_id);
     bool old_format = false;
     bool unknown_format = true;
-    ImageCtx *ictx = new ImageCtx(imgname, "", NULL, io_ctx, false);
+    ImageCtx *ictx = new ImageCtx(
+      (id.empty() ? name : std::string()), id, nullptr, io_ctx, false);
     int r = ictx->state->open();
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
@@ -2026,6 +2030,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
       unknown_format = false;
+      name = ictx->name;
       id = ictx->id;
 
       ictx->owner_lock.get_read();
@@ -2120,7 +2125,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     if (old_format || unknown_format) {
       ldout(cct, 2) << "removing rbd image from v1 directory..." << dendl;
-      r = tmap_rm(io_ctx, imgname);
+      r = tmap_rm(io_ctx, name);
       old_format = (r == 0);
       if (r < 0 && !unknown_format) {
         if (r != -ENOENT) {
@@ -2133,12 +2138,20 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (!old_format) {
       if (id.empty()) {
         ldout(cct, 5) << "attempting to determine image id" << dendl;
-        r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
+        r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, name, &id);
         if (r < 0 && r != -ENOENT) {
           lderr(cct) << "error getting id of image" << dendl;
           return r;
         }
+      } else if (name.empty()) {
+        ldout(cct, 5) << "attempting to determine image name" << dendl;
+        r = cls_client::dir_get_name(&io_ctx, RBD_DIRECTORY, id, &name);
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "error getting name of image" << dendl;
+          return r;
+        }
       }
+
       if (!id.empty()) {
         ldout(cct, 10) << "removing journal..." << dendl;
         r = Journal<>::remove(io_ctx, id);
@@ -2165,7 +2178,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
 
       ldout(cct, 2) << "removing id object..." << dendl;
-      r = io_ctx.remove(util::id_obj_name(imgname));
+      r = io_ctx.remove(util::id_obj_name(name));
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing id object: " << cpp_strerror(r)
                    << dendl;
@@ -2173,7 +2186,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
 
       ldout(cct, 2) << "removing rbd image from v2 directory..." << dendl;
-      r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, imgname, id);
+      r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, name, id);
       if (r < 0) {
         if (r != -ENOENT) {
           lderr(cct) << "error removing image from v2 directory: "
