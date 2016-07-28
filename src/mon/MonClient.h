@@ -146,6 +146,11 @@ private:
 
   // monitor session
   bool hunting;
+  bool reopened;
+  int auth_progress;
+  // 0 -- set when none authenticating to incr on need 37
+  // 1 -- set when need 37 to incr on need 32
+  // 2 -- set when need 32 to reset 0 on need 0 have session
 
   struct C_Tick : public Context {
     MonClient *monc;
@@ -185,7 +190,11 @@ private:
     _reopen_session(-1, string());
   }
   void _mark_down_all() {
-    //TODO state_map.clear(); //this wasn't really done before...
+    state_map.clear(); //this wasn't really done before... ACTUALLLY:
+    //it was, state was singular and tied to cur_con, both were eliminated by force in
+    //reopen_session when it was set to a new con and negotiating state.
+    //we'll be able to tell if we should acknowledge a connection as a current con as
+    //under the old paradigm if it has a state in the state_map... in theory
     if (cur_con) {
       cur_con->mark_down();
     }
