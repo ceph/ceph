@@ -3047,7 +3047,7 @@ int CDir::scrub_dentry_next(MDSInternalContext *cb, CDentry **dnout)
     dout(20) << __func__ << " inserted to directories scrubbing: "
       << *dnout << dendl;
     scrub_infop->directories_scrubbing.insert((*dnout)->key());
-  } else if (rval < 0 || rval == EAGAIN) {
+  } else if (rval == EAGAIN) {
     // we don't need to do anything else
   } else { // we emptied out the directory scrub set
     assert(rval == ENOENT);
