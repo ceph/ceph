@@ -1,4 +1,9 @@
 
+overrides:
+  ceph:
+    log-whitelist:
+      - inodes wrongly marked free
+
 tasks:
   - cephfs_test_runner:
       modules:
