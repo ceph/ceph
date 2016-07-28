@@ -195,10 +195,10 @@ TEST(bluestore_blob_t, put_ref)
   unsigned mrs = 8192;
 
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(0, mas*2));
-    b.ref_map.get(0, mas*2);
+    b.get_ref(0, mas*2);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
     b.put_ref(0, mas*2, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
@@ -212,10 +212,10 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(mas*2, b.extents[0].length);
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(123, mas*2));
-    b.ref_map.get(0, mas*2);
+    b.get_ref(0, mas*2);
     b.put_ref(0, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -230,13 +230,13 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(mas*2, b.extents[0].length);
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
     b.extents.push_back(bluestore_pextent_t(4, mas));
-    b.ref_map.get(0, mas*4);
+    b.get_ref(0, mas*4);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -262,7 +262,7 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(3u, b.extents.size());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
@@ -270,7 +270,7 @@ TEST(bluestore_blob_t, put_ref)
     b.extents.push_back(bluestore_pextent_t(4, mas));
     b.extents.push_back(bluestore_pextent_t(5, mas));
     b.extents.push_back(bluestore_pextent_t(6, mas));
-    b.ref_map.get(0, mas*6);
+    b.get_ref(0, mas*6);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -297,10 +297,10 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_TRUE(b.extents[4].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 6));
-    b.ref_map.get(0, mas*6);
+    b.get_ref(0, mas*6);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -323,12 +323,12 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_TRUE(b.extents[2].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
-    b.ref_map.get(0, mas*12);
+    b.get_ref(0, mas*12);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -355,12 +355,12 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_TRUE(b.extents[2].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
-    b.ref_map.get(0, mas*12);
+    b.get_ref(0, mas*12);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -402,12 +402,12 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_FALSE(b.extents[0].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
-    b.ref_map.get(0, mas*12);
+    b.get_ref(0, mas*12);
     b.put_ref(mas, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -449,10 +449,10 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_FALSE(b.extents[0].is_valid());
   }
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(1, mas * 8));
-    b.ref_map.get(0, mas*8);
+    b.get_ref(0, mas*8);
     b.put_ref(0, mas, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
     ASSERT_EQ(0u, r.size());
@@ -484,11 +484,11 @@ TEST(bluestore_blob_t, put_ref)
   }
   // verify csum chunk size if factored in properly
   {
-    bluestore_blob_t b;
+    bluestore_blob_t b(bluestore_blob_t::FLAG_HAS_REFMAP);
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
     b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, mas * 4);
-    b.ref_map.get(0, mas*4);
+    b.get_ref(0, mas*4);
     ASSERT_TRUE(b.is_allocated(0, mas*4));
     b.put_ref(0, mas*3, mrs, &r);
     cout << "r " << r << " " << b << std::endl;
@@ -767,16 +767,16 @@ TEST(bluestore_onode_t, compress_extent_map)
 TEST(bluestore_onode_t, punch_hole)
 {
   bluestore_onode_t on;
-  vector<bluestore_lextent_t> r;
+  vector<std::pair<uint64_t, bluestore_lextent_t> > r;
   on.extent_map[0] = bluestore_lextent_t(1, 0, 100);
   on.extent_map[100] = bluestore_lextent_t(2, 0, 100);
 
   on.punch_hole(0, 100, &r);
   ASSERT_EQ(1u, on.extent_map.size());
   ASSERT_EQ(1u, r.size());
-  ASSERT_EQ(1, r[0].blob);
-  ASSERT_EQ(0u, r[0].offset);
-  ASSERT_EQ(100u, r[0].length);
+  ASSERT_EQ(1, r[0].second.blob);
+  ASSERT_EQ(0u, r[0].second.offset);
+  ASSERT_EQ(100u, r[0].second.length);
   r.clear();
 
   on.punch_hole(150, 10, &r);
@@ -788,9 +788,9 @@ TEST(bluestore_onode_t, punch_hole)
   ASSERT_EQ(60u, on.extent_map.rbegin()->second.offset);
   ASSERT_EQ(40u, on.extent_map.rbegin()->second.length);
   ASSERT_EQ(1u, r.size());
-  ASSERT_EQ(2, r[0].blob);
-  ASSERT_EQ(50u, r[0].offset);
-  ASSERT_EQ(10u, r[0].length);
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(50u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
   r.clear();
 
   on.punch_hole(140, 20, &r);
@@ -802,9 +802,9 @@ TEST(bluestore_onode_t, punch_hole)
   ASSERT_EQ(60u, on.extent_map.rbegin()->second.offset);
   ASSERT_EQ(40u, on.extent_map.rbegin()->second.length);
   ASSERT_EQ(1u, r.size());
-  ASSERT_EQ(2, r[0].blob);
-  ASSERT_EQ(40u, r[0].offset);
-  ASSERT_EQ(10u, r[0].length);
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(40u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
   r.clear();
 
   on.punch_hole(130, 40, &r);
@@ -816,12 +816,12 @@ TEST(bluestore_onode_t, punch_hole)
   ASSERT_EQ(70u, on.extent_map.rbegin()->second.offset);
   ASSERT_EQ(30u, on.extent_map.rbegin()->second.length);
   ASSERT_EQ(2u, r.size());
-  ASSERT_EQ(2, r[0].blob);
-  ASSERT_EQ(30u, r[0].offset);
-  ASSERT_EQ(10u, r[0].length);
-  ASSERT_EQ(2, r[1].blob);
-  ASSERT_EQ(60u, r[1].offset);
-  ASSERT_EQ(10u, r[1].length);
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(30u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
+  ASSERT_EQ(2, r[1].second.blob);
+  ASSERT_EQ(60u, r[1].second.offset);
+  ASSERT_EQ(10u, r[1].second.length);
   r.clear();
 
   on.punch_hole(110, 10, &r);
@@ -835,22 +835,216 @@ TEST(bluestore_onode_t, punch_hole)
   ASSERT_EQ(70u, on.extent_map.rbegin()->second.offset);
   ASSERT_EQ(30u, on.extent_map.rbegin()->second.length);
   ASSERT_EQ(1u, r.size());
-  ASSERT_EQ(2, r[0].blob);
-  ASSERT_EQ(10u, r[0].offset);
-  ASSERT_EQ(10u, r[0].length);
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(10u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
   r.clear();
 
   on.punch_hole(0, 1000, &r);
   ASSERT_EQ(0u, on.extent_map.size());
   ASSERT_EQ(3u, r.size());
-  ASSERT_EQ(2, r[0].blob);
-  ASSERT_EQ(0u, r[0].offset);
-  ASSERT_EQ(10u, r[0].length);
-  ASSERT_EQ(2, r[1].blob);
-  ASSERT_EQ(20u, r[1].offset);
-  ASSERT_EQ(10u, r[1].length);
-  ASSERT_EQ(2, r[2].blob);
-  ASSERT_EQ(70u, r[2].offset);
-  ASSERT_EQ(30u, r[2].length);
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(0u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
+  ASSERT_EQ(2, r[1].second.blob);
+  ASSERT_EQ(20u, r[1].second.offset);
+  ASSERT_EQ(10u, r[1].second.length);
+  ASSERT_EQ(2, r[2].second.blob);
+  ASSERT_EQ(70u, r[2].second.offset);
+  ASSERT_EQ(30u, r[2].second.length);
   r.clear();
+}
+
+TEST(bluestore_onode_t, insert_remove_lextent)
+{
+  bluestore_onode_t on;
+  vector<std::pair<uint64_t, bluestore_lextent_t> > r;
+  vector<bluestore_pextent_t> rp;
+
+  bluestore_pextent_t pext1(1, 0x10000);
+  bluestore_pextent_t pext2(2, 0x10000);
+  bluestore_pextent_t pext3(3, 0x10000);
+
+  bluestore_blob_t blob(bluestore_blob_t::FLAG_HAS_REFMAP);
+  blob.extents.push_back(pext1);
+
+  bluestore_blob_t blob2, blob3;
+  blob2.clear_flag(bluestore_blob_t::FLAG_HAS_REFMAP);
+  blob2.extents.push_back(pext2);
+  blob3.clear_flag(bluestore_blob_t::FLAG_HAS_REFMAP);
+  blob3.extents.push_back(pext3);
+
+  bool empty;
+
+  bluestore_lextent_t lextent(1, 0, 100);
+  on.set_lextent(0, lextent, &blob, &r);
+
+  ASSERT_EQ(1u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  r.clear();
+
+  lextent.blob = 2;
+  lextent.offset = 1;
+  lextent.length = 99;
+  on.set_lextent(101, lextent, &blob2, &r);
+
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  r.clear();
+
+  //overwrite lextent/blob that doesn't have REF_MAP
+  lextent.blob = 3;
+  lextent.offset = 1;
+  lextent.length = 99;
+  on.set_lextent(101, lextent, &blob3, &r);
+
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(1u, r[0].second.offset);
+  ASSERT_EQ(99u, r[0].second.length);
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //deref overwritten lextent
+  empty = on.deref_lextent(100, r[0].second, &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext2.offset == rp[0].offset);
+  ASSERT_TRUE(pext2.length == rp[0].length);
+
+  r.clear();
+  rp.clear();
+
+  //overwrite lextent/blob that has a REF_MAP with one that doesn't
+  lextent.blob = 2;
+  lextent.offset = 0;
+  lextent.length = 100;
+  blob2.extents.clear(); //for sure
+  blob2.extents.push_back(pext2);
+  on.set_lextent(0, lextent, &blob2, &r);
+
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(1, r[0].second.blob);
+  ASSERT_EQ(0u, r[0].second.offset);
+  ASSERT_EQ(100u, r[0].second.length);
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //deref overwritten lextent
+  empty = on.deref_lextent(0, r[0].second, &blob, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext1.offset == rp[0].offset);
+  ASSERT_TRUE(pext1.length == rp[0].length);
+  ASSERT_TRUE(blob.ref_map.empty());
+
+  r.clear();
+  rp.clear();
+
+  //append an lextent pointing to already present blob 3
+  lextent.blob = 3;
+  lextent.offset = 200;
+  lextent.length = 50;
+  on.set_lextent(300, lextent, &blob3, &r);
+
+  ASSERT_EQ(3u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //deref lextent with underlying blob having multiple references (no ref_map case)
+  on.punch_hole(100, 100, &r);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(3, r[0].second.blob);
+  ASSERT_EQ(1u, r[0].second.offset);
+  ASSERT_EQ(99u, r[0].second.length);
+
+  empty = on.deref_lextent(100, r[0].second, &blob3, 0x10000, &rp);
+  ASSERT_FALSE(empty);
+  ASSERT_EQ(0u, rp.size());
+
+  r.clear();
+  rp.clear();
+
+  //deref lextent with underlying blob having single reference (no ref_map case)
+  on.punch_hole(300, 100, &r);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(3, r[0].second.blob);
+  ASSERT_EQ(200u, r[0].second.offset);
+  ASSERT_EQ(50u, r[0].second.length);
+
+  empty = on.deref_lextent(300, r[0].second, &blob3, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext3.offset == rp[0].offset);
+  ASSERT_TRUE(pext3.length == rp[0].length);
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  r.clear();
+  rp.clear();
+
+  //deref lextent partially (no ref_map case)
+  on.punch_hole(20, 10, &r);
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(20u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
+
+  empty = on.deref_lextent(20, r[0].second, &blob2, 0x10000, &rp);
+  ASSERT_FALSE(empty);
+  ASSERT_EQ(0u, rp.size());
+
+  r.clear();
+  rp.clear();
+
+  //deref lextent partially once again(no ref_map case)
+  on.punch_hole(70, 10, &r);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(70u, r[0].second.offset);
+  ASSERT_EQ(10u, r[0].second.length);
+
+  empty = on.deref_lextent(70, r[0].second, &blob2, 0x10000, &rp);
+  ASSERT_FALSE(empty);
+  ASSERT_EQ(0u, rp.size());
+
+  r.clear();
+  rp.clear();
+
+  //deref fragmented lextent totally (no ref_map case)
+  on.punch_hole(0, 100, &r);
+  ASSERT_EQ(3u, r.size());
+  ASSERT_EQ(2, r[0].second.blob);
+  ASSERT_EQ(0u, r[0].second.offset);
+  ASSERT_EQ(20u, r[0].second.length);
+  ASSERT_EQ(2, r[1].second.blob);
+  ASSERT_EQ(30u, r[1].second.offset);
+  ASSERT_EQ(40u, r[1].second.length);
+  ASSERT_EQ(2, r[2].second.blob);
+  ASSERT_EQ(80u, r[2].second.offset);
+  ASSERT_EQ(20u, r[2].second.length);
+
+  empty = on.deref_lextent(0, r[0].second, &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext2.offset == rp[0].offset);
+  ASSERT_TRUE(pext2.length == rp[0].length);
+  rp.clear();
+
+  empty = on.deref_lextent(30, r[1].second, &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(0u, rp.size()); //no more pextents for the blob, already deallocated above
+  rp.clear();
+
+  empty = on.deref_lextent(80, r[2].second, &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(0u, rp.size()); //no more pextents for the blob, already deallocated above
+
+  r.clear();
+  rp.clear();
 }
