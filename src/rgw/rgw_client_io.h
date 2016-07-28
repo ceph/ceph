@@ -28,10 +28,18 @@ public:
   }
 
   virtual int complete_request() = 0; /* XXX signature likely changing */
+}; /* RGWClient IO */
+
+
+class RGWClientIOAccounter {
+public:
+  virtual ~RGWClientIOAccounter() {}
+
+  virtual void set_account(bool enabled) = 0;
 
   virtual uint64_t get_bytes_sent() const = 0;
   virtual uint64_t get_bytes_received() const = 0;
-}; /* RGWClient IO */
+};
 
 
 class RGWStreamIOEngine : public RGWClientIO {
@@ -52,8 +60,10 @@ public:
   int read(char *buf, int max, int *actual);
 };
 
+
 /* HTTP IO: compatibility layer */
-class RGWStreamIO : public RGWStreamIOEngine {
+class RGWStreamIO : public RGWStreamIOEngine,
+                    public RGWClientIOAccounter {
   bool _account;
   size_t bytes_sent;
   size_t bytes_received;
@@ -80,7 +90,7 @@ public:
 
   std::string grab_aws4_sha256_hash();
 
-  void set_account(bool _accnt) {
+  void set_account(bool _accnt) override {
     _account = _accnt;
   }
 

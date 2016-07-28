@@ -50,7 +50,8 @@ namespace rgw {
 
 /* request interface */
 
-  class RGWLibIO : public RGWClientIO
+  class RGWLibIO : public RGWClientIO,
+                   public RGWClientIOAccounter
   {
     RGWUserInfo user_info;
   public:
@@ -78,6 +79,10 @@ namespace rgw {
     int complete_request() override { /* XXX */
       return 0;
     };
+
+    void set_account(bool) override {
+      return;
+    }
 
     uint64_t get_bytes_sent() const override {
       return 0;
