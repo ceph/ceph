@@ -1172,7 +1172,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int fd = open_files[f];
       int64_t off = t.get_int();
       int64_t whence = t.get_int();
-      client->lseek(fd, off, whence);
+      client->lseek(fd, off, whence, perms);
     } else if (strcmp(op, "read") == 0) {
       int64_t f = t.get_int();
       int64_t size = t.get_int();

@@ -838,7 +838,8 @@ extern "C" int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->lseek(fd, offset, whence);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->lseek(fd, offset, whence, perms);
 }
 
 extern "C" int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf,
@@ -1510,7 +1511,8 @@ extern "C" int ceph_ll_fsync(class ceph_mount_info *cmount,
 extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
 				Fh *fh, off_t offset, int whence)
 {
-  return (cmount->get_client()->ll_lseek(fh, offset, whence));
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return (cmount->get_client()->ll_lseek(fh, offset, whence, perms));
 }
 
 extern "C" int ceph_ll_write(class ceph_mount_info *cmount,
