@@ -264,6 +264,8 @@ void AbstractAioImageWrite::send_request() {
                   !m_image_ctx.journal->is_journal_replaying());
   }
 
+  prune_object_extents(object_extents);
+
   if (!object_extents.empty()) {
     uint64_t journal_tid = 0;
     m_aio_comp->set_request_count(
@@ -392,6 +394,24 @@ uint64_t AioImageDiscard::append_journal_event(
   return tid;
 }
 
+void AioImageDiscard::prune_object_extents(ObjectExtents &object_extents) {
+  CephContext *cct = m_image_ctx.cct;
+  if (!cct->_conf->rbd_skip_partial_discard) {
+    return;
+  }
+
+  for (auto p = object_extents.begin(); p != object_extents.end(); ) {
+    if (p->offset + p->length < m_image_ctx.layout.object_size) {
+      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~"
+		     << p->length << " from " << p->buffer_extents
+		     << ": skip partial discard" << dendl;
+      p = object_extents.erase(p);
+    } else {
+      ++p;
+    }
+  }
+}
+
 uint32_t AioImageDiscard::get_cache_request_count(bool journaling) const {
   // extra completion request is required for tracking journal commit
   return (m_image_ctx.object_cacher != nullptr && journaling ? 1 : 0);
@@ -415,8 +435,6 @@ void AioImageDiscard::send_cache_requests(const ObjectExtents &object_extents,
 AioObjectRequest *AioImageDiscard::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
-  CephContext *cct = m_image_ctx.cct;
-
   AioObjectRequest *req;
   if (object_extent.length == m_image_ctx.layout.object_size) {
     req = new AioObjectRemove(&m_image_ctx, object_extent.oid.name,
@@ -427,10 +445,6 @@ AioObjectRequest *AioImageDiscard::create_object_request(
                                 object_extent.objectno, object_extent.offset,
                                 snapc, on_finish);
   } else {
-    if(cct->_conf->rbd_skip_partial_discard) {
-      delete on_finish;
-      return NULL;
-    }
     req = new AioObjectZero(&m_image_ctx, object_extent.oid.name,
                             object_extent.objectno, object_extent.offset,
                             object_extent.length, snapc, on_finish);
