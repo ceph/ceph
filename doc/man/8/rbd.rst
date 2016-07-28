@@ -224,8 +224,10 @@ Commands
   Deletes an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
 
-:command:`export` (*image-spec* | *snap-spec*) [*dest-path*]
+:command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Exports image to dest path (use - for stdout).
+  The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
+  of image, but also the snapshots and other priorities, such as image_order, features.
 
 :command:`import` [--import-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Creates a new image and imports its data from path (use - for
