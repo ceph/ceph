@@ -320,6 +320,7 @@
   rbd help export
   usage: rbd export [--pool <pool>] [--image <image>] [--snap <snap>] 
                     [--path <path>] [--no-progress] 
+                    [--export-format <export-format>] 
                     <source-image-or-snap-spec> <path-name> 
   
   Export image to file.
@@ -336,6 +337,7 @@
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
     --no-progress                disable progress output
+    --export-format arg          format of image file
   
   rbd help export-diff
   usage: rbd export-diff [--pool <pool>] [--image <image>] [--snap <snap>] 
@@ -585,7 +587,7 @@
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] [--no-progress] 
-                    [--import-format <import-format>] [--pool <pool>] 
+                    [--export-format <export-format>] [--pool <pool>] 
                     [--image <image>] 
                     <path-name> <dest-image-spec> 
   
@@ -617,7 +619,7 @@
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
     --no-progress             disable progress output
-    --import-format arg       format of the file to be imported
+    --export-format arg       format of image file
     -p [ --pool ] arg         pool name (deprecated)
     --image arg               image name (deprecated)
   

@@ -110,7 +110,7 @@ private:
 
 int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
 		   const char *endsnapname, bool whole_object,
-		   int fd, bool no_progress)
+		   int fd, bool no_progress, int export_format)
 {
   int r;
   librbd::image_info_t info;
@@ -122,7 +122,10 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   {
     // header
     bufferlist bl;
-    bl.append(utils::RBD_DIFF_BANNER);
+    if (export_format == 1)
+      bl.append(utils::RBD_DIFF_BANNER);
+    else
+      bl.append(utils::RBD_DIFF_BANNER_V2);
 
     __u8 tag;
     if (fromsnapname) {
@@ -192,9 +195,10 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
-  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress);
+  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress, 1);
 
-  close(fd);
+  if (fd != 1)
+    close(fd);
   if (r < 0 && fd != 1) {
     remove(path);
   }
@@ -283,11 +287,11 @@ class C_Export : public Context
 {
 public:
   C_Export(SimpleThrottle &simple_throttle, librbd::Image &image,
-                   uint64_t offset, uint64_t length, int fd)
+	   uint64_t fd_offset, uint64_t offset, uint64_t length, int fd)
     : m_aio_completion(
         new librbd::RBD::AioCompletion(this, &utils::aio_context_callback)),
-      m_throttle(simple_throttle), m_image(image), m_offset(offset),
-      m_length(length), m_fd(fd)
+      m_throttle(simple_throttle), m_image(image), m_dest_offset(fd_offset),
+      m_offset(offset), m_length(length), m_fd(fd)
   {
   }
 
@@ -325,10 +329,10 @@ public:
         return;
       }
 
-      uint64_t chkret = lseek64(m_fd, m_offset, SEEK_SET);
-      if (chkret != m_offset) {
+      uint64_t chkret = lseek64(m_fd, m_dest_offset, SEEK_SET);
+      if (chkret != m_dest_offset) {
         cerr << "rbd: error seeking destination image to offset "
-             << m_offset << std::endl;
+             << m_dest_offset << std::endl;
         r = -errno;
         return;
       }
@@ -337,7 +341,7 @@ public:
     r = m_bufferlist.write_fd(m_fd);
     if (r < 0) {
       cerr << "rbd: error writing to destination image at offset "
-           << m_offset << std::endl;
+           << m_dest_offset << std::endl;
     }
   }
 
@@ -346,13 +350,20 @@ private:
   SimpleThrottle &m_throttle;
   librbd::Image &m_image;
   bufferlist m_bufferlist;
+  uint64_t m_dest_offset;
   uint64_t m_offset;
   uint64_t m_length;
   int m_fd;
 };
 
-static int do_export(librbd::Image& image, const char *path, bool no_progress)
+static int do_export(librbd::Image& image, const char *path, bool no_progress, int export_format)
 {
+  // check current supported formats.
+  if (export_format != 1 && export_format != 2) {
+    std::cerr << "rbd: wrong file format to import" << std::endl;
+    return -EINVAL;
+  }
+
   librbd::image_info_t info;
   int64_t r = image.stat(info, sizeof(info));
   if (r < 0)
@@ -376,34 +387,96 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress)
   }
 
   utils::ProgressContext pc("Exporting image", no_progress);
-
   SimpleThrottle throttle(max_concurrent_ops, false);
   uint64_t period = image.get_stripe_count() * (1ull << info.order);
-  for (uint64_t offset = 0; offset < info.size; offset += period) {
-    if (throttle.pending_error()) {
-      break;
+
+  if (export_format == 2) {
+    size_t offset = 0;
+    // header
+    bufferlist bl;
+    bl.append(utils::RBD_IMAGE_BANNER_V2);
+
+    // size in header
+    uint64_t size = info.size;
+    ::encode(size, bl);
+
+    r = bl.write_fd(fd);
+    if (r < 0) {
+      goto out;
+    }
+    offset += bl.length();
+
+    lseek(fd, offset, SEEK_SET);
+
+    // header for snapshots
+    bl.clear();
+    bl.append(utils::RBD_IMAGE_SNAPS_BANNER_V2);
+
+    std::vector<librbd::snap_info_t> snaps;
+    r = image.snap_list(snaps);
+    if (r < 0) {
+      goto out;
     }
 
-    uint64_t length = min(period, info.size - offset);
-    C_Export *ctx = new C_Export(throttle, image, offset, length, fd);
-    ctx->send();
+    uint64_t snap_num = snaps.size() + 1;
+    ::encode(snap_num, bl);
 
-    pc.update_progress(offset, info.size);
-  }
-
-  r = throttle.wait_for_ret();
-  if (!to_stdout) {
-    if (r >= 0) {
-      r = ftruncate(fd, info.size);
+    r = bl.write_fd(fd);
+    if (r < 0) {
+      goto out;
     }
-    close(fd);
-  }
 
-  if (r < 0) {
-    pc.fail();
+    if (0 == snap_num) {
+      goto out;
+    } else {
+      const char *last_snap = NULL;
+      for (size_t i = 0; i < snaps.size(); ++i) {
+	utils::snap_set(image, snaps[i].name.c_str());
+	r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
+	if (r < 0) {
+	  goto out;
+	}
+	pc.update_progress(i, snaps.size() + 1);
+	last_snap = snaps[i].name.c_str();
+      }
+      utils::snap_set(image, std::string(""));
+      r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+      if (r < 0) {
+	goto out;
+      }
+      pc.update_progress(snaps.size() + 1, snaps.size() + 1);
+    }
   } else {
-    pc.finish();
+    size_t file_size = 0;
+    for (uint64_t offset = 0; offset < info.size; offset += period) {
+      if (throttle.pending_error()) {
+	break;
+      }
+
+      uint64_t length = min(period, info.size - offset);
+      C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset, length, fd);
+      ctx->send();
+
+      pc.update_progress(offset, info.size);
+    }
+
+    file_size += info.size;
+    r = throttle.wait_for_ret();
+    if (!to_stdout) {
+      if (r >= 0) {
+	r = ftruncate(fd, file_size);
+	r = lseek(fd, file_size, SEEK_SET);
+      }
+    }
   }
+
+out:
+  if (r < 0)
+    pc.fail();
+  else
+    pc.finish();
+  if (!to_stdout)
+    close(fd);
   return r;
 }
 
@@ -414,6 +487,8 @@ void get_arguments(po::options_description *positional,
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
   at::add_no_progress_option(options);
+  options->add_options()
+    ("export-format", po::value<int>(), "format to export image");
 }
 
 int execute(const po::variables_map &vm) {
@@ -443,8 +518,12 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  
+  int format = 1;
+  if (vm.count("export-format"))
+    format = vm["export-format"].as<int>();
 
-  r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>());
+  r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(), format);
   if (r < 0) {
     std::cerr << "rbd: export error: " << cpp_strerror(r) << std::endl;
     return r;
