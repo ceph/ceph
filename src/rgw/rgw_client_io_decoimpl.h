@@ -86,4 +86,83 @@ public:
   }
 };
 
+
+template <typename T>
+class RGWStreamIOAccountingEngine : public RGWDecoratedStreamIO<T>,
+                                    public RGWClientIOAccounter {
+  bool enabled;
+  uint64_t total_sent;
+  uint64_t total_received;
+
+protected:
+  int read_data(char* const buf, const int max) override {
+    const auto received = RGWDecoratedStreamIO<T>::read_data(buf, max);
+    if (enabled) {
+      total_received += received;
+    }
+    return received;
+  }
+
+  int write_data(const char* const buf, const int len) override {
+    const auto sent = RGWDecoratedStreamIO<T>::write_data(buf, len);
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+public:
+  template <typename U>
+  RGWStreamIOAccountingEngine(U&& decoratee)
+    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+      enabled(false),
+      total_sent(0),
+      total_received(0) {
+  }
+
+  int send_status(const int status, const char* const status_name) override {
+    const auto sent = RGWDecoratedStreamIO<T>::send_status(status, status_name);
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+  int send_100_continue() override {
+    const auto sent = RGWDecoratedStreamIO<T>::send_100_continue();
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+  int send_content_length(const uint64_t len) override {
+    const auto sent = RGWDecoratedStreamIO<T>::send_content_length(len);
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+  int complete_header() override {
+    const auto sent = RGWDecoratedStreamIO<T>::complete_header();
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+  uint64_t get_bytes_sent() const override {
+    return total_sent;
+  }
+
+  uint64_t get_bytes_received() const override {
+    return total_received;
+  }
+
+  void set_account(bool enabled) override {
+    this->enabled = enabled;
+  }
+};
+
 #endif /* CEPH_RGW_CLIENT_IO_DECOIMPL_H */
