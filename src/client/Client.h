@@ -1217,8 +1217,6 @@ public:
 
   int ll_statfs(Inode *in, struct statvfs *stbuf);
   int ll_walk(const char* name, Inode **i, struct stat *attr); // XXX in?
-  int ll_listxattr_chunks(Inode *in, char *names, size_t size,
-			  int *cookie, int *eol, int uid, int gid);
   uint32_t ll_stripe_unit(Inode *in);
   int ll_file_layout(Inode *in, file_layout_t *layout);
   uint64_t ll_snap_seq(Inode *in);
