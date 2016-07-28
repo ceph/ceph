@@ -7155,10 +7155,13 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
-  CInode *srci;
+  CInode *srci = nullptr;
   r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);
+
+  // srcpath must not point to a null dentry
+  assert(srci != nullptr);
       
   CDentry *srcdn = trace[trace.size()-1];
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
