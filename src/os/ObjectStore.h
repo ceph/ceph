@@ -1375,7 +1375,7 @@ public:
    * has information of src_offset, dest_offset and length.
    * Finally, the source object is deleted.
    */
-  void merge_delete_srcobj(const coll_t& cid, const ghobject_t& src_oid, ghobject_t oid,
+  void move_ranges_destroy_src(const coll_t& cid, const ghobject_t& src_oid, ghobject_t oid,
                      const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info) {
     if (use_tbl) {
       __u32 op = OP_MERGE_DELETE;

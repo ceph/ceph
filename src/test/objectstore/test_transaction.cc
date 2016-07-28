@@ -113,7 +113,7 @@ ObjectStore::Transaction generate_transaction()
   return a;
 }
 
-TEST(Transaction, MoveTempObjs)
+TEST(Transaction, MoveRangesDelSrcObj)
 {
   auto t = ObjectStore::Transaction{};
   t.set_use_tbl(false);
@@ -135,7 +135,7 @@ TEST(Transaction, MoveTempObjs)
   bl.append("some other data");
   t.write(c, o2, 1, bl.length(), bl);
 
-  t.merge_delete_srcobj(c, o1, o2, move_info);
+  t.move_ranges_destroy_src(c, o1, o2, move_info);
 
 }
 

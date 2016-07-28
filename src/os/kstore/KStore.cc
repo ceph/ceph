@@ -2366,7 +2366,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   OnodeRef bo = c->get_onode(boid, true);
   vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
   i.decode_move_info(move_info);
-  r = _merge_delete_srcobj(txc, c, o, cvec[op->dest_cid], bo, move_info);
+  r = _move_ranges_destroy_src(txc, c, o, cvec[op->dest_cid], bo, move_info);
       }
 			break;
 
@@ -3179,7 +3179,7 @@ int KStore::_clone_range(TransContext *txc,
   return r;
 }
 
-int KStore::_merge_delete_srcobj(TransContext *txc,
+int KStore::_move_ranges_destroy_src(TransContext *txc,
                            CollectionRef& c,
                            OnodeRef& srco,
                            CollectionRef& basec,

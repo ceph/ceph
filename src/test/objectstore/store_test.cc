@@ -2513,10 +2513,10 @@ TEST_P(StoreTest, SimpleCloneTest) {
   }
 }
 
-TEST_P(StoreTest, SimpleMoveTempTest) {
+TEST_P(StoreTest, SimpleMoveRangeDelSrcTest) {
   ObjectStore::Sequencer osr("test");
   int r;
-  coll_t cid, cid2;
+  coll_t cid;
   if ((GetParam() == string("filestore")) || (GetParam() == string("kstore"))) {
   {
     ObjectStore::Transaction t;
@@ -2550,8 +2550,9 @@ TEST_P(StoreTest, SimpleMoveTempTest) {
   }
   {
     vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info = { boost::make_tuple(0, 0, 5), boost::make_tuple(10, 10, 5) };
+
     ObjectStore::Transaction t;
-    t.merge_delete_srcobj(cid, hoid2, hoid, move_info);
+    t.move_ranges_destroy_src(cid, hoid2, hoid, move_info);
     cerr << "move temp object" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);

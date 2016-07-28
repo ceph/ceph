@@ -2709,9 +2709,9 @@ void FileStore::_do_transaction(
         _kludge_temp_object_collection(src_cid, src_oid);
         vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
         i.decode_move_info(move_info);
-        tracepoint(objectstore, merge_delete_srcobj_enter, osr_name);
-        r = _merge_delete_srcobj(src_cid, src_oid, cid, oid, move_info, spos);
-        tracepoint(objectstore, merge_delete_srcobj_exit, r);
+        tracepoint(objectstore, move_ranges_destroy_src_enter, osr_name);
+        r = _move_ranges_destroy_src(src_cid, src_oid, cid, oid, move_info, spos);
+        tracepoint(objectstore, move_ranges_destroy_src_exit, r);
       }
       break;
 
@@ -3768,67 +3768,75 @@ int FileStore::_clone_range(const coll_t& oldcid, const ghobject_t& oldoid, cons
 /*
  * Move contents of src object according to move_info to base object. Once the move_info is traversed completely, delete the src object.
  */
-int FileStore::_merge_delete_srcobj(const coll_t& src_cid, const ghobject_t& src_oid, const coll_t& cid, const ghobject_t& oid,
+int FileStore::_move_ranges_destroy_src(const coll_t& src_cid, const ghobject_t& src_oid, const coll_t& cid, const ghobject_t& oid,
                               const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info,
                               const SequencerPosition& spos)
 {
   int r = 0;
-  bool err = false;
-  int dstcmp;
-  FDRef t, b;
 
-  dout(10) << "merge_delete_srcobj " << src_cid << "/" << src_oid << " -> " << cid << "/" << oid << dendl;
+  dout(10) << __func__ << src_cid << "/" << src_oid << " -> " << cid << "/" << oid << dendl;
 
-  dstcmp = _check_replay_guard(cid, oid, spos);
+  // check replay guard for base object. If not possible to replay, return.
+  int dstcmp = _check_replay_guard(cid, oid, spos);
   if (dstcmp < 0)
     return 0;
 
-  r = lfn_open(src_cid, src_oid, false, &t);
-  if (r < 0) {
-    err = true;
-    goto out;
-  }
+  // check the src name too; it might have a newer guard, and we don't
+  // want to clobber it
+  int srccmp = _check_replay_guard(src_cid, src_oid, spos);
+  if (srccmp < 0)
+    return 0;
 
+  FDRef b;
   r = lfn_open(cid, oid, true, &b);
   if (r < 0) {
-    err = true;
-    goto out2;
+    return 0;
+  }
+
+  FDRef t;
+  r = lfn_open(src_cid, src_oid, false, &t);
+  //If we are replaying, it is possible that we do not find src obj as it is deleted before crashing.
+  if (r < 0) {
+    lfn_close(b);
+    dout(10) << __func__ << " replaying -->" << replaying  << dendl;
+    if (replaying)
+      _set_replay_guard(**b, spos, &oid);
+    return 0;
   }
 
   for (unsigned i = 0; i < move_info.size(); ++i) {
-     uint64_t srcoff;
-     uint64_t dstoff;
-     uint64_t len;
-
-     srcoff = move_info[i].get<0>();
-     dstoff = move_info[i].get<1>();
-     len = move_info[i].get<2>();
+     uint64_t srcoff = move_info[i].get<0>();
+     uint64_t dstoff = move_info[i].get<1>();
+     uint64_t len = move_info[i].get<2>();
 
      r = _do_clone_range(**t, **b, srcoff, len, dstoff);
-     if (r < 0) {
-       err = true;
-       goto out3;
-      }
   }
 
-  dout(10) << "merge_delete_srcobj "  << cid << "/" << oid << " "  <<  " = " << r << dendl;
+  dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
 
-  out3:
-    if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
-      _set_replay_guard(**b, spos, &oid);
-    }
-    lfn_close(b);
-  out2:
-    lfn_close(t);
-    if (err) { return r; }
+  lfn_close(t);
 
-  if (_check_replay_guard(src_cid, src_oid, spos) > 0) {
-    /* delete the src obj */
-    lfn_unlink(src_cid, src_oid, spos, true);
+  //In case crash occurs here, replay will have to do cloning again.
+  //Only if do_clone_range is successful, go ahead with deleting the source object.
+  if (r < 0)
+    goto out;
+
+  r = lfn_unlink(src_cid, src_oid, spos, true);
+  // If crash occurs between unlink and set guard, correct the error.
+  // as during next time, it might not find the already deleted object.
+  if (r < 0 && replaying) {
+    r = 0;
   }
 
-  out:
-  dout(10) << "merge_delete_srcobj "  << cid << "/" << oid << " "  <<  " = " << r << dendl;
+  if (r < 0)
+    goto out;
+
+  //set replay guard for base obj coll_t, as this api is not idempotent.
+  _set_replay_guard(**b, spos, &oid);
+
+out:
+  lfn_close(b);
+  dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
   return r;
 }
 

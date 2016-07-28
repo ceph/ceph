@@ -625,7 +625,7 @@ private:
 		   OnodeRef& oldo,
 		   OnodeRef& newo,
 		   uint64_t srcoff, uint64_t length, uint64_t dstoff);
-  int _merge_delete_srcobj(TransContext *txc,
+  int _move_ranges_destroy_src(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& oldo,
 		   CollectionRef& bc,

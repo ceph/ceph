@@ -244,7 +244,7 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
 	::decode(oid, p);
 	::decode(move_info, p);
 
-	merge_delete_srcobj(cid, src_oid, oid, move_info);
+	move_ranges_destroy_src(cid, src_oid, oid, move_info);
 
       }
       break;
