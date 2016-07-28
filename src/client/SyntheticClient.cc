@@ -835,7 +835,7 @@ int SyntheticClient::run()
 	  client->mknod("test", 0777);
 	  struct stat st;
 	  for (int i=0; i<count; i++) {
-	    client->lstat("test", &st);
+	    client->lstat("test", &st, perms);
 	    client->chmod("test", 0777, perms);
           }
         }
@@ -1105,7 +1105,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 	  strcmp(a, "/") != 0 &&
 	  strcmp(a, "/lib") != 0 && // or /lib.. that would be a lookup. hack.
 	  a[0] != 0)  // stop stating the root directory already
-	client->lstat(a, &st);
+	client->lstat(a, &st, perms);
     } else if (strcmp(op, "chmod") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
@@ -1577,7 +1577,7 @@ int SyntheticClient::clean_dir(string& basedir)
     if (time_to_stop()) break;
 
     struct stat st;
-    int r = client->lstat(file.c_str(), &st);
+    int r = client->lstat(file.c_str(), &st, perms);
     if (r < 0) {
       dout(1) << "stat error on " << file << " r=" << r << dendl;
       continue;
@@ -1637,7 +1637,7 @@ int SyntheticClient::full_walk(string& basedir)
       
       struct stat st;
       frag_info_t dirstat;
-      int r = client->lstat(file.c_str(), &st, &dirstat);
+      int r = client->lstat(file.c_str(), &st, perms, &dirstat);
       if (r < 0) {
 	dout(1) << "stat error on " << file << " r=" << r << dendl;
 	continue;
@@ -1698,6 +1698,8 @@ int SyntheticClient::full_walk(string& basedir)
 
 
 int SyntheticClient::dump_placement(string& fn) {
+  
+  UserPerm perms = client->pick_my_perms();
 
   // open file
   int fd = client->open(fn.c_str(), O_RDONLY);
@@ -1707,7 +1709,7 @@ int SyntheticClient::dump_placement(string& fn) {
 
   // How big is it?
   struct stat stbuf;
-  int lstat_result = client->lstat(fn.c_str(), &stbuf);
+  int lstat_result = client->lstat(fn.c_str(), &stbuf, perms);
   if (lstat_result < 0) {
     dout(0) << "lstat error for file " << fn << dendl;
     client->close(fd);
@@ -1775,9 +1777,11 @@ int SyntheticClient::stat_dirs(const char *basedir, int dirs, int files, int dep
 {
   if (time_to_stop()) return 0;
 
+  UserPerm perms = client->pick_my_perms();
+
   // make sure base dir exists
   struct stat st;
-  int r = client->lstat(basedir, &st);
+  int r = client->lstat(basedir, &st, perms);
   if (r != 0) {
     dout(1) << "can't make base dir? " << basedir << dendl;
     return -1;
@@ -1788,7 +1792,7 @@ int SyntheticClient::stat_dirs(const char *basedir, int dirs, int files, int dep
   dout(3) << "stat_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << dendl;
   for (int i=0; i<files; i++) {
     snprintf(d, sizeof(d), "%s/file.%d", basedir, i);
-    client->lstat(d, &st);
+    client->lstat(d, &st, perms);
   }
 
   if (depth == 0) return 0;
@@ -1824,7 +1828,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   for (int i=0; i<files; i++) {
     snprintf(d, sizeof(d), "%s/file.%d", basedir, i);
     utime_t s = ceph_clock_now(client->cct);
-    if (client->lstat(d, &st) < 0) {
+    if (client->lstat(d, &st, perms) < 0) {
       dout(2) << "read_dirs failed stat on " << d << ", stopping" << dendl;
       return -1;
     }
@@ -1875,7 +1879,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
       client->mknod(d, 0644);
 
       if (more) {
-        client->lstat(d, &st);
+        client->lstat(d, &st, perms);
         int fd = client->open(d, O_RDONLY);
         client->unlink(d, perms);
         client->close(fd);
@@ -2785,7 +2789,7 @@ int SyntheticClient::random_walk(int num_req)
         } else
           op = CEPH_MDS_OP_READDIR;
       } else
-        r = client->lstat(get_random_sub(), &st);
+        r = client->lstat(get_random_sub(), &st, perms);
     }
 
     if (op == CEPH_MDS_OP_READDIR) {
@@ -3354,7 +3358,8 @@ int SyntheticClient::chunk_file(string &filename)
     return fd;
 
   struct stat st;
-  int ret = client->fstat(fd, &st);
+  UserPerm perms = client->pick_my_perms();
+  int ret = client->fstat(fd, &st, perms);
   if (ret < 0) {
     client->close(fd);
     return ret;
