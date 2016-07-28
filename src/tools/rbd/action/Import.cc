@@ -141,7 +141,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     std::cerr << "rbd: failed to open image" << std::endl;
-    goto done;
+    goto err;
   }
 
   // loop body handles 0 return, as we may have a block to flush
@@ -167,7 +167,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       r = image.resize(size);
       if (r < 0) {
         std::cerr << "rbd: can't resize image during import" << std::endl;
-        goto done;
+        goto close;
       }
     }
 
@@ -188,19 +188,22 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   }
   r = throttle->wait_for_ret();
   if (r < 0) {
-    goto done;
+    goto close;
   }
 
   if (from_stdin) {
     r = image.resize(image_pos);
     if (r < 0) {
       std::cerr << "rbd: final image resize failed" << std::endl;
-      goto done;
+      goto close;
     }
   }
 
+close:
   r = image.close();
-
+err:
+  if (r < 0)
+    rbd.remove(io_ctx, imgname);
 done:
   if (!from_stdin) {
     if (r < 0)
