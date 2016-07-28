@@ -138,7 +138,7 @@ this if you have a daemon that you want to use for any rank, but
 only within a particular filesystem.
 
 mon_force_standby_active
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 This setting is used on monitor hosts.  It defaults to true.
 
