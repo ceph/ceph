@@ -6620,8 +6620,8 @@ int Client::fsetattr(int fd, struct stat *attr, int mask,
   return _setattr(f->inode, attr, mask, perms);
 }
 
-int Client::stat(const char *relpath, struct stat *stbuf,
-			  frag_info_t *dirstat, int mask)
+int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
+		 frag_info_t *dirstat, int mask)
 {
   ldout(cct, 3) << "stat enter (relpath " << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
@@ -6629,10 +6629,10 @@ int Client::stat(const char *relpath, struct stat *stbuf,
   tout(cct) << relpath << std::endl;
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
-  r = _getattr(in, mask);
+  r = _getattr(in, mask, perms);
   if (r < 0) {
     ldout(cct, 3) << "stat exit on error!" << dendl;
     return r;
@@ -6643,7 +6643,7 @@ int Client::stat(const char *relpath, struct stat *stbuf,
 }
 
 int Client::lstat(const char *relpath, struct stat *stbuf,
-			  frag_info_t *dirstat, int mask)
+		  const UserPerm& perms, frag_info_t *dirstat, int mask)
 {
   ldout(cct, 3) << "lstat enter (relpath " << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
@@ -6652,10 +6652,10 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
   filepath path(relpath);
   InodeRef in;
   // don't follow symlinks
-  int r = path_walk(path, &in, false);
+  int r = path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
-  r = _getattr(in, mask);
+  r = _getattr(in, mask, perms);
   if (r < 0) {
     ldout(cct, 3) << "lstat exit on error!" << dendl;
     return r;
@@ -8828,7 +8828,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   return _fsync(f->inode.get(), syncdataonly);
 }
 
-int Client::fstat(int fd, struct stat *stbuf, int mask)
+int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "fstat mask " << hex << mask << dec << std::endl;
@@ -8837,7 +8837,7 @@ int Client::fstat(int fd, struct stat *stbuf, int mask)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  int r = _getattr(f->inode, mask);
+  int r = _getattr(f->inode, mask, perms);
   if (r < 0)
     return r;
   fill_stat(f->inode, stbuf, NULL);
