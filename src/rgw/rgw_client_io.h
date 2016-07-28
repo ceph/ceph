@@ -33,25 +33,26 @@ public:
   virtual uint64_t get_bytes_received() const = 0;
 }; /* RGWClient IO */
 
+
 class RGWStreamIOBase : public RGWClientIO {
-protected:
-  virtual int write_data(const char *buf, int len) = 0;
   virtual int read_data(char *buf, int max) = 0;
-
+  virtual int write_data(const char *buf, int len) = 0;
 public:
-  virtual int print(const char *format, ...);
-  virtual int write(const char *buf, int len);
-  virtual void flush() = 0;
-  virtual int read(char *buf, int max, int *actual);
-
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual int complete_header() = 0;
   virtual int send_content_length(uint64_t len) = 0;
+  virtual void flush() = 0;
+
+  /* High-level utilities to move out to a client's facade. Those functions
+   * are not intended for overriding by a front-end glue code. That's the
+   * reason why they aren't virtuals. */
+  int print(const char *format, ...);
+  int write(const char *buf, int len);
+  int read(char *buf, int max, int *actual);
 };
 
-
-/* HTTP IO */
+/* HTTP IO: compatibility layer */
 class RGWStreamIO : public RGWStreamIOBase {
   bool _account;
   size_t bytes_sent;
@@ -72,10 +73,10 @@ public:
       sha256_hash(nullptr) {
   }
 
-  int write(const char *buf, int len) override;
+  int write(const char *buf, int len);
 
-  int read(char *buf, int max, int *actual) override;
-  virtual int read(char *buf, int max, int *actual, bool hash);
+  int read(char *buf, int max, int *actual);
+  int read(char *buf, int max, int *actual, bool hash);
 
   std::string grab_aws4_sha256_hash();
 
