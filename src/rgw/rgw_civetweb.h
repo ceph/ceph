@@ -10,8 +10,10 @@
 
 struct mg_connection;
 
-class RGWMongoose : public RGWStreamIO
+class RGWMongoose : public RGWStreamIOEngine,
+                    private RGWStreamIOFacade
 {
+  RGWEnv env;
   mg_connection *conn;
 
   bufferlist header_data;
@@ -38,8 +40,23 @@ public:
   int complete_request();
   int send_content_length(uint64_t len);
 
+  RGWEnv& get_env() override {
+    return env;
+  }
+
   RGWMongoose(mg_connection *_conn, int _port);
-  void flush();
+  RGWMongoose(const RGWMongoose& rhs)
+    : RGWStreamIOFacade(this),
+      env(rhs.env),
+      conn(rhs.conn),
+      header_data(rhs.header_data),
+      data(rhs.data),
+      header_done(rhs.header_done),
+      sent_header(rhs.sent_header),
+      has_content_length(rhs.has_content_length),
+      explicit_keepalive(rhs.explicit_keepalive),
+      explicit_conn_close(rhs.explicit_conn_close) {
+  }
 };
 
 #endif
