@@ -1202,10 +1202,10 @@ public:
 		const char *newname, const UserPerm& perm);
   int ll_link(Inode *in, Inode *newparent, const char *newname,
 	      struct stat *attr, const UserPerm& perm);
-  int ll_open(Inode *in, int flags, Fh **fh, int uid = -1, int gid = -1);
+  int ll_open(Inode *in, int flags, Fh **fh, const UserPerm& perms);
   int ll_create(Inode *parent, const char *name, mode_t mode, int flags,
-		struct stat *attr, Inode **out, Fh **fhp, int uid = -1,
-		int gid = -1);
+		struct stat *attr, Inode **out, Fh **fhp,
+		const UserPerm& perms);
   int ll_read_block(Inode *in, uint64_t blockid, char *buf,  uint64_t offset,
 		    uint64_t length, file_layout_t* layout);
 

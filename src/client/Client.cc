@@ -11321,7 +11321,7 @@ int Client::ll_fsyncdir(dir_result_t *dirp)
   return _fsync(dirp->inode.get(), false);
 }
 
-int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
+int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
 {
   assert(!(flags & O_CREAT));
 
@@ -11335,17 +11335,13 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
   tout(cct) << flags << std::endl;
 
   int r;
-  if (uid < 0) {
-    uid = get_uid();
-    gid = get_gid();
-  }
   if (!cct->_conf->fuse_default_permissions) {
-    r = may_open(in, flags, uid, gid);
+    r = may_open(in, flags, perms);
     if (r < 0)
       goto out;
   }
 
-  r = _open(in, flags, 0, fhp /* may be NULL */, uid, gid);
+  r = _open(in, flags, 0, fhp /* may be NULL */, perms);
 
  out:
   Fh *fhptr = fhp ? *fhp : NULL;
@@ -11360,14 +11356,15 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
 
 int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 		      int flags, struct stat *attr, Inode **outp, Fh **fhp,
-		      int uid, int gid)
+		      const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_create " << vparent << " " << name << " 0" << oct <<
-    mode << dec << " " << flags << ", uid " << uid << ", gid " << gid << dendl;
+    mode << dec << " " << flags << ", uid " << perms.uid()
+		<< ", gid " << perms.gid() << dendl;
   tout(cct) << "ll_create" << std::endl;
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
@@ -11376,19 +11373,19 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   InodeRef in;
-  int r = _lookup(parent, name, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
+  int r = _lookup(parent, name, CEPH_STAT_CAP_INODE_ALL, &in, perms);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
 
   if (r == -ENOENT && (flags & O_CREAT)) {
     if (!cct->_conf->fuse_default_permissions) {
-      r = may_create(parent, uid, gid);
+      r = may_create(parent, perms);
       if (r < 0)
 	goto out;
     }
     r = _create(parent, name, flags, mode, &in, fhp /* may be NULL */,
-	        0, 0, 0, NULL, &created, uid, gid);
+	        0, 0, 0, NULL, &created, perms);
     if (r < 0)
       goto out;
   }
@@ -11402,7 +11399,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   ldout(cct, 20) << "ll_create created = " << created << dendl;
   if (!created) {
     if (!cct->_conf->fuse_default_permissions) {
-      r = may_open(in.get(), flags, uid, gid);
+      r = may_open(in.get(), flags, perms);
       if (r < 0) {
 	if (fhp && *fhp) {
 	  int release_r = _release_fh(*fhp);
@@ -11412,7 +11409,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
       }
     }
     if (fhp && (*fhp == NULL)) {
-      r = _open(in.get(), flags, mode, fhp, uid, gid);
+      r = _open(in.get(), flags, mode, fhp, perms);
       if (r < 0)
 	goto out;
     }

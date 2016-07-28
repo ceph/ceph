@@ -1450,7 +1450,8 @@ extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_open(class ceph_mount_info *cmount, Inode *in,
 			    int flags, Fh **fh, int uid, int gid)
 {
-  return (cmount->get_client()->ll_open(in, flags, fh, uid, gid));
+  UserPerm perms(uid, gid);
+  return (cmount->get_client()->ll_open(in, flags, fh, perms));
 }
 
 extern "C" int ceph_ll_read(class ceph_mount_info *cmount, Fh* filehandle,
@@ -1546,8 +1547,9 @@ extern "C" int ceph_ll_create(class ceph_mount_info *cmount,
 			      mode_t mode, int flags, struct stat *attr,
 			      struct Inode **out, Fh **fhp, int uid, int gid)
 {
+  UserPerm perms(uid, gid);
   return (cmount->get_client())->ll_create(parent, name, mode, flags,
-					   attr, out, fhp, uid, gid);
+					   attr, out, fhp, perms);
 }
 
 extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount,
