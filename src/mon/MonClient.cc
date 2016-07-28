@@ -82,13 +82,13 @@ MonClient::~MonClient()
 
 int MonClient::build_initial_monmap()
 {
-  ldout(cct, 10) << "build_initial_monmap" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   return monmap.build_initial(cct, cerr);
 }
 
 int MonClient::get_monmap()
 {
-  ldout(cct, 10) << "get_monmap" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   Mutex::Locker l(monc_lock);
   
   _sub_want("monmap", 0, 0);
@@ -98,13 +98,13 @@ int MonClient::get_monmap()
   while (want_monmap)
     map_cond.Wait(monc_lock);
 
-  ldout(cct, 10) << "get_monmap done" << dendl;
+  ldout(cct, 10) << __func__ << " done" << dendl;
   return 0;
 }
 
 int MonClient::get_monmap_privately()
 {
-  ldout(cct, 10) << "get_monmap_privately" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   Mutex::Locker l(monc_lock);
 
   bool temp_msgr = false;
@@ -399,7 +399,7 @@ void MonClient::flush_log()
 
 void MonClient::handle_monmap(MMonMap *m)
 {
-  ldout(cct, 10) << "handle_monmap " << *m << dendl;
+  ldout(cct, 10) << __func__ << " " << *m << dendl;
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
 
@@ -431,7 +431,7 @@ void MonClient::handle_monmap(MMonMap *m)
 
 int MonClient::init()
 {
-  ldout(cct, 10) << "init" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
 
   messenger->add_dispatcher_head(this);
 
@@ -780,17 +780,38 @@ void MonClient::_reopen_session(int rank, string name)
   }
 
   // restart authentication handshake
-  for (int j = 0; j < attempt; j++) {
+  for (auto j = conns.begin(); j != conns.end(); ++j) {
+    ConnectionRef con = *j;
+    _set_state(con->get_peer_addr(), MC_STATE_NEGOTIATING, true);
+    ldout(cct, 10) << __func__ << " _set_state on "
+      << con->get_peer_addr() << " to MC_STATE_NEGOTIATING" << dendl;
+  }
+  /*for (int j = 0; j < attempt; j++) {
     _set_state(conns[j]->get_peer_addr(), MC_STATE_NEGOTIATING, true);
     ldout(cct, 10) << __func__ << " _set_state on "
       << conns[j]->get_peer_addr() << " to MC_STATE_NEGOTIATING" << dendl;
-  }
+  }*/
   hunting = true;
 
   // send an initial keepalive to ensure our timestamp is valid by the
   // time we are in an OPENED state (by sequencing this before
   // authentication).
-  for (int j = 0; j < attempt; j++) {
+  for (auto j = conns.begin(); j != conns.end(); ++j) {
+    ConnectionRef con = *j;
+    con->send_keepalive();
+
+    MAuth *m = new MAuth;
+    m->protocol = 0;
+    m->monmap_epoch = monmap.get_epoch();
+    __u8 struct_v = 1;
+    ::encode(struct_v, m->auth_payload);
+    ::encode(auth_supported->get_supported_set(), m->auth_payload);
+    ::encode(entity_name, m->auth_payload);
+    ::encode(global_id, m->auth_payload);
+    
+    _send_mon_message(m, con, true);    
+  }
+  /*for (int j = 0; j < attempt; j++) {
     conns[j]->send_keepalive();
 
     MAuth *m = new MAuth;
@@ -803,13 +824,14 @@ void MonClient::_reopen_session(int rank, string name)
     ::encode(global_id, m->auth_payload);
     
     _send_mon_message(m, conns[j], true);
-  }
+  }*/
 
   reopened = true;
-
-  for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
-       p != sub_sent.end();
-       ++p) {
+  
+  //for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
+  //     p != sub_sent.end();
+  //     ++p) {
+  for (auto p = sub_sent.begin(); p != sub_sent.end(); ++p) {
     if (sub_new.count(p->first) == 0)
       sub_new[p->first] = p->second;
   }
@@ -825,10 +847,10 @@ bool MonClient::ms_handle_reset(Connection *con)
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     if (!reopened || _check_state(con, MC_STATE_NONE)) { //added check (before: con != cur_con)
-      ldout(cct, 10) << "ms_handle_reset stray mon" << dendl;
+      ldout(cct, 10) << __func__ << " stray mon" << dendl;
       return true;
     } else {
-      ldout(cct, 10) << "ms_handle_reset sessioned mon" << dendl;
+      ldout(cct, 10) << __func__ << " sessioned mon" << dendl;
       if (hunting) {
 	return true;
       }
@@ -855,7 +877,7 @@ void MonClient::_finish_hunting()
 
 void MonClient::tick()
 {
-  ldout(cct, 10) << "tick" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
 
   _check_auth_tickets();
   
