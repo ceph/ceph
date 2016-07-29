@@ -1889,6 +1889,8 @@ def main(argv):
 
 
 def remove_btrfs_subvolumes(path):
+    if platform.system() == "FreeBSD":
+        return 
     result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
     for line in result.stdout:
         filesystem = decode(line).rstrip('\n')
