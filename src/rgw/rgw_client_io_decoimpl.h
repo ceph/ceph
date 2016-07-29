@@ -165,4 +165,92 @@ public:
   }
 };
 
+
+/* Filter for in-memory buffering incoming data and calculating the content
+ * length header if it isn't present. */
+template <typename T>
+class RGWStreamIOBufferingEngine : public RGWDecoratedStreamIO<T> {
+  template<typename Td> friend class RGWDecoratedStreamIO;
+protected:
+  ceph::bufferlist data;
+
+  bool has_content_length;
+  bool buffer_data;
+
+  int write_data(const char* buf, const int len) override;
+
+public:
+  template <typename U>
+  RGWStreamIOBufferingEngine(U&& decoratee)
+    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+      has_content_length(false),
+      buffer_data(false) {
+  }
+
+  int send_content_length(const uint64_t len) override;
+  int complete_header() override;
+  int complete_request() override;
+};
+
+template <typename T>
+int RGWStreamIOBufferingEngine<T>::write_data(const char* buf,
+                                              const int len)
+{
+  if (buffer_data) {
+    data.append(buf, len);
+    return 0;
+  }
+
+  return RGWDecoratedStreamIO<T>::write_data(buf, len);
+}
+
+template <typename T>
+int RGWStreamIOBufferingEngine<T>::send_content_length(const uint64_t len)
+{
+  has_content_length = true;
+  return RGWDecoratedStreamIO<T>::send_content_length(len);
+}
+
+template <typename T>
+int RGWStreamIOBufferingEngine<T>::complete_header()
+{
+  if (! has_content_length) {
+    /* We will dump everything in complete_request(). */
+    buffer_data = true;
+    return 0;
+  }
+
+  return RGWDecoratedStreamIO<T>::complete_header();
+}
+
+template <typename T>
+int RGWStreamIOBufferingEngine<T>::complete_request()
+{
+  size_t sent = 0;
+
+  if (! has_content_length) {
+    sent += RGWDecoratedStreamIO<T>::send_content_length(data.length());
+    sent += RGWDecoratedStreamIO<T>::complete_header();
+  }
+
+  if (buffer_data) {
+    /* We are sending each buffer separately to avoid extra memory shuffling
+     * that would occur on data.c_str() to provide a continuous memory area. */
+    for (const auto& ptr : data.buffers()) {
+      sent += RGWDecoratedStreamIO<T>::write_data(ptr.c_str(),
+                                                  ptr.length());
+    }
+    data.clear();
+    buffer_data = false;
+  }
+
+  return sent + RGWDecoratedStreamIO<T>::complete_request();
+}
+
+template <typename T>
+RGWStreamIOBufferingEngine<T> add_buffering(T&& t) {
+  return RGWStreamIOBufferingEngine<T>(std::move(t));
+}
+
+
 #endif /* CEPH_RGW_CLIENT_IO_DECOIMPL_H */
