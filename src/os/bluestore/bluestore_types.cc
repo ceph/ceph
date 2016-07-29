@@ -555,7 +555,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   out << "blob(" << o.extents
       << " clen 0x" << std::hex
       << o.compressed_length_orig
-      << " -> " << std::hex
+      << " -> 0x"
       << o.compressed_length
       << std::dec;
   if (o.flags) {
