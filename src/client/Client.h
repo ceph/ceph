@@ -778,7 +778,8 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target, int uid, int gid);
+  int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
+		 const UserPerm& perms);
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target, int uid, int gid);
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 	      const UserPerm& perm) {
