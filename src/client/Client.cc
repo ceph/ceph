@@ -10547,7 +10547,7 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
 int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 		    InodeRef *inp, Fh **fhp, int stripe_unit, int stripe_count,
 		    int object_size, const char *data_pool, bool *created,
-		    int uid, int gid)
+		    const UserPerm& perms)
 {
   ldout(cct, 3) << "_create(" << dir->ino << " " << name << ", 0" << oct <<
     mode << dec << ")" << dendl;
@@ -10597,7 +10597,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   mode |= S_IFREG;
   bufferlist xattrs_bl;
-  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, perms.uid(), perms.gid());
   if (res < 0)
     goto fail;
   req->head.args.open.mode = mode;
@@ -10610,7 +10610,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     goto fail;
   req->set_dentry(de);
 
-  res = make_request(req, uid, gid, inp, created);
+  res = make_request(req, perms, inp, created);
   if (res < 0) {
     goto reply_error;
   }
