@@ -560,6 +560,7 @@ def cli_test(ctx, config):
                                 action='check health') as proceed:
        while proceed():
            r = remote.run(args=['sudo', 'ceph', 'health'], stdout=StringIO())
+           out = r.stdout.getvalue()
            if (out.split(None,1)[0] == 'HEALTH_OK'):
                break
     rgw_install = 'install {branch} --rgw {node}'.format(
