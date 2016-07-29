@@ -898,7 +898,8 @@ private:
   };
 
   int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
-  int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1);
+  int xattr_permission(Inode *in, const char *name, unsigned want,
+		       const UserPerm& perms);
   int may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& perms);
   int may_open(Inode *in, int flags, const UserPerm& perms);
   int may_lookup(Inode *dir, const UserPerm& perms);
@@ -910,9 +911,11 @@ private:
     RequestUserGroups groups(this, perms.uid(), perms.gid());
     return inode_permission(in, perms.uid(), groups, want);
   }
-  int xattr_permission(Inode *in, const char *name, unsigned want,
-		       const UserPerm& perms) {
-    return xattr_permission(in, name, want, perms.uid(), perms.gid());
+  int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1) {
+    if (uid < 0) uid = get_uid();
+    if (gid < 0) gid = get_gid();
+    UserPerm perms(uid, gid);
+    return xattr_permission(in, name, want, perms);
   }
 
   int may_setattr(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1) {

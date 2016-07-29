@@ -5022,14 +5022,10 @@ int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned 
   return 0;
 }
 
-int Client::xattr_permission(Inode *in, const char *name, unsigned want, int uid, int gid)
+int Client::xattr_permission(Inode *in, const char *name, unsigned want,
+			     const UserPerm& perms)
 {
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
-  UserPerm perms(uid, gid);
+  RequestUserGroups groups(this, perms.uid(), perms.gid());
 
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
@@ -5037,10 +5033,10 @@ int Client::xattr_permission(Inode *in, const char *name, unsigned want, int uid
 
   r = 0;
   if (strncmp(name, "system.", 7) == 0) {
-    if ((want & MAY_WRITE) && (uid != 0 && (uid_t)uid != in->uid))
+    if ((want & MAY_WRITE) && (perms.uid() != 0 && perms.uid() != in->uid))
       r = -EPERM;
   } else {
-    r = inode_permission(in, uid, groups, want);
+    r = inode_permission(in, perms, want);
   }
 out:
   ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
