@@ -55,7 +55,7 @@ class MDBalancer {
 
   // per-epoch scatter/gathered info
   map<mds_rank_t, mds_load_t>  mds_load;
-  map<mds_rank_t, float>       mds_meta_load;
+  map<mds_rank_t, double>       mds_meta_load;
   map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
 
   // per-epoch state
