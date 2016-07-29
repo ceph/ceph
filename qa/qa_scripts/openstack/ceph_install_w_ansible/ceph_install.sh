@@ -33,4 +33,7 @@ copy_file execs/ceph_ansible.sh $adminnode . 0777 ubuntu:ubuntu
 copy_file execs/edit_ansible_hosts.sh $adminnode . 0777 ubuntu:ubuntu
 copy_file execs/edit_groupvars_osds.sh $adminnode . 0777 ubuntu:ubuntu
 copy_file ../execs/ceph-pool-create.sh $monnode . 0777 ubuntu:ubuntu
+if [ -e ~/ip_info ]; then
+    copy_file ~/ip_info $adminnode . 0777 ubuntu:ubuntu
+fi
 ssh $adminnode ./ceph_ansible.sh $cephnodes
