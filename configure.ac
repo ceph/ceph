@@ -51,6 +51,7 @@ darwin*)
 	;;
 linux*)
 	linux="yes"
+	CFLAGS="-D_LARGEFILE64_SOURCE ${CFLAGS}"
 	;;
 freebsd*)
 	freebsd="yes"
