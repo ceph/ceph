@@ -43,9 +43,8 @@ public:
                             uint64_t max_alloc_size, int64_t hint,
                             std::vector<AllocExtent> *extents, int *count) = 0;
 
-  virtual int alloc_extents(uint64_t want_size, uint64_t alloc_unit,
-                            int64_t hint, std::vector<AllocExtent> *extents,
-			    int *count) {
+  int alloc_extents(uint64_t want_size, uint64_t alloc_unit,
+                    int64_t hint, std::vector<AllocExtent> *extents, int *count) {
     return alloc_extents(want_size, alloc_unit, want_size, hint, extents, count);
   }
 
