@@ -56,17 +56,18 @@ wait_for_pool_images()
 
     while true; do
         for s in `seq 1 40`; do
+            test $s -ne 1 && sleep 30
             count=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'images: ' | cut -d' ' -f 2)
             test "${count}" = "${image_count}" && return 0
 
             # reset timeout if making forward progress
-            test $count -gt $last_count && break
-            sleep 30
+            test $count -ne $last_count && break
         done
 
-        test $count -eq $last_count && return 1
-        $last_count=$count
+        test $count -eq $last_count && break
+        last_count=$count
     done
+    rbd --cluster ${cluster} -p ${pool} mirror pool status --verbose >&2
     return 1
 }
 
@@ -78,11 +79,12 @@ wait_for_pool_healthy()
     local state
 
     for s in `seq 1 40`; do
+        test $s -ne 1 && sleep 30
         state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'health:' | cut -d' ' -f 2)
-        test "${state}" = "ERROR" && return 1
+        test "${state}" = "ERROR" && break
         test "${state}" = "OK" && return 0
-	sleep 30
     done
+    rbd --cluster ${cluster} -p ${pool} mirror pool status --verbose >&2
     return 1
 }
 
@@ -154,6 +156,7 @@ do
 done
 
 testlog "TEST: image deletions should propagate"
+wait_for_pool_images ${CLUSTER2} ${POOL} 0
 wait_for_pool_healthy ${CLUSTER1} ${POOL} 0
 for i in `seq 1 ${IMAGE_COUNT}`
 do
