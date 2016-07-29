@@ -942,6 +942,7 @@ void RGWGetObj::execute()
     ret = handle_user_manifest(attr_iter->second.c_str());
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
+      goto done_err;
     }
     return;
   }
