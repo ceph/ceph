@@ -1284,7 +1284,10 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
 
   map<std::string, RGWSubUser>::iterator siter;
   siter = subuser_map->find(subuser_str);
-
+  if (siter == subuser_map->end()){
+    set_err_msg(err_msg, "subuser not found: " + subuser_str);
+    return -EINVAL;
+  }
   if (!op_state.has_existing_subuser()) {
     set_err_msg(err_msg, "subuser not found: " + subuser_str);
     return -EINVAL;
