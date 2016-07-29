@@ -12,6 +12,8 @@
  *
  */
 
+#include "include/compat.h"
+
 #include "simple_dispatcher.h"
 #include "messages/MPing.h"
 #include "messages/MDataPing.h"
