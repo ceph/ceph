@@ -594,13 +594,13 @@ int RGWRemoteDataLog::get_shard_info(int shard_id)
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
   // cannot run concurrently with run_sync(), so run in a separate manager
-  RGWCoroutinesManager crs(store->ctx(), nullptr);
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   return crs.run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
 }
 
 int RGWRemoteDataLog::init_sync_status(int num_shards)
 {
-  RGWCoroutinesManager crs(store->ctx(), nullptr);
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   return crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env, num_shards));
 }
 
