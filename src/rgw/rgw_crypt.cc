@@ -11,6 +11,8 @@
 #include "include/assert.h"
 #include <boost/utility/string_ref.hpp>
 #include <rgw/rgw_keystone.h>
+#include "../isa-l_crypto_plugin/crypto_accel.h"
+#include "../isa-l_crypto_plugin/crypto_plugin.h"
 
 #ifdef USE_NSS
 # include <nspr.h>
@@ -192,6 +194,26 @@ const uint8_t AES_256_CTR::IV[AES_256_CTR::AES_256_IVSIZE] =
     { 'a', 'e', 's', '2', '5', '6', 'i', 'v', '_', 'c', 't', 'r', '1', '3', '3', '7' };
 
 
+CryptoAccelRef get_crypto_accel(CephContext *cct)
+{
+  CryptoAccelRef ca_impl = nullptr;
+  stringstream ss;
+  PluginRegistry *reg = cct->get_plugin_registry();
+  string crypto_accel_type = cct->_conf->async_compressor_type; //fixme
+  crypto_accel_type = "crypto_isal";
+
+  CryptoPlugin *factory = dynamic_cast<CryptoPlugin*>(reg->get_with_load("cryptoaccel", crypto_accel_type));
+  if (factory == nullptr) {
+    lderr(cct) << __func__ << " cannot load crypto accelerator of type " << crypto_accel_type << dendl;
+    return nullptr;
+  }
+  int err = factory->factory(&ca_impl, &ss);
+  if (err)
+    lderr(cct) << __func__ << " factory return error " << err << dendl;
+  return ca_impl;
+}
+
+
 /**
  * Encryption in CBC mode. Chunked to 4K blocks. offset is used as IV for 4K block.
  */
@@ -223,8 +245,8 @@ public:
 #ifdef USE_CRYPTOPP
 
   bool cbc_transform(unsigned char* out, const unsigned char* in, size_t size,
-                     unsigned char iv[AES_256_IVSIZE],
-                     unsigned char key[AES_256_KEYSIZE],
+                     const unsigned char (&iv)[AES_256_IVSIZE],
+                     const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt) {
     if (encrypt) {
       CBC_Mode< AES >::Encryption e;
@@ -241,8 +263,8 @@ public:
 #elif defined(USE_NSS)
 
   bool cbc_transform(unsigned char* out, const unsigned char* in, size_t size,
-                   unsigned char iv[AES_256_IVSIZE],
-                   unsigned char key[AES_256_KEYSIZE],
+                   const unsigned char (&iv)[AES_256_IVSIZE],
+                   const unsigned char (&key)[AES_256_KEYSIZE],
                    bool encrypt) {
     bool result = false;
     PK11SlotInfo *slot;
@@ -258,7 +280,7 @@ public:
     slot = PK11_GetBestSlot(CKM_AES_CBC, NULL);
     if (slot) {
       keyItem.type = siBuffer;
-      keyItem.data = key;
+      keyItem.data = const_cast<unsigned char*>(&key[0]);
       keyItem.len = AES_256_KEYSIZE;
       symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
       if (symkey) {
@@ -295,17 +317,32 @@ public:
 #error Must define USE_CRYPTOPP or USE_NSS
 #endif
 
+
+
   bool cbc_transform(unsigned char* out, const unsigned char* in, size_t size,
                      off_t stream_offset,
-                     unsigned char key[AES_256_KEYSIZE],
+                     const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt) {
+    static CryptoAccelRef crypto_accel = get_crypto_accel(cct);
+    //compressor(Compressor::create(c, c->_conf->async_compressor_type))
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
+      size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
       prepare_iv(iv, stream_offset + offset);
-      result = cbc_transform(
-          out + offset, in + offset, offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset,
-          iv, key, encrypt);
+      if (crypto_accel != nullptr) {
+        if (encrypt) {
+          result = crypto_accel->cbc_encrypt(out + offset, in + offset,
+                                             process_size, iv, key);
+        } else {
+          result = crypto_accel->cbc_decrypt(out + offset, in + offset,
+                                             process_size, iv, key);
+        }
+      } else {
+        result = cbc_transform(
+            out + offset, in + offset, process_size,
+            iv, key, encrypt);
+      }
     }
     return result;
   }
@@ -321,7 +358,6 @@ public:
     unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
     unsigned char* input_raw = reinterpret_cast<unsigned char*>(input.c_str());
     unsigned char iv[AES_256_IVSIZE];
-
     result = cbc_transform(buf_raw,
                            input_raw + in_ofs,
                            aligned_size,
