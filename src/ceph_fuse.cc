@@ -189,6 +189,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     Messenger *messenger = NULL;
     Client *client;
     CephFuse *cfuse;
+    UserPerm perms;
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
@@ -234,10 +235,11 @@ int main(int argc, const char **argv, const char *envp[]) {
     }
     
     client->update_metadata("mount_point", cfuse->get_mount_point());
-
+    perms = client->pick_my_perms();
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    r = client->mount(g_conf->client_mountpoint.c_str(), g_ceph_context->_conf->fuse_require_active_mds);
+    r = client->mount(g_conf->client_mountpoint.c_str(), perms,
+		      g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
       if (r == CEPH_FUSE_NO_MDS_UP)
         cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
