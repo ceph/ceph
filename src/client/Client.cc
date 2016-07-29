@@ -5025,8 +5025,6 @@ int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned 
 int Client::xattr_permission(Inode *in, const char *name, unsigned want,
 			     const UserPerm& perms)
 {
-  RequestUserGroups groups(this, perms.uid(), perms.gid());
-
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
