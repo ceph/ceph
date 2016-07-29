@@ -25,7 +25,7 @@ stop_file_path = '/tmp/teuthology-stop-workers'
 
 
 def sentinel(path):
-    if not os.path.exists(restart_file_path):
+    if not os.path.exists(path):
         return False
     file_mtime = datetime.utcfromtimestamp(os.path.getmtime(path))
     if file_mtime > start_time:
