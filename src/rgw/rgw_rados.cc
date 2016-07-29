@@ -3078,7 +3078,8 @@ class RGWSyncLogTrimThread : public RGWSyncProcessorThread
   void stop_process() override { crs.stop(); }
 public:
   RGWSyncLogTrimThread(RGWRados *store, int interval)
-    : RGWSyncProcessorThread(store), crs(store->ctx(), nullptr), store(store),
+    : RGWSyncProcessorThread(store),
+      crs(store->ctx(), store->get_cr_registry()), store(store),
       http(store->ctx(), crs.get_completion_mgr()),
       trim_interval(interval, 0)
   {}
