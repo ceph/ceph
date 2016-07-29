@@ -19,6 +19,7 @@ if (WITH_RBD)
   install(TARGETS cls_rbd DESTINATION ${cls_dir})
 
   add_library(cls_rbd_client STATIC rbd/cls_rbd_client.cc rbd/cls_rbd_types.cc)
+  target_link_libraries(cls_rbd_client cls_lock_client)
 endif (WITH_RBD)
 
 # cls_lock
