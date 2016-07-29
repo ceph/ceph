@@ -6,13 +6,13 @@ Slow/stuck operations
 If you are experiencing apparent hung operations, the first task is to identify
 where the problem is occurring: in the client, the MDS, or the network connecting
 them. Start by looking to see if either side has stuck operations
-("Slow requests", below), and narrow it down from there.
+(:ref:`slow_requests`, below), and narrow it down from there.
 
 RADOS Health
 ~~~~~~~~~~~~
 If part of the CephFS metadata or data pools is unavaible and CephFS isn't
 responding, it is probably because RADOS itself is unhealthy. Resolve those
-problems first.
+problems first (:doc:`/rados/troubleshooting`).
 
 The MDS
 ~~~~~~~
@@ -30,6 +30,7 @@ than your MDS cache is the #1 cause of this!)
 Otherwise, you have probably discovered a new bug and should report it to
 the developers!
 
+.. _slow_requests:
 Slow requests (MDS)
 -------------------
 You can list current operations via the admin socket by running
