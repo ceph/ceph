@@ -84,33 +84,54 @@ if MYDIR.endswith('src') and \
     if 'PATH' in os.environ and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
-elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
-     and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
-    src_path = None
-    for l in open("./CMakeCache.txt"):
-        if l.startswith("ceph_SOURCE_DIR:STATIC="):
-            src_path = l.split("=")[1].strip()
+else:
+    if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
+            and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
+        # Could be we are running from ./build
+        cmakecachepath = "./CMakeCache.txt"
+        mybase = os.getcwd()
+    elif os.path.exists(os.path.join(os.getcwd(), "build/CMakeCache.txt")):
+        # Developer mode, Using Cmake but running from ./src
+        # This happens when running tests standalone from ./src
+        # python lib could be in: build/lib/cython_modules/lib.freebsd-11.0-CURRENT-amd64-2.7
+        cmakecachepath = "build/CMakeCache.txt"
+        mybase = os.path.join(os.getcwd(),"build")
+    elif os.path.exists(os.path.join(os.getcwd(), "../build/CMakeCache.txt")):
+        # Developer mode, Using Cmake but running from ./src
+        # This happens when running tests standalone from ./src
+        # python lib could be in: build/lib/cython_modules/lib.freebsd-11.0-CURRENT-amd64-2.7
+        cmakecachepath = "../build/CMakeCache.txt"
+        mybase = os.path.join(os.getcwd(),"../build")
+    else:
+        mybase = None
 
-
-    if src_path is None:
-        # Huh, maybe we're not really in a cmake environment?
+    if mybase is None:
         pass
     else:
-        # Developer mode, but in a cmake build dir instead of the src dir
-        lib_path = os.path.join(os.getcwd(), "lib")
-        bin_path = os.path.join(os.getcwd(), "bin")
-        pybind_path = os.path.join(src_path, "src", "pybind")
+        src_path = None
+        DEVMODEMSG = ''
+        for l in open(cmakecachepath):
+            if l.startswith("ceph_SOURCE_DIR:STATIC="):
+                src_path = l.split("=")[1].strip()
 
-        import sysconfig
-        f = "lib.{platform}-{version[0]}.{version[1]}"
-        name = f.format(platform=sysconfig.get_platform(),
-                        version=sys.version_info)
-        pythonlib_path = os.path.join(os.getcwd(), "lib/cython_modules", name)
+        if src_path is None:
+            # Huh, maybe we're not really in a cmake environment?
+            pass
+        else:
+            lib_path = os.path.join(mybase, "lib")
+            bin_path = os.path.join(mybase, "bin")
+            pybind_path = os.path.join(src_path, "src", "pybind")
 
-        respawn_in_path(lib_path, pybind_path, pythonlib_path)
+            import sysconfig
+            f = "lib.{platform}-{version[0]}.{version[1]}"
+            name = f.format(platform=sysconfig.get_platform(),
+                            version=sys.version_info)
+            pythonlib_path = os.path.join(lib_path, "cython_modules", name)
 
-        if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
-            os.environ['PATH'] += ':' + bin_path
+            respawn_in_path(lib_path, pybind_path, pythonlib_path)
+
+            if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
+                os.environ['PATH'] += ':' + bin_path
 
 import argparse
 import errno
