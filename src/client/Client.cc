@@ -6343,7 +6343,7 @@ int Client::_readlink(Inode *in, char *buf, size_t size)
 
 // inode stuff
 
-int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
+int Client::_getattr(Inode *in, int mask, const UserPerm& perms, bool force)
 {
   bool yes = in->caps_issued_mask(mask);
 
@@ -6358,7 +6358,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
   req->set_inode(in);
   req->head.args.getattr.mask = mask;
   
-  int res = make_request(req, uid, gid);
+  int res = make_request(req, perms);
   ldout(cct, 10) << "_getattr result=" << res << dendl;
   return res;
 }
