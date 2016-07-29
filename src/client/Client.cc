@@ -5029,8 +5029,9 @@ int Client::xattr_permission(Inode *in, const char *name, unsigned want, int uid
   if (gid < 0)
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
+  UserPerm perms(uid, gid);
 
-  int r = _getattr_for_perm(in, uid, gid);
+  int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
 
@@ -5046,46 +5047,42 @@ out:
   return r;
 }
 
-int Client::may_setattr(Inode *in, struct stat *st, int mask, int uid, int gid)
+int Client::may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& perms)
 {
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
+  RequestUserGroups groups(this, perms.uid(), perms.gid());
 
-  int r = _getattr_for_perm(in, uid, gid);
+  int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
 
   if (mask & CEPH_SETATTR_SIZE) {
-    r = inode_permission(in, uid, groups, MAY_WRITE);
+    r = inode_permission(in, perms, MAY_WRITE);
     if (r < 0)
       goto out;
   }
 
   r = -EPERM;
   if (mask & CEPH_SETATTR_UID) {
-    if (uid != 0 && ((uid_t)uid != in->uid || st->st_uid != in->uid))
+    if (perms.uid() != 0 && (perms.uid() != in->uid || st->st_uid != in->uid))
       goto out;
   }
   if (mask & CEPH_SETATTR_GID) {
-    if (uid != 0 && ((uid_t)uid != in->uid ||
+    if (perms.uid() != 0 && (perms.uid() != in->uid ||
       	       (!groups.is_in(st->st_gid) && st->st_gid != in->gid)))
       goto out;
   }
 
   if (mask & CEPH_SETATTR_MODE) {
-    if (uid != 0 && (uid_t)uid != in->uid)
+    if (perms.uid() != 0 && perms.uid() != in->uid)
       goto out;
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? st->st_gid : in->gid;
-    if (uid != 0 && !groups.is_in(i_gid))
+    if (perms.uid() != 0 && !groups.is_in(i_gid))
       st->st_mode &= ~S_ISGID;
   }
 
   if (mask & (CEPH_SETATTR_CTIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_ATIME)) {
-    if (uid != 0 && (uid_t)uid != in->uid) {
+    if (perms.uid() != 0 && perms.uid() != in->uid) {
       int check_mask = CEPH_SETATTR_CTIME;
       if (!(mask & CEPH_SETATTR_MTIME_NOW))
 	check_mask |= CEPH_SETATTR_MTIME;
@@ -5094,7 +5091,7 @@ int Client::may_setattr(Inode *in, struct stat *st, int mask, int uid, int gid)
       if (check_mask & mask) {
 	goto out;
       } else {
-	r = inode_permission(in, uid, groups, MAY_WRITE);
+	r = inode_permission(in, perms, MAY_WRITE);
 	if (r < 0)
 	  goto out;
       }
@@ -5106,7 +5103,7 @@ out:
   return r;
 }
 
-int Client::may_open(Inode *in, int flags, int uid, int gid)
+int Client::may_open(Inode *in, int flags, const UserPerm& perms)
 {
   unsigned want = 0;
 
@@ -5118,12 +5115,6 @@ int Client::may_open(Inode *in, int flags, int uid, int gid)
     want = MAY_READ;
   if (flags & O_TRUNC)
     want |= MAY_WRITE;
-
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
 
   int r = 0;
   switch (in->mode & S_IFMT) {
@@ -5138,75 +5129,57 @@ int Client::may_open(Inode *in, int flags, int uid, int gid)
       break;
   }
 
-  r = _getattr_for_perm(in, uid, gid);
+  r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
 
-  r = inode_permission(in, uid, groups, want);
+  r = inode_permission(in, perms, want);
 out:
   ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
   return r;
 }
 
-int Client::may_lookup(Inode *dir, int uid, int gid)
+int Client::may_lookup(Inode *dir, const UserPerm& perms)
 {
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
-
-  int r = _getattr_for_perm(dir, uid, gid);
+  int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, uid, groups, MAY_EXEC);
+  r = inode_permission(dir, perms, MAY_EXEC);
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
   return r;
 }
 
-int Client::may_create(Inode *dir, int uid, int gid)
+int Client::may_create(Inode *dir, const UserPerm& perms)
 {
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
-
-  int r = _getattr_for_perm(dir, uid, gid);
+  int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, uid, groups, MAY_EXEC | MAY_WRITE);
+  r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE);
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
   return r;
 }
 
-int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
+int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
 {
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
-
-  int r = _getattr_for_perm(dir, uid, gid);
+  int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, uid, groups, MAY_EXEC | MAY_WRITE);
+  r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE);
   if (r < 0)
     goto out;
 
   /* 'name == NULL' means rmsnap */
-  if (uid != 0 && name && (dir->mode & S_ISVTX)) {
+  if (perms.uid() != 0 && name && (dir->mode & S_ISVTX)) {
     InodeRef otherin;
-    r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, uid, gid);
+    r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, perms);
     if (r < 0)
       goto out;
-    if (dir->uid != (uid_t)uid && otherin->uid != (uid_t)uid)
+    if (dir->uid != perms.uid() && otherin->uid != perms.uid())
       r = -EPERM;
   }
 out:
@@ -5214,19 +5187,13 @@ out:
   return r;
 }
 
-int Client::may_hardlink(Inode *in, int uid, int gid)
+int Client::may_hardlink(Inode *in, const UserPerm& perms)
 {
-  if (uid < 0)
-    uid = get_uid();
-  if (gid < 0)
-    gid = get_gid();
-  RequestUserGroups groups(this, uid, gid);
-
-  int r = _getattr_for_perm(in, uid, gid);
+  int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
 
-  if (uid == 0 || (uid_t)uid == in->uid) {
+  if (perms.uid() == 0 || perms.uid() == in->uid) {
     r = 0;
     goto out;
   }
@@ -5241,13 +5208,13 @@ int Client::may_hardlink(Inode *in, int uid, int gid)
   if ((in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))
     goto out;
 
-  r = inode_permission(in, uid, groups, MAY_READ | MAY_WRITE);
+  r = inode_permission(in, perms, MAY_READ | MAY_WRITE);
 out:
   ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
   return r;
 }
 
-int Client::_getattr_for_perm(Inode *in, int uid, int gid)
+int Client::_getattr_for_perm(Inode *in, const UserPerm& perms)
 {
   int mask = CEPH_STAT_CAP_MODE;
   bool force = false;
@@ -5255,7 +5222,7 @@ int Client::_getattr_for_perm(Inode *in, int uid, int gid)
     mask |= CEPH_STAT_CAP_XATTR;
     force = in->xattr_version == 0;
   }
-  return _getattr(in, mask, uid, gid, force);
+  return _getattr(in, mask, perms, force);
 }
 
 vinodeno_t Client::_get_vino(Inode *in)
