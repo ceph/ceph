@@ -31,7 +31,7 @@ add_library(ec_jerasure_generic SHARED
   $<TARGET_OBJECTS:erasure_code_objs>
   )
 add_dependencies(ec_jerasure_generic ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_jerasure_generic crush ${EXTRALIBS})
+target_link_libraries(ec_jerasure_generic ${EXTRALIBS})
 set_target_properties(ec_jerasure_generic PROPERTIES VERSION 2.0.0 SOVERSION 2)
 install(TARGETS ec_jerasure_generic DESTINATION ${erasure_plugin_dir})
 
