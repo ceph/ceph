@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 2.8.11)
 project(ceph)
 set(VERSION "10.2.1")
 
-if (NOT (CMAKE_MAJOR_VERSION LESS 3))
+if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
   cmake_policy(SET CMP0046 OLD)
-endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
+endif()
 # we use LINK_PRIVATE keyword instead of PRIVATE, but do not specify the LINK_PUBLIC
 # for target_link_libraries() command when PUBLIC should be used instead, it's just
 # for backward compatibility with cmake 2.8.11.
@@ -16,6 +16,12 @@ endif (POLICY CMP0022)
 if (POLICY CMP0023)
 cmake_policy(SET CMP0023 OLD)
 endif (POLICY CMP0023)
+if(POLICY CMP0056)
+  cmake_policy(SET CMP0056 NEW)
+endif()
+if(POLICY CMP0065)
+  cmake_policy(SET CMP0065 NEW)
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
