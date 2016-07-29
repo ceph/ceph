@@ -28,12 +28,16 @@ class RemoteProcess(object):
         '_stdin_buf', '_stdout_buf', '_stderr_buf',
         'returncode', 'exitstatus', 'timeout',
         'greenlets',
+        '_wait', 'logger',
         # for orchestra.remote.Remote to place a backreference
         'remote',
         'label',
         ]
 
-    def __init__(self, client, args, check_status=True, hostname=None, label=None, timeout=None):
+    deadlock_warning = "Using PIPE for %s without wait=False would deadlock"
+
+    def __init__(self, client, args, check_status=True, hostname=None,
+                 label=None, timeout=None, wait=True, logger=None):
         """
         Create the object. Does not initiate command execution.
 
@@ -48,6 +52,8 @@ class RemoteProcess(object):
                              command is doing.
         :param timeout:      timeout value for arg that is passed to
                              exec_command of paramiko
+        :param wait:         Whether self.wait() will be called automatically
+        :param logger:       Alternative logger to use (optional)
         """
         self.client = client
         self.args = args
@@ -68,6 +74,8 @@ class RemoteProcess(object):
         self.greenlets = []
         self.stdin, self.stdout, self.stderr = (None, None, None)
         self.returncode = self.exitstatus = None
+        self._wait = wait
+        self.logger = logger or log
 
     def execute(self):
         """
@@ -91,6 +99,34 @@ class RemoteProcess(object):
     def add_greenlet(self, greenlet):
         self.greenlets.append(greenlet)
 
+    def setup_stdin(self, stream_obj):
+        self.stdin = KludgeFile(wrapped=self.stdin)
+        if stream_obj is not PIPE:
+            greenlet = gevent.spawn(copy_and_close, stream_obj, self.stdin)
+            self.add_greenlet(greenlet)
+            self.stdin = None
+        elif self._wait:
+            # FIXME: Is this actually true?
+            raise RuntimeError(self.deadlock_warning % 'stdin')
+
+    def setup_output_stream(self, stream_obj, stream_name):
+        if stream_obj is not PIPE:
+            # Log the stream
+            host_log = self.logger.getChild(self.hostname)
+            stream_log = host_log.getChild(stream_name)
+            self.add_greenlet(
+                gevent.spawn(
+                    copy_file_to,
+                    getattr(self, stream_name),
+                    stream_log,
+                    stream_obj,
+                )
+            )
+            setattr(self, stream_name, stream_obj)
+        elif self._wait:
+            # FIXME: Is this actually true?
+            raise RuntimeError(self.deadlock_warning % stream_name)
+
     def wait(self):
         """
         Block until remote process finishes.
@@ -102,6 +138,15 @@ class RemoteProcess(object):
 
         status = self._get_exitstatus()
         self.exitstatus = self.returncode = status
+        for stream in ('stdout', 'stderr'):
+            if hasattr(self, stream):
+                stream_obj = getattr(self, stream)
+                # Despite ChannelFile having a seek() method, it raises
+                # "IOError: File does not support seeking."
+                if hasattr(stream_obj, 'seek') and \
+                        not isinstance(stream_obj, ChannelFile):
+                    stream_obj.seek(0)
+
         if self.check_status:
             if status is None:
                 # command either died due to a signal, or the connection
@@ -199,9 +244,7 @@ def copy_to_log(f, logger, loglevel=logging.INFO):
     if isinstance(f, ChannelFile):
         f._flags += ChannelFile.FLAG_BINARY
 
-    # i can't seem to get fudge to fake an iterable, so using this old
-    # api for now
-    for line in f.xreadlines():
+    for line in f.readlines():
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         try:
@@ -222,20 +265,19 @@ def copy_and_close(src, fdst):
     fdst.close()
 
 
-def copy_file_to(f, dst):
+def copy_file_to(src, logger, stream=None):
     """
     Copy file
-    :param f: file to be copied.
-    :param dst: destination
-    :param host: original host location
+    :param src: file to be copied.
+    :param logger: the logger object
+    :param stream: an optional file-like object which will receive a copy of
+                   src.
     """
-    if hasattr(dst, 'log'):
-        # looks like a Logger to me; not using isinstance to make life
-        # easier for unit tests
-        handler = copy_to_log
-    else:
-        handler = shutil.copyfileobj
-    return handler(f, dst)
+    if stream is not None:
+        shutil.copyfileobj(src, stream)
+        stream.seek(0)
+        src = stream
+    copy_to_log(src, logger)
 
 
 def spawn_asyncresult(fn, *args, **kwargs):
@@ -351,48 +393,13 @@ def run(
     if timeout:
         log.info("Running command with timeout %d", timeout)
     r = RemoteProcess(client, args, check_status=check_status, hostname=name,
-                      label=label, timeout=timeout)
+                      label=label, timeout=timeout, wait=wait, logger=logger)
     r.execute()
-
-    r.stdin = KludgeFile(wrapped=r.stdin)
-
-    g_in = None
-    if stdin is not PIPE:
-        g_in = gevent.spawn(copy_and_close, stdin, r.stdin)
-        r.add_greenlet(g_in)
-        r.stdin = None
-    else:
-        assert not wait, \
-            "Using PIPE for stdin without wait=False would deadlock."
-
-    if logger is None:
-        logger = log
-
-    g_err = None
-    if stderr is not PIPE:
-        if stderr is None:
-            stderr = logger.getChild(name).getChild('stderr')
-        g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
-        r.add_greenlet(g_err)
-        r.stderr = stderr
-    else:
-        assert not wait, \
-            "Using PIPE for stderr without wait=False would deadlock."
-
-    g_out = None
-    if stdout is not PIPE:
-        if stdout is None:
-            stdout = logger.getChild(name).getChild('stdout')
-        g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
-        r.add_greenlet(g_out)
-        r.stdout = stdout
-    else:
-        assert not wait, \
-            "Using PIPE for stdout without wait=False would deadlock."
-
+    r.setup_stdin(stdin)
+    r.setup_output_stream(stderr, 'stderr')
+    r.setup_output_stream(stdout, 'stdout')
     if wait:
         r.wait()
-
     return r
 
 
