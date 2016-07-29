@@ -458,7 +458,7 @@ void MDBalancer::prep_rebalance(int beat)
 	      << dendl;
     }
 
-    double total_load = 0;
+    double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
       map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
@@ -655,7 +655,7 @@ void MDBalancer::try_rebalance()
       //<< " .. " << (*it).second << " * " << load_fac
 	    << " -> " << amount
 	    << dendl;//" .. fudge is " << fudge << dendl;
-    double have = 0;
+    double have = 0.0;
 
 
     show_imports();
@@ -1007,7 +1007,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     dir->pop_spread.hit(now, mds->mdcache->decayrate, who);
   }
 
-  double rd_adj = 0;
+  double rd_adj = 0.0;
   if (type == META_POP_IRD &&
       dir->last_popularity_sample < last_sample) {
     double dir_pop = dir->pop_auth_subtree.get(type).get(now, mds->mdcache->decayrate);    // hmm??
@@ -1059,7 +1059,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   bool hit_subtree = dir->is_auth();         // current auth subtree (if any)
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
-  while (1) {
+  while (true) {
     dir->pop_nested.get(type).hit(now, amount);
     if (rd_adj != 0.0)
       dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
