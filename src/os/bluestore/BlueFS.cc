@@ -144,7 +144,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
   block_all[id].insert(offset, length);
   block_total[id] += length;
 
-  if (alloc.size()) {
+  if (id < alloc.size() && alloc[id]) {
     log_t.op_alloc_add(id, offset, length);
     int r = _flush_and_sync_log(l);
     assert(r == 0);
