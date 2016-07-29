@@ -830,10 +830,11 @@ private:
 		int flags, const UserPerm& perms);
   int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
   int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
-  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp,
-	    const UserPerm& perms) {
-    return _open(in, flags, mode, fhp, perms.uid(), perms.gid());
+	    const UserPerm& perms);
+  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) {
+    UserPerm perms(uid, gid);
+    return _open(in, flags, mode, fhp, perms);
   }
   int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,

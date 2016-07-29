@@ -7769,7 +7769,8 @@ void Client::_put_fh(Fh *f)
     delete f;
 }
 
-int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
+int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
+		  const UserPerm& perms)
 {
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
@@ -7802,7 +7803,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
       req->head.args.open.mask = 0;
     req->head.args.open.old_size = in->size;   // for O_TRUNC
     req->set_inode(in);
-    result = make_request(req, uid, gid);
+    result = make_request(req, perms);
   }
 
   // success?
