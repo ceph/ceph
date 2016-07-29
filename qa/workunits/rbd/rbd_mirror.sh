@@ -75,13 +75,19 @@ wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror start
-wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
-
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
