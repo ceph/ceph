@@ -26,10 +26,6 @@ if (HAVE_BETTER_YASM_ELF64)
   set(EC_ISA_LIB ceph_isa)
 endif (HAVE_BETTER_YASM_ELF64)
 
-#add_library(erasure_code STATIC ErasureCodePlugin.cc)
-#target_link_libraries(erasure_code ${CMAKE_DL_LIBS})
-#add_dependencies(erasure_code ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-
 add_library(erasure_code_objs OBJECT ErasureCode.cc)
 
 add_custom_target(erasure_code_plugins DEPENDS
