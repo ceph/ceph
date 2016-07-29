@@ -586,9 +586,9 @@ if(${WITH_RADOSGW})
     cls_user_client
     cls_statelog_client
     cls_rgw_client
-    curl
-    expat
     fcgi
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
   )
 endif(${WITH_RADOSGW})
 if(${WITH_RBD})
