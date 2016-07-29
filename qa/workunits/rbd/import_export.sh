@@ -74,6 +74,32 @@ cmp ${TMPDIR}/img ${TMPDIR}/img3
 
 rm ${TMPDIR}/img ${TMPDIR}/img2 ${TMPDIR}/img3
 
+# try with --export/import-format for snapshots
+dd if=/bin/dd of=${TMPDIR}/img bs=1k count=10 seek=100
+rbd import $RBD_CREATE_ARGS ${TMPDIR}/img testimg
+rbd snap create testimg@snap
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --import-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd info testimg_import
+rbd info testimg_import@snap
+
+# compare the contents between testimg and testimg_import
+rbd export testimg_import ${TMPDIR}/img_import
+compare_files_and_ondisk_sizes ${TMPDIR}/img ${TMPDIR}/img_import
+
+rbd export testimg@snap ${TMPDIR}/img_snap
+rbd export testimg_import@snap ${TMPDIR}/img_snap_import
+compare_files_and_ondisk_sizes ${TMPDIR}/img_snap ${TMPDIR}/img_snap_import
+
+rm ${TMPDIR}/img_v2
+rm ${TMPDIR}/img_import
+rm ${TMPDIR}/img_snap
+rm ${TMPDIR}/img_snap_import
+
+rbd snap rm testimg_import@snap
+rbd remove testimg_import
+rbd snap rm testimg@snap
+rbd rm testimg
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
