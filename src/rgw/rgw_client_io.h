@@ -15,19 +15,14 @@
 
 class RGWClientIO {
 protected:
-  RGWEnv env;
-
   virtual void init_env(CephContext *cct) = 0;
 
 public:
   virtual ~RGWClientIO() {}
 
   void init(CephContext *cct);
-  RGWEnv& get_env() {
-    return env;
-  }
-
-  virtual int complete_request() = 0; /* XXX signature likely changing */
+  virtual RGWEnv& get_env() = 0;
+  virtual int complete_request() = 0;
 }; /* RGWClient IO */
 
 
@@ -91,6 +86,9 @@ class RGWStreamIO : public RGWStreamIOEngine,
     return _account;
   }
 
+protected:
+  RGWEnv env;
+
 public:
   virtual ~RGWStreamIO() {}
   RGWStreamIO()
@@ -107,6 +105,10 @@ public:
   int read(char *buf, int max, int *actual, bool hash);
 
   std::string grab_aws4_sha256_hash();
+
+  RGWEnv& get_env() override {
+    return env;
+  }
 
   void set_account(bool _accnt) override {
     _account = _accnt;
