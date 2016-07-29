@@ -361,10 +361,6 @@ public:
       return ret;
     }
 
-    const map<hobject_t, pg_missing_t::item> &get_all_missing() const {
-      return needs_recovery_map;
-    }
-
     void clear() {
       needs_recovery_map.clear();
       missing_loc.clear();
