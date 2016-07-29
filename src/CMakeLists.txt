@@ -197,7 +197,7 @@ else(INTEL_SSE4_1)
 endif(INTEL_SSE4_1)
 
 
-set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 if(WITH_PROFILER)
@@ -521,7 +521,7 @@ endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
 
-target_link_libraries(common json_spirit erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES})
+target_link_libraries(common json_spirit erasure_code rt resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
