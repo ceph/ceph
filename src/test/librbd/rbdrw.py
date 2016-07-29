@@ -22,7 +22,7 @@ with rados.Rados(conffile='') as r:
             with rbd.Image(ioctx, sys.argv[1]) as image:
                 image.lock_exclusive(sys.argv[2])
                 while True:
-                    image.write('A' * 4096, 0)
+                    image.write(b'A' * 4096, 0)
                     r = image.read(0, 4096)
         except rbd.ConnectionShutdown:
             # it so happens that the errno here is 108, but
