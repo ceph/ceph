@@ -753,7 +753,7 @@ class RBD(object):
                     break
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error listing images')
-            return [decode_cstr(name) for name in c_names[:ret].split('\0')
+            return [decode_cstr(name) for name in c_names[:ret].split(b'\0')
                     if name]
         finally:
             free(c_names)
@@ -1913,8 +1913,8 @@ written." % (self.name, ret, length))
                     raise make_ex(ret, 'error listing images')
             if ret == 0:
                 return []
-            pools = map(decode_cstr, c_pools[:pools_size - 1].split('\0'))
-            images = map(decode_cstr, c_images[:images_size - 1].split('\0'))
+            pools = map(decode_cstr, c_pools[:pools_size - 1].split(b'\0'))
+            images = map(decode_cstr, c_images[:images_size - 1].split(b'\0'))
             return list(zip(pools, images))
         finally:
             free(c_pools)
@@ -1961,9 +1961,9 @@ written." % (self.name, ret, length))
                     raise make_ex(ret, 'error listing images')
             if ret == 0:
                 return []
-            clients = map(decode_cstr, c_clients[:clients_size - 1].split('\0'))
-            cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split('\0'))
-            addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split('\0'))
+            clients = map(decode_cstr, c_clients[:clients_size - 1].split(b'\0'))
+            cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split(b'\0'))
+            addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split(b'\0'))
             return {
                 'tag'       : decode_cstr(c_tag),
                 'exclusive' : exclusive == 1,
