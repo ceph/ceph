@@ -90,6 +90,18 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
   return exists;
 }
 
+bool ObjectMap::update_required(uint64_t object_no, uint8_t new_state) {
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+  uint8_t state = (*this)[object_no];
+
+  if ((state == new_state) ||
+      (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT) ||
+      (new_state == OBJECT_NONEXISTENT && state != OBJECT_PENDING)) {
+    return false;
+  }
+  return true;
+}
+
 void ObjectMap::open(Context *on_finish) {
   object_map::RefreshRequest<> *req = new object_map::RefreshRequest<>(
     m_image_ctx, &m_object_map, m_snap_id, on_finish);
