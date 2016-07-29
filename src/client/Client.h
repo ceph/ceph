@@ -878,24 +878,28 @@ private:
   };
 
   class RequestUserGroups : public UserGroups {
-    Client *client;
     uid_t uid;
     gid_t gid;
     int sgid_count;
     gid_t *sgids;
-    void init() {
-      sgid_count = client->_getgrouplist(&sgids, uid, gid);
-    }
     public:
-    RequestUserGroups(Client *c, uid_t u, gid_t g) :
-      client(c), uid(u), gid(g), sgid_count(-1), sgids(NULL) {}
+    RequestUserGroups(uid_t u, gid_t g) :
+      uid(u), gid(g), sgid_count(-1), sgids(NULL) {}
     ~RequestUserGroups() {
       free(sgids);
     }
+    bool is_init() { return sgid_count < 0; }
+    void init_gids(gid_t *_sgids, int count) {
+      sgids = _sgids;
+      sgid_count = count;
+    }
+    uid_t get_uid() { return uid; }
     gid_t get_gid() { return gid; }
     bool is_in(gid_t id);
     int get_gids(const gid_t **out);
   };
+  friend class RequestUserGroups;
+  void init_groups(RequestUserGroups *groups);
 
   int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want,
@@ -908,7 +912,8 @@ private:
   int may_hardlink(Inode *in, const UserPerm& perms);
 
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want) {
-    RequestUserGroups groups(this, perms.uid(), perms.gid());
+    RequestUserGroups groups(perms.uid(), perms.gid());
+    init_groups(&groups);
     return inode_permission(in, perms.uid(), groups, want);
   }
   int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1) {

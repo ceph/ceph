@@ -5043,7 +5043,8 @@ out:
 
 int Client::may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& perms)
 {
-  RequestUserGroups groups(this, perms.uid(), perms.gid());
+  RequestUserGroups groups(perms.uid(), perms.gid());
+  init_groups(&groups);
 
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
@@ -12479,12 +12480,18 @@ void Client::handle_conf_change(const struct md_config_t *conf,
   }
 }
 
+void Client::init_groups(RequestUserGroups *groups)
+{
+  gid_t *sgids;
+  int count = _getgrouplist(&sgids, groups->get_uid(), groups->get_gid());
+  groups->init_gids(sgids, count);
+}
+
 bool Client::RequestUserGroups::is_in(gid_t id)
 {
+  assert(sgid_count >= 0);
   if (id == gid)
     return true;
-  if (sgid_count < 0)
-    init();
   for (int i = 0; i < sgid_count; ++i) {
     if (id == sgids[i])
       return true;
@@ -12494,8 +12501,7 @@ bool Client::RequestUserGroups::is_in(gid_t id)
 
 int Client::RequestUserGroups::get_gids(const gid_t **out)
 {
-  if (sgid_count < 0)
-    init();
+  assert(sgid_count >= 0);
   if (sgid_count > 0) {
     *out = sgids;
     return sgid_count;
