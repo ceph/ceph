@@ -508,7 +508,7 @@ add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
 target_link_libraries(common json_spirit erasure_code rt resolv
   ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
-  ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
+  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
