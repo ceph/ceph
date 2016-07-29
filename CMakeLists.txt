@@ -188,7 +188,6 @@ if(LINUX)
 
   find_package(aio REQUIRED)
   set(HAVE_LIBAIO ${AIO_FOUND})
-  message(STATUS "${AIO_LIBS}")
 
   find_package(blkid REQUIRED)
   set(HAVE_BLKID ${BLKID_FOUND})
@@ -307,17 +306,17 @@ else ()
 endif (${WITH_NSS})
 
 option(WITH_SSL "SSL build selected" ON)
-if (${USE_NSS})
+if(USE_NSS)
   #nss
   set(SSL_LIBRARIES ${NSS_LIBRARIES})
   message(STATUS "SSL with NSS selected (Libs: ${SSL_LIBRARIES})")
-else (${USE_NSS})
+else(USE_NSS)
   #openssl
   find_package(OpenSSL REQUIRED)
   set(HAVE_OPENSSL ON)
   set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
   message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
-endif(${USE_NSS})
+endif(USE_NSS)
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
