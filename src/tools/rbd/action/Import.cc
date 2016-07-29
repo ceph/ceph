@@ -205,13 +205,11 @@ err:
   if (r < 0)
     rbd.remove(io_ctx, imgname);
 done:
-  if (!from_stdin) {
-    if (r < 0)
-      pc.fail();
-    else
-      pc.finish();
-    close(fd);
-  }
+  if (r < 0)
+    pc.fail();
+  else
+    pc.finish();
+  close(fd);
 done2:
   delete[] p;
   return r;
