@@ -629,7 +629,8 @@ int Objecter::linger_check(LingerOp *info)
 		 << " age " << age << dendl;
   if (info->last_error)
     return info->last_error;
-  return age.to_msec();
+  // return a safe upper bound (we are truncating to ms)
+  return 1 + age.to_msec();
 }
 
 void Objecter::linger_cancel(LingerOp *info)
