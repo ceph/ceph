@@ -103,7 +103,7 @@ public:
     return ret;
   }
 
-  int mount(const std::string &mount_root)
+  int mount(const std::string &mount_root, const UserPerm& perms)
   {
     int ret;
     
@@ -117,7 +117,7 @@ public:
       }
     }
 
-    ret = client->mount(mount_root);
+    ret = client->mount(mount_root, perms);
     if (ret) {
       shutdown();
       return ret;
@@ -427,7 +427,8 @@ extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
   std::string mount_root;
   if (root)
     mount_root = root;
-  return cmount->mount(mount_root);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->mount(mount_root, perms);
 }
 
 extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)

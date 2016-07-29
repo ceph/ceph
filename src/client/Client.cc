@@ -5533,7 +5533,8 @@ void Client::handle_command_reply(MCommandReply *m)
 // -------------------
 // MOUNT
 
-int Client::mount(const std::string &mount_root, bool require_mds)
+int Client::mount(const std::string &mount_root, const UserPerm& perms,
+		  bool require_mds)
 {
   Mutex::Locker lock(client_lock);
 
@@ -5596,7 +5597,7 @@ int Client::mount(const std::string &mount_root, bool require_mds)
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
     req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
-    int res = make_request(req, -1, -1);
+    int res = make_request(req, perms);
     if (res < 0) {
       if (res == -EACCES && root) {
 	ldout(cct, 1) << __func__ << " EACCES on parent of mount point; quotas may not work" << dendl;

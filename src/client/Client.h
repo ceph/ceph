@@ -999,7 +999,8 @@ private:
   mds_rank_t _get_random_up_mds() const;
 
 public:
-  int mount(const std::string &mount_root, bool require_mds=false);
+  int mount(const std::string &mount_root, const UserPerm& perms,
+	    bool require_mds=false);
   void unmount();
 
   int mds_command(
