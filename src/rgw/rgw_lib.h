@@ -54,6 +54,7 @@ namespace rgw {
                    public RGWClientIOAccounter
   {
     RGWUserInfo user_info;
+    RGWEnv env;
   public:
     RGWLibIO() {
       get_env().set("HTTP_HOST", "");
@@ -75,6 +76,10 @@ namespace rgw {
     int send_100_continue();
     int complete_header();
     int send_content_length(uint64_t len);
+
+    RGWEnv& get_env() override {
+      return env;
+    }
 
     int complete_request() override { /* XXX */
       return 0;
