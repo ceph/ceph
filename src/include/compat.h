@@ -59,6 +59,13 @@
 #define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
 #endif
 #endif
+#if !defined(CLOCK_REALTIME_COARSE)
+#if defined(CLOCK_REALTIME_FAST)
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME_FAST
+#else
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME
+#endif
+#endif
 
 /* And include the extra required include file */
 #include <pthread_np.h>
