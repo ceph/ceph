@@ -377,12 +377,6 @@ protected:
   int make_request(MetaRequest *req, const UserPerm& perms,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
-  int make_request(MetaRequest *req, int uid, int gid,
-		   InodeRef *ptarget = 0, bool *pcreated = 0,
-		   int use_mds=-1, bufferlist *pdirbl=0) {
-    UserPerm perms(uid, gid);
-    return make_request(req, perms, ptarget, pcreated, use_mds, pdirbl);
-  }
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
