@@ -7057,8 +7057,9 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->dirp = dirp;
   
   bufferlist dirbl;
-  // FIXME: is owner_uid safe, or can dirp get invoked with different perms?
-  int res = make_request(req, dirp->owner_uid, dirp->owner_gid, NULL, NULL, -1, &dirbl);
+  // FIXME
+  UserPerm perms(dirp->owner_uid, dirp->owner_gid);
+  int res = make_request(req, perms, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
     ldout(cct, 10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
@@ -7591,7 +7592,9 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
 
-  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
+  UserPerm perms(get_uid(), get_gid()); // FIXME
+  int r = make_request(req, perms, NULL, NULL,
+		       rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
   return r;
 }
@@ -7613,7 +7616,8 @@ int Client::lookup_ino(inodeno_t ino, Inode **inode)
   filepath path(ino);
   req->set_filepath(path);
 
-  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
+  UserPerm perms(get_uid(), get_gid()); // FIXME
+  int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   if (r == 0 && inode != NULL) {
     vinodeno_t vino(ino, CEPH_NOSNAP);
     unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
@@ -7648,7 +7652,8 @@ int Client::lookup_parent(Inode *ino, Inode **parent)
   req->set_inode(ino);
 
   InodeRef target;
-  int r = make_request(req, -1, -1, &target, NULL, rand() % mdsmap->get_num_in_mds());
+  UserPerm perms(get_uid(), get_gid()); // FIXME
+  int r = make_request(req, perms, &target, NULL, rand() % mdsmap->get_num_in_mds());
   // Give caller a reference to the parent ino if they provided a pointer.
   if (parent != NULL) {
     if (r == 0) {
@@ -7680,7 +7685,8 @@ int Client::lookup_name(Inode *ino, Inode *parent)
   req->set_filepath(filepath(ino->ino));
   req->set_inode(ino);
 
-  int r = make_request(req, -1, -1, NULL, NULL, rand() % mdsmap->get_num_in_mds());
+  UserPerm perms(get_uid(), get_gid()); // FIXME
+  int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_name exit(" << ino->ino << ") = " << r << dendl;
   return r;
 }
@@ -7843,7 +7849,8 @@ int Client::_renew_caps(Inode *in)
     req->head.args.open.mask = 0;
   req->set_inode(in);
 
-  int ret = make_request(req, -1, -1);
+  UserPerm perms(get_uid(), get_gid()); // FIXME
+  int ret = make_request(req, perms);
   return ret;
 }
 
@@ -8850,7 +8857,8 @@ void Client::getcwd(string& dir)
       filepath path(in->ino);
       req->set_filepath(path);
       req->set_inode(in);
-      int res = make_request(req, -1, -1);
+      UserPerm perms(get_uid(), get_gid()); // FIXME
+      int res = make_request(req, perms);
       if (res < 0)
 	break;
 
@@ -8984,17 +8992,17 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
   int ret;
   bufferlist bl;
 
+  UserPerm perms(get_uid(), get_gid()); // FIXME
   if (sleep && switch_interrupt_cb) {
     // enable interrupt
     switch_interrupt_cb(callback_handle, req->get());
-
-    ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
+    ret = make_request(req, perms, NULL, NULL, -1, &bl);
 
     // disable interrupt
     switch_interrupt_cb(callback_handle, NULL);
     put_request(req);
   } else {
-    ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
+    ret = make_request(req, perms, NULL, NULL, -1, &bl);
   }
 
   if (ret == 0) {
@@ -9071,7 +9079,8 @@ int Client::_interrupt_filelock(MetaRequest *req)
   intr_req->head.args.filelock_change.rule = lock_type;
   intr_req->head.args.filelock_change.type = CEPH_LOCK_UNLOCK;
 
-  return make_request(intr_req, -1, -1, NULL, NULL, -1);
+  UserPerm perms(get_uid(), get_gid()); // FIXME
+  return make_request(intr_req, perms, NULL, NULL, -1);
 }
 
 void Client::_encode_filelocks(Inode *in, bufferlist& bl)
@@ -11084,7 +11093,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     goto fail;
   req->set_dentry(de);
   
-  res = make_request(req, perm.uid(), perm.gid(), inp);
+  res = make_request(req, perm, inp);
   ldout(cct, 10) << "link result is " << res << dendl;
 
   trim_cache();
@@ -12142,7 +12151,8 @@ Inode *Client::get_quota_root(Inode *in)
     req->set_inode(cur);
 
     InodeRef parent_ref;
-    int ret = make_request(req, -1, -1, &parent_ref);
+    UserPerm perms(get_uid(), get_gid());
+    int ret = make_request(req, perms, &parent_ref);
     if (ret < 0) {
       ldout(cct, 1) << __func__ << " " << in->vino()
 		    << " failed to find parent of " << cur->vino()
