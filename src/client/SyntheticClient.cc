@@ -887,7 +887,7 @@ int SyntheticClient::run()
 	string iname = get_sarg(0);
 	sscanf(iname.c_str(), "%llx", (long long unsigned*)&ino.val);
 	if (run_me()) {
-	  lookup_ino(ino);
+	  lookup_ino(ino, perms);
 	}
       }
       break;
@@ -3344,9 +3344,9 @@ int SyntheticClient::lookup_hash(inodeno_t ino, inodeno_t dirino,
   return r;
 }
 
-int SyntheticClient::lookup_ino(inodeno_t ino)
+int SyntheticClient::lookup_ino(inodeno_t ino, const UserPerm& perms)
 {
-  int r = client->lookup_ino(ino);
+  int r = client->lookup_ino(ino, perms);
   dout(0) << "lookup_ino(" << ino << ") = " << r << dendl;
   return r;
 }
