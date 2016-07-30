@@ -86,7 +86,7 @@ endif(${WITH_RADOSGW})
 
 # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
 add_executable(test_build_libcephfs buildtest_skeleton.cc)
-target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+target_link_libraries(test_build_libcephfs cephfs pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 
 add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES})
@@ -155,9 +155,9 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
@@ -171,8 +171,6 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     cls_version_client
     cls_log_client
     cls_statelog_client
@@ -182,6 +180,8 @@ if(${WITH_RADOSGW})
     cls_lock_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
   set_target_properties(ceph_test_cls_rgw_meta PROPERTIES
     COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
@@ -201,8 +201,6 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     cls_version_client
     cls_log_client
     cls_statelog_client
@@ -212,6 +210,8 @@ if(${WITH_RADOSGW})
     cls_lock_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
@@ -237,9 +237,9 @@ if(${WITH_RADOSGW})
     cls_user_client
     cls_lock_client
     global
-    curl
-    expat
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}
     ${CRYPTO_LIBS}

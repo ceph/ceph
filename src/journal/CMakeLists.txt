@@ -12,3 +12,4 @@ set(journal_srcs
   ObjectRecorder.cc
   Utils.cc)
 add_library(journal STATIC ${journal_srcs})
+target_link_libraries(journal cls_journal_client)

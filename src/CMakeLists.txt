@@ -197,7 +197,7 @@ else(INTEL_SSE4_1)
 endif(INTEL_SSE4_1)
 
 
-set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 if(WITH_PROFILER)
@@ -506,7 +506,9 @@ endif(ENABLE_SHARED)
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
+target_link_libraries(common json_spirit erasure_code rt resolv
+  ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
+  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -520,8 +522,6 @@ if(HAVE_ARMV8_CRC)
 endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
-
-target_link_libraries(common json_spirit erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -586,9 +586,9 @@ if(${WITH_RADOSGW})
     cls_user_client
     cls_statelog_client
     cls_rgw_client
-    curl
-    expat
     fcgi
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
   )
 endif(${WITH_RADOSGW})
 if(${WITH_RBD})

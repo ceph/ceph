@@ -133,6 +133,7 @@ add_executable(ceph_test_librbd_fsx
 target_link_libraries(ceph_test_librbd_fsx
   librbd
   librados
+  journal
   global
   m
   ${CMAKE_DL_LIBS}
