@@ -12,6 +12,7 @@
 #include "global/global_context.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Settings.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -373,12 +374,15 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
   }
 
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  double commit_interval = cct->_conf->rbd_journal_commit_age;
+  journal::Settings settings;
+  settings.commit_interval = cct->_conf->rbd_mirror_journal_commit_age;
+  settings.max_fetch_bytes = cct->_conf->rbd_mirror_journal_max_fetch_bytes;
+
   m_remote_journaler = new Journaler(m_threads->work_queue,
                                      m_threads->timer,
 				     &m_threads->timer_lock, m_remote_ioctx,
 				     m_remote_image_id, m_local_mirror_uuid,
-                                     commit_interval);
+                                     settings);
   bootstrap();
 }
 
@@ -562,10 +566,12 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   }
 
   {
+    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+    double poll_seconds = cct->_conf->rbd_mirror_journal_poll_age;
+
     Mutex::Locker locker(m_lock);
     m_replay_handler = new ReplayHandler<I>(this);
-    m_remote_journaler->start_live_replay(m_replay_handler,
-                                          1 /* TODO: configurable */);
+    m_remote_journaler->start_live_replay(m_replay_handler, poll_seconds);
 
     dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
   }
@@ -628,6 +634,7 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
 {
   dout(20) << "on_finish=" << on_finish << dendl;
 
+  image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
   bool running = true;
   {
@@ -639,7 +646,8 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
 	if (m_state == STATE_STARTING) {
 	  dout(20) << "canceling start" << dendl;
 	  if (m_bootstrap_request) {
-	    m_bootstrap_request->cancel();
+            bootstrap_request = m_bootstrap_request;
+            bootstrap_request->get();
 	  }
 	} else {
 	  dout(20) << "interrupting replay" << dendl;
@@ -654,8 +662,14 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
     }
   }
 
+  // avoid holding lock since bootstrap request will update status
+  if (bootstrap_request != nullptr) {
+    bootstrap_request->cancel();
+    bootstrap_request->put();
+  }
+
   if (!running) {
-    derr << "not running" << dendl;
+    dout(20) << "not running" << dendl;
     if (on_finish) {
       on_finish->complete(-EINVAL);
     }
@@ -882,7 +896,7 @@ void ImageReplayer<I>::replay_flush() {
         ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
       m_local_journal->start_external_replay(&m_local_replay, ctx, stop_ctx);
     });
-  m_local_replay->shut_down(true, ctx);
+  m_local_replay->shut_down(false, ctx);
 }
 
 template <typename I>
@@ -1168,9 +1182,12 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     {
       Context *on_req_finish = new FunctionContext(
         [this](int r) {
+          dout(20) << "replay status ready: r=" << r << dendl;
           if (r >= 0) {
-            dout(20) << "replay status ready" << dendl;
             send_mirror_status_update(boost::none);
+          } else if (r == -EAGAIN) {
+            // decrement in-flight status update counter
+            handle_mirror_status_update(r);
           }
         });
 

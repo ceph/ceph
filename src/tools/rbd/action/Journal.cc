@@ -20,6 +20,7 @@
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Settings.h"
 #include "librbd/journal/Types.h"
 
 namespace rbd {
@@ -171,7 +172,7 @@ class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
 	    const std::string &client_id) :
-    ::journal::Journaler(io_ctx, journal_id, client_id, 5) {
+    ::journal::Journaler(io_ctx, journal_id, client_id, {}) {
   }
 
   int init() {

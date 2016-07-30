@@ -20,6 +20,7 @@ class SafeTimer;
 namespace journal {
 
 struct ReplayHandler;
+struct Settings;
 
 struct MockFuture {
   static MockFuture *s_instance;
@@ -136,13 +137,13 @@ struct MockJournaler {
 struct MockJournalerProxy {
   template <typename IoCtxT>
   MockJournalerProxy(IoCtxT &header_ioctx, const std::string &,
-                     const std::string &, double) {
+                     const std::string &, const Settings&) {
     MockJournaler::get_instance().construct();
   }
 
   MockJournalerProxy(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                      librados::IoCtx &header_ioctx, const std::string &journal_id,
-                     const std::string &client_id, double commit_interval) {
+                     const std::string &client_id, const Settings&) {
     MockJournaler::get_instance().construct();
   }
 

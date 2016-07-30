@@ -19,7 +19,7 @@
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
-#define dout_prefix *_dout << "Journaler: "
+#define dout_prefix *_dout << "Journaler: " << this << " "
 
 namespace journal {
 
@@ -68,25 +68,26 @@ Journaler::Threads::~Threads() {
 
 Journaler::Journaler(librados::IoCtx &header_ioctx,
                      const std::string &journal_id,
-                     const std::string &client_id, double commit_interval)
+                     const std::string &client_id, const Settings &settings)
     : m_threads(new Threads(reinterpret_cast<CephContext*>(header_ioctx.cct()))),
       m_client_id(client_id) {
   set_up(m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-         header_ioctx, journal_id, commit_interval);
+         header_ioctx, journal_id, settings);
 }
 
 Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
                      Mutex *timer_lock, librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
-		     const std::string &client_id, double commit_interval)
+		     const std::string &client_id, const Settings &settings)
     : m_client_id(client_id) {
   set_up(work_queue, timer, timer_lock, header_ioctx, journal_id,
-         commit_interval);
+         settings);
 }
 
 void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
                        Mutex *timer_lock, librados::IoCtx &header_ioctx,
-                       const std::string &journal_id, double commit_interval) {
+                       const std::string &journal_id,
+                       const Settings &settings) {
   m_header_ioctx.dup(header_ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
@@ -95,7 +96,7 @@ void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
 
   m_metadata = new JournalMetadata(work_queue, timer, timer_lock,
                                    m_header_ioctx, m_header_oid, m_client_id,
-                                   commit_interval);
+                                   settings);
   m_metadata->get();
 }
 
@@ -394,7 +395,13 @@ void Journaler::stop_append(Context *on_safe) {
 }
 
 uint64_t Journaler::get_max_append_size() const {
-  return m_metadata->get_object_size() - Entry::get_fixed_size();
+  uint64_t max_payload_size = m_metadata->get_object_size() -
+                              Entry::get_fixed_size();
+  if (m_metadata->get_settings().max_payload_bytes > 0) {
+    max_payload_size = MIN(max_payload_size,
+                           m_metadata->get_settings().max_payload_bytes);
+  }
+  return max_payload_size;
 }
 
 Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {

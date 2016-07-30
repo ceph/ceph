@@ -239,6 +239,13 @@ void Mirror::run()
     // TODO: make interval configurable
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
+
+  // stop all replayers in parallel
+  Mutex::Locker locker(m_lock);
+  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
+    auto &replayer = it->second;
+    replayer->stop(false);
+  }
   dout(20) << "return" << dendl;
 }
 
@@ -313,7 +320,7 @@ void Mirror::stop()
 
   for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
     auto &replayer = it->second;
-    replayer->stop();
+    replayer->stop(true);
   }
 }
 

@@ -143,7 +143,7 @@ public:
 
   void append_op_event(uint64_t op_tid, journal::EventEntry &&event_entry,
                        Context *on_safe);
-  void commit_op_event(uint64_t tid, int r);
+  void commit_op_event(uint64_t tid, int r, Context *on_safe);
   void replay_op_ready(uint64_t op_tid, Context *on_resume);
 
   void flush_event(uint64_t tid, Context *on_safe);
@@ -221,15 +221,17 @@ private:
     uint64_t tid;
     Future op_start_future;
     Future op_finish_future;
+    Context *on_safe;
 
     C_OpEventSafe(Journal *journal, uint64_t tid, const Future &op_start_future,
-                  const Future &op_finish_future)
+                  const Future &op_finish_future, Context *on_safe)
       : journal(journal), tid(tid), op_start_future(op_start_future),
-        op_finish_future(op_finish_future) {
+        op_finish_future(op_finish_future), on_safe(on_safe) {
     }
 
     virtual void finish(int r) {
-      journal->handle_op_event_safe(r, tid, op_start_future, op_finish_future);
+      journal->handle_op_event_safe(r, tid, op_start_future, op_finish_future,
+                                    on_safe);
     }
   };
 
@@ -348,7 +350,7 @@ private:
 
   void handle_io_event_safe(int r, uint64_t tid);
   void handle_op_event_safe(int r, uint64_t tid, const Future &op_start_future,
-                            const Future &op_finish_future);
+                            const Future &op_finish_future, Context *on_safe);
 
   void stop_recording();
 
