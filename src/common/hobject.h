@@ -248,10 +248,6 @@ public:
     nibblewise_key_cache = _reverse_nibbles(hash);
     hash_reverse_bits = _reverse_bits(hash);
   }
-  void set_nibblewise_key_u32(uint32_t value) {
-    hash = _reverse_nibbles(value);
-    build_hash_cache();
-  }
   void set_bitwise_key_u32(uint32_t value) {
     hash = _reverse_bits(value);
     build_hash_cache();
