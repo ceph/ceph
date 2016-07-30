@@ -73,7 +73,7 @@ public:
   explicit StopCommand(Replayer *replayer) : replayer(replayer) {}
 
   bool call(Formatter *f, stringstream *ss) {
-    replayer->stop();
+    replayer->stop(true);
     return true;
   }
 
@@ -513,18 +513,20 @@ void Replayer::start()
   }
 }
 
-void Replayer::stop()
+void Replayer::stop(bool manual)
 {
-  dout(20) << "enter" << dendl;
+  dout(20) << "enter: manual=" << manual << dendl;
 
   Mutex::Locker l(m_lock);
-
-  if (m_stopping.read()) {
+  if (!manual) {
+    m_stopping.set(1);
+    m_cond.Signal();
+    return;
+  } else if (m_stopping.read()) {
     return;
   }
 
   m_manual_stop = true;
-
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
     image_replayer->stop(nullptr, true);
@@ -767,7 +769,7 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
     }
     FunctionContext *ctx = new FunctionContext(
         [&image_replayer, this] (int r) {
-          if (!m_stopping.read()) {
+          if (!m_stopping.read() && r >= 0) {
             m_image_deleter->schedule_image_delete(
               m_local_rados,
               image_replayer->get_local_pool_id(),

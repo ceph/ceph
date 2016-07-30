@@ -11,6 +11,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
+#include "journal/Settings.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -374,8 +375,7 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     pool_id = data_io_ctx.get_id();
   }
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   int r = journaler.create(order, splay_width, pool_id);
   if (r < 0) {
@@ -413,8 +413,7 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   bool journal_exists;
   int r = journaler.exists(&journal_exists);
@@ -455,8 +454,7 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   C_SaferCond cond;
   journaler.init(&cond);
@@ -533,8 +531,7 @@ int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
@@ -553,8 +550,7 @@ int Journal<I>::request_resync(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
@@ -592,8 +588,7 @@ int Journal<I>::promote(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
@@ -1013,7 +1008,7 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 }
 
 template <typename I>
-void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
+void Journal<I>::commit_op_event(uint64_t op_tid, int r, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": op_tid=" << op_tid << ", "
                  << "r=" << r << dendl;
@@ -1040,7 +1035,7 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
 
   op_finish_future.flush(create_async_context_callback(
     m_image_ctx, new C_OpEventSafe(this, op_tid, op_start_future,
-                                   op_finish_future)));
+                                   op_finish_future, on_safe)));
 }
 
 template <typename I>
@@ -1194,9 +1189,13 @@ void Journal<I>::create_journaler() {
   assert(m_journaler == NULL);
 
   transition_state(STATE_INITIALIZING, 0);
+  ::journal::Settings settings;
+  settings.commit_interval = m_image_ctx.journal_commit_age;
+  settings.max_payload_bytes = m_image_ctx.journal_max_payload_bytes;
+
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
-			      IMAGE_CLIENT_ID, m_image_ctx.journal_commit_age);
+			      IMAGE_CLIENT_ID, settings);
   m_journaler->init(create_async_context_callback(
     m_image_ctx, create_context_callback<
       Journal<I>, &Journal<I>::handle_initialized>(this)));
@@ -1649,7 +1648,8 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 template <typename I>
 void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
                                       const Future &op_start_future,
-                                      const Future &op_finish_future) {
+                                      const Future &op_finish_future,
+                                      Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
@@ -1665,7 +1665,7 @@ void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
   m_journaler->committed(op_finish_future);
 
   // reduce the replay window after committing an op event
-  m_journaler->flush_commit_position(nullptr);
+  m_journaler->flush_commit_position(on_safe);
 }
 
 template <typename I>

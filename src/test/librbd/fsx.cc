@@ -53,6 +53,7 @@
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Settings.h"
 
 #include <boost/scope_exit.hpp>
 
@@ -323,7 +324,7 @@ int register_journal(rados_ioctx_t ioctx, const char *image_name) {
                 return r;
         }
 
-        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, 0);
+        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {});
         r = journaler.register_client(bufferlist());
         if (r < 0) {
                 simple_err("failed to register journal client", r);
@@ -342,7 +343,7 @@ int unregister_journal(rados_ioctx_t ioctx, const char *image_name) {
                 return r;
         }
 
-        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, 0);
+        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {});
         r = journaler.unregister_client();
         if (r < 0) {
                 simple_err("failed to unregister journal client", r);
@@ -394,7 +395,7 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, 0);
+        journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, {});
         C_SaferCond init_ctx;
         journaler.init(&init_ctx);
         BOOST_SCOPE_EXIT_ALL( (&journaler) ) {
@@ -407,7 +408,7 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        journal::Journaler replay_journaler(io_ctx, replay_image_id, "", 0);
+        journal::Journaler replay_journaler(io_ctx, replay_image_id, "", {});
 
         C_SaferCond replay_init_ctx;
         replay_journaler.init(&replay_init_ctx);

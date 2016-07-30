@@ -86,7 +86,8 @@ struct MockImageCtx {
       journal_object_flush_interval(image_ctx.journal_object_flush_interval),
       journal_object_flush_bytes(image_ctx.journal_object_flush_bytes),
       journal_object_flush_age(image_ctx.journal_object_flush_age),
-      journal_pool(image_ctx.journal_pool)
+      journal_pool(image_ctx.journal_pool),
+      journal_max_payload_bytes(image_ctx.journal_max_payload_bytes)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -240,6 +241,7 @@ struct MockImageCtx {
   uint64_t journal_object_flush_bytes;
   double journal_object_flush_age;
   std::string journal_pool;
+  uint32_t journal_max_payload_bytes;
 };
 
 } // namespace librbd
