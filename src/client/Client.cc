@@ -8815,25 +8815,26 @@ int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
 
 // not written yet, but i want to link!
 
-int Client::chdir(const char *relpath, std::string &new_cwd)
+int Client::chdir(const char *relpath, std::string &new_cwd,
+		  const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "chdir" << std::endl;
   tout(cct) << relpath << std::endl;
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
   if (cwd != in)
     cwd.swap(in);
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
 
-  getcwd(new_cwd);
+  getcwd(new_cwd, perms);
   return 0;
 }
 
-void Client::getcwd(string& dir)
+void Client::getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
   ldout(cct, 10) << "getcwd " << *cwd << dendl;
@@ -8857,7 +8858,6 @@ void Client::getcwd(string& dir)
       filepath path(in->ino);
       req->set_filepath(path);
       req->set_inode(in);
-      UserPerm perms(get_uid(), get_gid()); // FIXME
       int res = make_request(req, perms);
       if (res < 0)
 	break;

@@ -225,15 +225,15 @@ public:
     return client;
   }
 
-  const char *get_cwd()
+  const char *get_cwd(const UserPerm& perms)
   {
-    client->getcwd(cwd);
+    client->getcwd(cwd, perms);
     return cwd.c_str();
   }
 
-  int chdir(const char *to)
+  int chdir(const char *to, const UserPerm& perms)
   {
-    return client->chdir(to, cwd);
+    return client->chdir(to, cwd, perms);
   }
 
   CephContext *get_ceph_context() const {
@@ -453,14 +453,16 @@ extern "C" int ceph_get_local_osd(struct ceph_mount_info *cmount)
 
 extern "C" const char* ceph_getcwd(struct ceph_mount_info *cmount)
 {
-  return cmount->get_cwd();
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_cwd(perms);
 }
 
 extern "C" int ceph_chdir (struct ceph_mount_info *cmount, const char *s)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->chdir(s);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->chdir(s, perms);
 }
 
 extern "C" int ceph_opendir(struct ceph_mount_info *cmount,
