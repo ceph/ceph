@@ -91,6 +91,7 @@ private:
 public:
   UserPerm() : m_uid(-1), m_gid(-1) {}
   UserPerm(int uid, int gid) : m_uid(uid), m_gid(gid) {}
+  // the readdir code relies on UserPerm copy-constructor being a deep copy!
   uid_t uid() const { return m_uid; }
   gid_t gid() const { return m_gid; }
 };
@@ -213,6 +214,7 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
+  UserPerm perms;
 
   frag_t buffer_frag;
 
@@ -231,7 +233,7 @@ struct dir_result_t {
   };
   vector<dentry> buffer;
 
-  explicit dir_result_t(Inode *in);
+  explicit dir_result_t(Inode *in, const UserPerm& perms);
 
   unsigned offset_high() { return fpos_high(offset); }
   unsigned offset_low() { return fpos_low(offset); }
