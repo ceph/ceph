@@ -2946,20 +2946,32 @@ class LastTimelogTrimCR : public RGWRadosTimelogTrimCR {
   }
 };
 
-} // anonymous namespace
+class DataLogTrimCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http;
+  const int num_shards;
+  const utime_t interval; //< polling interval
+  const std::string& zone; //< my zone id
+  std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
+  std::vector<rgw_data_sync_marker> min_shard_markers; //< min marker per shard
+  std::vector<std::string> last_trim; //< last trimmed marker per shard
+  int ret{0};
 
-RGWDataLogTrimCR::RGWDataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
-                                   int num_shards, utime_t interval)
-  : RGWCoroutine(store->ctx()), store(store), http(http),
-    num_shards(num_shards), interval(interval),
-    zone(store->get_zone().id),
-    peer_status(store->zone_conn_map.size()),
-    min_shard_markers(num_shards),
-    last_trim(num_shards)
-{
-}
+ public:
+  DataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
+                   int num_shards, utime_t interval)
+    : RGWCoroutine(store->ctx()), store(store), http(http),
+      num_shards(num_shards), interval(interval),
+      zone(store->get_zone().id),
+      peer_status(store->zone_conn_map.size()),
+      min_shard_markers(num_shards),
+      last_trim(num_shards)
+  {}
 
-int RGWDataLogTrimCR::operate()
+  int operate() override;
+};
+
+int DataLogTrimCR::operate()
 {
   reenter(this) {
     for (;;) {
@@ -3021,4 +3033,13 @@ int RGWDataLogTrimCR::operate()
     }
   }
   return 0;
+}
+
+} // anonymous namespace
+
+RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
+                                      RGWHTTPManager *http,
+                                      int num_shards, utime_t interval)
+{
+  return new DataLogTrimCR(store, http, num_shards, interval);
 }

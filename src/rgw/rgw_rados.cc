@@ -3088,9 +3088,9 @@ public:
     return http.set_threaded();
   }
   int process() override {
-    crs.run(new RGWDataLogTrimCR(store, &http,
-                                 cct->_conf->rgw_data_log_num_shards,
-                                 trim_interval));
+    crs.run(create_data_log_trim_cr(store, &http,
+                                    cct->_conf->rgw_data_log_num_shards,
+                                    trim_interval));
     return 0;
   }
 };
