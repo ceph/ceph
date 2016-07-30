@@ -162,9 +162,10 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 
 // -------------
 
-dir_result_t::dir_result_t(Inode *in)
+dir_result_t::dir_result_t(Inode *in, const UserPerm& perms)
   : inode(in), owner_uid(-1), owner_gid(-1), offset(0), next_offset(2),
-    release_count(0), ordered_count(0), cache_index(0), start_shared_gen(0)
+    release_count(0), ordered_count(0), cache_index(0), start_shared_gen(0),
+    perms(perms)
   { }
 
 void Client::_reset_faked_inos()
@@ -6870,7 +6871,7 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
 {
   if (!in->is_dir())
     return -ENOTDIR;
-  *dirpp = new dir_result_t(in);
+  *dirpp = new dir_result_t(in, perms);
   opened_dirs.insert(*dirpp);
   (*dirpp)->owner_uid = perms.uid();
   (*dirpp)->owner_gid = perms.gid();
@@ -7057,9 +7058,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->dirp = dirp;
   
   bufferlist dirbl;
-  // FIXME
-  UserPerm perms(dirp->owner_uid, dirp->owner_gid);
-  int res = make_request(req, perms, NULL, NULL, -1, &dirbl);
+  int res = make_request(req, dirp->perms, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
     ldout(cct, 10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
