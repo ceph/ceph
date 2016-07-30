@@ -290,6 +290,11 @@ void test::server_data(std::ostream& out,
     out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_p << std::endl;
 
+    const auto& q = sim->get_server(0).get_priority_queue();
+    out << std::endl <<
+	" k-way heap: " << q.get_heap_branching_factor() << std::endl
+	<< std::endl;
+
 #ifdef PROFILE
     crimson::ProfileCombiner<std::chrono::nanoseconds> art_combiner;
     crimson::ProfileCombiner<std::chrono::nanoseconds> rct_combiner;

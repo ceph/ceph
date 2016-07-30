@@ -21,6 +21,14 @@ if(DO_NOT_DELAY_TAG_CALC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDO_NOT_DELAY_TAG_CALC")
 endif()
 
+if(K_WAY_HEAP)
+  if(K_WAY_HEAP LESS 2)
+    message(FATAL_ERROR "K_WAY_HEAP value should be at least 2")
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DK_WAY_HEAP=${K_WAY_HEAP}")
+  endif()
+endif()
+
 add_subdirectory(src)
 add_subdirectory(sim)
 

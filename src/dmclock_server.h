@@ -14,6 +14,15 @@
 // #define USE_PROP_HEAP
 // #define DO_NOT_DELAY_TAG_CALC
 
+/*
+ * Branching factor of the internal heap,
+ * default value is 2 for binary heap.
+ * To change, re-compile with -DK_WAY_HEAP=VALUE flag
+ */
+#ifndef K_WAY_HEAP
+#define K_WAY_HEAP  2
+#endif
+
 #pragma once
 
 
@@ -499,6 +508,10 @@ namespace crimson {
       }
 
 
+      uint get_heap_branching_factor() const {
+	return K_WAY_HEAP;
+      }
+
     protected:
 
       // The ClientCompare functor is essentially doing a precedes?
@@ -563,36 +576,39 @@ namespace crimson {
       mutable std::mutex data_mtx;
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
 
-      // stable mappiing between client ids and client queues
+      // stable mapping between client ids and client queues
       std::map<C,ClientRecRef> client_map;
-
 
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::reserv_heap_data,
 		      ClientCompare<&RequestTag::reservation,
 				    ReadyOption::ignore,
-				    false>> resv_heap;
+				    false>,
+		      K_WAY_HEAP> resv_heap;
 #if USE_PROP_HEAP
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::prop_heap_data,
 		      ClientCompare<&RequestTag::proportion,
 				    ReadyOption::ignore,
-				    true>> prop_heap;
+				    true>,
+		      K_WAY_HEAP> prop_heap;
 #endif
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::lim_heap_data,
 		      ClientCompare<&RequestTag::limit,
 				    ReadyOption::lowers,
-				    false>> limit_heap;
+				    false>,
+		      K_WAY_HEAP> limit_heap;
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,
 				    ReadyOption::raises,
-				    true>> ready_heap;
+				    true>,
+		      K_WAY_HEAP> ready_heap;
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -762,7 +778,7 @@ namespace crimson {
       // data_mtx should be held when called; top of heap should have
       // a ready request
       template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
-      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
+      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3, K_WAY_HEAP>& heap,
 			       std::function<void(const C& client,
 						  RequestRef& request)> process) {
 	// gain access to data
@@ -817,6 +833,7 @@ namespace crimson {
 	  prop_heap.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
 #endif
+	std::cout << "{ K_WAY_HEAP:" << K_WAY_HEAP << "}" << std::endl;
       } // display_queues
 
 
@@ -993,7 +1010,7 @@ namespace crimson {
       // data_mtx must be held by caller
       template<IndIntruHeapData ClientRec::*C1,typename C2>
       void delete_from_heap(ClientRecRef& client,
-			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2>& heap) {
+			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2, K_WAY_HEAP>& heap) {
 	auto i = heap.rfind(client);
 	heap.remove(i);
       }
@@ -1383,7 +1400,7 @@ namespace crimson {
       // should not be empty and the top element of the heap should
       // not be already handled
       template<typename C1, IndIntruHeapData super::ClientRec::*C2, typename C3>
-      C submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3>& heap,
+      C submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3,K_WAY_HEAP>& heap,
 			   PhaseType phase) {
 	C client_result;
 	super::pop_process_request(heap,

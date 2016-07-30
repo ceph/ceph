@@ -20,7 +20,6 @@
 
 namespace crimson {
   using IndIntruHeapData = size_t;
-  using BranchingFactor  = size_t;
 
   /* T is the ultimate data that's being stored in the heap, although
    *   through indirection.
@@ -37,7 +36,7 @@ namespace crimson {
    *
    * K is the branching factor of the heap, default is 2 (binary heap).
    */
-  template<typename I, typename T, IndIntruHeapData T::*heap_info, typename C, BranchingFactor K = 2>
+  template<typename I, typename T, IndIntruHeapData T::*heap_info, typename C, uint K = 2>
   class IndIntruHeap {
 
     static_assert(
@@ -51,12 +50,12 @@ namespace crimson {
 
 
     class Iterator {
-      friend IndIntruHeap<I, T, heap_info, C>;
+      friend IndIntruHeap<I, T, heap_info, C, K>;
 
-      IndIntruHeap<I, T, heap_info, C>& heap;
+      IndIntruHeap<I, T, heap_info, C, K>& heap;
       size_t                            index;
 
-      Iterator(IndIntruHeap<I, T, heap_info, C>& _heap, size_t _index) :
+      Iterator(IndIntruHeap<I, T, heap_info, C, K>& _heap, size_t _index) :
 	heap(_heap),
 	index(_index)
       {
@@ -123,12 +122,12 @@ namespace crimson {
 
     
     class ConstIterator {
-      friend IndIntruHeap<I, T, heap_info, C>;
+      friend IndIntruHeap<I, T, heap_info, C, K>;
 
-      const IndIntruHeap<I, T, heap_info, C>& heap;
+      const IndIntruHeap<I, T, heap_info, C, K>& heap;
       size_t                                  index;
 
-      ConstIterator(const IndIntruHeap<I, T, heap_info, C>& _heap, size_t _index) :
+      ConstIterator(const IndIntruHeap<I, T, heap_info, C, K>& _heap, size_t _index) :
 	heap(_heap),
 	index(_index)
       {
@@ -202,7 +201,7 @@ namespace crimson {
       assert(K > 0);
     }
 
-    IndIntruHeap(const IndIntruHeap<I,T,heap_info,C>& other) :
+    IndIntruHeap(const IndIntruHeap<I,T,heap_info,C,K>& other) :
       count(other.count)
     {
       for (uint i = 0; i < other.count; ++i) {
@@ -334,7 +333,7 @@ namespace crimson {
 		    "cannot call display_sorted when class I is not copy"
 		    " constructible");
 
-      IndIntruHeap<I,T,heap_info,C> copy = *this;
+      IndIntruHeap<I,T,heap_info,C,K> copy = *this;
 
       bool first = true;
       while(!copy.empty()) {
