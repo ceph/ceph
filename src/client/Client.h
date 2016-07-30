@@ -1039,8 +1039,8 @@ public:
   int statfs(const char *path, struct statvfs *stbuf);
 
   // crap
-  int chdir(const char *s, std::string &new_cwd);
-  void getcwd(std::string& cwd);
+  int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
+  void getcwd(std::string& cwd, const UserPerm& perms);
 
   // namespace ops
   int opendir(const char *name, dir_result_t **dirpp, const UserPerm& perms);
