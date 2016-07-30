@@ -1123,7 +1123,7 @@ public:
   int open(const char *path, int flags, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool);
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 		  const UserPerm& perms);
-  int lookup_ino(inodeno_t ino, Inode **inode=NULL);
+  int lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   int lookup_parent(Inode *in, Inode **parent=NULL);
   int lookup_name(Inode *in, Inode *parent);
   int close(int fd);

@@ -7606,7 +7606,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
  * the resulting Inode object in one operation, so that caller
  * can safely assume inode will still be there after return.
  */
-int Client::lookup_ino(inodeno_t ino, Inode **inode)
+int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_ino enter(" << ino << ") = " << dendl;
@@ -7615,7 +7615,6 @@ int Client::lookup_ino(inodeno_t ino, Inode **inode)
   filepath path(ino);
   req->set_filepath(path);
 
-  UserPerm perms(get_uid(), get_gid()); // FIXME
   int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   if (r == 0 && inode != NULL) {
     vinodeno_t vino(ino, CEPH_NOSNAP);

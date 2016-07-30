@@ -1373,7 +1373,8 @@ extern "C" int ceph_ll_lookup_inode(
     struct inodeno_t ino,
     Inode **inode)
 {
-  int r = (cmount->get_client())->lookup_ino(ino, inode);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  int r = (cmount->get_client())->lookup_ino(ino, perms, inode);
   if (r) {
     return r;
   }
