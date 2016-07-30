@@ -4741,6 +4741,14 @@ void Monitor::scrub_event_start()
     return;
   }
 
+  struct C_Scrub : public Context {
+    Monitor *mon;
+    explicit C_Scrub(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->scrub_start();
+    }
+  };
+
   scrub_event = new C_Scrub(this);
   timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
 }
@@ -4766,6 +4774,15 @@ void Monitor::scrub_reset_timeout()
 {
   dout(15) << __func__ << " reset timeout event" << dendl;
   scrub_cancel_timeout();
+
+  struct C_ScrubTimeout : public Context {
+    Monitor *mon;
+    explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->scrub_timeout();
+    }
+  };
+
   scrub_timeout_event = new C_ScrubTimeout(this);
   timer.add_event_after(g_conf->mon_scrub_timeout, scrub_timeout_event);
 }

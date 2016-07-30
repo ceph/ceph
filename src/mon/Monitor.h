@@ -259,20 +259,6 @@ private:
   void scrub_reset();
   void scrub_update_interval(int secs);
 
-  struct C_Scrub : public Context {
-    Monitor *mon;
-    explicit C_Scrub(Monitor *m) : mon(m) { }
-    void finish(int r) {
-      mon->scrub_start();
-    }
-  };
-  struct C_ScrubTimeout : public Context {
-    Monitor *mon;
-    explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
-    void finish(int r) {
-      mon->scrub_timeout();
-    }
-  };
   Context *scrub_event;       ///< periodic event to trigger scrub (leader)
   Context *scrub_timeout_event;  ///< scrub round timeout (leader)
   void scrub_event_start();
