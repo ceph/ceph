@@ -31,9 +31,9 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_user_client
   librados
   global
-  curl
-  expat
   ${BLKID_LIBRARIES}
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
@@ -58,9 +58,8 @@ target_link_libraries(ceph_test_rgw_obj
   cls_user_client
   librados
   global
-  curl
-  uuid
-  expat
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
