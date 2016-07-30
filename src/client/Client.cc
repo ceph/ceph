@@ -8874,7 +8874,8 @@ void Client::getcwd(string& dir, const UserPerm& perms)
   dir += path.get_path();
 }
 
-int Client::statfs(const char *path, struct statvfs *stbuf)
+int Client::statfs(const char *path, struct statvfs *stbuf,
+		   const UserPerm& perms)
 {
   Mutex::Locker l(client_lock);
   tout(cct) << "statfs" << std::endl;
@@ -9236,12 +9237,12 @@ int Client::_flock(Fh *fh, int cmd, uint64_t owner)
   return ret;
 }
 
-int Client::ll_statfs(Inode *in, struct statvfs *stbuf)
+int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
 {
   /* Since the only thing this does is wrap a call to statfs, and
      statfs takes a lock, it doesn't seem we have a need to split it
      out. */
-  return statfs(0, stbuf);
+  return statfs(0, stbuf, perms);
 }
 
 void Client::ll_register_callbacks(struct client_callback_args *args)

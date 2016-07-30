@@ -1217,7 +1217,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->chdir(a, ignore, perms);
     } else if (strcmp(op, "statfs") == 0) {
       struct statvfs stbuf;
-      client->statfs("/", &stbuf);
+      client->statfs("/", &stbuf, perms);
     }
 
     // low level ops ---------------------
@@ -1437,7 +1437,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_statfs") == 0) {
       int64_t i = t.get_int();
       if (ll_inos.count(i))
-	{} //client->ll_statfs(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
+	{} //client->ll_statfs(vinodeno_t(ll_inos[i],CEPH_NOSNAP), perms);
     }
 
 
