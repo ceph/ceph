@@ -804,7 +804,7 @@ void bluestore_lextent_t::decode(bufferlist::iterator& p)
 
 void bluestore_lextent_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("blob", blob);
+  f->dump_int("blob", blob);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
 }
