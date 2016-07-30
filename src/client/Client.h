@@ -1036,7 +1036,7 @@ public:
     bufferlist *poutbl, std::string *prs, Context *onfinish);
 
   // these shoud (more or less) mirror the actual system calls.
-  int statfs(const char *path, struct statvfs *stbuf);
+  int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
   // crap
   int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
@@ -1242,7 +1242,7 @@ public:
 		     uint64_t snapseq, uint32_t sync);
   int ll_commit_blocks(Inode *in, uint64_t offset, uint64_t length);
 
-  int ll_statfs(Inode *in, struct statvfs *stbuf);
+  int ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms);
   int ll_walk(const char* name, Inode **i, struct stat *attr); // XXX in?
   uint32_t ll_stripe_unit(Inode *in);
   int ll_file_layout(Inode *in, file_layout_t *layout);

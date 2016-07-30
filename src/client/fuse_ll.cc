@@ -707,8 +707,10 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
   struct statvfs stbuf;
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   Inode *in = cfuse->iget(ino);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  UserPerm perms(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_statfs(in, &stbuf);
+  int r = cfuse->client->ll_statfs(in, &stbuf, perms);
   if (r == 0)
     fuse_reply_statfs(req, &stbuf);
   else

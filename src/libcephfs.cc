@@ -441,7 +441,8 @@ extern "C" int ceph_statfs(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->statfs(path, stbuf);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->statfs(path, stbuf, perms);
 }
 
 extern "C" int ceph_get_local_osd(struct ceph_mount_info *cmount)
@@ -1632,7 +1633,8 @@ extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_statfs(class ceph_mount_info *cmount,
 			      Inode *in, struct statvfs *stbuf)
 {
-  return (cmount->get_client()->ll_statfs(in, stbuf));
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return (cmount->get_client()->ll_statfs(in, stbuf, perms));
 }
 
 extern "C" int ceph_ll_readlink(class ceph_mount_info *cmount,
