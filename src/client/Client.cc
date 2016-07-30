@@ -7575,7 +7575,8 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   return open(relpath, flags, mode, 0, 0, 0, NULL);
 }
 
-int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
+int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
+			const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_hash enter(" << ino << ", #" << dirino << "/" << name << ") = " << dendl;
@@ -7591,7 +7592,6 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
   path2.push_dentry(string(f));
   req->set_filepath2(path2);
 
-  UserPerm perms(get_uid(), get_gid()); // FIXME
   int r = make_request(req, perms, NULL, NULL,
 		       rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;

@@ -877,7 +877,7 @@ int SyntheticClient::run()
 	sscanf(diname.c_str(), "%llx", (long long unsigned*)&dirino.val);
 	string name = get_sarg(0);
 	if (run_me()) {
-	  lookup_hash(ino, dirino, name.c_str());
+	  lookup_hash(ino, dirino, name.c_str(), perms);
 	}
       }
       break;
@@ -3336,9 +3336,10 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 }
 
 
-int SyntheticClient::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name)
+int SyntheticClient::lookup_hash(inodeno_t ino, inodeno_t dirino,
+				 const char *name, const UserPerm& perms)
 {
-  int r = client->lookup_hash(ino, dirino, name);
+  int r = client->lookup_hash(ino, dirino, name, perms);
   dout(0) << "lookup_hash(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
   return r;
 }
