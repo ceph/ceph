@@ -20,6 +20,7 @@
 
 namespace crimson {
   using IndIntruHeapData = size_t;
+  using BranchingFactor  = size_t;
 
   /* T is the ultimate data that's being stored in the heap, although
    *   through indirection.
@@ -33,8 +34,10 @@ namespace crimson {
    *
    * heap_info is a data member pointer as to where the heap data in T
    * is stored.
+   *
+   * K is the branching factor of the heap, default is 2 (binary heap).
    */
-  template<typename I, typename T, IndIntruHeapData T::*heap_info, typename C>
+  template<typename I, typename T, IndIntruHeapData T::*heap_info, typename C, BranchingFactor K = 2>
   class IndIntruHeap {
 
     static_assert(
@@ -196,7 +199,7 @@ namespace crimson {
     IndIntruHeap() :
       count(0)
     {
-      // empty
+      assert(K > 0);
     }
 
     IndIntruHeap(const IndIntruHeap<I,T,heap_info,C>& other) :
@@ -369,12 +372,12 @@ namespace crimson {
     // when i is negative?
     static inline index_t parent(index_t i) {
       assert(0 != i);
-      return (i - 1) / 2;
+      return (i - 1) / K;
     }
 
-    static inline index_t lhs(index_t i) { return 2*i + 1; }
+    static inline index_t lhs(index_t i) { return K*i + 1; }
 
-    static inline index_t rhs(index_t i) { return 2*i + 2; }
+    static inline index_t rhs(index_t i) { return K*i + K; }
 
     void sift_up(index_t i) {
       while (i > 0) {
@@ -393,29 +396,31 @@ namespace crimson {
     void sift_down(index_t i) {
       while (i < count) {
 	index_t li = lhs(i);
-	index_t ri = rhs(i);
 
 	if (li < count) {
-	  if (comparator(*data[li], *data[i])) {
-	    if (ri < count && comparator(*data[ri], *data[li])) {
-	      std::swap(data[i], data[ri]);
-	      intru_data_of(data[i]) = i;
-	      intru_data_of(data[ri]) = ri;
-	      i = ri;
+	  index_t ri = rhs(i);
+
+	  // find the index of min. child
+	  index_t min_i = li;
+	  for (index_t k = li + 1 ; k <= ri ; k++ ){
+	    if (k < count) {
+	      if (comparator(*data[k], *data[min_i])) {
+		min_i = k;
+	      }
 	    } else {
-	      std::swap(data[i], data[li]);
-	      intru_data_of(data[i]) = i;
-	      intru_data_of(data[li]) = li;
-	      i = li;
+	      break;
 	    }
-	  } else if (ri < count && comparator(*data[ri], *data[i])) {
-	    std::swap(data[i], data[ri]);
+	  }
+
+	  if (comparator(*data[min_i], *data[i])) {
+	    std::swap(data[i], data[min_i]);
 	    intru_data_of(data[i]) = i;
-	    intru_data_of(data[ri]) = ri;
-	    i = ri;
+	    intru_data_of(data[min_i]) = min_i;
+	    i = min_i;
 	  } else {
 	    break;
 	  }
+
 	} else {
 	  break;
 	}

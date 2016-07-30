@@ -24,7 +24,7 @@ set_target_properties(data-struct-tests
   RUNTIME_OUTPUT_DIRECTORY ../../test)
 
 target_link_libraries(data-struct-tests
-  PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+  PUBLIC ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY} pthread)
 
 # for every argument, adds a test with that name, using it as a gtest filter
 function(make_tests)
