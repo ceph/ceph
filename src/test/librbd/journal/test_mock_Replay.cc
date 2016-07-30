@@ -54,7 +54,15 @@ struct AioImageRequest<MockReplayImageCtx> {
 
 AioImageRequest<MockReplayImageCtx> *AioImageRequest<MockReplayImageCtx>::s_instance = nullptr;
 
+namespace util {
+
+inline ImageCtx *get_image_ctx(librbd::MockReplayImageCtx *image_ctx) {
+  return image_ctx->image_ctx;
 }
+
+} // namespace util
+
+} // namespace librbd
 
 // template definitions
 #include "librbd/journal/Replay.cc"

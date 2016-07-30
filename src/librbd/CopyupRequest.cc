@@ -181,7 +181,8 @@ private:
   void CopyupRequest::send()
   {
     m_state = STATE_READ_FROM_PARENT;
-    AioCompletion *comp = AioCompletion::create(this);
+    AioCompletion *comp = AioCompletion::create_and_start(
+      this, m_ictx, AIO_TYPE_READ);
 
     ldout(m_ictx->cct, 20) << __func__ << " " << this
                            << ": completion " << comp

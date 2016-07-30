@@ -79,10 +79,7 @@ void AioImageRequest<I>::aio_read(
     I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
     char *buf, bufferlist *pbl, int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_READ);
-
   AioImageRead req(*ictx, c, extents, buf, pbl, op_flags);
-  req.start_op();
   req.send();
 }
 
@@ -90,10 +87,7 @@ template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                   uint64_t off, size_t len, char *buf,
                                   bufferlist *pbl, int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_READ);
-
   AioImageRead req(*ictx, c, off, len, buf, pbl, op_flags);
-  req.start_op();
   req.send();
 }
 
@@ -101,35 +95,29 @@ template <typename I>
 void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                    uint64_t off, size_t len, const char *buf,
                                    int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_WRITE);
-
   AioImageWrite req(*ictx, c, off, len, buf, op_flags);
-  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                      uint64_t off, uint64_t len) {
-  c->init_time(ictx, librbd::AIO_TYPE_DISCARD);
-
   AioImageDiscard req(*ictx, c, off, len);
-  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
-  c->init_time(ictx, librbd::AIO_TYPE_FLUSH);
-
+  assert(c->is_initialized(AIO_TYPE_FLUSH));
   AioImageFlush req(*ictx, c);
-  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::send() {
   assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_aio_comp->is_initialized(get_aio_type()));
+  assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << get_request_type() << ": ictx=" << &m_image_ctx << ", "

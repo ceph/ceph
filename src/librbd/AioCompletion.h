@@ -50,7 +50,7 @@ namespace librbd {
    * context or via a thread pool context for cache read hits).
    */
   struct AioCompletion {
-    Mutex lock;
+    mutable Mutex lock;
     Cond cond;
     aio_state_t state;
     ssize_t rval;
@@ -100,6 +100,15 @@ namespace librbd {
       return comp;
     }
 
+    template <typename T, void (T::*MF)(int) = &T::complete>
+    static AioCompletion *create_and_start(T *obj, ImageCtx *image_ctx,
+                                           aio_type_t type) {
+      AioCompletion *comp = create<T, MF>(obj);
+      comp->init_time(image_ctx, type);
+      comp->start_op();
+      return comp;
+    }
+
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      state(STATE_PENDING), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
@@ -116,6 +125,15 @@ namespace librbd {
     int wait_for_complete();
 
     void finalize(ssize_t rval);
+
+    inline bool is_initialized(aio_type_t type) const {
+      Mutex::Locker locker(lock);
+      return ((ictx != nullptr) && (aio_type == type));
+    }
+    inline bool is_started() const {
+      Mutex::Locker locker(lock);
+      return async_op.started();
+    }
 
     void init_time(ImageCtx *i, aio_type_t t);
     void start_op(bool ignore_type = false);
