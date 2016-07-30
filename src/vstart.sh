@@ -114,7 +114,7 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
-usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw)\n"
+usage=$usage"\t-r start radosgw\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
@@ -290,7 +290,7 @@ if [ "$overwrite_conf" -eq 0 ]; then
     RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
 else
-	rm -- "$conf_fn"
+	rm -f -- "$conf_fn"
 fi
 
 if [ "$start_all" -eq 1 ]; then
