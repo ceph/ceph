@@ -475,7 +475,7 @@ OPTION(mds_log_events_per_segment, OPT_INT, 1024)
 OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log, default to default file_layout_t
 OPTION(mds_log_max_segments, OPT_U32, 30)
 OPTION(mds_log_max_expiring, OPT_INT, 20)
-OPTION(mds_bal_sample_interval, OPT_FLOAT, 3.0)  // every 5 seconds
+OPTION(mds_bal_sample_interval, OPT_DOUBLE, 3.0)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT, 0)
 OPTION(mds_bal_frag, OPT_BOOL, false)
