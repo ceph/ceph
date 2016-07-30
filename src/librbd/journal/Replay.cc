@@ -297,6 +297,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
 
   bool flush_required;
   AioCompletion *aio_comp = create_aio_modify_completion(on_ready, on_safe,
+                                                         AIO_TYPE_DISCARD,
                                                          &flush_required);
   AioImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
                                   event.length);
@@ -318,6 +319,7 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
   bufferlist data = event.data;
   bool flush_required;
   AioCompletion *aio_comp = create_aio_modify_completion(on_ready, on_safe,
+                                                         AIO_TYPE_WRITE,
                                                          &flush_required);
   AioImageRequest<I>::aio_write(&m_image_ctx, aio_comp, event.offset,
                                 event.length, data.c_str(), 0);
@@ -837,6 +839,7 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 template <typename I>
 AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
                                                        Context *on_safe,
+                                                       aio_type_t aio_type,
                                                        bool *flush_required) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
@@ -871,8 +874,9 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
   // when the modification is ACKed by librbd, we can process the next
   // event. when flushed, the completion of the next flush will fire the
   // on_safe callback
-  AioCompletion *aio_comp = AioCompletion::create<Context>(
-    new C_AioModifyComplete(this, on_ready, on_safe));
+  AioCompletion *aio_comp = AioCompletion::create_and_start<Context>(
+    new C_AioModifyComplete(this, on_ready, on_safe),
+    util::get_image_ctx(&m_image_ctx), aio_type);
   return aio_comp;
 }
 
@@ -883,9 +887,10 @@ AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_safe) {
   ++m_in_flight_aio_flush;
 
   // associate all prior write/discard ops to this flush request
-  AioCompletion *aio_comp = AioCompletion::create<Context>(
+  AioCompletion *aio_comp = AioCompletion::create_and_start<Context>(
       new C_AioFlushComplete(this, on_safe,
-                             std::move(m_aio_modify_unsafe_contexts)));
+                             std::move(m_aio_modify_unsafe_contexts)),
+      util::get_image_ctx(&m_image_ctx), AIO_TYPE_FLUSH);
   m_aio_modify_unsafe_contexts.clear();
   return aio_comp;
 }

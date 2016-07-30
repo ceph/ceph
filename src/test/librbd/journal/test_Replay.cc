@@ -255,36 +255,11 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
 
   // inject a flush operation into the journal
   inject_into_journal(ictx, librbd::journal::AioFlushEvent());
-
-  // start an AIO write op
-  librbd::Journal<> *journal = ictx->journal;
-  ictx->journal = NULL;
-
-  std::string payload(m_image_size, '1');
-  librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
-  {
-    RWLock::RLocker owner_lock(ictx->owner_lock);
-    librbd::AioImageRequest<>::aio_write(ictx, aio_comp, 0, payload.size(),
-                                         payload.c_str(), 0);
-  }
-  ictx->journal = journal;
   close_image(ictx);
 
   // re-open the journal so that it replays the new entry
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
-
-  ASSERT_TRUE(aio_comp->is_complete());
-  ASSERT_EQ(0, aio_comp->wait_for_complete());
-  aio_comp->release();
-
-  std::string read_payload(m_image_size, '\0');
-  aio_comp = new librbd::AioCompletion();
-  ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
-                                 &read_payload[0], NULL, 0);
-  ASSERT_EQ(0, aio_comp->wait_for_complete());
-  aio_comp->release();
-  ASSERT_EQ(payload, read_payload);
 
   // check the commit position is properly updated
   int64_t current_tag;
@@ -305,7 +280,7 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ASSERT_EQ(1, current_entry);
 
   // verify lock ordering constraints
-  aio_comp = new librbd::AioCompletion();
+  librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_flush(aio_comp);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
