@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <Python.h>
+
 #include "osdc/Objecter.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
@@ -44,7 +46,7 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
   waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, py_modules),
+  server(monc, daemon_state, cluster_state, py_modules),
   initialized(false),
   initializing(false)
 {
@@ -164,6 +166,11 @@ void Mgr::init()
   lock.Unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
   objecter->wait_for_osd_map();
   lock.Lock();
+
+  // Populate PGs in ClusterState
+  objecter->with_osdmap([this](const OSDMap &osd_map) {
+    cluster_state.notify_osdmap(osd_map);
+  });
 
   monc->sub_want("mgrdigest", 0, 0);
 
@@ -387,6 +394,8 @@ void Mgr::handle_osd_map()
         assert(r == 0);  // start_mon_command defined to not fail
       }
     }
+
+    cluster_state.notify_osdmap(osd_map);
   });
 
   // TODO: same culling for MonMap and FSMap

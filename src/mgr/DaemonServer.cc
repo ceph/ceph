@@ -17,6 +17,7 @@
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MPGStats.h"
 
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
@@ -24,9 +25,11 @@
 
 DaemonServer::DaemonServer(MonClient *monc_,
   DaemonStateIndex &daemon_state_,
+  ClusterState &cluster_state_,
   PyModules &py_modules_)
     : Dispatcher(g_ceph_context), msgr(nullptr), monc(monc_),
       daemon_state(daemon_state_),
+      cluster_state(cluster_state_),
       py_modules(py_modules_),
       auth_registry(g_ceph_context,
                     g_conf->auth_supported.empty() ?
@@ -120,6 +123,10 @@ bool DaemonServer::ms_dispatch(Message *m)
   Mutex::Locker l(lock);
 
   switch(m->get_type()) {
+    case MSG_PGSTATS:
+      cluster_state.ingest_pgstats(static_cast<MPGStats*>(m));
+      m->put();
+      return true;
     case MSG_MGR_REPORT:
       return handle_report(static_cast<MMgrReport*>(m));
     case MSG_MGR_OPEN:

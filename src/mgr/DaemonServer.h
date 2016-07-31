@@ -43,6 +43,7 @@ protected:
   Messenger *msgr;
   MonClient *monc;
   DaemonStateIndex &daemon_state;
+  ClusterState &cluster_state;
   PyModules &py_modules;
 
   AuthAuthorizeHandlerRegistry auth_registry;
@@ -58,6 +59,7 @@ public:
 
   DaemonServer(MonClient *monc_,
       DaemonStateIndex &daemon_state_,
+      ClusterState &cluster_state_,
       PyModules &py_modules_);
   ~DaemonServer();
 

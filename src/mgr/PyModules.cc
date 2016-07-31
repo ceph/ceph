@@ -11,11 +11,13 @@
  * Foundation.  See file COPYING.
  */
 
+// Include this first to get python headers earlier
+#include "PyState.h"
 
 #include <boost/tokenizer.hpp>
 #include "common/errno.h"
+#include "include/stringify.h"
 
-#include "PyState.h"
 #include "PyFormatter.h"
 
 #include "osd/OSDMap.h"
@@ -171,12 +173,56 @@ PyObject *PyModules::get_python(const std::string &what)
       f.close_section();
     }
     return f.get();
-  } else if (what == "pg_summary" || what == "health" || what == "mon_status") {
+  } else if (what == "pg_summary") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+      //    f.open_object_section("outer");
+          std::map<std::string, std::map<std::string, uint32_t> > osds;
+          std::map<std::string, std::map<std::string, uint32_t> > pools;
+          std::map<std::string, uint32_t> all;
+          for (const auto &i : pg_map.pg_stat) {
+            const auto pool = i.first.m_pool;
+            const std::string state = pg_state_string(i.second.state);
+            // Insert to per-pool map
+            pools[stringify(pool)][state]++;
+            for (const auto &osd_id : i.second.acting) {
+              osds[stringify(osd_id)][state]++;
+            }
+            all[state]++;
+          }
+          f.open_object_section("by_osd");
+          for (const auto &i : osds) {
+            f.open_object_section(i.first.c_str());
+            for (const auto &j : i.second) {
+              f.dump_int(j.first.c_str(), j.second);
+            }
+            f.close_section();
+          }
+          f.close_section();
+          f.open_object_section("by_pool");
+          for (const auto &i : pools) {
+            f.open_object_section(i.first.c_str());
+            for (const auto &j : i.second) {
+              f.dump_int(j.first.c_str(), j.second);
+            }
+            f.close_section();
+          }
+          f.close_section();
+          f.open_object_section("all");
+          for (const auto &i : all) {
+            f.dump_int(i.first.c_str(), i.second);
+          }
+          f.close_section();
+      //    f.close_section();
+        }
+    );
+    return f.get();
+
+  } else if (what == "health" || what == "mon_status") {
     PyFormatter f;
     bufferlist json;
-    if (what == "pg_summary") {
-      json = cluster_state.get_pg_summary();
-    } else if (what == "health") {
+    if (what == "health") {
       json = cluster_state.get_health();
     } else if (what == "mon_status") {
       json = cluster_state.get_mon_status();
