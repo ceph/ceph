@@ -40,7 +40,19 @@ class SessionMapIOContext : public MDSIOContextBase
     }
 };
 
-
+void SessionMap::register_perfcounters()
+{
+  PerfCountersBuilder plb(g_ceph_context, "mds_sessions",
+      l_mdssm_first, l_mdssm_last);
+  plb.add_u64(l_mdssm_session_count, "session_count",
+      "Session count");
+  plb.add_u64_counter(l_mdssm_session_add, "session_add",
+      "Sessions added");
+  plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
+      "Sessions removed");
+  logger = plb.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
+}
 
 void SessionMap::dump()
 {
@@ -557,6 +569,9 @@ void SessionMap::add_session(Session *s)
     by_state[s->state] = new xlist<Session*>;
   by_state[s->state]->push_back(&s->item_session_list);
   s->get();
+
+  logger->set(l_mdssm_session_count, session_map.size());
+  logger->inc(l_mdssm_session_add);
 }
 
 void SessionMap::remove_session(Session *s)
@@ -571,6 +586,9 @@ void SessionMap::remove_session(Session *s)
   }
   null_sessions.insert(s->info.inst.name);
   s->put();
+
+  logger->set(l_mdssm_session_count, session_map.size());
+  logger->inc(l_mdssm_session_remove);
 }
 
 void SessionMap::touch_session(Session *session)

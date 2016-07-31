@@ -26,6 +26,7 @@ using std::set;
 #include "include/interval_set.h"
 #include "mdstypes.h"
 #include "mds/MDSAuthCaps.h"
+#include "common/perf_counters.h"
 
 class CInode;
 struct MDRequestImpl;
@@ -34,6 +35,13 @@ struct MDRequestImpl;
 #include "Capability.h"
 #include "msg/Message.h"
 
+enum {
+  l_mdssm_first = 5500,
+  l_mdssm_session_count,
+  l_mdssm_session_add,
+  l_mdssm_session_remove,
+  l_mdssm_last,
+};
 
 /* 
  * session
@@ -376,8 +384,9 @@ class MDSRank;
 class SessionMapStore {
 protected:
   version_t version;
-public:
   ceph::unordered_map<entity_name_t, Session*> session_map;
+  PerfCounters *logger;
+public:
   mds_rank_t rank;
 
   version_t get_version() const {return version;}
@@ -401,6 +410,10 @@ public:
       s = session_map[i.name] = new Session;
       s->info.inst = i;
       s->last_cap_renew = ceph_clock_now(g_ceph_context);
+      if (logger) {
+        logger->set(l_mdssm_session_count, session_map.size());
+        logger->inc(l_mdssm_session_add);
+      }
     }
 
     return s;
@@ -413,7 +426,7 @@ public:
     session_map.clear();
   }
 
-  SessionMapStore() : version(0), rank(MDS_RANK_NONE) {}
+  SessionMapStore() : version(0), logger(nullptr), rank(MDS_RANK_NONE) {}
   virtual ~SessionMapStore() {};
 };
 
@@ -437,7 +450,15 @@ public:
   {
     for (auto p : by_state)
       delete p.second;
+
+    if (logger) {
+      g_ceph_context->get_perfcounters_collection()->remove(logger);
+    }
+
+    delete logger;
   }
+
+  void register_perfcounters();
 
   void set_version(const version_t v)
   {
