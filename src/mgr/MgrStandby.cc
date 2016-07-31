@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <Python.h>
+
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"

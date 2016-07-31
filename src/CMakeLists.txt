@@ -517,6 +517,7 @@ add_subdirectory(libradosstriper)
 if (WITH_MGR)
   set(mgr_srcs
       ceph_mgr.cc
+      mon/PGMap.cc
       mgr/DaemonState.cc
       mgr/DaemonServer.cc
       mgr/ClusterState.cc

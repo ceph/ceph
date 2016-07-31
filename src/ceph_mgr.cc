@@ -14,6 +14,7 @@
  *
  */
 
+#include <Python.h>
 
 #include "include/types.h"
 #include "common/config.h"
