@@ -255,7 +255,9 @@ private:
   ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
 
   friend class OSDMonitor;
+  // FIXME: the elements required for PGMap updates should be exposed properly
   friend class PGMonitor;
+  friend class ClusterState;
 
  public:
   OSDMap() : epoch(0), 
