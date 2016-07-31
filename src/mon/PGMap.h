@@ -22,6 +22,7 @@
 #define CEPH_PGMAP_H
 
 #include "common/debug.h"
+#include "common/TextTable.h"
 #include "osd/osd_types.h"
 #include <sstream>
 
@@ -176,6 +177,8 @@ public:
 
   epoch_t calc_min_last_epoch_clean() const;
 
+  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+
  public:
 
   set<pg_t> creating_pgs;
@@ -269,6 +272,14 @@ public:
   void dirty_all(Incremental& inc);
 
   void dump(Formatter *f) const; 
+  void dump_pool_stats(const OSDMap &osd_map, stringstream *ss, Formatter *f,
+      bool verbose) const;
+  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+			    const object_stat_sum_t &sum,
+			    uint64_t avail,
+			    float raw_used_rate,
+			    bool verbose, const pg_pool_t *pool);
   void dump_basic(Formatter *f) const;
   void dump_pg_stats(Formatter *f, bool brief) const;
   void dump_pool_stats(Formatter *f) const;
