@@ -23,6 +23,7 @@
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MPGStats.h"
 
 #define dout_subsys ceph_subsys_mgrc
 #undef dout_prefix
@@ -230,6 +231,11 @@ void MgrClient::send_report()
   if (stats_period != 0) {
     report_callback = new C_StdFunction([this](){send_report();});
     timer.add_event_after(stats_period, report_callback);
+  }
+
+  if (pgstats_cb) {
+    MPGStats *m_stats = pgstats_cb();
+    session->con->send_message(m_stats);
   }
 }
 

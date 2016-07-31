@@ -27,6 +27,7 @@ class MMgrMap;
 class MMgrConfigure;
 class Messenger;
 class MCommandReply;
+class MPGStats;
 
 class MgrSessionState
 {
@@ -67,6 +68,10 @@ protected:
   list<Cond*> waiting_for_session;
   Context *report_callback;
 
+  // If provided, use this to compose an MPGStats to send with
+  // our reports (hook for use by OSD)
+  std::function<MPGStats*()> pgstats_cb;
+
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);
 
@@ -84,6 +89,11 @@ public:
   bool handle_command_reply(MCommandReply *m);
 
   void send_report();
+
+  void set_pgstats_cb(std::function<MPGStats*()> cb_)
+  {
+    pgstats_cb = cb_;
+  }
 
   int start_command(const vector<string>& cmd, const bufferlist& inbl,
 		    bufferlist *outbl, string *outs,
