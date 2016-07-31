@@ -2181,6 +2181,40 @@ int OSD::init()
   if (r < 0)
     goto out;
 
+  /**
+   * FIXME: this is a placeholder implementation that unconditionally
+   * sends every is_primary PG's stats every time we're called, unlike
+   * the existing mon PGStats mechanism that uses pg_stat_queue and acks.
+   * This has equivalent cost to the existing worst case where all
+   * PGs are busy and their stats are always enqueued for sending.
+   */
+  mgrc.set_pgstats_cb([this](){
+      RWLock::RLocker l(map_lock);
+      
+      utime_t had_for = ceph_clock_now(cct) - had_map_since;
+      osd_stat_t cur_stat = service.get_osd_stat();
+      cur_stat.fs_perf_stat = store->get_cur_stats();
+
+      MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+      m->osd_stat = cur_stat;
+
+      RWLock::RLocker lpg(pg_map_lock);
+      for (const auto &i : pg_map) {
+        PG *pg = i.second;
+        if (!pg->is_primary()) {
+          continue;
+        }
+
+        pg->pg_stats_publish_lock.Lock();
+        if (pg->pg_stats_publish_valid) {
+          m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
+        }
+        pg->pg_stats_publish_lock.Unlock();
+      }
+
+      return m;
+  });
+
   mgrc.init();
   client_messenger->add_dispatcher_head(&mgrc);
 
