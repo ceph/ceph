@@ -98,7 +98,6 @@ public:
   template<typename Callback, typename...Args>
   void with_osdmap(Callback&& cb, Args&&...args)
   {
-    Mutex::Locker l(lock);
     assert(objecter != nullptr);
     objecter->with_osdmap(cb);
   }
