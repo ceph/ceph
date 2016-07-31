@@ -162,7 +162,12 @@ int pidfh::open(const md_config_t *conf)
   pf_dev = st.st_dev;
   pf_ino = st.st_ino;
 
-  struct flock l = { F_WRLCK, SEEK_SET, 0, 0, 0 };
+  struct flock l = {
+    .l_type = F_WRLCK,
+    .l_whence = SEEK_SET,
+    .l_start = 0,
+    .l_len = 0
+  };
   int r = ::fcntl(pf_fd, F_SETLK, &l);
   if (r < 0) {
     derr << __func__ << ": failed to lock pidfile "
