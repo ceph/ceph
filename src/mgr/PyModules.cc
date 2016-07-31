@@ -177,7 +177,6 @@ PyObject *PyModules::get_python(const std::string &what)
     PyFormatter f;
     cluster_state.with_pgmap(
         [&f](const PGMap &pg_map) {
-      //    f.open_object_section("outer");
           std::map<std::string, std::map<std::string, uint32_t> > osds;
           std::map<std::string, std::map<std::string, uint32_t> > pools;
           std::map<std::string, uint32_t> all;
@@ -214,11 +213,21 @@ PyObject *PyModules::get_python(const std::string &what)
             f.dump_int(i.first.c_str(), i.second);
           }
           f.close_section();
-      //    f.close_section();
         }
     );
     return f.get();
 
+  } else if (what == "df") {
+    PyFormatter f;
+
+    cluster_state.with_osdmap([this, &f](const OSDMap &osd_map){
+      cluster_state.with_pgmap(
+          [osd_map, &f](const PGMap &pg_map) {
+        pg_map.dump_fs_stats(nullptr, &f, true);
+        pg_map.dump_pool_stats(osd_map, nullptr, &f, true);
+      });
+    });
+    return f.get();
   } else if (what == "health" || what == "mon_status") {
     PyFormatter f;
     bufferlist json;
