@@ -124,8 +124,8 @@ class Module(MgrModule):
             obj = FsMap(data['epoch'], data)
         elif object_type == PgSummary:
             data = self.get("pg_summary")
-            self.log.debug("JSON: {0}".format(data['json']))
-            obj = PgSummary(0, json.loads(data['json']))
+            self.log.debug("JSON: {0}".format(data))
+            obj = PgSummary(0, data)
         elif object_type == Health:
             data = self.get("health")
             obj = Health(0, json.loads(data['json']))
