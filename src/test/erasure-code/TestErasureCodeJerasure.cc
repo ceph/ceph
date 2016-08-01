@@ -366,7 +366,7 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
 
   const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
+  string directory(env ? env : "lib");
   g_conf->set_val("plugin_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);

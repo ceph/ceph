@@ -97,7 +97,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   const char* env = getenv("CEPH_LIB");
-  std::string libs_dir(env ? env : ".libs");
+  std::string libs_dir(env ? env : "lib");
 
   g_conf->set_val("plugin_dir", libs_dir, false, false);
 
