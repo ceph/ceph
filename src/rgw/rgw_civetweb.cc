@@ -9,7 +9,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWMongoose::write_data(const char *buf, int len)
+int RGWCivetWeb::write_data(const char *buf, int len)
 {
   if (!header_done) {
     header_data.append(buf, len);
@@ -27,7 +27,7 @@ int RGWMongoose::write_data(const char *buf, int len)
   return r;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
+RGWCivetWeb::RGWCivetWeb(mg_connection *_conn, int _port)
   : RGWStreamIOFacade(this),
     conn(_conn), port(_port), status_num(0), header_done(false),
     sent_header(false), has_content_length(false),
@@ -35,16 +35,16 @@ RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
 {
 }
 
-int RGWMongoose::read_data(char *buf, int len)
+int RGWCivetWeb::read_data(char *buf, int len)
 {
   return mg_read(conn, buf, len);
 }
 
-void RGWMongoose::flush()
+void RGWCivetWeb::flush()
 {
 }
 
-int RGWMongoose::complete_request()
+int RGWCivetWeb::complete_request()
 {
   if (!sent_header) {
     if (!has_content_length) {
@@ -88,7 +88,7 @@ int RGWMongoose::complete_request()
   return 0;
 }
 
-void RGWMongoose::init_env(CephContext *cct)
+void RGWCivetWeb::init_env(CephContext *cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
@@ -158,7 +158,7 @@ void RGWMongoose::init_env(CephContext *cct)
   }
 }
 
-int RGWMongoose::send_status(int status, const char *status_name)
+int RGWCivetWeb::send_status(int status, const char *status_name)
 {
   char buf[128];
 
@@ -178,7 +178,7 @@ int RGWMongoose::send_status(int status, const char *status_name)
   return 0;
 }
 
-int RGWMongoose::send_100_continue()
+int RGWCivetWeb::send_100_continue()
 {
   char buf[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
 
@@ -200,7 +200,7 @@ static void dump_date_header(bufferlist &out)
     out.append(timestr);
 }
 
-int RGWMongoose::complete_header()
+int RGWCivetWeb::complete_header()
 {
   header_done = true;
 
@@ -222,7 +222,7 @@ int RGWMongoose::complete_header()
   return write_data(header_data.c_str(), header_data.length());
 }
 
-int RGWMongoose::send_content_length(uint64_t len)
+int RGWCivetWeb::send_content_length(uint64_t len)
 {
   has_content_length = true;
   char buf[21];
