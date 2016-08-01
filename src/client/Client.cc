@@ -7634,12 +7634,14 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
  * our cache.  Conditionally also set `parent` to a referenced
  * Inode* if caller provides non-NULL value.
  */
-int Client::lookup_parent(Inode *ino, Inode **parent)
+int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << "lookup_parent enter(" << ino->ino << ") = " << dendl;
 
   if (!ino->dn_set.empty()) {
+    // if we exposed the parent here, we'd need to check permissions,
+    // but right now we just rely on the MDS doing so in make_request
     ldout(cct, 3) << "lookup_parent dentry already present" << dendl;
     return 0;
   }
@@ -7650,7 +7652,6 @@ int Client::lookup_parent(Inode *ino, Inode **parent)
   req->set_inode(ino);
 
   InodeRef target;
-  UserPerm perms(get_uid(), get_gid()); // FIXME
   int r = make_request(req, perms, &target, NULL, rand() % mdsmap->get_num_in_mds());
   // Give caller a reference to the parent ino if they provided a pointer.
   if (parent != NULL) {
