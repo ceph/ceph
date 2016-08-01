@@ -26,6 +26,7 @@ class TestAnsibleTask(TestTask):
         self.ctx.cluster.add(Remote('user@remote1'), ['role1'])
         self.ctx.cluster.add(Remote('user@remote2'), ['role2'])
         self.ctx.config = dict()
+        self.ctx.summary = dict()
         self.task_config = dict(playbook=[])
         self.start_patchers()
 
@@ -306,6 +307,7 @@ class TestAnsibleTask(TestTask):
                 m_run.return_value = ('', 1)
                 with raises(CommandFailedError):
                     task.execute_playbook()
+                assert task.ctx.summary.get('status') is None
 
     def test_build_args_no_tags(self):
         self.task_config.update(dict(
@@ -491,3 +493,21 @@ class TestCephLabTask(TestTask):
             'remote1\n',
             'remote2\n',
         ]
+
+    def test_fail_status_dead(self):
+        self.task_config.update(dict(
+            playbook=[],
+        ))
+        task = self.klass(self.ctx, self.task_config)
+        task.ctx.summary = dict()
+        task.setup()
+        with patch.object(ansible.pexpect, 'run') as m_run:
+            with patch('teuthology.task.ansible.open') as m_open:
+                fake_failure_log = Mock()
+                fake_failure_log.__enter__ = Mock()
+                fake_failure_log.__exit__ = Mock()
+                m_open.return_value = fake_failure_log
+                m_run.return_value = ('', 1)
+                with raises(CommandFailedError):
+                    task.execute_playbook()
+                assert task.ctx.summary.get('status') == 'dead'

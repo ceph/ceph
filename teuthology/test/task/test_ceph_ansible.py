@@ -23,6 +23,7 @@ class TestCephAnsibleTask(TestAnsibleTask):
         self.ctx.cluster.add(Remote('user@remote1'), ['mon.0'])
         self.ctx.cluster.add(Remote('user@remote2'), ['mds.0'])
         self.ctx.cluster.add(Remote('user@remote3'), ['osd.0'])
+        self.ctx.summary = dict()
         self.ctx.config = dict()
         self.task_config = dict()
         self.start_patchers()
