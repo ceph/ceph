@@ -382,12 +382,6 @@ public:
       auth->set_want_keys(want | CEPH_ENTITY_TYPE_MON);
   }
 
-  void add_want_keys(uint32_t want) {
-    want_keys |= want;
-    if (auth)
-      auth->add_want_keys(want);
-  }
-
   // admin commands
 private:
   uint64_t last_mon_command_tid;
