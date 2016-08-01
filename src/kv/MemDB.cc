@@ -76,19 +76,19 @@ void MemDB::_save()
          << cpp_strerror(err) << std::endl;
     return;
   }
+  bufferlist bl;
   btree::btree_map<string, bufferptr>::iterator iter = m_btree.begin();
   while (iter != m_btree.end()) {
-    bufferlist bl;
     dout(10) << __func__ << " Key:"<< iter->first << dendl;
     _encode(iter, bl);
-    bl.write_fd(fd);
     iter++;
   }
+  bl.write_fd(fd);
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void MemDB::_load()
+int MemDB::_load()
 {
   std::lock_guard<std::mutex> l(m_lock);
   dout(10) << __func__ << " Reading MemDB from file: "<< _get_data_fn().c_str() << dendl;
@@ -100,7 +100,7 @@ void MemDB::_load()
     int err = errno;
     cerr << "can't open " << _get_data_fn().c_str() << ": "
          << cpp_strerror(err) << std::endl;
-    return;
+    return -err;
   }
 
   struct stat st;
@@ -110,7 +110,7 @@ void MemDB::_load()
     cerr << "can't stat file " << _get_data_fn().c_str() << ": "
          << cpp_strerror(err) << std::endl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
-    return;
+    return -err;
   }
 
   ssize_t file_size = st.st_size;
@@ -124,27 +124,31 @@ void MemDB::_load()
 
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_btree[key] = datap;
+    m_total_bytes += datap.length();
   }
   VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return 0;
 }
 
 int MemDB::_init(bool create)
 {
+  int r;
   dout(1) << __func__ << dendl;
   if (create) {
-    int r = ::mkdir(m_db_path.c_str(), 0700);
+    r = ::mkdir(m_db_path.c_str(), 0700);
     if (r < 0) {
       r = -errno;
       if (r != -EEXIST) {
         derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
         return r;
       }
+      return 0; // ignore EEXIST
     }
- } else {
-    _load();
- }
+  } else {
+    r = _load();
+  }
 
-  return 0;
+  return r;
 }
 
 int MemDB::set_merge_operator(
