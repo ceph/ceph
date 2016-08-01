@@ -4623,6 +4623,9 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
     if (strcmp(de->d_name, "omap") == 0) {
       continue;
     }
+    if (strcmp(de->d_name, "meta") == 0) {
+      continue;
+    }
     if (de->d_name[0] == '.' &&
 	(de->d_name[1] == '\0' ||
 	 (de->d_name[1] == '.' &&
