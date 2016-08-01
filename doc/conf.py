@@ -2,7 +2,7 @@ import sys
 import os
 
 project = u'Ceph'
-copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
+copyright = u'2016, Red Hat, Inc, and contributors. Licensed under Creative Commons BY-SA'
 version = 'dev'
 release = 'dev'
 
