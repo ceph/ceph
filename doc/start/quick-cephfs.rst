@@ -114,6 +114,6 @@ if you encounter trouble.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _Ceph FS: ../../cephfs/
-.. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F
+.. _FAQ: http://wiki.ceph.com/How_Can_I_Give_Ceph_a_Try
 .. _Troubleshooting: ../../cephfs/troubleshooting
 .. _OS Recommendations: ../os-recommendations
