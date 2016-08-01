@@ -18,7 +18,8 @@
 #include "common/config.h"
 #include "include/types.h"
 
-#include "../MDS.h"
+class MDLog;
+class MDSRank;
 
 #include "EMetaBlob.h"
 #include "../LogEvent.h"
@@ -46,14 +47,15 @@ protected:
 
   EMetaBlob *get_metablob() { return &metablob; }
   
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EImportStart*>& ls);
   
   void update_segment();
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 
 };
+WRITE_CLASS_ENCODER_FEATURES(EImportStart)
 
 #endif

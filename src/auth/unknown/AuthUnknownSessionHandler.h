@@ -12,8 +12,8 @@
  * 
  */
 
-#include "../AuthSessionHandler.h"
-#include "../Auth.h"
+#include "auth/AuthSessionHandler.h"
+#include "msg/Message.h"
 
 #define dout_subsys ceph_subsys_auth
 

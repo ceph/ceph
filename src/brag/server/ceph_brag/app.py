@@ -12,7 +12,7 @@ def setup_app(config):
         logging=getattr(config, 'logging', {}),
         hooks=[TransactionHook(model.start,
                                model.start,
-                               model.commit, 
+                               model.commit,
                                model.rollback,
                                model.clear)],
         **app_conf

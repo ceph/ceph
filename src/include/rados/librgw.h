@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-
 #ifndef CEPH_LIBRGW_H
 #define CEPH_LIBRGW_H
 
@@ -19,17 +18,12 @@
 extern "C" {
 #endif
 
-class CephContext;
-typedef CephContext* librgw_t;
-int librgw_create(librgw_t *rgw, const char * const id);
-int librgw_acl_bin2xml(librgw_t rgw, const char *bin, int bin_len, char **xml);
-void librgw_free_xml(librgw_t rgw, char *xml);
-int librgw_acl_xml2bin(librgw_t rgw, const char *xml, char **bin, int *bin_len);
-void librgw_free_bin(librgw_t rgw, char *bin);
+typedef void* librgw_t;
+int librgw_create(librgw_t *rgw, int argc, char **argv);
 void librgw_shutdown(librgw_t rgw);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* CEPH_LIBRGW_H */

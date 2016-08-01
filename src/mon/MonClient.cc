@@ -12,7 +12,6 @@
  * 
  */
 
-#include "msg/Messenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -26,8 +25,6 @@
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
-#include "common/ConfUtils.h"
-#include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/LogClient.h"
 
@@ -37,11 +34,7 @@
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 #include "auth/AuthMethodList.h"
-
-#include "include/str_list.h"
-#include "include/addr_parsing.h"
-
-#include "common/config.h"
+#include "auth/RotatingKeyRing.h"
 
 
 #define dout_subsys ceph_subsys_monc
@@ -116,9 +109,10 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   Messenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = Messenger::create(cct,
-					       entity_name_t::CLIENT(-1),
-					       "temp_mon_client", getpid());
+    messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
+    if (NULL == messenger) {
+        return -1;
+    }
     messenger->add_dispatcher_head(this);
     smessenger->start();
     temp_msgr = true;
@@ -207,25 +201,30 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 {
   ldout(cct, 10) << __func__ << dendl;
 
-  if (mon_id.empty()) {
+  string new_mon_id;
+  if (monmap.contains("noname-"+mon_id)) {
+    new_mon_id = "noname-"+mon_id;
+  } else {
+    new_mon_id = mon_id;
+  }
+
+  if (new_mon_id.empty()) {
     ldout(cct, 10) << __func__ << " specified mon id is empty!" << dendl;
     return -EINVAL;
-  } else if (!monmap.contains(mon_id)) {
-    ldout(cct, 10) << __func__ << " no such monitor 'mon." << mon_id << "'"
+  } else if (!monmap.contains(new_mon_id)) {
+    ldout(cct, 10) << __func__ << " no such monitor 'mon." << new_mon_id << "'"
                    << dendl;
     return -ENOENT;
   }
 
   MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
 
-  Messenger *smsgr = Messenger::create(cct,
-				       entity_name_t::CLIENT(-1),
-				       "temp_ping_client", getpid());
+  Messenger *smsgr = Messenger::create_client_messenger(cct, "temp_ping_client");
   smsgr->add_dispatcher_head(pinger);
   smsgr->start();
 
-  ConnectionRef con = smsgr->get_connection(monmap.get_inst(mon_id));
-  ldout(cct, 10) << __func__ << " ping mon." << mon_id
+  ConnectionRef con = smsgr->get_connection(monmap.get_inst(new_mon_id));
+  ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
                  << " " << con->get_peer_addr() << dendl;
   con->send_message(new MPing);
 
@@ -314,6 +313,12 @@ void MonClient::send_log()
   }
 }
 
+void MonClient::flush_log()
+{
+  Mutex::Locker l(monc_lock);
+  send_log();
+}
+
 void MonClient::handle_monmap(MMonMap *m)
 {
   ldout(cct, 10) << "handle_monmap " << *m << dendl;
@@ -354,7 +359,7 @@ int MonClient::init()
   Mutex::Locker l(monc_lock);
 
   string method;
-    if (cct->_conf->auth_supported.length() != 0)
+    if (!cct->_conf->auth_supported.empty())
       method = cct->_conf->auth_supported;
     else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
              entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
@@ -372,7 +377,7 @@ int MonClient::init()
     r = keyring->from_ceph_context(cct);
     if (r == -ENOENT) {
       auth_supported->remove_supported_auth(CEPH_AUTH_CEPHX);
-      if (auth_supported->get_supported_set().size() > 0) {
+      if (!auth_supported->get_supported_set().empty()) {
 	r = 0;
 	no_keyring_disabled_cephx = true;
       } else {
@@ -414,6 +419,11 @@ void MonClient::shutdown()
     waiting_for_session.pop_front();
   }
 
+  if (cur_con)
+    cur_con->mark_down();
+  cur_con.reset(NULL);
+  cur_mon.clear();
+
   monc_lock.Unlock();
 
   if (initialized) {
@@ -421,11 +431,6 @@ void MonClient::shutdown()
   }
   monc_lock.Lock();
   timer.shutdown();
-
-  if (cur_con)
-    cur_con->mark_down();
-  cur_con.reset(NULL);
-  cur_mon.clear();
 
   monc_lock.Unlock();
 }
@@ -522,6 +527,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (ret == 0) {
     if (state != MC_STATE_HAVE_SESSION) {
       state = MC_STATE_HAVE_SESSION;
+      last_rotating_renew_sent = utime_t();
       while (!waiting_for_session.empty()) {
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
@@ -650,7 +656,13 @@ void MonClient::_reopen_session(int rank, string name)
   ::encode(global_id, m->auth_payload);
   _send_mon_message(m, true);
 
-  if (!sub_have.empty())
+  for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
+       p != sub_sent.end();
+       ++p) {
+    if (sub_new.count(p->first) == 0)
+      sub_new[p->first] = p->second;
+  }
+  if (!sub_new.empty())
     _renew_subs();
 }
 
@@ -700,28 +712,30 @@ void MonClient::tick()
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
-    ldout(cct, 10) << "renew subs? (now: " << now 
-		   << "; renew after: " << sub_renew_after << ") -- " 
-		   << (now > sub_renew_after ? "yes" : "no") 
-		   << dendl;
-    if (now > sub_renew_after)
-      _renew_subs();
+    if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
+      ldout(cct, 10) << "renew subs? (now: " << now
+		     << "; renew after: " << sub_renew_after << ") -- "
+		     << (now > sub_renew_after ? "yes" : "no")
+		     << dendl;
+      if (now > sub_renew_after)
+	_renew_subs();
+    }
 
     cur_con->send_keepalive();
 
     if (state == MC_STATE_HAVE_SESSION) {
-      send_log();
-
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
-	utime_t interval = ceph_clock_now(cct) - lk;
+	utime_t interval = now - lk;
 	if (interval > cct->_conf->mon_client_ping_timeout) {
 	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 			<< " seconds), reconnecting" << dendl;
 	  _reopen_session();
 	}
       }
+
+      send_log();
     }
   }
 
@@ -742,7 +756,7 @@ void MonClient::schedule_tick()
 void MonClient::_renew_subs()
 {
   assert(monc_lock.is_locked());
-  if (sub_have.empty()) {
+  if (sub_new.empty()) {
     ldout(cct, 10) << "renew_subs - empty" << dendl;
     return;
   }
@@ -755,14 +769,19 @@ void MonClient::_renew_subs()
       sub_renew_sent = ceph_clock_now(cct);
 
     MMonSubscribe *m = new MMonSubscribe;
-    m->what = sub_have;
+    m->what = sub_new;
     _send_mon_message(m);
+
+    sub_sent.insert(sub_new.begin(), sub_new.end());
+    sub_new.clear();
   }
 }
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
   if (sub_renew_sent != utime_t()) {
+    // NOTE: this is only needed for legacy (infernalis or older)
+    // mons; see tick().
     sub_renew_after = sub_renew_sent;
     sub_renew_after += m->interval / 2.0;
     ldout(cct, 10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
@@ -806,8 +825,11 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t cutoff = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now(cct);
+  utime_t cutoff = now;
   cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  utime_t issued_at_lower_bound = now;
+  issued_at_lower_bound -= cct->_conf->auth_service_ticket_ttl;
   if (!rotating_secrets->need_new_secrets(cutoff)) {
     ldout(cct, 10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();
@@ -815,9 +837,22 @@ int MonClient::_check_auth_rotating()
   }
 
   ldout(cct, 10) << "_check_auth_rotating renewing rotating keys (they expired before " << cutoff << ")" << dendl;
+  if (!rotating_secrets->need_new_secrets() &&
+      rotating_secrets->need_new_secrets(issued_at_lower_bound)) {
+    // the key has expired before it has been issued?
+    lderr(cct) << __func__ << " possible clock skew, rotating keys expired way too early"
+               << " (before " << issued_at_lower_bound << ")" << dendl;
+  }
+  if ((now > last_rotating_renew_sent) &&
+      double(now - last_rotating_renew_sent) < 1) {
+    ldout(cct, 10) << __func__ << " called too often (last: "
+                   << last_rotating_renew_sent << "), skipping refresh" << dendl;
+    return 0;
+  }
   MAuth *m = new MAuth;
   m->protocol = auth->get_protocol();
   if (auth->build_rotating_request(m->auth_payload)) {
+    last_rotating_renew_sent = now;
     _send_mon_message(m);
   } else {
     m->put();
@@ -828,7 +863,8 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t until = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now(cct);
+  utime_t until = now;
   until += timeout;
 
   if (auth->get_protocol() == CEPH_AUTH_NONE)
@@ -838,14 +874,14 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 rotating_secrets->need_new_secrets()) {
-    utime_t now = ceph_clock_now(cct);
+	 rotating_secrets->need_new_secrets(now)) {
     if (now >= until) {
       ldout(cct, 0) << "wait_auth_rotating timed out after " << timeout << dendl;
       return -ETIMEDOUT;
     }
     ldout(cct, 10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
+    now = ceph_clock_now(cct);
   }
   ldout(cct, 10) << "wait_auth_rotating done" << dendl;
   return 0;

@@ -24,12 +24,14 @@ class Thread {
   pthread_t thread_id;
   pid_t pid;
   int ioprio_class, ioprio_priority;
+  int cpuid;
+  const char *thread_name;
 
   void *entry_wrapper();
 
  public:
-  Thread(const Thread& other);
-  const Thread& operator=(const Thread& other);
+  Thread(const Thread&) = delete;
+  Thread& operator=(const Thread&) = delete;
 
   Thread();
   virtual ~Thread();
@@ -41,16 +43,17 @@ class Thread {
   static void *_entry_func(void *arg);
 
  public:
-  const pthread_t &get_thread_id();
+  const pthread_t &get_thread_id() const;
   pid_t get_pid() const { return pid; }
   bool is_started() const;
-  bool am_self();
+  bool am_self() const;
   int kill(int signal);
   int try_create(size_t stacksize);
-  void create(size_t stacksize = 0);
+  void create(const char *name, size_t stacksize = 0);
   int join(void **prval = 0);
   int detach();
   int set_ioprio(int cls, int prio);
+  int set_affinity(int cpuid);
 };
 
 #endif

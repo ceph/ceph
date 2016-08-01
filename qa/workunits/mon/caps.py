@@ -233,9 +233,6 @@ def test_all():
         {
           'cmd':('pg getmap', '', 'r'),
           },
-        {
-          'cmd':('pg send_pg_creates', '', 'rw'),
-          },
         ],
       'mds':[
         {
@@ -367,4 +364,3 @@ def main():
 
 if __name__ == '__main__':
   main()
-

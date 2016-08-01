@@ -16,7 +16,6 @@
 #define CEPH_AUTHSERVICEHANDLER_H
 
 #include "include/types.h"
-#include "common/config.h"
 #include "Auth.h"
 
 class CephContext;
@@ -29,7 +28,7 @@ public:
   EntityName entity_name;
   uint64_t global_id;
 
-  AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
+  explicit AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
 
   virtual ~AuthServiceHandler() { }
 

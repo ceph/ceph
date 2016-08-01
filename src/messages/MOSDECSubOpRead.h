@@ -20,7 +20,7 @@
 #include "osd/ECMsgTypes.h"
 
 class MOSDECSubOpRead : public Message {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -46,7 +46,7 @@ public:
   virtual void encode_payload(uint64_t features) {
     ::encode(pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(op, payload);
+    ::encode(op, payload, features);
   }
 
   const char *get_type_name() const { return "MOSDECSubOpRead"; }

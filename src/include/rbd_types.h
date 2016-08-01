@@ -13,23 +13,19 @@
 #ifndef CEPH_RBD_TYPES_H
 #define CEPH_RBD_TYPES_H
 
-#if defined(__linux__)
-#include <linux/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#endif
-
 #include "rbd/features.h"
 
 /* New-style rbd image 'foo' consists of objects
  *   rbd_id.foo              - id of image
  *   rbd_header.<id>         - image metadata
+ *   rbd_object_map.<id>     - optional image object map
  *   rbd_data.<id>.00000000
  *   rbd_data.<id>.00000001
  *   ...                     - data
  */
 
 #define RBD_HEADER_PREFIX      "rbd_header."
+#define RBD_OBJECT_MAP_PREFIX  "rbd_object_map."
 #define RBD_DATA_PREFIX        "rbd_data."
 #define RBD_ID_PREFIX          "rbd_id."
 
@@ -62,7 +58,11 @@
 #define RBD_CHILDREN		"rbd_children"
 #define RBD_LOCK_NAME		"rbd_lock"
 
-#define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
+/**
+ * rbd_mirroring object in each pool contains pool-specific settings
+ * for configuring mirroring.
+ */
+#define RBD_MIRRORING       "rbd_mirroring"
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
@@ -73,6 +73,10 @@
 #define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
+
+#define RBD_GROUP_HEADER_PREFIX "rbd_group_header."
+
+#define RBD_GROUP_DIRECTORY "rbd_group_directory"
 
 struct rbd_info {
 	__le64 max_id;
@@ -101,6 +105,5 @@ struct rbd_obj_header_ondisk {
 	__le64 snap_names_len;
 	struct rbd_obj_snap_ondisk snaps[0];
 } __attribute__((packed));
-
 
 #endif

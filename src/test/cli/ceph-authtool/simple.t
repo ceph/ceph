@@ -13,12 +13,13 @@
                                   specified entityname
     --gen-print-key               will generate a new secret key without set it
                                   to the keyringfile, prints the secret to stdout
-    --import-keyring              will import the content of a given keyring
+    --import-keyring FILE         will import the content of a given keyring
                                   into the keyringfile
-    -u, --set-uid                 sets the auid (authenticated user id) for the
+    -n NAME, --name NAME          specify entityname to operate on
+    -u AUID, --set-uid AUID       sets the auid (authenticated user id) for the
                                   specified entityname
-    -a, --add-key                 will add an encoded key to the keyring
-    --cap subsystem capability    will set the capability for given subsystem
-    --caps capsfile               will set all of capabilities associated with a
+    -a BASE64, --add-key BASE64   will add an encoded key to the keyring
+    --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem
+    --caps CAPSFILE               will set all of capabilities associated with a
                                   given key, for all subsystems
   [1]

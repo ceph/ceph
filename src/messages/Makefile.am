@@ -12,6 +12,7 @@ noinst_HEADERS += \
 	messages/MClientRequestForward.h \
 	messages/MClientSession.h \
 	messages/MClientSnap.h \
+	messages/MClientQuota.h \
 	messages/MCommand.h \
 	messages/MCommandReply.h \
 	messages/MDentryLink.h \
@@ -21,6 +22,7 @@ noinst_HEADERS += \
 	messages/MDiscoverReply.h \
 	messages/MExportCaps.h \
 	messages/MExportCapsAck.h \
+	messages/MGatherCaps.h \
 	messages/MExportDir.h \
 	messages/MExportDirAck.h \
 	messages/MExportDirCancel.h \
@@ -46,6 +48,8 @@ noinst_HEADERS += \
 	messages/MMDSFindInoReply.h \
 	messages/MMDSFragmentNotify.h \
 	messages/MMDSMap.h \
+	messages/MFSMap.h \
+	messages/MFSMapUser.h \
 	messages/MMDSOpenIno.h \
 	messages/MMDSOpenInoReply.h \
 	messages/MMDSResolve.h \
@@ -56,12 +60,14 @@ noinst_HEADERS += \
 	messages/MMonCommandAck.h \
 	messages/MMonElection.h \
 	messages/MMonGetMap.h \
+	messages/MMonGetOSDMap.h \
 	messages/MMonGetVersion.h \
 	messages/MMonGetVersionReply.h \
 	messages/MMonGlobalID.h \
 	messages/MMonHealth.h \
 	messages/MMonJoin.h \
 	messages/MMonMap.h \
+	messages/MMonMetadata.h \
 	messages/MMonPaxos.h \
 	messages/MMonProbe.h \
 	messages/MMonScrub.h \
@@ -87,6 +93,8 @@ noinst_HEADERS += \
 	messages/MOSDPGQuery.h \
 	messages/MOSDPGRemove.h \
 	messages/MOSDPGScan.h \
+	messages/MOSDPGUpdateLogMissing.h \
+	messages/MOSDPGUpdateLogMissingReply.h \
 	messages/MOSDECSubOpWrite.h \
 	messages/MOSDECSubOpWriteReply.h \
 	messages/MOSDECSubOpRead.h \
@@ -101,9 +109,12 @@ noinst_HEADERS += \
 	messages/MOSDScrub.h \
 	messages/MOSDSubOp.h \
 	messages/MOSDSubOpReply.h \
+	messages/MOSDRepOp.h \
+	messages/MOSDRepOpReply.h \
 	messages/MPGStats.h \
 	messages/MPGStatsAck.h \
 	messages/MPing.h \
+	messages/MDataPing.h \
 	messages/MPoolOp.h \
 	messages/MPoolOpReply.h \
 	messages/MRemoveSnaps.h \
@@ -113,5 +124,6 @@ noinst_HEADERS += \
 	messages/MStatfsReply.h \
 	messages/MTimeCheck.h \
 	messages/MWatchNotify.h \
-	messages/PaxosServiceMessage.h
+	messages/PaxosServiceMessage.h \
+	messages/MNop.h
 

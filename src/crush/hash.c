@@ -1,12 +1,8 @@
-#include "include/int_types.h"
-
-#if defined(__linux__)
-#include <linux/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
+#ifdef __KERNEL__
+# include <linux/crush/hash.h>
+#else
+# include "hash.h"
 #endif
-
-#include "hash.h"
 
 /*
  * Robert Jenkins' function for mixing 32-bit values

@@ -108,14 +108,14 @@ Install Ceph client packages
 
 On the ``glance-api`` node, you'll need the Python bindings for ``librbd``::
 
-  sudo apt-get install python-ceph
-  sudo yum install python-ceph
+  sudo apt-get install python-rbd
+  sudo yum install python-rbd
 
 On the ``nova-compute``, ``cinder-backup`` and on the ``cinder-volume`` node,
 use both the Python bindings and the client command line tools::
 
   sudo apt-get install ceph-common
-  sudo yum install ceph
+  sudo yum install ceph-common
 
 
 Setup Ceph Client Authentication
@@ -139,7 +139,11 @@ Add the keyrings for ``client.cinder``, ``client.glance``, and
   ssh {your-cinder-backup-server} sudo chown cinder:cinder /etc/ceph/ceph.client.cinder-backup.keyring
 
 Nodes running ``nova-compute`` need the keyring file for the ``nova-compute``
-process. They also need to store the secret key of the ``client.cinder`` user in
+process::
+
+  ceph auth get-or-create client.cinder | ssh {your-nova-compute-server} sudo tee /etc/ceph/ceph.client.cinder.keyring
+
+They also need to store the secret key of the ``client.cinder`` user in
 ``libvirt``. The libvirt process needs it to access the cluster while attaching
 a block device from Cinder.
 
@@ -200,6 +204,10 @@ Juno
 
 Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
 
+    [DEFAULT]
+    ...
+    default_store = rbd
+    ...
     [glance_store]
     stores = rbd
     rbd_store_pool = images
@@ -210,6 +218,8 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
 
 For more information about the configuration options available in Glance please see: http://docs.openstack.org/trunk/config-reference/content/section_glance-api.conf.html.
 
+.. important:: Glance has not completely moved to 'store' yet.
+    So we still need to configure the store in the DEFAULT section.
 
 Any OpenStack version
 ~~~~~~~~~~~~~~~~~~~~~
@@ -227,6 +237,16 @@ assuming your configuration file has ``flavor = keystone+cachemanagement``::
     [paste_deploy]
     flavor = keystone
 
+Image properties
+~~~~~~~~~~~~~~~~
+
+We recommend to use the following properties for your images:
+
+- ``hw_scsi_model=virtio-scsi``: add the virtio-scsi controller and get better performance and support for discard operation
+- ``hw_disk_bus=scsi``: connect every cinder block devices to that controller
+- ``hw_qemu_guest_agent=yes``: enable the QEMU guest agent
+- ``os_require_quiesce=yes``: send fs-freeze/thaw calls through the QEMU guest agent
+
 
 Configuring Cinder
 ------------------
@@ -235,6 +255,11 @@ OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack node, edit
 ``/etc/cinder/cinder.conf`` by adding::
 
+    [DEFAULT]
+    ...
+    enabled_backends = ceph
+    ...
+    [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
     rbd_pool = volumes
     rbd_ceph_conf = /etc/ceph/ceph.conf
@@ -247,6 +272,8 @@ specify the pool name for the block device. On your OpenStack node, edit
 If you're using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
+    [ceph]
+    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -292,7 +319,7 @@ configure the ephemeral backend for Nova.
 
 It is recommended to enable the RBD cache in your Ceph configuration file
 (enabled by default since Giant). Moreover, enabling the admin socket
-brings a lot of benefits while troubleshoothing. Having one socket
+brings a lot of benefits while troubleshooting. Having one socket
 per virtual machine using a Ceph block device will help investigating performance and/or wrong behaviors.
 
 This socket can be accessed like this::
@@ -304,7 +331,17 @@ Now on every compute nodes edit your Ceph configuration file::
     [client]
         rbd cache = true
         rbd cache writethrough until flush = true
-        admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
+        admin socket = /var/run/ceph/guests/$cluster-$type.$id.$pid.$cctid.asok
+        log file = /var/log/qemu/qemu-guest-$pid.log
+        rbd concurrent management ops = 20
+
+Configure the permissions of these paths::
+
+    mkdir -p /var/run/ceph/guests/ /var/log/qemu/
+    chown qemu:libvirtd /var/run/ceph/guests /var/log/qemu/
+
+Note that user ``qemu`` and group ``libvirtd`` can vary depending on your system.
+The provided example works for RedHat based systems.
 
 .. tip:: If your virtual machine is already running you can simply restart it to get the socket
 
@@ -323,6 +360,7 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
     libvirt_images_type = rbd
     libvirt_images_rbd_pool = vms
     libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
+    libvirt_disk_cachemodes="network=writeback"
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -340,8 +378,7 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 
 To ensure a proper live-migration, use the following flags::
 
-    libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
-
+    libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED"
 
 Juno
 ~~~~
@@ -356,6 +393,7 @@ section and add::
     images_rbd_ceph_conf = /etc/ceph/ceph.conf
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
+    disk_cachemodes="network=writeback"
 
 
 It is also a good practice to disable file injection. While booting an
@@ -371,9 +409,19 @@ under the ``[libvirt]`` section::
     inject_key = false
     inject_partition = -2
 
-To ensure a proper live-migration, use the following flags::
+To ensure a proper live-migration, use the following flags (under the ``[libvirt]`` section)::
 
-    live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
+    live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED"
+
+Kilo
+~~~~
+
+Enable discard support for virtual machine ephemeral root disk::
+
+    [libvirt]
+    ...
+    ...
+    hw_disk_discard = unmap # enable discard support (be careful of performance)
 
 
 Restart OpenStack
@@ -418,7 +466,7 @@ dashboard, you can boot from that volume by performing the following steps:
 
 #. Launch a new instance.
 #. Choose the image associated to the copy-on-write clone.
-#. Select 'boot from volume'
+#. Select 'boot from volume'.
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd

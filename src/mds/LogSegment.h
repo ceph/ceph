@@ -30,7 +30,7 @@ using ceph::unordered_set;
 class CDir;
 class CInode;
 class CDentry;
-class MDS;
+class MDSRank;
 struct MDSlaveUpdate;
 
 typedef uint64_t log_segment_seq_t;
@@ -63,13 +63,16 @@ class LogSegment {
   // client request ids
   map<int, ceph_tid_t> last_client_tids;
 
+  // potentially dirty sessions
+  std::set<entity_name_t> touched_sessions;
+
   // table version
   version_t inotablev;
   version_t sessionmapv;
   map<int,version_t> tablev;
 
   // try to expire
-  void try_to_expire(MDS *mds, MDSGatherBuilder &gather_bld, int op_prio);
+  void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
 
   std::list<MDSInternalContextBase*> expiry_waiters;
 

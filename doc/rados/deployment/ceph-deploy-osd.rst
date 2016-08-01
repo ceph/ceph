@@ -50,9 +50,11 @@ see `List Disks`_ and `Zap Disks`_. ::
 	ceph-deploy osd prepare osdserver1:sdb:/dev/ssd
 	ceph-deploy osd prepare osdserver1:sdc:/dev/ssd
 
-The ``prepare`` command only prepares the OSD. It does not activate it. To
-activate a prepared OSD, use the ``activate`` command. See `Activate OSDs`_ 
-for details.
+The ``prepare`` command only prepares the OSD. On most operating
+systems, the ``activate`` phase will automatically run when the
+partitions are created on the disk (using Ceph ``udev`` rules). If not
+use the ``activate`` command. See `Activate OSDs`_ for
+details.
 
 The foregoing example assumes a disk dedicated to one Ceph OSD Daemon, and 
 a path to an SSD journal partition. We recommend storing the journal on 
@@ -60,6 +62,10 @@ a separate drive to maximize throughput. You may dedicate a single drive
 for the journal too (which may be expensive) or place the journal on the 
 same disk as the OSD (not recommended as it impairs performance). In the
 foregoing example we store the journal on a partitioned solid state drive.
+
+You can use the settings --fs-type or --bluestore to choose which file system
+you want to install in the OSD drive. (More information by running
+'ceph-deploy osd prepare --help').
 
 .. note:: When running multiple Ceph OSD daemons on a single node, and 
    sharing a partioned journal with each OSD daemon, you should consider

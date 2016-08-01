@@ -14,15 +14,13 @@
 #ifndef CEPH_MON_CONFIG_KEY_SERVICE_H
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
-#include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 
-#include "messages/MMonHealth.h"
-
-#include "common/config.h"
-#include "common/Formatter.h"
-
 class Paxos;
+class Monitor;
+namespace ceph {
+class Formatter;
+}
 
 class ConfigKeyService : public QuorumService
 {
@@ -55,7 +53,7 @@ public:
   virtual void get_health(Formatter *f,
 			  list<pair<health_status_t,string> >& summary,
                           list<pair<health_status_t,string> > *detail) { }
-  virtual bool service_dispatch(Message *m);
+  virtual bool service_dispatch(MonOpRequestRef op);
 
   virtual void start_epoch() { }
   virtual void finish_epoch() { }
@@ -69,7 +67,7 @@ public:
   virtual string get_name() const {
     return "config_key";
   }
-
+  virtual void get_store_prefixes(set<string>& s);
   /**
    * @} // ConfigKeyService_Inherited_h
    */

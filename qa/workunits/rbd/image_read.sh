@@ -55,8 +55,6 @@ MAX_OBJECT_ORDER=32
 
 PROGNAME=$(basename $0)
 
-[ $(id -u) -eq 0 ] && SUSER=true
-
 ORIGINAL=original-$$
 SNAP1=snap1-$$
 CLONE1=clone1-$$
@@ -260,15 +258,6 @@ function setup() {
 	TEMP=$(mktemp -d /tmp/rbd_image_read.XXXXX)
 	mkdir -p $(out_data_dir)
 
-	if [ "${LOCAL_FILES}" != true -a "${SUSER}" != true ]; then
-		[ -d /sys/bus/rbd ] || sudo modprobe rbd
-		while [ ! -f /sys/bus/rbd/add ]; do
-		    sleep 1
-		done
-		# allow ubuntu user to map/unmap rbd devices
-		sudo chown ubuntu /sys/bus/rbd/add
-		sudo chown ubuntu /sys/bus/rbd/remove
-	fi
 	# create and fill the original image with some data
 	create_image "${ORIGINAL}"
 	map_image "${ORIGINAL}"
@@ -311,10 +300,6 @@ function teardown() {
 	destroy_image_snap "${ORIGINAL}" "${SNAP1}"			|| true
 	unmap_image "${ORIGINAL}"					|| true
 	destroy_image "${ORIGINAL}"					|| true
-	if [ "${LOCAL_FILES}" != true -a "${SUSER}" != true ]; then
-		sudo chown root /sys/bus/rbd/add
-		sudo chown root /sys/bus/rbd/remove
-	fi
 
 	rm -rf $(out_data_dir)
 	rmdir "${TEMP}"
@@ -336,7 +321,8 @@ function create_image() {
 	fi
 
 	rbd create "${image_name}" --image-format "${FORMAT}" \
-		--size "${IMAGE_SIZE}" --order "${OBJECT_ORDER}"
+		--size "${IMAGE_SIZE}" --order "${OBJECT_ORDER}" \
+		--image-shared
 }
 
 function destroy_image() {
@@ -362,12 +348,7 @@ function map_image() {
 		return
 	fi
 
-	rbd map "${image_name}"
-	udevadm settle
-	# allow ubuntu user to write to the device
-	[ "${SUSER}" = true ] ||
-		sudo chown ubuntu $(image_dev_path "${image_name}")
-	true	# Don't let the suser test spoil our return value
+	sudo rbd map "${image_name}"
 }
 
 function unmap_image() {
@@ -381,10 +362,7 @@ function unmap_image() {
 	image_path=$(image_dev_path "${image_name}")
 
 	if [ -e "${image_path}" ]; then
-		[ "${SUSER}" = true ] || sudo chown root "${image_path}"
-		udevadm settle
-		rbd unmap "${image_path}"
-		udevadm settle
+		sudo rbd unmap "${image_path}"
 	fi
 }
 
@@ -476,7 +454,8 @@ function create_snap_clone() {
 	fi
 
 	rbd snap protect "${image_snap}"
-	rbd clone --order "${clone_order}" "${image_snap}" "${clone_name}"
+	rbd clone --order "${clone_order}" --image-shared \
+		"${image_snap}" "${clone_name}"
 }
 
 function destroy_snap_clone() {

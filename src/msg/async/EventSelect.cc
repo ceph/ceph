@@ -48,7 +48,7 @@ int SelectDriver::add_event(int fd, int cur_mask, int add_mask)
   return 0;
 }
 
-void SelectDriver::del_event(int fd, int cur_mask, int delmask)
+int SelectDriver::del_event(int fd, int cur_mask, int delmask)
 {
   ldout(cct, 10) << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask
                  << dendl;
@@ -57,6 +57,7 @@ void SelectDriver::del_event(int fd, int cur_mask, int delmask)
     FD_CLR(fd, &rfds);
   if (delmask & EVENT_WRITABLE)
     FD_CLR(fd, &wfds);
+  return 0;
 }
 
 int SelectDriver::resize_events(int newsize)
@@ -66,14 +67,14 @@ int SelectDriver::resize_events(int newsize)
 
 int SelectDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
 {
-  int retval, j, numevents = 0;
+  int retval, numevents = 0;
 
   memcpy(&_rfds, &rfds, sizeof(fd_set));
   memcpy(&_wfds, &wfds, sizeof(fd_set));
 
   retval = select(max_fd+1, &_rfds, &_wfds, NULL, tvp);
   if (retval > 0) {
-    for (j = 0; j <= max_fd; j++) {
+    for (int j = 0; j <= max_fd; j++) {
       int mask = 0;
       struct FiredFileEvent fe;
       if (FD_ISSET(j, &_rfds))

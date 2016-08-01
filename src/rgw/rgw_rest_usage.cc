@@ -25,12 +25,14 @@ public:
 void RGWOp_Usage_Get::execute() {
   map<std::string, bool> categories;
 
-  string uid;
+  string uid_str;
   uint64_t start, end;
   bool show_entries;
   bool show_summary;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
   RESTArgs::get_bool(s, "show-entries", true, &show_entries);
@@ -65,10 +67,12 @@ public:
 };
 
 void RGWOp_Usage_Delete::execute() {
-  string uid;
+  string uid_str;
   uint64_t start, end;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
 

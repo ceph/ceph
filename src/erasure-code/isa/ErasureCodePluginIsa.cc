@@ -35,13 +35,16 @@ class ErasureCodePluginIsa : public ErasureCodePlugin {
 public:
   ErasureCodeIsaTableCache tcache;
 
-  virtual int factory(const map<std::string, std::string> &parameters,
-                      ErasureCodeInterfaceRef *erasure_code)
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
+                      ErasureCodeInterfaceRef *erasure_code,
+                      ostream *ss)
   {
     ErasureCodeIsa *interface;
-    std::string t = "reed_sol_van";
-    if (parameters.find("technique") != parameters.end())
-      t = parameters.find("technique")->second;
+    std::string t;
+    if (profile.find("technique") == profile.end())
+      profile["technique"] = "reed_sol_van";
+    t = profile.find("technique")->second;
     if ((t == "reed_sol_van")) {
       interface = new ErasureCodeIsaDefault(tcache,
                                             ErasureCodeIsaDefault::kVandermonde);
@@ -50,15 +53,19 @@ public:
         interface = new ErasureCodeIsaDefault(tcache,
                                               ErasureCodeIsaDefault::kCauchy);
       } else {
-        derr << "technique=" << t << " is not a valid coding technique. "
+        *ss << "technique=" << t << " is not a valid coding technique. "
           << " Choose one of the following: "
           << "reed_sol_van,"
-          << "cauchy" << dendl;
+          << "cauchy" << std::endl;
         return -ENOENT;
       }
     }
 
-    interface->init(parameters);
+    int r = interface->init(profile, ss);
+    if (r) {
+      delete interface;
+      return r;
+    }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
   }

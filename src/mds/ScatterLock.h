@@ -26,7 +26,7 @@ class ScatterLock : public SimpleLock {
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
 
-    more_bits_t(ScatterLock *lock) :
+    explicit more_bits_t(ScatterLock *lock) :
       state_flags(0),
       item_updated(lock)
     {}

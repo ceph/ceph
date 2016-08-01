@@ -1,5 +1,5 @@
 from pecan.jsonify import jsonify
-from ceph_brag.model import db 
+from ceph_brag.model import db
 
 @jsonify.register(db.version_info)
 def jsonify_version(vi):
@@ -80,7 +80,7 @@ def jsonify_ceph_versions(value):
 @jsonify.register(db.sysinfo)
 def jsonify_sysinfo(value):
     retval = {}
-    
+
     if value.os:
       retval['os_info'] = value.os
     if value.kern_vers:
@@ -104,7 +104,7 @@ def jsonify_brag(b):
                  'description':b.ci.description,
                  'email':b.ci.contact_email,
                  'name':b.ci.cluster_name
-                } 
+                }
     return dict(uuid=b.ci.uuid,
                 cluster_creation_date=str(b.ci.cluster_creation_date),
                 components_count=b.comps,

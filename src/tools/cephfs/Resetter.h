@@ -17,6 +17,8 @@
 
 #include "MDSUtility.h"
 
+class Journaler;
+
 /**
  * This class lets you reset an mds journal for troubleshooting or whatever.
  *
@@ -24,11 +26,18 @@
  * of the file to dump to.
  */
 class Resetter : public MDSUtility {
-  int rank; 
+protected:
+  int _write_reset_event(Journaler *journaler);
+
 public:
   Resetter() {}
 
-  void reset(int rank);
+  /**
+   * For use when no journal header/pointer was present: write one
+   * out from scratch.
+   */
+  int reset_hard(mds_role_t role);
+  int reset(mds_role_t role);
 };
 
 #endif /* JOURNAL_RESETTER_H_ */

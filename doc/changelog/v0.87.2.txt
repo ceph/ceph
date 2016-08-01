@@ -1,0 +1,1413 @@
+commit 87a7cec9ab11c677de2ab23a7668a77d2f5b955e (tag: refs/tags/v0.87.2, refs/remotes/gh/giant)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Fri Apr 24 12:31:27 2015 -0700
+
+    0.87.2
+
+commit c1301e84aee0f399db85e2d37818a66147a0ce78
+Merge: 1a13e10 9e9c3c6
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Apr 7 21:08:24 2015 +0200
+
+    Merge pull request #4214 from dachary/wip-10430-giant
+    
+    osd/osd_types.cc: 456: FAILED assert(m_seed < old_pg_num)
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 1a13e1065829c59987c2f57a13eaa03de31df4ed
+Merge: 1fb08d3 5f4e62f
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Apr 7 16:39:28 2015 +0200
+
+    Merge pull request #4258 from ceph/wip-10643-v2
+    
+    mon: MDSMonitor: additional backports for #10643
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 1fb08d3066b14b178a8912ffb3c9f50d2333738c
+Merge: 90b37d9 7684ee2
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Apr 2 08:55:48 2015 -0700
+
+    Merge pull request #4261 from ceph/wip-11303-giant
+    
+    allow -L to disable lttng. Enable it by default
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 7684ee25ac21810153a44bdc4fc00b36e39eb12f
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu Apr 2 10:34:02 2015 -0400
+
+    allow -L to disable lttng. Enable it by default
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+
+commit 5f4e62f382767ee69e5b0c701b1a01d9e4132237
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Oct 17 19:08:20 2014 +0100
+
+    mon: MDSMonitor: wait for osdmon to be writable when requesting proposal
+    
+    Otherwise we may end up requesting the osdmon to propose while it is
+    mid-proposal.  We can't simply return EAGAIN to the user either because
+    then we would have to expect the user to be able to successfully race
+    with the whole cluster in finding a window in which 'mds fs new' command
+    would succeed -- which is not a realistic expectation.  Having the
+    command to osdmon()->wait_for_writable() guarantees that the command
+    will be added to a queue and that we will, eventually, tend to it.
+    
+    Fixes: #9794
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 2ae1cba595d9c56a0a4c534b34fe25250e7eb2d5)
+
+commit 257bd17db6470ca050403b1c8ff8daa94a4b80b5
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Oct 17 18:59:51 2014 +0100
+
+    mon: MDSMonitor: have management_command() returning int instead of bool
+    
+    We can more easily differentiate between errors we get out of this
+    function, which makes the code a bit more versatile and readable.
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 0dd473cbad4f9ea403fe60badffdc6da4dd3aa3c)
+
+commit 9e9c3c652339d85863af01cac621228f04eb4f18
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Oct 9 11:20:13 2014 -0700
+
+    osd: Get pgid ancestor from last_map when building past intervals
+    
+    Fixed OSD::build_past_intervals_parallel() and PG::generate_past_intervals()
+    
+    Fixes: #10430
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0c5b66da7a9ba516340d06d9e806beb9d1040d0e)
+
+commit 90b37d9bdcc044e26f978632cd68f19ece82d19a
+Merge: 2ccbc14 9f1f355
+Author: Loic Dachary <loic-redhat@dachary.org>
+Date:   Thu Mar 26 07:58:14 2015 +0100
+
+    Merge pull request #4175 from wonzhq/objecter-timer-2
+    
+    Objecter: failed assert(tick_event==NULL) at osdc/Objecter.cc
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 9f1f35546e00e8f1ecbce0697d59b64f3537facf
+Author: Zhiqiang Wang <zhiqiang.wang@intel.com>
+Date:   Wed Mar 25 16:32:44 2015 +0800
+
+    Objecter: failed assert(tick_event==NULL) at osdc/Objecter.cc
+    
+    When the Objecter timer erases the tick_event from its events queue and
+    calls tick() to dispatch it, if the Objecter::rwlock is held by shutdown(),
+    it waits there to get the rwlock. However, inside the shutdown function,
+    it checks the tick_event and tries to cancel it. The cancel_event function
+    returns false since tick_event is already removed from the events queue. Thus
+    tick_event is not set to NULL in shutdown(). Later the tick function return
+    ealier and doesn't set tick_event to NULL as well. This leads to the assertion
+    failure.
+    
+    This is a regression introduced by an incorrect conflict resolution when
+    d790833 was backported.
+    
+    Fixes: #11183
+    
+    Signed-off-by: Zhiqiang Wang <zhiqiang.wang@intel.com>
+
+commit 2ccbc14d17b54ea4fd4126cb04a7b83cd64c7f1e
+Merge: 02f9cdb de4b087
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 23 20:39:26 2015 +0100
+
+    Merge pull request #4127 from dzafman/wip-11176-giant
+    
+    ceph-objectstore-tool: Output only unsupported features when incomatible
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 02f9cdbf889071ca6fe3811d9b9a92a0b630fa55
+Merge: 83bcc51 fc43d8c
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:11:46 2015 +0100
+
+    Merge pull request #4097 from dachary/wip-10497-giant
+    
+    librados: c api does not translate op flag
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 83bcc516743e426c7a8c6f6401721bffbbec4fc0
+Merge: ebab2bd d790833
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:11:26 2015 +0100
+
+    Merge pull request #4096 from dachary/wip-9617-giant
+    
+    objecter shutdown races with msg dispatch
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit ebab2bd5f36205d666673600624aaa3e5e06c405
+Merge: e31c92d 970a797
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:11:03 2015 +0100
+
+    Merge pull request #4095 from dachary/wip-9675-giant
+    
+    splitting a pool doesn't start when rule_id != ruleset_id
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit e31c92d8dd814d276357e431ed87b93d75933f77
+Merge: f0ec5e3 7653511
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:10:42 2015 +0100
+
+    Merge pull request #4094 from dachary/wip-9891-giant
+    
+    Assertion: os/DBObjectMap.cc: 1214: FAILED assert(0)
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit f0ec5e3b3ed58af65323bcc494e589935147aa45
+Merge: dd7c15b 13b0147
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:10:25 2015 +0100
+
+    Merge pull request #4093 from dachary/wip-9915-giant
+    
+    osd: eviction logic reversed
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit dd7c15b2b24027a7cc5fa4bff21222c5a4606e60
+Merge: 33b09e1 13b8364
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:09:28 2015 +0100
+
+    Merge pull request #4092 from dachary/wip-9985-giant
+    
+    osd: incorrect atime calculation
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 33b09e18aa78252d94cbec8bf94ec97ed5bb1573
+Merge: 950123e 5550cdd
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:08:41 2015 +0100
+
+    Merge pull request #4091 from dachary/wip-9986-giant
+    
+    objecter: map epoch skipping broken
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 950123e4daa85562b2f52e0e12e0bae07f444095
+Merge: abdc065 21f81b8
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:08:16 2015 +0100
+
+    Merge pull request #4090 from dachary/wip-10059-giant
+    
+    osd/ECBackend.cc: 876: FAILED assert(0)
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit abdc065acd6cafa6439e9c1724cc87de02352bd7
+Merge: aee2825 1ccf583
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:07:52 2015 +0100
+
+    Merge pull request #4089 from dachary/wip-10080-giant
+    
+    Pipe::connect() cause osd crash when osd reconnect to its peer
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit aee28250fee66bca08d91e56ce47ec46c2e9fc24
+Merge: 6582253 3e875ab
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:07:20 2015 +0100
+
+    Merge pull request #4088 from dachary/wip-6003-giant
+    
+    journal Unable to read past sequence 406 ...
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 65822530ebfdea2feb9192c6eb6e3b8b9d60fe33
+Merge: 4b20f2d 96a5c67
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:06:51 2015 +0100
+
+    Merge pull request #4082 from dachary/wip-10106-giant
+    
+    rgw acl response should start with <?xml version=1.0 ?>
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 4b20f2d2d1ee52deed33617f000fa342ebce2e49
+Merge: 7ff3a67 c7b02f5
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:06:23 2015 +0100
+
+    Merge pull request #4078 from dachary/wip-11157-giant
+    
+    doc,tests: force checkout of submodules
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 7ff3a67c44ba3dc20a663a7dc6ba28c25714f063
+Merge: 440e706 4d4eb9f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:05:20 2015 +0100
+
+    Merge pull request #4077 from dachary/wip-10150-giant
+    
+    osd/ReplicatedPG.cc: 10853: FAILED assert(r >= 0) (in _scan_range)
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 440e70607e7e3cd1d8ca33843c626109431caf8d
+Merge: 66f639b 499d94f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:04:51 2015 +0100
+
+    Merge pull request #4076 from dachary/wip-10153-giant
+    
+    Rados.shutdown() dies with Illegal instruction (core dumped)
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 66f639b30ce6c74caae9397f20053761203f8e87
+Merge: 43b45df b79852f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:04:25 2015 +0100
+
+    Merge pull request #4074 from dachary/wip-10220-giant
+    
+    mon/Paxos.cc: 1033: FAILED assert(mon->is_leader())
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 43b45dfacd598bab51fa06c5d0e2d0605d6e83d6
+Merge: d282cfd b318e2f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 23:03:35 2015 +0100
+
+    Merge pull request #3548 from ceph/wip-10643
+    
+    mon: MDSMonitor: missing backports for giant
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit d282cfd5ae3e65b74801cd27480ce8c0bd72d9a7
+Merge: 3f3b981 681c99f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:12:58 2015 +0100
+
+    Merge pull request #4053 from dachary/wip-8011-giant
+    
+    osd/ReplicatedPG.cc: 5244: FAILED assert(soid < scrubber.start || soid >= scrubber.end)
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 3f3b98123cb46080068c1c73f4be41acbe18bd0d
+Merge: 6919eb1 4427358
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:12:40 2015 +0100
+
+    Merge pull request #4052 from dachary/wip-10844-giant
+    
+    mon: caps validation should rely on EntityName instead of entity_name_t
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 6919eb1684e34a6395963be6cc65215a51f5ba13
+Merge: 8876585 1d4ffbe
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:12:15 2015 +0100
+
+    Merge pull request #4050 from dachary/wip-10817-giant
+    
+    WorkQueue: make timeout when calling WaitInterval configurable
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 88765851bd56a6a526f6ab724920c8858ec4956c
+Merge: 6da3171 92c352d
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:11:43 2015 +0100
+
+    Merge pull request #4049 from dachary/wip-10787-giant
+    
+    mon: OSDMonitor::map_cache is buggy, send_incremental is not conservative
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 6da3171f21b8e1a56fe941a5028f2ccfdccee18a
+Merge: 5a6eefc 25fcaca
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:09:28 2015 +0100
+
+    Merge pull request #4048 from dachary/wip-10770-giant
+    
+    rgw: pending bucket index operations are not cancelled correctly
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 5a6eefcb40c94da9a900d9893ecb6eaaf8fd0cea
+Merge: c67a7a5 2858327
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:09:06 2015 +0100
+
+    Merge pull request #4046 from dachary/wip-10723-giant
+    
+    rados python binding leaks Ioctx objects
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit c67a7a52dc96f176431125921e36e4a2b8a30f1c
+Merge: 41dcd2d d5b1b7e
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:08:45 2015 +0100
+
+    Merge pull request #4044 from dachary/wip-10617-giant
+    
+    osd: pgs for deleted pools don't finish getting removed if osd restarts
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 41dcd2d9c307dd0b25d27bd6673943f3fdaaa28b
+Merge: 42e7413 c3d998e
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:08:20 2015 +0100
+
+    Merge pull request #4034 from dachary/wip-10475-giant
+    
+    rgw: Swift API. Support for X-Remove-Container-Meta-{key} header.
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit 42e741339913990521c4509f4e266921f8dbe007
+Merge: ffb76d1 fa8d454
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Mar 22 22:07:53 2015 +0100
+
+    Merge pull request #4033 from dachary/wip-10471-giant
+    
+    rgw: index swift keys appropriately
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+
+commit de4b08704172ac31b511dde50e5c11d58d811ca2
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 20 16:57:40 2015 -0700
+
+    ceph-objectstore-tool: Output only unsupported features when incomatible
+    
+    Fixes: #11176
+    Backport: firefly, giant
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5b23f5b5892b36fb7d06efc0d77e64a24ef6e8c9)
+
+commit ffb76d16c5d9d65ac94d21b4e8fc1fdf86441977
+Merge: fea29b1 61d6006
+Author: John Spray <jcspray@gmail.com>
+Date:   Thu Mar 19 22:07:58 2015 +0000
+
+    Merge pull request #3971 from ceph/giant-11053
+    
+    mds: fix assertion caused by system clock backwards
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit c3d998e4c3c9d90b50c3f6c0af7d48785616e032
+Author: Dmytro Iurchenko <diurchenko@mirantis.com>
+Date:   Tue Feb 3 17:54:38 2015 +0200
+
+    rgw: Swift API. Support for X-Remove-Container-Meta-{key} header.
+    
+    Fixes: #10475
+    Backport: hammer, firefly
+    Reported-by: Josh Durgin <jdurgin@redhat.com>
+    Signed-off-by: Dmytro Iurchenko <diurchenko@mirantis.com>
+    (cherry picked from commit f67bfa24fd6f69c2fcc0987eba8b6b426dd78320)
+    
+    Conflicts:
+    	src/rgw/rgw_rest.h
+            trivial merge: prototype of an unrelated function changed
+            src/rgw/rgw_op.cc
+            s/is_object_op/!(s->object == NULL)/
+
+commit fc43d8c2c54ec9e9cb6ef4d19cca695eb2fb3aab
+Author: Matt Richards <mattjrichards@gmail.com>
+Date:   Thu Jan 8 13:16:17 2015 -0800
+
+    librados: Translate operation flags from C APIs
+    
+    The operation flags in the public C API are a distinct enum
+    and need to be translated to Ceph OSD flags, like as happens in
+    the C++ API. It seems like the C enum and the C++ enum consciously
+    use the same values, so I reused the C++ translation function.
+    
+    Signed-off-by: Matthew Richards <mattjrichards@gmail.com>
+    (cherry picked from commit 49d114f1fff90e5c0f206725a5eb82c0ba329376)
+
+commit d790833cb84d6f6349146e4f9abdcdffb4db2ee0
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Sep 29 18:17:29 2014 -0700
+
+    Objecter: check the 'initialized' atomic_t safely
+    
+    shutdown() resets initialized to 0, but we can still receive messages
+    after this point, so fix message handlers to skip messages in this
+    case instead of asserting.
+    
+    Also read initialized while holding Objecter::rwlock to avoid races
+    where e.g. handle_osd_map() checks initialized -> 1, continues,
+    shutdown() is called, sets initialized to 0, then handle_osd_map()
+    goes about its business and calls op_submit(), which would fail the
+    assert(initialized.read()) check. Similar races existed in other
+    message handlers which change Objecter state.
+    
+    The Objecter is not destroyed until after its Messenger in
+    the MDS, OSD, and librados, so this should be safe.
+    
+    Fixes: #9617
+    Backport: giant
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e506f896a9217324ab7a7865989f4454562aed5f)
+    
+    Conflicts:
+    	src/osdc/Objecter.cc
+            context changed: Objecter::tick() did not have
+            assert(initialized.read())
+
+commit ce436a33e0f720ea4b8cf0363bcac1126be3c28b
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Sep 29 18:12:50 2014 -0700
+
+    Objecter: init with a constant of the correct type
+    
+    Just a tiny cleanup.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 1feba200aae7d9a042cda705c3de8fba2fc82331)
+
+commit 970a79753dc52d82d2abf29ffe6f88adac678eb0
+Author: Xiaoxi Chen <xiaoxi.chen@intel.com>
+Date:   Wed Aug 20 15:35:44 2014 +0800
+
+    CrushWrapper: pick a ruleset same as rule_id
+    
+    Originally in the add_simple_ruleset funtion, the ruleset_id
+    is not reused but rule_id is reused. So after some add/remove
+    against rules, the newly created rule likely to have
+    ruleset!=rule_id.
+    
+    We dont want this happen because we are trying to hold the constraint
+    that ruleset == rule_id.
+    
+    Signed-off-by: Xiaoxi Chen <xiaoxi.chen@intel.com>
+    (cherry picked from commit 78e84f34da83abf5a62ae97bb84ab70774b164a6)
+
+commit 76535116823f02f0392226e5725fbfef14c277ba
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Feb 20 13:43:46 2015 -0800
+
+    DBObjectMap: lock header_lock on sync()
+    
+    Otherwise, we can race with another thread updating state.seq
+    resulting in the old, smaller value getting persisted.  If there
+    is a crash at that time, we will reuse a sequence number, resulting
+    in an inconsistent node tree and bug #9891.
+    
+    Fixes: 9891
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 2b63dd25fc1c73fa42e52e9ea4ab5a45dd9422a0)
+    
+    Conflicts:
+    	src/os/DBObjectMap.cc
+            because we have state.v = 1; instead of state.v = 2;
+
+commit 13b01473c5c1a116d6cd6acbbb6cbe08ee6e9433
+Author: Zhiqiang Wang <zhiqiang.wang@intel.com>
+Date:   Tue Oct 28 09:37:11 2014 +0800
+
+    osd: cache tiering: fix the atime logic of the eviction
+    
+    Reported-by: Xinze Chi <xmdxcxz@gmail.com>
+    Signed-off-by: Zhiqiang Wang <zhiqiang.wang@intel.com>
+    (cherry picked from commit 622c5ac41707069ef8db92cb67c9185acf125d40)
+
+commit 13b8364dc869b2eefcb6646cff1e18c31126ce7d
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Oct 31 19:33:59 2014 -0700
+
+    osd/ReplicatedPG: fix compile error
+    
+    From 1fef4c3d541cba360738437420ebfa2447d5802e.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4a9ad7dc2da6f4fa6a64235776a3f1d2799aef60)
+
+commit 55541b90db0a6d6c26c1fae6a4958fa5a320f82c
+Author: Xinze Chi <xmdxcxz@gmail.com>
+Date:   Wed Oct 29 07:11:11 2014 +0000
+
+    Get the currently atime of the object in cache pool for eviction
+    
+    Because if there are mutiple atime in agent_state for the same object, we should use the recently one.
+    
+    Signed-off-by: Xinze Chi <xmdxcxz@gmail.com>
+    (cherry picked from commit 1fef4c3d541cba360738437420ebfa2447d5802e)
+
+commit 5550cdd876db913b152edad17a4de16bded31627
+Author: Ding Dinghua <dingdinghua85@gmail.com>
+Date:   Thu Oct 30 14:58:42 2014 +0800
+
+    osdc/Objecter: Fix a bug of dead looping in Objecter::handle_osd_map
+    
+    If current map epoch is less than oldest epoch, current map epoch
+    should step up to oldest epoch.
+    
+    Fixes: #9986
+    Signed-off-by: Ding Dinghua <dingdinghua85@gmail.com>
+    (cherry picked from commit e0166a23c2cf655bfb4cf873be021a14d9b9be27)
+
+commit 7c5056f5cf77065e0e5a920f525f0a3be6b4b299
+Author: Ding Dinghua <dingdinghua85@gmail.com>
+Date:   Thu Oct 30 14:58:05 2014 +0800
+
+    osdc/Objecter: e shouldn't be zero in Objecter::handle_osd_map
+    
+    Signed-off-by: Ding Dinghua <dingdinghua85@gmail.com>
+    (cherry picked from commit 31c584c8ba022cd44fe2872d221f3026618cefab)
+
+commit 21f81b85de652aede51e88b87bdff71f2e411da3
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed Nov 19 08:20:16 2014 -0800
+
+    PG: always clear_primary_state on new interval, but only clear pg temp if not primary
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit f692bfe076b8ddb679c6d1a6ea78cc47f0876326)
+
+commit 0c3f7637d8cf2146a4268330d8c0506ad38c354d
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Nov 14 15:44:20 2014 -0800
+
+    PG: always clear_primary_state when leaving Primary
+    
+    Otherwise, entries from the log collection process might leak into the next
+    epoch, where we might end up choosing a different authoritative log.  In this
+    case, it resulted in us not rolling back to log entries on one of the replicas
+    prior to trying to recover from an affected object due to the peer_missing not
+    being cleared.
+    
+    Fixes: #10059
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit c87bde64dfccb5d6ee2877cc74c66fc064b1bcd7)
+
+commit 1ccf58355d0796172935938572cf68ceb31a6801
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Tue Dec 2 15:17:57 2014 -0800
+
+    SimpleMessenger: allow RESETSESSION whenever we forget an endpoint
+    
+    In the past (e229f8451d37913225c49481b2ce2896ca6788a2) we decided to disable
+    reset of lossless Pipes, because lossless peers resetting caused trouble and
+    they can't forget about each other. But they actually can: if mark_down()
+    is called.
+    
+    I can't figure out how else we could forget about a remote endpoint, so I think
+    it's okay if we tell them we reset in order to clean up state. That's desirable
+    so that we don't get into strange situations with out-of-whack counters.
+    
+    Fixes: #10080
+    Backport: giant, firefly, dumpling
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 8cd1fdd7a778eb84cb4d7161f73bc621cc394261)
+
+commit 3e875ab108de8d2aa3717f76a3fe48ede286abb7
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Feb 6 09:52:29 2015 -0800
+
+    FileJournal: fix journalq population in do_read_entry()
+    
+    Fixes: 6003
+    Backport: dumpling, firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit bae1f3eaa09c4747b8bfc6fb5dc673aa6989b695)
+    
+    Conflicts:
+    	src/os/FileJournal.cc
+            because reinterpret_cast was added near two hunks after firefly
+
+commit 96a5c67121dde0d4d4cd13793bb131414b64cc28
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Jan 30 18:42:40 2015 -0800
+
+    rgw: flush xml header on get acl request
+    
+    Fixes: #10106
+    Backport: firefly, giant
+    
+    dump_start() updates the formatter with the appropriate prefix, however,
+    we never flushed the formatter.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit eb45f861343162e018968b8c56693a8c6f5b2cab)
+
+commit c7b02f5a7347ea8688c5214f85bb9f612925a586
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Mar 19 00:32:39 2015 +0100
+
+    doc,tests: force checkout of submodules
+    
+    When updating submodules, always checkout even if the HEAD is the
+    desired commit hash (update --force) to avoid the following:
+    
+        * a directory gmock exists in hammer
+        * a submodule gmock replaces the directory gmock in master
+        * checkout master + submodule update : gmock/.git is created
+        * checkout hammer : the gmock directory still contains the .git from
+          master because it did not exist at the time and checkout won't
+          remove untracked directories
+        * checkout master + submodule update : git rev-parse HEAD is
+          at the desired commit although the content of the gmock directory
+          is from hammer
+    
+    http://tracker.ceph.com/issues/11157 Fixes: #11157
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+
+commit 4d4eb9faf1871c4469b78a7ee75d527ce5cc67ad
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Dec 11 13:05:54 2014 -0800
+
+    ReplicatedPG::scan_range: an object can disappear between the list and the attr get
+    
+    The first item in the range is often last_backfill, upon which writes
+    can be occuring.  It's trimmed off on the primary side anyway.
+    
+    Fixes: 10150
+    Backport: dumpling, firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit dce6f288ad541fe7f0ef8374301cd712dd3bfa39)
+
+commit 499d94f573e78f6545bd5a12ade6b5ba5a75bbca
+Author: Federico Simoncelli <fsimonce@redhat.com>
+Date:   Sat Nov 15 14:14:04 2014 +0000
+
+    common: do not unlock rwlock on destruction
+    
+    According to pthread_rwlock_unlock(3p):
+    
+     Results are undefined if the read-write lock rwlock is not held
+     by the calling thread.
+    
+    and:
+    
+     https://sourceware.org/bugzilla/show_bug.cgi?id=17561
+    
+     Calling pthread_rwlock_unlock on an rwlock which is not locked
+     is undefined.
+    
+    calling pthread_rwlock_unlock on RWLock destruction could cause
+    an unknown behavior for two reasons:
+    
+    - the lock is acquired by another thread (undefined)
+    - the lock is not acquired (undefined)
+    
+    Moreover since glibc-2.20 calling pthread_rwlock_unlock on a
+    rwlock that is not locked results in a SIGILL that kills the
+    application.
+    
+    This patch removes the pthread_rwlock_unlock call on destruction
+    and replaces it with an assertion to check that the RWLock is
+    not in use.
+    
+    Any code that relied on the implicit release is now going to
+    break the assertion, e.g.:
+    
+     {
+       RWLock l;
+       l.get(for_write);
+     } // implicit release, wrong.
+    
+    Signed-off-by: Federico Simoncelli <fsimonce@redhat.com>
+    (cherry picked from commit cf2104d4d991361c53f6e2fea93b69de10cd654b)
+
+commit b79852f3ab0643bbb3f6b71a56b15e5a4b5fc1f5
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Wed Dec 10 17:46:35 2014 +0000
+
+    mon: Paxos: reset accept timeout before submiting work to the store
+    
+    Otherwise we may trigger the timeout while waiting for the work to be
+    committed to the store -- and it would only take the write to take a bit
+    longer than 10 seconds (default accept timeout).
+    
+    We do wait for the work to be properly committed to the store before
+    extending the lease though.
+    
+    Fixes: #10220
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 18534615f184ba56b441fd1d4242eb06debdfe13)
+
+commit e997c9fed5feb3e877dfe07ffac1327b85d09ea2
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Tue Dec 9 17:35:47 2014 +0000
+
+    mon: MonitorDBStore: allow randomly injecting random delays on writes
+    
+    Adds two new config options:
+    
+    mon_inject_transaction_delay_probability : DOUBLE (0.0-1.0, default: 0.0)
+    mon_inject_transaction_delay_max : DOUBLE (seconds, default: 10.0)
+    
+    If probability is set to a value greater than 0, just before applying
+    the transaction, the store will decide whether to inject a delay,
+    randomly choosing a value between 0 and the max.
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit beaa04e4119765d5775a6c48fd072dd95c984e3b)
+
+commit 1d4ffbe1d233de555c1ecb0a33eebe2391b29f33
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Feb 9 17:41:19 2015 -0800
+
+    ShardedThreadPool: make wait timeout on empty queue configurable
+    
+    Fixes: 10818
+    Backport: giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 7002f934e6664daa995ca0629c0ea3bae1c6bddf)
+
+commit 292c4339c064968c2aa05eec701fbc2a8d82dab0
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Feb 9 17:11:38 2015 -0800
+
+    WorkQueue: make wait timeout on empty queue configurable
+    
+    Fixes: 10817
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 5aa6f910843e98a05bfcabe6f29d612cf335edbf)
+
+commit fea29b1bcbd17b3d1f642398ec70dbe258bbc98f
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Nov 20 15:15:08 2014 -0800
+
+    PGLog: include rollback_info_trimmed_to in (read|write)_log
+    
+    Fixes: #10157
+    Backport: firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1fe8b846641486cc294fe7e1d2450132c38d2dba)
+
+commit 4427358bb556d902b01df27fd097cc3eefa561da
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Wed Feb 11 23:36:01 2015 +0000
+
+    mon: MonCap: take EntityName instead when expanding profiles
+    
+    entity_name_t is tightly coupled to the messenger, while EntityName is
+    tied to auth.  When expanding profiles we want to tie the profile
+    expansion to the entity that was authenticated.  Otherwise we may incur
+    in weird behavior such as having caps validation failing because a given
+    client messenger inst does not match the auth entity it used.
+    
+    e.g., running
+    
+    ceph --name osd.0 config-key exists foo daemon-private/osd.X/foo
+    
+    has entity_name_t 'client.12345' and EntityName 'osd.0'.  Using
+    entity_name_t during profile expansion would not allow the client access
+    to daemon-private/osd.X/foo (client.12345 != osd.X).
+    
+    Fixes: #10844
+    Backport: firefly,giant
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 87544f68b88fb3dd17c519de3119a9ad9ab21dfb)
+
+commit 8902279dd4b52516d59db712bd59e8d9372611a6
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Nov 14 21:03:54 2014 +0000
+
+    mon: Monitor: stash auth entity name in session
+    
+    Backport: giant
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit ca8e1efc0be9bffcfbdce5593526d257aa498062)
+
+commit 681c99fe12cfa6318f8cf06f4e825805635bcc07
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Nov 20 14:27:39 2014 -0800
+
+    ReplicatedPG: fail a non-blocking flush if the object is being scrubbed
+    
+    Fixes: #8011
+    Backport: firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 9b26de3f3653d38dcdfc5b97874089f19d2a59d7)
+
+commit 1f58a0adc3b23785fac00083d721b62f6a4c44a1
+Merge: 9fee7ba fe7d4ca
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:52:01 2015 -0700
+
+    Merge pull request #4042 from dachary/wip-10546-giant
+    
+    ceph time check start round bug in monitor.cc
+
+commit 9fee7ba9d7343bda29bc5113f8db5cdd9c09d71a
+Merge: ca635ce e7af52a
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:50:26 2015 -0700
+
+    Merge pull request #4047 from dachary/wip-10762-giant
+    
+    mon: osd gets marked down twice
+
+commit ca635ce3eb21135b08613b97ce0c56977de44351
+Merge: 9094185 5771f57
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:49:53 2015 -0700
+
+    Merge pull request #4041 from dachary/wip-10512-giant
+    
+    osd: cancel_flush requeues blocked events after blocking event
+
+commit 90941850ceb2c080ac72c67fed991c951b13f449
+Merge: bc1b9d2 5fca232
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:47:26 2015 -0700
+
+    Merge pull request #4031 from dachary/wip-10353-giant
+    
+    crush: set_choose_tries = 100 for erasure code rulesets
+
+commit bc1b9d22d29a74e6853834fb0430e8803710bbbf
+Merge: bd69cfc 30a1744
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:47:08 2015 -0700
+
+    Merge pull request #4029 from dachary/wip-9910-giant
+    
+    msg/Pipe: discard delay queue before incoming queue
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit bd69cfcbd58103843fbc42c4e55d43c2bafe54ff
+Merge: 30f7df2 4bd5237
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:44:53 2015 -0700
+
+    Merge pull request #4030 from dachary/wip-10351-giant
+    
+    mount.ceph: avoid spurious error message
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 30f7df2b110f73477354fbfa607b4777317dddfa
+Merge: e5a50c3 8307318
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:44:00 2015 -0700
+
+    Merge pull request #4028 from dachary/wip-10259-giant
+    
+    osd_types: op_queue_age_hist and fs_perf_stat should be in osd_stat_t::o...
+
+commit e5a50c3ae42c8b9d16a19a13e10fc35b91149e73
+Merge: ba1d55d a5a76f8
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:42:10 2015 -0700
+
+    Merge pull request #4027 from dachary/wip-10257-giant
+    
+      mon: PGMonitor: several stats output error fixes
+
+commit ba1d55de1e92a0143702e9e3fbbb1820db17d6c3
+Merge: 530fce4 640986f
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:41:56 2015 -0700
+
+    Merge pull request #3998 from dzafman/wip-10677
+    
+    Fix ceph command manpage to match ceph -h (giant)
+    
+    Reviewed-by: Xinxin Shu <xinxin.shu@intel.com>
+
+commit 530fce4d7cf51f4a4ac1e70ebe20b2795a30010e
+Merge: a2a3dad 8a5a3c7
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:40:02 2015 -0700
+
+    Merge pull request #3921 from sponce/wip-11078-giant
+    
+    Fix libstriprados::stat, use strtoll insdead of strtol
+
+commit a2a3dad8ec00434b99d6d538615bf8ff9eada217
+Merge: 0f57188 984df3b
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:36:28 2015 -0700
+
+    Merge pull request #3819 from tchaikov/giant-pg-leak-10421
+    
+    osd: fix PG leak in SnapTrimWQ._clear()
+
+commit 0f5718822793074ffab45124afb3bf3160e92004
+Merge: 776c82c c5c6fcd
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:35:37 2015 -0700
+
+    Merge pull request #3771 from ceph/wip-10883-giant
+    
+    osd: Fix FileJournal wrap to get header out first
+
+commit 776c82caac36de14a5f895688f81c88a883fca3e
+Merge: 938e036 37f196e
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Mar 17 10:35:29 2015 -0700
+
+    Merge pull request #3637 from sponce/wip-10758-giant
+    
+    Backport of pull request 3633 to giant : Fixed write_full behavior in libradosstriper
+
+commit 92c352d047c84035478e71828e32f554d9f507fc
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Feb 12 13:49:50 2015 -0800
+
+    mon/OSDMonitor: do not trust small values in osd epoch cache
+    
+    If the epoch cache says the osd has epoch 100 and the osd is asking for
+    epoch 200+, do not send it 100+.
+    
+    Fixes: #10787
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a5759e9b97107488a8508f36adf9ca1aba3fae07)
+
+commit 25fcaca19c76765284787c61584d25efd105a0ca
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Feb 5 09:33:26 2015 -0800
+
+    rgw: send appropriate op to cancel bucket index pending operation
+    
+    Fixes: #10770
+    Backport: firefly, giant
+    
+    Reported-by: baijiaruo <baijiaruo@126.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit dfee96e3aebcaeef18c721ab73f0460eba69f1c7)
+    
+    Conflicts:
+    	src/rgw/rgw_rados.cc
+            resolved by manual s/ADD/CANCEL/
+
+commit e7af52a147cc6e1a578d51193a2d5a425cee8a20
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Feb 5 03:07:50 2015 -0800
+
+    mon: ignore osd failures from before up_from
+    
+    If the failure was generated for an instance of the OSD prior to when
+    it came up, ignore it.
+    
+    This probably causes a fair bit of unnecessary flapping in the wild...
+    
+    Backport: giant, firefly
+    Fixes: #10762
+    Reported-by: Dan van der Ster <dan@vanderster.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 400ac237d35d0d1d53f240fea87e8483c0e2a7f5)
+
+commit 28583276254ba6121b93688a6c6d8fab6588c864
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Feb 9 20:50:23 2015 -0800
+
+    rados.py: keep reference to python callbacks
+    
+    If we don't keep a reference to these, the librados aio calls will
+    segfault since the python-level callbacks will have been garbage
+    collected. Passing them to aio_create_completion() does not take a
+    reference to them. Keep a reference in the python Completion object
+    associated with the request, since they need the same lifetime.
+    
+    This fixes a regression from 60b019f69aa0e39d276c669698c92fc890599f50.
+    
+    Fixes: #10775
+    Backport: dumpling, firefly, giant
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 36d37aadbbbece28d70e827511f1a473d851463d)
+    (cherry picked from commit 5f1245e131e33a98572408c8223deed2c7cf7b75)
+
+commit 1b5fb51a995d5d672a46176240d5887354c12967
+Author: Billy Olsen <billy.olsen@gmail.com>
+Date:   Mon Feb 2 16:24:59 2015 -0700
+
+    Fix memory leak in python rados bindings
+    
+    A circular reference was inadvertently created when using the
+    CFUNCTYPE binding for callbacks for the asynchronous i/o callbacks.
+    This commit refactors the usage of the callbacks such that the
+    Ioctx object does not have a class reference to the callbacks.
+    
+    Fixes: #10723
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Billy Olsen <billy.olsen@gmail.com>
+    Reviewed-by: Dan Mick <dmick@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 60b019f69aa0e39d276c669698c92fc890599f50)
+
+commit d5b1b7e52242e082820e0cdd76dc59e9aea7f284
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jan 23 10:47:44 2015 -0800
+
+    osd: do not ignore deleted pgs on startup
+    
+    These need to get instantiated so that we can complete the removal process.
+    
+    Fixes: #10617
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 879fd0c192f5d3c6afd36c2df359806ea95827b8)
+
+commit fe7d4ca17dacf4419be7bdc50010115cee36517b
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Jan 30 11:37:28 2015 +0000
+
+    mon: Monitor: fix timecheck rounds period
+    
+    Fixes: #10546
+    Backports: dumpling?,firefly,giant
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 2e749599ac6e1060cf553b521761a93fafbf65bb)
+
+commit 5771f57af731e61bf70f630cf85f5b94dcfd1edb
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Jan 11 17:28:04 2015 -0800
+
+    osd: requeue blocked op before flush it was blocked on
+    
+    If we have request A (say, cache-flush) that blocks things, and then
+    request B that gets blocked on it, and we have an interval change, then we
+    need to requeue B first, then A, so that the resulting queue will keep
+    A before B and preserve the order.
+    
+    This was observed on this firefly run:
+    
+      ubuntu@teuthology:/a/sage-2015-01-09_21:43:43-rados-firefly-distro-basic-multi/694675
+    
+    Backport: giant, firefly
+    Fixes: #10512
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 11bdfb4131ecac16d4a364d651c6cf5d1d28c702)
+
+commit fa8d45423e22f7b916a345024a9f70283fc3097d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jan 7 13:56:14 2015 -0800
+
+    rgw: index swift keys appropriately
+    
+    Fixes: #10471
+    Backport: firefly, giant
+    
+    We need to index the swift keys by the full uid:subuser when decoding
+    the json representation, to keep it in line with how we store it when
+    creating it through other mechanism.
+    
+    Reported-by: hemant burman <hemant.burman@gmail.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 478629bd2f3f32afbe6e93eaebb8a8fa01af356f)
+
+commit 5fca232080c0bde50b5c65c60c133bf81311e8d3
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 17 16:06:55 2014 +0100
+
+    crush: set_choose_tries = 100 for erasure code rulesets
+    
+    It is common for people to try to map 9 OSDs out of a 9 OSDs total ceph
+    cluster. The default tries (50) will frequently lead to bad mappings for
+    this use case. Changing it to 100 makes no significant CPU performance
+    difference, as tested manually by running crushtool on one million
+    mappings.
+    
+    http://tracker.ceph.com/issues/10353 Fixes: #10353
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 2f87ac807f3cc7ac55d9677d2051645bf5396a62)
+
+commit 4bd523744cefb4a5e6b0d4440b9829b0e19dc012
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Jan 3 15:29:29 2015 +0800
+
+    mount.ceph: avoid spurious error message
+    
+    /etc/mtab in most modern distributions is a symbol link to
+    /proc/self/mounts.
+    
+    Fixes: #10351
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit bdd0e3c4bda97fe18487a58dd173a7dff752e1a2)
+
+commit 30a17441f5030ac5c1227a9672811f88e580b4b2
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Oct 29 14:45:11 2014 -0700
+
+    msg/Pipe: discard delay queue before incoming queue
+    
+    Shutdown the delayed delivery before the incoming queue in case the
+    DelayedDelivery thread is busy queuing messages.
+    
+    Fixes: #9910
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit f7431cc3c25878057482007beb874c9d4473883e)
+
+commit 8307318cdf9487dde3231aa4a00fca6079379738
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Dec 5 15:29:52 2014 -0800
+
+    osd_types: op_queue_age_hist and fs_perf_stat should be in osd_stat_t::operator==
+    
+    Fixes: 10259
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1ac17c0a662e6079c2c57edde2b4dc947f547f57)
+
+commit a5a76f81ae9242a54d6ef150fa0ac32b31e90c25
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Mon Jan 19 18:49:15 2015 +0000
+
+    mon: PGMonitor: skip zeroed osd stats on get_rule_avail()
+    
+    Fixes: #10257
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit b311e7c36273efae39aa2602c1f8bd90d39e5975)
+
+commit 95ec68505ce4a26ea707716791cfb1e46a75ed25
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Jan 16 18:13:05 2015 +0000
+
+    mon: PGMonitor: available size 0 if no osds on pool's ruleset
+    
+    get_rule_avail() may return < 0, which we were using blindly assuming it
+    would always return an unsigned value.  We would end up with weird
+    values if the ruleset had no osds.
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 8be6a6ab2aa5a000a39c73a98b11a0ab32fffa1c)
+
+commit 1c480b39acc184018d976beddc55187f86dfff1a
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Jan 16 18:12:42 2015 +0000
+
+    mon: PGMonitor: fix division by zero on stats dump
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 50547dc3c00b7556e26b9a44ec68640c5c3a2384)
+
+commit 640986fdef3543c7469e43853900b63d7b2f6f36
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 13 19:16:47 2015 -0700
+
+    doc: Fix ceph command manpage to match ceph -h (giant)
+    
+    Fixes: #10677
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+
+commit ec4c8997a67397e3ba5f335e444586f6f1a7864c
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 13 16:50:13 2015 -0700
+
+    doc: Minor fixes to ceph command manpage
+    
+    Fixes: #10676
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 7e85722fd4c89715fc2ed79697c82d65d7ebf287)
+
+commit 15e1c6fb3a0e2e191025f96df33feaf115c1411d
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Mar 12 11:39:52 2015 -0700
+
+    doc: Fix ceph command manpage to match ceph -h (firefly)
+    
+    Improve synopsis section
+    Fixes: #10676
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 9ac488c1eb0e30511079ba05aaf11c79615b3940)
+    
+    Conflicts:
+    
+    	man/ceph.8 (took incoming version)
+
+commit 17d03e8e8b055ed50b1abb679a0dd1edf4ec3f30
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Thu Dec 18 17:11:22 2014 +0530
+
+    doc: Changes format style in ceph to improve readability as html.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 8b796173063ac9af8c21364521fc5ee23d901196)
+
+commit 61d600687ae6887a2edea0e79d582b1353558a83
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Tue Mar 10 19:55:57 2015 +0800
+
+    mds: fix assertion caused by system clock backwards
+    
+    Fixes: #11053
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+
+commit f1c9c71fd6d566687db05e1d8f15b04a9f793005
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Sat Dec 13 02:24:41 2014 +0530
+
+    doc: Adds man page for ceph.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 76da87a64ca6b3cc0ceeaf63e19a9f440d6f4161)
+
+commit 8a5a3c7a20517c7482dc9f5f2783a3da54bd4f23
+Author: Dongmao Zhang <deanraccoon@gmail.com>
+Date:   Fri Nov 14 18:48:58 2014 +0800
+
+    Fix libstriprados::stat, use strtoll insdead of strtol
+    
+    The return value(long int) of strict_strtol is too small for unstriped
+    object.
+    
+    Signed-off-by: Dongmao Zhang <deanraccoon@gmail.com>
+    (cherry picked from commit fe6679dca479fc24806d7e57ab0108a516cd6d55)
+
+commit 5d423a5188c62650eaa39077eb99a84085f5f3e2
+Author: Dongmao Zhang <deanraccoon@gmail.com>
+Date:   Wed Dec 10 18:55:28 2014 +0800
+
+    Fix libstriprados::remove, use strtoll insdead of strtol
+    
+    Signed-off-by: Dongmao Zhang <deanraccoon@gmail.com>
+    (cherry picked from commit 78a15ee4c61fdadccb1921e861748400cc651862)
+
+commit 938e03630e075af03780da139ae879b5b0377734
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Feb 2 13:57:00 2015 -0800
+
+    Objecter::_op_submit_with_budget: add timeout before call
+    
+    Objecter::_send_op depends on the ontimeout field being filled in
+    to avoid 10340 and 9582.
+    
+    Fixes: 10340
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit cfcfafcb0f33994dbda1efe478ef3ab822ff50d4)
+
+commit 984df3b865f295ecf77b041a69d1d59384d80671
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Feb 10 16:29:45 2015 +0800
+
+    osd: fix PG leak in SnapTrimWQ._clear()
+    
+    Fixes: #10421
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 01e154d592d6cdbf3f859cf1b4357e803536a6b4)
+
+commit c5c6fcd6ad7a0317301970bc25419727ee3192fa
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Feb 18 16:21:12 2015 -0800
+
+    osd: Fix FileJournal wrap to get header out first
+    
+    Correct and restore assert that was removed
+    
+    Cause by f46b1b473fce0322a672b16c7739e569a45054b6
+    Fixes: #10883
+    Backport: dumpling, firefly, giant
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 970bb4901f93575709421b5b25c3eff213de61b8)
+
+commit 37f196e80906d6b855ca0a7ce7344d1f8f50ae7f
+Author: Sebastien Ponce <Sebastien.Ponce@cern.ch>
+Date:   Thu Feb 5 10:46:37 2015 +0100
+
+    libradosstriper: fixed write_full when ENOENT
+    
+    Fixes: #10758
+    write_full was returning ENOENT when the file did not exists, while it should just have created it without complaining.
+    
+    Signed-off-by: Sebastien Ponce <sebastien.ponce@cern.ch>
+    (cherry picked from commit 6a91f2bb82035b3c8021a7dc7b23548ce3d61eb6)
+
+commit b318e2ffc3faedf6b02908429eb4ce79147d3471 (refs/remotes/gh/wip-10643)
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Oct 17 18:01:05 2014 +0100
+
+    mon: MDSMonitor: don't return -EINVAL if function is bool
+    
+    Returning -EINVAL on a function that expects bool and the error code to
+    be in a variable 'r' can only achieve one thing: if this path is ever
+    touched, instead of returning an error as it was supposed to, we're
+    returning 'true' with 'r = 0' and, for no apparent reason, the user will
+    think everything went smoothly but with no new fs created.
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 91b2a2b69b198567d42f45f75b7f7ea559f89150)
+
+commit a1a7d856f5409280b6345afbbd961bcd8ee8d046
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Oct 17 17:43:33 2014 +0100
+
+    mon: MDSMonitor: check all conditions are met *before* osdmon proposal
+    
+    We should not allow ourselves to request the osdmon to propose before we
+    know for sure that we meet the required conditions to go through with
+    our own state change.  Even if we still can't guarantee that our
+    proposal is going to be committed, we shouldn't just change the osdmon's
+    state just because we can.  This way, at least, we make sure that our
+    checks hold up before doing anything with side-effects.
+    
+    Fixes: #10643
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 1d1ae413e9f0aafa314af903bcf6b815f6558082)
+
+commit 0df7cf1e58bc4d77c69354f2a7160e3d9e6d1fc1
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Oct 17 17:37:03 2014 +0100
+
+    mon: MDSMonitor: return if fs exists on 'fs new'
+    
+    We were just setting return code to -EINVAL, while allowing the logic to
+    continue regardless.  If we are to return error, then we should abort
+    the operation as well and let the user know it went wrong instead of
+    continuing as if nothing had happened.
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 07b7f101057a80d1356bd20040180e94cd20c211)

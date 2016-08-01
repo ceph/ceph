@@ -6,7 +6,7 @@
 
 You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` and ``osd host``,  and
+Ceph OSD Daemon configuration sets ``osd journal size`` and ``host``,  and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -19,7 +19,7 @@ with ``0`` using the following convention. ::
 In a configuration file, you may specify settings for all Ceph OSD Daemons in
 the cluster by adding configuration settings to the ``[osd]`` section of your
 configuration file. To add settings directly to a specific Ceph OSD Daemon
-(e.g., ``osd host``), enter  it in an OSD-specific section of your configuration
+(e.g., ``host``), enter  it in an OSD-specific section of your configuration
 file. For example:
 
 .. code-block:: ini
@@ -28,10 +28,10 @@ file. For example:
 		osd journal size = 1024
 	
 	[osd.0]
-		osd host = osd-host-a
+		host = osd-host-a
 		
 	[osd.1]
-		osd host = osd-host-b
+		host = osd-host-b
 
 
 .. index:: OSD; config settings
@@ -116,7 +116,7 @@ For example::
 :Default for other file systems: ``rw, noatime``
 
 For example::
-  ``osd mount options xfs = rw, noatime, inode64, nobarrier, logbufs=8``
+  ``osd mount options xfs = rw, noatime, inode64, logbufs=8``
 
 
 .. index:: OSD; journal settings
@@ -219,6 +219,23 @@ scrubbing operations.
 :Type: 32-bit Int
 :Default: ``1`` 
 
+``osd scrub begin hour``
+
+:Description: The time of day for the lower bound when a scheduled scrub can be
+              performed.
+:Type: Integer in the range of 0 to 24
+:Default: ``0``
+
+
+``osd scrub end hour``
+
+:Description: The time of day for the upper bound when a scheduled scrub can be
+              performed. Along with ``osd scrub begin hour``, they define a time
+              window, in which the scrubs can happen. But a scrub will be performed
+              no matter the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd scrub max interval``.
+:Type: Integer in the range of 0 to 24
+:Default: ``24``
 
 ``osd scrub thread timeout`` 
 
@@ -273,6 +290,17 @@ scrubbing operations.
 :Default: Once per week.  ``60*60*24*7``
 
 
+``osd scrub interval randomize ratio``
+
+:Description: Add a random delay to ``osd scrub min interval`` when scheduling
+              the next scrub job for a placement group. The delay is a random
+              value less than ``osd scrub min interval`` \*
+              ``osd scrub interval randomized ratio``. So the default setting
+              practically randomly spreads the scrubs out in the allowed time
+              window of ``[1, 1.5]`` \* ``osd scrub min interval``.
+:Type: Float
+:Default: ``0.5``
+
 ``osd deep scrub stride``
 
 :Description: Read size when doing a deep scrub.
@@ -301,6 +329,42 @@ recovery operations to ensure optimal performance during recovery.
 
 :Type: 32-bit Integer
 :Default: ``2`` 
+
+
+``osd op queue``
+
+:Description: This sets the type of queue to be used for prioritizing ops
+              in the OSDs. Both queues feature a strict sub-queue which is
+              dequeued before the normal queue. The normal queue is different
+              between implementations. The original PrioritizedQueue (``prio``) uses a
+              token bucket system which when there are sufficient tokens will
+              dequeue high priority queues first. If there are not enough
+              tokens available, queues are dequeued low priority to high priority.
+              The new WeightedPriorityQueue (``wpq``) dequeues all priorities in
+              relation to their priorities to prevent starvation of any queue.
+              WPQ should help in cases where a few OSDs are more overloaded
+              than others. Requires a restart.
+
+:Type: String
+:Valid Choices: prio, wpq
+:Default: ``prio``
+
+
+``osd op queue cut off``
+
+:Description: This selects which priority ops will be sent to the strict
+              queue verses the normal queue. The ``low`` setting sends all
+              replication ops and higher to the strict queue, while the ``high``
+              option sends only replication acknowledgement ops and higher to
+              the strict queue. Setting this to ``high`` should help when a few
+              OSDs in the cluster are very busy especially when combined with
+              ``wpq`` in the ``osd op queue`` setting. OSDs that are very busy
+              handling replication traffic could starve primary client traffic
+              on these OSDs without these settings. Requires a restart.
+
+:Type: String
+:Valid Choices: low, high
+:Default: ``low``
 
 
 ``osd client op priority``
@@ -475,7 +539,7 @@ Ceph performs well as the OSD map grows larger.
 
 ``osd map cache size`` 
 
-:Description: The size of the OSD map cache in megabytes.
+:Description: The number of OSD maps to keep cached.
 :Type: 32-bit Integer
 :Default: ``500``
 

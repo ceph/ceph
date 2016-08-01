@@ -12,6 +12,8 @@
  *
  */
 
+#include <stdlib.h>
+
 #include "RadosXattrIter.h"
 
 librados::RadosXattrsIter::RadosXattrsIter()

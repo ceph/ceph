@@ -58,7 +58,7 @@ Snap Removal
 To remove a snapshot, a request is made to the *Monitor* cluster to
 add the snapshot id to the list of purged snaps (or to remove it from
 the set of pool snaps in the case of *pool snaps*).  In either case,
-the *PG* adds the snap to its *snaptrimq* for trimming.
+the *PG* adds the snap to its *snap_trimq* for trimming.
 
 A clone can be removed when all of its snaps have been removed.  In
 order to determine which clones might need to be removed upon snap
@@ -70,7 +70,7 @@ See ReplicatedPG::SnapTrimmer, SnapMapper
 This trimming is performed asynchronously by the snap_trim_wq while the
 pg is clean and not scrubbing.
 
-  #. The next snap in PG::snaptrimq is selected for trimming
+  #. The next snap in PG::snap_trimq is selected for trimming
   #. We determine the next object for trimming out of PG::snap_mapper.
      For each object, we create a log entry and repop updating the
      object info and the snap set (including adjusting the overlaps).
@@ -101,7 +101,7 @@ to flush the filestore.  *SnapMapper* provides two mappings:
 
   1. hobject_t -> set<snapid_t>: stores the set of snaps for each clone
      object
-  2. snapid_t -> hobject_t: stores the set of hobjects with a the snapshot
+  2. snapid_t -> hobject_t: stores the set of hobjects with the snapshot
      as one of its snaps
 
 Assumption: there are lots of hobjects and relatively few snaps.  The
@@ -113,8 +113,7 @@ is constant length.  These keys have a bufferlist encoding
 pair<snapid, hobject_t> as a value.  Thus, creating or trimming a single
 object does not involve reading all objects for any snap.  Additionally,
 upon construction, the *SnapMapper* is provided with a mask for filtering
-identifying the objects in the single SnapMapper keyspace belonging to that
-pg.
+the objects in the single SnapMapper keyspace belonging to that pg.
 
 Split
 -----

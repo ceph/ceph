@@ -13,7 +13,7 @@ struct T : public Thread {
   int num;
   set<int> myset;
   map<int,string> mymap;
-  T(int n) : num(n) {
+  explicit T(int n) : num(n) {
     myset.insert(123);
     myset.insert(456);
     mymap[1] = "foo";
@@ -46,22 +46,15 @@ int main(int argc, const char **argv)
   list<T*> ls;
   for (int i=0; i<threads; i++) {
     T *t = new T(num);
-    t->create();
+    t->create("t");
     ls.push_back(t);
   }
 
   for (int i=0; i<threads; i++) {
     T *t = ls.front();
     ls.pop_front();
-    try {
-      t->join();
-    }
-    catch (ceph::FailedAssertion &a) {
-      cout << "Failed assert in join(), exit." << std::endl;
-      delete t;
-      return -1;
-    }
-    delete t;    
+    t->join();
+    delete t;
   }
 
   utime_t t = ceph_clock_now(NULL);

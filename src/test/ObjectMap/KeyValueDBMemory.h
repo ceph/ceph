@@ -5,7 +5,7 @@
 #include <string>
 #include "include/memory.h"
 
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 
@@ -16,10 +16,10 @@ public:
   std::map<std::pair<string,string>,bufferlist> db;
 
   KeyValueDBMemory() { }
-  KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
+  explicit KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
   virtual ~KeyValueDBMemory() { }
 
-  virtual int init() {
+  virtual int init(string _opt) {
     return 0;
   }
   virtual int open(ostream &out) {
@@ -34,6 +34,7 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  using KeyValueDB::get;
 
   int get_keys(
     const string &prefix,
@@ -61,7 +62,7 @@ public:
     list<Context *> on_commit;
     KeyValueDBMemory *db;
 
-    TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
+    explicit TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
 
 
     struct SetOp : public Context {

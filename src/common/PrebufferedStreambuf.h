@@ -37,6 +37,12 @@ public:
 
   /// return a string copy (inefficiently)
   std::string get_str() const;
-};    
+
+  // returns current size of content
+  size_t size() const;
+
+  // extracts up to avail chars of content
+  int snprintf(char* dst, size_t avail) const;
+};
 
 #endif

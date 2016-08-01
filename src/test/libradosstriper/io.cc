@@ -27,6 +27,20 @@ TEST_F(StriperTestPP, SimpleWritePP) {
   ASSERT_EQ(0, striper.write("SimpleWritePP", bl, sizeof(buf), 0));
 }
 
+TEST_F(StriperTest, SimpleWriteFull) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_striper_write_full(striper, "SimpleWrite", buf, sizeof(buf)));
+}
+
+TEST_F(StriperTestPP, SimpleWriteFullPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, striper.write_full("SimpleWritePP", bl));
+}
+
 TEST_F(StriperTest, Stat) {
   uint64_t psize;
   time_t pmtime;
@@ -343,11 +357,11 @@ TEST_F(StriperTest, XattrIter) {
       break;
     }
     ASSERT_LT(num_seen, 2) << "Extra attribute : " << name;
-    if ((strcmp(name, "attr1") == 0) && (memcmp(val, attr1_buf, len) == 0)) {
+    if ((strcmp(name, "attr1") == 0) && (val != NULL) && (memcmp(val, attr1_buf, len) == 0)) {
       num_seen++;
       continue;
     }
-    else if ((strcmp(name, "attr2") == 0) && (memcmp(val, attr2_buf, len) == 0)) {
+    else if ((strcmp(name, "attr2") == 0) && (val != NULL) && (memcmp(val, attr2_buf, len) == 0)) {
       num_seen++;
       continue;
     }

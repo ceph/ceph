@@ -84,6 +84,40 @@
 		      (l.b == r.b && (l.c <= r.c))));			\
   }
 
+#define WRITE_EQ_OPERATORS_4(type, a, b, c, d)				\
+  inline bool operator==(const type &l, const type &r) {		\
+    return l.a == r.a && l.b == r.b && l.c == r.c && l.d == r.d;	\
+  }									\
+  inline bool operator!=(const type &l, const type &r) {		\
+    return l.a != r.a || l.b != r.b || l.c != r.c || l.d != r.d;	\
+  }
+
+#define WRITE_CMP_OPERATORS_4(type, a, b, c, d)				\
+  inline bool operator>(const type &l, const type &r) {			\
+    return l.a > r.a ||							\
+      (l.a == r.a && (l.b > r.b ||					\
+		      (l.b == r.b && (l.c > r.c ||			\
+				      (l.c == r.c && (l.d > r.d))))));	\
+  }									\
+  inline bool operator<(const type &l, const type &r) {			\
+    return l.a < r.a ||							\
+      (l.a == r.a && (l.b < r.b ||					\
+		      (l.b == r.b && (l.c < r.c ||			\
+				      (l.c == r.c && (l.d < r.d))))));	\
+  }									\
+  inline bool operator>=(const type &l, const type &r) {		\
+    return l.a > r.a ||							\
+      (l.a == r.a && (l.b > r.b ||					\
+		      (l.b == r.b && (l.c > r.c ||			\
+				      (l.c == r.c && (l.d >= r.d))))));	\
+  }									\
+  inline bool operator<=(const type &l, const type &r) {		\
+    return l.a < r.a ||							\
+      (l.a == r.a && (l.b < r.b ||					\
+		      (l.b == r.b && (l.c < r.c ||			\
+				      (l.c == r.c && (l.d <= r.d)))))); \
+  }
+
 
 
 #define WRITE_EQ_OPERATORS_5(type, a, b, c, d, e)			\

@@ -8,41 +8,76 @@
 # License version 2.1, as published by the Free Software
 # Foundation.  See file COPYING.
 #
+_rbd_commands="" # lazy init
+_rbd_global_options="" # lazy init
 
 _rbd()
 {
-        local cur prev
+	if [ "x${_rbd_commands}" == "x" ]; then
+		local rbc="$(rbd bash-completion 2>/dev/null)"
+		_rbd_commands="$(echo ${rbc} | sed -e 's/|-[^|]*//g' -e 's/||*/|/g')"
+		_rbd_global_options="$(echo ${rbc} | sed -e 's/|[^-][^\|]*//g' -e 's/||*/|/g')"
+	fi
 
         COMPREPLY=()
-        cur="${COMP_WORDS[COMP_CWORD]}"
-        prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-        if [[ ${cur} == -* ]] ; then
-            COMPREPLY=( $(compgen -W "-c --conf -m -d -f -p --pool --snap -i -o --image --dest --dest-pool --path --size --id --keyfile" -- ${cur}) )
-            return 0
-        fi
+	local arg_count=${#COMP_WORDS[@]}
+	local args=()
+	local help_request="false"
+	for (( i=1; i<arg_count; i++ )); do
+		word="${COMP_WORDS[i]}"
+		if [[ "x${word}" == "xhelp" && ${#args} == 0 ]]; then
+			# treat help request as a special case
+			help_request="true"
+			continue
+		elif [[ $(echo ${_rbd_global_options} | grep "|${word}|") ]]; then
+			# skip flag option
+			continue
+		elif [[ "x${word:0:1}" == "x-" ]]; then
+			# skip option with argument
+			let i=$i+1
+			continue
+		elif [[ "x${word}" == "x" ]]; then
+			# skip blank arguments
+			continue
+		fi
 
-        case "${prev}" in
-            --conf | -c | --path | --keyfile | --keyring)
-                COMPREPLY=( $(compgen -f ${cur}) )
-                return 0
-                ;;
-            -m)
-                COMPREPLY=( $(compgen -A hostname ${cur}) )
-                return 0
-                ;;
-            snap)
-                COMPREPLY=( $(compgen -W "ls create rollback rm purge protect unprotect" -- ${cur}) )
-                return 0
-                ;;
-            lock)
-                COMPREPLY=( $(compgen -W "list add remove" -- ${cur}) )
-                return 0
-                ;;
-            rbd)
-                COMPREPLY=( $(compgen -W "ls list info create clone flatten resize rm export import diff export-diff import-diff cp copy mv rename snap watch lock bench-write map unmap showmapped" -- ${cur}) )
-                return 0
-            ;;
-        esac
+		args+=("${word}")
+	done
+
+        local cur="${COMP_WORDS[COMP_CWORD]}"
+        local prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+	local options_exp=${_rbd_global_options}
+	local command="${args[@]}"
+	local valid_command="false"
+	if [[ ${#args} != 0 && "${args[-1]}" != "${cur}" &&
+	      $(echo "${_rbd_commands}" | grep -c "|${command}|") == 1 ]]; then
+		# combine global and command-specific options
+                local rbd_command_options="$(rbd bash-completion ${args[@]} 2>/dev/null)"
+                options_exp="${options_exp} ${rbd_command_options}"
+		valid_command="true"
+	fi
+
+	if [[ "x${cur}" == "xhelp" ]]; then
+		COMPREPLY=()
+	elif [[ "${options_exp}}" =~ "|${prev} path|" ]];  then
+		# perform path completion for path argument
+		COMPREPLY=($(compgen -f ${cur}))
+	elif [[ "${options_exp}}" =~ "|${prev} host|" ]];  then
+		# perform host completion for host argument
+		COMPREPLY=($(compgen -A hostname ${cur}))
+	elif [[ "${help_request}" == "false" && ( "x${cur:0:1}" == "x-" ||
+		( "x${cur}" == "x" && "${valid_command}" == "true" ) ) ]]; then
+		# all valid options for current command
+		options="$(echo ${options_exp} | sed -e 's/||*/ /g' -r -e 's/ (arg|path|host)//g')"
+		COMPREPLY=($(compgen -W "${options}" -- ${cur}))
+	elif [[ "${valid_command}" == "false" ]]; then
+		# search for valid command
+		[[ "x${command}" != "x" && "x${cur}" == "x" ]] && command="${command} "
+		COMPREPLY=($(echo ${_rbd_commands} | grep -o "|${command}[^ |]*" | \
+			uniq | sed -e 's/|//g' | awk -F' ' '{print $(NF)}'))
+	fi
 }
+
 complete -F _rbd rbd

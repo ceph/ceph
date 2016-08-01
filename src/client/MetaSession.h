@@ -6,11 +6,9 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "msg/msg_types.h"
+#include "msg/Message.h"
 #include "include/xlist.h"
-
-#include "messages/MClientCapRelease.h"
-#include "mds/MDSMap.h"
+#include "mds/mdstypes.h"
 
 struct Cap;
 struct Inode;
@@ -37,13 +35,17 @@ struct MetaSession {
     STATE_STALE,
   } state;
 
+  int mds_state;
+  bool readonly;
+
   list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
   xlist<Inode*> flushing_caps;
-  xlist<CapSnap*> flushing_capsnaps;
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
+  std::set<ceph_tid_t> flushing_caps_tids;
+  std::set<Inode*> early_flushing_caps;
 
   Cap *s_cap_iterator;
 
@@ -52,14 +54,17 @@ struct MetaSession {
   MetaSession()
     : mds_num(-1), con(NULL),
       seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-      state(STATE_NEW), s_cap_iterator(NULL),
-      release(NULL)
+      state(STATE_NEW), mds_state(0), readonly(false),
+      s_cap_iterator(NULL), release(NULL)
   {}
   ~MetaSession();
 
   const char *get_state_name() const;
 
   void dump(Formatter *f) const;
+
+  void enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
+      ceph_seq_t mseq, epoch_t osd_barrier);
 };
 
 #endif

@@ -13,16 +13,15 @@
  */
 
 #include <boost/config/warning_disable.hpp>
+#include <boost/spirit/include/qi_uint.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/spirit/include/phoenix.hpp>
-#include <boost/spirit/include/qi_uint.hpp>
 #include <boost/fusion/adapted/struct/adapt_struct.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
 
 #include "MonCap.h"
 #include "include/stringify.h"
-#include "common/config.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 
@@ -114,7 +113,7 @@ BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
 
 // </magic>
 
-void MonCapGrant::expand_profile(entity_name_t name) const
+void MonCapGrant::expand_profile(EntityName name) const
 {
   // only generate this list once
   if (!profile_grants.empty())
@@ -134,6 +133,8 @@ void MonCapGrant::expand_profile(entity_name_t name) const
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    // This command grant is checked explicitly in MRemoveSnaps handling
+    profile_grants.push_back(MonCapGrant("osd pool rmsnap"));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon") {
@@ -162,6 +163,15 @@ void MonCapGrant::expand_profile(entity_name_t name) const
     profile_grants.back().command_args["caps_mon"] = StringConstraint("allow profile mds", "");
     profile_grants.back().command_args["caps_osd"] = StringConstraint("allow rwx", "");
     profile_grants.back().command_args["caps_mds"] = StringConstraint("allow", "");
+  }
+  if (profile == "bootstrap-rgw") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
+    profile_grants.push_back(MonCapGrant("mon getmap"));
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mds keys
+    profile_grants.back().command_args["entity"] = StringConstraint("", "client.rgw.");
+    profile_grants.back().command_args["caps_mon"] = StringConstraint("allow rw", "");
+    profile_grants.back().command_args["caps_osd"] = StringConstraint("allow rwx", "");
   }
   if (profile == "fs-client") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
@@ -196,7 +206,7 @@ void MonCapGrant::expand_profile(entity_name_t name) const
 }
 
 mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
-				    entity_name_t name,
+				    EntityName name,
 				    const std::string& s, const std::string& c,
 				    const map<string,string>& c_args) const
 {
@@ -262,7 +272,7 @@ void MonCap::set_allow_all()
 }
 
 bool MonCap::is_capable(CephContext *cct,
-			entity_name_t name,
+			EntityName name,
 			const string& service,
 			const string& command, const map<string,string>& command_args,
 			bool op_may_read, bool op_may_write, bool op_may_exec) const

@@ -53,7 +53,7 @@ int OSDriver::get_next(
 struct Mapping {
   snapid_t snap;
   hobject_t hoid;
-  Mapping(const pair<snapid_t, hobject_t> &in)
+  explicit Mapping(const pair<snapid_t, hobject_t> &in)
     : snap(in.first), hoid(in.second) {}
   Mapping() : snap(0) {}
   void encode(bufferlist &bl) const {

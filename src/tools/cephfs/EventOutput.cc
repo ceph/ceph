@@ -29,14 +29,17 @@ int EventOutput::binary() const
   // Binary output, files
   int r = ::mkdir(path.c_str(), 0755);
   if (r != 0) {
-    std::cerr << "Error creating output directory: " << cpp_strerror(r) << std::endl;
-    return r;
+    r = -errno;
+    if (r != -EEXIST) {
+      std::cerr << "Error creating output directory: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
   }
 
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
     LogEvent *le = i->second.log_event;
     bufferlist le_bin;
-    le->encode(le_bin);
+    le->encode(le_bin, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
     std::stringstream filename;
     filename << "0x" << std::hex << i->first << std::dec << "_" << le->get_type_str() << ".bin";
@@ -119,5 +122,15 @@ void EventOutput::summary() const
   std::cout << "Events by type:" << std::endl;
   for (std::map<std::string, int>::iterator i = type_count.begin(); i != type_count.end(); ++i) {
       std::cout << "  " << i->first << ": " << i->second << std::endl;
+  }
+
+  std::cout << "Errors: " << scan.errors.size() << std::endl;
+  if (!scan.errors.empty()) {
+    for (JournalScanner::ErrorMap::const_iterator i = scan.errors.begin();
+         i != scan.errors.end(); ++i) {
+      std::cout << "  0x" << std::hex << i->first << std::dec
+                << ": " << i->second.r << " "
+                << i->second.description << std::endl;
+    }
   }
 }

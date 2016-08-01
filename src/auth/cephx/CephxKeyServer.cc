@@ -13,10 +13,8 @@
  */
 
 #include "common/config.h"
-
 #include "CephxKeyServer.h"
-#include "common/Timer.h"
-
+#include "common/dout.h"
 #include <sstream>
 
 #define dout_subsys ceph_subsys_auth
@@ -268,7 +266,7 @@ bool KeyServer::generate_secret(CryptoKey& secret)
   if (crypto->create(bp) < 0)
     return false;
 
-  secret.set_secret(cct, CEPH_CRYPTO_AES, bp);
+  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now(NULL));
 
   return true;
 }

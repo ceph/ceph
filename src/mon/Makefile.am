@@ -2,7 +2,10 @@ libmon_types_la_SOURCES = \
 	mon/PGMap.cc
 noinst_LTLIBRARIES += libmon_types.la
 
-libmon_la_SOURCES = \
+if ENABLE_SERVER
+if WITH_MON
+
+libmon_a_SOURCES = \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
 	mon/PaxosService.cc \
@@ -13,12 +16,11 @@ libmon_la_SOURCES = \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
-	mon/MonitorStore.cc \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
 	mon/ConfigKeyService.cc
-libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBMON_TYPES)
-noinst_LTLIBRARIES += libmon.la
+libmon_a_LIBADD =
+noinst_LIBRARIES += libmon.a
 
 noinst_HEADERS += \
 	mon/AuthMonitor.h \
@@ -36,8 +38,8 @@ noinst_HEADERS += \
 	mon/DumplingMonCommands.h \
 	mon/MonMap.h \
 	mon/Monitor.h \
-	mon/MonitorStore.h \
 	mon/MonitorDBStore.h \
+	mon/MonOpRequest.h \
 	mon/OSDMonitor.h \
 	mon/PGMap.h \
 	mon/PGMonitor.h \
@@ -47,3 +49,5 @@ noinst_HEADERS += \
 	mon/Session.h \
 	mon/mon_types.h
 
+endif # WITH_MON
+endif # ENABLE_SERVER

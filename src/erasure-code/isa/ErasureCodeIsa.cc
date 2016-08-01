@@ -41,6 +41,9 @@ _prefix(std::ostream* _dout)
 }
 // -----------------------------------------------------------------------------
 
+const std::string ErasureCodeIsaDefault::DEFAULT_K("7");
+const std::string ErasureCodeIsaDefault::DEFAULT_M("3");
+
 int
 ErasureCodeIsa::create_ruleset(const string &name,
                                CrushWrapper &crush,
@@ -55,27 +58,30 @@ ErasureCodeIsa::create_ruleset(const string &name,
 
   if (ruleid < 0)
     return ruleid;
-  else
+  else {
+    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
     return crush.get_rule_mask_ruleset(ruleid);
+  }
 }
 
 // -----------------------------------------------------------------------------
 
-void
-ErasureCodeIsa::init(const map<string, string> &parameters)
+int
+ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
-  dout(10) << "technique=" << technique << dendl;
-  map<string, string>::const_iterator parameter;
-  parameter = parameters.find("ruleset-root");
-  if (parameter != parameters.end())
-    ruleset_root = parameter->second;
-  parameter = parameters.find("ruleset-failure-domain");
-  if (parameter != parameters.end())
-    ruleset_failure_domain = parameter->second;
-  ostringstream ss;
-  if (parse(parameters, &ss))
-    derr << ss.str() << dendl;
+  int err = 0;
+  err |= to_string("ruleset-root", profile,
+		   &ruleset_root,
+		   DEFAULT_RULESET_ROOT, ss);
+  err |= to_string("ruleset-failure-domain", profile,
+		   &ruleset_failure_domain,
+		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
+  err |= parse(profile, ss);
+  if (err)
+    return err;
   prepare();
+  ErasureCode::init(profile, ss);
+  return err;
 }
 
 // -----------------------------------------------------------------------------
@@ -338,13 +344,13 @@ ErasureCodeIsaDefault::get_alignment() const
 
 // -----------------------------------------------------------------------------
 
-int ErasureCodeIsaDefault::parse(const map<std::string,
-                                 std::string> &parameters,
+int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
                                  ostream *ss)
 {
-  int err = ErasureCode::parse(parameters, ss);
-  err |= to_int("k", parameters, &k, DEFAULT_K, ss);
-  err |= to_int("m", parameters, &m, DEFAULT_M, ss);
+  int err = ErasureCode::parse(profile, ss);
+  err |= to_int("k", profile, &k, DEFAULT_K, ss);
+  err |= to_int("m", profile, &m, DEFAULT_M, ss);
+  err |= sanity_check_k(k, ss);
 
   if (matrixtype == kVandermonde) {
     // these are verified safe values evaluated using the

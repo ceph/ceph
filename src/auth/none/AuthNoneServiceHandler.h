@@ -15,14 +15,14 @@
 #ifndef CEPH_AUTHNONESERVICEHANDLER_H
 #define CEPH_AUTHNONESERVICEHANDLER_H
 
-#include "../AuthServiceHandler.h"
-#include "../Auth.h"
+#include "auth/AuthServiceHandler.h"
+#include "auth/Auth.h"
 
 class CephContext;
 
 class AuthNoneServiceHandler  : public AuthServiceHandler {
 public:
-  AuthNoneServiceHandler(CephContext *cct_) 
+  explicit AuthNoneServiceHandler(CephContext *cct_)
     : AuthServiceHandler(cct_) {}
   ~AuthNoneServiceHandler() {}
   
@@ -32,7 +32,6 @@ public:
     return CEPH_AUTH_NONE;
   }
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) {
-    assert(0);  // shouldn't get called
     return 0;
   }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }

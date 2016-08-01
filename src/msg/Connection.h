@@ -39,12 +39,12 @@ class Message;
 class Messenger;
 
 struct Connection : public RefCountedObject {
-  Mutex lock;
+  mutable Mutex lock;
   Messenger *msgr;
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
-  utime_t last_keepalive_ack;
+  utime_t last_keepalive, last_keepalive_ack;
 private:
   uint64_t features;
 public:
@@ -92,6 +92,13 @@ public:
     return NULL;
   }
 
+  /**
+   * Used to judge whether this connection is ready to send. Usually, the
+   * implementation need to build a own shakehand or sesson then it can be
+   * ready to send.
+   *
+   * @return true if ready to send, or false otherwise
+   */
   virtual bool is_connected() = 0;
 
   Messenger *get_messenger() {
@@ -106,7 +113,6 @@ public:
    *
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
-   * @param con The Connection to send the Message out on.
    *
    * @return 0 on success, or -errno on failure.
    */
@@ -172,9 +178,23 @@ public:
     rx_buffers.erase(tid);
   }
 
+  utime_t get_last_keepalive() const {
+    Mutex::Locker l(lock);
+    return last_keepalive;
+  }
+  void set_last_keepalive(utime_t t) {
+    Mutex::Locker l(lock);
+    last_keepalive = t;
+  }
   utime_t get_last_keepalive_ack() const {
+    Mutex::Locker l(lock);
     return last_keepalive_ack;
   }
+  void set_last_keepalive_ack(utime_t t) {
+    Mutex::Locker l(lock);
+    last_keepalive_ack = t;
+  }
+
 };
 
 typedef boost::intrusive_ptr<Connection> ConnectionRef;

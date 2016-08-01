@@ -61,8 +61,8 @@ The recovery reservation state chart controls the PG state as reported
 to the monitor. The state chart can set:
 
  - recovery_wait: waiting for local/remote reservations
- - recovering: recoverying
- - wait_backfill: waiting for remote backfill reservations
+ - recovering: recovering
+ - backfill_wait: waiting for remote backfill reservations
  - backfilling: backfilling
  - backfill_toofull: backfill reservation rejected, OSD too full
 

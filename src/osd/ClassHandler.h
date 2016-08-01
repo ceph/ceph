@@ -2,13 +2,11 @@
 #define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
-
 #include "objclass/objclass.h"
-
-#include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/ceph_context.h"
 
+//forward declaration
+class CephContext;
 
 class ClassHandler
 {
@@ -35,6 +33,17 @@ public:
     ClassMethod() : cls(0), flags(0), func(0), cxx_func(0) {}
   };
 
+  struct ClassFilter {
+    struct ClassHandler::ClassData *cls;
+    std::string name;
+    cls_cxx_filter_factory_t fn;
+
+    void unregister();
+
+    ClassFilter() : fn(0)
+    {}
+  };
+
   struct ClassData {
     enum Status { 
       CLASS_UNKNOWN,
@@ -48,7 +57,10 @@ public:
     ClassHandler *handler;
     void *handle;
 
+    bool whitelisted;
+
     map<string, ClassMethod> methods_map;
+    map<string, ClassFilter> filters_map;
 
     set<ClassData *> dependencies;         /* our dependencies */
     set<ClassData *> missing_dependencies; /* only missing dependencies */
@@ -64,22 +76,41 @@ public:
     ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func);
     void unregister_method(ClassMethod *method);
 
+    ClassFilter *register_cxx_filter(
+        const std::string &filter_name,
+        cls_cxx_filter_factory_t fn);
+    void unregister_filter(ClassFilter *method);
+
     ClassMethod *get_method(const char *mname) {
       Mutex::Locker l(handler->mutex);
       return _get_method(mname);
     }
     int get_method_flags(const char *mname);
+
+    ClassFilter *get_filter(const std::string &filter_name)
+    {
+      Mutex::Locker l(handler->mutex);
+      std::map<std::string, ClassFilter>::iterator i = filters_map.find(filter_name);
+      if (i == filters_map.end()) {
+        return NULL;
+      } else {
+        return &(i->second);
+      }
+    }
   };
 
 private:
   Mutex mutex;
   map<string, ClassData> classes;
 
-  ClassData *_get_class(const string& cname);
+  ClassData *_get_class(const string& cname, bool check_allowed);
   int _load_class(ClassData *cls);
 
+  static bool in_class_list(const std::string& cname,
+      const std::string& list);
+
 public:
-  ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
+  explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
   
   int open_all_classes();
 

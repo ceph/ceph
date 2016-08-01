@@ -12,10 +12,19 @@
  *
  */
 
+#include "acconfig.h"
+
+// Use the newer gperftools header locations if available.
+// If not, fall back to the old (gperftools < 2.0) locations.
+
+#ifdef HAVE_GPERFTOOLS_PROFILER_H
+  #include <gperftools/profiler.h>
+#else
+  #include <google/profiler.h>
+#endif
+
 #include "common/LogClient.h"
 #include "perfglue/cpu_profiler.h"
-
-#include <google/profiler.h>
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
 				 ostream& out)

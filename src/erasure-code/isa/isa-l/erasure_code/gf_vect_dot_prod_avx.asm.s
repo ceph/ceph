@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+;  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 ;
 ;  Redistribution and use in source and binary forms, with or without
 ;  modification, are permitted provided that the following conditions
@@ -30,8 +30,8 @@
 ;;;
 ;;; gf_vect_dot_prod_avx(len, vec, *g_tbls, **buffs, *dest);
 ;;;
-;;; Author: Gregory Tucker
 
+%include "reg_sizes.asm"
 
 %ifidn __OUTPUT_FORMAT__, elf64
  %define arg0  rdi
@@ -39,12 +39,14 @@
  %define arg2  rdx
  %define arg3  rcx
  %define arg4  r8
- %define arg5  r9
 
  %define tmp   r11
  %define tmp2  r10
  %define tmp3  r9
  %define return rax
+ %macro  SLDR 2
+ %endmacro
+ %define SSTR SLDR
  %define PS 8
  %define func(x) x:
  %define FUNC_SAVE
@@ -62,6 +64,9 @@
  %define tmp2   r10
  %define tmp3   rdi 		; must be saved and loaded
  %define return rax
+ %macro  SLDR 2
+ %endmacro
+ %define SSTR SLDR
  %define PS 8
  %define frame_size 2*8
  %define arg(x)      [rsp + frame_size + PS + PS*x]
@@ -80,6 +85,67 @@
  %endmacro
 %endif
 
+%ifidn __OUTPUT_FORMAT__, elf32
+
+;;;================== High Address;
+;;;	arg4
+;;;	arg3
+;;;	arg2
+;;;	arg1
+;;;	arg0
+;;;	return
+;;;<================= esp of caller
+;;;	ebp
+;;;<================= ebp = esp
+;;;	esi
+;;;	edi
+;;;	ebx
+;;;<================= esp of callee
+;;;
+;;;================== Low Address;
+
+ %define PS 4
+ %define LOG_PS 2
+ %define func(x) x:
+ %define arg(x) [ebp + PS*2 + PS*x]
+
+ %define trans   ecx			;trans is for the variables in stack
+ %define arg0    trans
+ %define arg0_m  arg(0)
+ %define arg1    trans
+ %define arg1_m  arg(1)
+ %define arg2    arg2_m
+ %define arg2_m  arg(2)
+ %define arg3    ebx
+ %define arg4    trans
+ %define arg4_m  arg(4)
+ %define tmp	 edx
+ %define tmp2    edi
+ %define tmp3    esi
+ %define return  eax
+ %macro SLDR 2	;; stack load/restore
+	mov %1, %2
+ %endmacro
+ %define SSTR SLDR
+
+ %macro FUNC_SAVE 0
+	push	ebp
+	mov	ebp, esp
+	push	esi
+	push	edi
+	push	ebx
+	mov	arg3, arg(3)
+ %endmacro
+
+ %macro FUNC_RESTORE 0
+	pop	ebx
+	pop	edi
+	pop	esi
+	mov	esp, ebp
+	pop	ebp
+ %endmacro
+
+%endif	; output formats
 
 %define len   arg0
 %define vec   arg1
@@ -90,6 +156,12 @@
 %define vec_i tmp2
 %define ptr   tmp3
 %define pos   return
+
+ %ifidn PS,4				;32-bit code
+	%define  vec_m 	arg1_m
+	%define  len_m 	arg0_m
+	%define  dest_m arg4_m
+ %endif
 
 %ifndef EC_ALIGNED_ADDR
 ;;; Use Un-aligned load/store
@@ -106,10 +178,11 @@
  %endif
 %endif
 
+%ifidn PS,8			; 64-bit code
+ default rel
+  [bits 64]
+%endif
 
-default rel
-
-[bits 64]
 section .text
 
 %define xmask0f  xmm5
@@ -124,7 +197,9 @@ align 16
 global gf_vect_dot_prod_avx:function
 func(gf_vect_dot_prod_avx)
 	FUNC_SAVE
+	SLDR 	len, len_m
 	sub	len, 16
+	SSTR 	len_m, len
 	jl	.return_fail
 	xor	pos, pos
 	vmovdqa	xmask0f, [mask0f]	;Load mask of lower nibble in each byte
@@ -135,10 +210,12 @@ func(gf_vect_dot_prod_avx)
 	xor	vec_i, vec_i
 
 .next_vect:
+
 	mov	ptr, [src+vec_i*PS]
 	vmovdqu	xgft_lo, [tmp]		;Load array Cx{00}, Cx{01}, ..., Cx{0f}
 	vmovdqu	xgft_hi, [tmp+16]	;     "     Cx{00}, Cx{10}, ..., Cx{f0}
 	XLDR	x0, [ptr+pos]		;Get next source vector
+
 	add	tmp, 32
 	add	vec_i, 1
 
@@ -150,11 +227,16 @@ func(gf_vect_dot_prod_avx)
 	vpshufb	xgft_lo, xgft_lo, xtmpa	;Lookup mul table of low nibble
 	vpxor	xgft_hi, xgft_hi, xgft_lo ;GF add high and low partials
 	vpxor	xp, xp, xgft_hi		;xp += partial
+
+	SLDR	vec, vec_m
 	cmp	vec_i, vec
 	jl	.next_vect
 
+	SLDR 	dest, dest_m
 	XSTR	[dest+pos], xp
+
 	add	pos, 16			;Loop on 16 bytes at a time
+	SLDR 	len, len_m
 	cmp	pos, len
 	jle	.loop16
 
@@ -182,19 +264,8 @@ section .data
 
 align 16
 
-poly:
 mask0f:
 ddq 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
 ;;;       func                 core, ver, snum
-slversion gf_vect_dot_prod_avx, 02,  03,  0061
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
+slversion gf_vect_dot_prod_avx, 02,  05,  0061

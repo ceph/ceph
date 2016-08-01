@@ -220,10 +220,10 @@ get_conf() {
 
 	if [ -z "$1" ]; then
 	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -n $type.$id \"$key\""
-	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || eval echo -n \"$def\"`\""
+	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || printf \"$def\"`\""
 	else
 	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -s $1 \"$key\""
-	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval echo -n \"$def\"`\""
+	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval printf \"$def\"`\""
 	fi
 }
 

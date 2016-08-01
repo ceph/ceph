@@ -1,5 +1,6 @@
 #!/bin/bash
 #
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
@@ -14,7 +15,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7202 test/vstart_wrapper.sh \
-    ../qa/workunits/cephtool/test.sh \
+source $(dirname $0)/detect-build-env-vars.sh
+
+CEPH_CLI_TEST_DUP_COMMAND=1 \
+# uses CEPH_PORT going from 7202 7203 and 7204 because
+# it starts at 7202 and runs 3 mons (see vstart.sh)
+MON=3 OSD=3 CEPH_START='mon osd' CEPH_PORT=7202 $CEPH_ROOT/src/test/vstart_wrapper.sh \
+    $CEPH_ROOT/qa/workunits/cephtool/test.sh \
     --test-mon \
     --asok-does-not-need-root

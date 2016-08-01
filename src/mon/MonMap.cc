@@ -11,6 +11,7 @@
 #include "include/ceph_features.h"
 #include "include/addr_parsing.h"
 #include "common/ceph_argparse.h"
+#include "common/dns_resolve.h"
 #include "common/errno.h"
 
 #include "common/dout.h"
@@ -27,7 +28,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
     vector<entity_inst_t> mon_inst(mon_addr.size());
     for (unsigned n = 0; n < mon_addr.size(); n++)
       mon_inst[n] = get_inst(n);
-    ::encode(mon_inst, blist);
+    ::encode(mon_inst, blist, features);
     ::encode(last_changed, blist);
     ::encode(created, blist);
     return;
@@ -38,7 +39,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
-    ::encode(mon_addr, blist);
+    ::encode(mon_addr, blist, features);
     ::encode(last_changed, blist);
     ::encode(created, blist);
   }
@@ -46,7 +47,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
   ENCODE_START(3, 3, blist);
   ::encode_raw(fsid, blist);
   ::encode(epoch, blist);
-  ::encode(mon_addr, blist);
+  ::encode(mon_addr, blist, features);
   ::encode(last_changed, blist);
   ::encode(created, blist);
   ENCODE_FINISH(blist);
@@ -153,6 +154,8 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
 {
   vector<entity_addr_t> addrs;
   if (parse_ip_port_vec(hostlist.c_str(), addrs)) {
+    if (addrs.empty())
+      return -ENOENT;
     for (unsigned i=0; i<addrs.size(); i++) {
       char n[2];
       n[0] = 'a' + i;
@@ -164,8 +167,6 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
       if (!contains(addrs[i]))
 	add(name, addrs[i]);
     }
-    if (addrs.empty())
-      return -ENOENT;
     return 0;
   }
 
@@ -274,6 +275,8 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
              << std::endl;
       return r;
     }
+    created = ceph_clock_now(cct);
+    last_changed = created;
     return 0;
   }
 
@@ -330,8 +333,35 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   }
 
   if (size() == 0) {
+    // no info found from conf options lets try use DNS SRV records
+    string srv_name = conf->mon_dns_srv_name;
+    string domain;
+    // check if domain is also provided and extract it from srv_name
+    size_t idx = srv_name.find("_");
+    if (idx != string::npos) {
+      domain = srv_name.substr(idx + 1);
+      srv_name = srv_name.substr(0, idx);
+    }
+
+    map<string, entity_addr_t> addrs;
+    if (DNSResolver::get_instance()->resolve_srv_hosts(cct, srv_name,
+        DNSResolver::SRV_Protocol::TCP, domain, &addrs) != 0) {
+
+      errout << "unable to get monitor info from DNS SRV with service name: " << 
+	   "ceph-mon" << std::endl;
+    }
+    else {
+      for (const auto& addr : addrs) {
+        add(addr.first, addr.second);
+      }
+    }
+  }
+
+  if (size() == 0) {
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
+  created = ceph_clock_now(cct);
+  last_changed = created;
   return 0;
 }

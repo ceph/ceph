@@ -22,7 +22,7 @@
 #include "detailed_stat_collector.h"
 #include "distribution.h"
 #include "global/global_init.h"
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include "dumb_backend.h"
 
 namespace po = boost::program_options;

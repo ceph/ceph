@@ -142,25 +142,25 @@ namespace libradosstriper
 
     /**
      * synchronously append data to the striped object
-     * NOTE: this call steals the contents of @param bl.
+     * NOTE: this call steals the contents of @p bl.
      */
     int append(const std::string& soid, const ceph::bufferlist& bl, size_t len);
 
     /**
      * asynchronously write to the striped object at the specified offset.
-     * NOTE: this call steals the contents of @param bl.
+     * NOTE: this call steals the contents of @p bl.
      */
     int aio_write(const std::string& soid, librados::AioCompletion *c, const ceph::bufferlist& bl, size_t len, uint64_t off);
 
     /**
      * asynchronously fill the striped object with the specified data
-     * NOTE: this call steals the contents of @param bl.
+     * NOTE: this call steals the contents of @p bl.
      */
     int aio_write_full(const std::string& soid, librados::AioCompletion *c, const ceph::bufferlist& bl);
 
     /**
      * asynchronously append data to the striped object
-     * NOTE: this call steals the contents of @param bl.
+     * NOTE: this call steals the contents of @p bl.
      */
     int aio_append(const std::string& soid, librados::AioCompletion *c, const ceph::bufferlist& bl, size_t len);
 
@@ -190,7 +190,7 @@ namespace libradosstriper
      * during deletion (same EBUSY return code)
      */
     int remove(const std::string& soid);
-
+    int remove(const std::string& soid, int flags);
     /**
      * Resizes a striped object
      * the truncation can not happen if any I/O is ongoing (it

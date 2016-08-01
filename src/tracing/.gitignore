@@ -1,2 +1,6 @@
-*.h
-*.c
+librados.h
+librbd.h
+objectstore.h
+oprequest.h
+osd.h
+pg.h

@@ -345,3 +345,33 @@ Response Entities
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
 | ``CommonPrefixes.Prefix``               | String      | The substring of the key after the prefix as defined by the ``prefix`` request parameter.                |
 +-----------------------------------------+-------------+----------------------------------------------------------------------------------------------------------+
+
+ENABLE/SUSPEND BUCKET VERSIONING
+--------------------------------
+
+``PUT /?versioning`` This subresource set the versioning state of an existing bucket. To set the versioning state, you must be the bucket owner.
+
+You can set the versioning state with one of the following values:
+
+- Enabled : Enables versioning for the objects in the bucket, All objects added to the bucket receive a unique version ID.
+- Suspended : Disables versioning for the objects in the bucket, All objects added to the bucket receive the version ID null.
+
+If the versioning state has never been set on a bucket, it has no versioning state; a GET versioning request does not return a versioning state value.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT  /{bucket}?versioning  HTTP/1.1
+
+REQUEST ENTITIES
+~~~~~~~~~~~~~~~~
+
++-----------------------------+-----------+---------------------------------------------------------------------------+
+| Name                        | Type      | Description                                                               |
++=============================+===========+===========================================================================+
+| ``VersioningConfiguration`` | Container | A container for the request.                                              |
++-----------------------------+-----------+---------------------------------------------------------------------------+
+| ``Status``                  | String    | Sets the versioning state of the bucket.  Valid Values: Suspended/Enabled |
++-----------------------------+-----------+---------------------------------------------------------------------------+

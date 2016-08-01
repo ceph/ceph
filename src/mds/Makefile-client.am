@@ -1,0 +1,4 @@
+# There are no libmds_types so use the full mds library for dencoder for now
+DENCODER_SOURCES += $(LIBMDS_SOURCES)
+
+DENCODER_DEPS += $(LIBMDS_DEPS)

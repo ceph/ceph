@@ -31,10 +31,14 @@ public:
   epoch_t get_epoch() { return epoch; }
 
   MOSDPGInfo()
-    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {}
+    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
+    set_priority(CEPH_MSG_PRIO_HIGH);
+  }
   MOSDPGInfo(version_t mv)
     : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
-      epoch(mv) { }
+      epoch(mv) {
+    set_priority(CEPH_MSG_PRIO_HIGH);
+  }
 private:
   ~MOSDPGInfo() {}
 

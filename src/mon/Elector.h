@@ -20,11 +20,8 @@
 using namespace std;
 
 #include "include/types.h"
-#include "msg/Message.h"
-
 #include "include/Context.h"
-
-#include "common/Timer.h"
+#include "mon/MonOpRequest.h"
 
 class Monitor;
 
@@ -56,7 +53,7 @@ class Elector {
    *
    * @remarks This function assumes as a default firing value the duration of
    *	      the monitor's lease interval, and adds to it the value specified
-   *	      in @plus
+   *	      in @e plus
    *
    * @post expire_event is set
    *
@@ -127,7 +124,7 @@ class Elector {
    */
   int	    leader_acked;
   /**
-   * Indicates when we have acked him
+   * Indicates when we have acked it
    */
   utime_t   ack_stamp;
   /**
@@ -168,7 +165,7 @@ class Elector {
   class C_ElectionExpire : public Context {
     Elector *elector;
   public:
-    C_ElectionExpire(Elector *e) : elector(e) { }
+    explicit C_ElectionExpire(Elector *e) : elector(e) { }
     void finish(int r) {
       elector->expire();
     }
@@ -245,7 +242,7 @@ class Elector {
   void victory();
 
   /**
-   * Handle a message from some other node proposing himself to become him
+   * Handle a message from some other node proposing itself to become it
    * the Leader.
    *
    * If the message appears to be old (i.e., its epoch is lower than our epoch),
@@ -253,16 +250,16 @@ class Elector {
    *
    *  @li Ignore it because it's nothing more than an old proposal
    *  @li Start new elections if we verify that it was sent by a monitor from
-   *	  outside the quorum; given its old state, it's fair to assume he just
-   *	  started, so we should start new elections so he may rejoin
+   *	  outside the quorum; given its old state, it's fair to assume it just
+   *	  started, so we should start new elections so it may rejoin
    *
    * If we did not ignore the received message, then we know that this message
-   * was sent by some other node proposing himself to become the Leader. So, we
+   * was sent by some other node proposing itself to become the Leader. So, we
    * will take one of the following actions:
    *
-   *  @li Ignore him because we already acked another node with higher rank
-   *  @li Ignore him and start a new election because we outrank him
-   *  @li Defer to him because he outranks us and the node we previously
+   *  @li Ignore it because we already acked another node with higher rank
+   *  @li Ignore it and start a new election because we outrank it
+   *  @li Defer to it because it outranks us and the node we previously
    *	  acked, if any
    *
    *
@@ -270,7 +267,7 @@ class Elector {
    *
    * @param m A message sent by another participant in the quorum.
    */
-  void handle_propose(class MMonElection *m);
+  void handle_propose(MonOpRequestRef op);
   /**
    * Handle a message from some other participant Acking us as the Leader.
    *
@@ -293,7 +290,7 @@ class Elector {
    *
    * @param m A message with an operation type of OP_ACK
    */
-  void handle_ack(class MMonElection *m);
+  void handle_ack(MonOpRequestRef op);
   /**
    * Handle a message from some other participant declaring Victory.
    *
@@ -314,7 +311,7 @@ class Elector {
    *
    * @param m A message with an operation type of OP_VICTORY
    */
-  void handle_victory(class MMonElection *m);
+  void handle_victory(MonOpRequestRef op);
   /**
    * Send a nak to a peer who's out of date, containing information about why.
    *
@@ -326,7 +323,7 @@ class Elector {
    * @param m A message from a monitor not supporting required features. We
    * take ownership of the reference.
    */
-  void nak_old_peer(class MMonElection *m);
+  void nak_old_peer(MonOpRequestRef op);
   /**
    * Handle a message from some other participant declaring
    * we cannot join the quorum.
@@ -339,7 +336,7 @@ class Elector {
    *
    * @param m A message with an operation type of OP_NAK
    */
-  void handle_nak(class MMonElection *m);
+  void handle_nak(MonOpRequestRef op);
   
  public:
   /**
@@ -347,7 +344,7 @@ class Elector {
    *
    * @param m A Monitor instance
    */
-  Elector(Monitor *m) : mon(m),
+  explicit Elector(Monitor *m) : mon(m),
 			expire_event(0),
 			epoch(0),
 			participating(true),
@@ -398,7 +395,7 @@ class Elector {
    *
    * @param m A received message
    */
-  void dispatch(Message *m);
+  void dispatch(MonOpRequestRef op);
 
   /**
    * Call an election.

@@ -16,9 +16,6 @@
 #define CEPH_AUTHTYPES_H
 
 #include "Crypto.h"
-#include "msg/msg_types.h"
-
-#include "common/config.h"
 #include "common/entity_name.h"
 
 class Cond;
@@ -136,7 +133,7 @@ struct AuthAuthorizer {
   bufferlist bl;
   CryptoKey session_key;
 
-  AuthAuthorizer(__u32 p) : protocol(p) {}
+  explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
   virtual bool verify_reply(bufferlist::iterator& reply) = 0;
 };

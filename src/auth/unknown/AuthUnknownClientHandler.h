@@ -15,7 +15,7 @@
 #ifndef CEPH_AUTHUNKNOWNCLIENTHANDLER_H
 #define CEPH_AUTHUNKNOWNCLIENTHANDLER_H
 
-#include "../AuthClientHandler.h"
+#include "auth/AuthClientHandler.h"
 #include "AuthUnknownProtocol.h"
 
 class CephContext;

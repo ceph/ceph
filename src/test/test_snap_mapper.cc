@@ -45,7 +45,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   typedef ceph::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
-    Remove(const set<string> &to_remove) : to_remove(to_remove) {}
+    explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
     void operate(map<string, bufferlist> *store) {
       for (set<string>::iterator i = to_remove.begin();
 	   i != to_remove.end();
@@ -56,7 +56,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Insert : public _Op {
     map<string, bufferlist> to_insert;
-    Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
+    explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
     void operate(map<string, bufferlist> *store) {
       for (map<string, bufferlist>::iterator i = to_insert.begin();
 	   i != to_insert.end();
@@ -68,7 +68,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Callback : public _Op {
     Context *context;
-    Callback(Context *c) : context(c) {}
+    explicit Callback(Context *c) : context(c) {}
     void operate(map<string, bufferlist> *store) {
       context->complete(0);
     }
@@ -103,7 +103,7 @@ private:
     bool paused;
     list<Op> queue;
   public:
-    Doer(PausyAsyncMap *parent) :
+    explicit Doer(PausyAsyncMap *parent) :
       parent(parent), lock("Doer lock"), stopping(0), paused(false) {}
     virtual void *entry() {
       while (1) {
@@ -167,7 +167,7 @@ private:
 
 public:
   PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
-    doer.create();
+    doer.create("doer");
   }
   ~PausyAsyncMap() {
     doer.join();
@@ -440,8 +440,8 @@ TEST_F(MapCacherTest, Random)
 class MapperVerifier {
   PausyAsyncMap *driver;
   boost::scoped_ptr< SnapMapper > mapper;
-  map<snapid_t, set<hobject_t> > snap_to_hobject;
-  map<hobject_t, set<snapid_t> > hobject_to_snap;
+  map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> > snap_to_hobject;
+  map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator> hobject_to_snap;
   snapid_t next;
   uint32_t mask;
   uint32_t bits;
@@ -493,7 +493,7 @@ public:
     for (set<snapid_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
+      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j = snap_to_hobject.find(*i);
       assert(j != snap_to_hobject.end());
       j->second.insert(obj);
     }
@@ -508,9 +508,9 @@ public:
     Mutex::Locker l(lock);
     if (snap_to_hobject.empty())
       return;
-    map<snapid_t, set<hobject_t> >::iterator snap =
+    map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator snap =
       rand_choose(snap_to_hobject);
-    set<hobject_t> hobjects = snap->second;
+    set<hobject_t, hobject_t::BitwiseComparator> hobjects = snap->second;
 
     hobject_t hoid;
     while (mapper->get_next_object_to_trim(snap->first, &hoid) == 0) {
@@ -518,7 +518,7 @@ public:
       assert(hobjects.count(hoid));
       hobjects.erase(hoid);
 
-      map<hobject_t, set<snapid_t> >::iterator j =
+      map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
 	hobject_to_snap.find(hoid);
       assert(j->second.count(snap->first));
       set<snapid_t> old_snaps(j->second);
@@ -547,12 +547,12 @@ public:
     Mutex::Locker l(lock);
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t> >::iterator obj =
+    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
       rand_choose(hobject_to_snap);
     for (set<snapid_t>::iterator i = obj->second.begin();
 	 i != obj->second.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j =
+      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j =
 	snap_to_hobject.find(*i);
       assert(j->second.count(obj->first));
       j->second.erase(obj->first);
@@ -571,7 +571,7 @@ public:
     Mutex::Locker l(lock);
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t> >::iterator obj =
+    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
       rand_choose(hobject_to_snap);
     set<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);

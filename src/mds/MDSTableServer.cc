@@ -13,7 +13,7 @@
  */
 
 #include "MDSTableServer.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDLog.h"
 #include "msg/Messenger.h"
 
@@ -22,7 +22,7 @@
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
+#define dout_prefix *_dout << "mds." << rank << ".tableserver(" << get_mdstable_name(table) << ") "
 
 /* This function DOES put the passed message before returning */
 void MDSTableServer::handle_request(MMDSTableRequest *req)
@@ -33,7 +33,7 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
   case TABLESERVER_OP_PREPARE: return handle_prepare(req);
   case TABLESERVER_OP_COMMIT: return handle_commit(req);
   case TABLESERVER_OP_ROLLBACK: return handle_rollback(req);
-  default: assert(0);
+  default: assert(0 == "unrecognized mds_table_server request op");
   }
 }
 

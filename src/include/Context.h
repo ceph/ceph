@@ -17,12 +17,12 @@
 #define CEPH_CONTEXT_H
 
 #include "common/dout.h"
-#include "include/assert.h"
 
+#include <boost/function.hpp>
 #include <list>
 #include <set>
 
-#include <iostream>
+#include "include/assert.h"
 #include "include/memory.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
@@ -190,7 +190,7 @@ public:
   }
   void complete(int r) {
     // Neuter any ContextInstanceType custom complete(), because although
-    // I want to look like him, I don't actually want to run his code.
+    // I want to look like it, I don't actually want to run its code.
     Context::complete(r);
   }
   void finish(int r) {
@@ -448,6 +448,20 @@ private:
 
 typedef C_GatherBase<Context, Context> C_Gather;
 typedef C_GatherBuilderBase<Context, C_Gather > C_GatherBuilder;
+
+class FunctionContext : public Context {
+public:
+  FunctionContext(const boost::function<void(int)> &callback)
+    : m_callback(callback)
+  {
+  }
+
+  virtual void finish(int r) {
+    m_callback(r);
+  }
+private:
+  boost::function<void(int)> m_callback;
+};
 
 #undef mydout
 

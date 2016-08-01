@@ -18,7 +18,7 @@
 #include "common/config.h"
 #include "include/types.h"
 
-#include "../MDS.h"
+#include "../MDSRank.h"
 #include "../LogEvent.h"
 
 class EImportFinish : public LogEvent {
@@ -40,13 +40,14 @@ class EImportFinish : public LogEvent {
       out << " failed";
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EImportFinish*>& ls);
   
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 
 };
+WRITE_CLASS_ENCODER_FEATURES(EImportFinish)
 
 #endif

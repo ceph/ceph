@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "common/Preforker.h"
+
 #define RETURN1_IF_NOT_VAL(expected, expr) \
   do {\
     int _rinv_ret = expr;\
@@ -34,7 +36,7 @@
   RETURN1_IF_NOT_VAL(0, expr)
 
 extern void* systest_runnable_pthread_helper(void *arg);
-
+std::string get_temp_pool_name(const char* prefix);
 /* Represents a single test thread / process.
  *
  * Inherit from this class and implement the test body in run().
@@ -70,18 +72,18 @@ protected:
   const char **m_argv;
 
 private:
-  SysTestRunnable(const SysTestRunnable &rhs);
+  explicit SysTestRunnable(const SysTestRunnable &rhs);
   SysTestRunnable& operator=(const SysTestRunnable &rhs);
   void update_id_str(bool started);
   void set_argv(int argc, const char **argv);
 
   friend void* systest_runnable_pthread_helper(void *arg);
 
+  Preforker preforker;
   const char **m_argv_orig;
   bool m_started;
   int m_id;
   pthread_t m_pthread;
-  int m_pid;
   char m_id_str[ID_STR_SZ];
 };
 

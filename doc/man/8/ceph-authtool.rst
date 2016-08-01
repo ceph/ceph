@@ -1,3 +1,5 @@
+:orphan:
+
 =================================================
  ceph-authtool -- ceph keyring manipulation tool
 =================================================
@@ -7,9 +9,18 @@
 Synopsis
 ========
 
-| **ceph-authtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
-  ] [ -p | --print ] [ -n | --name *entityname* ] [ --gen-key ] [ -a |
-  --add-key *base64_key* ] [ --caps *capfile* ]
+| **ceph-authtool** *keyringfile*
+  [ -l | --list ]
+  [ -p | --print-key ]
+  [ -C | --create-keyring ]
+  [ -g | --gen-key ]
+  [ --gen-print-key ]
+  [ --import-keyring *otherkeyringfile* ]
+  [ -n | --name *entityname* ]
+  [ -u | --set-uid *auid* ]
+  [ -a | --add-key *base64_key* ]
+  [ --cap *subsystem* *capability* ]
+  [ --caps *capfile* ]
 
 
 Description
@@ -24,7 +35,7 @@ associated with an entity name, of the form
 **WARNING** Ceph provides authentication and protection against
 man-in-the-middle attacks once secret keys are in place.  However,
 data over the wire is not encrypted, which may include the messages
-used to configure said keys.  The system is primarily intended to be
+used to configure said keys. The system is primarily intended to be
 used in trusted environments.
 
 Options
@@ -34,7 +45,7 @@ Options
 
    will list all keys and capabilities present in the keyring
 
-.. option:: -p, --print
+.. option:: -p, --print-key
 
    will print an encoded key for the specified entityname. This is
    suitable for the ``mount -o secret=`` argument
@@ -43,19 +54,36 @@ Options
 
    will create a new keyring, overwriting any existing keyringfile
 
-.. option:: --gen-key
+.. option:: -g, --gen-key
 
    will generate a new secret key for the specified entityname
 
-.. option:: --add-key
+.. option:: --gen-print-key
+
+   will generate a new secret key for the specified entityname,
+   without altering the keyringfile, printing the secret to stdout
+
+.. option:: --import-keyring *secondkeyringfile*
+
+   will import the content of a given keyring to the keyringfile
+
+.. option:: -n, --name *name*
+
+   specify entityname to operate on
+
+.. option:: -u, --set-uid *auid*
+
+   sets the auid (authenticated user id) for the specified entityname
+
+.. option:: -a, --add-key *base64_key*
 
    will add an encoded key to the keyring
 
-.. option:: --cap subsystem capability
+.. option:: --cap *subsystem* *capability*
 
    will set the capability for given subsystem
 
-.. option:: --caps capsfile
+.. option:: --caps *capsfile*
 
    will set all of capabilities associated with a given key, for all subsystems
 
@@ -165,7 +193,7 @@ When mounting a Ceph file system, you can grab the appropriately encoded secret 
 Availability
 ============
 
-**ceph-authtool** is part of the Ceph distributed storage system. Please
+**ceph-authtool** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

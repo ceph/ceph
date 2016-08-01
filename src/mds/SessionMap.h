@@ -64,7 +64,7 @@ public:
     STATE_KILLING = 5
   };
 
-  const char *get_state_name(int s) {
+  const char *get_state_name(int s) const {
     switch (s) {
     case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
@@ -82,13 +82,41 @@ private:
   int importing_count;
   friend class SessionMap;
 
-
   // Human (friendly) name is soft state generated from client metadata
   void _update_human_name();
   std::string human_name;
 
+  // Versions in this session was projected: used to verify
+  // that appropriate mark_dirty calls follow.
+  std::deque<version_t> projected;
+
+
+
 public:
 
+  void push_pv(version_t pv)
+  {
+    if (!projected.empty()) {
+      assert(projected.back() != pv);
+    }
+    projected.push_back(pv);
+  }
+
+  void pop_pv(version_t v)
+  {
+    assert(!projected.empty());
+    assert(projected.front() == v);
+    projected.pop_front();
+  }
+
+  inline int get_state() const {return state;}
+  void set_state(int new_state)
+  {
+    if (state != new_state) {
+      state = new_state;
+      state_seq++;
+    }
+  }
   void decode(bufferlist::iterator &p);
   void set_client_metadata(std::map<std::string, std::string> const &meta);
   std::string get_human_name() const {return human_name;}
@@ -145,20 +173,20 @@ public:
   }
 
   int get_state() { return state; }
-  const char *get_state_name() { return get_state_name(state); }
+  const char *get_state_name() const { return get_state_name(state); }
   uint64_t get_state_seq() { return state_seq; }
-  bool is_closed() { return state == STATE_CLOSED; }
-  bool is_opening() { return state == STATE_OPENING; }
-  bool is_open() { return state == STATE_OPEN; }
-  bool is_closing() { return state == STATE_CLOSING; }
-  bool is_stale() { return state == STATE_STALE; }
-  bool is_killing() { return state == STATE_KILLING; }
+  bool is_closed() const { return state == STATE_CLOSED; }
+  bool is_opening() const { return state == STATE_OPENING; }
+  bool is_open() const { return state == STATE_OPEN; }
+  bool is_closing() const { return state == STATE_CLOSING; }
+  bool is_stale() const { return state == STATE_STALE; }
+  bool is_killing() const { return state == STATE_KILLING; }
 
   void inc_importing() {
     ++importing_count;
   }
   void dec_importing() {
-    assert(importing_count);
+    assert(importing_count > 0);
     --importing_count;
   }
   bool is_importing() { return importing_count > 0; }
@@ -167,6 +195,7 @@ public:
 private:
   version_t cap_push_seq;        // cap push seq #
   map<version_t, list<MDSInternalContextBase*> > waitfor_flush; // flush session messages
+
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
@@ -201,17 +230,30 @@ public:
 
   // -- completed requests --
 private:
+  // Has completed_requests been modified since the last time we
+  // wrote this session out?
+  bool completed_requests_dirty;
 
-
+  unsigned num_trim_flushes_warnings;
+  unsigned num_trim_requests_warnings;
 public:
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
     info.completed_requests[t] = created;
+    completed_requests_dirty = true;
   }
-  void trim_completed_requests(ceph_tid_t mintid) {
+  bool trim_completed_requests(ceph_tid_t mintid) {
     // trim
+    bool erased_any = false;
     while (!info.completed_requests.empty() && 
-	   (mintid == 0 || info.completed_requests.begin()->first < mintid))
+	   (mintid == 0 || info.completed_requests.begin()->first < mintid)) {
       info.completed_requests.erase(info.completed_requests.begin());
+      erased_any = true;
+    }
+
+    if (erased_any) {
+      completed_requests_dirty = true;
+    }
+    return erased_any;
   }
   bool have_completed_request(ceph_tid_t tid, inodeno_t *pcreated) const {
     map<ceph_tid_t,inodeno_t>::const_iterator p = info.completed_requests.find(tid);
@@ -222,14 +264,60 @@ public:
     return true;
   }
 
+  void add_completed_flush(ceph_tid_t tid) {
+    info.completed_flushes.insert(tid);
+  }
+  bool trim_completed_flushes(ceph_tid_t mintid) {
+    bool erased_any = false;
+    while (!info.completed_flushes.empty() &&
+	(mintid == 0 || *info.completed_flushes.begin() < mintid)) {
+      info.completed_flushes.erase(info.completed_flushes.begin());
+      erased_any = true;
+    }
+    if (erased_any) {
+      completed_requests_dirty = true;
+    }
+    return erased_any;
+  }
+  bool have_completed_flush(ceph_tid_t tid) const {
+    return info.completed_flushes.count(tid);
+  }
+
+  unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }
+  unsigned get_num_trim_flushes_warnings() { return num_trim_flushes_warnings; }
+  void inc_num_trim_flushes_warnings() { ++num_trim_flushes_warnings; }
+  void reset_num_trim_flushes_warnings() { num_trim_flushes_warnings = 0; }
+
+  unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
+  unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
+  void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
+  void reset_num_trim_requests_warnings() { num_trim_requests_warnings = 0; }
+
+  bool has_dirty_completed_requests() const
+  {
+    return completed_requests_dirty;
+  }
+
+  void clear_dirty_completed_requests()
+  {
+    completed_requests_dirty = false;
+  }
+
+  int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
+		   int new_uid, int new_gid);
+
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     recalled_at(), recall_count(0), recall_release_count(0),
+    auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0),
-    lease_seq(0) { }
+    lease_seq(0),
+    completed_requests_dirty(false),
+    num_trim_flushes_warnings(0),
+    num_trim_requests_warnings(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
     while (!preopen_out_queue.empty()) {
@@ -246,60 +334,160 @@ public:
     last_cap_renew = utime_t();
 
   }
+};
 
+class SessionFilter
+{
+protected:
+  // First is whether to filter, second is filter value
+  std::pair<bool, bool> reconnecting;
+
+public:
+  std::map<std::string, std::string> metadata;
+  std::string auth_name;
+  std::string state;
+  int64_t id;
+
+  SessionFilter()
+    : reconnecting(false, false), id(0)
+  {}
+
+  bool match(
+      const Session &session,
+      std::function<bool(client_t)> is_reconnecting) const;
+  int parse(const std::vector<std::string> &args, std::stringstream *ss);
+  void set_reconnecting(bool v)
+  {
+    reconnecting.first = true;
+    reconnecting.second = v;
+  }
 };
 
 /*
  * session map
  */
 
-class MDS;
+class MDSRank;
 
-class SessionMap {
+/**
+ * Encapsulate the serialized state associated with SessionMap.  Allows
+ * encode/decode outside of live MDS instance.
+ */
+class SessionMapStore {
+protected:
+  version_t version;
 public:
-  MDS *mds;
-private:
   ceph::unordered_map<entity_name_t, Session*> session_map;
+  mds_rank_t rank;
+
+  version_t get_version() const {return version;}
+
+  virtual void encode_header(bufferlist *header_bl);
+  virtual void decode_header(bufferlist &header_bl);
+  virtual void decode_values(std::map<std::string, bufferlist> &session_vals);
+  virtual void decode_legacy(bufferlist::iterator& blp);
+  void dump(Formatter *f) const;
+
+  void set_rank(mds_rank_t r)
+  {
+    rank = r;
+  }
+
+  Session* get_or_add_session(const entity_inst_t& i) {
+    Session *s;
+    if (session_map.count(i.name)) {
+      s = session_map[i.name];
+    } else {
+      s = session_map[i.name] = new Session;
+      s->info.inst = i;
+      s->last_cap_renew = ceph_clock_now(g_ceph_context);
+    }
+
+    return s;
+  }
+
+  static void generate_test_instances(list<SessionMapStore*>& ls);
+
+  void reset_state()
+  {
+    session_map.clear();
+  }
+
+  SessionMapStore() : version(0), rank(MDS_RANK_NONE) {}
+  virtual ~SessionMapStore() {};
+};
+
+class SessionMap : public SessionMapStore {
+public:
+  MDSRank *mds;
+
+protected:
+  version_t projected, committing, committed;
 public:
   map<int,xlist<Session*>* > by_state;
-  
-public:  // i am lazy
-  version_t version, projected, committing, committed;
+  uint64_t set_state(Session *session, int state);
   map<version_t, list<MDSInternalContextBase*> > commit_waiters;
 
-public:
-  SessionMap(MDS *m) : mds(m), 
-		       version(0), projected(0), committing(0), committed(0) 
+  explicit SessionMap(MDSRank *m) : mds(m),
+		       projected(0), committing(0), committed(0),
+                       loaded_legacy(false)
   { }
-  
-  //for the dencoder
-  SessionMap() : mds(NULL), version(0), projected(0),
-		 committing(0), committed(0) {}
-    
+
+  ~SessionMap()
+  {
+    for (auto p : by_state)
+      delete p.second;
+  }
+
+  void set_version(const version_t v)
+  {
+    version = projected = v;
+  }
+
+  void set_projected(const version_t v)
+  {
+    projected = v;
+  }
+
+  version_t get_projected() const
+  {
+    return projected;
+  }
+
+  version_t get_committed() const
+  {
+    return committed;
+  }
+
+  version_t get_committing() const
+  {
+    return committing;
+  }
+
   // sessions
-  bool empty() { return session_map.empty(); }
+  void decode_legacy(bufferlist::iterator& blp);
+  bool empty() const { return session_map.empty(); }
   const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
   {
     return session_map;
   }
 
-  bool is_any_state(int state) {
-    map<int,xlist<Session*>* >::iterator p = by_state.find(state);
+  bool is_any_state(int state) const {
+    map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);
     if (p == by_state.end() || p->second->empty())
       return false;
     return true;
   }
 
-  bool have_unclosed_sessions() {
+  bool have_unclosed_sessions() const {
     return
-      is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPEN) ||
       is_any_state(Session::STATE_CLOSING) ||
       is_any_state(Session::STATE_STALE) ||
       is_any_state(Session::STATE_KILLING);
   }
-  bool have_session(entity_name_t w) {
+  bool have_session(entity_name_t w) const {
     return session_map.count(w);
   }
   Session* get_session(entity_name_t w) {
@@ -315,17 +503,7 @@ public:
       return p->second;
     }
   }
-  Session* get_or_add_session(const entity_inst_t& i) {
-    Session *s;
-    if (session_map.count(i.name)) {
-      s = session_map[i.name];
-    } else {
-      s = session_map[i.name] = new Session;
-      s->info.inst = i;
-      s->last_cap_renew = ceph_clock_now(g_ceph_context);
-    }
-    return s;
-  }
+
   void add_session(Session *s);
   void remove_session(Session *s);
   void touch_session(Session *session);
@@ -335,16 +513,7 @@ public:
       return 0;
     return by_state[state]->front();
   }
-  uint64_t set_state(Session *session, int s) {
-    if (session->state != s) {
-      session->state = s;
-      session->state_seq++;
-      if (by_state.count(s) == 0)
-	by_state[s] = new xlist<Session*>;
-      by_state[s]->push_back(&session->item_session_list);
-    }
-    return session->state_seq;
-  }
+
   void dump();
 
   void get_client_set(set<client_t>& s) {
@@ -400,18 +569,74 @@ public:
   inodeno_t ino;
   list<MDSInternalContextBase*> waiting_for_load;
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& blp);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<SessionMap*>& ls);
-
   object_t get_object_name();
 
   void load(MDSInternalContextBase *onload);
-  void _load_finish(int r, bufferlist &bl);
+  void _load_finish(
+      int operation_r,
+      int header_r,
+      int values_r,
+      bool first,
+      bufferlist &header_bl,
+      std::map<std::string, bufferlist> &session_vals);
+
+  void load_legacy();
+  void _load_legacy_finish(int r, bufferlist &bl);
+
   void save(MDSInternalContextBase *onsave, version_t needv=0);
   void _save_finish(version_t v);
- 
+
+protected:
+  std::set<entity_name_t> dirty_sessions;
+  std::set<entity_name_t> null_sessions;
+  bool loaded_legacy;
+  void _mark_dirty(Session *session);
+public:
+
+  /**
+   * Advance the version, and mark this session
+   * as dirty within the new version.
+   *
+   * Dirty means journalled but needing writeback
+   * to the backing store.  Must have called
+   * mark_projected previously for this session.
+   */
+  void mark_dirty(Session *session);
+
+  /**
+   * Advance the projected version, and mark this
+   * session as projected within the new version
+   *
+   * Projected means the session is updated in memory
+   * but we're waiting for the journal write of the update
+   * to finish.  Must subsequently call mark_dirty
+   * for sessions in the same global order as calls
+   * to mark_projected.
+   */
+  version_t mark_projected(Session *session);
+
+  /**
+   * During replay, advance versions to account
+   * for a session modification, and mark the
+   * session dirty.
+   */
+  void replay_dirty_session(Session *session);
+
+  /**
+   * During replay, if a session no longer present
+   * would have consumed a version, advance `version`
+   * and `projected` to account for that.
+   */
+  void replay_advance_version();
+
+  /**
+   * For these session IDs, if a session exists with this ID, and it has
+   * dirty completed_requests, then persist it immediately
+   * (ahead of usual project/dirty versioned writes
+   *  of the map).
+   */
+  void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
+                     MDSGatherBuilder *gather_bld);
 };
 
 

@@ -57,7 +57,7 @@ private:
   }
   
 
-  MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
+  MDSTableServer(MDSRank *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
   virtual ~MDSTableServer() {}
 
   void handle_request(MMDSTableRequest *m);

@@ -14,8 +14,10 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-: ${CORPUS:=https://github.com/dachary/ceph-erasure-code-corpus.git}
-: ${DIRECTORY:=../ceph-erasure-code-corpus}
+source $(dirname $0)/../../../src/test/detect-build-env-vars.sh
+
+: ${CORPUS:=https://github.com/ceph/ceph-erasure-code-corpus.git}
+: ${DIRECTORY:=$CEPH_ROOT/ceph-erasure-code-corpus}
 
 # when running from sources, the current directory must have precedence
 export PATH=:$PATH

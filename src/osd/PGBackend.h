@@ -18,14 +18,22 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "OSDMap.h"
-#include "PGLog.h"
 #include "osd_types.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
 #include "common/LogClient.h"
 #include <string>
+
+namespace Scrub {
+  class Store;
+}
+struct shard_info_wrapper;
+
+//forward declaration
+class OSDMap;
+class PGLog;
+typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
   * PGBackend
@@ -43,7 +51,7 @@
  protected:
    ObjectStore *store;
    const coll_t coll;
-   const coll_t temp_coll;
+   ObjectStore::CollectionHandle &ch;
  public:	
    /**
     * Provides interfaces for PGBackend callbacks
@@ -56,15 +64,11 @@
    public:
      /// Recovery
 
-     virtual void on_local_recover_start(
-       const hobject_t &oid,
-       ObjectStore::Transaction *t) = 0;
      /**
       * Called with the transaction recovering oid
       */
      virtual void on_local_recover(
        const hobject_t &oid,
-       const object_stat_sum_t &stat_diff,
        const ObjectRecoveryInfo &recovery_info,
        ObjectContextRef obc,
        ObjectStore::Transaction *t
@@ -74,7 +78,10 @@
       * Called when transaction recovering oid is durable and
       * applied on all replicas
       */
-     virtual void on_global_recover(const hobject_t &oid) = 0;
+     virtual void on_global_recover(
+       const hobject_t &oid,
+       const object_stat_sum_t &stat_diff
+       ) = 0;
 
      /**
       * Called when peer is recovered
@@ -106,7 +113,11 @@
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
-       ObjectStore::Transaction *t,
+       ObjectStore::Transaction&& t,
+       OpRequestRef op = OpRequestRef()
+       ) = 0;
+     virtual void queue_transactions(
+       vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual epoch_t get_epoch() const = 0;
@@ -117,13 +128,13 @@
 
      virtual std::string gen_dbg_prefix() const = 0;
 
-     virtual const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards()
+     virtual const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards()
        const = 0;
 
-     virtual const pg_missing_t &get_local_missing() const = 0;
+     virtual const pg_missing_tracker_t &get_local_missing() const = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
-     virtual boost::optional<const pg_missing_t &> maybe_get_shard_missing(
+     virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(
        pg_shard_t peer) const {
        if (peer == primary_shard()) {
 	 return get_local_missing();
@@ -131,14 +142,14 @@
 	 map<pg_shard_t, pg_missing_t>::const_iterator i =
 	   get_shard_missing().find(peer);
 	 if (i == get_shard_missing().end()) {
-	   return boost::optional<const pg_missing_t &>();
+	   return boost::optional<const pg_missing_const_i &>();
 	 } else {
 	   return i->second;
 	 }
        }
      }
-     virtual const pg_missing_t &get_shard_missing(pg_shard_t peer) const {
-       boost::optional<const pg_missing_t &> m = maybe_get_shard_missing(peer);
+     virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
+       auto m = maybe_get_shard_missing(peer);
        assert(m);
        return *m;
      }
@@ -173,12 +184,12 @@
        const hobject_t &hoid) = 0;
 
      virtual void log_operation(
-       vector<pg_log_entry_t> &logv,
+       const vector<pg_log_entry_t> &logv,
        boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &trim_rollback_to,
        bool transaction_applied,
-       ObjectStore::Transaction *t) = 0;
+       ObjectStore::Transaction &t) = 0;
 
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
@@ -204,6 +215,12 @@
      virtual spg_t primary_spg_t() const = 0;
      virtual pg_shard_t primary_shard() const = 0;
 
+     virtual uint64_t min_peer_features() const = 0;
+     virtual bool sort_bitwise() const = 0;
+
+     virtual hobject_t get_temp_recovery_object(eversion_t version,
+						snapid_t snap) = 0;
+
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
      virtual void send_message_osd_cluster(
@@ -223,11 +240,12 @@
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(Listener *l, ObjectStore *store, coll_t coll, coll_t temp_coll) :
+   PGBackend(Listener *l, ObjectStore *store, coll_t coll,
+	     ObjectStore::CollectionHandle &ch) :
      store(store),
      coll(coll),
-     temp_coll(temp_coll),
-     parent(l), temp_created(false) {}
+     ch(ch),
+     parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
@@ -245,6 +263,9 @@
     * the pending recovery operations.
     */
    struct RecoveryHandle {
+     bool cache_dont_need;
+
+     RecoveryHandle(): cache_dont_need(false) {}
      virtual ~RecoveryHandle() {}
    };
 
@@ -310,74 +331,30 @@
     * won't be called after on_change()
     */
    virtual void on_change() = 0;
-   virtual void clear_state() = 0;
+   virtual void clear_recovery_state() = 0;
 
    virtual void on_flushed() = 0;
 
-   class IsRecoverablePredicate {
-   public:
-     /**
-      * have encodes the shards available
-      */
-     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
-     virtual ~IsRecoverablePredicate() {}
-   };
-   virtual IsRecoverablePredicate *get_is_recoverable_predicate() = 0;
-
-   class IsReadablePredicate {
-   public:
-     /**
-      * have encodes the shards available
-      */
-     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
-     virtual ~IsReadablePredicate() {}
-   };
-   virtual IsReadablePredicate *get_is_readable_predicate() = 0;
-
-   void temp_colls(list<coll_t> *out) {
-     if (temp_created)
-       out->push_back(temp_coll);
-   }
-   void split_colls(
-     spg_t child,
-     int split_bits,
-     int seed,
-     ObjectStore::Transaction *t) {
-     coll_t target = coll_t::make_temp_coll(child);
-     if (!temp_created)
-       return;
-     t->create_collection(target);
-     t->split_collection(
-       temp_coll,
-       split_bits,
-       seed,
-       target);
-   }
+   virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() = 0;
+   virtual IsPGReadablePredicate *get_is_readable_predicate() = 0;
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
  private:
-   bool temp_created;
-   set<hobject_t> temp_contents;
+   set<hobject_t, hobject_t::BitwiseComparator> temp_contents;
  public:
-   coll_t get_temp_coll(ObjectStore::Transaction *t);
-   coll_t get_temp_coll() const {
-    return temp_coll;
-   }
-   bool have_temp_coll() const { return temp_created; }
-
    // Track contents of temp collection, clear on reset
    void add_temp_obj(const hobject_t &oid) {
      temp_contents.insert(oid);
    }
-   void add_temp_objs(const set<hobject_t> &oids) {
+   void add_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
      temp_contents.insert(oids.begin(), oids.end());
    }
    void clear_temp_obj(const hobject_t &oid) {
      temp_contents.erase(oid);
    }
-   void clear_temp_objs(const set<hobject_t> &oids) {
-     for (set<hobject_t>::const_iterator i = oids.begin();
+   void clear_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
+     for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = oids.begin();
 	  i != oids.end();
 	  ++i) {
        temp_contents.erase(*i);
@@ -426,7 +403,8 @@
      virtual void set_alloc_hint(
        const hobject_t &hoid,
        uint64_t expected_object_size,
-       uint64_t expected_write_size
+       uint64_t expected_write_size,
+       uint32_t flags
        ) = 0;
 
      /// Optional, not supported on ec-pool
@@ -434,15 +412,24 @@
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
        uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl         ///< [in] bl to write will be claimed to len
+       bufferlist &bl,        ///< [in] bl to write will be claimed to len
+       uint32_t fadvise_flags = 0 ///< [in] fadvise hint
        ) { assert(0); }
      virtual void omap_setkeys(
        const hobject_t &hoid,         ///< [in] object to write
        map<string, bufferlist> &keys  ///< [in] omap keys, may be cleared
        ) { assert(0); }
+     virtual void omap_setkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &keys_bl  ///< [in] omap keys, may be cleared
+       ) { assert(0); }
      virtual void omap_rmkeys(
        const hobject_t &hoid,         ///< [in] object to write
        set<string> &keys              ///< [in] omap keys, may be cleared
+       ) { assert(0); }
+     virtual void omap_rmkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &keys_bl            ///< [in] omap keys, may be cleared
        ) { assert(0); }
      virtual void omap_clear(
        const hobject_t &hoid          ///< [in] object to clear omap
@@ -475,8 +462,9 @@
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
        uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl         ///< [in] bl to write will be claimed to len
-       ) { write(hoid, off, len, bl); }
+       bufferlist &bl,        ///< [in] bl to write will be claimed to len
+       uint32_t fadvise_flags ///< [in] fadvise hint
+       ) { write(hoid, off, len, bl, fadvise_flags); }
 
      /// to_append *must* have come from the same PGBackend (same concrete type)
      virtual void append(
@@ -487,6 +475,8 @@
      virtual uint64_t get_bytes_written() const = 0;
      virtual ~PGTransaction() {}
    };
+   using PGTransactionUPtr = std::unique_ptr<PGTransaction>;
+
    /// Get implementation specific empty transaction
    virtual PGTransaction *get_transaction() = 0;
 
@@ -494,10 +484,10 @@
    virtual void submit_transaction(
      const hobject_t &hoid,               ///< [in] object
      const eversion_t &at_version,        ///< [in] version
-     PGTransaction *t,                    ///< [in] trans to execute
+     PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
      const eversion_t &trim_rollback_to,  ///< [in] trim rollback info to here
-     vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
+     const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
      Context *on_local_applied_sync,      ///< [in] called when applied locally
@@ -508,6 +498,11 @@
      OpRequestRef op                      ///< [in] op
      ) = 0;
 
+
+   void try_stash(
+     const hobject_t &hoid,
+     version_t v,
+     ObjectStore::Transaction *t);
 
    void rollback(
      const hobject_t &hoid,
@@ -532,6 +527,12 @@
      version_t old_version,
      ObjectStore::Transaction *t);
 
+   /// Unstash object to rollback stash
+   void rollback_try_stash(
+     const hobject_t &hoid,
+     version_t old_version,
+     ObjectStore::Transaction *t);
+
    /// Delete object to rollback create
    void rollback_create(
      const hobject_t &hoid,
@@ -548,7 +549,6 @@
      const hobject_t &begin,
      int min,
      int max,
-     snapid_t seq,
      vector<hobject_t> *ls,
      hobject_t *next);
 
@@ -572,48 +572,57 @@
      const hobject_t &hoid,
      uint64_t off,
      uint64_t len,
+     uint32_t op_flags,
      bufferlist *bl) = 0;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const list<pair<pair<uint64_t, uint64_t>,
+     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
-     Context *on_complete) = 0;
+     Context *on_complete, bool fast_read = false) = 0;
 
-   virtual bool scrub_supported() { return false; }
+   virtual bool scrub_supported() = 0;
+   virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
-     ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+     ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
    enum scrub_error_type be_compare_scrub_objects(
+     pg_shard_t auth_shard,
      const ScrubMap::object &auth,
+     const object_info_t& auth_oi,
      const ScrubMap::object &candidate,
+     shard_info_wrapper& shard_error,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
-     const map<pg_shard_t,ScrubMap*> &maps);
+     const map<pg_shard_t,ScrubMap*> &maps,
+     object_info_t *auth_oi);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
-     map<hobject_t, set<pg_shard_t> > &missing,
-     map<hobject_t, set<pg_shard_t> > &inconsistent,
-     map<hobject_t, pg_shard_t> &authoritative,
-     map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
+     bool repair,
+     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
+     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
+     map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
+     map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
      int &shallow_errors, int &deep_errors,
+     Scrub::Store *store,
      const spg_t& pgid,
      const vector<int> &acting,
      ostream &errorstream);
    virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) { assert(0); return 0; }
+     uint64_t logical_size) = 0;
    virtual void be_deep_scrub(
      const hobject_t &poid,
+     uint32_t seed,
      ScrubMap::object &o,
-     ThreadPool::TPHandle &handle) { assert(0); }
+     ThreadPool::TPHandle &handle) = 0;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
      const OSDMapRef curmap,
      Listener *l,
      coll_t coll,
-     coll_t temp_coll,
+     ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
  };

@@ -1,3 +1,5 @@
+#include "include/int_types.h"
+
 TRACEPOINT_EVENT(objectstore, exists_enter,
     TP_ARGS(
         const char *, coll_name),
@@ -511,6 +513,19 @@ TRACEPOINT_EVENT(objectstore, coll_move_rename_enter,
 )
 
 TRACEPOINT_EVENT(objectstore, coll_move_rename_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, coll_try_rename_enter,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(objectstore, coll_try_rename_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(

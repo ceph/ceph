@@ -24,6 +24,9 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include "include/Context.h"
+#include "include/atomic.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/Event.h"
@@ -138,26 +141,30 @@ TEST_P(EventDriverTest, PipeTest) {
 void* echoclient(void *arg)
 {
   intptr_t port = (intptr_t)arg;
-  int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in sa;
+  memset(&sa, 0, sizeof(sa));
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
-  int r = inet_aton(addr, &sa.sin_addr);
-  r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
-  int t = 0;
+  int r = inet_pton(AF_INET, addr, &sa.sin_addr);
 
-  do {
-    char c[] = "banner";
-    r = write(connect_sd, c, sizeof(c));
-    char d[100];
-    r = read(connect_sd, d, sizeof(d));
-    if (r == 0)
-      break;
-    if (t++ == 30)
-      break;
-  } while (1);
-  ::close(connect_sd);
+  int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (connect_sd >= 0) {
+    r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
+    int t = 0;
+  
+    do {
+      char c[] = "banner";
+      r = write(connect_sd, c, sizeof(c));
+      char d[100];
+      r = read(connect_sd, d, sizeof(d));
+      if (r == 0)
+        break;
+      if (t++ == 30)
+        break;
+    } while (1);
+    ::close(connect_sd);
+  }
   return 0;
 }
 
@@ -170,7 +177,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
   r = set_nonblock(listen_sd);
   ASSERT_EQ(r, 0);
   struct sockaddr_in sa;
-  int port = 0;
+  long port = 0;
   for (port = 38788; port < 40000; port++) {
     memset(&sa,0,sizeof(sa));
     sa.sin_family = AF_INET;
@@ -237,6 +244,87 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
 
   ::close(client_sd);
   ::close(listen_sd);
+}
+
+class FakeEvent : public EventCallback {
+
+ public:
+  void do_request(int fd_or_id) {}
+};
+
+TEST(EventCenterTest, FileEventExpansion) {
+  vector<int> sds;
+  EventCenter center(g_ceph_context);
+  center.init(100, 0);
+  center.set_owner();
+  EventCallbackRef e(new FakeEvent());
+  for (int i = 0; i < 300; i++) {
+    int sd = ::socket(AF_INET, SOCK_STREAM, 0);
+    center.create_file_event(sd, EVENT_READABLE, e);
+    sds.push_back(sd);
+  }
+
+  for (vector<int>::iterator it = sds.begin(); it != sds.end(); ++it)
+    center.delete_file_event(*it, EVENT_READABLE);
+}
+
+
+class Worker : public Thread {
+  CephContext *cct;
+  bool done;
+
+ public:
+  EventCenter center;
+  explicit Worker(CephContext *c, int idx): cct(c), done(false), center(c) {
+    center.init(100, idx);
+  }
+  void stop() {
+    done = true; 
+    center.wakeup();
+  }
+  void* entry() {
+    center.set_owner();
+    while (!done)
+      center.process_events(1000000);
+    return 0;
+  }
+};
+
+class CountEvent: public EventCallback {
+  atomic_t *count;
+  Mutex *lock;
+  Cond *cond;
+
+ public:
+  CountEvent(atomic_t *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
+  void do_request(int id) {
+    lock->Lock();
+    count->dec();
+    cond->Signal();
+    lock->Unlock();
+  }
+};
+
+TEST(EventCenterTest, DispatchTest) {
+  Worker worker1(g_ceph_context, 1), worker2(g_ceph_context, 2);
+  atomic_t count(0);
+  Mutex lock("DispatchTest::lock");
+  Cond cond;
+  worker1.create("worker_1");
+  worker2.create("worker_2");
+  for (int i = 0; i < 10000; ++i) {
+    count.inc();
+    worker1.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
+    count.inc();
+    worker2.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
+    Mutex::Locker l(lock);
+    while (count.read())
+      cond.Wait(lock);
+  }
+  worker1.stop();
+  worker2.stop();
+  worker1.join();
+  worker2.join();
 }
 
 INSTANTIATE_TEST_CASE_P(

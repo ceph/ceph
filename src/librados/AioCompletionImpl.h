@@ -42,6 +42,7 @@ struct librados::AioCompletionImpl {
   bool is_read;
   bufferlist bl;
   bufferlist *blp;
+  char *out_buf;
 
   IoCtxImpl *io;
   ceph_tid_t aio_write_seq;
@@ -55,7 +56,7 @@ struct librados::AioCompletionImpl {
 			callback_safe(0),
 			callback_complete_arg(0),
 			callback_safe_arg(0),
-			is_read(false), blp(NULL),
+			is_read(false), blp(nullptr), out_buf(nullptr),
 			io(NULL), aio_write_seq(0), aio_write_list_item(this) { }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
@@ -170,7 +171,7 @@ namespace librados {
 struct C_AioComplete : public Context {
   AioCompletionImpl *c;
 
-  C_AioComplete(AioCompletionImpl *cc) : c(cc) {
+  explicit C_AioComplete(AioCompletionImpl *cc) : c(cc) {
     c->_get();
   }
 
@@ -189,7 +190,7 @@ struct C_AioComplete : public Context {
 struct C_AioSafe : public Context {
   AioCompletionImpl *c;
 
-  C_AioSafe(AioCompletionImpl *cc) : c(cc) {
+  explicit C_AioSafe(AioCompletionImpl *cc) : c(cc) {
     c->_get();
   }
 
@@ -216,7 +217,7 @@ struct C_AioSafe : public Context {
 struct C_AioCompleteAndSafe : public Context {
   AioCompletionImpl *c;
 
-  C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
+  explicit C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
     c->get();
   }
 

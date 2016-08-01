@@ -19,11 +19,23 @@ set -e
 # convert device string to options
 cephargs='--'`echo $1 | sed 's/,/ --/g'`
 
+# get mount point
+mountpoint=$2
+
+shift 2
+
+while [ "$1" != "-o" ]
+do
+        shift
+done
+
+opts=$2
+
 # strip out 'noauto' option; libfuse doesn't like it
-opts=`echo $4 | sed 's/,noauto//' | sed 's/noauto,//'`
+opts=`echo $opts | sed 's/,noauto//' | sed 's/noauto,//'`
 
 # strip out '_netdev' option; libfuse doesn't like it
 opts=`echo $opts | sed 's/,_netdev//' | sed 's/_netdev,//'`
 
 # go
-exec ceph-fuse $cephargs $2 $3 $opts
+exec ceph-fuse $cephargs $mountpoint -o $opts

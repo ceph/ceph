@@ -53,10 +53,11 @@ public:
     if (header.version < 2)
       request_ack = true;    // assume true for older clients
   }
+
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(target_osd, payload);
+    ::encode(target_osd, payload, features);
     ::encode(epoch, payload);
     ::encode(request_ack, payload);
   }

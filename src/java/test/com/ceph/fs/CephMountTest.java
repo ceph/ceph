@@ -47,6 +47,7 @@ public class CephMountTest {
     String conf_file = System.getProperty("CEPH_CONF_FILE");
     if (conf_file != null)
       mount.conf_read_file(conf_file);
+    mount.conf_set("client_permissions", "0");
 
     mount.mount(null);
 
@@ -69,6 +70,18 @@ public class CephMountTest {
   public String makePath() {
     String path = basedir + "/" + UUID.randomUUID();
     return path;
+  }
+
+  /*
+   * Helper to learn the data pool name, by reading it
+   * from the '/' dir inode.
+   */
+  public String getRootPoolName() throws Exception
+  {
+    int fd = mount.open("/", CephMount.O_DIRECTORY, 0600);
+    String pool = mount.get_file_pool_name(fd);
+    mount.close(fd);
+    return pool;
   }
 
   /*
@@ -764,6 +777,10 @@ public class CephMountTest {
     int crop_size = 333333;
     mount.ftruncate(fd, crop_size);
     mount.fstat(fd, st);
+    if (st.size != crop_size) {
+      System.err.println("ftruncate error: st.size=" + st.size + " crop_size=" + crop_size);
+      assertTrue(false);
+    }
     assertTrue(st.size == crop_size);
     mount.close(fd);
 
@@ -786,6 +803,35 @@ public class CephMountTest {
     int fd = createFile(path, 123);
     mount.fsync(fd, false);
     mount.fsync(fd, true);
+    mount.close(fd);
+    mount.unlink(path);
+  }
+
+  /*
+   * flock
+   */
+
+  @Test
+  public void test_flock() throws Exception {
+    String path = makePath();
+    int fd = createFile(path, 123);
+    mount.flock(fd, CephMount.LOCK_SH | CephMount.LOCK_NB, 42);
+    mount.flock(fd, CephMount.LOCK_SH | CephMount.LOCK_NB, 43);
+    mount.flock(fd, CephMount.LOCK_UN, 42);
+    mount.flock(fd, CephMount.LOCK_UN, 43);
+    mount.flock(fd, CephMount.LOCK_EX | CephMount.LOCK_NB, 42);
+    try {
+      mount.flock(fd, CephMount.LOCK_SH | CephMount.LOCK_NB, 43);
+      assertTrue(false);
+    } catch(IOException io) {}
+    try {
+      mount.flock(fd, CephMount.LOCK_EX | CephMount.LOCK_NB, 43);
+      assertTrue(false);
+    } catch(IOException io) {}
+    mount.flock(fd, CephMount.LOCK_SH, 42);  // downgrade
+    mount.flock(fd, CephMount.LOCK_SH, 43);
+    mount.flock(fd, CephMount.LOCK_UN, 42);
+    mount.flock(fd, CephMount.LOCK_UN, 43);
     mount.close(fd);
     mount.unlink(path);
   }
@@ -902,17 +948,11 @@ public class CephMountTest {
     assertTrue(mount.get_stripe_unit_granularity() > 0);
   }
 
-  /*
-   * pool info. below we use "data" and "metadata" pool names which we assume
-   * to exist (they are the default pools created for file data / metadata in
-   * CephFS).
-   */
-
   @Test
   public void test_get_pool_id() throws Exception {
-    /* returns valid pool ids */
-    assertTrue(mount.get_pool_id("data") >= 0);
-    assertTrue(mount.get_pool_id("metadata") >= 0);
+    String data_pool_name = getRootPoolName();
+    /* returns valid pool id */
+    assertTrue(mount.get_pool_id(data_pool_name) >= 0);
 
     /* test non-existent pool name */
     try {
@@ -930,20 +970,22 @@ public class CephMountTest {
     } catch (CephPoolException e) {}
 
     /* test valid pool id */
-    int poolid = mount.get_pool_id("data");
+    String data_pool_name = getRootPoolName();
+    int poolid = mount.get_pool_id(data_pool_name);
     assertTrue(poolid >= 0);
     assertTrue(mount.get_pool_replication(poolid) > 0);
   }
 
   @Test
   public void test_get_file_pool_name() throws Exception {
+    String data_pool_name = getRootPoolName();
     String path = makePath();
     int fd = createFile(path, 1);
     String pool = mount.get_file_pool_name(fd);
     mount.close(fd);
     assertTrue(pool != null);
-    /* assumes using default data pool "data" */
-    assertTrue(pool.compareTo("data") == 0);
+    /* assumes using default data pool */
+    assertTrue(pool.compareTo(data_pool_name) == 0);
     mount.unlink(path);
   }
 

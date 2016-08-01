@@ -1,0 +1,26 @@
+# /etc/sysconfig/ceph
+#
+# Environment file for ceph daemon systemd unit files.
+#
+
+# Increase tcmalloc cache size
+TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728
+
+## use jemalloc instead of tcmalloc
+#
+# jemalloc is generally faster for small IO workloads and when
+# ceph-osd is backed by SSDs.  However, memory usage is usually
+# higher by 200-300mb.
+#
+#LD_PRELOAD=/usr/lib64/libjemalloc.so.1
+
+## automatically restart systemd units on upgrade
+#
+# By default, it is left to the administrator to restart
+# ceph daemons (or their related systemd units) manually
+# when the 'ceph' package is upgraded. By setting this
+# parameter to "yes", package upgrade will trigger a 
+# "systemctl try-restart" on all the ceph systemd units
+# currently active on the node.
+#
+CEPH_AUTO_RESTART_ON_UPGRADE=no

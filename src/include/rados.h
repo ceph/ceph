@@ -142,6 +142,10 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NOSCRUB  (1<<11) /* block periodic scrub */
 #define CEPH_OSDMAP_NODEEP_SCRUB (1<<12) /* block periodic deep-scrub */
 #define CEPH_OSDMAP_NOTIERAGENT (1<<13) /* disable tiering agent */
+#define CEPH_OSDMAP_NOREBALANCE (1<<14) /* block osd backfill unless pg is degraded */
+#define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
+#define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
+#define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -164,7 +168,6 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_OP_MODE_CACHE 0x8000
 
 #define CEPH_OSD_OP_TYPE       0x0f00
-#define CEPH_OSD_OP_TYPE_LOCK  0x0100
 #define CEPH_OSD_OP_TYPE_DATA  0x0200
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
@@ -249,6 +252,13 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* hints */							    \
 	f(SETALLOCHINT,	__CEPH_OSD_OP(WR, DATA, 35),	"set-alloc-hint")   \
+                                                                            \
+	/* cache pin/unpin */						    \
+	f(CACHE_PIN,	__CEPH_OSD_OP(WR, DATA, 36),	"cache-pin")        \
+	f(CACHE_UNPIN,	__CEPH_OSD_OP(WR, DATA, 37),	"cache-unpin")      \
+									    \
+	/* ESX/SCSI */							    \
+	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
 									    \
 	/** multi **/							    \
 	f(CLONERANGE,	__CEPH_OSD_OP(WR, MULTI, 1),	"clonerange")	    \
@@ -275,16 +285,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(SCRUB,	__CEPH_OSD_OP1(SUB, 5),		"scrub")	    \
 	f(SCRUB_RESERVE, __CEPH_OSD_OP1(SUB, 6),	"scrub-reserve")    \
 	f(SCRUB_UNRESERVE, __CEPH_OSD_OP1(SUB, 7),	"scrub-unreserve")  \
-	f(SCRUB_STOP,	__CEPH_OSD_OP1(SUB, 8),		"scrub-stop")	    \
+	/* 8 used to be scrub-stop */					\
 	f(SCRUB_MAP,	__CEPH_OSD_OP1(SUB, 9),		"scrub-map")	    \
-									    \
-	/** lock **/							    \
-	f(WRLOCK,	__CEPH_OSD_OP(WR, LOCK, 1),	"wrlock")	    \
-	f(WRUNLOCK,	__CEPH_OSD_OP(WR, LOCK, 2),	"wrunlock")	    \
-	f(RDLOCK,	__CEPH_OSD_OP(WR, LOCK, 3),	"rdlock")	    \
-	f(RDUNLOCK,	__CEPH_OSD_OP(WR, LOCK, 4),	"rdunlock")	    \
-	f(UPLOCK,	__CEPH_OSD_OP(WR, LOCK, 5),	"uplock")	    \
-	f(DNLOCK,	__CEPH_OSD_OP(WR, LOCK, 6),	"dnlock")	    \
 									    \
 	/** exec **/							    \
 	/* note: the RD bit here is wrong; see special-case below in helper */ \
@@ -296,7 +298,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_LS,	__CEPH_OSD_OP(RD, PG, 3),	"pg-hitset-ls")	    \
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
-	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")
+	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")     \
+	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -304,10 +307,6 @@ __CEPH_FORALL_OSD_OPS(GENERATE_ENUM_ENTRY)
 #undef GENERATE_ENUM_ENTRY
 };
 
-static inline int ceph_osd_op_type_lock(int op)
-{
-	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_LOCK;
-}
 static inline int ceph_osd_op_type_data(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_DATA;
@@ -409,11 +408,18 @@ enum {
 						      pool uses pool snaps */
 	CEPH_OSD_FLAG_REDIRECTED   = 0x200000,  /* op has been redirected */
 	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
+	CEPH_OSD_FLAG_FULL_TRY =    0x800000,  /* try op despite full flag */
+	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
 };
 
 enum {
-	CEPH_OSD_OP_FLAG_EXCL = 1,      /* EXCL object create */
-	CEPH_OSD_OP_FLAG_FAILOK = 2,    /* continue despite failure */
+	CEPH_OSD_OP_FLAG_EXCL = 0x1,      /* EXCL object create */
+	CEPH_OSD_OP_FLAG_FAILOK = 0x2,    /* continue despite failure */
+	CEPH_OSD_OP_FLAG_FADVISE_RANDOM     = 0x4, /* the op is random */
+	CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL = 0x8, /* the op is sequential */
+	CEPH_OSD_OP_FLAG_FADVISE_WILLNEED   = 0x10,/* data will be accessed in the near future */
+	CEPH_OSD_OP_FLAG_FADVISE_DONTNEED   = 0x20,/* data will not be accessed in the near future */
+	CEPH_OSD_OP_FLAG_FADVISE_NOCACHE   = 0x40, /* data will be accessed only once by this client */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
@@ -440,11 +446,39 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE = 4, /* ignore osd cache logic */
 	CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE = 8, /* map snap direct to
 						     * cloneid */
+	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
 };
 
 enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
+
+enum {
+	CEPH_OSD_WATCH_OP_UNWATCH = 0,
+	CEPH_OSD_WATCH_OP_LEGACY_WATCH = 1,
+	/* note: use only ODD ids to prevent pre-giant code from
+	   interpreting the op as UNWATCH */
+	CEPH_OSD_WATCH_OP_WATCH = 3,
+	CEPH_OSD_WATCH_OP_RECONNECT = 5,
+	CEPH_OSD_WATCH_OP_PING = 7,
+};
+
+const char *ceph_osd_watch_op_name(int o);
+
+enum {
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
+	CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
+	CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ = 8,
+	CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY = 16,
+	CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE = 32,
+	CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED = 64,
+	CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED = 128,
+	CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
+	CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
+};
+
+const char *ceph_osd_alloc_hint_flag_name(int f);
 
 /*
  * an individual object operation.  each may be accompanied by some data
@@ -452,7 +486,7 @@ enum {
  */
 struct ceph_osd_op {
 	__le16 op;           /* CEPH_OSD_OP_* */
-	__le32 flags;        /* CEPH_OSD_FLAG_* */
+	__le32 flags;        /* CEPH_OSD_OP_FLAG_* */
 	union {
 		struct {
 			__le64 offset, length;
@@ -480,9 +514,13 @@ struct ceph_osd_op {
 	        } __attribute__ ((packed)) snap;
 		struct {
 			__le64 cookie;
-			__le64 ver;
-			__u8 flag;	/* 0 = unwatch, 1 = watch */
+			__le64 ver;     /* no longer used */
+			__u8 op;	/* CEPH_OSD_WATCH_OP_* */
+			__u32 gen;      /* registration generation */
 		} __attribute__ ((packed)) watch;
+		struct {
+			__le64 cookie;
+		} __attribute__ ((packed)) notify;
 		struct {
 			__le64 unused;
 			__le64 ver;
@@ -498,6 +536,11 @@ struct ceph_osd_op {
 			__le64 snapid;
 			__le64 src_version;
 			__u8 flags;
+			/*
+			 * __le32 flags: CEPH_OSD_OP_FLAG_FADVISE_: mean the fadvise flags for dest object
+			 * src_fadvise_flags mean the fadvise flags for src object
+			 */
+			__le32 src_fadvise_flags;
 		} __attribute__ ((packed)) copy_from;
 		struct {
 			struct ceph_timespec stamp;
@@ -508,7 +551,13 @@ struct ceph_osd_op {
 		struct {
 			__le64 expected_object_size;
 			__le64 expected_write_size;
+			__le32 flags;  /* CEPH_OSD_OP_ALLOC_HINT_FLAG_* */
 		} __attribute__ ((packed)) alloc_hint;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le64 data_length;
+		} __attribute__ ((packed)) writesame;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

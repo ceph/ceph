@@ -15,8 +15,6 @@
 #ifndef CEPH_COMPATSET_H
 #define CEPH_COMPATSET_H
 #include "include/buffer.h"
-#include <vector>
-
 #include "common/Formatter.h"
 
 struct CompatSet {
@@ -25,23 +23,29 @@ struct CompatSet {
     uint64_t id;
     string name;
 
-    Feature(uint64_t _id, const char *_name) : id(_id), name(_name) {}
     Feature(uint64_t _id, const string& _name) : id(_id), name(_name) {}
   };
 
-  struct FeatureSet {
+  class FeatureSet {
     uint64_t mask;
     map <uint64_t,string> names;
 
+  public:
+    friend struct CompatSet;
+    friend class CephCompatSet_AllSet_Test;
+    friend class CephCompatSet_other_Test;
+    friend class CephCompatSet_merge_Test;
+    friend ostream& operator<<(ostream& out, const CompatSet::FeatureSet& fs);
+    friend ostream& operator<<(ostream& out, const CompatSet& compat);
     FeatureSet() : mask(1), names() {}
-    void insert(Feature f) {
+    void insert(const Feature& f) {
       assert(f.id > 0);
       assert(f.id < 64);
       mask |= ((uint64_t)1<<f.id);
       names[f.id] = f.name;
     }
 
-    bool contains(Feature f) const {
+    bool contains(const Feature& f) const {
       return names.count(f.id);
     }
     bool contains(uint64_t f) const {
@@ -55,13 +59,14 @@ struct CompatSet {
       assert(i != names.end());
       return i->second;
     }
+
     void remove(uint64_t f) {
       if (names.count(f)) {
 	names.erase(f);
 	mask &= ~((uint64_t)1<<f);
       }
     }
-    void remove(Feature f) {
+    void remove(const Feature& f) {
       remove(f.id);
     }
 
@@ -103,7 +108,7 @@ struct CompatSet {
       for (map<uint64_t,string>::const_iterator p = names.begin();
 	   p != names.end();
 	   ++p) {
-	char s[10];
+	char s[18];
 	snprintf(s, sizeof(s), "feature_%lld", (unsigned long long)p->first);
 	f->dump_string(s, p->second);
       }
@@ -146,7 +151,7 @@ struct CompatSet {
    * -1: This CompatSet is missing at least one feature
    *     described in the other. It may still have more features, though.
    */
-  int compare(CompatSet& other) {
+  int compare(const CompatSet& other) {
     if ((other.compat.mask == compat.mask) &&
 	(other.ro_compat.mask == ro_compat.mask) &&
 	(other.incompat.mask == incompat.mask)) return 0;

@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "common/valgrind.h"
 #include "auth/Crypto.h"
 #include "include/Spinlock.h"
 
@@ -38,22 +39,23 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  */
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
-				 string mname, uint64_t _nonce)
+				 string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
-    dispatch_queue(cct, this),
+    dispatch_queue(cct, this, mname),
     reaper_thread(this),
     nonce(_nonce),
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
     cluster_protocol(0),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname,
-		       cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
     local_connection(new PipeConnection(cct, this))
 {
+  ANNOTATE_BENIGN_RACE_SIZED(&timeout, sizeof(timeout),
+                             "SimpleMessenger read timeout");
   ceph_spin_init(&global_seq_lock);
+  local_features = features;
   init_local_connection();
 }
 
@@ -66,6 +68,7 @@ SimpleMessenger::~SimpleMessenger()
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(!reaper_started); // the reaper thread is stopped
+  ceph_spin_destroy(&global_seq_lock);
 }
 
 void SimpleMessenger::ready()
@@ -95,6 +98,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myname();
+  m->set_cct(cct);
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
@@ -141,11 +145,11 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
+void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
   if (my_inst.addr.is_blank_ip()) {
     int port = my_inst.addr.get_port();
-    my_inst.addr.addr = addr.addr;
+    my_inst.addr.u = addr.u;
     my_inst.addr.set_port(port);
     init_local_connection();
   }
@@ -189,16 +193,6 @@ int SimpleMessenger::get_proto_version(int peer_type, bool connect)
  */
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-
-void SimpleMessenger::dispatch_throttle_release(uint64_t msize)
-{
-  if (msize) {
-    ldout(cct,10) << "dispatch_throttle_release " << msize << " to dispatch throttler "
-	    << dispatch_throttler.get_current() << "/"
-	    << dispatch_throttler.get_max() << dendl;
-    dispatch_throttler.put(msize);
-  }
-}
 
 void SimpleMessenger::reaper_entry()
 {
@@ -266,7 +260,19 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
   lock.Unlock();
 }
 
-
+bool SimpleMessenger::is_connected(Connection *con)
+{
+  bool r = false;
+  if (con) {
+    Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
+    if (p) {
+      assert(p->msgr == this);
+      r = p->is_connected();
+      p->put();
+    }
+  }
+  return r;
+}
 
 int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 {
@@ -315,7 +321,7 @@ int SimpleMessenger::start()
   lock.Unlock();
 
   reaper_started = true;
-  reaper_thread.create();
+  reaper_thread.create("ms_reaper");
   return 0;
 }
 
@@ -466,6 +472,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
   if (my_inst.addr == dest_addr) {
     // local
     ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+    m->set_connection(local_connection.get());
     dispatch_queue.local_delivery(m, m->get_priority());
     return;
   }
@@ -520,9 +527,10 @@ void SimpleMessenger::wait()
   }
   lock.Unlock();
 
-  if(dispatch_queue.is_started()) {
+  if (dispatch_queue.is_started()) {
     ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
     dispatch_queue.wait();
+    dispatch_queue.discard_local();
     ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   }
 
@@ -686,7 +694,9 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    my_inst.addr.addr = t.addr;
+    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr.u, sizeof(my_inst.addr.u),
+                               "SimpleMessenger learned addr");
+    my_inst.addr.u = t.u;
     ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     init_local_connection();
@@ -698,5 +708,6 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_inst.name.type();
+  local_connection->set_features(local_features);
   ms_deliver_handle_fast_connect(local_connection.get());
 }

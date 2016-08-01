@@ -15,10 +15,7 @@
 #ifndef CEPH_ROTATINGKEYRING_H
 #define CEPH_ROTATINGKEYRING_H
 
-#include "common/config.h"
 #include "common/Mutex.h"
-
-#include "auth/Crypto.h"
 #include "auth/Auth.h"
 
 /*
@@ -26,6 +23,7 @@
  */
 
 class KeyRing;
+class CephContext;
 
 class RotatingKeyRing : public KeyStore {
   CephContext *cct;

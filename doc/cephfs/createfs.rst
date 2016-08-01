@@ -54,9 +54,8 @@ an *active* state.  For example, in a single MDS system:
 Once the filesystem is created and the MDS is active, you are ready to mount
 the filesystem:
 
-.. toctree:: 
-	:maxdepth: 1
+	- `Mount CephFS`_
+	- `Mount CephFS as FUSE`_
 
-	Mount Ceph FS <kernel>
-	Mount Ceph FS as FUSE <fuse>
-
+.. _Mount CephFS: ../../cephfs/kernel
+.. _Mount CephFS as FUSE: ../../cephfs/fuse

@@ -17,6 +17,7 @@
 
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/shared_mutex.hpp>
+#include "rbd_replay/ActionTypes.h"
 #include "BoundedBuffer.hpp"
 #include "ImageNameMap.hpp"
 #include "PendingIO.hpp"
@@ -76,7 +77,7 @@ private:
 
 class Replayer {
 public:
-  Replayer(int num_action_trackers);
+  explicit Replayer(int num_action_trackers);
 
   ~Replayer();
 
@@ -100,7 +101,7 @@ public:
 
   bool is_action_complete(action_id_t id);
 
-  void wait_for_actions(const std::vector<dependency_d> &deps);
+  void wait_for_actions(const action::Dependencies &deps);
 
   std::string pool_name() const;
 

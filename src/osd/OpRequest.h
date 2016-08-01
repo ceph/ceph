@@ -63,14 +63,36 @@ struct OpRequest : public TrackedOp {
   bool includes_pg_op();
   bool need_read_cap();
   bool need_write_cap();
-  bool need_class_read_cap();
-  bool need_class_write_cap();
+  bool need_promote();
+  bool need_skip_handle_cache();
+  bool need_skip_promote();
   void set_read();
   void set_write();
   void set_cache();
   void set_class_read();
   void set_class_write();
   void set_pg_op();
+  void set_promote();
+  void set_skip_handle_cache();
+  void set_skip_promote();
+
+  struct ClassInfo {
+    ClassInfo(const std::string& name, bool read, bool write,
+        bool whitelisted) :
+      name(name), read(read), write(write), whitelisted(whitelisted)
+    {}
+    const std::string name;
+    const bool read, write, whitelisted;
+  };
+
+  void add_class(const std::string& name, bool read, bool write,
+      bool whitelisted) {
+    classes_.emplace_back(name, read, write, whitelisted);
+  }
+
+  std::vector<ClassInfo> classes() const {
+    return classes_;
+  }
 
   void _dump(utime_t now, Formatter *f) const;
 
@@ -91,6 +113,8 @@ private:
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
 
+  std::vector<ClassInfo> classes_;
+
   OpRequest(Message *req, OpTracker *tracker);
 
 protected:
@@ -103,6 +127,7 @@ public:
   }
   bool send_map_update;
   epoch_t sent_epoch;
+  bool hitset_inserted;
   Message *get_req() const { return request; }
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
@@ -136,13 +161,13 @@ public:
   void mark_reached_pg() {
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
-  void mark_delayed(string s) {
+  void mark_delayed(const string& s) {
     mark_flag_point(flag_delayed, s);
   }
   void mark_started() {
     mark_flag_point(flag_started, "started");
   }
-  void mark_sub_op_sent(string s) {
+  void mark_sub_op_sent(const string& s) {
     mark_flag_point(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
@@ -164,9 +189,11 @@ public:
 
 private:
   void set_rmw_flags(int flags);
-  void mark_flag_point(uint8_t flag, string s);
+  void mark_flag_point(uint8_t flag, const string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
+
+ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i);
 
 #endif /* OPREQUEST_H_ */

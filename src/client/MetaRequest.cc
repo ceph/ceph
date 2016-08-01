@@ -37,13 +37,6 @@ void MetaRequest::dump(Formatter *f) const
 
   f->dump_int("got_unsafe", got_unsafe);
 
-  if (head.op == CEPH_MDS_OP_READDIR ||
-      head.op == CEPH_MDS_OP_LSSNAP) {
-    f->dump_stream("readdir_frag") << readdir_frag;
-    f->dump_string("readdir_start", readdir_start);
-    f->dump_unsigned("readdir_offset", readdir_offset);
-  }
-
   f->dump_unsigned("uid", head.caller_uid);
   f->dump_unsigned("gid", head.caller_gid);
 
@@ -53,46 +46,18 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("num_retry", head.num_retry);
   f->dump_unsigned("num_fwd", head.num_fwd);
   f->dump_unsigned("num_releases", head.num_releases);
+
+  f->dump_int("abort_rc", abort_rc);
 }
 
 MetaRequest::~MetaRequest()
 {
-  assert(!_inode);
-  assert(!_old_inode);
-  assert(!_other_inode);
   if (_dentry)
     _dentry->put();
   if (_old_dentry)
     _old_dentry->put();
   if (reply)
     reply->put();
-}
-
-void MetaRequest::set_inode(Inode *in) {
-  assert(_inode == NULL);
-  _inode = in;
-  _inode->get();
-}
-Inode *MetaRequest::inode() {
-  return _inode;
-}
-
-void MetaRequest::set_old_inode(Inode *in) {
-  assert(_old_inode == NULL);
-  _old_inode = in;
-  _old_inode->get();
-}
-Inode *MetaRequest::old_inode() {
-  return _old_inode;
-}
-
-void MetaRequest::set_other_inode(Inode *in) {
-  assert(_other_inode == NULL);
-  _other_inode = in;
-  _other_inode->get();
-}
-Inode *MetaRequest::other_inode() {
-  return _other_inode;
 }
 
 void MetaRequest::set_dentry(Dentry *d) {

@@ -24,7 +24,7 @@ public:
   bufferlist monmapbl;
 
   MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
+  explicit MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
     monmapbl.claim(bl);
   }
 private:

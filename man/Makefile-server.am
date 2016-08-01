@@ -1,0 +1,33 @@
+dist_man_MANS += \
+	ceph-deploy.8 \
+	crushtool.8 \
+	ceph-run.8 \
+	mount.ceph.8 \
+	ceph-create-keys.8 \
+	ceph-rest-api.8 \
+	ceph-debugpack.8
+
+if WITH_SELINUX
+dist_man_MANS += \
+	ceph_selinux.8
+endif
+
+if WITH_MON
+dist_man_MANS += \
+	ceph-mon.8 \
+	monmaptool.8
+endif
+
+if WITH_OSD
+dist_man_MANS += \
+	ceph-clsinfo.8 \
+	ceph-detect-init.8 \
+	ceph-disk.8 \
+	ceph-osd.8 \
+	osdmaptool.8
+endif
+
+if WITH_MDS
+dist_man_MANS += \
+	ceph-mds.8
+endif

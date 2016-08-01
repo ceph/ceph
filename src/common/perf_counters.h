@@ -18,8 +18,11 @@
 
 #include "common/config_obs.h"
 #include "common/Mutex.h"
-#include "include/buffer.h"
 #include "include/utime.h"
+
+#include "common/config_obs.h"
+#include "common/Mutex.h"
+#include "common/ceph_time.h"
 
 #include <stdint.h>
 #include <string>
@@ -92,10 +95,12 @@ public:
 
   void tset(int idx, utime_t v);
   void tinc(int idx, utime_t v);
+  void tinc(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
 
   void reset();
-  void dump_formatted(ceph::Formatter *f, bool schema);
+  void dump_formatted(ceph::Formatter *f, bool schema,
+      const std::string &counter = "");
   pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
 
   const std::string& get_name() const;
@@ -113,6 +118,8 @@ private:
   struct perf_counter_data_any_d {
     perf_counter_data_any_d()
       : name(NULL),
+        description(NULL),
+        nick(NULL),
 	type(PERFCOUNTER_NONE),
 	u64(0),
 	avgcount(0),
@@ -120,6 +127,8 @@ private:
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
+        description(other.description),
+        nick(other.nick),
 	type(other.type),
 	u64(other.u64.read()) {
       pair<uint64_t,uint64_t> a = other.read_avg();
@@ -128,10 +137,9 @@ private:
       avgcount2.set(a.second);
     }
 
-    void write_schema_json(char *buf, size_t buf_sz) const;
-    void  write_json(char *buf, size_t buf_sz) const;
-
     const char *name;
+    const char *description;
+    const char *nick;
     enum perfcounter_type_d type;
     atomic64_t u64;
     atomic64_t avgcount;
@@ -148,6 +156,8 @@ private:
 
     perf_counter_data_any_d& operator=(const perf_counter_data_any_d& other) {
       name = other.name;
+      description = other.description;
+      nick = other.nick;
       type = other.type;
       pair<uint64_t,uint64_t> a = other.read_avg();
       u64.set(a.first);
@@ -203,7 +213,11 @@ public:
   void remove(class PerfCounters *l);
   void clear();
   bool reset(const std::string &name);
-  void dump_formatted(ceph::Formatter *f, bool schema);
+  void dump_formatted(
+      ceph::Formatter *f,
+      bool schema,
+      const std::string &logger = "",
+      const std::string &counter = "");
 private:
   CephContext *m_cct;
 
@@ -229,16 +243,22 @@ public:
   PerfCountersBuilder(CephContext *cct, const std::string &name,
 		    int first, int last);
   ~PerfCountersBuilder();
-  void add_u64(int key, const char *name);
-  void add_u64_counter(int key, const char *name);
-  void add_u64_avg(int key, const char *name);
-  void add_time(int key, const char *name);
-  void add_time_avg(int key, const char *name);
+  void add_u64(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_u64_counter(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_u64_avg(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_time(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
+  void add_time_avg(int key, const char *name,
+      const char *description=NULL, const char *nick = NULL);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
-  void add_impl(int idx, const char *name, int ty);
+  void add_impl(int idx, const char *name,
+                const char *description, const char *nick, int ty);
 
   PerfCounters *m_perf_counters;
 };

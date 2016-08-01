@@ -15,12 +15,10 @@
 #ifndef CEPH_KEYSSERVER_H
 #define CEPH_KEYSSERVER_H
 
-#include "common/config.h"
-
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
-
-#include "common/Timer.h"
+#include "CephxKeyServer.h"
+#include "common/Mutex.h"
 
 class CephContext;
 
@@ -35,7 +33,7 @@ struct KeyServerData {
   version_t rotating_ver;
   map<uint32_t, RotatingSecrets> rotating_secrets;
 
-  KeyServerData(KeyRing *extra)
+  explicit KeyServerData(KeyRing *extra)
     : version(0),
       extra_secrets(extra),
       rotating_ver(0) {}

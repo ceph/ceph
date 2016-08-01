@@ -95,7 +95,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 {
   result.clear();
 
-  for (; *index < cct->_conf->rgw_gc_max_objs && result.size() < max; (*index)++, marker.clear()) {
+  for (; *index < max_objs && result.size() < max; (*index)++, marker.clear()) {
     std::list<cls_rgw_gc_obj_info> entries;
     int ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated);
     if (ret == -ENOENT)
@@ -108,7 +108,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
       result.push_back(*iter);
     }
 
-    if (*index == cct->_conf->rgw_gc_max_objs - 1) {
+    if (*index == max_objs - 1) {
       /* we cut short here, truncated will hold the correct value */
       return 0;
     }
@@ -186,7 +186,7 @@ int RGWGC::process(int index, int max_secs)
         if (obj.pool != last_pool) {
           delete ctx;
           ctx = new IoCtx;
-	  ret = store->rados->ioctx_create(obj.pool.c_str(), *ctx);
+	  ret = store->get_rados_handle()->ioctx_create(obj.pool.c_str(), *ctx);
 	  if (ret < 0) {
 	    dout(0) << "ERROR: failed to create ioctx pool=" << obj.pool << dendl;
 	    continue;
@@ -194,16 +194,20 @@ int RGWGC::process(int index, int max_secs)
           last_pool = obj.pool;
         }
 
-        ctx->locator_set_key(obj.key);
-	dout(0) << "gc::process: removing " << obj.pool << ":" << obj.oid << dendl;
+        ctx->locator_set_key(obj.loc);
+        rgw_obj key_obj;
+        key_obj.set_obj(obj.key.name);
+        key_obj.set_instance(obj.key.instance);
+
+	dout(0) << "gc::process: removing " << obj.pool << ":" << key_obj.get_object() << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
-        ret = ctx->operate(obj.oid, &op);
+        ret = ctx->operate(key_obj.get_object(), &op);
 	if (ret == -ENOENT)
 	  ret = 0;
         if (ret < 0) {
           remove_tag = false;
-          dout(0) << "failed to remove " << obj.pool << ":" << obj.oid << "@" << obj.key << dendl;
+          dout(0) << "failed to remove " << obj.pool << ":" << key_obj.get_object() << "@" << obj.loc << dendl;
         }
 
         if (going_down()) // leave early, even if tag isn't removed, it's ok
@@ -230,7 +234,6 @@ done:
 
 int RGWGC::process()
 {
-  int max_objs = cct->_conf->rgw_gc_max_objs;
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
   unsigned start;
@@ -256,7 +259,7 @@ bool RGWGC::going_down()
 void RGWGC::start_processor()
 {
   worker = new GCWorker(cct, this);
-  worker->create();
+  worker->create("rgw_gc");
 }
 
 void RGWGC::stop_processor()

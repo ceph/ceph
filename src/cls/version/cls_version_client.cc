@@ -60,7 +60,7 @@ void cls_version_check(librados::ObjectOperation& op, obj_version& objv, Version
 class VersionReadCtx : public ObjectOperationCompletion {
   obj_version *objv;
 public:
-  VersionReadCtx(obj_version *_objv) : objv(_objv) {}
+  explicit VersionReadCtx(obj_version *_objv) : objv(_objv) {}
   void handle_completion(int r, bufferlist& outbl) {
     if (r >= 0) {
       cls_version_read_ret ret;

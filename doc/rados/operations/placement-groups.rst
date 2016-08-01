@@ -9,7 +9,7 @@ A preselection of pg_num
 
 When creating a new pool with::
 
-        ceph osd pool set {pool-name} pg_num
+        ceph osd pool create {pool-name} pg_num
 
 it is mandatory to choose the value of ``pg_num`` because it cannot be
 calculated automatically. Here are a few values commonly used:
@@ -22,6 +22,8 @@ calculated automatically. Here are a few values commonly used:
 
 - If you have more than 50 OSDs, you need to understand the tradeoffs
   and how to calculate the ``pg_num`` value by yourself
+
+- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool 
 
 As the number of OSDs increases, chosing the right value for pg_num
 becomes more important because it has a significant influence on the
@@ -58,11 +60,10 @@ cannot realistically track placement on a per-object basis.
                   |                       |
                   +-----------------------+
 
-Placement groups are invisible to the Ceph user: the CRUSH algorithm
-determines in which placement group the object will be
-placed. Although CRUSH is a deterministic function using the object
-name as a parameter, there is no way to force an object into a given
-placement group.
+The Ceph client will calculate which placement group an object should
+be in. It does this by hashing the object ID and applying an operation
+based on the number of PGs in the defined pool and the ID of the pool.
+See `Mapping PGs to OSDs`_ for details.
 
 The object's contents within a placement group are stored in a set of
 OSDs. For instance, in a replicated pool of size two, each placement
@@ -178,19 +179,19 @@ increased.
 
 No matter how short the recovery time is, there is a chance for a
 second OSD to fail while it is in progress. In the 10 OSDs cluster
-described above, if any of them fail, then ~8 placement groups
-(i.e. ~75 / 9 placement groups being recovered) will only have one
+described above, if any of them fail, then ~17 placement groups
+(i.e. ~150 / 9 placement groups being recovered) will only have one
 surviving copy. And if any of the 8 remaining OSD fail, the last
-objects of one placement group are likely to be lost (i.e. ~8 / 8
+objects of two placement groups are likely to be lost (i.e. ~17 / 8
 placement groups with only one remaining copy being recovered).
 
 When the size of the cluster grows to 20 OSDs, the number of Placement
 Groups damaged by the loss of three OSDs drops. The second OSD lost
-will degrade ~2 (i.e. ~35 / 19 placement groups being recovered)
-instead of ~8 and the third OSD lost will only lose data if it is one
-of the two OSDs containing the surviving copy. In other words, if the
+will degrade ~4 (i.e. ~75 / 19 placement groups being recovered)
+instead of ~17 and the third OSD lost will only lose data if it is one
+of the four OSDs containing the surviving copy. In other words, if the
 probability of losing one OSD is 0.0001% during the recovery time
-frame, it goes from 8 * 0.0001% in the cluster with 10 OSDs to 2 *
+frame, it goes from 17 * 10 * 0.0001% in the cluster with 10 OSDs to 4 * 20 * 
 0.0001% in the cluster with 20 OSDs.
 
 In a nutshell, more OSDs mean faster recovery and a lower risk of
@@ -310,10 +311,14 @@ placement groups, execute the following::
         ceph osd pool set {pool-name} pg_num {pg_num}
 
 Once you increase the number of placement groups, you must also
-increase the number of placement groups for placement (``pgp_num``) before your
-cluster will rebalance. The ``pgp_num`` should be equal to the ``pg_num``.
-To increase the number of placement groups for placement, execute the
-following::
+increase the number of placement groups for placement (``pgp_num``)
+before your cluster will rebalance. The ``pgp_num`` will be the number of
+placement groups that will be considered for placement by the CRUSH
+algorithm. Increasing ``pg_num`` splits the placement groups but data
+will not be migrated to the newer placement groups until placement
+groups for placement, ie. ``pgp_num`` is increased. The ``pgp_num``
+should be equal to the ``pg_num``.  To increase the number of
+placement groups for placement, execute the following::
 
         ceph osd pool set {pool-name} pgp_num {pgp_num}
 
@@ -342,7 +347,7 @@ Get Statistics for Stuck PGs
 To get the statistics for all placement groups stuck in a specified state,
 execute the following::
 
-        ceph pg dump_stuck inactive|unclean|stale [--format <format>] [-t|--threshold <seconds>]
+        ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format <format>] [-t|--threshold <seconds>]
 
 **Inactive** Placement groups cannot process reads or writes because they are waiting for an OSD
 with the most up-to-date data to come up and in.
@@ -427,3 +432,5 @@ entirely. To mark the "unfound" objects as "lost", execute the following::
 
 
 .. _Create a Pool: ../pools#createpool
+.. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
+.. _pgcalc: http://ceph.com/pgcalc/

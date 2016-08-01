@@ -15,11 +15,9 @@
 #ifndef CEPH_KEYRING_H
 #define CEPH_KEYRING_H
 
-#include "common/config.h"
-
-#include "auth/Crypto.h"
 #include "auth/Auth.h"
 
+class CephContext;
 
 class KeyRing : public KeyStore {
   map<EntityName, EntityAuth> keys;

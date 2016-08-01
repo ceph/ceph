@@ -35,9 +35,10 @@ public:
   MOSDECSubOpWrite()
     : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
     {}
-  MOSDECSubOpWrite(ECSubWrite &op)
-  : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION),
-    op(op) {}
+  MOSDECSubOpWrite(ECSubWrite &in_op)
+    : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
+    op.claim(in_op);
+  }
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();

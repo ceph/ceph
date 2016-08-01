@@ -93,14 +93,14 @@ class PassAlong : public ThreadPool::WorkQueue<unsigned> {
     q.pop_front();
     return val;
   }
-  void _process(unsigned *item) {
+  void _process(unsigned *item, ThreadPool::TPHandle &) override {
     next->queue(item);
   }
   void _clear() { q.clear(); }
   bool _empty() { return q.empty(); }
 public:
-  PassAlong(ThreadPool *tp, Queueable *next) :
-    ThreadPool::WorkQueue<unsigned>("TestQueue", 100, 100, tp), next(next) {}
+  PassAlong(ThreadPool *tp, Queueable *_next) :
+    ThreadPool::WorkQueue<unsigned>("TestQueue", 100, 100, tp), next(_next) {}
 };
 
 int main(int argc, char **argv)
@@ -172,7 +172,7 @@ int main(int argc, char **argv)
     if (*i == 'q') {
       ThreadPool *tp =
 	new ThreadPool(
-	  g_ceph_context, ss.str(), vm["num-threads"].as<unsigned>(), 0);
+	  g_ceph_context, ss.str(), "tp_test",  vm["num-threads"].as<unsigned>(), 0);
       wqs.push_back(
 	new WQWrapper(
 	  new PassAlong(tp, wqs.back()),

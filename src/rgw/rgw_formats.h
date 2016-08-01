@@ -22,9 +22,12 @@ struct plain_stack_entry {
 class RGWFormatter_Plain : public Formatter {
   void reset_buf();
 public:
-  RGWFormatter_Plain();
+  explicit RGWFormatter_Plain(bool use_kv = false);
   virtual ~RGWFormatter_Plain();
 
+  virtual void set_status(int status, const char* status_name) {};
+  virtual void output_header() {};
+  virtual void output_footer() {};
   virtual void flush(ostream& os);
   virtual void reset();
 
@@ -36,7 +39,7 @@ public:
   virtual void dump_unsigned(const char *name, uint64_t u);
   virtual void dump_int(const char *name, int64_t u);
   virtual void dump_float(const char *name, double d);
-  virtual void dump_string(const char *name, std::string s);
+  virtual void dump_string(const char *name, const std::string& s);
   virtual std::ostream& dump_stream(const char *name);
   virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
   virtual int get_len() const;
@@ -52,6 +55,7 @@ private:
 
   std::list<struct plain_stack_entry> stack;
   size_t min_stack_level;
+  bool use_kv;
 };
 
 class RGWFormatterFlusher {
@@ -65,7 +69,7 @@ protected:
     formatter = f;
   }
 public:
-  RGWFormatterFlusher(Formatter *f) : formatter(f), flushed(false), started(false) {}
+  explicit RGWFormatterFlusher(Formatter *f) : formatter(f), flushed(false), started(false) {}
   virtual ~RGWFormatterFlusher() {}
 
   void flush() {

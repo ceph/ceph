@@ -4,21 +4,6 @@
 # display the crush tree by default
 #
   $ crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 root straw 0
-  .* (re)
-  # id\tweight\ttype name\treweight (esc)
-  -7\t5\troot root (esc)
-  -4\t2\t\track rack0 (esc)
-  -1\t2\t\t\tnode node0 (esc)
-  0\t1\t\t\t\tosd.0\t1\t (esc)
-  1\t1\t\t\t\tosd.1\t1\t (esc)
-  -5\t2\t\track rack1 (esc)
-  -2\t2\t\t\tnode node1 (esc)
-  2\t1\t\t\t\tosd.2\t1\t (esc)
-  3\t1\t\t\t\tosd.3\t1\t (esc)
-  -6\t1\t\track rack2 (esc)
-  -3\t1\t\t\tnode node2 (esc)
-  4\t1\t\t\t\tosd.4\t1\t (esc)
-  
 
 #  
 # silence all messages with --debug-crush 0
@@ -29,20 +14,6 @@
 # display a warning if there is more than one root
 #
   $ crushtool --outfn "$map" --build --num_osds 5 node straw 2 rack straw 1 
-  .* (re)
-  # id\tweight\ttype name\treweight (esc)
-  -6\t1\track rack2 (esc)
-  -3\t1\t\tnode node2 (esc)
-  4\t1\t\t\tosd.4\t1\t (esc)
-  -5\t2\track rack1 (esc)
-  -2\t2\t\tnode node1 (esc)
-  2\t1\t\t\tosd.2\t1\t (esc)
-  3\t1\t\t\tosd.3\t1\t (esc)
-  -4\t2\track rack0 (esc)
-  -1\t2\t\tnode node0 (esc)
-  0\t1\t\t\tosd.0\t1\t (esc)
-  1\t1\t\t\tosd.1\t1\t (esc)
-  
   .* The crush rulesets will use the root rack0 (re)
   and ignore the others.
   There are 3 roots, they can be
@@ -52,7 +23,7 @@
 #
 # crush rulesets are generated using the OSDMap helpers
 #
-  $ CEPH_ARGS="--debug-crush 0" crushtool --outfn "$map" --build --num_osds 1 root straw 0
+  $ CEPH_ARGS="--debug-crush 0" crushtool --outfn "$map" --set-straw-calc-version 0 --build --num_osds 1 root straw 0
   $ crushtool -o "$map.txt" -d "$map"
   $ cat "$map.txt"
   # begin crush map
@@ -60,12 +31,13 @@
   tunable choose_local_fallback_tries 0
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
+  tunable chooseleaf_vary_r 1
   
   # devices
-  device 0 device0
+  device 0 osd.0
   
   # types
-  type 0 device
+  type 0 osd
   type 1 root
   
   # buckets
@@ -74,7 +46,7 @@
   \t# weight 1.000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem device0 weight 1.000 (esc)
+  \titem osd.0 weight 1.000 (esc)
   }
   
   # rules

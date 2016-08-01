@@ -20,15 +20,21 @@
 using namespace std;
 
 #include "include/types.h"
-#include "msg/Messenger.h"
 #include "PaxosService.h"
 
 #include "common/LogEntry.h"
-#include "messages/MLog.h"
+#include "include/str_map.h"
 
 class MMonCommand;
+class MLog;
 
 static const string LOG_META_CHANNEL = "$channel";
+
+namespace ceph {
+namespace log {
+  class Graylog;
+}
+}
 
 class LogMonitor : public PaxosService,
                    public md_config_obs_t {
@@ -44,6 +50,13 @@ private:
     map<string,string> log_file;
     map<string,string> expanded_log_file;
     map<string,string> log_file_level;
+    map<string,string> log_to_graylog;
+    map<string,string> log_to_graylog_host;
+    map<string,string> log_to_graylog_port;
+
+    map<string, shared_ptr<ceph::log::Graylog>> graylogs;
+    uuid_d fsid;
+    string host;
 
     void clear() {
       log_to_syslog.clear();
@@ -52,6 +65,10 @@ private:
       log_file.clear();
       expanded_log_file.clear();
       log_file_level.clear();
+      log_to_graylog.clear();
+      log_to_graylog_host.clear();
+      log_to_graylog_port.clear();
+      graylogs.clear();
     }
 
     /** expands $channel meta variable on all maps *EXCEPT* log_file
@@ -69,19 +86,16 @@ private:
     string expand_channel_meta(const string &input,
                                const string &change_to);
 
-    bool do_log_to_syslog(const string &channel) {
-      return (get_str_map_key(log_to_syslog, channel,
-                              &CLOG_CHANNEL_DEFAULT) == "true");
-    }
+    bool do_log_to_syslog(const string &channel);
 
     string get_facility(const string &channel) {
       return get_str_map_key(syslog_facility, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+                             &CLOG_CONFIG_DEFAULT_KEY);
     }
 
     string get_level(const string &channel) {
       return get_str_map_key(syslog_level, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+                             &CLOG_CONFIG_DEFAULT_KEY);
     }
 
     string get_log_file(const string &channel) {
@@ -90,8 +104,7 @@ private:
 
       if (expanded_log_file.count(channel) == 0) {
         string fname = expand_channel_meta(
-            get_str_map_key(log_file, channel,
-              &CLOG_CHANNEL_DEFAULT),
+            get_str_map_key(log_file, channel, &CLOG_CONFIG_DEFAULT_KEY),
             channel);
         expanded_log_file[channel] = fname;
 
@@ -104,8 +117,15 @@ private:
 
     string get_log_file_level(const string &channel) {
       return get_str_map_key(log_file_level, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+                             &CLOG_CONFIG_DEFAULT_KEY);
     }
+
+    bool do_log_to_graylog(const string &channel) {
+      return (get_str_map_key(log_to_graylog, channel,
+			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
+    }
+
+    shared_ptr<ceph::log::Graylog> get_graylog(const string &channel);
   } channels;
 
   void update_log_channels();
@@ -117,12 +137,12 @@ private:
   void encode_pending(MonitorDBStore::TransactionRef t);
   virtual void encode_full(MonitorDBStore::TransactionRef t);
   version_t get_trim_to();
-  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);  // true if processed.
+  bool prepare_update(MonOpRequestRef op);
 
-  bool preprocess_log(MLog *m);
-  bool prepare_log(MLog *m);
-  void _updated_log(MLog *m);
+  bool preprocess_log(MonOpRequestRef op);
+  bool prepare_log(MonOpRequestRef op);
+  void _updated_log(MonOpRequestRef op);
 
   bool should_propose(double& delay);
 
@@ -131,28 +151,23 @@ private:
     return true;
   }
 
-  struct C_Log : public Context {
+  struct C_Log : public C_MonOp {
     LogMonitor *logmon;
-    MLog *ack;
-    C_Log(LogMonitor *p, MLog *a) : logmon(p), ack(a) {}
-    void finish(int r) {
+    C_Log(LogMonitor *p, MonOpRequestRef o) : 
+      C_MonOp(o), logmon(p) {}
+    void _finish(int r) {
       if (r == -ECANCELED) {
-	if (ack)
-	  ack->put();
 	return;
       }
-      logmon->_updated_log(ack);
+      logmon->_updated_log(op);
     }    
   };
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   bool _create_sub_summary(MLog *mlog, int level);
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
-
-  void store_do_append(MonitorDBStore::TransactionRef t,
-		       const string& key, bufferlist& bl);
 
  public:
   LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 
@@ -188,6 +203,9 @@ private:
       "mon_cluster_log_to_syslog_facility",
       "mon_cluster_log_file",
       "mon_cluster_log_file_level",
+      "mon_cluster_log_to_graylog",
+      "mon_cluster_log_to_graylog_host",
+      "mon_cluster_log_to_graylog_port",
       NULL
     };
     return KEYS;

@@ -1,8 +1,12 @@
 
+#include "acconfig.h"
 #include "include/types.h"
 #include "MemoryModel.h"
 #include "common/config.h"
 #include "debug.h"
+#if defined(__linux__)
+#include <malloc.h>
+#endif
 
 #include <fstream>
 
@@ -92,7 +96,7 @@ void MemoryModel::_sample(snap *psnap)
   psnap->heap = heap >> 10;
 
   // ...
-#if defined(__linux__)
+#if defined(HAVE_MALLINFO)
   struct mallinfo mi = mallinfo();
   
   psnap->malloc = mi.uordblks >> 10;

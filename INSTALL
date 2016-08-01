@@ -1,25 +1,12 @@
 Installation Instructions
 *************************
 
-When pulling from git, use the --recursive option to include sub-modules:
+To use Ceph
 
-$ git clone --recursive https://github.com/ceph/ceph.git
+  Read online        http://docs.ceph.com/docs/master/start/
+  Read from sources  doc/start
 
-And then build the configure script with:
+To build from sources
 
-$ ./autogen.sh
-
-Then the usual:
-
-$ ./configure
-$ make
-
-Note that if the FUSE library is not found, the user-space fuse client
-will not be built.
-
-If you are doing development, you may want to do
-
-$ CXXFLAGS="-g -pg" ./configure
-
-or similar to avoid the default (-g -O2), which includes optimizations
-(-O2).
+  Read online        http://docs.ceph.com/docs/master/install/build-ceph/
+  Read from sources  doc/install/build-ceph.rst

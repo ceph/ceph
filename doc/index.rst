@@ -36,6 +36,7 @@ system**.
 - KVM/libvirt support
 - Back-end for cloud solutions
 - Incremental backup
+- Disaster recovery
 
 .. raw:: html 
 
@@ -101,4 +102,5 @@ about Ceph, see our `Architecture`_ section.
    architecture
    Development <dev/index>
    release-notes
+   releases
    Glossary <glossary>

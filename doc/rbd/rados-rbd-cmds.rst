@@ -21,13 +21,18 @@ Before you can add a block device to a node, you must create an image for it in
 the :term:`Ceph Storage Cluster` first. To create a block device image, execute
 the  following::
 
-	rbd create {image-name} --size {megabytes} --pool {pool-name}
+	rbd create --size {megabytes} {pool-name}/{image-name}
 	
-For example, to create a 1GB image named ``foo`` that stores information in a 
+For example, to create a 1GB image named ``bar`` that stores information in a
 pool named ``swimmingpool``, execute the following::
 
-	rbd create foo --size 1024
-	rbd create bar --size 1024 --pool swimmingpool
+	rbd create --size 1024 swimmingpool/bar
+
+If you don't specify pool when creating an image, it will be stored in the
+default pool ``rbd``. For example, to create a 1GB image named ``foo`` stored in
+the default pool ``rbd``, execute the following::
+
+	rbd create --size 1024 foo
 
 .. note:: You must create a pool first before you can specify it as a 
    source. See `Storage Pools`_ for details.
@@ -55,21 +60,21 @@ Retrieving Image Information
 To retrieve information from a particular image, execute the following,
 but replace ``{image-name}`` with the name for the image:: 
 
-	rbd --image {image-name} info
+	rbd info {image-name}
 	
 For example::
 
-	rbd --image foo info
+	rbd info foo
 	
 To retrieve information from an image within a pool, execute the following,
 but replace ``{image-name}`` with the name of the image and replace ``{pool-name}``
 with the name of the pool:: 
 
-	rbd --image {image-name} -p {pool-name} info
+	rbd info {pool-name}/{image-name}
 
 For example:: 
 
-	rbd --image bar -p swimmingpool info	
+	rbd info swimmingpool/bar
 
 Resizing a Block Device Image
 =============================
@@ -80,7 +85,8 @@ a maximum capacity  that you set with the ``--size`` option. If you want to
 increase (or decrease) the maximum size of a Ceph Block Device image, execute
 the following:: 
 
-	rbd resize --image foo --size 2048
+	rbd resize --size 2048 foo (to increase)
+	rbd resize --size 2048 foo --allow-shrink (to decrease)
 
 
 Removing a Block Device Image
@@ -99,11 +105,11 @@ To remove a block device from a pool, execute the following, but replace
 ``{image-name}`` with the name of the image to remove and replace 
 ``{pool-name}`` with the name of the pool:: 
 
-	rbd rm {image-name} -p {pool-name}
+	rbd rm {pool-name}/{image-name}
 	
 For example:: 
 
-	rbd rm bar -p swimmingpool
+	rbd rm swimmingpool/bar
 
 
 

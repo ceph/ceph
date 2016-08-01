@@ -15,8 +15,6 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
-extern struct ceph_file_layout g_default_file_layout;
-
 #include <iosfwd>
 #include <vector>
 #include <map>
@@ -106,7 +104,6 @@ public:
 
   // Parse a config file
   int parse_config_files(const char *conf_files,
-			 std::deque<std::string> *parse_errors,
 			 std::ostream *warnings, int flags);
 
   // Absorb config settings from the environment
@@ -140,6 +137,8 @@ public:
   int get_val(const char *key, char **buf, int len) const;
   int _get_val(const char *key, char **buf, int len) const;
 
+  void get_all_keys(std::vector<std::string> *keys) const;
+
   // Return a list of all the sections that the current entity is a member of.
   void get_my_sections(std::vector <std::string> &sections) const;
 
@@ -160,6 +159,9 @@ public:
   void diff(const md_config_t *other,
             map<string,pair<string,string> > *diff, set<string> *unknown);
 
+  /// print/log warnings/errors from parsing the config
+  void complain_about_parse_errors(CephContext *cct);
+
 private:
   void _show_config(std::ostream *out, Formatter *f);
 
@@ -174,7 +176,6 @@ private:
   int parse_injectargs(std::vector<const char*>& args,
 		      std::ostream *oss);
   int parse_config_files_impl(const std::list<std::string> &conf_files,
-			      std::deque<std::string> *parse_errors,
 			      std::ostream *warnings);
 
   int set_val_impl(const char *val, const config_option *opt);
@@ -184,7 +185,13 @@ private:
 
   bool expand_meta(std::string &val,
 		   std::ostream *oss) const;
-
+public:  // for global_init
+  bool early_expand_meta(std::string &val,
+			 std::ostream *oss) const {
+    Mutex::Locker l(lock);
+    return expand_meta(val, oss);
+  }
+private:
   bool expand_meta(std::string &val,
 		   config_option *opt,
 		   std::list<config_option *> stack,
@@ -195,6 +202,9 @@ private:
 
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
+public:
+  std::deque<std::string> parse_errors;
+private:
 
   obs_map_t observers;
   changed_set_t changed;
@@ -203,6 +213,7 @@ public:
   ceph::log::SubsystemMap subsys;
 
   EntityName name;
+  string data_dir_option;  ///< data_dir config option, if any
 
   /// cluster name
   string cluster;
@@ -255,8 +266,8 @@ typedef enum {
 	OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
 } opt_type_t;
 
-bool ceph_resolve_file_search(const std::string& filename_list,
-			      std::string& result);
+int ceph_resolve_file_search(const std::string& filename_list,
+			     std::string& result);
 
 struct config_option {
   const char *name;

@@ -15,15 +15,16 @@
  * calculate intervals/extents that vary between two snapshots
  */
 void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
-			librados::snap_t start,
-			librados::snap_t end,
-			interval_set<uint64_t> *diff, bool *end_exists)
+			librados::snap_t start, librados::snap_t end,
+			interval_set<uint64_t> *diff, uint64_t *end_size,
+                        bool *end_exists)
 {
   ldout(cct, 10) << "calc_snap_set_diff start " << start << " end " << end
 		 << ", snap_set seq " << snap_set.seq << dendl;
   bool saw_start = false;
   uint64_t start_size = 0;
   diff->clear();
+  *end_size = 0;
   *end_exists = false;
 
   for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
@@ -44,7 +45,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     ldout(cct, 20) << " clone " << r->cloneid << " snaps " << r->snaps
 		   << " -> [" << a << "," << b << "]"
 		   << " size " << r->size << " overlap to next " << r->overlap << dendl;
-    
+
     if (b < start) {
       // this is before start
       ++r;
@@ -65,6 +66,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
       saw_start = true;
     }
 
+    *end_size = r->size;
     if (end < a) {
       ldout(cct, 20) << " past end " << end << ", end object does not exist" << dendl;
       *end_exists = false;
