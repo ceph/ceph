@@ -33,7 +33,7 @@ public:
   {}
 
   virtual int factory(CompressorRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     bool isal;
     if (cct->_conf->compressor_zlib_isal) {

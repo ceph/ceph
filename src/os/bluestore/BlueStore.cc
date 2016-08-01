@@ -2475,7 +2475,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
-    csum_type(bluestore_blob_t::CSUM_CRC32C),
+    csum_type(Checksummer::CSUM_CRC32C),
     sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
 {
   _init_logger();
@@ -2546,67 +2546,47 @@ void BlueStore::_set_compression()
   comp_min_blob_size = g_conf->bluestore_compression_min_blob_size;
   comp_max_blob_size = g_conf->bluestore_compression_max_blob_size;
 
-  if (g_conf->bluestore_compression == "force") {
-    comp_mode = COMP_FORCE;
-  } else if (g_conf->bluestore_compression == "aggressive") {
-    comp_mode = COMP_AGGRESSIVE;
-  } else if (g_conf->bluestore_compression == "passive") {
-    comp_mode = COMP_PASSIVE;
-  } else if (g_conf->bluestore_compression == "none") {
-    comp_mode = COMP_NONE;
+  auto m = Compressor::get_comp_mode_type(g_conf->bluestore_compression);
+  if (m) {
+    comp_mode = *m;
   } else {
     derr << __func__ << " unrecognized value '"
          << g_conf->bluestore_compression
          << "' for bluestore_compression, reverting to 'none'"
          << dendl;
-    comp_mode = COMP_NONE;
+    comp_mode = Compressor::COMP_NONE;
   }
 
   compressor = nullptr;
-  if (comp_mode.load() != COMP_NONE) {
-    const char *alg = 0;
-    if (g_conf->bluestore_compression_algorithm == "snappy") {
-      alg = "snappy";
-    } else if (g_conf->bluestore_compression_algorithm == "zlib") {
-      alg = "zlib";
-    } else if (g_conf->bluestore_compression_algorithm.length()) {
-      derr << __func__ << " unrecognized compression algorithm '"
-	   << g_conf->bluestore_compression_algorithm << "'"
-           << ", reverting compression mode to 'none'"
-           << dendl;
-      comp_mode = COMP_NONE;
-    } else {
-      derr << __func__ << " compression algorithm not specified, "
-           << "reverting compression mode to 'none'"
-           << dendl;
-      comp_mode = COMP_NONE;
-    }
+  if (comp_mode.load() != Compressor::COMP_NONE) {    
 
-    if (alg) {
-      compressor = Compressor::create(cct, alg);
+    auto& alg_name = g_conf->bluestore_compression_algorithm;
+
+    if (!alg_name.empty()) {
+      compressor = Compressor::create(cct, alg_name);
       if (!compressor) {
-        derr << __func__ << " unable to initialize " << alg << " compressor"
+        derr << __func__ << " unable to initialize " << alg_name << " compressor"
              << ", reverting compression mode to 'none'" 
 	     << dendl;
-        comp_mode = COMP_NONE;
+        comp_mode = Compressor::COMP_NONE;
       }
     }
   }
  
-  dout(10) << __func__ << " mode " << get_comp_mode_name(comp_mode)
-	   << " alg " << (compressor ? compressor->get_type() : "(none)")
+  dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
+	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
 	   << dendl;
 }
 
 void BlueStore::_set_csum()
 {
-  csum_type = bluestore_blob_t::CSUM_NONE;
-  int t = bluestore_blob_t::get_csum_string_type(g_conf->bluestore_csum_type);
-  if (t > bluestore_blob_t::CSUM_NONE)
+  csum_type = Checksummer::CSUM_NONE;
+  int t = Checksummer::get_csum_string_type(g_conf->bluestore_csum_type);
+  if (t > Checksummer::CSUM_NONE)
     csum_type = t;
 
   dout(10) << __func__ << " csum_type "
-	   << bluestore_blob_t::get_csum_type_string(csum_type)
+	   << Checksummer::get_csum_type_string(csum_type)
 	   << dendl;
 }
 
@@ -5168,7 +5148,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
           return 0;
 	});
       assert(r == 0);
-      derr << __func__ << " bad " << blob->get_csum_type_string(blob->csum_type)
+      derr << __func__ << " bad " << Checksummer::get_csum_type_string(blob->csum_type)
 	   << "/0x" << std::hex << blob->get_csum_chunk_size()
 	   << " checksum at blob offset 0x" << bad
 	   << ", got 0x" << bad_csum << ", expected 0x"
@@ -5190,15 +5170,16 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
-  string name = bluestore_blob_t::get_comp_alg_name(chdr.type);
+  int alg = int(chdr.type);
   CompressorRef cp = compressor;
-  if (!cp || cp->get_type() != name)
-    cp = Compressor::create(cct, name);
+  if (!cp || (int)cp->get_type() != alg) {
+    cp = Compressor::create(cct, alg);
+  }
 
   if (!cp.get()) {
     // if compressor isn't available - error, because cannot return
     // decompressed data?
-    derr << __func__ << " can't load decompressor " << (int)chdr.type << dendl;
+    derr << __func__ << " can't load decompressor " << alg << dendl;
     r = -EIO;
   } else {
     r = cp->decompress(i, chdr.length, *result);
@@ -7611,7 +7592,7 @@ int BlueStore::_do_alloc_write(
       assert(b_off == 0);
       assert(wi.blob_length == l->length());
       bluestore_compression_header_t chdr;
-      chdr.type = bluestore_blob_t::get_comp_alg_type(c->get_type());
+      chdr.type = c->get_type();
       // FIXME: memory alignment here is bad
       bufferlist t;
 
@@ -7880,10 +7861,10 @@ int BlueStore::_do_write(
   unsigned alloc_hints = o->onode.alloc_hint_flags;
   int comp = comp_mode.load();
   wctx.compress =
-    (comp == COMP_FORCE) ||
-    (comp == COMP_AGGRESSIVE &&
+    (comp == Compressor::COMP_FORCE) ||
+    (comp == Compressor::COMP_AGGRESSIVE &&
      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
-    (comp == COMP_PASSIVE &&
+    (comp == Compressor::COMP_PASSIVE &&
      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&

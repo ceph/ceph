@@ -236,9 +236,9 @@ TEST(bluestore_blob_t, calc_csum)
   n.append("12345678");
 
   for (unsigned csum_type = 1;
-       csum_type < bluestore_blob_t::CSUM_MAX;
+       csum_type < Checksummer::CSUM_MAX;
        ++csum_type) {
-    cout << "csum_type " << bluestore_blob_t::get_csum_type_string(csum_type)
+    cout << "csum_type " << Checksummer::get_csum_type_string(csum_type)
 	 << std::endl;
 
     bluestore_blob_t b;
@@ -297,7 +297,7 @@ TEST(bluestore_blob_t, csum_bench)
   bl.append(bp);
   int count = 256;
   for (unsigned csum_type = 1;
-       csum_type < bluestore_blob_t::CSUM_MAX;
+       csum_type < Checksummer::CSUM_MAX;
        ++csum_type) {
     bluestore_blob_t b;
     b.init_csum(csum_type, 12, bl.length());
@@ -308,7 +308,7 @@ TEST(bluestore_blob_t, csum_bench)
     ceph::mono_clock::time_point end = ceph::mono_clock::now();
     auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
     double mbsec = (double)count * (double)bl.length() / 1000000.0 / (double)dur.count() * 1000000000.0;
-    cout << "csum_type " << bluestore_blob_t::get_csum_type_string(csum_type)
+    cout << "csum_type " << Checksummer::get_csum_type_string(csum_type)
 	 << ", " << dur << " seconds, "
 	 << mbsec << " MB/sec" << std::endl;
   }
@@ -682,7 +682,7 @@ TEST(Blob, put_ref)
     bluestore_blob_t& b = B.dirty_blob();
     vector<bluestore_pextent_t> r;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
-    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, mas * 4);
+    b.init_csum(Checksummer::CSUM_CRC32C, 14, mas * 4);
     B.get_ref(0, mas*4);
     ASSERT_TRUE(b.is_allocated(0, mas*4));
     B.put_ref(0, mas*3, mrs, &r);
@@ -715,7 +715,7 @@ TEST(bluestore_blob_t, can_split_at)
   a.extents.emplace_back(bluestore_pextent_t(0x20000, 0x2000));
   ASSERT_TRUE(a.can_split_at(0x1000));
   ASSERT_TRUE(a.can_split_at(0x1800));
-  a.init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x4000);
+  a.init_csum(Checksummer::CSUM_CRC32C, 12, 0x4000);
   ASSERT_TRUE(a.can_split_at(0x1000));
   ASSERT_TRUE(a.can_split_at(0x2000));
   ASSERT_TRUE(a.can_split_at(0x3000));
@@ -739,7 +739,7 @@ TEST(bluestore_blob_t, prune_tail)
 
   a.extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
-  a.init_csum(bluestore_blob_t::CSUM_CRC32C_8, 12, 0x6000);
+  a.init_csum(Checksummer::CSUM_CRC32C_8, 12, 0x6000);
   ASSERT_EQ(6u, a.csum_data.length());
   ASSERT_TRUE(a.can_prune_tail());
   a.prune_tail();
@@ -764,7 +764,7 @@ TEST(Blob, split)
     R.shared_blob = new BlueStore::SharedBlob(-1, string(), cache);
     R.shared_blob->get();  // hack to avoid dtor from running
     L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x2000, 0x2000));
-    L.dirty_blob().init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x2000);
+    L.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
     L.split(0x1000, &R);
     ASSERT_EQ(0x1000u, L.get_blob().get_logical_length());
     ASSERT_EQ(4u, L.get_blob().csum_data.length());
@@ -785,7 +785,7 @@ TEST(Blob, split)
     R.shared_blob->get();  // hack to avoid dtor from running
     L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x2000, 0x1000));
     L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x12000, 0x1000));
-    L.dirty_blob().init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x2000);
+    L.dirty_blob().init_csum(Checksummer::CSUM_CRC32C, 12, 0x2000);
     L.split(0x1000, &R);
     ASSERT_EQ(0x1000u, L.get_blob().get_logical_length());
     ASSERT_EQ(4u, L.get_blob().csum_data.length());

@@ -29,7 +29,7 @@
 
 class CompressorExample : public Compressor {
 public:
-  CompressorExample() : Compressor("example") {}
+  CompressorExample() : Compressor(COMP_ALG_NONE, "example") {}
   virtual ~CompressorExample() {}
 
   virtual int compress(const bufferlist &in, bufferlist &out)

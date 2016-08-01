@@ -56,7 +56,7 @@ class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
 
 class SnappyCompressor : public Compressor {
  public:
-  SnappyCompressor() : Compressor("snappy") {}
+  SnappyCompressor() : Compressor(COMP_ALG_SNAPPY, "snappy") {}
 
   int compress(const bufferlist &src, bufferlist &dst) override {
     BufferlistSource source(const_cast<bufferlist&>(src).begin(), src.length());

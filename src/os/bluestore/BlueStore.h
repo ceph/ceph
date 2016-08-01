@@ -1466,23 +1466,7 @@ private:
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
-  // compression options
-  enum CompressionMode {
-    COMP_NONE,                  ///< compress never
-    COMP_PASSIVE,               ///< compress if hinted COMPRESSIBLE
-    COMP_AGGRESSIVE,            ///< compress unless hinted INCOMPRESSIBLE
-    COMP_FORCE                  ///< compress always
-  };
-  const char *get_comp_mode_name(int m) {
-    switch (m) {
-    case COMP_NONE: return "none";
-    case COMP_PASSIVE: return "passive";
-    case COMP_AGGRESSIVE: return "aggressive";
-    case COMP_FORCE: return "force";
-    default: return "???";
-    }
-  }
-  std::atomic<int> comp_mode = {COMP_NONE}; ///< compression mode
+  std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};

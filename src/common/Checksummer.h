@@ -9,6 +9,53 @@
 
 class Checksummer {
 public:
+  enum CSumType {
+    CSUM_NONE = 1,	//intentionally set to 1 to be aligned with OSDMnitor's pool_opts_t handling - it treats 0 as unset while we need to distinguish none and unset cases
+    CSUM_XXHASH32 = 2,
+    CSUM_XXHASH64 = 3,
+    CSUM_CRC32C = 4,
+    CSUM_CRC32C_16 = 5, // low 16 bits of crc32c
+    CSUM_CRC32C_8 = 6,  // low 8 bits of crc32c
+    CSUM_MAX,
+  };
+  static const char *get_csum_type_string(unsigned t) {
+    switch (t) {
+    case CSUM_NONE: return "none";
+    case CSUM_XXHASH32: return "xxhash32";
+    case CSUM_XXHASH64: return "xxhash64";
+    case CSUM_CRC32C: return "crc32c";
+    case CSUM_CRC32C_16: return "crc32c_16";
+    case CSUM_CRC32C_8: return "crc32c_8";
+    default: return "???";
+    }
+  }
+  static int get_csum_string_type(const std::string &s) {
+    if (s == "none")
+      return CSUM_NONE;
+    if (s == "xxhash32")
+      return CSUM_XXHASH32;
+    if (s == "xxhash64")
+      return CSUM_XXHASH64;
+    if (s == "crc32c")
+      return CSUM_CRC32C;
+    if (s == "crc32c_16")
+      return CSUM_CRC32C_16;
+    if (s == "crc32c_8")
+      return CSUM_CRC32C_8;
+    return -EINVAL;
+  }
+  static size_t get_csum_value_size(int csum_type) {
+    switch (csum_type) {
+    case CSUM_NONE: return 0;
+    case CSUM_XXHASH32: return 4;
+    case CSUM_XXHASH64: return 8;
+    case CSUM_CRC32C: return 4;
+    case CSUM_CRC32C_16: return 2;
+    case CSUM_CRC32C_8: return 1;
+    default: return 0;
+    }
+  }
+
   struct crc32c {
     typedef __le32 value_t;
 
