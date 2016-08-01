@@ -1341,6 +1341,13 @@ void RGWGetObj::execute()
   if (op_ret < 0)
     goto done_err;
 
+  // for range requests with obj size 0
+  if (range_str && !(s->obj_size)) {
+    total_len = 0;
+    op_ret = -ERANGE;
+    goto done_err;
+  }
+
   /* start gettorrent */
   if (torrent.get_flag())
   {
