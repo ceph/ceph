@@ -11,14 +11,6 @@
 
 int RGWCivetWeb::write_data(const char *buf, int len)
 {
-  if (!header_done) {
-    header_data.append(buf, len);
-    return len;
-  }
-  if (!sent_header) {
-    data.append(buf, len);
-    return len;
-  }
   int r = mg_write(conn, buf, len);
   if (r == 0) {
     /* didn't send anything, error out */
@@ -29,9 +21,9 @@ int RGWCivetWeb::write_data(const char *buf, int len)
 
 RGWCivetWeb::RGWCivetWeb(mg_connection *_conn, int _port)
   : RGWStreamIOFacade(this),
-    conn(_conn), port(_port), status_num(0), header_done(false),
-    sent_header(false), has_content_length(false),
-    explicit_keepalive(false), explicit_conn_close(false)
+    conn(_conn), port(_port),
+    explicit_keepalive(false),
+    explicit_conn_close(false)
 {
 }
 
@@ -46,45 +38,6 @@ void RGWCivetWeb::flush()
 
 int RGWCivetWeb::complete_request()
 {
-  if (!sent_header) {
-    if (!has_content_length) {
-
-      header_done = false; /* let's go back to writing the header */
-
-      /*
-       * Status 204 should not include a content-length header
-       * RFC7230 says so
-       *
-       * Same goes for status 304: Not Modified
-       *
-       * 'If a cache uses a received 304 response to update a cache entry,'
-       * 'the cache MUST update the entry to reflect any new field values'
-       * 'given in the response.'
-       *
-       */
-      if (status_num == 204 || status_num == 304) {
-        has_content_length = true;
-      } else if (0 && data.length() == 0) {
-        has_content_length = true;
-        print("Transfer-Enconding: %s\r\n", "chunked");
-        data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
-      } else {
-	int r = send_content_length(data.length());
-	if (r < 0)
-	  return r;
-      }
-    }
-
-    complete_header();
-  }
-
-  if (data.length()) {
-    int r = write_data(data.c_str(), data.length());
-    if (r < 0)
-      return r;
-    data.clear();
-  }
-
   return 0;
 }
 
@@ -160,72 +113,62 @@ void RGWCivetWeb::init_env(CephContext *cct)
 
 int RGWCivetWeb::send_status(int status, const char *status_name)
 {
-  char buf[128];
+  mg_set_http_status(conn, status);
 
-  if (!status_name)
-    status_name = "";
-
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %d %s\r\n", status, status_name);
-
-  bufferlist bl;
-  bl.append(buf);
-  bl.append(header_data);
-  header_data = bl;
-
-  status_num = status;
-  mg_set_http_status(conn, status_num);
-
-  return 0;
+  return mg_printf(conn, "HTTP/1.1 %d %s\r\n", status,
+                   status_name ? status_name : "");
 }
 
 int RGWCivetWeb::send_100_continue()
 {
-  char buf[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
+  const char buf[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
 
   return mg_write(conn, buf, sizeof(buf) - 1);
 }
 
-static void dump_date_header(bufferlist &out)
+int RGWCivetWeb::dump_date_header()
 {
   char timestr[TIME_BUF_SIZE];
-  const time_t gtime = time(NULL);
+
+  const time_t gtime = time(nullptr);
   struct tm result;
-  struct tm const * const tmp = gmtime_r(&gtime, &result);
+  struct tm const* const tmp = gmtime_r(&gtime, &result);
 
-  if (tmp == NULL)
-    return;
+  if (nullptr == tmp) {
+    return 0;
+  }
 
-  if (strftime(timestr, sizeof(timestr),
-	       "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
-    out.append(timestr);
+  if (! strftime(timestr, sizeof(timestr),
+                 "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp)) {
+    return 0;
+  }
+
+  return write_data(timestr, strlen(timestr));
 }
 
 int RGWCivetWeb::complete_header()
 {
-  header_done = true;
+  constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
+  constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
+  constexpr char HEADER_END[] = "\r\n";
 
-  if (!has_content_length) {
-    return 0;
+  size_t sent = 0;
+
+  dump_date_header();
+
+  if (explicit_keepalive) {
+    sent += write_data(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+  } else if (explicit_conn_close) {
+    sent += write_data(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
 
-  dump_date_header(header_data);
-
-  if (explicit_keepalive)
-    header_data.append("Connection: Keep-Alive\r\n");
-  else if (explicit_conn_close)
-    header_data.append("Connection: close\r\n");
-
-  header_data.append("\r\n");
-
-  sent_header = true;
-
-  return write_data(header_data.c_str(), header_data.length());
+  return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }
 
 int RGWCivetWeb::send_content_length(uint64_t len)
 {
-  has_content_length = true;
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\r\n", buf);
+
+  return mg_printf(conn, "Content-Length: %s\r\n", buf);
 }

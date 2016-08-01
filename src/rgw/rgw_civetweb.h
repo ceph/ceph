@@ -16,18 +16,12 @@ class RGWCivetWeb : public RGWStreamIOEngine,
   RGWEnv env;
   mg_connection *conn;
 
-  bufferlist header_data;
-  bufferlist data;
-
   int port;
-  int status_num;
 
-  bool header_done;
-  bool sent_header;
-  bool has_content_length;
   bool explicit_keepalive;
   bool explicit_conn_close;
 
+  int dump_date_header();
 public:
   void init_env(CephContext *cct);
 
@@ -51,11 +45,6 @@ public:
     : RGWStreamIOFacade(this),
       env(rhs.env),
       conn(rhs.conn),
-      header_data(rhs.header_data),
-      data(rhs.data),
-      header_done(rhs.header_done),
-      sent_header(rhs.sent_header),
-      has_content_length(rhs.has_content_length),
       explicit_keepalive(rhs.explicit_keepalive),
       explicit_conn_close(rhs.explicit_conn_close) {
   }
