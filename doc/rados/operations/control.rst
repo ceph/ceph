@@ -65,7 +65,7 @@ The valid formats are ``plain`` (default) and ``json``.
 To display the statistics for all placement groups stuck in a specified state, 
 execute the following:: 
 
-	ceph pg dump_stuck inactive|unclean|stale [--format {format}] [-t|--threshold {seconds}]
+	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
 ``--format`` may be ``plain`` (default) or ``json``
@@ -131,9 +131,13 @@ location. ::
 
 	ceph osd crush set {id} {weight} [{loc1} [{loc2} ...]]
 
-Remove an existing item from the CRUSH map. ::
+Remove an existing item (OSD) from the CRUSH map. ::
 
-	ceph osd crush remove {id}
+	ceph osd crush remove {name}
+
+Remove an existing bucket from the CRUSH map. ::
+
+	ceph osd crush remove {bucket-name}
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
@@ -163,13 +167,6 @@ Remove the given OSD(s). ::
 Query the current max_osd parameter in the OSD map. ::
 
 	ceph osd getmaxosd
-
-Import the given OSD map. Note that this can be a bit dangerous,
-since the OSD map includes dynamic state about which OSDs are current
-on or offline; only do this if you've just modified a (very) recent
-copy of the map. ::
-
-	ceph osd setmap -i file
 
 Import the given crush map. ::
 
@@ -222,6 +219,10 @@ OSDs which have 120% of the average utilization, but if you include
 threshold it will use that percentage instead. ::
 
 	ceph osd reweight-by-utilization [threshold]
+
+Describes what reweight-by-utilization would do. ::
+
+    ceph osd test-reweight-by-utilization
 
 Adds/removes the address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
@@ -282,7 +283,10 @@ Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 Runs a simple throughput benchmark against OSD.N, writing ``NUMBER_OF_OBJECTS``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
-writes 1 GB in total in 4-MB increments. ::
+writes 1 GB in total in 4-MB increments.
+The benchmark is non-destructive and will not overwrite existing live
+OSD data, but might temporarily affect the performance of clients
+concurrently accessing the OSD. ::
 
 	ceph tell osd.N bench [NUMER_OF_OBJECTS] [BYTES_PER_WRITE]
 

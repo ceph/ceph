@@ -7,14 +7,15 @@ Sage Weil <sage@redhat.com>
 Component Technical Leads
 -------------------------
 
-Core, RADOS   - Samuel Just <sam.just@inktank.com>
-RBD           - Josh Durgin <josh.durgin@inktank.com>
-RBD (kernel)  - Ilya Dryomov <ilya.dryomov@inktank.com>
-RGW           - Yehuda Sadeh <yehuda@inktank.com>
-CephFS        - Greg Farnum <greg@inktank.com>
-                Yan, Zheng <zheng.z.yan@intel.com>
-Deployment    - Alfredo Deza <alfredo.deza@inktank.com>
-Teuthology    - Zack Cerza <zack.cerza@inktank.com>
+Core, RADOS   - Samuel Just <sjust@redhat.com>
+RBD           - Josh Durgin <jdurgin@redhat.com>
+                Jason Dillaman <dillaman@redhat.com>
+RBD (kernel)  - Ilya Dryomov <idryomov@redhat.com>
+RGW           - Yehuda Sadeh <yehuda@redhat.com>
+CephFS        - Greg Farnum <gfarnum@redhat.com>
+                Yan, Zheng <zyan@redhat.com>
+Deployment    - Alfredo Deza <adeza@redhat.com>
+Teuthology    - Zack Cerza <zack@redhat.com>
 Calamari      - Gregory Meno <gmeno@redhat.com>
 Chef Cookbook - Guilhem Lettron <guilhem@lettron.fr>
 

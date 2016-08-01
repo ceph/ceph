@@ -40,9 +40,9 @@ public:
   }
 
   void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
-	       int wanted, int issued, inodeno_t sr, bufferlist& lb)
+	       int wanted, int issued, inodeno_t sr, snapid_t sf, bufferlist& lb)
   {
-    caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, lb);
+    caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, sf, lb);
   }
   void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
     ceph_mds_snaprealm_reconnect r;
@@ -56,6 +56,7 @@ public:
     data.clear();
     if (features & CEPH_FEATURE_MDSENC) {
       ::encode(caps, data);
+      header.version = HEAD_VERSION;
     } else if (features & CEPH_FEATURE_FLOCK) {
       // encode with old cap_reconnect_t encoding
       __u32 n = caps.size();

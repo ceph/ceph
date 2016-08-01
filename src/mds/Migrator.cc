@@ -12,7 +12,7 @@
  * 
  */
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "CInode.h"
 #include "CDir.h"
@@ -50,6 +50,7 @@
 
 #include "messages/MExportCaps.h"
 #include "messages/MExportCapsAck.h"
+#include "messages/MGatherCaps.h"
 
 
 /*
@@ -85,11 +86,11 @@
 class MigratorContext : public MDSInternalContextBase {
 protected:
   Migrator *mig;
-  MDS *get_mds() {
+  MDSRank *get_mds() {
     return mig->mds;
   }
 public:
-  MigratorContext(Migrator *mig_) : mig(mig_) {
+  explicit MigratorContext(Migrator *mig_) : mig(mig_) {
     assert(mig != NULL);
   }
 };
@@ -139,9 +140,13 @@ void Migrator::dispatch(Message *m)
   case MSG_MDS_EXPORTCAPS:
     handle_export_caps(static_cast<MExportCaps*>(m));
     break;
+  case MSG_MDS_GATHERCAPS:
+    handle_gather_caps(static_cast<MGatherCaps*>(m));
+    break;
 
   default:
-    assert(0);
+    derr << "migrator unknown message " << m->get_type() << dendl;
+    assert(0 == "migrator unknown message");
   }
 }
 
@@ -728,6 +733,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
    
+  if (mds->mdcache->is_readonly()) {
+    dout(7) << "read-only FS, no exports for now" << dendl;
+    return;
+  }
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
@@ -958,7 +967,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   MExportDirPrep *prep = new MExportDirPrep(dir->dirfrag(), it->second.tid);
 
   // include list of bystanders
-  for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
+  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
        p != dir->replicas_end();
        ++p) {
     if (p->first != it->second.peer) {
@@ -1011,7 +1020,8 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
       bufferlist bl;
       cache->replicate_dentry(cur->inode->parent, it->second.peer, bl);
       dout(7) << "  added " << *cur->inode->parent << dendl;
-      cache->replicate_inode(cur->inode, it->second.peer, bl);
+      cache->replicate_inode(cur->inode, it->second.peer, bl,
+			     mds->mdsmap->get_up_features());
       dout(7) << "  added " << *cur->inode << dendl;
       bl.claim_append(tracebl);
       tracebl.claim(bl);
@@ -1034,12 +1044,12 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
 
       start = 'f';  // start with dirfrag
     }
-    bufferlist final;
+    bufferlist final_bl;
     dirfrag_t df = cur->dirfrag();
-    ::encode(df, final);
-    ::encode(start, final);
-    final.claim_append(tracebl);
-    prep->add_trace(final);
+    ::encode(df, final_bl);
+    ::encode(start, final_bl);
+    final_bl.claim_append(tracebl);
+    prep->add_trace(final_bl);
   }
 
   // send.
@@ -1138,7 +1148,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 	  it->second.warning_ack_waiting.count(MDS_RANK_NONE) > 0));
   assert(it->second.notify_ack_waiting.empty());
 
-  for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
+  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
        p != dir->replicas_end();
        ++p) {
     if (p->first == it->second.peer) continue;
@@ -1226,7 +1236,8 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
 					      dir,   // recur start point
 					      exported_client_map,
 					      now);
-  ::encode(exported_client_map, req->client_map);
+  ::encode(exported_client_map, req->client_map,
+           mds->mdsmap->get_up_features());
 
   // add bounds to message
   set<CDir*> bounds;
@@ -1315,7 +1326,7 @@ void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
     dout(7) << "finish_export_inode_caps telling client." << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, in->ino(), 0,
-				     cap->get_cap_id(), cap->get_mseq());
+				     cap->get_cap_id(), cap->get_mseq(), mds->get_osd_epoch_barrier());
 
     map<client_t,Capability::Import>::iterator q = peer_imported.find(it->first);
     assert(q != peer_imported.end());
@@ -1897,7 +1908,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
-      assert(0);    // this shouldn't happen if the auth pins his path properly!!!! 
+      assert(0);    // this shouldn't happen if the auth pins its path properly!!!!
     }
 
     assert(0); // this shouldn't happen; the get_inode above would have succeeded.
@@ -2137,7 +2148,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   dout(7) << " all ready, noting auth and freezing import region" << dendl;
 
   bool success = true;
-  if (dir->get_inode()->filelock.can_wrlock(-1) &&
+  if (!mds->mdcache->is_readonly() &&
+      dir->get_inode()->filelock.can_wrlock(-1) &&
       dir->get_inode()->nestlock.can_wrlock(-1)) {
     it->second.mut = MutationRef(new MutationImpl);
     // force some locks.  hacky.
@@ -2557,7 +2569,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   dout(7) << "sending ack for " << *dir << " to old auth mds." << from << dendl;
 
   // test surviving observer of a failed migration that did not complete
-  //assert(dir->replica_map.size() < 2 || mds->whoami != 0);
+  //assert(dir->replica_map.size() < 2 || mds->get_nodeid() != 0);
 
   MExportDirAck *ack = new MExportDirAck(dir->dirfrag(), it->second.tid);
   ::encode(imported_caps, ack->imported_caps);
@@ -2687,7 +2699,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   mds->mdcache->maybe_send_pending_resolves();
 
   // did i just import mydir?
-  if (dir->ino() == MDS_INO_MDSDIR(mds->whoami))
+  if (dir->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
     cache->populate_mydir();
 
   // is it empty?
@@ -2923,7 +2935,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     else if (icode == 'I') {
       // inode
       assert(le);
-      decode_import_inode(dn, blp, oldauth, ls, le->get_start_off(), peer_exports, updated_scatterlocks);
+      decode_import_inode(dn, blp, oldauth, ls, le->get_metablob()->event_seq,
+          peer_exports, updated_scatterlocks);
     }
     
     // add dentry to journal entry
@@ -3002,6 +3015,26 @@ void Migrator::export_caps(CInode *in)
   encode_export_inode_caps(in, false, ex->cap_bl, ex->client_map);
 
   mds->send_message_mds(ex, dest);
+}
+
+void Migrator::handle_gather_caps(MGatherCaps *m)
+{
+  CInode *in = cache->get_inode(m->ino);
+
+  if (!in)
+    goto out;
+
+  dout(10) << "handle_gather_caps " << *m << " from " << m->get_source()
+           << " on " << *in
+	   << dendl;
+  if (in->is_any_caps() &&
+      !in->is_auth() &&
+      !in->is_ambiguous_auth() &&
+      !in->state_test(CInode::STATE_EXPORTINGCAPS))
+    export_caps(in);
+
+out:
+  m->put();
 }
 
 class C_M_LoggedImportCaps : public MigratorContext {

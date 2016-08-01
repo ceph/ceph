@@ -14,7 +14,6 @@
 namespace rados {
   namespace cls {
     namespace lock {
-
       extern void lock(librados::ObjectWriteOperation *rados_op,
 		       const std::string& name, ClsLockType type,
 		       const std::string& cookie, const std::string& tag,
@@ -55,6 +54,11 @@ namespace rados {
 			       map<locker_id_t, locker_info_t> *lockers,
 			       ClsLockType *type, std::string *tag);
 
+      extern void assert_locked(librados::ObjectOperation *rados_op,
+                                const std::string& name, ClsLockType type,
+                                const std::string& cookie,
+                                const std::string& tag);
+
       class Lock {
 	std::string name;
 	std::string cookie;
@@ -78,6 +82,9 @@ namespace rados {
 	    flags &= ~LOCK_FLAG_RENEW;
 	  }
 	}
+
+        void assert_locked_exclusive(librados::ObjectOperation *rados_op);
+        void assert_locked_shared(librados::ObjectOperation *rados_op);
 
 	/* ObjectWriteOperation */
 	void lock_exclusive(librados::ObjectWriteOperation *ioctx);

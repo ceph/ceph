@@ -1,4 +1,4 @@
-  $ crushtool -i "$TESTDIR/test-map-tries-vs-retries.crushmap" --test --show-statistics --weight 0 0 --weight 8 0
+  $ crushtool -i "$TESTDIR/test-map-tries-vs-retries.crushmap" --test --show-mappings --show-statistics --weight 0 0 --weight 8 0
   rule 0 (replicated_ruleset), x = 0..1023, numrep = 1..10
   CRUSH rule 0 x 0 [7]
   CRUSH rule 0 x 1 [10]

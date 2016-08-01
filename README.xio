@@ -1,0 +1,37 @@
+
+
+Building
+
+The Accelio XioMessenger is built conditionally only, when --enable-xio is
+provided to configure.
+
+Accelio depends on OpenFabrics verbs development headers/libraries.
+Prior to installing the Accelio package, the following prerequisites are required:
+
+RedHat (RHEL 6.4 and above)
+
+        yum groupinstall "Infiniband Support"
+        yum install libtool autoconf automake
+        yum install infiniband-diags perftest libibverbs-utils librdmacm-utils
+        yum install librdmacm-devel libibverbs-devel numactl numactl-devel libaio-devel libevent-devel
+
+
+Ubuntu (Ubuntu 13.04 and above)
+
+        apt-get install libtool autoconf automake build-essential
+        apt-get install ibverbs-utils rdmacm-utils infiniband-diags perftest
+        apt-get install librdmacm-dev libibverbs-dev numactl libnuma-dev libaio-dev libevent-dev
+
+
+MLNX_OFED
+
+        Mellanox OFED pacakage is optional and recommended
+        look for latest OFED packages at:
+        http://www.mellanox.com/page/products_dyn?product_family=26
+
+
+If either the Accelio or OFED development environments are in non-standard locations,
+include and library paths must be added to both CFLAGS and CXXFLAGS, in the Autotools
+build as of 1/1/2015.
+
+-Matt

@@ -206,4 +206,17 @@ protected:
   std::string nspace;
   uint64_t alignment;
 };
+
+/**
+ * Test case without creating a temporary pool in advance.
+ * This is necessary for scenarios such that we need to
+ * manually create a pool, start some long-runing tasks and
+ * then the related pool is suddenly gone.
+ */
+class RadosTestNP: public ::testing::Test {
+public:
+  RadosTestNP() {}
+  virtual ~RadosTestNP() {}
+};
+
 #endif

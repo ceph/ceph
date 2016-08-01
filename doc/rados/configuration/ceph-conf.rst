@@ -447,17 +447,11 @@ Viewing a Configuration at Runtime
 If your Ceph Storage Cluster is running, and you would like to see the
 configuration settings from a running daemon, execute the following:: 
 
-	ceph --admin-daemon {/path/to/admin/socket} config show | less
-	
-The default path for the admin socket for each daemon is:: 
+	ceph daemon {daemon-type}.{id} config show | less
 
-	/var/run/ceph/$cluster-$name.asok
-	
-At real time, the metavariables will evaluate to the actual cluster name and
-daemon name. For example, if the cluster name is ``ceph`` (it is by default) 
-and you want to retrieve the configuration for ``osd.0``, use the following::
+If you are on a machine where osd.0 is running, the command would be::
 
-	ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config show | less
+    ceph daemon osd.0 config show | less
 
 
 Running Multiple Clusters
@@ -471,7 +465,8 @@ When running Ceph with  default settings, the default cluster name is ``ceph``,
 which means you would  save your Ceph configuration file with the file name
 ``ceph.conf`` in the  ``/etc/ceph`` default directory.
 
-See `ceph-deploy new` for details.
+See `ceph-deploy new`_ for details.
+.. _ceph-deploy new:../ceph-deploy-new
 
 When you run multiple clusters, you must name your cluster and save the Ceph
 configuration file with the name of the cluster. For example, a cluster named

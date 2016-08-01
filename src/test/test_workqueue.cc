@@ -8,7 +8,7 @@
 
 TEST(WorkQueue, StartStop)
 {
-  ThreadPool tp(g_ceph_context, "foo", 10, "");
+  ThreadPool tp(g_ceph_context, "foo", "tp_foo", 10, "");
   
   tp.start();
   tp.pause();
@@ -21,7 +21,7 @@ TEST(WorkQueue, StartStop)
 
 TEST(WorkQueue, Resize)
 {
-  ThreadPool tp(g_ceph_context, "bar", 2, "osd_op_threads");
+  ThreadPool tp(g_ceph_context, "bar", "tp_bar", 2, "osd_op_threads");
   
   tp.start();
 
@@ -38,12 +38,12 @@ TEST(WorkQueue, Resize)
   sleep(1);
   ASSERT_EQ(3, tp.get_num_threads());
 
-  g_conf->set_val("osd op threads", "15");
+  g_conf->set_val("osd op threads", "0");
   g_conf->apply_changes(&cout);
   sleep(1);
-  ASSERT_EQ(15, tp.get_num_threads());
+  ASSERT_EQ(0, tp.get_num_threads());
 
-  g_conf->set_val("osd op threads", "0");
+  g_conf->set_val("osd op threads", "15");
   g_conf->apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(15, tp.get_num_threads());

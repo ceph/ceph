@@ -56,7 +56,7 @@ some insight into the internal state of the ``radosgw`` daemon via
 its admin socket.  By default, there will be a socket configured to
 reside in ``/var/run/ceph``, and the daemon can be queried with::
 
- ceph --admin-daemon /var/run/ceph/client.rgw help
+ ceph daemon /var/run/ceph/client.rgw help
  
  help                list available commands
  objecter_requests   show in-progress osd requests
@@ -66,7 +66,7 @@ reside in ``/var/run/ceph``, and the daemon can be queried with::
 
 Of particular interest::
 
- ceph --admin-daemon /var/run/ceph/client.rgw objecter_requests
+ ceph daemon /var/run/ceph/client.rgw objecter_requests
  ...
 
 will dump information about current in-progress requests with the
@@ -114,7 +114,7 @@ check the OSD status with::
 
 This tells us to look at ``osd.1``, the primary copy for this PG::
 
- ceph --admin-daemon /var/run/ceph/osd.1.asok
+ ceph daemon osd.1 ops
  { "num_ops": 651,
   "ops": [
         { "description": "osd_op(client.4124.0:1858 fatty_25647_object1857 [write 0~4096] 2.d2041a48)",

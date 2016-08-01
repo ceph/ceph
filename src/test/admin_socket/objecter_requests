@@ -29,8 +29,8 @@ def check_osd_ops(ops):
     def add_to_mapping(mapping, key, value, msg):
         if key in mapping:
             if mapping[key] != value:
-                print mapping[key], '!=', value
-                print msg
+                print('%s != %s' % (mapping[key], value))
+                print(msg)
                 found_error[0] = True
         else:
             mapping[key] = value

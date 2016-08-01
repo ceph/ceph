@@ -289,11 +289,13 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 
   map<string, bufferlist> keys;
 
-  string from_index = op.marker;
+  const string& from_index = op.marker;
+  const string& to_index = op.end_marker;
+  const bool to_index_valid = !to_index.empty();
 
 #define MAX_ENTRIES 1000
   size_t max_entries = op.max_entries;
-  if (!max_entries || max_entries > MAX_ENTRIES)
+  if (max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
 
   string match_prefix;
@@ -302,7 +304,10 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
   if (rc < 0)
     return rc;
 
-  CLS_LOG(20, "from_index=%s match_prefix=%s", from_index.c_str(), match_prefix.c_str());
+  CLS_LOG(20, "from_index=%s to_index=%s match_prefix=%s",
+          from_index.c_str(),
+          to_index.c_str(),
+          match_prefix.c_str());
   cls_user_list_buckets_ret ret;
 
   list<cls_user_bucket_entry>& entries = ret.entries;
@@ -315,6 +320,9 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
   for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
     const string& index = iter->first;
     marker = index;
+
+    if (to_index_valid && to_index.compare(index) <= 0)
+      break;
 
     bufferlist& bl = iter->second;
     bufferlist::iterator biter = bl.begin();
@@ -372,7 +380,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_buckets_info", CLS_METHOD_RD | CLS_METHOD_WR,
                           cls_user_set_buckets_info, &h_user_set_buckets_info);
   cls_register_cxx_method(h_class, "complete_stats_sync", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cls_user_complete_stats_sync, &h_user_set_buckets_info);
+                          cls_user_complete_stats_sync, &h_user_complete_stats_sync);
   cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);
   cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);

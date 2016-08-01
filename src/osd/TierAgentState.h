@@ -23,7 +23,6 @@ struct TierAgentState {
   bool delaying;
 
   /// histogram of ages we've encountered
-  pow2_hist_t atime_hist;
   pow2_hist_t temp_hist;
   int hist_age;
 
@@ -35,12 +34,14 @@ struct TierAgentState {
 
   enum flush_mode_t {
     FLUSH_MODE_IDLE,   // nothing to flush
-    FLUSH_MODE_ACTIVE, // flush what we can to bring down dirty count
+    FLUSH_MODE_LOW, // flush dirty objects with a low speed
+    FLUSH_MODE_HIGH, //flush dirty objects with a high speed
   } flush_mode;     ///< current flush behavior
   static const char *get_flush_mode_name(flush_mode_t m) {
     switch (m) {
     case FLUSH_MODE_IDLE: return "idle";
-    case FLUSH_MODE_ACTIVE: return "active";
+    case FLUSH_MODE_LOW: return "low";
+    case FLUSH_MODE_HIGH: return "high";
     default: assert(0 == "bad flush mode");
     }
   }
@@ -107,9 +108,6 @@ struct TierAgentState {
     f->dump_string("evict_mode", get_evict_mode_name());
     f->dump_unsigned("evict_effort", evict_effort);
     f->dump_stream("position") << position;
-    f->open_object_section("atime_hist");
-    atime_hist.dump(f);
-    f->close_section();
     f->open_object_section("temp_hist");
     temp_hist.dump(f);
     f->close_section();

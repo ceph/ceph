@@ -1,392 +1,583 @@
-=============================
- Install Ceph Object Gateway
-=============================
-
-The :term:`Ceph Object Gateway` daemon runs on Apache and FastCGI. 
-
-To run a :term:`Ceph Object Storage` service, you must install Apache and
-FastCGI. Then, you must install the Ceph Object Gateway daemon. The Ceph Object
-Gateway supports 100-continue, but you must install Ceph builds of Apache and
-FastCGI for 100-continue support. To install the Ceph Object Gateway, first
-install and configure Apache and FastCGI. Then, install the Ceph Object Gateway
-daemon. If you plan to run a Ceph Object Storage service with a federated
-architecture (multiple regions and zones), you must also install the
-synchronization agent.
-
-See `Get Packages`_ for information on adding Ceph packages to each Ceph Node. 
-Ensure that you have executed those steps on each Ceph Node first.
-
-
-Apache/FastCGI w/out 100-Continue
-=================================
-
-You may use standard Apache and FastCGI packages for your Ceph Object
-Gateways. However, they will not provide 100-continue support.
-
-Debian Packages
----------------
-
-To install Apache and FastCGI Debian packages, execute the following:: 
-
-	sudo apt-get install apache2 libapache2-mod-fastcgi
-
-
-RPM Packages
-------------
-
-To install Apache and FastCGI RPMs, execute the following::
-
-	sudo rpm -ivh fcgi-2.4.0-10.el6.x86_64.rpm 
-	sudo rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
-
-Or::
-
-	sudo yum install httpd mod_fastcgi
-
-
-Apache/FastCGI w/ 100-Continue
-==============================
-
-The Ceph community provides a slightly optimized version of the  ``apache2``
-and ``fastcgi`` packages. The material difference is that  the Ceph packages are
-optimized for the ``100-continue`` HTTP response,  where the server determines
-if it will accept the request by first  evaluating the request header. See `RFC
-2616, Section 8`_ for details  on ``100-continue``. You can find the most recent
-builds of Apache and FastCGI packages modified for Ceph at `gitbuilder.ceph.com`_.
-
-
-Debian Packages
----------------
-
-#. Add the development key::
-
-	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc | sudo apt-key add -
-
-#. Add a ``ceph-apache.list`` file to your APT sources. :: 
-
-	echo deb http://gitbuilder.ceph.com/apache2-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-apache.list
-
-#. Add a ``ceph-fastcgi.list`` file to your APT sources. :: 
-
-	echo deb http://gitbuilder.ceph.com/libapache-mod-fastcgi-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-fastcgi.list
-
-#. Update your repository and install Apache and FastCGI:: 
-
-	sudo apt-get update && sudo apt-get install apache2 libapache2-mod-fastcgi
-
-
-RPM Packages
-------------
-
-To install Apache with 100-continue, execute the following steps:
-
-#. Install ``yum-plugin-priorities``. ::
-
-	sudo yum install yum-plugin-priorities
-
-#. Ensure ``/etc/yum/pluginconf.d/priorities.conf`` exists.
-
-#. Ensure ``priorities.conf`` enables the plugin. :: 
-
-	[main]
-	enabled = 1
-
-#. Add a ``ceph-apache.repo`` file to ``/etc/yum.repos.d``. Replace 
-   ``{distro}`` with the name of your distribution (e.g., ``centos6``, 
-   ``rhel6``, etc.) ::
-
-	[apache2-ceph-noarch]
-	name=Apache noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/apache2-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
-
-	[apache2-ceph-source]
-	name=Apache source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/apache2-rpm-{distro}-x86_64-basic/ref/master
-	enabled=0
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
-
-
-#. Add a ``ceph-fastcgi.repo`` file to ``/etc/yum.repos.d``. Replace 
-   ``{distro}`` with the name of your distribution (e.g., ``centos6``, 
-   ``rhel6``, etc.) ::
-
-	[fastcgi-ceph-basearch]
-	name=FastCGI basearch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
-	
-	[fastcgi-ceph-noarch]
-	name=FastCGI noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
-
-	[fastcgi-ceph-source]
-	name=FastCGI source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=0
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
-
-   If the repository doesn't have a ``noarch`` section, you may remove the
-   ``noarch`` entry above.
-
-
-#. Update your repository. On RHEL systems, enable the 
-   ``rhel-6-server-optional-rpms`` repository. ::
-
-	sudo yum update --enablerepo=rhel-6-server-optional-rpms
-
-#. Install Apache and FastCGI. :: 
-
-	sudo yum update && sudo yum install httpd mod_fastcgi
-
-
-Configure Apache/FastCGI
-========================
-
-To complete the installation, ensure that you have the rewrite module
-enabled and FastCGI enabled. The steps differ slightly based upon the 
-type of package installation. 
-
-Debian-based Packages
----------------------
-
-#. Open the ``apache2.conf`` file. :: 
-
-	sudo vim /etc/apache2/apache2.conf
-
-
-#. Add a line for the ``ServerName`` in the Apache configuration file. 
-   Provide the fully qualified domain name of the server machine 
-   (e.g., ``hostname -f``). ::
-
-	ServerName {fqdn}
-
-#. Enable the URL rewrite modules for Apache and FastCGI. ::
-
-	sudo a2enmod rewrite
-	sudo a2enmod fastcgi
-
-
-#. Restart Apache so that the foregoing changes take effect. ::
-
-	sudo service apache2 restart
-
-
-RPM-based Packages
-------------------
-
-
-#. Open the ``httpd.conf`` file. :: 
-
-	sudo vim /etc/httpd/conf/httpd.conf
-
-#. Uncomment ``#ServerName`` and add the name of your server. 
-   Provide the fully qualified domain name of the server machine 
-   (e.g., ``hostname -f``).:: 
-
-	ServerName {fqdn}
-
-#. Ensure that the Rewrite module is enabled. :: 
-
-	#if not present, add:
-	LoadModule rewrite_module modules/mod_rewrite.so	
-
-#. Save the ``httpd.conf`` file.
-
-#. Ensure that the FastCGI module is enabled. The installer should
-   include an ``/etc/httpd/conf.d/fastcgi.conf`` file that loads the
-   FastCGI module. :: 
-
-	#if not present, add:
-	LoadModule fastcgi_module modules/mod_fastcgi.so
-
-#. Restart Apache so that the foregoing changes take effect.. :: 
-
-	sudo /etc/init.d/httpd restart
-
-
-
-Enable SSL
-==========
-
-Some REST clients use HTTPS by default. So you should consider enabling SSL
-for Apache. Use the following procedures to enable SSL.
-
-.. note:: You can use self-certified certificates. Some client
-   APIs check for a trusted certificate authority. You may need to obtain
-   a SSL certificate from a trusted authority to use those client APIs.
-
-
-Debian Packages
----------------
-
-To enable SSL for Debian/Ubuntu systems, execute the following steps:
-
-#. Ensure that you have installed the dependencies. :: 
-
-	sudo apt-get install openssl ssl-cert
-
-#. Enable the SSL module. ::
-
-	sudo a2enmod ssl
-
-#. Generate a certificate. ::
-
-	sudo mkdir /etc/apache2/ssl
-	sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/apache2/ssl/apache.key -out /etc/apache2/ssl/apache.crt
-
-#. Restart Apache. ::
-
-	sudo service apache2 restart
-
-
-See the `Ubuntu Server Guide`_ for additional details.
-
-
-RPM Packages
-------------
-
-To enable SSL for RPM-based systems, execute the following steps:
-
-#. Ensure that you have installed the dependencies. ::
-
-	sudo yum install mod_ssl openssl
-
-#. Ensure the SSL module is enabled.
-
-#. Generate a certificate and copy it to the appropriate locations. ::
-
-	openssl x509 -req -days 365 -in ca.csr -signkey ca.key -out ca.crt
-	cp ca.crt /etc/pki/tls/certs
-	cp ca.key /etc/pki/tls/private/ca.key
-	cp ca.csr /etc/pki/tls/private/ca.csr
-
-#. Restart Apache. ::
-
-	sudo /etc/init.d/httpd restart
-
-See `Setting up an SSL secured Webserver with CentOS`_ for additional details.
-
-
-
-Add Wildcard to DNS
-===================
-
-To use Ceph with S3-style subdomains (e.g., ``bucket-name.domain-name.com``),
-you need to add a wildcard to the DNS record of the DNS server you use with the
-``radosgw`` daemon.
-
-.. tip:: The address of the DNS must also be specified in the Ceph 
-   configuration file with the ``rgw dns name = {hostname}`` setting.
-
-For ``dnsmasq``, consider addding the following ``address`` setting with a dot
-(.) prepended to the host name:: 
-
-	address=/.{hostname-or-fqdn}/{host-ip-address}
-	address=/.ceph-node/192.168.0.1
-
-For ``bind``, consider adding the a wildcard to the DNS record::
-
-	$TTL	604800
-	@	IN	SOA	ceph-node. root.ceph-node. (
-				      2		; Serial
-				 604800		; Refresh
-				  86400		; Retry
-				2419200		; Expire
-				 604800 )	; Negative Cache TTL
-	;
-	@	IN	NS	ceph-node.
-	@	IN	A	192.168.122.113
-	*	IN	CNAME	@
-
-Restart your DNS server and ping your server with a subdomain to 
-ensure that your Ceph Object Store ``radosgw`` daemon can process
-the subdomain requests. :: 
-
-	ping mybucket.{fqdn}
-	ping mybucket.ceph-node
-	
-
+===========================
 Install Ceph Object Gateway
 ===========================
 
-Ceph Object Storage services use the Ceph Object Gateway daemon (``radosgw``)
-to enable the gateway. For federated architectures, the synchronization 
-agent (``radosgw-agent``) provides data and metadata synchronization between
-zones and regions. 
+As of `firefly` (v0.80), Ceph Object Gateway is running on Civetweb (embedded
+into the ``ceph-radosgw`` daemon) instead of Apache and FastCGI. Using Civetweb
+simplifies the Ceph Object Gateway installation and configuration.
+
+.. note:: To run the Ceph Object Gateway service, you should have a running
+          Ceph storage cluster, and the gateway host should have access to the 
+          public network.
+
+.. note:: In version 0.80, the Ceph Object Gateway does not support SSL. You
+          may setup a reverse proxy server with SSL to dispatch HTTPS requests 
+          as HTTP requests to CivetWeb.
+
+Execute the Pre-Installation Procedure
+--------------------------------------
+
+See Preflight_ and execute the pre-installation procedures on your Ceph Object
+Gateway node. Specifically, you should disable ``requiretty`` on your Ceph
+Deploy user, set SELinux to ``Permissive`` and set up a Ceph Deploy user with
+password-less ``sudo``. For Ceph Object Gateways, you will need to open the
+port that Civetweb will use in production.
+
+.. note:: Civetweb runs on port ``7480`` by default.
+
+Install Ceph Object Gateway
+---------------------------
+
+From the working directory of your administration server, install the Ceph
+Object Gateway package on the Ceph Object Gateway node. For example::
+
+ ceph-deploy install --rgw <gateway-node1> [<gateway-node2> ...]
+
+The ``ceph-common`` package is a dependency, so ``ceph-deploy`` will install
+this too. The ``ceph`` CLI tools are intended for administrators. To make your
+Ceph Object Gateway node an administrator node, execute the following from the
+working directory of your administration server::
+
+ ceph-deploy admin <node-name>
+
+Create a Gateway Instance
+-------------------------
+
+From the working directory of your administration server, create an instance of
+the Ceph Object Gateway on the Ceph Object Gateway. For example::
+
+ ceph-deploy rgw create <gateway-node1>
+
+Once the gateway is running, you should be able to access it on port ``7480``
+with an unauthenticated request like this::
+
+ http://client-node:7480
+
+If the gateway instance is working properly, you should receive a response like
+this::
+
+ <?xml version="1.0" encoding="UTF-8"?>
+ <ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+        <Owner>
+ 		<ID>anonymous</ID>
+ 		<DisplayName></DisplayName>
+ 	</Owner>
+ 	<Buckets>
+ 	</Buckets>
+ </ListAllMyBucketsResult>
+
+If at any point you run into trouble and you want to start over, execute the
+following to purge the configuration::
+
+ ceph-deploy purge <gateway-node1> [<gateway-node2>]
+ ceph-deploy purgedata <gateway-node1> [<gateway-node2>]
+
+If you execute ``purge``, you must re-install Ceph.
+
+Change the Default Port
+-----------------------
+
+Civetweb runs on port ``7480`` by default. To change the default port (e.g., to
+port ``80``), modify your Ceph configuration file in the working directory of
+your administration server. Add a section entitled
+``[client.rgw.<gateway-node>]``, replacing ``<gateway-node>`` with the short
+node name of your Ceph Object Gateway node (i.e., ``hostname -s``).
+
+.. note:: In version 0.94, the Ceph Object Gateway does not support SSL. You
+          may setup a reverse proxy web server with SSL to dispatch HTTPS 
+          requests as HTTP requests to CivetWeb.
+
+For example, if your node name is ``gateway-node1``, add a section like this
+after the ``[global]`` section::
+
+ [client.rgw.gateway-node1]
+ rgw_frontends = "civetweb port=80"
+
+.. note:: Ensure that you leave no whitespace between ``port=<port-number>`` in
+          the ``rgw_frontends`` key/value pair. The ``[client.rgw.gateway-node1]``
+          heading identifies this portion of the Ceph configuration file as 
+          configuring a Ceph Storage Cluster client where the client type is a Ceph
+          Object Gateway (i.e., ``rgw``), and the name of the instance is
+          ``gateway-node1``.
+
+Push the updated configuration file to your Ceph Object Gateway node
+(and other Ceph nodes)::
+
+ ceph-deploy --overwrite-conf config push <gateway-node> [<other-nodes>]
+
+To make the new port setting take effect, restart the Ceph Object
+Gateway::
+
+ sudo systemctl restart ceph-radosgw.service
+
+Finally, check to ensure that the port you selected is open on the node's
+firewall (e.g., port ``80``). If it is not open, add the port and reload the
+firewall configuration. If you use the ``firewalld`` daemon, execute::
+
+  sudo firewall-cmd --list-all
+  sudo firewall-cmd --zone=public --add-port 80/tcp --permanent
+  sudo firewall-cmd --reload
+
+If you use ``iptables``, execute::
+
+  sudo iptables --list
+  sudo iptables -I INPUT 1 -i <iface> -p tcp -s <ip-address>/<netmask> --dport 80 -j ACCEPT
+
+Replace ``<iface>`` and ``<ip-address>/<netmask>`` with the relevant values for
+your Ceph Object Gateway node.
+
+Once you have finished configuring ``iptables``, ensure that you make the
+change persistent so that it will be in effect when your Ceph Object Gateway
+node reboots. Execute::
+
+  sudo apt-get install iptables-persistent
+
+A terminal UI will open up. Select ``yes`` for the prompts to save current
+``IPv4`` iptables rules to ``/etc/iptables/rules.v4`` and current ``IPv6``
+iptables rules to ``/etc/iptables/rules.v6``.
+
+The ``IPv4`` iptables rule that you set in the earlier step will be loaded in
+``/etc/iptables/rules.v4`` and will be persistent across reboots.
+
+If you add a new ``IPv4`` iptables rule after installing
+``iptables-persistent`` you will have to add it to the rule file. In such case,
+execute the following as the ``root`` user::
+
+ iptables-save > /etc/iptables/rules.v4
+
+Migrating from Apache to Civetweb
+---------------------------------
+
+If you're running the Ceph Object Gateway on Apache and FastCGI with Ceph
+Storage v0.80 or above, you're already running Civetweb--it starts with the
+``ceph-radosgw`` daemon and it's running on port 7480 by default so that it
+doesn't conflict with your Apache and FastCGI installation and other commonly
+used web service ports. Migrating to use Civetweb basically involves removing
+your Apache installation. Then, you must remove Apache and FastCGI settings
+from your Ceph configuration file and reset ``rgw_frontends`` to Civetweb.
+
+Referring back to the description for installing a Ceph Object Gateway with
+``ceph-deploy``, notice that the configuration file only has one setting
+``rgw_frontends`` (and that's assuming you elected to change the default port).
+The ``ceph-deploy`` utility generates the data directory and the keyring for
+you--placing the keyring in ``/var/lib/ceph/radosgw/{rgw-intance}``. The daemon
+looks in default locations, whereas you may have specified different settings
+in your Ceph configuration file. Since you already have keys and a data
+directory, you will want to maintain those paths in your Ceph configuration
+file if you used something other than default paths.
+
+A typical Ceph Object Gateway configuration file for an Apache-based deployment
+looks something similar as the following::
+
+On Red Hat Enterprise Linux::
+
+ [client.radosgw.gateway-node1]
+ host = {hostname}
+ keyring = /etc/ceph/ceph.client.radosgw.keyring
+ rgw socket path = ""
+ log file = /var/log/radosgw/client.radosgw.gateway-node1.log
+ rgw frontends = fastcgi socket\_port=9000 socket\_host=0.0.0.0
+ rgw print continue = false
+
+On Ubuntu::
+
+ [client.radosgw.gateway-node]
+ host = {hostname}
+ keyring = /etc/ceph/ceph.client.radosgw.keyring
+ rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
+ log file = /var/log/radosgw/client.radosgw.gateway-node1.log
+
+To modify it for use with Civetweb, simply remove the Apache-specific settings
+such as ``rgw_socket_path`` and ``rgw_print_continue``. Then, change the
+``rgw_frontends`` setting to reflect Civetweb rather than the Apache FastCGI
+front end and specify the port number you intend to use. For example::
+
+ [client.radosgw.gateway-node1]
+ host = {hostname}
+ keyring = /etc/ceph/ceph.client.radosgw.keyring
+ log file = /var/log/radosgw/client.radosgw.gateway-node1.log
+ rgw_frontends = civetweb port=80
+
+Finally, restart the Ceph Object Gateway. On Red Hat Enterprise Linux execute::
+
+ sudo systemctl restart ceph-radosgw.service
+
+On Ubuntu execute::
+
+ sudo service radosgw restart id=rgw.<short-hostname>
+
+If you used a port number that is not open, you will also need to open that
+port on your firewall.
+
+Configure Bucket Sharding
+-------------------------
+
+A Ceph Object Gateway stores bucket index data in the ``index_pool``, which
+defaults to ``.rgw.buckets.index``. Sometimes users like to put many objects
+(hundreds of thousands to millions of objects) in a single bucket. If you do
+not use the gateway administration interface to set quotas for the maximum
+number of objects per bucket, the bucket index can suffer significant
+performance degradation when users place large numbers of objects into a
+bucket.
+
+In Ceph 0.94, you may shard bucket indices to help prevent performance
+bottlenecks when you allow a high number of objects per bucket. The
+``rgw_override_bucket_index_max_shards`` setting allows you to set a maximum
+number of shards per bucket. The default value is ``0``, which means bucket
+index sharding is off by default.
+
+To turn bucket index sharding on, set ``rgw_override_bucket_index_max_shards``
+to a value greater than ``0``.
+
+For simple configurations, you may add ``rgw_override_bucket_index_max_shards``
+to your Ceph configuration file. Add it under ``[global]`` to create a
+system-wide value. You can also set it for each instance in your Ceph
+configuration file.
+
+Once you have changed your bucket sharding configuration in your Ceph
+configuration file, restart your gateway. On Red Hat Enteprise Linux execute::
+
+ sudo systemctl restart ceph-radosgw.service
+
+On Ubuntu execute::
+
+ sudo service radosgw restart id=rgw.<short-hostname>sudo service radosgw restart id=rgw.<short-hostname>
+
+For federated configurations, each zone may have a different ``index_pool``
+setting for failover. To make the value consistent for a region's zones, you
+may set ``rgw_override_bucket_index_max_shards`` in a gateway's region
+configuration. For example::
+
+  radosgw-admin region get > region.json
+
+Open the ``region.json`` file and edit the ``bucket_index_max_shards`` setting
+for each named zone. Save the ``region.json`` file and reset the region. For
+example::
+
+   radosgw-admin region set < region.json
+
+Once you've updated your region, update the region map. For example::
+
+   radosgw-admin regionmap update --name client.rgw.ceph-client
+
+Where ``client.rgw.ceph-client`` is the name of the gateway user.
+
+.. note:: Mapping the index pool (for each zone, if applicable) to a CRUSH
+          ruleset of SSD-based OSDs may also help with bucket index performance.
+
+Add Wildcard to DNS
+-------------------
+
+To use Ceph with S3-style subdomains (e.g., bucket-name.domain-name.com), you
+need to add a wildcard to the DNS record of the DNS server you use with the
+``ceph-radosgw`` daemon.
+
+The address of the DNS must also be specified in the Ceph configuration file
+with the ``rgw dns name = {hostname}`` setting.
+
+For ``dnsmasq``, add the following address setting with a dot (.) prepended to
+the host name::
+
+ address=/.{hostname-or-fqdn}/{host-ip-address}
+
+For example::
+
+ address=/.gateway-node1/192.168.122.75
 
 
-Debian Packages
----------------
+For ``bind``, add a wildcard to the DNS record. For example::
 
-To install the Ceph Object Gateway daemon, execute the following::
+ $TTL    604800
+ @       IN      SOA     gateway-node1. root.gateway-node1. (
+                               2         ; Serial
+                          604800         ; Refresh
+                           86400         ; Retry
+                         2419200         ; Expire
+                          604800 )       ; Negative Cache TTL
+ ;
+ @       IN      NS      gateway-node1.
+ @       IN      A       192.168.122.113
+ *       IN      CNAME   @
 
-	sudo apt-get install radosgw
-	
+Restart your DNS server and ping your server with a subdomain to ensure that
+your ``ceph-radosgw`` daemon can process the subdomain requests::
 
-To install the Ceph Object Gateway synchronization agent, execute the
-following::
-	
-	sudo apt-get install radosgw-agent
+ ping mybucket.{hostname}
 
+For example::
 
-RPM Packages
-------------
+ ping mybucket.gateway-node1
 
-To install the Ceph Object Gateway daemon, execute the
-following:: 
+Add Debugging (if needed)
+-------------------------
 
-	sudo yum install ceph-radosgw ceph
+Once you finish the setup procedure, if you encounter issues with your
+configuration, you can add debugging to the ``[global]`` section of your Ceph
+configuration file and restart the gateway(s) to help troubleshoot any
+configuration issues. For example::
 
+ [global]
+ #append the following in the global section.
+ debug ms = 1
+ debug rgw = 20
 
-To install the Ceph Object Gateway synchronization agent, execute the
-following::
+Using the Gateway
+-----------------
 
-	sudo yum install radosgw-agent
-	
-	
-Configure The Gateway
-=====================
+To use the REST interfaces, first create an initial Ceph Object Gateway user
+for the S3 interface. Then, create a subuser for the Swift interface. You then
+need to verify if the created users are able to access the gateway.
 
-Once you have installed the Ceph Object Gateway packages, the next step is
-to configure your Ceph Object Gateway. There are two approaches: 
+Create a RADOSGW User for S3 Access
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- **Simple:** A `simple`_ Ceph Object Gateway configuration implies that you 
-  are running a Ceph Object Storage service in a single data center. So you can
-  configure the Ceph Object Gateway without regard to regions and zones.
+A ``radosgw`` user needs to be created and granted access. The command ``man
+radosgw-admin`` will provide information on additional command options.
 
-- **Federated:** A `federated`_ Ceph Object Gateway configuration implies that
-  you are running a Ceph Object Storage service in a geographically distributed 
-  manner for fault tolerance and failover. This involves configuring your
-  Ceph Object Gateway instances with regions and zones.
+To create the user, execute the following on the ``gateway host``::
 
-Choose the approach that best reflects your cluster.
-	
+ sudo radosgw-admin user create --uid="testuser" --display-name="First User"
 
-.. _Get Packages: ../get-packages
-.. _Ubuntu Server Guide: https://help.ubuntu.com/12.04/serverguide/httpd.html
-.. _Setting up an SSL secured Webserver with CentOS: http://wiki.centos.org/HowTos/Https
-.. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
-.. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
-.. _Installing YUM Priorities: ../yum-priorities
-.. _simple: ../../radosgw/config
-.. _federated: ../../radosgw/federated-config
+The output of the command will be something like the following::
+
+ {
+	 "user_id": "testuser",
+	 "display_name": "First User",
+	 "email": "",
+	 "suspended": 0,
+	 "max_buckets": 1000,
+	 "auid": 0,
+	 "subusers": [],
+	 "keys": [{
+		 "user": "testuser",
+		 "access_key": "I0PJDPCIYZ665MW88W9R",
+		 "secret_key": "dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA"
+	 }],
+	 "swift_keys": [],
+	 "caps": [],
+	 "op_mask": "read, write, delete",
+	 "default_placement": "",
+	 "placement_tags": [],
+	 "bucket_quota": {
+		 "enabled": false,
+		 "max_size_kb": -1,
+		 "max_objects": -1
+	 },
+	 "user_quota": {
+		 "enabled": false,
+		 "max_size_kb": -1,
+		 "max_objects": -1
+	 },
+	 "temp_url_keys": []
+ }
+
+.. note:: The values of ``keys->access_key`` and ``keys->secret_key`` are
+          needed for access validation.
+
+.. important:: Check the key output. Sometimes ``radosgw-admin`` generates a
+               JSON escape character ``\`` in ``access_key`` or ``secret_key``
+               and some clients do not know how to handle JSON escape 
+               characters. Remedies include removing the JSON escape character
+               ``\``, encapsulating the string in quotes, regenerating the key 
+               and ensuring that it does not have a JSON escape character or 
+               specify the key and secret manually. Also, if ``radosgw-admin``
+               generates a JSON escape character ``\`` and a forward slash ``/``
+               together in a key, like ``\/``, only remove the JSON escape 
+               character ``\``. Do not remove the forward slash ``/`` as it is 
+               a valid character in the key.
+
+Create a Swift User
+^^^^^^^^^^^^^^^^^^^
+
+A Swift subuser needs to be created if this kind of access is needed. Creating
+a Swift user is a two step process. The first step is to create the user. The
+second is to create the secret key.
+
+Execute the following steps on the ``gateway host``:
+
+Create the Swift user::
+
+ sudo radosgw-admin subuser create --uid=testuser --subuser=testuser:swift --access=full
+
+The output will be something like the following::
+
+ {
+	 "user_id": "testuser",
+	 "display_name": "First User",
+	 "email": "",
+	 "suspended": 0,
+	 "max_buckets": 1000,
+	 "auid": 0,
+	 "subusers": [{
+		 "id": "testuser:swift",
+		 "permissions": "full-control"
+	 }],
+	 "keys": [{
+		 "user": "testuser:swift",
+		 "access_key": "3Y1LNW4Q6X0Y53A52DET",
+		 "secret_key": ""
+	 }, {
+		 "user": "testuser",
+		 "access_key": "I0PJDPCIYZ665MW88W9R",
+		 "secret_key": "dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA"
+	 }],
+	 "swift_keys": [],
+	 "caps": [],
+	 "op_mask": "read, write, delete",
+	 "default_placement": "",
+	 "placement_tags": [],
+	 "bucket_quota": {
+		 "enabled": false,
+		 "max_size_kb": -1,
+		 "max_objects": -1
+	 },
+	 "user_quota": {
+		 "enabled": false,
+		 "max_size_kb": -1,
+		 "max_objects": -1
+	 },
+	 "temp_url_keys": []
+  }
+
+Create the secret key::
+
+ sudo radosgw-admin key create --subuser=testuser:swift --key-type=swift --gen-secret
+
+The output will be something like the following::
+
+ {
+	 "user_id": "testuser",
+	 "display_name": "First User",
+	 "email": "",
+	 "suspended": 0,
+	 "max_buckets": 1000,
+	 "auid": 0,
+	 "subusers": [{
+		 "id": "testuser:swift",
+		 "permissions": "full-control"
+	 }],
+	 "keys": [{
+		 "user": "testuser:swift",
+		 "access_key": "3Y1LNW4Q6X0Y53A52DET",
+		 "secret_key": ""
+	 }, {
+		 "user": "testuser",
+		 "access_key": "I0PJDPCIYZ665MW88W9R",
+		 "secret_key": "dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA"
+	 }],
+	 "swift_keys": [{
+		 "user": "testuser:swift",
+		 "secret_key": "244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF\/IA"
+	 }],
+	 "caps": [],
+	 "op_mask": "read, write, delete",
+	 "default_placement": "",
+	 "placement_tags": [],
+	 "bucket_quota": {
+		 "enabled": false,
+		 "max_size_kb": -1,
+		 "max_objects": -1
+	 },
+	 "user_quota": {
+		 "enabled": false,
+		 "max_size_kb": -1,
+		 "max_objects": -1
+	 },
+	 "temp_url_keys": []
+ }
+
+Access Verification
+^^^^^^^^^^^^^^^^^^^
+
+Test S3 Access
+""""""""""""""
+
+You need to write and run a Python test script for verifying S3 access. The S3
+access test script will connect to the ``radosgw``, create a new bucket and
+list all buckets. The values for ``aws_access_key_id`` and
+``aws_secret_access_key`` are taken from the values of ``access_key`` and
+``secret_key`` returned by the ``radosgw_admin`` command.
+
+Execute the following steps:
+
+#. You will need to install the ``python-boto`` package::
+
+    sudo yum install python-boto
+
+#. Create the Python script::
+
+    vi s3test.py
+
+#. Add the following contents to the file::
+
+    import boto
+    import boto.s3.connection
+
+    access_key = 'I0PJDPCIYZ665MW88W9R'
+    secret_key = 'dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA'
+    conn = boto.connect_s3(
+            aws_access_key_id = access_key,
+            aws_secret_access_key = secret_key,
+            host = '{hostname}', port = {port},
+            is_secure=False, calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+            )
+
+    bucket = conn.create_bucket('my-new-bucket')
+        for bucket in conn.get_all_buckets():
+                print "{name} {created}".format(
+                        name = bucket.name,
+                        created = bucket.creation_date,
+     )
+
+   Replace ``{hostname}`` with the hostname of the host where you have
+   configured the gateway service i.e., the ``gateway host``. Replace {port}
+   with the port number you are using with Civetweb.
+
+#. Run the script::
+
+    python s3test.py
+
+   The output will be something like the following::
+
+    my-new-bucket 2015-02-16T17:09:10.000Z
+
+Test swift access
+"""""""""""""""""
+
+Swift access can be verified via the ``swift`` command line client. The command
+``man swift`` will provide more information on available command line options.
+
+To install ``swift`` client, execute the following commands. On Red Hat
+Enterprise Linux::
+
+ sudo yum install python-setuptools
+ sudo easy_install pip
+ sudo pip install --upgrade setuptools
+ sudo pip install --upgrade python-swiftclient
+
+On Debian-based distributions::
+
+ sudo apt-get install python-setuptools
+ sudo easy_install pip
+ sudo pip install --upgrade setuptools
+ sudo pip install --upgrade python-swiftclient
+
+To test swift access, execute the following::
+
+ swift -A http://{IP ADDRESS}:{port}/auth/1.0 -U testuser:swift -K '{swift_secret_key}' list
+
+Replace ``{IP ADDRESS}`` with the public IP address of the gateway server and
+``{swift_secret_key}`` with its value from the output of ``radosgw-admin key
+create`` command executed for the ``swift`` user. Replace {port} with the port
+number you are using with Civetweb (e.g., ``7480`` is the default). If you
+don't replace the port, it will default to port ``80``.
+
+For example::
+
+ swift -A http://10.19.143.116:7480/auth/1.0 -U testuser:swift -K '244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF/IA' list
+
+The output should be::
+
+ my-new-bucket
+
+.. _Preflight:  ../../start/quick-start-preflight

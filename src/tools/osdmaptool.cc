@@ -28,7 +28,8 @@ void usage()
   cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
-  cout << "   --test-map-pgs [--pool <poolid>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
@@ -52,8 +53,9 @@ int main(int argc, const char **argv)
 
   std::string fn;
   bool print = false;
-  bool print_json = false;
+  boost::scoped_ptr<Formatter> print_formatter;
   bool tree = false;
+  boost::scoped_ptr<Formatter> tree_formatter;
   bool createsimple = false;
   bool create_from_conf = false;
   int num_osd = 0;
@@ -69,7 +71,9 @@ int main(int argc, const char **argv)
   bool mark_up_in = false;
   bool clear_temp = false;
   bool test_map_pgs = false;
+  bool test_map_pgs_dump = false;
   bool test_random = false;
+  int64_t pg_num = -1;
 
   std::string val;
   std::ostringstream err;
@@ -80,11 +84,17 @@ int main(int argc, const char **argv)
       usage();
     } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
       print = true;
-    } else if (ceph_argparse_flag(args, i, "--dump-json", (char*)NULL)) {
-      print_json = true;
-    } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--dump", (char*)NULL)) {
+      print = true;
+      if (!val.empty() && val != "plain") {
+	print_formatter.reset(Formatter::create(val, "", "json"));
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--tree", (char*)NULL)) {
       tree = true;
-    } else if (ceph_argparse_withint(args, i, &num_osd, &err, "--createsimple", (char*)NULL)) {
+      if (!val.empty() && val != "plain") {
+	tree_formatter.reset(Formatter::create(val, "", "json"));
+      }
+    } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -98,16 +108,18 @@ int main(int argc, const char **argv)
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
       test_map_pgs = true;
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump", (char*)NULL)) {
+      test_map_pgs_dump = true;
     } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
       test_random = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
-    } else if (ceph_argparse_withint(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--pg_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_withint(args, i, &pgp_bits, &err, "--pgp_bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--pgp_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
@@ -122,9 +134,16 @@ int main(int argc, const char **argv)
       test_map_object = val;
     } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
       test_crush = true;
-    } else if (ceph_argparse_withint(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
-    } else if (ceph_argparse_withint(args, i, &range_last, &err, "--range_last", (char*)NULL)) {
-    } else if (ceph_argparse_withint(args, i, &pool, &err, "--pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)NULL)) {
+      string interr;
+      pg_num = strict_strtoll(val.c_str(), 10, &interr);
+      if (interr.length() > 0) {
+        cerr << "error parsing integer value " << interr << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
         exit(EXIT_FAILURE);
@@ -291,23 +310,22 @@ int main(int argc, const char **argv)
   if (!test_map_pg.empty()) {
     pg_t pgid;
     if (!pgid.parse(test_map_pg.c_str())) {
-      cerr << me << ": failed to parse pg '" << test_map_pg
-	   << "', r = " << r << std::endl;
+      cerr << me << ": failed to parse pg '" << test_map_pg << std::endl;
       usage();
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
     vector<int> raw, up, acting;
-    int calced_primary, up_primary, acting_primary;
-    osdmap.pg_to_osds(pgid, &raw, &calced_primary);
+    int raw_primary, up_primary, acting_primary;
+    osdmap.pg_to_raw_osds(pgid, &raw, &raw_primary);
     osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
                                 &acting, &acting_primary);
-    cout << pgid << " raw (" << raw << ", p" << calced_primary
+    cout << pgid << " raw (" << raw << ", p" << raw_primary
          << ") up (" << up << ", p" << up_primary
          << ") acting (" << acting << ", p" << acting_primary << ")"
          << std::endl;
   }
-  if (test_map_pgs) {
+  if (test_map_pgs || test_map_pgs_dump) {
     if (pool != -1 && !osdmap.have_pg_pool(pool)) {
       cerr << "There is no pool " << pool << std::endl;
       exit(1);
@@ -319,11 +337,14 @@ int main(int argc, const char **argv)
     vector<int> size(30, 0);
     if (test_random)
       srand(getpid());
-    const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-    for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+    map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
+    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
 	 p != pools.end(); ++p) {
       if (pool != -1 && p->first != pool)
 	continue;
+      if (pg_num > 0) 
+        p->second.set_pg_num(pg_num);
+      
       cout << "pool " << p->first
 	   << " pg_num " << p->second.get_pg_num() << std::endl;
       for (unsigned i = 0; i < p->second.get_pg_num(); ++i) {
@@ -341,6 +362,9 @@ int main(int argc, const char **argv)
 	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
 	}
 	size[osds.size()]++;
+
+	if (test_map_pgs_dump)
+	  cout << pgid << "\t" << osds << "\t" << primary << std::endl;
 
 	for (unsigned i=0; i<osds.size(); i++) {
 	  //cout << " rep " << i << " on " << osds[i] << std::endl;
@@ -443,10 +467,10 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!print && !print_json && !tree && !modified && 
+  if (!print && !tree && !modified &&
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
-      !test_map_pgs) {
+      !test_map_pgs && !test_map_pgs_dump) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }
@@ -454,16 +478,31 @@ int main(int argc, const char **argv)
   if (modified)
     osdmap.inc_epoch();
 
-  if (print) 
-    osdmap.print(cout);
-  if (print_json)
-    osdmap.dump_json(cout);
-  if (tree) 
-    osdmap.print_tree(&cout, NULL);
+  if (print) {
+    if (print_formatter) {
+      print_formatter->open_object_section("osdmap");
+      osdmap.dump(print_formatter.get());
+      print_formatter->close_section();
+      print_formatter->flush(cout);
+    } else {
+      osdmap.print(cout);
+    }
+  }
 
+  if (tree) {
+    if (tree_formatter) {
+      tree_formatter->open_object_section("tree");
+      osdmap.print_tree(tree_formatter.get(), NULL);
+      tree_formatter->close_section();
+      tree_formatter->flush(cout);
+      cout << std::endl;
+    } else {
+      osdmap.print_tree(NULL, &cout);
+    }
+  }
   if (modified) {
     bl.clear();
-    osdmap.encode(bl);
+    osdmap.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
 
     // write it out
     cout << me << ": writing epoch " << osdmap.get_epoch()

@@ -1,5 +1,3 @@
 usr/include/radosstriper/libradosstriper.h
 usr/include/radosstriper/libradosstriper.hpp
-usr/lib/libradosstriper.a
-usr/lib/libradosstriper.la
 usr/lib/libradosstriper.so

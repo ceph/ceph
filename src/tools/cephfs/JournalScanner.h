@@ -85,7 +85,17 @@ class JournalScanner
     LogEvent *log_event;
     uint32_t raw_size;  //< Size from start offset including all encoding overhead
   };
+
+  class EventError {
+    public:
+    int r;
+    std::string description;
+    EventError(int r_, const std::string &desc_)
+      : r(r_), description(desc_) {}
+  };
+
   typedef std::map<uint64_t, EventRecord> EventMap;
+  typedef std::map<uint64_t, EventError> ErrorMap;
   typedef std::pair<uint64_t, uint64_t> Range;
   bool pointer_present;
   bool pointer_valid;
@@ -100,6 +110,11 @@ class JournalScanner
   std::vector<Range> ranges_invalid;
   std::vector<uint64_t> events_valid;
   EventMap events;
+
+  // For events present in ::events (i.e. scanned successfully),
+  // any subsequent errors handling them (e.g. replaying)
+  ErrorMap errors;
+
 
   private:
   // Forbid copy construction because I have ptr members

@@ -1,6 +1,10 @@
 
 #include "CrushCompiler.h"
 
+#if defined(_AIX)
+#define EBADE ECORRUPT
+#endif
+
 #ifndef EBADE
 #define EBADE EFTYPE
 #endif
@@ -15,6 +19,7 @@
 
 #include <typeinfo>
 #include "common/errno.h"
+#include <boost/algorithm/string.hpp>
 
 // -------------
 
@@ -191,6 +196,13 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable chooseleaf_descend_once " << crush.get_chooseleaf_descend_once() << "\n";
   if (crush.get_chooseleaf_vary_r() != 0)
     out << "tunable chooseleaf_vary_r " << crush.get_chooseleaf_vary_r() << "\n";
+  if (crush.get_chooseleaf_stable() != 0)
+    out << "tunable chooseleaf_stable " << crush.get_chooseleaf_stable() << "\n";
+  if (crush.get_straw_calc_version() != 0)
+    out << "tunable straw_calc_version " << crush.get_straw_calc_version() << "\n";
+  if (crush.get_allowed_bucket_algs() != CRUSH_LEGACY_ALLOWED_BUCKET_ALGS)
+    out << "tunable allowed_bucket_algs " << crush.get_allowed_bucket_algs()
+	<< "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -204,7 +216,7 @@ int CrushCompiler::decompile(ostream &out)
   for (int i=0; n; i++) {
     const char *name = crush.get_type_name(i);
     if (!name) {
-      if (i == 0) out << "type 0 device\n";
+      if (i == 0) out << "type 0 osd\n";
       continue;
     }
     n--;
@@ -276,6 +288,10 @@ int CrushCompiler::decompile(ostream &out)
 	out << "\tstep set_chooseleaf_vary_r " << crush.get_rule_arg1(i, j)
 	    << "\n";
 	break;
+      case CRUSH_RULE_SET_CHOOSELEAF_STABLE:
+	out << "\tstep set_chooseleaf_stable " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
       case CRUSH_RULE_CHOOSE_FIRSTN:
 	out << "\tstep choose firstn "
 	    << crush.get_rule_arg1(i, j) 
@@ -317,11 +333,7 @@ int CrushCompiler::decompile(ostream &out)
 
 string CrushCompiler::string_node(node_t &node)
 {
-  string s = string(node.value.begin(), node.value.end());
-  while (s.length() > 0 &&
-	 s[0] == ' ')
-    s = string(s.begin() + 1, s.end());
-  return s;
+  return boost::trim_copy(string(node.value.begin(), node.value.end()));
 }
 
 int CrushCompiler::int_node(node_t &node) 
@@ -368,6 +380,12 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_chooseleaf_descend_once(val);
   else if (name == "chooseleaf_vary_r")
     crush.set_chooseleaf_vary_r(val);
+  else if (name == "chooseleaf_stable")
+    crush.set_chooseleaf_stable(val);
+  else if (name == "straw_calc_version")
+    crush.set_straw_calc_version(val);
+  else if (name == "allowed_bucket_algs")
+    crush.set_allowed_bucket_algs(val);
   else {
     err << "tunable " << name << " not recognized" << std::endl;
     return -1;
@@ -435,6 +453,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	alg = CRUSH_BUCKET_TREE;
       else if (a == "straw")
 	alg = CRUSH_BUCKET_STRAW;
+      else if (a == "straw2")
+	alg = CRUSH_BUCKET_STRAW2;
       else {
 	err << "unknown bucket alg '" << a << "'" << std::endl << std::endl;
 	return -EINVAL;
@@ -661,6 +681,13 @@ int CrushCompiler::parse_rule(iter_t const& i)
       }
       break;
 
+    case crush_grammar::_step_set_chooseleaf_stable:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_chooseleaf_stable(ruleno, step++, val);
+      }
+      break;
+
     case crush_grammar::_step_choose:
     case crush_grammar::_step_chooseleaf:
       {
@@ -788,6 +815,54 @@ void CrushCompiler::dump(iter_t const& i, int ind)
     dump(i->children.begin() + j, ind+1); 
 }
 
+/**
+*  This function fix the problem like below
+*   rack using_foo { item foo }  
+*   host foo { ... }
+*
+*  if an item being used by a bucket is defined after that bucket. 
+*  CRUSH compiler will create a map by which we can 
+*  not identify that item when selecting in that bucket.
+**/
+int CrushCompiler::adjust_bucket_item_place(iter_t const &i)
+{
+  map<string,set<string> > bucket_items;
+  map<string,iter_t> bucket_itrer;
+  vector<string> buckets;
+  for (iter_t p = i->children.begin(); p != i->children.end(); ++p) {
+    if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
+      string name = string_node(p->children[1]);
+      buckets.push_back(name);
+      bucket_itrer[name] = p;
+      //skip non-bucket-item children in the bucket's parse tree
+      for (unsigned q=3; q < p->children.size()-1; ++q) {
+        iter_t sub = p->children.begin() + q;
+        if ((int)sub->value.id().to_long() 
+          == crush_grammar::_bucket_item) {
+          string iname = string_node(sub->children[1]);
+          bucket_items[name].insert(iname);
+        }         
+      }       
+    }     
+  }
+  
+  //adjust the bucket
+  for (unsigned i=0; i < buckets.size(); ++i) { 
+    for (unsigned j=i+1; j < buckets.size(); ++j) {
+      if (bucket_items[buckets[i]].count(buckets[j])) {
+        if (bucket_items[buckets[j]].count(buckets[i])) {
+          err << "bucket  '" <<  buckets[i] << "' and bucket '"
+          << buckets[j] << "' are included each other" << std::endl;
+          return -1; 
+        } else {  
+	   std::iter_swap(bucket_itrer[buckets[i]], bucket_itrer[buckets[j]]);
+        } 
+      } 
+    }
+  }
+	
+  return 0;
+}
 
 int CrushCompiler::compile(istream& in, const char *infn)
 {
@@ -853,7 +928,11 @@ int CrushCompiler::compile(istream& in, const char *infn)
 	<< " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
     return -1;
   }
-
+  
+  int r = adjust_bucket_item_place(info.trees.begin());
+  if (r < 0) {
+    return r;
+  }
   //out << "parsing succeeded\n";
   //dump(info.trees.begin());
   return parse_crush(info.trees.begin());

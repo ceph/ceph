@@ -35,6 +35,7 @@ class DecayRate {
 
 public:
   DecayRate() : k(0) {}
+  // cppcheck-suppress noExplicitConstructor
   DecayRate(double hl) { set_halflife(hl); }
   void set_halflife(double hl) {
     k = ::log(.5) / hl;
@@ -56,7 +57,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<DecayCounter*>& ls);
 
-  DecayCounter(const utime_t &now)
+  explicit DecayCounter(const utime_t &now)
     : val(0), delta(0), vel(0), last_decay(now)
   {
   }

@@ -39,7 +39,7 @@ class Trace {
   string line;
 
  public:
-  Trace(const char* f) : _line(0), filename(f), fs(0) {}
+  explicit Trace(const char* f) : _line(0), filename(f), fs(0) {}
   ~Trace() { 
     delete fs; 
   }
@@ -54,7 +54,7 @@ class Trace {
   const char *peek_string(char *buf, const char *prefix);
   const char *get_string(char *buf, const char *prefix);
 
-  __int64_t get_int() {
+  int64_t get_int() {
     char buf[20];
     return atoll(get_string(buf, 0));
   }

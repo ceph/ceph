@@ -11,8 +11,8 @@ Access
 
 The perf counter data is accessed via the admin socket.  For example::
 
-   ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok perf schema
-   ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok perf dump
+   ceph daemon osd.0 perf schema
+   ceph daemon osd.0 perf dump
 
 
 Collections
@@ -44,7 +44,7 @@ The ``perf schema`` command dumps a json description of which values are availab
 | 8    | counter (vs gauge)                  |
 +------+-------------------------------------+
 
-Every value with have either bit 1 or 2 set to indicate the type (float or integer).  If bit 8 is set (counter), the reader may want to subtract off the previously read value to get the delta during the previous interval.  
+Every value will have either bit 1 or 2 set to indicate the type (float or integer).  If bit 8 is set (counter), the reader may want to subtract off the previously read value to get the delta during the previous interval.  
 
 If bit 4 is set (average), there will be two values to read, a sum and a count.  If it is a counter, the average for the previous interval would be sum delta (since the previous read) divided by the count delta.  Alternatively, dividing the values outright would provide the lifetime average value.  Normally these are used to measure latencies (number of requests and a sum of request latencies), and the average for the previous interval is what is interesting.
 

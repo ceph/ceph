@@ -238,7 +238,7 @@ Request Parameters
 :Description: The user for which the information is requested.
 :Type: String
 :Example: ``foo_user``
-:Required: No
+:Required: Yes
 
 
 Response Entities
@@ -497,7 +497,7 @@ Special Error Responses
 :Description: Provided email address exists.
 :Code: 409 Conflict
 
-``InvalidCap``
+``InvalidCapability``
 
 :Description: Attempt to grant invalid admin capability.
 :Code: 400 Bad Request
@@ -685,7 +685,7 @@ Special Error Responses
 :Description: Provided email address exists.
 :Code: 409 Conflict
 
-``InvalidCap``
+``InvalidCapability``
 
 :Description: Attempt to grant invalid admin capability.
 :Code: 400 Bad Request
@@ -1719,7 +1719,7 @@ If successful, the response contains the user's capabilities.
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-``InvalidCap``
+``InvalidCapability``
 
 :Description: Attempt to grant invalid admin capability.
 :Code: 400 Bad Request
@@ -1796,7 +1796,7 @@ If successful, the response contains the user's capabilities.
 Special Error Responses
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-``InvalidCap``
+``InvalidCapability``
 
 :Description: Attempt to remove an invalid admin capability.
 :Code: 400 Bad Request

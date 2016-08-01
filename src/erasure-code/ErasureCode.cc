@@ -18,11 +18,23 @@
 #include <errno.h>
 #include <vector>
 #include <algorithm>
+#include <ostream>
 
 #include "common/strtol.h"
 #include "ErasureCode.h"
+#include "include/buffer.h"
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
+
+int ErasureCode::sanity_check_k(int k, ostream *ss)
+{
+  if (k < 2) {
+    *ss << "k=" << k << " must be >= 2" << std::endl;
+    return -EINVAL;
+  } else {
+    return 0;
+  }
+}
 
 int ErasureCode::chunk_index(unsigned int i) const
 {
@@ -66,21 +78,14 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
   unsigned int k = get_data_chunk_count();
   unsigned int m = get_chunk_count() - k;
   unsigned blocksize = get_chunk_size(raw.length());
-  unsigned pad_len = blocksize * k - raw.length();
   unsigned padded_chunks = k - raw.length() / blocksize;
   bufferlist prepared = raw;
-
-  if (!prepared.is_aligned(SIMD_ALIGN)) {
-    // splice padded chunks off to make the rebuild faster
-    if (padded_chunks)
-      prepared.splice((k - padded_chunks) * blocksize,
-                      padded_chunks * blocksize - pad_len);
-    prepared.rebuild_aligned(SIMD_ALIGN);
-  }
 
   for (unsigned int i = 0; i < k - padded_chunks; i++) {
     bufferlist &chunk = encoded[chunk_index(i)];
     chunk.substr_of(prepared, i * blocksize, blocksize);
+    chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN);
+    assert(chunk.is_contiguous());
   }
   if (padded_chunks) {
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
@@ -88,12 +93,12 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
 
     raw.copy((k - padded_chunks) * blocksize, remainder, buf.c_str());
     buf.zero(remainder, blocksize - remainder);
-    encoded[chunk_index(k-padded_chunks)].push_back(buf);
+    encoded[chunk_index(k-padded_chunks)].push_back(std::move(buf));
 
     for (unsigned int i = k - padded_chunks + 1; i < k; i++) {
       bufferptr buf(buffer::create_aligned(blocksize, SIMD_ALIGN));
       buf.zero();
-      encoded[chunk_index(i)].push_back(buf);
+      encoded[chunk_index(i)].push_back(std::move(buf));
     }
   }
   for (unsigned int i = k; i < k + m; i++) {
@@ -170,21 +175,21 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
   assert("ErasureCode::decode_chunks not implemented" == 0);
 }
 
-int ErasureCode::parse(const map<std::string,std::string> &parameters,
+int ErasureCode::parse(const ErasureCodeProfile &profile,
 		       ostream *ss)
 {
-  return to_mapping(parameters, ss);
+  return to_mapping(profile, ss);
 }
 
 const vector<int> &ErasureCode::get_chunk_mapping() const {
   return chunk_mapping;
 }
 
-int ErasureCode::to_mapping(const map<std::string,std::string> &parameters,
+int ErasureCode::to_mapping(const ErasureCodeProfile &profile,
 			    ostream *ss)
 {
-  if (parameters.find("mapping") != parameters.end()) {
-    std::string mapping = parameters.find("mapping")->second;
+  if (profile.find("mapping") != profile.end()) {
+    std::string mapping = profile.find("mapping")->second;
     int position = 0;
     vector<int> coding_chunk_mapping;
     for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
@@ -202,24 +207,22 @@ int ErasureCode::to_mapping(const map<std::string,std::string> &parameters,
 }
 
 int ErasureCode::to_int(const std::string &name,
-			const map<std::string,std::string> &parameters,
+			ErasureCodeProfile &profile,
 			int *value,
-			int default_value,
+			const std::string &default_value,
 			ostream *ss)
 {
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
-    *value = default_value;
-    return 0;
-  }
-  std::string p = parameters.find(name)->second;
+  if (profile.find(name) == profile.end() ||
+      profile.find(name)->second.size() == 0)
+    profile[name] = default_value;
+  std::string p = profile.find(name)->second;
   std::string err;
   int r = strict_strtol(p.c_str(), 10, &err);
   if (!err.empty()) {
     *ss << "could not convert " << name << "=" << p
 	<< " to int because " << err
 	<< ", set to default " << default_value << std::endl;
-    *value = default_value;
+    *value = strict_strtol(default_value.c_str(), 10, &err);
     return -EINVAL;
   }
   *value = r;
@@ -227,18 +230,29 @@ int ErasureCode::to_int(const std::string &name,
 }
 
 int ErasureCode::to_bool(const std::string &name,
-			 const map<std::string,std::string> &parameters,
+			 ErasureCodeProfile &profile,
 			 bool *value,
-			 bool default_value,
+			 const std::string &default_value,
 			 ostream *ss)
 {
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
-    *value = default_value;
-    return 0;
-  }
-  const std::string p = parameters.find(name)->second;
+  if (profile.find(name) == profile.end() ||
+      profile.find(name)->second.size() == 0)
+    profile[name] = default_value;
+  const std::string p = profile.find(name)->second;
   *value = (p == "yes") || (p == "true");
+  return 0;
+}
+
+int ErasureCode::to_string(const std::string &name,
+			   ErasureCodeProfile &profile,
+			   std::string *value,
+			   const std::string &default_value,
+			   ostream *ss)
+{
+  if (profile.find(name) == profile.end() ||
+      profile.find(name)->second.size() == 0)
+    profile[name] = default_value;
+  *value = profile[name];
   return 0;
 }
 

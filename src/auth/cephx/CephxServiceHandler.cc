@@ -15,16 +15,12 @@
 
 #include "CephxServiceHandler.h"
 #include "CephxProtocol.h"
-
-#include "../Auth.h"
-
-#include "mon/Monitor.h"
-
+#include "CephxKeyServer.h"
 #include <errno.h>
 #include <sstream>
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
@@ -97,7 +93,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       bool should_enc_ticket = false;
 
       EntityAuth eauth;
-      if (key_server->get_auth(entity_name, eauth) < 0) {
+      if (! key_server->get_auth(entity_name, eauth)) {
 	ret = -EPERM;
 	break;
       }
@@ -139,6 +135,13 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON, caps)) {
         ldout(cct, 0) << " could not get mon caps for " << entity_name << dendl;
+        ret = -EACCES;
+      } else {
+        char *caps_str = caps.caps.c_str();
+        if (!caps_str || !caps_str[0]) {
+          ldout(cct,0) << "mon caps null for " << entity_name << dendl;
+          ret = -EACCES;
+        }
       }
     }
     break;
@@ -183,8 +186,10 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     {
       ldout(cct, 10) << "handle_request getting rotating secret for " << entity_name << dendl;
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      key_server->get_rotating_encrypted(entity_name, result_bl);
-      ret = 0;
+      if (!key_server->get_rotating_encrypted(entity_name, result_bl)) {
+        ret = -EPERM;
+        break;
+      }
     }
     break;
 

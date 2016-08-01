@@ -13,6 +13,7 @@
 
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
+#include "common/crc32c_aarch64.h"
 
 TEST(Crc32c, Small) {
   const char *a = "foo bar baz";
@@ -78,6 +79,15 @@ TEST(Crc32c, Performance) {
     utime_t end = ceph_clock_now(NULL);
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "intel baseline = " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(261108528u, val);
+  }
+  if (ceph_arch_aarch64_crc32) // Skip if CRC32C instructions are not defined.
+  {
+    utime_t start = ceph_clock_now(NULL);
+    unsigned val = ceph_crc32c_aarch64(0, (unsigned char *)a, len);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "aarch64 = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
 
@@ -152,14 +162,15 @@ static uint32_t crc_check_table[] = {
 
 TEST(Crc32c, Range) {
   int len = sizeof(crc_check_table) / sizeof(crc_check_table[0]);
-  const char *b = (const char *)malloc(len);
-  memset((void *)b, 1, len);
+  unsigned char *b = (unsigned char *)malloc(len);
+  memset(b, 1, len);
   uint32_t crc = 0;
   uint32_t *check = crc_check_table;
   for (int i = 0 ; i < len; i++, check++) {
-    crc = ceph_crc32c(crc, (unsigned char *)b+i, len-i);
+    crc = ceph_crc32c(crc, b+i, len-i);
     ASSERT_EQ(crc, *check);
   }
+  free(b);
 }
 
 static uint32_t crc_zero_check_table[] = {
@@ -231,15 +242,16 @@ static uint32_t crc_zero_check_table[] = {
 
 TEST(Crc32c, RangeZero) {
   int len = sizeof(crc_zero_check_table) / sizeof(crc_zero_check_table[0]);
-  const char *b = (const char *)malloc(len);
-  memset((void *)b, 0, len);
+  unsigned char *b = (unsigned char *)malloc(len);
+  memset(b, 0, len);
   uint32_t crc = 1; /* when checking zero buffer we want to start with a non zero crc, otherwise
                        all the results are going to be zero */
   uint32_t *check = crc_zero_check_table;
   for (int i = 0 ; i < len; i++, check++) {
-    crc = ceph_crc32c(crc, (unsigned char *)b+i, len-i);
+    crc = ceph_crc32c(crc, b+i, len-i);
     ASSERT_EQ(crc, *check);
   }
+  free(b);
 }
 
 TEST(Crc32c, RangeNull) {

@@ -17,6 +17,8 @@
 #ifndef CEPH_STRMAP_H
 #define CEPH_STRMAP_H
 
+#define CONST_DELIMS ",;\t\n "
+
 #include <map>
 #include <string>
 #include <sstream>
@@ -83,18 +85,14 @@ extern int get_json_str_map(
  * Always returns 0, as there is no condition for failure.
  *
  * @param [in] str plain text key/value pairs
+ * @param [in] delims field delimiters to be used for parsing str
  * @param [out] str_map key/value pairs parsed from str
- * @param [in] delim field delimiters to be used for parsing str
  * @return **0**
  */
 extern int get_str_map(
     const std::string &str,
-    const char *delims,
-    std::map<std::string,std::string> *str_map);
-
-extern int get_str_map(
-    const std::string &str,
-    std::map<std::string,std::string> *str_map);
+    std::map<std::string,std::string> *str_map,
+    const char *delims = CONST_DELIMS);
 
 /**
  * Returns the value of **key** in **str_map** if available.

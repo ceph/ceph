@@ -33,7 +33,12 @@ PROGNAME=$(basename $0)
 
 # xfstests is downloaded from this git repository and then built.
 # XFSTESTS_REPO="git://oss.sgi.com/xfs/cmds/xfstests.git"
-XFSTESTS_REPO="git://ceph.com/git/xfstests.git"
+XFSTESTS_REPO="git://git.ceph.com/xfstests.git"
+XFSTESTS_VERSION="facff609afd6a2ca557c2b679e088982026aa188"
+XFSPROGS_REPO="git://oss.sgi.com/xfs/cmds/xfsprogs"
+XFSPROGS_VERSION="v3.2.2"
+XFSDUMP_REPO="git://oss.sgi.com/xfs/cmds/xfsdump"
+XFSDUMP_VERSION="v3.1.4"
 
 # Default command line option values
 COUNT="1"
@@ -44,9 +49,8 @@ SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
 TESTS="-g auto"	# The "auto" group is supposed to be "known good"
 
-# rbd presents geometry information that causes mkfs.xfs to
-# issue a warning.  This option avoids this class of problems.
-XFS_MKFS_OPTIONS="-l su=32k"
+# We no longer need to set the stripe unit in XFS_MKFS_OPTIONS because recent
+# versions of mkfs.xfs autodetect it.
 
 # print an error message and quit with non-zero status
 function err() {
@@ -248,11 +252,14 @@ export PATH="${TESTDIR}/binary/usr/local/sbin:${PATH}"
 ################################################################
 
 # Filesystem-specific mkfs options--set if not supplied
-export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS:--f -l su=65536}"
+#export XFS_MKFS_OPTIONS="${XFS_MKFS_OPTIONS:--f -l su=65536}"
 export EXT4_MKFS_OPTIONS="${EXT4_MKFS_OPTIONS:--F}"
 export BTRFS_MKFS_OPTION	# No defaults
 
 XFSTESTS_DIR="/var/lib/xfstests"	# Where the tests live
+XFSPROGS_DIR="/tmp/cephtest/xfsprogs-install"
+XFSDUMP_DIR="/tmp/cephtest/xfsdump-install"
+export PATH="${XFSPROGS_DIR}/sbin:${XFSDUMP_DIR}/sbin:${PATH}"
 
 # download, build, and install xfstests
 function install_xfstests() {
@@ -266,6 +273,7 @@ function install_xfstests() {
 	git clone "${XFSTESTS_REPO}"
 
 	cd xfstests
+	git checkout "${XFSTESTS_VERSION}"
 
 	ncpu=$(getconf _NPROCESSORS_ONLN 2>&1)
 	[ -n "${ncpu}" -a "${ncpu}" -gt 1 ] && multiple="-j ${ncpu}"
@@ -288,10 +296,12 @@ function remove_xfstests() {
 # create a host options file that uses the specified devices
 function setup_host_options() {
 	arg_count 0 $#
+	export MNTDIR="/tmp/cephtest"
 
 	# Create mount points for the test and scratch filesystems
-	local test_dir="$(mktemp -d ${TESTDIR}/test_dir.XXXXXXXXXX)"
-	local scratch_dir="$(mktemp -d ${TESTDIR}/scratch_mnt.XXXXXXXXXX)"
+	mkdir -p ${MNTDIR}
+	local test_dir="$(mktemp -d ${MNTDIR}/test_dir.XXXXXXXXXX)"
+	local scratch_dir="$(mktemp -d ${MNTDIR}/scratch_mnt.XXXXXXXXXX)"
 
 	# Write a host options file that uses these devices.
 	# xfstests uses the file defined by HOST_OPTIONS as the
@@ -393,13 +403,70 @@ function cleanup_xfstests() {
 	# the corresponding setup function mounted them...)
 	do_umount "${TEST_DEV}"
 	do_umount "${SCRATCH_DEV}"
+	rmdir "${TEST_DIR}"
+	rmdir "${SCRATCH_MNT}"
+	rmdir "${MNTDIR}"
 }
+
+function install_xfsprogs() {
+	arg_count 0 $#
+
+	pushd "${TESTDIR}"
+	git clone ${XFSPROGS_REPO}
+	cd xfsprogs
+	git checkout ${XFSPROGS_VERSION}
+	libtoolize -c `libtoolize -n -i >/dev/null 2>/dev/null && echo -i` -f
+	cp include/install-sh .
+	aclocal -I m4
+	autoconf
+	./configure --prefix=${XFSPROGS_DIR}
+	make install
+	popd
+}
+
+function install_xfsdump() {
+	arg_count 0 $#
+
+	pushd "${TESTDIR}"
+	git clone ${XFSDUMP_REPO}
+	cd xfsdump
+	git checkout ${XFSDUMP_VERSION}
+
+	# somebody took #define min and #define max out, which breaks the build on
+	# ubuntu. we back out this commit here, though that may cause problems with
+	# this script down the line.
+	git revert -n 5a2985233c390d59d2a9757b119cb0e001c87a96
+	libtoolize -c `libtoolize -n -i >/dev/null 2>/dev/null && echo -i` -f
+	cp include/install-sh .
+	aclocal -I m4
+	autoconf
+	./configure --prefix=${XFSDUMP_DIR}
+	(make -k install || true) # that's right, the install process is broken too
+	popd
+}
+
+function remove_xfsprogs() {
+	arg_count 0 $#
+
+	rm -rf ${TESTDIR}/xfsprogs
+	rm -rf ${XFSPROGS_DIR}
+}	
+
+function remove_xfsdump() {
+	arg_count 0 $#
+
+	rm -rf ${TESTDIR}/xfsdump
+	rm -rf ${XFSDUMP_DIR}
+}
+
 
 # top-level setup routine
 function setup() {
 	arg_count 0 $#
 
 	setup_host_options
+	install_xfsprogs
+	install_xfsdump
 	install_xfstests
 	setup_xfstests
 }
@@ -409,6 +476,8 @@ function cleanup() {
 	arg_count 0 $#
 
 	cd /
+	remove_xfsprogs
+	remove_xfsdump
 	cleanup_xfstests
 	remove_xfstests
 	cleanup_host_options

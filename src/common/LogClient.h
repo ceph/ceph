@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_LOGCLIENT_H
@@ -27,15 +27,27 @@ class MLogAck;
 class Messenger;
 class MonMap;
 class Message;
+struct uuid_d;
 struct Connection;
 
 class LogChannel;
+
+namespace ceph {
+namespace log {
+  class Graylog;
+}
+}
 
 int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
 			     map<string,string> &log_to_syslog,
 			     map<string,string> &log_channels,
-			     map<string,string> &log_prios);
+			     map<string,string> &log_prios,
+			     map<string,string> &log_to_graylog,
+			     map<string,string> &log_to_graylog_host,
+			     map<string,string> &log_to_graylog_port,
+			     uuid_d &fsid,
+			     string &host);
 
 class LogClientTemp
 {
@@ -137,6 +149,10 @@ public:
   }
   bool must_log_to_monitors() { return log_to_monitors; }
 
+  bool do_log_to_graylog() {
+    return (graylog != nullptr);
+  }
+
   typedef shared_ptr<LogChannel> Ref;
 
   /**
@@ -147,7 +163,12 @@ public:
   void update_config(map<string,string> &log_to_monitors,
 		     map<string,string> &log_to_syslog,
 		     map<string,string> &log_channels,
-		     map<string,string> &log_prios);
+		     map<string,string> &log_prios,
+		     map<string,string> &log_to_graylog,
+		     map<string,string> &log_to_graylog_host,
+		     map<string,string> &log_to_graylog_port,
+		     uuid_d &fsid,
+		     string &host);
 
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
@@ -161,6 +182,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
+  shared_ptr<ceph::log::Graylog> graylog;
 
 
   friend class LogClientTemp;
@@ -210,7 +232,7 @@ public:
   void shutdown() {
     channels.clear();
   }
-  
+
   version_t queue(LogEntry &entry);
 
 private:

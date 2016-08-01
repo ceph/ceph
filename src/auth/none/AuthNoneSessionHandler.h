@@ -12,10 +12,8 @@
  * 
  */
 
-#include "../AuthSessionHandler.h"
-#include "../Auth.h"
-
-#define dout_subsys ceph_subsys_auth
+#include "auth/AuthSessionHandler.h"
+#include "msg/Message.h"
 
 class CephContext;
 

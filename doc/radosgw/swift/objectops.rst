@@ -263,7 +263,7 @@ Syntax
 Request Headers
 ~~~~~~~~~~~~~~~
 
-``X-Container-Meta-{key}``
+``X-Object-Meta-{key}``
 
 :Description:  A user-defined meta data key that takes an arbitrary string value.
 :Type: String

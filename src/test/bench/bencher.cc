@@ -10,7 +10,7 @@
 template<typename T>
 struct C_Holder : public Context {
   T obj;
-  C_Holder(
+  explicit C_Holder(
     T obj)
     : obj(obj) {}
   void finish(int r) {
@@ -20,13 +20,13 @@ struct C_Holder : public Context {
 
 struct OnDelete {
   Context *c;
-  OnDelete(Context *c) : c(c) {}
+  explicit OnDelete(Context *c) : c(c) {}
   ~OnDelete() { c->complete(0); }
 };
 
 struct Cleanup : public Context {
   Bencher *bench;
-  Cleanup(Bencher *bench) : bench(bench) {}
+  explicit Cleanup(Bencher *bench) : bench(bench) {}
   void finish(int r) {
     bench->complete_op();
   }
@@ -195,7 +195,8 @@ void Bencher::run_bench()
       default: {
 	assert(0);
       }
-    }
+    } 
+    ops++;
   }
   drain_ops();
 }

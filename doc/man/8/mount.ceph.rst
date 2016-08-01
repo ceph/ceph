@@ -1,3 +1,5 @@
+:orphan:
+
 ========================================
  mount.ceph -- mount a ceph file system
 ========================================
@@ -134,7 +136,7 @@ If there are multiple monitors::
 
         mount.ceph monhost1,monhost2,monhost3:/ /mnt/foo
 
-If :doc:`ceph-mon </man/8/ceph-mon>`\(8) is running on a non-standard
+If :doc:`ceph-mon <ceph-mon>`\(8) is running on a non-standard
 port::
 
         mount.ceph monhost1:7000,monhost2:7000,monhost3:7000:/ /mnt/foo
@@ -152,7 +154,7 @@ automatically invoked by mount(8) like so::
 Availability
 ============
 
-**mount.ceph** is part of the Ceph distributed storage system. Please
+**mount.ceph** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

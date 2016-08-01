@@ -16,25 +16,28 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
+#include "common/config.h"
 #include "gtest/gtest.h"
 
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
-  parameters["mapping"] = "DD_";
-  parameters["layers"] = "[ [ \"DDc\", \"\" ] ]";
+  ErasureCodeProfile profile;
+  profile["mapping"] = "DD_";
+  profile["layers"] = "[ [ \"DDc\", \"\" ] ]";
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("lrc", parameters, &erasure_code, cerr));
-  EXPECT_TRUE(erasure_code);
+  EXPECT_EQ(0, instance.factory("lrc",
+				g_conf->erasure_code_dir,
+				profile, &erasure_code, &cerr));
+  EXPECT_TRUE(erasure_code.get());
 }
 
 int main(int argc, char **argv)
@@ -44,6 +47,10 @@ int main(int argc, char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

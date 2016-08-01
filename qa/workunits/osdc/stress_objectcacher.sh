@@ -14,7 +14,7 @@ do
                     do
                         for MAX_DIRTY in 0 25165824
                         do
-                            ceph_test_objectcacher_stress --ops $OPS --percent-read $READS --delay-ns $DELAY --objects $OBJECTS --max-op-size $OP_SIZE --client-oc-max-dirty $MAX_DIRTY > /dev/null 2>&1
+                            ceph_test_objectcacher_stress --ops $OPS --percent-read $READS --delay-ns $DELAY --objects $OBJECTS --max-op-size $OP_SIZE --client-oc-max-dirty $MAX_DIRTY --stress-test > /dev/null 2>&1
                         done
                     done
                 done
@@ -22,5 +22,7 @@ do
         done
     done
 done
+
+ceph_test_objectcacher_stress --correctness-test > /dev/null 2>&1
 
 echo OK

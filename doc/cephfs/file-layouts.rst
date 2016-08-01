@@ -95,7 +95,22 @@ Layout fields are modified using ``setfattr``:
     $ setfattr -n ceph.file.layout.pool -v 1 file2  # Setting pool by ID
     $ setfattr -n ceph.file.layout.pool -v cephfs_data file2  # Setting pool by name
 
+.. note::
 
+    When the layout fields of a file are modified using ``setfattr``, this file must be empty, otherwise an error will occur.
+
+.. code-block:: bash
+
+    # touch an empty file
+    $ touch file1
+    # modify layout field successfully
+    $ setfattr -n ceph.file.layout.stripe_count -v 3 file1
+
+    # write something to file1
+    $ echo "hello world" > file1
+    $ setfattr -n ceph.file.layout.stripe_count -v 4 file1
+    setfattr: file1: Directory not empty
+    
 Inheritance of layouts
 ----------------------
 
@@ -144,4 +159,18 @@ directories do not have layouts set:
     $ getfattr -n ceph.file.layout dir/childdir/grandchild
     # file: dir/childdir/grandchild
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
+
     
+Adding a data pool to the MDS
+---------------------------------
+
+Before you can use a pool with CephFS you have to add it to the Metadata Servers.
+
+.. code-block:: bash
+
+    $ ceph mds add_data_pool cephfs_data_ssd
+    # Pool should now show up
+    $ ceph fs ls
+    .... data pools: [cephfs_data cephfs_data_ssd ]
+
+Make sure that your cephx keys allows the client to access this new pool.

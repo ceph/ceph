@@ -15,10 +15,12 @@
 #ifndef CEPH_CEPHXCLIENTHANDLER_H
 #define CEPH_CEPHXCLIENTHANDLER_H
 
-#include "../AuthClientHandler.h"
+#include "auth/AuthClientHandler.h"
 #include "CephxProtocol.h"
+#include "auth/RotatingKeyRing.h"
 
 class CephContext;
+class KeyRing;
 
 class CephxClientHandler : public AuthClientHandler {
   bool starting;

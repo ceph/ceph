@@ -73,8 +73,16 @@ weight).
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
-	ceph osd create [{uuid}]
+	ceph osd create [{uuid} [{id}]]
 
+   If the optional parameter {id} is given it will be used as the OSD id.
+   Note, in this case the command may fail if the number is already in use.
+
+   .. warning:: In general, explicitly specifying {id} is not recommended.
+      IDs are allocated as an array, and skipping entries consumes some extra
+      memory. This can become significant if there are large gaps and/or
+      clusters are large. If {id} is not specified, the smallest available is
+      used.
 
 #. Create the default directory on your new OSD. :: 
 
@@ -166,13 +174,13 @@ your new OSD before it can begin receiving data. You may use
 ``service ceph`` from your admin host or start the OSD from its host
 machine.
 
-For Debian/Ubuntu use Upstart. ::
+For Ubuntu Trusty use Upstart. ::
 
 	sudo start ceph-osd id={osd-num}
 
-For CentOS/RHEL, use sysvinit. ::
+For all other distros use systemd. ::
 
-	sudo /etc/init.d/ceph start osd.{osd-num}
+	sudo systemctl start ceph-osd@{osd-num}
 
 
 Once you start your OSD, it is ``up`` and ``in``.
@@ -213,7 +221,7 @@ that your cluster is not at its ``near full`` ratio.
    or exceed its ``full ratio``.
    
 
-Take the OSD ``out`` of the Cluster
+Take the OSD out of the Cluster
 -----------------------------------
 
 Before you remove an OSD, it is usually ``up`` and ``in``.  You need to take it
@@ -236,6 +244,27 @@ You should see the placement group states change from ``active+clean`` to
 ``active, some degraded objects``, and finally ``active+clean`` when migration
 completes. (Control-c to exit.)
 
+.. note:: Sometimes, typically in a "small" cluster with few hosts (for
+   instance with a small testing cluster), the fact to take ``out`` the
+   OSD can spawn a CRUSH corner case where some PGs remain stuck in the
+   ``active+remapped`` state. If you are in this case, you should mark
+   the OSD ``in`` with:
+
+       ``ceph osd in {osd-num}``
+
+   to come back to the initial state and then, instead of marking ``out``
+   the OSD, set its weight to 0 with:
+
+       ``ceph osd crush reweight osd.{osd-num} 0``
+
+   After that, you can observe the data migration which should come to its
+   end. The difference between marking ``out`` the OSD and reweighting it
+   to 0 is that in the first case the weight of the bucket which contains
+   the OSD isn't changed whereas in the second case the weight of the bucket
+   is updated (and decreased of the OSD weight). The reweight command could
+   be sometimes favoured in the case of a "small" cluster.
+
+
 
 Stopping the OSD
 ----------------
@@ -245,7 +274,7 @@ That is, the OSD may be ``up`` and ``out``. You must stop
 your OSD before you remove it from the configuration. :: 
 
 	ssh {osd-host}
-	sudo /etc/init.d/ceph stop osd.{osd-num}
+	sudo systemctl stop ceph-osd@{osd-num}
 
 Once you stop your OSD, it is ``down``. 
 

@@ -1,5 +1,5 @@
   $ crushtool -c "$TESTDIR/set-choose.crushmap.txt" -o set-choose.crushmap
-  $ crushtool -i set-choose.crushmap --test --show-statistics
+  $ crushtool -i set-choose.crushmap --test --show-mappings --show-statistics --set-straw-calc-version 0
   rule 0 (choose), x = 0..1023, numrep = 2..3
   CRUSH rule 0 x 0 [0,3]
   CRUSH rule 0 x 1 [0,8]
@@ -12306,7 +12306,8 @@
   CRUSH rule 5 x 1022 [1,6,4]
   CRUSH rule 5 x 1023 [3,2,8]
   rule 5 (chooseleaf-set) num_rep 3 result size == 3:\t1024/1024 (esc)
-  $ crushtool -i set-choose.crushmap --test --show-statistics --weight 0 0 --weight 1 0 --weight 3 0 --weight 4 0
+  crushtool successfully built or modified map.  Use '-o <file>' to write it out.
+  $ crushtool -i set-choose.crushmap --test --show-mappings --show-statistics --weight 0 0 --weight 1 0 --weight 3 0 --weight 4 0 --set-straw-calc-version 0
   rule 0 (choose), x = 0..1023, numrep = 2..3
   CRUSH rule 0 x 0 [2,5]
   CRUSH rule 0 x 1 [2,8]
@@ -24618,7 +24619,8 @@
   CRUSH rule 5 x 1022 [2,6,5]
   CRUSH rule 5 x 1023 [5,2,8]
   rule 5 (chooseleaf-set) num_rep 3 result size == 3:\t1024/1024 (esc)
-  $ crushtool -i set-choose.crushmap --test --show-statistics --weight 0 0 --weight 3 0 --weight 4 .5 --weight 5 0 --weight 6 .1 --weight 7 0
+  crushtool successfully built or modified map.  Use '-o <file>' to write it out.
+  $ crushtool -i set-choose.crushmap --test --show-mappings --show-statistics --weight 0 0 --weight 3 0 --weight 4 .5 --weight 5 0 --weight 6 .1 --weight 7 0 --set-straw-calc-version 0
   rule 0 (choose), x = 0..1023, numrep = 2..3
   CRUSH rule 0 x 0 [2,4]
   CRUSH rule 0 x 1 [2,8]
@@ -36939,3 +36941,4 @@
   CRUSH rule 5 x 1023 [4,2,8]
   rule 5 (chooseleaf-set) num_rep 3 result size == 2:\t501/1024 (esc)
   rule 5 (chooseleaf-set) num_rep 3 result size == 3:\t523/1024 (esc)
+  crushtool successfully built or modified map.  Use '-o <file>' to write it out.

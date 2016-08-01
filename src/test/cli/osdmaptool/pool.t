@@ -7,10 +7,11 @@
 #
   $ osdmaptool myosdmap --test-map-object foo --pool
   Option --pool requires an argument.
+  
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool bar
-  strict_strtoll: expected integer, got: 'bar'
+  The option value 'bar' is invalid
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool 123
@@ -32,10 +33,11 @@
 #
   $ osdmaptool myosdmap --test-map-pgs --pool
   Option --pool requires an argument.
+  
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool baz
-  strict_strtoll: expected integer, got: 'baz'
+  The option value 'baz' is invalid
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool 123

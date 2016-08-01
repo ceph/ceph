@@ -19,7 +19,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/debug.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 
 #include "DeterministicOpSequence.h"
 #include "FileStoreDiff.h"
@@ -109,8 +109,8 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
     return err;
   }
 
-  coll_t txn_coll("meta");
-  hobject_t txn_object(sobject_t("txn", CEPH_NOSNAP));
+  coll_t txn_coll;
+  ghobject_t txn_object(hobject_t(sobject_t("txn", CEPH_NOSNAP)));
   bufferlist bl;
   store->read(txn_coll, txn_object, 0, 100, bl);
   int32_t txn = 0;

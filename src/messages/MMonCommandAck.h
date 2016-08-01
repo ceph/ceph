@@ -20,7 +20,7 @@
 class MMonCommandAck : public PaxosServiceMessage {
  public:
   vector<string> cmd;
-  __s32 r;
+  errorcode32_t r;
   string rs;
   
   MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, 0) {}

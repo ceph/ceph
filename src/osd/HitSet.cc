@@ -13,6 +13,7 @@
  */
 
 #include "HitSet.h"
+#include "common/Formatter.h"
 
 // -- HitSet --
 
@@ -34,9 +35,6 @@ HitSet::HitSet(const HitSet::Params& params)
 
   case TYPE_EXPLICIT_OBJECT:
     impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
-    break;
-
-  case TYPE_NONE:
     break;
 
   default:
@@ -215,4 +213,40 @@ ostream& operator<<(ostream& out, const HitSet::Params& p) {
   }
   out << "}";
   return out;
+}
+
+
+void ExplicitHashHitSet::dump(Formatter *f) const {
+  f->dump_unsigned("insert_count", count);
+  f->open_array_section("hash_set");
+  for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin();
+       p != hits.end();
+       ++p)
+    f->dump_unsigned("hash", *p);
+  f->close_section();
+}
+
+void ExplicitObjectHitSet::dump(Formatter *f) const {
+  f->dump_unsigned("insert_count", count);
+  f->open_array_section("set");
+  for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin();
+       p != hits.end();
+       ++p) {
+    f->open_object_section("object");
+    p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void BloomHitSet::Params::dump(Formatter *f) const {
+  f->dump_float("false_positive_probability", get_fpp());
+  f->dump_int("target_size", target_size);
+  f->dump_int("seed", seed);
+}
+
+void BloomHitSet::dump(Formatter *f) const {
+  f->open_object_section("bloom_filter");
+  bloom.dump(f);
+  f->close_section();
 }

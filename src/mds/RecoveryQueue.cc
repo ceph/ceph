@@ -14,7 +14,7 @@
 
 #include "CInode.h"
 #include "MDCache.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "Locker.h"
 #include "osdc/Filer.h"
 
@@ -33,7 +33,7 @@ protected:
     rq->_recovered(in, r, size, mtime);
   }
 
-  MDS *get_mds() {
+  MDSRank *get_mds() {
     return rq->mds;
   }
 
@@ -45,6 +45,11 @@ public:
     assert(rq != NULL);
   }
 };
+
+
+RecoveryQueue::RecoveryQueue(MDSRank *mds_)
+  : mds(mds_), logger(NULL), filer(mds_->objecter, mds_->finisher)
+{}
 
 
 /**
@@ -71,6 +76,10 @@ void RecoveryQueue::advance()
       break;
     }
   }
+
+  logger->set(l_mdc_num_recovering_processing, file_recovering.size());
+  logger->set(l_mdc_num_recovering_enqueued, file_recover_queue.size());
+  logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front.size());
 }
 
 void RecoveryQueue::_start(CInode *in)
@@ -89,9 +98,9 @@ void RecoveryQueue::_start(CInode *in)
     file_recovering.insert(in);
 
     C_MDC_Recover *fin = new C_MDC_Recover(this, in);
-    mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-		      pi->get_max_size(), &fin->size, &fin->mtime, false,
-		      0, fin);
+    filer.probe(in->inode.ino, &in->inode.layout, in->last,
+		pi->get_max_size(), &fin->size, &fin->mtime, false,
+		0, fin);
   } else {
     dout(10) << "skipping " << in->inode.size << " " << *in << dendl;
     in->state_clear(CInode::STATE_RECOVERING);
@@ -110,6 +119,7 @@ void RecoveryQueue::prioritize(CInode *in)
   if (file_recover_queue.count(in)) {
     dout(20) << *in << dendl;
     file_recover_queue_front.insert(in);
+    logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front.size());
     return;
   }
 
@@ -124,14 +134,17 @@ void RecoveryQueue::prioritize(CInode *in)
 void RecoveryQueue::enqueue(CInode *in)
 {
   dout(15) << "RecoveryQueue::enqueue " << *in << dendl;
+  assert(logger);  // Caller should have done set_logger before using me
   assert(in->is_auth());
 
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   if (!in->state_test(CInode::STATE_RECOVERING)) {
     in->state_set(CInode::STATE_RECOVERING);
     in->auth_pin(this);
+    logger->inc(l_mdc_recovery_started);
   }
   file_recover_queue.insert(in);
+  logger->set(l_mdc_num_recovering_enqueued, file_recover_queue.size());
 }
 
 
@@ -146,13 +159,15 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
   if (r != 0) {
     dout(0) << "recovery error! " << r << dendl;
     if (r == -EBLACKLISTED) {
-      mds->suicide();
+      mds->respawn();
       return;
     }
     assert(0 == "unexpected error from osd during recovery");
   }
 
   file_recovering.erase(in);
+  logger->set(l_mdc_num_recovering_processing, file_recovering.size());
+  logger->inc(l_mdc_recovery_completed);
   in->state_clear(CInode::STATE_RECOVERING);
 
   if (!in->get_parent_dn() && !in->get_projected_parent_dn()) {

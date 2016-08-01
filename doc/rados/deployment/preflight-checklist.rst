@@ -16,9 +16,9 @@ daemons.
 Install an Operating System
 ===========================
 
-Install a recent release of Debian or Ubuntu (e.g., 12.04, 12.10) on your
-nodes. For additional details on operating systems or to use other operating
-systems other than Debian or Ubuntu, see `OS Recommendations`_.
+Install a recent release of Debian or Ubuntu (e.g., 12.04 LTS, 14.04 LTS) on
+your nodes. For additional details on operating systems or to use other
+operating systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
 
 Install an SSH Server
@@ -89,7 +89,7 @@ Install ceph-deploy
 
 To install ``ceph-deploy``, execute the following:: 
 
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 	sudo apt-get update	
 	sudo apt-get install ceph-deploy
@@ -102,10 +102,8 @@ Ensure that your Admin node has connectivity to the network and to your Server
 node (e.g., ensure ``iptables``, ``ufw`` or other tools that may prevent
 connections, traffic forwarding, etc. to allow what you need).
 
-.. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
-   without  effective error messages. 
 
 Once you have completed this pre-flight checklist, you are ready to begin using
 ``ceph-deploy``.
 
-.. _OS Recommendations: ../../../install/os-recommendations
+.. _OS Recommendations: ../../../start/os-recommendations

@@ -48,4 +48,6 @@ private:
   std::string m_suffix;
 };
 
+std::string get_temp_pool_name(const char* prefix);
+
 #endif

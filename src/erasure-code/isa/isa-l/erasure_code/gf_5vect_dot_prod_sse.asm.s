@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+;  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 ;
 ;  Redistribution and use in source and binary forms, with or without
 ;  modification, are permitted provided that the following conditions
@@ -30,8 +30,8 @@
 ;;;
 ;;; gf_5vect_dot_prod_sse(len, vec, *g_tbls, **buffs, **dests);
 ;;;
-;;; Author: Gregory Tucker
 
+%include "reg_sizes.asm"
 
 %ifidn __OUTPUT_FORMAT__, elf64
  %define arg0  rdi
@@ -165,23 +165,23 @@ default rel
 section .text
 
 %define xmask0f   xmm15
-%define xgft1_lo  xmm14
-%define xgft1_hi  xmm13
-%define xgft2_lo  xmm12
-%define xgft2_hi  xmm11
+%define xgft1_lo  xmm2
+%define xgft1_hi  xmm3
+%define xgft2_lo  xmm4
+%define xgft2_hi  xmm5
 %define xgft3_lo  xmm10
-%define xgft3_hi  xmm9
+%define xgft3_hi  xmm6
 %define xgft4_lo  xmm8
 %define xgft4_hi  xmm7
 
 
 %define x0     xmm0
 %define xtmpa  xmm1
-%define xp1    xmm2
-%define xp2    xmm3
-%define xp3    xmm4
-%define xp4    xmm5
-%define xp5    xmm6
+%define xp1    xmm9
+%define xp2    xmm11
+%define xp3    xmm12
+%define xp4    xmm13
+%define xp5    xmm14
 
 align 16
 global gf_5vect_dot_prod_sse:function
@@ -300,15 +300,5 @@ section .data
 align 16
 mask0f:	ddq 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
 ;;;       func                  core, ver, snum
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
-slversion gf_5vect_dot_prod_sse, 00,  03,  0065
+slversion gf_5vect_dot_prod_sse, 00,  05,  0065

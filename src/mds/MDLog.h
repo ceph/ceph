@@ -50,7 +50,7 @@ enum {
 class Journaler;
 class JournalPointer;
 class LogEvent;
-class MDS;
+class MDSRank;
 class LogSegment;
 class ESubtreeMap;
 
@@ -64,7 +64,7 @@ using std::map;
 
 class MDLog {
 public:
-  MDS *mds;
+  MDSRank *mds;
 protected:
   int num_events; // in events
 
@@ -72,7 +72,10 @@ protected:
 
   bool capped;
 
-  bool stopping;
+  // Log position which is persistent *and* for which
+  // submit_entry wait_for_safe callbacks have already
+  // been called.
+  uint64_t safe_pos;
 
   inodeno_t ino;
   Journaler *journaler;
@@ -84,7 +87,7 @@ protected:
   class ReplayThread : public Thread {
     MDLog *log;
   public:
-    ReplayThread(MDLog *l) : log(l) {}
+    explicit ReplayThread(MDLog *l) : log(l) {}
     void* entry() {
       log->_replay_thread();
       return 0;
@@ -106,7 +109,7 @@ protected:
     MDSInternalContextBase *completion;
   public:
     void set_completion(MDSInternalContextBase *c) {completion = c;}
-    RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
+    explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
     void* entry() {
       log->_recovery_thread(completion);
       return 0;
@@ -138,7 +141,7 @@ protected:
   class SubmitThread : public Thread {
     MDLog *log;
   public:
-    SubmitThread(MDLog *l) : log(l) {}
+    explicit SubmitThread(MDLog *l) : log(l) {}
     void* entry() {
       log->_submit_thread();
       return 0;
@@ -176,23 +179,23 @@ public:
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
 
-
+  void set_write_iohint(unsigned iohint_flags);
 
 public:
-  MDLog(MDS *m) : mds(m),
-		  num_events(0), 
-		  unflushed(0),
-		  capped(false),
-		  stopping(false),
-		  journaler(0),
-		  logger(0),
-		  replay_thread(this),
-		  already_replayed(false),
-		  recovery_thread(this),
-		  event_seq(0), expiring_events(0), expired_events(0),
-		  submit_mutex("MDLog::submit_mutex"),
-		  submit_thread(this),
-		  cur_event(NULL) { }		  
+  explicit MDLog(MDSRank *m) : mds(m),
+                      num_events(0), 
+                      unflushed(0),
+                      capped(false),
+                      safe_pos(0),
+                      journaler(0),
+                      logger(0),
+                      replay_thread(this),
+                      already_replayed(false),
+                      recovery_thread(this),
+                      event_seq(0), expiring_events(0), expired_events(0),
+                      submit_mutex("MDLog::submit_mutex"),
+                      submit_thread(this),
+                      cur_event(NULL) { }		  
   ~MDLog();
 
 
@@ -251,6 +254,7 @@ public:
   bool is_capped() { return capped; }
   void cap();
 
+  void kick_submitter();
   void shutdown();
 
   // -- events --
@@ -284,21 +288,13 @@ public:
   }
 
 private:
-  class C_MaybeExpiredSegment : public MDSInternalContext {
-    MDLog *mdlog;
-    LogSegment *ls;
-    int op_prio;
-  public:
-    C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) : MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
-    void finish(int res) {
-      mdlog->_maybe_expired(ls, op_prio);
-    }
-  };
-
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
   void _expired(LogSegment *ls);
   void _trim_expired_segments();
+
+  friend class C_MaybeExpiredSegment;
+  friend class C_MDL_Flushed;
 
 public:
   void trim_expired_segments();
@@ -320,6 +316,8 @@ public:
   void replay(MDSInternalContextBase *onfinish);
 
   void standby_trim_segments();
+
+  void dump_replay_status(Formatter *f) const;
 };
 
 #endif

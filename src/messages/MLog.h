@@ -19,7 +19,6 @@
 #include "messages/PaxosServiceMessage.h"
 
 #include <deque>
-#include <uuid/uuid.h>
 
 class MLog : public PaxosServiceMessage {
 public:
@@ -38,14 +37,15 @@ public:
   void print(ostream& out) const {
     out << "log(";
     if (entries.size())
-      out << entries.size() << " entries";
+      out << entries.size() << " entries from seq " << entries.front().seq
+	  << " at " << entries.front().stamp;
     out << ")";
   }
 
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(entries, payload);
+    ::encode(entries, payload, features);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

@@ -168,7 +168,7 @@ For instance, when three coding steps are described as::
 
 where *c* are coding chunks calculated from the data chunks *D*, the
 loss of chunk *7* can be recovered with the last four chunks. And the
-loss of chun *2* chunk can be recovered with the first four
+loss of chunk *2* chunk can be recovered with the first four
 chunks.
 
 Erasure code profile examples using low level configuration
@@ -272,7 +272,7 @@ are applied in order. For instance, if a 4K object is encoded, it will
 first go thru *step 1* and be divided in four 1K chunks (the four
 uppercase D). They are stored in the chunks 2, 3, 6 and 7, in
 order. From these, two coding chunks are calculated (the two lowercase
-c). The coding chunks are stored in the chunks 1 and 4, respectively.
+c). The coding chunks are stored in the chunks 1 and 5, respectively.
 
 The *step 2* re-uses the content created by *step 1* in a similar
 fashion and stores a single coding chunk *c* at position 0. The last four
@@ -300,7 +300,7 @@ The coding chunk from *step 2*, stored in chunk *0*, allows it to
 recover the content of chunk *2*. There are no more chunks to recover
 and the process stops, without considering *step 1*.
 
-Recovering chunk *2* required reading chunks *0, 1, 3* and writing
+Recovering chunk *2* requires reading chunks *0, 1, 3* and writing
 back chunk *2*.
 
 If chunk *2, 3, 6* are lost::
@@ -311,7 +311,7 @@ If chunk *2, 3, 6* are lost::
    step 2      cD  __ _
    step 3      __  cD D
 
-The *step 3* can recover the conten of chunk *6*::
+The *step 3* can recover the content of chunk *6*::
 
    chunk nr    01234567
 
@@ -355,6 +355,6 @@ For instance::
 
 will create a ruleset that will select two crush buckets of type
 *rack* and for each of them choose four OSDs, each of them located in
-different bucket of type *host*.
+different buckets of type *host*.
 
 The ruleset can also be manually crafted for finer control.

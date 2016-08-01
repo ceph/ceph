@@ -1,0 +1,15 @@
+# /etc/default/ceph
+#
+# Environment file for ceph daemon systemd unit files.
+#
+
+# Increase tcmalloc cache size
+TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728
+
+## use jemalloc instead of tcmalloc
+#
+# jemalloc is generally faster for small IO workloads and when
+# ceph-osd is backed by SSDs.  However, memory usage is usually
+# higher by 200-300mb.
+#
+#LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.1

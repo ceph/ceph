@@ -18,7 +18,7 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
   cls_user_set_buckets_op call;
   call.entries = entries;
   call.add = add;
-  call.time = ceph_clock_now(NULL);
+  call.time = real_clock::now();
   ::encode(call, in);
   op.exec("user", "set_buckets_info", in);
 }
@@ -27,7 +27,7 @@ void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op)
 {
   bufferlist in;
   cls_user_complete_stats_sync_op call;
-  call.time = ceph_clock_now(NULL);
+  call.time = real_clock::now();
   ::encode(call, in);
   op.exec("user", "complete_stats_sync", in);
 }
@@ -72,12 +72,18 @@ public:
 };
 
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
-                       const string& in_marker, int max_entries, list<cls_user_bucket_entry>& entries,
-                       string *out_marker, bool *truncated, int *pret)
+                          const string& in_marker,
+                          const string& end_marker,
+                          int max_entries,
+                          list<cls_user_bucket_entry>& entries,
+                          string *out_marker,
+                          bool *truncated,
+                          int *pret)
 {
   bufferlist inbl;
   cls_user_list_buckets_op call;
   call.marker = in_marker;
+  call.end_marker = end_marker;
   call.max_entries = max_entries;
 
   ::encode(call, inbl);

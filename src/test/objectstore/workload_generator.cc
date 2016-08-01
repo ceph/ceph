@@ -268,7 +268,7 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
     stat->written_data += bl.length();
 
-  t->write(coll, obj, 0, bl.length(), bl);
+  t->write(coll, ghobject_t(obj), 0, bl.length(), bl);
 }
 
 void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
@@ -292,11 +292,11 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
-  t->setattr(coll, obj, "objxattr", bl);
+  t->setattr(coll, ghobject_t(obj), "objxattr", bl);
 }
 
-void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
-					      coll_t coll, C_StatState *stat)
+void WorkloadGenerator::do_pgmeta_omap_set(ObjectStore::Transaction *t, spg_t pgid,
+					   coll_t coll, C_StatState *stat)
 {
   if (m_suppress_write_xattr_coll) {
     dout(5) << __func__ << " suppressed" << dendl;
@@ -314,8 +314,12 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
-  t->collection_setattr(coll, "collxattr", bl);
+  ghobject_t pgmeta(pgid.make_pgmeta_oid());
+  map<string,bufferlist> values;
+  values["_"].claim(bl);
+  t->omap_setkeys(coll, pgmeta, values);
 }
+
 
 void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
                                       coll_entry_t *entry, C_StatState *stat)
@@ -329,16 +333,16 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
 
   bufferlist bl;
   get_filled_byte_array(bl, size);
-  hobject_t log_obj = entry->m_meta_obj;
+  ghobject_t log_obj = entry->m_meta_obj;
 
   dout(2) << __func__ << " coll " << entry->m_coll << " "
-      << META_COLL << " /" << log_obj << " (" << bl.length() << ")" << dendl;
+      << coll_t::meta() << " /" << log_obj << " (" << bl.length() << ")" << dendl;
 
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
   uint64_t s = pg_log_size[entry->m_coll];
-  t->write(META_COLL, log_obj, s, bl.length(), bl);
+  t->write(coll_t::meta(), log_obj, s, bl.length(), bl);
   pg_log_size[entry->m_coll] += bl.length();
 }
 
@@ -349,7 +353,8 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   m_nr_runs.set(0);
   entry->m_osr.flush();
   vector<ghobject_t> ls;
-  m_store->collection_list(entry->m_coll, ls);
+  m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(),
+			   true, INT_MAX, &ls, NULL);
   dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
@@ -358,7 +363,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   }
 
   t->remove_collection(entry->m_coll);
-  t->remove(META_COLL, entry->m_meta_obj);
+  t->remove(coll_t::meta(), entry->m_meta_obj);
 }
 
 TestObjectStoreState::coll_entry_t
@@ -374,9 +379,9 @@ TestObjectStoreState::coll_entry_t
   m_collections.insert(make_pair(entry->m_id, entry));
 
   dout(2) << __func__ << " id " << entry->m_id << " coll " << entry->m_coll << dendl;
-  t->create_collection(entry->m_coll);
-  dout(2) << __func__ << " meta " << META_COLL << "/" << entry->m_meta_obj << dendl;
-  t->touch(META_COLL, entry->m_meta_obj);
+  t->create_collection(entry->m_coll, 32);
+  dout(2) << __func__ << " meta " << coll_t::meta() << "/" << entry->m_meta_obj << dendl;
+  t->touch(coll_t::meta(), entry->m_meta_obj);
   return entry;
 }
 
@@ -454,7 +459,7 @@ void WorkloadGenerator::run()
         break;
       }
 
-      c = new C_OnReadable(this, t);
+      c = new C_OnReadable(this);
       goto queue_tx;
     }
 
@@ -464,7 +469,7 @@ void WorkloadGenerator::run()
 
     if (destroy_collection) {
       do_destroy_collection(t, entry, stat_state);
-      c = new C_OnDestroyed(this, t, entry);
+      c = new C_OnDestroyed(this, entry);
       if (!m_num_ops)
         create_coll = true;
     } else {
@@ -472,10 +477,10 @@ void WorkloadGenerator::run()
 
       do_write_object(t, entry->m_coll, *obj, stat_state);
       do_setattr_object(t, entry->m_coll, *obj, stat_state);
-      do_setattr_collection(t, entry->m_coll, stat_state);
+      do_pgmeta_omap_set(t, entry->m_pgid, entry->m_coll, stat_state);
       do_append_log(t, entry, stat_state);
 
-      c = new C_OnReadable(this, t);
+      c = new C_OnReadable(this);
     }
 
 queue_tx:
@@ -485,7 +490,8 @@ queue_tx:
       c = new C_StatWrapper(stat_state, tmp);
     }
 
-    m_store->queue_transaction(&(entry->m_osr), t, c);
+    m_store->queue_transaction(&(entry->m_osr), std::move(*t), c);
+    delete t;
 
     inc_in_flight();
 

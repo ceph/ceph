@@ -84,9 +84,9 @@ int OmapBench::setup(int argc, const char** argv) {
       	   << "rand for random sizes between\n"
       	   << "                        0 and max size, uniform for all sizes"
       	   << " to be specified size.\n"
-      	   << "                        (default "<<value_size;
-      cout <<"\n  --name          the rados id to use (default "<<rados_id;
-      cout<<")\n";
+           << "                        (default uniform)\n";
+      cout << "	--name          the rados id to use (default "<< rados_id
+           << ")\n";
       exit(1);
     }
   }

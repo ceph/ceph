@@ -1,4 +1,2 @@
 usr/include/cephfs/libcephfs.h
-usr/lib/libcephfs.a
-usr/lib/libcephfs.la
 usr/lib/libcephfs.so

@@ -1,5 +1,5 @@
 /**********************************************************************
-  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -41,7 +41,7 @@
 extern "C" {
 #endif
 
-#ifndef __unix__
+#ifdef __WIN32__
 #ifdef __MINGW32__
 # include <_mingw.h>
 #endif
@@ -59,12 +59,20 @@ typedef unsigned char      UINT8;
 #endif
 
 
-#ifdef __unix__
+#if defined  __unix__ || defined __APPLE__
 # define DECLARE_ALIGNED(decl, alignval) decl __attribute__((aligned(alignval)))
 # define __forceinline static inline
+# define aligned_free(x) free(x)
 #else
-# define DECLARE_ALIGNED(decl, alignval) __declspec(align(alignval)) decl
-# define posix_memalign(p, algn, len) (NULL == (*((char**)(p)) = (void*) _aligned_malloc(len, algn)))
+# ifdef __MINGW32__
+#   define DECLARE_ALIGNED(decl, alignval) decl __attribute__((aligned(alignval)))
+#   define posix_memalign(p, algn, len) (NULL == (*((char**)(p)) = (void*) _aligned_malloc(len, algn)))
+#   define aligned_free(x) _aligned_free(x)
+# else
+#   define DECLARE_ALIGNED(decl, alignval) __declspec(align(alignval)) decl
+#   define posix_memalign(p, algn, len) (NULL == (*((char**)(p)) = (void*) _aligned_malloc(len, algn)))
+#   define aligned_free(x) _aligned_free(x)
+# endif
 #endif
 
 #ifdef DEBUG

@@ -104,7 +104,7 @@ Capability syntax follows the form::
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` and 
   ``allow profile {cap}``. For example:: 
 
-	mon 'allow rwx`
+	mon 'allow rwx'
 	mon 'allow profile osd'
 
 - **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``, 
@@ -189,7 +189,7 @@ The following entries describe each capability.
               bootstrapping an OSD.
 
 
-``profile bootstrap-osd``
+``profile bootstrap-mds``
 
 :Description: Gives a user permissions to bootstrap a metadata server. 
               Conferred on deployment tools such as ``ceph-deploy``, etc.
@@ -201,8 +201,7 @@ The following entries describe each capability.
 Pool
 ----
 
-A pool is a logical partition where users store data. By default, a Ceph Storage
-Cluster has `pools`_ for ``data``, ``rbd`` and ``metadata`` (metadata server).
+A pool is a logical partition where users store data.
 In Ceph deployments, it is common to create a pool as a logical partition for
 similar types of data. For example, when deploying Ceph as a backend for
 OpenStack, a typical deployment would have pools for volumes, images, backups
@@ -365,12 +364,15 @@ Modify User Capabilities
 ------------------------
 
 The ``ceph auth caps`` command allows you to specify a user and change the 
-user's capabilties. To add capabilities, use the form:: 
+user's capabilities. Setting new capabilities will overwrite current capabilities.
+To view current capabilities run ``ceph auth get USERTYPE.USERID``.  To add
+capabilities, you should also specify the existing capabilities when using the form:: 
 
-	ceph auth caps USERTYPE.USERID {daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}'
+	ceph auth caps USERTYPE.USERID {daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]' [{daemon} 'allow [r|w|x|*|...] [pool={pool-name}] [namespace={namespace-name}]']
 
 For example:: 
 
+	ceph auth get client.john
 	ceph auth caps client.john mon 'allow r' osd 'allow rw pool=liverpool'
 	ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
 	ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
@@ -601,7 +603,7 @@ Ceph supports the following usage for user name and secret:
               preferred approach, because you can switch user names without 
               switching the keyring path. For example:: 
 
-               sudo rbd map foo --pool rbd myimage --id client.foo --keyring /path/to/keyring
+               sudo rbd map --id foo --keyring /path/to/keyring mypool/myimage
 
 
 .. _pools: ../pools
@@ -641,7 +643,7 @@ authentication issues more fully.
 
 At the moment, none of the Ceph authentication protocols provide secrecy for
 messages in transit. Thus, an eavesdropper on the wire can hear and understand
-all data sent between clients and servers in Ceph, even if he cannot create or
+all data sent between clients and servers in Ceph, even if it cannot create or
 alter them. Further, Ceph does not include options to encrypt user data in the
 object store. Users can hand-encrypt and store their own data in the Ceph
 object store, of course, but Ceph provides no features to perform object

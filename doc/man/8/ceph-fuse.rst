@@ -1,3 +1,5 @@
+:orphan:
+
 =========================================
  ceph-fuse -- FUSE-based client for ceph
 =========================================
@@ -51,7 +53,7 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 Availability
 ============
 
-**ceph-fuse** is part of the Ceph distributed storage system. Please refer to
+**ceph-fuse** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 

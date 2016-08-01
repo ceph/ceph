@@ -13,6 +13,7 @@
  *  version 2.1 of the License, or (at your option) any later version.
  * 
  */
+#include <stdlib.h>
 
 #include "include/stringify.h"
 #include "global/global_init.h"
@@ -239,6 +240,10 @@ int main(int argc, char **argv) {
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

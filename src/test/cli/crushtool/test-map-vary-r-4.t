@@ -1,5 +1,4 @@
-  $ crushtool -i "$TESTDIR/test-map-vary-r.crushmap" --test --show-statistics --rule 3 --set-chooseleaf-vary-r 4 --weight 0 0 --weight 4 0 --weight 9 0
-  crushtool successfully built or modified map.  Use '-o <file>' to write it out.
+  $ crushtool -i "$TESTDIR/test-map-vary-r.crushmap" --test --show-mappings --show-statistics --rule 3 --set-chooseleaf-vary-r 4 --weight 0 0 --weight 4 0 --weight 9 0
   rule 3 (delltestrule), x = 0..1023, numrep = 2..4
   CRUSH rule 3 x 0 [94,85]
   CRUSH rule 3 x 1 [73,78]
@@ -3076,3 +3075,4 @@
   CRUSH rule 3 x 1022 [73,28]
   CRUSH rule 3 x 1023 [59,88]
   rule 3 (delltestrule) num_rep 4 result size == 2:\t1024/1024 (esc)
+  crushtool successfully built or modified map.  Use '-o <file>' to write it out.

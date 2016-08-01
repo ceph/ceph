@@ -70,6 +70,17 @@ namespace ceph {
       ceph_spin_unlock(&lock);
       return ret;
     }
+    bool compare_and_swap(T o, T n) {
+      bool success = false;
+      ceph_spin_lock(&lock);
+      if (val == o) {
+        success = true;
+        val = n;
+      }
+      ceph_spin_unlock(&lock);
+      return success;
+    }
+
   private:
     // forbid copying
     atomic_spinlock_t(const atomic_spinlock_t<T> &other);
@@ -100,12 +111,12 @@ namespace ceph {
     AO_t dec() {
       return AO_fetch_and_sub1_write(&val) - 1;
     }
-    void add(AO_t add_me) {
-      AO_fetch_and_add(&val, add_me);
+    AO_t add(AO_t add_me) {
+      return AO_fetch_and_add(&val, add_me) + add_me;
     }
-    void sub(AO_t sub_me) {
+    AO_t sub(AO_t sub_me) {
       AO_t negsub = 0 - sub_me;
-      AO_fetch_and_add_write(&val, (AO_t)negsub);
+      return AO_fetch_and_add_write(&val, negsub) + negsub;
     }
     AO_t read() const {
       // cast away const on the pointer.  this is only needed to build
@@ -113,6 +124,10 @@ namespace ceph {
       // at some point.  this hack can go away someday...
       return AO_load_full((AO_t *)&val);
     }
+    bool compare_and_swap(AO_t o, AO_t n) {
+      return AO_compare_and_swap(&val, o, n);
+    }
+
   private:
     // forbid copying
     atomic_t(const atomic_t &other);

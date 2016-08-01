@@ -93,7 +93,7 @@ public:
     ::encode(last_key.first, payload);
     ::encode(last_key.second, payload);
     ::encode(chunk_bl, payload);
-    ::encode(reply_to, payload);
+    ::encode(reply_to, payload, features);
   }
 
   void decode_payload() {

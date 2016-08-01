@@ -56,7 +56,11 @@ int JournalPointer::load(Objecter *objecter)
   // Construct JournalPointer result, null or decoded data
   if (r == 0) {
     bufferlist::iterator q = data.begin();
-    decode(q);
+    try {
+      decode(q);
+    } catch (const buffer::error &e) {
+      return -EINVAL;
+    }
   } else {
     dout(1) << "Journal pointer '" << object_id << "' read failed: " << cpp_strerror(r) << dendl;
   }
@@ -86,7 +90,9 @@ int JournalPointer::save(Objecter *objecter) const
 
   C_SaferCond waiter;
   objecter->write_full(object_t(object_id), object_locator_t(pool_id),
-      SnapContext(), data, ceph_clock_now(g_ceph_context), 0, NULL, &waiter);
+		       SnapContext(), data,
+		       ceph::real_clock::now(g_ceph_context), 0, NULL,
+		       &waiter);
   int write_result = waiter.wait();
   if (write_result < 0) {
     derr << "Error writing pointer object '" << object_id << "': " << cpp_strerror(write_result) << dendl;
@@ -107,6 +113,8 @@ void JournalPointer::save(Objecter *objecter, Context *completion) const
   encode(data);
 
   objecter->write_full(object_t(get_object_id()), object_locator_t(pool_id),
-      SnapContext(), data, ceph_clock_now(g_ceph_context), 0, NULL, completion);
+		       SnapContext(), data,
+		       ceph::real_clock::now(g_ceph_context), 0, NULL,
+		       completion);
 }
 

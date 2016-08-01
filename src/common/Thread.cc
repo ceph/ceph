@@ -1,4 +1,4 @@
- // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/Thread.h"
 #include "common/code_environment.h"
 #include "common/debug.h"
@@ -22,18 +23,41 @@
 #include <errno.h>
 #include <iostream>
 #include <pthread.h>
+
 #include <signal.h>
 #include <sstream>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#ifdef HAVE_SCHED
+#include <sched.h>
+#endif
 
+static int _set_affinity(int id)
+{
+#ifdef HAVE_SCHED
+  if (id >= 0 && id < CPU_SETSIZE) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+
+    CPU_SET(id, &cpuset);
+
+    if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0)
+      return -errno;
+    /* guaranteed to take effect immediately */
+    sched_yield();
+  }
+#endif
+  return 0;
+}
 
 Thread::Thread()
   : thread_id(0),
     pid(0),
     ioprio_class(-1),
-    ioprio_priority(-1)
+    ioprio_priority(-1),
+    cpuid(-1),
+    thread_name(NULL)
 {
 }
 
@@ -58,10 +82,14 @@ void *Thread::entry_wrapper()
 		    pid,
 		    IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
   }
+  if (pid && cpuid >= 0)
+    _set_affinity(cpuid);
+
+  ceph_pthread_setname(pthread_self(), thread_name);
   return entry();
 }
 
-const pthread_t &Thread::get_thread_id()
+const pthread_t &Thread::get_thread_id() const
 {
   return thread_id;
 }
@@ -71,7 +99,7 @@ bool Thread::is_started() const
   return thread_id != 0;
 }
 
-bool Thread::am_self()
+bool Thread::am_self() const
 {
   return (pthread_self() == thread_id);
 }
@@ -87,11 +115,11 @@ int Thread::kill(int signal)
 int Thread::try_create(size_t stacksize)
 {
   pthread_attr_t *thread_attr = NULL;
+  pthread_attr_t thread_attr_loc;
+  
   stacksize &= CEPH_PAGE_MASK;  // must be multiple of page
   if (stacksize) {
-    thread_attr = (pthread_attr_t*) malloc(sizeof(pthread_attr_t));
-    if (!thread_attr)
-      return -ENOMEM;
+    thread_attr = &thread_attr_loc;
     pthread_attr_init(thread_attr);
     pthread_attr_setstacksize(thread_attr, stacksize);
   }
@@ -113,13 +141,18 @@ int Thread::try_create(size_t stacksize)
   r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
   restore_sigset(&old_sigset);
 
-  if (thread_attr)
-    free(thread_attr);
+  if (thread_attr) {
+    pthread_attr_destroy(thread_attr);	
+  }
+
   return r;
 }
 
-void Thread::create(size_t stacksize)
+void Thread::create(const char *name, size_t stacksize)
 {
+  assert(strlen(name) < 16);
+  thread_name = name;
+
   int ret = try_create(stacksize);
   if (ret != 0) {
     char buf[256];
@@ -138,7 +171,14 @@ int Thread::join(void **prval)
   }
 
   int status = pthread_join(thread_id, prval);
-  assert(status == 0);
+  if (status != 0) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "Thread::join(): pthread_join "
+             "failed with error %d\n", status);
+    dout_emergency(buf);
+    assert(status == 0);
+  }
+
   thread_id = 0;
   return status;
 }
@@ -158,4 +198,13 @@ int Thread::set_ioprio(int cls, int prio)
 			   pid,
 			   IOPRIO_PRIO_VALUE(cls, prio));
   return 0;
+}
+
+int Thread::set_affinity(int id)
+{
+  int r = 0;
+  cpuid = id;
+  if (pid && ceph_gettid() == pid)
+    r = _set_affinity(id);
+  return r;
 }

@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_LOG_H
-#define CEPH_RGW_REST_LOG_H
+
+#ifndef RGW_REST_LOG_H
+#define RGW_REST_LOG_H
 
 #include "rgw_metadata.h"
 
@@ -26,7 +27,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   virtual void send_response();
   virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
@@ -38,18 +39,18 @@ public:
 };
 
 class RGWOp_BILog_Info : public RGWRESTOp {
-  uint64_t bucket_ver;
-  uint64_t master_ver;
+  string bucket_ver;
+  string master_ver;
   string max_marker;
 public:
-  RGWOp_BILog_Info() : bucket_ver(0), master_ver(0) {}
+  RGWOp_BILog_Info() : bucket_ver(), master_ver() {}
   ~RGWOp_BILog_Info() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   virtual void send_response();
   void execute();
@@ -76,16 +77,15 @@ class RGWOp_MDLog_List : public RGWRESTOp {
   list<cls_log_entry> entries;
   string last_marker;
   bool truncated;
-  int http_ret;
 public:
-  RGWOp_MDLog_List() : truncated(false), http_ret(0) {}
+  RGWOp_MDLog_List() : truncated(false) {}
   ~RGWOp_MDLog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -96,16 +96,16 @@ public:
 
 class RGWOp_MDLog_Info : public RGWRESTOp {
   unsigned num_objects;
-  int http_ret;
+  RGWPeriodHistory::Cursor period;
 public:
-  RGWOp_MDLog_Info() : num_objects(0), http_ret(0) {}
+  RGWOp_MDLog_Info() : num_objects(0) {}
   ~RGWOp_MDLog_Info() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -124,7 +124,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -161,6 +161,20 @@ public:
   }
 };
 
+class RGWOp_MDLog_Notify : public RGWRESTOp {
+public:
+  RGWOp_MDLog_Notify() {}
+  ~RGWOp_MDLog_Notify() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const string name() {
+    return "mdlog_notify";
+  }
+};
+
 class RGWOp_MDLog_Delete : public RGWRESTOp {
 public:
   RGWOp_MDLog_Delete() {}
@@ -176,19 +190,19 @@ public:
 };
 
 class RGWOp_DATALog_List : public RGWRESTOp {
-  list<rgw_data_change> entries;
+  list<rgw_data_change_log_entry> entries;
   string last_marker;
   bool truncated;
-  int http_ret;
+  bool extra_info;
 public:
-  RGWOp_DATALog_List() : truncated(false), http_ret(0) {}
+  RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -199,16 +213,15 @@ public:
 
 class RGWOp_DATALog_Info : public RGWRESTOp {
   unsigned num_objects;
-  int http_ret;
 public:
-  RGWOp_DATALog_Info() : num_objects(0), http_ret(0) {}
+  RGWOp_DATALog_Info() : num_objects(0) {}
   ~RGWOp_DATALog_Info() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -227,7 +240,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -264,6 +277,20 @@ public:
   }
 };
 
+class RGWOp_DATALog_Notify : public RGWRESTOp {
+public:
+  RGWOp_DATALog_Notify() {}
+  ~RGWOp_DATALog_Notify() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const string name() {
+    return "datalog_notify";
+  }
+};
+
 class RGWOp_DATALog_Delete : public RGWRESTOp {
 public:
   RGWOp_DATALog_Delete() {}
@@ -297,10 +324,9 @@ public:
   RGWRESTMgr_Log() {}
   virtual ~RGWRESTMgr_Log() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_Log;
   }
 };
 
-#endif
-
+#endif /* RGW_REST_LOG_H */

@@ -1,5 +1,5 @@
 /**********************************************************************
-  Copyright(c) 2011-2014 Intel Corporation All rights reserved.
+  Copyright(c) 2011-2015 Intel Corporation All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -275,6 +275,18 @@ void gf_vect_dot_prod_base(int len, int vlen, unsigned char *v,
 	}
 }
 
+void gf_vect_mad_base(int len, int vec, int vec_i,
+		      unsigned char *v, unsigned char *src, unsigned char *dest)
+{
+	int i;
+	unsigned char s;
+	for (i = 0; i < len; i++) {
+		s = dest[i];
+		s ^= gf_mul(src[i], v[vec_i * 32 + 1]);
+		dest[i] = s;
+	}
+}
+
 void ec_encode_data_base(int len, int srcs, int dests, unsigned char *v,
 			 unsigned char **src, unsigned char **dest)
 {
@@ -286,6 +298,22 @@ void ec_encode_data_base(int len, int srcs, int dests, unsigned char *v,
 			s = 0;
 			for (j = 0; j < srcs; j++)
 				s ^= gf_mul(src[j][i], v[j * 32 + l * srcs * 32 + 1]);
+
+			dest[l][i] = s;
+		}
+	}
+}
+
+void ec_encode_data_update_base(int len, int k, int rows, int vec_i, unsigned char *v,
+				unsigned char *data, unsigned char **dest)
+{
+	int i, l;
+	unsigned char s;
+
+	for (l = 0; l < rows; l++) {
+		for (i = 0; i < len; i++) {
+			s = dest[l][i];
+			s ^= gf_mul(data[i], v[vec_i * 32 + l * k * 32 + 1]);
 
 			dest[l][i] = s;
 		}

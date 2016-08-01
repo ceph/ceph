@@ -114,11 +114,6 @@ on ``mon.a``).
 	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
 	
 
-#. Add the new monitor to the list of monitors for you cluster (runtime). This enables 
-   other nodes to use this monitor during their initial startup. ::
-
-	ceph mon add <mon-id> <ip>[:<port>]
-
 #. Start the new monitor and it will automatically join the cluster.
    The daemon needs to know which address to bind to, either via
    ``--public-addr {ip:port}`` or by setting ``mon addr`` in the
@@ -159,38 +154,52 @@ quorum.
 Removing Monitors from an Unhealthy Cluster
 -------------------------------------------
 
-This procedure removes a ``ceph-mon`` daemon from an unhealhty cluster--i.e., 
-a cluster that has placement groups that are persistently not ``active + clean``.
+This procedure removes a ``ceph-mon`` daemon from an unhealthy
+cluster, for example a cluster where the monitors cannot form a
+quorum.
 
+
+#. Stop all ``ceph-mon`` daemons on all monitor hosts. ::
+
+	ssh {mon-host}
+	service ceph stop mon || stop ceph-mon-all
+	# and repeat for all mons
 
 #. Identify a surviving monitor and log in to that host. :: 
 
-	ceph mon dump
 	ssh {mon-host}
 
-#. Stop the ``ceph-mon`` daemon and extract a copy of the monap file.  ::
+#. Extract a copy of the monmap file.  ::
 
-	service ceph stop mon || stop ceph-mon-all
         ceph-mon -i {mon-id} --extract-monmap {map-path}
-	# for example,
-        ceph-mon -i a --extract-monmap /tmp/monmap
+        # in most cases, that's
+        ceph-mon -i `hostname` --extract-monmap /tmp/monmap
 
-#. Remove the non-surviving monitors. 	For example, if you have three monitors, 
-   ``mon.a``, ``mon.b``, and ``mon.c``, where only ``mon.a`` will survive, follow 
-   the example below:: 
+#. Remove the non-surviving or problematic monitors.  For example, if
+   you have three monitors, ``mon.a``, ``mon.b``, and ``mon.c``, where
+   only ``mon.a`` will survive, follow the example below::
 
 	monmaptool {map-path} --rm {mon-id}
 	# for example,
 	monmaptool /tmp/monmap --rm b
 	monmaptool /tmp/monmap --rm c
 	
-#. Inject the surviving map with the removed monitors into the surviving monitors. 
-   For example, to inject a map into monitor ``mon.a``, follow the example below:: 
+#. Inject the surviving map with the removed monitors into the
+   surviving monitor(s).  For example, to inject a map into monitor
+   ``mon.a``, follow the example below::
 
 	ceph-mon -i {mon-id} --inject-monmap {map-path}
 	# for example,
 	ceph-mon -i a --inject-monmap /tmp/monmap
 
+#. Start only the surviving monitors.
+
+#. Verify the monitors form a quorum (``ceph -s``).
+
+#. You may wish to archive the removed monitors' data directory in
+   ``/var/lib/ceph/mon`` in a safe location, or delete it if you are
+   confident the remaining monitors are healthy and are sufficiently
+   redundant.
 
 .. _Changing a Monitor's IP address:
 

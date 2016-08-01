@@ -31,7 +31,7 @@ Initial Troubleshooting
   the server and, if that succeeds, try connecting to the monitor's port
   using you tool of choice (telnet, nc,...).
 
-**Does ``ceph -s`` run and obtain a reply from the cluster?**
+**Does ceph -s run and obtain a reply from the cluster?**
 
   If the answer is yes then your cluster is up and running.  One thing you
   can take for granted is that the monitors will only answer to a ``status``
@@ -43,7 +43,7 @@ Initial Troubleshooting
   enough to form a quorum (keep in mind that a quorum if formed by a majority
   of monitors).
 
-**What if ``ceph -s`` doesn't finish?**
+**What if ceph -s doesn't finish?**
 
   If you haven't gone through all the steps so far, please go back and do.
 
@@ -82,12 +82,12 @@ admin socket, with ``ceph`` likely returning ``Error 111: Connection Refused``.
 Accessing the admin socket is as simple as telling the ``ceph`` tool to use
 the ``asok`` file.  In pre-Dumpling Ceph, this can be achieved by::
 
-  ceph --admin-daemon /var/run/ceph/ceph-mon.ID.asok <command>
+  ceph --admin-daemon /var/run/ceph/ceph-mon.<id>.asok <command>
 
 while in Dumpling and beyond you can use the alternate (and recommended)
 format::
 
-  ceph daemon mon.ID <command>
+  ceph daemon mon.<id> <command>
 
 Using ``help`` as the command to the ``ceph`` tool will show you the
 supported commands available through the admin socket. Please take a look
@@ -378,9 +378,10 @@ like this appropriately::
 
 You may also need to add rules to IP tables on your Ceph hosts to ensure
 that clients can access the ports associated with your Ceph monitors (i.e., port
-6789 by default) and Ceph OSDs (i.e., 6800 et. seq. by default). For example::
+6789 by default) and Ceph OSDs (i.e., 6800 through 7300 by default). For
+example::
 
-	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
+	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
 
 
 Everything Failed! Now What?
@@ -429,8 +430,8 @@ ask you to raise them or even define other debug subsystems to obtain infos
 from -- but at least we started off with some useful information, instead
 of a massively empty log without much to go on with.
 
-Do I need to restart a monitor to adjust deebug levels?
--------------------------------------------------------
+Do I need to restart a monitor to adjust debug levels?
+------------------------------------------------------
 
 No. You may do it in one of two ways:
 

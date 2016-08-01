@@ -22,10 +22,9 @@
 #include "../CDentry.h"
 #include "../LogSegment.h"
 
-#include "include/triple.h"
 #include "include/interval_set.h"
 
-class MDS;
+class MDSRank;
 class MDLog;
 class LogSegment;
 struct MDSlaveUpdate;
@@ -63,6 +62,8 @@ public:
     static const int STATE_DIRTY =	 (1<<0);
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
+    static const int STATE_NEED_SNAPFLUSH = (1<<3);
+    typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
     string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv;
@@ -70,9 +71,9 @@ public:
     fragtree_t dirfragtree;
     map<string,bufferptr> xattrs;
     string symlink;
+    snapid_t oldest_snap;
     bufferlist snapbl;
     __u8 state;
-    typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
     fullbit(const fullbit& o);
@@ -81,34 +82,35 @@ public:
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, const inode_t& i, const fragtree_t &dft, 
 	    const map<string,bufferptr> &xa, const string& sym,
-	    const bufferlist &sbl, __u8 st,
+	    snapid_t os, const bufferlist &sbl, __u8 st,
 	    const old_inodes_t *oi = NULL) :
-      dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa), state(st)
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
+      oldest_snap(os), state(st)
     {
       if (i.is_symlink())
 	symlink = sym;
-      if (i.is_dir()) {
+      if (i.is_dir())
 	dirfragtree = dft;
-	snapbl = sbl;
-      }
       if (oi)
 	old_inodes = *oi;
+      snapbl = sbl;
     }
-    fullbit(bufferlist::iterator &p) {
+    explicit fullbit(bufferlist::iterator &p) {
       decode(p);
     }
     fullbit() {}
     ~fullbit() {}
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
 
-    void update_inode(MDS *mds, CInode *in);
+    void update_inode(MDSRank *mds, CInode *in);
     bool is_dirty() const { return (state & STATE_DIRTY); }
     bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
     bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
+    bool need_snapflush() const { return (state & STATE_NEED_SNAPFLUSH); }
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
@@ -130,7 +132,7 @@ public:
       return state_string;
     }
   };
-  WRITE_CLASS_ENCODER(fullbit)
+  WRITE_CLASS_ENCODER_FEATURES(fullbit)
   
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
@@ -144,7 +146,7 @@ public:
 
     remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
-    remotebit(bufferlist::iterator &p) { decode(p); }
+    explicit remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
 	d_type('\0'), dirty(false) {}
 
@@ -171,7 +173,7 @@ public:
 
     nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
-    nullbit(bufferlist::iterator &p) { decode(p); }
+    explicit nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
     void encode(bufferlist& bl) const;
@@ -262,9 +264,9 @@ public:
     }
 
     // if this changes, update the versioning in encode for it!
-    void _encode_bits() const {
+    void _encode_bits(uint64_t features) const {
       if (!dn_decoded) return;
-      ::encode(dfull, dnbl);
+      ::encode(dfull, dnbl, features);
       ::encode(dremote, dnbl);
       ::encode(dnull, dnbl);
     }
@@ -277,12 +279,12 @@ public:
       dn_decoded = true;
     }
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<dirlump*>& ls);
   };
-  WRITE_CLASS_ENCODER(dirlump)
+  WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
@@ -314,9 +316,10 @@ private:
 
   // idempotent op(s)
   list<pair<metareqid_t,uint64_t> > client_reqs;
+  list<pair<metareqid_t,uint64_t> > client_flushes;
 
  public:
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void get_inodes(std::set<inodeno_t> &inodes) const;
   void get_paths(std::vector<std::string> &paths) const;
@@ -332,7 +335,7 @@ private:
   // for replay, in certain cases
   //LogSegment *_segment;
 
-  EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
+  explicit EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
   ~EMetaBlob() { }
 
   void print(ostream& out) {
@@ -345,6 +348,9 @@ private:
 
   void add_client_req(metareqid_t r, uint64_t tid=0) {
     client_reqs.push_back(pair<metareqid_t,uint64_t>(r, tid));
+  }
+  void add_client_flush(metareqid_t r, uint64_t tid=0) {
+    client_flushes.push_back(pair<metareqid_t,uint64_t>(r, tid));
   }
 
   void add_table_transaction(int table, version_t tid) {
@@ -376,7 +382,7 @@ private:
     truncate_finish[ino] = segoff;
   }
   
-  bool rewrite_truncate_finish(MDS const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
+  bool rewrite_truncate_finish(MDSRank const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
 
   void add_destroyed_inode(inodeno_t ino) {
     destroyed_inodes.push_back(ino);
@@ -416,11 +422,13 @@ private:
 
   // return remote pointer to to-be-journaled inode
   void add_primary_dentry(CDentry *dn, CInode *in, bool dirty,
-			  bool dirty_parent=false, bool dirty_pool=false) {
+			  bool dirty_parent=false, bool dirty_pool=false,
+			  bool need_snapflush=false) {
     __u8 state = 0;
     if (dirty) state |= fullbit::STATE_DIRTY;
     if (dirty_parent) state |= fullbit::STATE_DIRTYPARENT;
     if (dirty_pool) state |= fullbit::STATE_DIRTYPOOL;
+    if (need_snapflush) state |= fullbit::STATE_NEED_SNAPFLUSH;
     add_primary_dentry(add_dir(dn->get_dir(), false), dn, in, state);
   }
   void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, __u8 state) {
@@ -431,24 +439,24 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    inode_t *pi = in->get_projected_inode();
+    const inode_t *pi = in->get_projected_inode();
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
     bufferlist snapbl;
-    sr_t *sr = in->get_projected_srnode();
+    const sr_t *sr = in->get_projected_srnode();
     if (sr)
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
-                                                         dn->first, dn->last,
-                                                         dn->get_projected_version(), 
-                                                         *pi, in->dirfragtree,
-                                                         *in->get_projected_xattrs(),
-                                                         in->symlink, snapbl,
-                                                         state,
-                                                         &in->old_inodes)));
+    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(),
+							 dn->first, dn->last,
+							 dn->get_projected_version(),
+							 *pi, in->dirfragtree,
+							 *in->get_projected_xattrs(),
+							 in->symlink,
+							 in->oldest_snap, snapbl,
+							 state, &in->old_inodes)));
   }
 
   // convenience: primary or remote?  figure it out.
@@ -479,7 +487,7 @@ private:
     add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
-  void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+  void add_root(bool dirty, CInode *in, const inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 		    map<string,bufferptr> *px=0) {
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
@@ -503,9 +511,10 @@ private:
 
     string empty;
     roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, *pi,
-							      *pdft, *px, in->symlink, snapbl,
-							      dirty ? fullbit::STATE_DIRTY : 0,
-							      &in->old_inodes)));
+							  *pdft, *px, in->symlink,
+							  in->oldest_snap, snapbl,
+							  dirty ? fullbit::STATE_DIRTY : 0,
+							  &in->old_inodes)));
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
@@ -525,7 +534,7 @@ private:
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
 		   dirty, false, false, false, dirtydft);
   }
-  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty,
+  dirlump& add_dir(dirfrag_t df, const fnode_t *pf, version_t pv, bool dirty,
 		   bool complete=false, bool isnew=false,
 		   bool importing=false, bool dirty_dft=false) {
     if (lump_map.count(df) == 0)
@@ -573,13 +582,13 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDS *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
+  void replay(MDSRank *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
 };
-WRITE_CLASS_ENCODER(EMetaBlob)
-WRITE_CLASS_ENCODER(EMetaBlob::fullbit)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
 WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
 WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
-WRITE_CLASS_ENCODER(EMetaBlob::dirlump)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::dirlump)
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {
   t.print(out);

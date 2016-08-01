@@ -14,13 +14,10 @@
 
 #include "PaxosService.h"
 #include "common/Clock.h"
-#include "Monitor.h"
-#include "MonitorDBStore.h"
-
-
 #include "common/config.h"
+#include "include/stringify.h"
 #include "include/assert.h"
-#include "common/Formatter.h"
+#include "mon/MonOpRequest.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
@@ -32,12 +29,17 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
 }
 
-bool PaxosService::dispatch(PaxosServiceMessage *m)
+bool PaxosService::dispatch(MonOpRequestRef op)
 {
-  dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+  assert(op->is_type_service() || op->is_type_command());
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  op->mark_event("psvc:dispatch");
+
+  dout(10) << "dispatch " << m << " " << *m
+	   << " from " << m->get_orig_source_inst()
+	   << " con " << m->get_connection() << dendl;
 
   if (mon->is_shutdown()) {
-    m->put();
     return true;
   }
 
@@ -46,7 +48,6 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
       m->rx_election_epoch < mon->get_epoch()) {
     dout(10) << " discarding forwarded message from previous election epoch "
 	     << m->rx_election_epoch << " < " << mon->get_epoch() << dendl;
-    m->put();
     return true;
   }
 
@@ -59,36 +60,35 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
       m->get_connection()->get_messenger() != NULL) {
     dout(10) << " discarding message from disconnected client "
 	     << m->get_source_inst() << " " << *m << dendl;
-    m->put();
     return true;
   }
 
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
-    wait_for_readable(new C_RetryMessage(this, m), m->version);
+    wait_for_readable(op, new C_RetryMessage(this, op), m->version);
     return true;
   }
 
   // preprocess
-  if (preprocess_query(m)) 
+  if (preprocess_query(op)) 
     return true;  // easy!
 
   // leader?
   if (!mon->is_leader()) {
-    mon->forward_request_leader(m);
+    mon->forward_request_leader(op);
     return true;
   }
   
   // writeable?
   if (!is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
-    wait_for_writeable(new C_RetryMessage(this, m));
+    wait_for_writeable(op, new C_RetryMessage(this, op));
     return true;
   }
 
   // update
-  if (prepare_update(m)) {
+  if (prepare_update(op)) {
     double delay = 0.0;
     if (should_propose(delay)) {
       if (delay == 0.0) {
@@ -128,25 +128,15 @@ void PaxosService::refresh(bool *need_bootstrap)
   update_from_paxos(need_bootstrap);
 }
 
-
-void PaxosService::remove_legacy_versions()
+void PaxosService::post_refresh()
 {
   dout(10) << __func__ << dendl;
-  if (!mon->store->exists(get_service_name(), "conversion_first"))
-    return;
 
-  version_t cf = mon->store->get(get_service_name(), "conversion_first");
-  version_t fc = get_first_committed();
+  post_paxos_update();
 
-  dout(10) << __func__ << " conversion_first " << cf
-	   << " first committed " << fc << dendl;
-
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  if (cf < fc) {
-    trim(t, cf, fc);
+  if (mon->is_peon() && !waiting_for_finished_proposal.empty()) {
+    finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
   }
-  t->erase(get_service_name(), "conversion_first");
-  mon->store->apply_transaction(t);
 }
 
 bool PaxosService::should_propose(double& delay)
@@ -181,15 +171,15 @@ void PaxosService::propose_pending()
   }
 
   /**
-   * @note The value we propose is encoded in a bufferlist, passed to 
-   *	   Paxos::propose_new_value and it is obtained by calling a 
-   *	   function that must be implemented by the class implementing us.
-   *	   I.e., the function encode_pending will be the one responsible
-   *	   to encode whatever is pending on the implementation class into a
-   *	   bufferlist, so we can then propose that as a value through Paxos.
+   * @note What we contirbute to the pending Paxos transaction is
+   *	   obtained by calling a function that must be implemented by
+   *	   the class implementing us.  I.e., the function
+   *	   encode_pending will be the one responsible to encode
+   *	   whatever is pending on the implementation class into a
+   *	   bufferlist, so we can then propose that as a value through
+   *	   Paxos.
    */
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  bufferlist bl;
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
 
   if (should_stash_full())
     encode_full(t);
@@ -201,17 +191,10 @@ void PaxosService::propose_pending()
     t->put(get_service_name(), "format_version", format_version);
   }
 
-  dout(30) << __func__ << " transaction dump:\n";
-  JSONFormatter f(true);
-  t->dump(&f);
-  f.flush(*_dout);
-  *_dout << dendl;
-
-  t->encode(bl);
-
   // apply to paxos
   proposing = true;
-  paxos->propose_new_value(bl, new C_Committed(this));
+  paxos->queue_pending_finisher(new C_Committed(this));
+  paxos->trigger_propose();
 }
 
 bool PaxosService::should_stash_full()
@@ -265,15 +248,13 @@ void PaxosService::_active()
   }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
-    wait_for_active(new C_Active(this));
+    wait_for_active_ctx(new C_Active(this));
     return;
   }
   dout(10) << "_active" << dendl;
 
-  remove_legacy_versions();
-
   // create pending state?
-  if (mon->is_leader() && is_active()) {
+  if (mon->is_leader()) {
     dout(7) << "_active creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
@@ -289,8 +270,6 @@ void PaxosService::_active()
   } else {
     if (!mon->is_leader()) {
       dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
-    } else if (!is_active()) {
-      dout(7) << __func__ << " we are not active, hence we propose nothing!" << dendl;
     }
   }
 
@@ -299,13 +278,12 @@ void PaxosService::_active()
   // on this list; it is on Paxos's.
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
 
-  if (is_active() && mon->is_leader())
+  if (mon->is_leader())
     upgrade_format();
 
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
-  if (is_active())
-    on_active();
+  on_active();
 }
 
 
@@ -347,20 +325,18 @@ void PaxosService::maybe_trim()
 	     << " > paxos_service_trim_max, limiting to " << g_conf->paxos_service_trim_max
 	     << dendl;
     trim_to = get_first_committed() + g_conf->paxos_service_trim_max;
-    to_remove = trim_to - get_first_committed();
+    to_remove = g_conf->paxos_service_trim_max;
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   trim(t, get_first_committed(), trim_to);
   put_first_committed(t, trim_to);
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
 
-  bufferlist bl;
-  t->encode(bl);
-  paxos->propose_new_value(bl, NULL);
+  paxos->trigger_propose();
 }
 
 void PaxosService::trim(MonitorDBStore::TransactionRef t,
@@ -382,6 +358,9 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
   if (g_conf->mon_compact_on_trim) {
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
+    t->compact_range(get_service_name(),
+		     mon->store->combine_strings(full_prefix_name, from - 1),
+		     mon->store->combine_strings(full_prefix_name, to));
   }
 }
 

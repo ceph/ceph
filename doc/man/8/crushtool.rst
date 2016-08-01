@@ -1,3 +1,5 @@
+:orphan:
+
 ==========================================
  crushtool -- CRUSH map manipulation tool
 ==========================================
@@ -47,7 +49,7 @@ The tool has four modes of operation.
    object names. See below for a detailed explanation.
 
 Unlike other Ceph tools, **crushtool** does not accept generic options
-such as **--debug-crush** from the command line. They can however be
+such as **--debug-crush** from the command line. They can, however, be
 provided via the CEPH_ARGS environment variable. For instance, to
 silence all output from the CRUSH subsystem::
 
@@ -60,13 +62,15 @@ Running tests with --test
 The test mode will use the input crush map ( as specified with **-i
 map** ) and perform a dry run of CRUSH mapping or random placement (
 if **--simulate** is set ). On completion, two kinds of reports can be
-created. The **--show-...** options output human readable information
-on stderr. The **--output-csv** option creates CSV files that are
+created. 
+1) The **--show-...** option outputs human readable information
+on stderr. 
+2) The **--output-csv** option creates CSV files that are
 documented by the **--help-output** option.
 
 .. option:: --show-statistics
 
-   for each rule display the mapping of each object. For instance::
+   For each rule, displays the mapping of each object. For instance::
 
        CRUSH rule 1 x 24 [11,6]
 
@@ -80,7 +84,7 @@ documented by the **--help-output** option.
    mapped **1024** objects to **result size == 5** devices when trying
    to map them to **num_rep 5** replicas. When it fails to provide the
    required mapping, presumably because the number of **tries** must
-   be increased, a breakdown of the failures is displays. For instance::
+   be increased, a breakdown of the failures is displayed. For instance::
 
        rule 1 (metadata) num_rep 10 result size == 8:	4/1024
        rule 1 (metadata) num_rep 10 result size == 9:	93/1024
@@ -92,17 +96,17 @@ documented by the **--help-output** option.
 
 .. option:: --show-bad-mappings
 
-   display which object failed to be mapped to the required number of
+   Displays which object failed to be mapped to the required number of
    devices. For instance::
 
      bad mapping rule 1 x 781 num_rep 7 result [8,10,2,11,6,9]
 
    shows that when rule **1** was required to map **7** devices, it
-   could only map six : **[8,10,2,11,6,9]**.
+   could map only six : **[8,10,2,11,6,9]**.
 
 .. option:: --show-utilization
 
-   display the expected and actual utilisation for each device, for
+   Displays the expected and actual utilisation for each device, for
    each number of replicas. For instance::
 
      device 0: stored : 951      expected : 853.333
@@ -114,13 +118,13 @@ documented by the **--help-output** option.
 
 .. option:: --show-utilization-all
 
-   displays the same as **--show-utilization** but does not suppress
+   Displays the same as **--show-utilization** but does not suppress
    output when the weight of a device is zero.
    Implies **--show-statistics**.
 
 .. option:: --show-choose-tries
 
-   display how many attempts were needed to find a device mapping.
+   Displays how many attempts were needed to find a device mapping.
    For instance::
 
       0:     95224
@@ -134,10 +138,10 @@ documented by the **--help-output** option.
 
 .. option:: --output-csv
 
-   create CSV files (in the current directory) containing information
+   Creates CSV files (in the current directory) containing information
    documented by **--help-output**. The files are named after the rule
    used when collecting the statistics. For instance, if the rule
-   metadata is used, the CSV files will be::
+   : 'metadata' is used, the CSV files will be::
 
       metadata-absolute_weights.csv
       metadata-device_utilization.csv
@@ -153,7 +157,7 @@ documented by the **--help-output** option.
 
 .. option:: --output-name NAME
 
-   prepend **NAME** to the file names generated when **--output-csv**
+   Prepend **NAME** to the file names generated when **--output-csv**
    is specified. For instance **--output-name FOO** will create
    files::
 
@@ -244,7 +248,7 @@ creating a new Ceph cluster. They can be further edited with::
 Availability
 ============
 
-**crushtool** is part of the Ceph distributed storage system. Please
+**crushtool** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

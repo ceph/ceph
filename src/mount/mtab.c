@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
 #include <time.h>
 #include <mntent.h>
 #include <stdarg.h>
@@ -44,6 +45,7 @@ setlkw_timeout (int sig) {
 
 #define _PATH_MOUNTED "/etc/mtab"
 #define _PATH_MOUNTED_LOCK "/etc/mtab~"
+#define PROC_SUPER_MAGIC      0x9fa0
 
 /* exit status - bits below are ORed */
 #define EX_USAGE        1       /* incorrect invocation or permission */
@@ -245,11 +247,21 @@ lock_mtab (void) {
 static void
 update_mtab_entry(const char *spec, const char *node, const char *type,
 		  const char *opts, int flags, int freq, int pass) {
-	struct mntent mnt;
+	struct statfs buf;
+	int err = statfs(_PATH_MOUNTED, &buf);
+	if (err) {
+		printf("mount: can't statfs %s: %s", _PATH_MOUNTED,
+		       strerror (err));
+		return;
+	}
+	/* /etc/mtab is symbol link to /proc/self/mounts? */
+	if (buf.f_type == PROC_SUPER_MAGIC)
+		return;
 
 	if (!opts)
 		opts = "rw";
 
+	struct mntent mnt;
 	mnt.mnt_fsname = strdup(spec);
 	mnt.mnt_dir = canonicalize_path(node);
 	mnt.mnt_type = strdup(type);
@@ -277,4 +289,6 @@ update_mtab_entry(const char *spec, const char *node, const char *type,
 
 	free(mnt.mnt_fsname);
 	free(mnt.mnt_dir);
+	free(mnt.mnt_type);
+	free(mnt.mnt_opts);
 }

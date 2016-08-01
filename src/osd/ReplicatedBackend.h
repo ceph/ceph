@@ -17,8 +17,7 @@
 
 #include "OSD.h"
 #include "PGBackend.h"
-#include "osd_types.h"
-#include "../include/memory.h"
+#include "include/memory.h"
 
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
@@ -33,7 +32,7 @@ public:
   ReplicatedBackend(
     PGBackend::Listener *pg,
     coll_t coll,
-    coll_t temp_coll,
+    ObjectStore::CollectionHandle &ch,
     ObjectStore *store,
     CephContext *cct);
 
@@ -70,42 +69,42 @@ public:
     );
 
   void on_change();
-  void clear_state();
+  void clear_recovery_state();
   void on_flushed();
 
-  class RPCRecPred : public IsRecoverablePredicate {
+  class RPCRecPred : public IsPGRecoverablePredicate {
   public:
     bool operator()(const set<pg_shard_t> &have) const {
       return !have.empty();
     }
   };
-  IsRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
     return new RPCRecPred;
   }
 
-  class RPCReadPred : public IsReadablePredicate {
+  class RPCReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
   public:
-    RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
+    explicit RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
     bool operator()(const set<pg_shard_t> &have) const {
       return have.count(whoami);
     }
   };
-  IsReadablePredicate *get_is_readable_predicate() {
+  IsPGReadablePredicate *get_is_readable_predicate() {
     return new RPCReadPred(get_parent()->whoami_shard());
   }
 
   virtual void dump_recovery_info(Formatter *f) const {
     {
       f->open_array_section("pull_from_peer");
-      for (map<pg_shard_t, set<hobject_t> >::const_iterator i = pull_from_peer.begin();
+      for (map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> >::const_iterator i = pull_from_peer.begin();
 	   i != pull_from_peer.end();
 	   ++i) {
 	f->open_object_section("pulling_from");
 	f->dump_stream("pull_from") << i->first;
 	{
 	  f->open_array_section("pulls");
-	  for (set<hobject_t>::const_iterator j = i->second.begin();
+	  for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator j = i->second.begin();
 	       j != i->second.end();
 	       ++j) {
 	    f->open_object_section("pull_info");
@@ -121,7 +120,7 @@ public:
     }
     {
       f->open_array_section("pushing");
-      for (map<hobject_t, map<pg_shard_t, PushInfo> >::const_iterator i =
+      for (map<hobject_t, map<pg_shard_t, PushInfo>, hobject_t::BitwiseComparator>::const_iterator i =
 	     pushing.begin();
 	   i != pushing.end();
 	   ++i) {
@@ -153,13 +152,15 @@ public:
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
+    uint32_t op_flags,
     bufferlist *bl);
 
   void objects_read_async(
     const hobject_t &hoid,
-    const list<pair<pair<uint64_t, uint64_t>,
+    const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 	       pair<bufferlist*, Context*> > > &to_read,
-    Context *on_complete);
+               Context *on_complete,
+               bool fast_read = false);
 
 private:
   // push
@@ -182,7 +183,7 @@ private:
       }
     }
   };
-  map<hobject_t, map<pg_shard_t, PushInfo> > pushing;
+  map<hobject_t, map<pg_shard_t, PushInfo>, hobject_t::BitwiseComparator> pushing;
 
   // pull
   struct PullInfo {
@@ -191,6 +192,7 @@ private:
     ObjectContextRef head_ctx;
     ObjectContextRef obc;
     object_stat_sum_t stat;
+    bool cache_dont_need;
 
     void dump(Formatter *f) const {
       {
@@ -210,10 +212,10 @@ private:
     }
   };
 
-  map<hobject_t, PullInfo> pulling;
+  map<hobject_t, PullInfo, hobject_t::BitwiseComparator> pulling;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
-  map<pg_shard_t, set<hobject_t> > pull_from_peer;
+  map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> > pull_from_peer;
 
   void sub_op_push(OpRequestRef op);
   void sub_op_push_reply(OpRequestRef op);
@@ -262,10 +264,12 @@ private:
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
 		    PushOp *out_op,
-		    object_stat_sum_t *stat = 0);
+		    object_stat_sum_t *stat = 0,
+                    bool cache_dont_need = true);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
+			bool cache_dont_need,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
@@ -279,7 +283,7 @@ private:
     SnapSet& snapset, const hobject_t& poid, const pg_missing_t& missing,
     const hobject_t &last_backfill,
     interval_set<uint64_t>& data_subset,
-    map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets);
   void prepare_pull(
     eversion_t v,
     const hobject_t& soid,
@@ -291,21 +295,23 @@ private:
     RPGHandle *h);
   void prep_push_to_replica(
     ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
-    PushOp *pop);
+    PushOp *pop, bool cache_dont_need = true);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& oid, pg_shard_t dest,
-		 PushOp *op);
+		 PushOp *op,
+		 bool cache_dont_need);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& soid, pg_shard_t peer,
 		 eversion_t version,
 		 interval_set<uint64_t> &data_subset,
-		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
-		 PushOp *op);
+		 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets,
+		 PushOp *op,
+                 bool cache = false);
   void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
 			 const pg_missing_t& missing,
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
-			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+			 map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>& clone_subsets);
   ObjectRecoveryInfo recalc_subsets(
     const ObjectRecoveryInfo& recovery_info,
     SnapSetContext *ssc
@@ -340,10 +346,10 @@ public:
   void submit_transaction(
     const hobject_t &hoid,
     const eversion_t &at_version,
-    PGTransaction *t,
+    PGTransactionUPtr &&t,
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
-    vector<pg_log_entry_t> &log_entries,
+    const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     Context *on_local_applied_sync,
     Context *on_all_applied,
@@ -354,6 +360,21 @@ public:
     );
 
 private:
+  Message * generate_subop(
+    const hobject_t &soid,
+    const eversion_t &at_version,
+    ceph_tid_t tid,
+    osd_reqid_t reqid,
+    eversion_t pg_trim_to,
+    eversion_t pg_trim_rollback_to,
+    hobject_t new_temp_oid,
+    hobject_t discard_temp_oid,
+    const vector<pg_log_entry_t> &log_entries,
+    boost::optional<pg_hit_set_history_t> &hset_history,
+    InProgressOp *op,
+    ObjectStore::Transaction &op_t,
+    pg_shard_t peer,
+    const pg_info_t &pinfo);
   void issue_op(
     const hobject_t &soid,
     const eversion_t &at_version,
@@ -363,10 +384,10 @@ private:
     eversion_t pg_trim_rollback_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
-    vector<pg_log_entry_t> &log_entries,
+    const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
-    ObjectStore::Transaction *op_t);
+    ObjectStore::Transaction &op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
   void sub_op_modify_reply(OpRequestRef op);
@@ -379,12 +400,10 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    uint64_t bytes_written;
-
     ObjectStore::Transaction opt, localt;
     
     RepModify() : applied(false), committed(false), ackerosd(-1),
-		  epoch_started(0), bytes_written(0) {}
+		  epoch_started(0) {}
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 
@@ -409,9 +428,12 @@ private:
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }
+  bool auto_repair_supported() const { return false; }
+
 
   void be_deep_scrub(
     const hobject_t &obj,
+    uint32_t seed,
     ScrubMap::object &o,
     ThreadPool::TPHandle &handle);
   uint64_t be_get_ondisk_size(uint64_t logical_size) { return logical_size; }

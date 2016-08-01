@@ -16,19 +16,19 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include <boost/intrusive_ptr.hpp>
+// #include <boost/intrusive_ptr.hpp>
 // Because intusive_ptr clobbers our assert...
 #include "include/assert.h"
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
-#include "mon/HealthService.h"
+// #include "mon/QuorumService.h"
+// #include "mon/HealthService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/DataHealthService.h"
 
 #include "messages/MMonHealth.h"
-
-#include "common/config.h"
+#include "common/Formatter.h"
+// #include "common/config.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -53,18 +53,17 @@ void HealthMonitor::init()
   }
 }
 
-bool HealthMonitor::service_dispatch(Message *m)
+bool HealthMonitor::service_dispatch(MonOpRequestRef op)
 {
-  assert(m->get_type() == MSG_MON_HEALTH);
-  MMonHealth *hm = (MMonHealth*)m;
+  assert(op->get_req()->get_type() == MSG_MON_HEALTH);
+  MMonHealth *hm = static_cast<MMonHealth*>(op->get_req());
   int service_type = hm->get_service_type();
   if (services.count(service_type) == 0) {
     dout(1) << __func__ << " service type " << service_type
             << " not registered -- drop message!" << dendl;
-    m->put();
     return false;
   }
-  return services[service_type]->service_dispatch(hm);
+  return services[service_type]->service_dispatch(op);
 }
 
 void HealthMonitor::service_shutdown()

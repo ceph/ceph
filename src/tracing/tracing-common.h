@@ -4,7 +4,7 @@
 // Amount of buffer data to dump when using ceph_ctf_sequence or ceph_ctf_sequencep.
 // If 0, then *_data field is omitted entirely.
 #if !defined(CEPH_TRACE_BUF_TRUNC_LEN)
-#define CEPH_TRACE_BUF_TRUNC_LEN 0
+#define CEPH_TRACE_BUF_TRUNC_LEN 0u
 #endif
 
 // TODO: This is GCC-specific.  Replace CEPH_MAX and CEPH_MIN with standard macros, if possible.
@@ -77,6 +77,12 @@
 #define ceph_ctf_timevalp(field, p) \
     ctf_integer(long int, field##_sec, (p) == NULL ? 0 : (p)->tv_sec) \
     ctf_integer(long int, field##_usec, (p) == NULL ? 0 : (p)->tv_usec) \
+    ctf_integer(uint8_t, field##_isnull, (p) == NULL)
+
+// p should be of type struct timespec*
+#define ceph_ctf_timespecp(field, p) \
+    ctf_integer(long int, field##_sec, (p) == NULL ? 0 : (p)->tv_sec) \
+    ctf_integer(long int, field##_nsec, (p) == NULL ? 0 : (p)->tv_nsec) \
     ctf_integer(uint8_t, field##_isnull, (p) == NULL)
 
 // val should be of type time_t

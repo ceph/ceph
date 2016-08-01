@@ -1,12 +1,9 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
-	url = git://ceph.com/git/ceph-object-corpus.git
-[submodule "src/libs3"]
-	path = src/libs3
-	url = git://github.com/ceph/libs3.git
+	url = https://github.com/ceph/ceph-object-corpus.git
 [submodule "src/civetweb"]
 	path = src/civetweb
-	url = git://github.com/ceph/civetweb
+	url = https://github.com/ceph/civetweb
 [submodule "src/erasure-code/jerasure/jerasure"]
 	path = src/erasure-code/jerasure/jerasure
 	url = https://github.com/ceph/jerasure.git
@@ -14,12 +11,25 @@
 [submodule "src/erasure-code/jerasure/gf-complete"]
 	path = src/erasure-code/jerasure/gf-complete
 	url = https://github.com/ceph/gf-complete.git
-	branch = v1-ceph
+	branch = v2-ceph
 [submodule "src/rocksdb"]
 	path = src/rocksdb
-	url = git://github.com/ceph/rocksdb
+	url = https://github.com/ceph/rocksdb
 	ignore = dirty
 [submodule "ceph-erasure-code-corpus"]
 	path = ceph-erasure-code-corpus
 	url = https://github.com/ceph/ceph-erasure-code-corpus.git
 
+[submodule "src/googletest"]
+	path = src/googletest
+	url = https://github.com/ceph/googletest
+	branch = ceph-release-1.7.x
+[submodule "src/spdk"]
+	path = src/spdk
+	url = https://github.com/ceph/spdk.git
+[submodule "src/xxHash"]
+	path = src/xxHash
+	url = https://github.com/ceph/xxHash.git
+[submodule "src/isa-l"]
+	path = src/isa-l
+	url = https://github.com/ceph/isa-l

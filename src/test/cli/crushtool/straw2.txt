@@ -1,0 +1,43 @@
+# begin crush map
+tunable choose_local_tries 0
+tunable choose_local_fallback_tries 0
+tunable choose_total_tries 50
+tunable chooseleaf_descend_once 1
+tunable straw_calc_version 1
+
+# devices
+device 0 device0
+
+# types
+type 0 device
+type 1 host
+type 2 default
+
+# buckets
+host host0 {
+	id -1		# do not change unnecessarily
+	# weight 1.000
+	alg straw2
+	hash 0	# rjenkins1
+	item device0 weight 1.000
+}
+default default {
+	id -2		# do not change unnecessarily
+	# weight 1.000
+	alg straw2
+	hash 0	# rjenkins1
+	item host0 weight 1.000
+}
+
+# rules
+rule replicated_ruleset {
+	ruleset 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take default
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+# end crush map

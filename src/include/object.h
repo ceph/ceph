@@ -18,12 +18,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <iostream>
+#include <iosfwd>
 #include <iomanip>
 using namespace std;
 
 #include "include/unordered_map.h"
-#include "include/hash_namespace.h"
 
 #include "hash.h"
 #include "encoding.h"
@@ -34,7 +33,9 @@ struct object_t {
   string name;
 
   object_t() {}
+  // cppcheck-suppress noExplicitConstructor
   object_t(const char *s) : name(s) {}
+  // cppcheck-suppress noExplicitConstructor
   object_t(const string& s) : name(s) {}
 
   void swap(object_t& o) {
@@ -75,7 +76,7 @@ inline ostream& operator<<(ostream& out, const object_t& o) {
   return out << o.name;
 }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<object_t> {
     size_t operator()(const object_t& r) const { 
       //static hash<string> H;
@@ -83,12 +84,12 @@ CEPH_HASH_NAMESPACE_START
       return ceph_str_hash_linux(r.name.c_str(), r.name.length());
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 struct file_object_t {
   uint64_t ino, bno;
-  mutable char buf[33];
+  mutable char buf[34];
 
   file_object_t(uint64_t i=0, uint64_t b=0) : ino(i), bno(b) {
     buf[0] = 0;
@@ -96,7 +97,7 @@ struct file_object_t {
   
   const char *c_str() const {
     if (!buf[0])
-      sprintf(buf, "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
+      snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
     return buf;
   }
 
@@ -111,6 +112,7 @@ struct file_object_t {
 
 struct snapid_t {
   uint64_t val;
+  // cppcheck-suppress noExplicitConstructor
   snapid_t(uint64_t v=0) : val(v) {}
   snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
   snapid_t operator++() { ++val; return *this; }
@@ -176,7 +178,7 @@ inline bool operator<=(const sobject_t &l, const sobject_t &r) {
 inline ostream& operator<<(ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;
 }
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<sobject_t> {
     size_t operator()(const sobject_t &r) const {
       static hash<object_t> H;
@@ -184,6 +186,6 @@ CEPH_HASH_NAMESPACE_START
       return H(r.oid) ^ I(r.snap);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 #endif

@@ -69,10 +69,6 @@ These are exciting times in the Ceph community! Get involved!
 |                      | at http://github.com. See `Ceph Source Code`_   |                                               |
 |                      | for details on cloning from github.             |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Support**          | If you have a very specific problem, an         | http://inktank.com                            |
-|                      | immediate need, or if your deployment requires  |                                               |
-|                      | significant help, consider commercial support_. |                                               |
-+----------------------+-------------------------------------------------+-----------------------------------------------+
 
 
 
@@ -91,6 +87,5 @@ These are exciting times in the Ceph community! Get involved!
 .. _Mailing list archives: http://lists.ceph.com/
 .. _Blog: http://ceph.com/community/blog/
 .. _Tracker: http://tracker.ceph.com/
-.. _Support: http://ceph.com/help/professional/
 .. _Ceph Source Code: http://github.com/ceph/ceph
 

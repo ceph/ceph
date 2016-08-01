@@ -20,6 +20,8 @@
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
 #include "common/Thread.h"
+#include "include/stringify.h"
+#include "osd/ReplicatedBackend.h"
 
 #include <sstream>
 
@@ -139,6 +141,7 @@ TEST(pg_interval_t, check_new_interval)
   int64_t pool_id = 200;
   int pg_num = 4;
   __u8 min_size = 2;
+  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(new ReplicatedBackend::RPCRecPred());
   {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
@@ -183,6 +186,7 @@ TEST(pg_interval_t, check_new_interval)
 						   osdmap,
 						   lastmap,
 						   pgid,
+                                                   recoverable.get(),
 						   &past_intervals));
     ASSERT_TRUE(past_intervals.empty());
   }
@@ -212,6 +216,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -244,6 +249,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     old_primary = new_primary;
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -277,6 +283,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -308,6 +315,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -346,6 +354,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -384,6 +393,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -417,6 +427,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -468,6 +479,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -502,6 +514,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -546,6 +559,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -594,6 +608,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -734,7 +749,7 @@ TEST(pg_missing_t, have_missing)
   EXPECT_TRUE(missing.have_missing());
 }
 
-TEST(pg_missing_t, swap)
+TEST(pg_missing_t, claim)
 {
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
@@ -745,8 +760,7 @@ TEST(pg_missing_t, swap)
   pg_missing_t other;
   EXPECT_FALSE(other.have_missing());
 
-  other.swap(missing);
-  EXPECT_FALSE(missing.have_missing());
+  other.claim(missing);
   EXPECT_TRUE(other.have_missing());
 }
 
@@ -794,7 +808,7 @@ TEST(pg_missing_t, add_next_event)
   eversion_t prior_version(3,4);
   pg_log_entry_t sample_e(pg_log_entry_t::DELETE, oid, version, prior_version,
 			  0, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-			  utime_t(8,9));
+			  utime_t(8,9), 0);
 
   // new object (MODIFY)
   {
@@ -804,19 +818,21 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::MODIFY;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(eversion_t(), missing.missing[oid].have);
-    EXPECT_EQ(oid, missing.rmissing[e.version.version]);
+    EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object replaces the previous one
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
   // new object (CLONE)
@@ -827,19 +843,21 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::CLONE;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_clone());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(eversion_t(), missing.missing[oid].have);
-    EXPECT_EQ(oid, missing.rmissing[e.version.version]);
+    EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object replaces the previous one
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
   // existing object (MODIFY)
@@ -850,21 +868,23 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::MODIFY;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(eversion_t(), missing.missing[oid].have);
-    EXPECT_EQ(oid, missing.rmissing[e.version.version]);
+    EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object with a different version
     e.prior_version = prior_version;
     missing.add_next_event(e);
-    EXPECT_EQ(eversion_t(), missing.missing[oid].have);
+    EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
   // object with prior version (MODIFY)
@@ -874,14 +894,16 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::MODIFY;
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(prior_version, missing.missing[oid].have);
-    EXPECT_EQ(version, missing.missing[oid].need);
-    EXPECT_EQ(oid, missing.rmissing[e.version.version]);
+    EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
+    EXPECT_EQ(version, missing.get_items().at(oid).need);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
     EXPECT_EQ(1U, missing.num_missing());
-    EXPECT_EQ(1U, missing.rmissing.size());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
   // obsolete (BACKLOG)
@@ -891,8 +913,10 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::BACKLOG;
     EXPECT_TRUE(e.is_backlog());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    EXPECT_THROW(missing.add_next_event(e), FailedAssertion);
+    EXPECT_DEATH(missing.add_next_event(e), "");
   }
 
   // adding a DELETE matching an existing event
@@ -902,6 +926,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::MODIFY;
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -910,6 +936,43 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.is_delete());
     missing.add_next_event(e);
     EXPECT_FALSE(missing.have_missing());
+  }
+
+  // ERROR op should only be used for dup detection
+  {
+    pg_missing_t missing;
+    pg_log_entry_t e = sample_e;
+
+    e.op = pg_log_entry_t::ERROR;
+    e.return_code = -ENOENT;
+    EXPECT_FALSE(e.is_update());
+    EXPECT_FALSE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(e);
+    EXPECT_FALSE(missing.is_missing(oid));
+    EXPECT_FALSE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
+  }
+
+  // ERROR op should not affect previous entries
+  {
+    pg_missing_t missing;
+    pg_log_entry_t modify = sample_e;
+
+    modify.op = pg_log_entry_t::MODIFY;
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(modify);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_EQ(missing.get_items().at(oid).need, version);
+
+    pg_log_entry_t error = sample_e;
+    error.op = pg_log_entry_t::ERROR;
+    error.return_code = -ENOENT;
+    error.version = eversion_t(11, 5);
+    missing.add_next_event(error);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_EQ(missing.get_items().at(oid).need, version);
   }
 }
 
@@ -922,16 +985,16 @@ TEST(pg_missing_t, revise_need)
   eversion_t need(10,10);
   missing.revise_need(oid, need);
   EXPECT_TRUE(missing.is_missing(oid));
-  EXPECT_EQ(eversion_t(), missing.missing[oid].have);
-  EXPECT_EQ(need, missing.missing[oid].need);
+  EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
+  EXPECT_EQ(need, missing.get_items().at(oid).need);
   // update an existing entry and preserve have
   eversion_t have(1,1);
   missing.revise_have(oid, have);
   eversion_t new_need(10,12);
-  EXPECT_EQ(have, missing.missing[oid].have);
+  EXPECT_EQ(have, missing.get_items().at(oid).have);
   missing.revise_need(oid, new_need);
-  EXPECT_EQ(have, missing.missing[oid].have);
-  EXPECT_EQ(new_need, missing.missing[oid].need);
+  EXPECT_EQ(have, missing.get_items().at(oid).have);
+  EXPECT_EQ(new_need, missing.get_items().at(oid).need);
 }
 
 TEST(pg_missing_t, revise_have)
@@ -948,10 +1011,10 @@ TEST(pg_missing_t, revise_have)
   missing.add(oid, need, have);
   EXPECT_TRUE(missing.is_missing(oid));
   eversion_t new_have(2,2);
-  EXPECT_EQ(have, missing.missing[oid].have);
+  EXPECT_EQ(have, missing.get_items().at(oid).have);
   missing.revise_have(oid, new_have);
-  EXPECT_EQ(new_have, missing.missing[oid].have);
-  EXPECT_EQ(need, missing.missing[oid].need);
+  EXPECT_EQ(new_have, missing.get_items().at(oid).have);
+  EXPECT_EQ(need, missing.get_items().at(oid).need);
 }
 
 TEST(pg_missing_t, add)
@@ -963,8 +1026,8 @@ TEST(pg_missing_t, add)
   eversion_t need(10,10);
   missing.add(oid, need, have);
   EXPECT_TRUE(missing.is_missing(oid));
-  EXPECT_EQ(have, missing.missing[oid].have);
-  EXPECT_EQ(need, missing.missing[oid].need);
+  EXPECT_EQ(have, missing.get_items().at(oid).have);
+  EXPECT_EQ(need, missing.get_items().at(oid).need);
 }
 
 TEST(pg_missing_t, rm)
@@ -985,14 +1048,14 @@ TEST(pg_missing_t, rm)
     missing.rm(oid, eversion_t(epoch * 2,20));
     EXPECT_FALSE(missing.is_missing(oid));
   }
-  // void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+  // void pg_missing_t::rm(const std::map<hobject_t, pg_missing_item>::iterator &m)
   {
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add(oid, eversion_t(), eversion_t());
     EXPECT_TRUE(missing.is_missing(oid));
-    const std::map<hobject_t, pg_missing_t::item>::iterator m = missing.missing.find(oid);
+    auto m = missing.get_items().find(oid);
     missing.rm(m);
     EXPECT_FALSE(missing.is_missing(oid));
   }
@@ -1005,26 +1068,26 @@ TEST(pg_missing_t, got)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     // assert if the oid does not exist
-    EXPECT_THROW(missing.got(oid, eversion_t()), FailedAssertion);
+    EXPECT_DEATH(missing.got(oid, eversion_t()), "");
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
     missing.add(oid, need, eversion_t());
     EXPECT_TRUE(missing.is_missing(oid));
     // assert if that the version to be removed is lower than the version of the object
-    EXPECT_THROW(missing.got(oid, eversion_t(epoch / 2,20)), FailedAssertion);
+    EXPECT_DEATH(missing.got(oid, eversion_t(epoch / 2,20)), "");
     // remove of a later version removes the object
     missing.got(oid, eversion_t(epoch * 2,20));
     EXPECT_FALSE(missing.is_missing(oid));
   }
-  // void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+  // void pg_missing_t::got(const std::map<hobject_t, pg_missing_item>::iterator &m)
   {
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add(oid, eversion_t(), eversion_t());
     EXPECT_TRUE(missing.is_missing(oid));
-    const std::map<hobject_t, pg_missing_t::item>::iterator m = missing.missing.find(oid);
+    auto m = missing.get_items().find(oid);
     missing.got(m);
     EXPECT_FALSE(missing.is_missing(oid));
   }
@@ -1059,7 +1122,7 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_read_lock(ObjectContext& _obc) :
+    explicit Thread_read_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
@@ -1074,7 +1137,7 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_write_lock(ObjectContext& _obc) :
+    explicit Thread_write_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
@@ -1146,7 +1209,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(1, obc.unstable_writes);
 
     Thread_read_lock t(obc);
-    t.create();
+    t.create("obc_read");
 
     do {
       cout << "Trying (1) with delay " << delay << "us\n";
@@ -1203,7 +1266,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(0, obc.unstable_writes);
 
     Thread_write_lock t(obc);
-    t.create();
+    t.create("obc_write");
 
     do {
       cout << "Trying (3) with delay " << delay << "us\n";
@@ -1290,6 +1353,227 @@ TEST(shard_id_t, iostream) {
     ostringstream out;
     out << shards;
     ASSERT_EQ(out.str(), "0,1,2");
+
+    shard_id_t noshard = shard_id_t::NO_SHARD;
+    shard_id_t zero(0);
+    ASSERT_GT(zero, noshard);
+}
+
+TEST(spg_t, parse) {
+  spg_t a(pg_t(1,2), shard_id_t::NO_SHARD);
+  spg_t aa, bb;
+  spg_t b(pg_t(3,2), shard_id_t(2));
+  std::string s = stringify(a);
+  ASSERT_TRUE(aa.parse(s.c_str()));
+  ASSERT_EQ(a, aa);
+
+  s = stringify(b);
+  ASSERT_TRUE(bb.parse(s.c_str()));
+  ASSERT_EQ(b, bb);
+}
+
+TEST(coll_t, parse) {
+  const char *ok[] = {
+    "meta",
+    "1.2_head",
+    "1.2_TEMP",
+    "1.2s3_head",
+    "1.3s2_TEMP",
+    "1.2s0_head",
+    0
+  };
+  const char *bad[] = {
+    "foo",
+    "1.2_food",
+    "1.2_head ",
+    //" 1.2_head",   // hrm, this parses, which is not ideal.. pg_t's fault?
+    "1.2_temp",
+    "1.2_HEAD",
+    "1.xS3_HEAD",
+    "1.2s_HEAD",
+    "1.2sfoo_HEAD",
+    0
+  };
+  coll_t a;
+  for (int i = 0; ok[i]; ++i) {
+    cout << "check ok " << ok[i] << std::endl;
+    ASSERT_TRUE(a.parse(ok[i]));
+    ASSERT_EQ(string(ok[i]), a.to_str());
+  }
+  for (int i = 0; bad[i]; ++i) {
+    cout << "check bad " << bad[i] << std::endl;
+    ASSERT_FALSE(a.parse(bad[i]));
+  }
+}
+
+TEST(coll_t, temp) {
+  spg_t pgid;
+  coll_t foo(pgid);
+  ASSERT_EQ(foo.to_str(), string("0.0_head"));
+
+  coll_t temp = foo.get_temp();
+  ASSERT_EQ(temp.to_str(), string("0.0_TEMP"));
+
+  spg_t pgid2;
+  ASSERT_TRUE(temp.is_temp());
+  ASSERT_TRUE(temp.is_temp(&pgid2));
+  ASSERT_EQ(pgid, pgid2);
+}
+
+TEST(coll_t, assigment) {
+  spg_t pgid;
+  coll_t right(pgid);
+  ASSERT_EQ(right.to_str(), string("0.0_head"));
+
+  coll_t left, middle;
+
+  ASSERT_EQ(left.to_str(), string("meta"));
+  ASSERT_EQ(middle.to_str(), string("meta"));
+
+  left = middle = right;
+
+  ASSERT_EQ(left.to_str(), string("0.0_head"));
+  ASSERT_EQ(middle.to_str(), string("0.0_head"));
+  
+  ASSERT_NE(middle.c_str(), right.c_str());
+  ASSERT_NE(left.c_str(), middle.c_str());
+}
+
+TEST(hobject_t, parse) {
+  const char *v[] = {
+    "MIN",
+    "MAX",
+    "-1:60c2fa6d:::inc_osdmap.1:0",
+    "-1:60c2fa6d:::inc_osdmap.1:333",
+    "0:00000000::::head",
+    "1:00000000:nspace:key:obj:head",
+    "-40:00000000:nspace::obj:head",
+    "20:00000000::key:obj:head",
+    "20:00000000:::o%fdj:head",
+    "20:00000000:::o%02fdj:head",
+    "20:00000000:::_zero_%00_:head",
+    NULL
+  };
+
+  for (unsigned i=0; v[i]; ++i) {
+    hobject_t o;
+    bool b = o.parse(v[i]);
+    if (!b) {
+      cout << "failed to parse " << v[i] << std::endl;
+      ASSERT_TRUE(false);
+    }
+    string s = stringify(o);
+    if (s != v[i]) {
+      cout << v[i] << " -> " << o << " -> " << s << std::endl;
+      ASSERT_EQ(s, string(v[i]));
+    }
+  }
+}
+
+TEST(ghobject_t, cmp) {
+  ghobject_t min;
+  ghobject_t sep;
+  sep.set_shard(shard_id_t(1));
+  sep.hobj.pool = -1;
+  cout << min << " < " << sep << std::endl;
+  ASSERT_TRUE(cmp_bitwise(min, sep) < 0);
+
+  sep.set_shard(shard_id_t::NO_SHARD);
+  cout << "sep shard " << sep.shard_id << std::endl;
+  ghobject_t o(hobject_t(object_t(), string(), CEPH_NOSNAP, 0x42,
+			 1, string()));
+  cout << "o " << o << std::endl;
+  ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
+}
+
+TEST(ghobject_t, parse) {
+  const char *v[] = {
+    "GHMIN",
+    "GHMAX",
+    "13#0:00000000::::head#",
+    "13#0:00000000::::head#deadbeef",
+    "#-1:60c2fa6d:::inc_osdmap.1:333#deadbeef",
+    "#-1:60c2fa6d:::inc%02osdmap.1:333#deadbeef",
+    "#-1:60c2fa6d:::inc_osdmap.1:333#",
+    "1#MIN#deadbeefff",
+    "1#MAX#",
+    "#MAX#123",
+    "#-40:00000000:nspace::obj:head#",
+    NULL
+  };
+
+  for (unsigned i=0; v[i]; ++i) {
+    ghobject_t o;
+    bool b = o.parse(v[i]);
+    if (!b) {
+      cout << "failed to parse " << v[i] << std::endl;
+      ASSERT_TRUE(false);
+    }
+    string s = stringify(o);
+    if (s != v[i]) {
+      cout << v[i] << " -> " << o << " -> " << s << std::endl;
+      ASSERT_EQ(s, string(v[i]));
+    }
+  }
+}
+
+TEST(pool_opts_t, invalid_opt) {
+  EXPECT_FALSE(pool_opts_t::is_opt_name("INVALID_OPT"));
+  EXPECT_DEATH(pool_opts_t::get_opt_desc("INVALID_OPT"), "");
+}
+
+TEST(pool_opts_t, scrub_min_interval) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("scrub_min_interval"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("scrub_min_interval"),
+            pool_opts_t::opt_desc_t(pool_opts_t::SCRUB_MIN_INTERVAL,
+                                    pool_opts_t::DOUBLE));
+
+  pool_opts_t opts;
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MIN_INTERVAL));
+  EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL), "");
+  double val;
+  EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &val));
+  opts.set(pool_opts_t::SCRUB_MIN_INTERVAL, static_cast<double>(2015));
+  EXPECT_TRUE(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &val));
+  EXPECT_EQ(val, 2015);
+  opts.unset(pool_opts_t::SCRUB_MIN_INTERVAL);
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MIN_INTERVAL));
+}
+
+TEST(pool_opts_t, scrub_max_interval) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("scrub_max_interval"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("scrub_max_interval"),
+            pool_opts_t::opt_desc_t(pool_opts_t::SCRUB_MAX_INTERVAL,
+                                    pool_opts_t::DOUBLE));
+
+  pool_opts_t opts;
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MAX_INTERVAL));
+  EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL), "");
+  double val;
+  EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &val));
+  opts.set(pool_opts_t::SCRUB_MAX_INTERVAL, static_cast<double>(2015));
+  EXPECT_TRUE(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &val));
+  EXPECT_EQ(val, 2015);
+  opts.unset(pool_opts_t::SCRUB_MAX_INTERVAL);
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MAX_INTERVAL));
+}
+
+TEST(pool_opts_t, deep_scrub_interval) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("deep_scrub_interval"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("deep_scrub_interval"),
+            pool_opts_t::opt_desc_t(pool_opts_t::DEEP_SCRUB_INTERVAL,
+                                    pool_opts_t::DOUBLE));
+
+  pool_opts_t opts;
+  EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
+  EXPECT_DEATH(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL), "");
+  double val;
+  EXPECT_FALSE(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &val));
+  opts.set(pool_opts_t::DEEP_SCRUB_INTERVAL, static_cast<double>(2015));
+  EXPECT_TRUE(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &val));
+  EXPECT_EQ(val, 2015);
+  opts.unset(pool_opts_t::DEEP_SCRUB_INTERVAL);
+  EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
 }
 
 /*

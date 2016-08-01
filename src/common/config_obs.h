@@ -20,12 +20,24 @@
 
 struct md_config_t;
 
+/** @brief Base class for configuration observers.
+ * Use this as a base class for your object if it has to respond to configuration changes,
+ * for example by updating some values or modifying its behavior.
+ * Subscribe for configuration changes by calling the md_config_t::add_observer() method
+ * and unsubscribe using md_config_t::remove_observer().
+ */
 class md_config_obs_t {
 public:
-  virtual ~md_config_obs_t();
+  virtual ~md_config_obs_t() {}
+  /** @brief Get a table of strings specifying the configuration keys in which the object is interested.
+   * This is called when the object is subscribed to configuration changes with add_observer().
+   * The returned table should not be freed until the observer is removed with remove_observer().
+   * Note that it is not possible to change the set of tracked keys without re-subscribing. */
   virtual const char** get_tracked_conf_keys() const = 0;
+  /// React to a configuration change.
   virtual void handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed) = 0;
+  /// Unused for now
   virtual void handle_subsys_change(const struct md_config_t *conf,
 				    const std::set<int>& changed) { }
 };

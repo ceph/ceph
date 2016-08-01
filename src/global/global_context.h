@@ -15,11 +15,7 @@
 #ifndef CEPH_GLOBAL_CONTEXT_H
 #define CEPH_GLOBAL_CONTEXT_H
 
-#include "common/ceph_context.h"
-
-#include <iostream>
-#include <stdint.h>
-
+class CephContext;
 struct md_config_t;
 
 extern CephContext *g_ceph_context;

@@ -4,7 +4,7 @@
  *  Created on: Sep 14, 2010
  *      Author: gregf
  *      contains functions used by Ceph to convert named addresses
- *      (eg ceph.newdream.net) into IP addresses (ie 127.0.0.1).
+ *      (eg ceph.com) into IP addresses (ie 127.0.0.1).
  */
 
 #ifndef ADDR_PARSING_H_

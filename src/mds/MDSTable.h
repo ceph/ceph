@@ -17,18 +17,19 @@
 
 #include "mdstypes.h"
 #include "mds_table_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
-class MDS;
+class MDSRank;
 class Context;
 class MDSInternalContextBase;
 
 class MDSTable {
 public:
-  MDS *mds;
+  MDSRank *mds;
 protected:
   const char *table_name;
   bool per_mds;
+  mds_rank_t rank;
 
   object_t get_object_name();
   
@@ -43,11 +44,16 @@ protected:
   map<version_t, list<MDSInternalContextBase*> > waitfor_save;
   
 public:
-  MDSTable(MDS *m, const char *n, bool is_per_mds) :
-    mds(m), table_name(n), per_mds(is_per_mds),
+  MDSTable(MDSRank *m, const char *n, bool is_per_mds) :
+    mds(m), table_name(n), per_mds(is_per_mds), rank(MDS_RANK_NONE),
     state(STATE_UNDEF),
     version(0), committing_version(0), committed_version(0), projected_version(0) {}
   virtual ~MDSTable() {}
+
+  void set_rank(mds_rank_t r)
+  {
+    rank = r;
+  }
 
   version_t get_version() { return version; }
   version_t get_committed_version() { return committed_version; }

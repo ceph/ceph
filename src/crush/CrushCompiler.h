@@ -52,8 +52,8 @@ class CrushCompiler {
   void find_used_bucket_ids(iter_t const& i);
   int parse_crush(iter_t const& i);  
   void dump(iter_t const& i, int ind=1);
-
   string consolidate_whitespace(string in);
+  int adjust_bucket_item_place(iter_t const &i);
 
 public:
   CrushCompiler(CrushWrapper& c, ostream& eo, int verbosity=0)

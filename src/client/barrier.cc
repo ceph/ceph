@@ -15,12 +15,8 @@
 #include <sys/param.h>
 #endif
 
-#include <iostream>
-using namespace std;
-
 #include "include/Context.h"
 #include "Client.h"
-#include "common/config.h"
 #include "barrier.h"
 #include "include/assert.h"
 

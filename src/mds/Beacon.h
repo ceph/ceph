@@ -25,7 +25,7 @@
 class MonClient;
 class MMDSBeacon;
 class Message;
-class MDS;
+class MDSRank;
 
 
 /**
@@ -50,10 +50,11 @@ class Beacon : public Dispatcher
   CompatSet compat;
   mds_rank_t standby_for_rank;
   std::string standby_for_name;
+  fs_cluster_id_t standby_for_fscid;
+  bool standby_replay;
   MDSMap::DaemonState want_state;
 
   // Internal beacon state
-  version_t last_send;
   version_t last_seq;          // last seq sent to monitor
   std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
   utime_t last_acked_stamp;  // last time we sent a beacon that got acked
@@ -68,7 +69,7 @@ class Beacon : public Dispatcher
   class C_MDS_BeaconSender : public Context {
     Beacon *beacon;
   public:
-    C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
+    explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
     void finish(int r) {
       assert(beacon->lock.is_locked_by_me());
       beacon->sender = NULL;
@@ -79,11 +80,14 @@ class Beacon : public Dispatcher
   void _notify_mdsmap(MDSMap const *mdsmap);
   void _send();
 
+  version_t awaiting_seq;
+  Cond waiting_cond;
+
 public:
   Beacon(CephContext *cct_, MonClient *monc_, std::string name);
   ~Beacon();
 
-  void init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, mds_rank_t standby_rank_, std::string const &standby_name_);
+  void init(MDSMap const *mdsmap);
   void shutdown();
 
   bool ms_dispatch(Message *m); 
@@ -92,13 +96,20 @@ public:
   void ms_handle_remote_reset(Connection *c) {}
 
   void notify_mdsmap(MDSMap const *mdsmap);
-  void notify_want_state(MDSMap::DaemonState const newstate);
-  void notify_health(MDS const *mds);
-
-  void set_standby_for(mds_rank_t rank_, std::string const &name_);
+  void notify_health(MDSRank const *mds);
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();
+
+  void set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate);
+  MDSMap::DaemonState get_want_state() const;
+
+  /**
+   * Send a beacon, and block until the ack is received from the mon
+   * or `duration` seconds pass, whichever happens sooner.  Useful
+   * for emitting a last message on shutdown.
+   */
+  void send_and_wait(const double duration);
 
   bool is_laggy();
   utime_t get_laggy_until() const;

@@ -298,3 +298,43 @@ TEST(ClsLock, TestLockDuration) {
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+TEST(ClsLock, TestAssertLocked) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string oid = "foo";
+  Lock l("lock1");
+  ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
+
+  librados::ObjectWriteOperation op1;
+  l.assert_locked_exclusive(&op1);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  librados::ObjectWriteOperation op2;
+  l.assert_locked_shared(&op2);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op2));
+
+  l.set_tag("tag");
+  librados::ObjectWriteOperation op3;
+  l.assert_locked_exclusive(&op3);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op3));
+  l.set_tag("");
+
+  l.set_cookie("cookie");
+  librados::ObjectWriteOperation op4;
+  l.assert_locked_exclusive(&op4);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op4));
+  l.set_cookie("");
+
+  ASSERT_EQ(0, l.unlock(&ioctx, oid));
+
+  librados::ObjectWriteOperation op5;
+  l.assert_locked_exclusive(&op5);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op5));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}

@@ -90,28 +90,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
    to re-install Ceph.
 
 
-#. Add the initial monitor(s) and gather the keys (new in
-   ``ceph-deploy`` v1.1.3). ::
+#. Add the initial monitor(s) and gather the keys::
 
 	ceph-deploy mon create-initial
-
-   **Note:** In earlier versions of ``ceph-deploy``, you must create the
-   initial monitor(s) and gather keys in two discrete steps. First, create
-   the monitor. ::
-
-	ceph-deploy mon create {ceph-node}
-
-   For example::
-
-	ceph-deploy mon create node1
-
-   Then, gather the keys. ::
-
-	ceph-deploy gatherkeys {ceph-node}
-
-   For example::
-
-	ceph-deploy gatherkeys node1
 
    Once you complete the process, your local directory should have the following
    keyrings:
@@ -119,7 +100,14 @@ configuration details, perform the following steps using ``ceph-deploy``.
    - ``{cluster-name}.client.admin.keyring``
    - ``{cluster-name}.bootstrap-osd.keyring``
    - ``{cluster-name}.bootstrap-mds.keyring``
+   - ``{cluster-name}.bootstrap-rgw.keyring``
 
+.. note:: The bootstrap-rgw keyring is only created during installation of clusters
+   running Hammer or newer
+
+.. note:: If this process fails with a message similar to
+   "Unable to find /etc/ceph/ceph.client.admin.keyring", please ensure that the IP
+   listed for the monitor node in ceph.conf is the Public IP, not the Private IP.
 
 #. Add two OSDs. For fast setup, this quick start uses a directory rather
    than an entire disk per Ceph OSD Daemon. See `ceph-deploy osd`_ for
@@ -210,7 +198,7 @@ quorum of Ceph Monitors.
 
 .. ditaa::
            /------------------\         /----------------\
-           |    ceph–deploy   |         |     node1      |
+           |    ceph-deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |
            |                  +-------->+   mon.node1    |
            |                  |         |     osd.2      |
@@ -289,6 +277,38 @@ For example::
    with multiple metadata servers.
 
 
+Add an RGW Instance
+-------------------
+
+To use the :term:`Ceph Object Gateway` component of Ceph, you must deploy an
+instance of :term:`RGW`.  Execute the following to create an new instance of
+RGW::
+
+    ceph-deploy rgw create {gateway-node}
+
+For example::
+
+    ceph-deploy rgw create node1
+
+.. note:: This functionality is new with the **Hammer** release, and also with
+   ``ceph-deploy`` v1.5.23.
+
+By default, the :term:`RGW` instance will listen on port 7480. This can be
+changed by editing ceph.conf on the node running the :term:`RGW` as follows:
+
+.. code-block:: ini
+
+    [client]
+    rgw frontends = civetweb port=80
+
+To use an IPv6 address, use:
+
+.. code-block:: ini
+
+    [client]
+    rgw frontends = civetweb port=[::]:80
+
+
 Adding Monitors
 ---------------
 
@@ -300,11 +320,12 @@ of monitors (i.e., 1, 2:3, 3:4, 3:5, 4:6, etc.) to form a quorum.
 
 Add two Ceph Monitors to your cluster. ::
 
-	ceph-deploy mon create {ceph-node}
+	ceph-deploy mon add {ceph-node}
 
 For example::
 
-	ceph-deploy mon create node2 node3
+	ceph-deploy mon add node2
+	ceph-deploy mon add node3
 
 Once you have added your new Ceph Monitors, Ceph will begin synchronizing
 the monitors and form a quorum. You can check the quorum status by executing
@@ -341,6 +362,7 @@ example::
 	``rados put`` command on the command line. For example::
 
 		echo {Test-data} > testfile.txt
+		rados mkpool data
 		rados put {object-name} {file-path} --pool=data
 		rados put test-object-1 testfile.txt --pool=data
 

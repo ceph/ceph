@@ -72,6 +72,5 @@ TEST(TextTable, TooManyItems) {
   t.define_column("3", TextTable::LEFT, TextTable::LEFT);
 
   // expect assertion failure on this, which throws FailedAssertion
-  ASSERT_THROW((t << "1" << "2" << "3" << "4" << TextTable::endrow),
-	       FailedAssertion);
+  ASSERT_DEATH((t << "1" << "2" << "3" << "4" << TextTable::endrow), "");
 }

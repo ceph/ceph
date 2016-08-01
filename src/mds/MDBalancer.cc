@@ -15,7 +15,7 @@
 #include "mdstypes.h"
 
 #include "MDBalancer.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "mon/MonClient.h"
 #include "MDSMap.h"
 #include "CInode.h"
@@ -58,10 +58,8 @@ int MDBalancer::proc_message(Message *m)
     break;
 
   default:
-    dout(1) << " balancer unknown message " << m->get_type() << dendl;
-    assert(0);
-    m->put();
-    break;
+    derr << " balancer unknown message " << m->get_type() << dendl;
+    assert(0 == "balancer unknown message");
   }
 
   return 0;
@@ -113,7 +111,7 @@ void MDBalancer::tick()
 
 class C_Bal_SendHeartbeat : public MDSInternalContext {
 public:
-  C_Bal_SendHeartbeat(MDS *mds_) : MDSInternalContext(mds_) { }
+  explicit C_Bal_SendHeartbeat(MDSRank *mds_) : MDSInternalContext(mds_) { }
   virtual void finish(int f) {
     mds->balancer->send_heartbeat();
   }
@@ -159,7 +157,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
   }
 
   load.req_rate = mds->get_req_rate();
-  load.queue_len = mds->messenger->get_dispatch_queue_len();
+  load.queue_len = messenger->get_dispatch_queue_len();
 
   ifstream cpu("/proc/loadavg");
   if (cpu.is_open())
@@ -218,14 +216,14 @@ void MDBalancer::send_heartbeat()
 
 
   set<mds_rank_t> up;
-  mds->get_mds_map()->get_mds_set(up);
+  mds->get_mds_map()->get_up_mds_set(up);
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
-    mds->messenger->send_message(hb,
-                                 mds->mdsmap->get_inst(*p));
+    messenger->send_message(hb,
+                            mds->mdsmap->get_inst(*p));
   }
 }
 
@@ -333,6 +331,7 @@ double MDBalancer::try_match(mds_rank_t ex, double& maxex,
 
 void MDBalancer::queue_split(CDir *dir)
 {
+  assert(mds->mdsmap->allows_dirfrags());
   split_queue.insert(dir->dirfrag());
 }
 
@@ -758,7 +757,7 @@ void MDBalancer::try_rebalance()
 bool MDBalancer::check_targets()
 {
   // get MonMap's idea of my_targets
-  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->get_nodeid()).export_targets;
 
   bool send = false;
   bool ok = true;
@@ -805,8 +804,8 @@ bool MDBalancer::check_targets()
   dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
 
   if (send) {
-    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mds->monc->get_global_id()), want_targets);
-    mds->monc->send_mon_message(m);
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mon_client->get_global_id()), want_targets);
+    mon_client->send_mon_message(m);
   }
   return ok;
 }
@@ -984,6 +983,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 
     // split
     if (g_conf->mds_bal_split_size > 0 &&
+	mds->mdsmap->allows_dirfrags() &&
 	(dir->should_split() ||
 	 (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
 	 (v > g_conf->mds_bal_split_wr && type == META_POP_IWR)) &&
@@ -1008,9 +1008,9 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   double rd_adj = 0;
   if (type == META_POP_IRD &&
       dir->last_popularity_sample < last_sample) {
-    float dir_pop = dir->pop_auth_subtree.get(type).get(now, mds->mdcache->decayrate);    // hmm??
+    double dir_pop = dir->pop_auth_subtree.get(type).get(now, mds->mdcache->decayrate);    // hmm??
     dir->last_popularity_sample = last_sample;
-    float pop_sp = dir->pop_spread.get(now, mds->mdcache->decayrate);
+    double pop_sp = dir->pop_spread.get(now, mds->mdcache->decayrate);
     dir_pop += pop_sp * 10;
 
     //if (dir->ino() == inodeno_t(0x10000000002))
@@ -1027,7 +1027,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
       if (!dir->is_rep() &&
 	  dir_pop >= g_conf->mds_bal_replicate_threshold) {
 	// replicate
-	float rdp = dir->pop_me.get(META_POP_IRD).get(now, mds->mdcache->decayrate);
+	double rdp = dir->pop_me.get(META_POP_IRD).get(now, mds->mdcache->decayrate);
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
 	rd_adj /= 2.0;  // temper somewhat
 

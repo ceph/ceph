@@ -28,9 +28,9 @@ struct ListObjectImpl {
   ListObjectImpl(std::string n, std::string o, std::string l):
       nspace(n), oid(o), locator(l) {}
 
-  const std::string& get_nspace() { return nspace; }
-  const std::string& get_oid() { return oid; }
-  const std::string& get_locator() { return locator; }
+  const std::string& get_nspace() const { return nspace; }
+  const std::string& get_oid() const { return oid; }
+  const std::string& get_locator() const { return locator; }
 };
 WRITE_EQ_OPERATORS_3(ListObjectImpl, nspace, oid, locator)
 WRITE_CMP_OPERATORS_3(ListObjectImpl, nspace, oid, locator)
@@ -40,9 +40,9 @@ inline std::ostream& operator<<(std::ostream& out, const struct ListObjectImpl& 
   return out;
 }
 
-class ObjListCtx;
+struct ObjListCtx;
 
-struct NObjectIteratorImpl {
+class NObjectIteratorImpl {
   public:
     NObjectIteratorImpl() {}
     ~NObjectIteratorImpl();
@@ -57,7 +57,7 @@ struct NObjectIteratorImpl {
     NObjectIteratorImpl operator++(int); // Postincrement
     const ListObject *get_listobjectp() { return &cur_obj; }
     friend class IoCtx;
-    friend class ListObjectImpl;
+    friend struct ListObjectImpl;
     //friend class ListObject;
     friend class NObjectIterator;
 
@@ -66,6 +66,8 @@ struct NObjectIteratorImpl {
 
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
+
+    void set_filter(const bufferlist &bl);
 
   private:
     NObjectIteratorImpl(ObjListCtx *ctx_);

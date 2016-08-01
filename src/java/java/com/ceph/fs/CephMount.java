@@ -42,13 +42,14 @@ public class CephMount {
    *
    * Must be synchronized with JNI if changed.
    */
-  public static final int O_RDONLY = 1;
-  public static final int O_RDWR   = 2;
-  public static final int O_APPEND = 4;
-  public static final int O_CREAT  = 8;
-  public static final int O_TRUNC  = 16;
-  public static final int O_EXCL   = 32;
-  public static final int O_WRONLY = 64;
+  public static final int O_RDONLY    = 1;
+  public static final int O_RDWR      = 2;
+  public static final int O_APPEND    = 4;
+  public static final int O_CREAT     = 8;
+  public static final int O_TRUNC     = 16;
+  public static final int O_EXCL      = 32;
+  public static final int O_WRONLY    = 64;
+  public static final int O_DIRECTORY = 128;
 
   /*
    * Whence flags for seek().
@@ -79,13 +80,26 @@ public class CephMount {
   public static final int XATTR_REPLACE = 2;
   public static final int XATTR_NONE    = 3;
 
+  /*
+   * Flags for flock();
+   *
+   * Must be synchronized with JNI if changed.
+   */
+  public static final int LOCK_SH       = 1;
+  public static final int LOCK_EX       = 2;
+  public static final int LOCK_NB       = 4;
+  public static final int LOCK_UN       = 8;
 
   /*
    * This is run by the class loader and will report early any problems
    * finding or linking in the shared JNI library.
    */
   static {
-    CephNativeLoader.checkLoaded();
+    loadLibrary();
+  }
+
+  static synchronized void loadLibrary() {
+    CephNativeLoader.getInstance().loadLibrary();
   }
 
   /*
@@ -684,6 +698,27 @@ public class CephMount {
   }
 
   private static native int native_ceph_fsync(long mountp, int fd, boolean dataonly);
+
+  /**
+   * Apply or remove an advisory lock.
+   *
+   * @param fd File descriptor to lock or unlock.
+   * @param operation the advisory lock operation to be performed on the file
+   * descriptor among LOCK_SH (shared lock), LOCK_EX (exclusive lock),
+   * or LOCK_UN (remove lock). The LOCK_NB value can be ORed to perform a
+   * non-blocking operation.
+   * @param owner the user-supplied owner identifier (an arbitrary integer)
+   */
+  public void flock(int fd, int operation, long owner) throws IOException {
+    rlock.lock();
+    try {
+      native_ceph_flock(instance_ptr, fd, operation, owner);
+    } finally {
+      rlock.unlock();
+    }
+  }
+
+  private static native int native_ceph_flock(long mountp, int fd, int operation, long owner);
 
   /**
    * Get file status.

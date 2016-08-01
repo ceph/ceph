@@ -44,7 +44,7 @@ static void usage(ostream &out)
 static void json_print(const MonCommand *mon_commands, int size)
 {
   bufferlist rdata;
-  Formatter *f = new_formatter("json");
+  Formatter *f = Formatter::create("json");
   Monitor::format_command_descriptions(mon_commands, size, f, &rdata);
   delete f;
   string data(rdata.c_str(), rdata.length());
@@ -53,10 +53,15 @@ static void json_print(const MonCommand *mon_commands, int size)
 
 static void all()
 {
+#undef FLAG
 #undef COMMAND
+#undef COMMAND_WITH_FLAG
   MonCommand mon_commands[] = {
+#define FLAG(f) (MonCommand::FLAG_##f)
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-    {parsesig, helptext, modulename, req_perms, avail},
+    {parsesig, helptext, modulename, req_perms, avail, 0},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
+    {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
   };
 

@@ -1,0 +1,80 @@
+#!/bin/bash
+# file: epoch_h
+#
+# Copyright (C) 2015 Ubuntu Kylin
+#
+# Author: Min Chen <minchen@ubuntukylin.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
+
+my_dir=$(dirname "$0")
+. $my_dir/common_h
+
+#pgid_list=$single_node/$cluster-$id/pgid_list
+function get_pgid_list()
+{
+  find $osd_data/current/ -type d -name "*_head"|\
+	sed -n 's/\(.*\)\/current\/\([0-9a-fA-F]\+\.[0-9a-fA-F]\+\)_head/\2 \1/p'|\
+	sort -t ' ' -k 1.1,1h -k 2.1,2 > $pgid_list;
+}
+
+function get_pgid()
+{
+  hobject_path=$1
+  echo $hobject_path| sed -n 's/\(.*\)\/\([0-9a-fA-F]\+\.[0-9a-fA-F]\+\)_head\(.*\)/\2/p'
+}
+
+infos_seq=
+function get_infos_seq()
+{
+  local func="get_infos_seq"
+  
+  local keyword=":infos." 
+  local infos_key=`get_map_header_key $keyword`
+
+  if [ "$infos_key"x = ""x ];then
+    echo "$func: keyword not input or infos_key not exisits"
+    exit 
+  fi
+  local prefix=`get_map_header_prefix`
+  local key=$infos_key
+
+  infos_seq=`get_header_seq $prefix $key`
+  if [ "$infos_seq"x = ""x ];then
+    echo "$func: infos_seq not exists"
+    exit
+  fi
+}
+
+pg_epoch=
+function get_pg_epoch()
+{
+  local func="get_pg_epoch"
+  if [ "$1"x = ""x ];then
+    echo "$func: no pgid input"
+    exit
+  fi
+  local pgid=$1
+  local key=$pgid"_epoch"
+
+  #get_infos_seq;
+  # infos_seq default to 1
+  infos_seq=1
+  local infos_seq=`printf "%016d" $infos_seq`
+  local prefix="_USER_"$infos_seq"_USER_"
+
+  pg_epoch=`get_header_kv $prefix $key int`
+  if [ "$pg_epoch"x = ""x ];then
+    echo "$func: $key not exisits"
+    exit
+  fi
+}

@@ -1,9 +1,10 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
-#include "msg/Message.h"
-#include "osd/OSD.h"
 #include "ClassHandler.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
 
 #include <dlfcn.h>
 
@@ -14,6 +15,7 @@
 #endif
 
 #include "common/config.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -27,7 +29,9 @@
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
   Mutex::Locker lock(mutex);
-  ClassData *cls = _get_class(cname);
+  ClassData *cls = _get_class(cname, true);
+  if (!cls)
+    return -EPERM;
   if (cls->status != ClassData::CLASS_OPEN) {
     int r = _load_class(cls);
     if (r)
@@ -54,12 +58,13 @@ int ClassHandler::open_all_classes()
 	strncmp(pde->d_name, CLS_PREFIX, sizeof(CLS_PREFIX) - 1) == 0 &&
 	strcmp(pde->d_name + strlen(pde->d_name) - (sizeof(CLS_SUFFIX) - 1), CLS_SUFFIX) == 0) {
       char cname[PATH_MAX + 1];
-      strcpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1);
+      strncpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1, sizeof(cname) -1);
       cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
       dout(10) << __func__ << " found " << cname << dendl;
       ClassData *cls;
+      // skip classes that aren't in 'osd class load list'
       r = open_class(cname, &cls);
-      if (r < 0)
+      if (r < 0 && r != -EPERM)
 	goto out;
     }
   }
@@ -70,13 +75,38 @@ int ClassHandler::open_all_classes()
 
 void ClassHandler::shutdown()
 {
-  for (map<string, ClassData>::iterator p = classes.begin(); p != classes.end(); ++p) {
-    dlclose(p->second.handle);
+  for (auto& cls : classes) {
+    if (cls.second.handle) {
+      dlclose(cls.second.handle);
+    }
   }
   classes.clear();
 }
 
-ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
+/*
+ * Check if @cname is in the whitespace delimited list @list, or the @list
+ * contains the wildcard "*".
+ *
+ * This is expensive but doesn't consume memory for an index, and is performed
+ * only once when a class is loaded.
+ */
+bool ClassHandler::in_class_list(const std::string& cname,
+    const std::string& list)
+{
+  std::istringstream ss(list);
+  std::istream_iterator<std::string> begin{ss};
+  std::istream_iterator<std::string> end{};
+
+  const std::vector<std::string> targets{cname, "*"};
+
+  auto it = std::find_first_of(begin, end,
+      targets.begin(), targets.end());
+
+  return it != end;
+}
+
+ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
+    bool check_allowed)
 {
   ClassData *cls;
   map<string, ClassData>::iterator iter = classes.find(cname);
@@ -84,10 +114,15 @@ ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
   if (iter != classes.end()) {
     cls = &iter->second;
   } else {
+    if (check_allowed && !in_class_list(cname, cct->_conf->osd_class_load_list)) {
+      dout(0) << "_get_class not permitted to load " << cname << dendl;
+      return NULL;
+    }
     cls = &classes[cname];
     dout(10) << "_get_class adding new class name " << cname << " " << cls << dendl;
     cls->name = cname;
     cls->handler = this;
+    cls->whitelisted = in_class_list(cname, cct->_conf->osd_class_default_list);
   }
   return cls;
 }
@@ -106,21 +141,21 @@ int ClassHandler::_load_class(ClassData *cls)
 	     cls->name.c_str());
     dout(10) << "_load_class " << cls->name << " from " << fname << dendl;
 
-    struct stat st;
-    int r = ::stat(fname, &st);
-    if (r < 0) {
-      r = -errno;
-      dout(0) << __func__ << " could not stat class " << fname
-	      << ": " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
     cls->handle = dlopen(fname, RTLD_NOW);
     if (!cls->handle) {
-      dout(0) << "_load_class could not open class " << fname
-	      << " (dlopen failed): " << dlerror() << dendl;
+      struct stat st;
+      int r = ::stat(fname, &st);
+      if (r < 0) {
+        r = -errno;
+        dout(0) << __func__ << " could not stat class " << fname
+                << ": " << cpp_strerror(r) << dendl;
+      } else {
+	dout(0) << "_load_class could not open class " << fname
+      	        << " (dlopen failed): " << dlerror() << dendl;
+      	r = -EIO;
+      }
       cls->status = ClassData::CLASS_MISSING;
-      return -EIO;
+      return r;
     }
 
     cls_deps_t *(*cls_deps)();
@@ -130,7 +165,7 @@ int ClassHandler::_load_class(ClassData *cls)
       while (deps) {
 	if (!deps->name)
 	  break;
-	ClassData *cls_dep = _get_class(deps->name);
+	ClassData *cls_dep = _get_class(deps->name, false);
 	cls->dependencies.insert(cls_dep);
 	if (cls_dep->status != ClassData::CLASS_OPEN)
 	  cls->missing_dependencies.insert(cls_dep);
@@ -171,7 +206,7 @@ ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
   assert(mutex.is_locked());
 
-  ClassData *cls = _get_class(cname);
+  ClassData *cls = _get_class(cname, false);
   dout(10) << "register_class " << cname << " status " << cls->status << dendl;
 
   if (cls->status != ClassData::CLASS_INITIALIZING) {
@@ -219,6 +254,17 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
   return &method;
 }
 
+ClassHandler::ClassFilter *ClassHandler::ClassData::register_cxx_filter(
+    const std::string &filter_name,
+    cls_cxx_filter_factory_t fn)
+{
+  ClassFilter &filter = filters_map[filter_name];
+  filter.fn = fn;
+  filter.name = filter_name;
+  filter.cls = this;
+  return &filter;
+}
+
 ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mname)
 {
   map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
@@ -248,6 +294,20 @@ void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *metho
 void ClassHandler::ClassMethod::unregister()
 {
   cls->unregister_method(this);
+}
+
+void ClassHandler::ClassData::unregister_filter(ClassHandler::ClassFilter *filter)
+{
+  /* no need for locking, called under the class_init mutex */
+   map<string, ClassFilter>::iterator iter = filters_map.find(filter->name);
+   if (iter == filters_map.end())
+     return;
+   filters_map.erase(iter);
+}
+
+void ClassHandler::ClassFilter::unregister()
+{
+  cls->unregister_filter(this);
 }
 
 int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata)

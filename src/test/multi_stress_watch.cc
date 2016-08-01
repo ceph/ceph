@@ -13,7 +13,6 @@
 #include <unistd.h>
 
 using namespace librados;
-using ceph::buffer;
 using std::map;
 using std::ostringstream;
 using std::string;
@@ -28,6 +27,10 @@ public:
       sem_post(&sem);
     }
 };
+
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 void
 test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
@@ -62,6 +65,9 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
 
   ioctx.close();
 }
+
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 void
 test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)

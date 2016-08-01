@@ -80,7 +80,7 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 		for (i = 0; i < nval; ++i) {
 			if (strcmp(exkeys[i], key))
 				continue;
-			if ((len == strlen(exvals[i]) + 1) && (!strcmp(exvals[i], val))) {
+			if ((len == strlen(exvals[i]) + 1) && (val != NULL) && (!strcmp(exvals[i], val))) {
 				nfound++;
 				break;
 			}

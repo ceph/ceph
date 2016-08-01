@@ -14,6 +14,7 @@
 #include "common/Clock.h"
 
 #include "global/global_context.h"
+#include "include/compat.h"
 
 CLS_VER(1,0)
 CLS_NAME(refcount)
@@ -53,7 +54,7 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
   bufferlist bl;
   objr->refs.clear();
   int ret = cls_cxx_getxattr(hctx, REFCOUNT_ATTR, &bl);
-  if (ret == -ENOENT || ret == -ENODATA) {
+  if (ret == -ENODATA) {
     if (implicit_ref) {
       objr->refs[wildcard_tag] = true;
     }

@@ -153,9 +153,29 @@ void ECSubWriteReply::generate_test_instances(list<ECSubWriteReply*>& o)
   o.back()->applied = true;
 }
 
-void ECSubRead::encode(bufferlist &bl) const
+void ECSubRead::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  if ((features & CEPH_FEATURE_OSD_FADVISE_FLAGS) == 0) {
+    ENCODE_START(1, 1, bl);
+    ::encode(from, bl);
+    ::encode(tid, bl);
+    map<hobject_t, list<pair<uint64_t, uint64_t> >, hobject_t::BitwiseComparator> tmp;
+    for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::const_iterator m = to_read.begin();
+	  m != to_read.end(); ++m) {
+      list<pair<uint64_t, uint64_t> > tlist;
+      for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator l = m->second.begin();
+	    l != m->second.end(); ++l) {
+	tlist.push_back(std::make_pair(l->get<0>(), l->get<1>()));
+      }
+      tmp[m->first] = tlist;
+    }
+    ::encode(tmp, bl);
+    ::encode(attrs_to_read, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+
+  ENCODE_START(2, 2, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(to_read, bl);
@@ -165,10 +185,24 @@ void ECSubRead::encode(bufferlist &bl) const
 
 void ECSubRead::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(from, bl);
   ::decode(tid, bl);
-  ::decode(to_read, bl);
+  if (struct_v == 1) {
+    map<hobject_t, list<pair<uint64_t, uint64_t> >, hobject_t::BitwiseComparator>tmp;
+    ::decode(tmp, bl);
+    for (map<hobject_t, list<pair<uint64_t, uint64_t> >, hobject_t::BitwiseComparator>::const_iterator m = tmp.begin();
+	  m != tmp.end(); ++m) {
+      list<boost::tuple<uint64_t, uint64_t, uint32_t> > tlist;
+      for (list<pair<uint64_t, uint64_t> > ::const_iterator l = m->second.begin();
+	    l != m->second.end(); ++l) {
+	tlist.push_back(boost::make_tuple(l->first, l->second, 0));
+      }
+      to_read[m->first] = tlist;
+    }
+  } else {
+    ::decode(to_read, bl);
+  }
   ::decode(attrs_to_read, bl);
   DECODE_FINISH(bl);
 }
@@ -187,20 +221,21 @@ void ECSubRead::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("objects");
-  for (map<hobject_t, list<pair<uint64_t, uint64_t> > >::const_iterator i =
+  for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::const_iterator i =
 	 to_read.begin();
        i != to_read.end();
        ++i) {
     f->open_object_section("object");
     f->dump_stream("oid") << i->first;
     f->open_array_section("extents");
-    for (list<pair<uint64_t, uint64_t> >::const_iterator j =
+    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator j =
 	   i->second.begin();
 	 j != i->second.end();
 	 ++j) {
       f->open_object_section("extent");
-      f->dump_unsigned("off", j->first);
-      f->dump_unsigned("len", j->second);
+      f->dump_unsigned("off", j->get<0>());
+      f->dump_unsigned("len", j->get<1>());
+      f->dump_unsigned("flags", j->get<2>());
       f->close_section();
     }
     f->close_section();
@@ -209,7 +244,7 @@ void ECSubRead::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("object_attrs_requested");
-  for (set<hobject_t>::const_iterator i = attrs_to_read.begin();
+  for (set<hobject_t,hobject_t::BitwiseComparator>::const_iterator i = attrs_to_read.begin();
        i != attrs_to_read.end();
        ++i) {
     f->open_object_section("object");
@@ -226,16 +261,16 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
   o.push_back(new ECSubRead());
   o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 1;
-  o.back()->to_read[hoid1].push_back(make_pair(100, 200));
-  o.back()->to_read[hoid1].push_back(make_pair(400, 600));
-  o.back()->to_read[hoid2].push_back(make_pair(400, 600));
+  o.back()->to_read[hoid1].push_back(boost::make_tuple(100, 200, 0));
+  o.back()->to_read[hoid1].push_back(boost::make_tuple(400, 600, 0));
+  o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
   o.back()->attrs_to_read.insert(hoid1);
   o.push_back(new ECSubRead());
   o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 300;
-  o.back()->to_read[hoid1].push_back(make_pair(300, 200));
-  o.back()->to_read[hoid2].push_back(make_pair(400, 600));
-  o.back()->to_read[hoid2].push_back(make_pair(2000, 600));
+  o.back()->to_read[hoid1].push_back(boost::make_tuple(300, 200, 0));
+  o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
+  o.back()->to_read[hoid2].push_back(boost::make_tuple(2000, 600, 0));
   o.back()->attrs_to_read.insert(hoid2);
 }
 
@@ -275,7 +310,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("buffers_read");
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> > >::const_iterator i =
+  for (map<hobject_t, list<pair<uint64_t, bufferlist> >, hobject_t::BitwiseComparator>::const_iterator i =
 	 buffers_read.begin();
        i != buffers_read.end();
        ++i) {
@@ -297,7 +332,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("attrs_returned");
-  for (map<hobject_t, map<string, bufferlist> >::const_iterator i =
+  for (map<hobject_t, map<string, bufferlist>, hobject_t::BitwiseComparator>::const_iterator i =
 	 attrs_read.begin();
        i != attrs_read.end();
        ++i) {
@@ -318,7 +353,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("errors");
-  for (map<hobject_t, int>::const_iterator i = errors.begin();
+  for (map<hobject_t, int, hobject_t::BitwiseComparator>::const_iterator i = errors.begin();
        i != errors.end();
        ++i) {
     f->open_object_section("error_pair");

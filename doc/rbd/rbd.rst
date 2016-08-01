@@ -29,9 +29,9 @@ interact with OSDs using kernel modules or the ``librbd`` library.
    applications, Ceph supports `RBD Caching`_.
 
 Ceph's block devices deliver high performance with infinite scalability to
-`kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `Qemu`_, and
+`kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `QEMU`_, and
 cloud-based computing systems like `OpenStack`_ and `CloudStack`_ that rely on
-libvirt and Qemu to integrate with Ceph block devices. You can use the same cluster
+libvirt and QEMU to integrate with Ceph block devices. You can use the same cluster
 to operate the `Ceph RADOS Gateway`_, the `Ceph FS filesystem`_, and Ceph block
 devices simultaneously.
 
@@ -44,6 +44,7 @@ devices simultaneously.
 	Commands <rados-rbd-cmds>
 	Kernel Modules <rbd-ko>
 	Snapshots<rbd-snapshot>
+        Mirroring <rbd-mirroring>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
 	Cache Settings <rbd-config-ref/>
@@ -51,6 +52,7 @@ devices simultaneously.
 	CloudStack <rbd-cloudstack>
 	Manpage rbd <../../man/8/rbd>
 	Manpage rbd-fuse <../../man/8/rbd-fuse>
+	Manpage rbd-nbd <../../man/8/rbd-nbd>
 	Manpage ceph-rbdnamer <../../man/8/ceph-rbdnamer>
 	RBD Replay <rbd-replay>
 	Manpage rbd-replay-prep <../../man/8/rbd-replay-prep>
@@ -62,7 +64,7 @@ devices simultaneously.
 
 .. _RBD Caching: ../rbd-config-ref/
 .. _kernel modules: ../rbd-ko/
-.. _Qemu: ../qemu-rbd/
+.. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack
 .. _CloudStack: ../rbd-cloudstack
 .. _Ceph RADOS Gateway: ../../radosgw/

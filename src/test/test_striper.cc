@@ -8,12 +8,11 @@
 
 TEST(Striper, Stripe1)
 {
-  ceph_file_layout l;
-  memset(&l, 0, sizeof(l));
+  file_layout_t l;
 
-  l.fl_object_size = 262144;
-  l.fl_stripe_unit = 4096;
-  l.fl_stripe_count = 3;
+  l.object_size = 262144;
+  l.stripe_unit = 4096;
+  l.stripe_count = 3;
 
   vector<ObjectExtent> ex;
   Striper::file_to_extents(g_ceph_context, 1, &l, 5006035, 46419, 5006035, ex);
@@ -28,12 +27,11 @@ TEST(Striper, Stripe1)
 
 TEST(Striper, EmptyPartialResult)
 {
-  ceph_file_layout l;
-  memset(&l, 0, sizeof(l));
+  file_layout_t l;
 
-  l.fl_object_size = 4194304;
-  l.fl_stripe_unit = 4194304;
-  l.fl_stripe_count = 1;
+  l.object_size = 4194304;
+  l.stripe_unit = 4194304;
+  l.stripe_count = 1;
 
   vector<ObjectExtent> ex;
   Striper::file_to_extents(g_ceph_context, 1, &l, 725549056, 131072, 72554905600, ex);
@@ -59,12 +57,11 @@ TEST(Striper, EmptyPartialResult)
 
 TEST(Striper, GetNumObj)
 {
-  ceph_file_layout l;
-  memset(&l, 0, sizeof(l));
+  file_layout_t l;
 
-  l.fl_object_size = 262144;
-  l.fl_stripe_unit = 4096;
-  l.fl_stripe_count = 3;
+  l.object_size = 262144;
+  l.stripe_unit = 4096;
+  l.stripe_count = 3;
   uint64_t size,numobjs;
   size = 6999;
   numobjs = Striper::get_num_objects(l, size);

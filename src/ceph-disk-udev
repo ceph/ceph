@@ -38,6 +38,12 @@ case $ID_PART_ENTRY_TYPE in
     /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} --key-size 256 create ${ID_PART_ENTRY_UUID} /dev/${NAME}
     ;;
 
+45b0969e-9b03-4f30-b4c6-35865ceff106)
+    # DMCRYPT_LUKS_JOURNAL_UUID
+    # Map journal if using dm-crypt
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} luksOpen /dev/${NAME} ${ID_PART_ENTRY_UUID}
+    ;;
+
 4fbd7e29-9d25-41b8-afd0-062c0ceff05d)
     # OSD_UUID
     # activate ceph-tagged partitions.
@@ -50,7 +56,16 @@ case $ID_PART_ENTRY_TYPE in
     # for dm-crypted data devices
     /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} --key-size 256 create ${ID_PART_ENTRY_UUID} /dev/${NAME}
     bash -c 'while [ ! -e /dev/mapper/${ID_PART_ENTRY_UUID} ];do sleep 1; done'
-    /usr/sbin/ceph-disk-activate /dev/mapper/${ID_PART_ENTRY_UUID}
+    /usr/sbin/ceph-disk activate /dev/mapper/${ID_PART_ENTRY_UUID}
+    ;;
+
+4fbd7e29-9d25-41b8-afd0-35865ceff05d)
+    # DMCRYPT_LUKS_OSD_UUID
+    # Map data device and activate ceph-tagged partitions
+    # for dm-crypted data devices
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} luksOpen /dev/${NAME} ${ID_PART_ENTRY_UUID}
+    bash -c 'while [ ! -e /dev/mapper/${ID_PART_ENTRY_UUID} ];do sleep 1; done'
+    /usr/sbin/ceph-disk activate /dev/mapper/${ID_PART_ENTRY_UUID}
     ;;
 
 89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be)

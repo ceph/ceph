@@ -66,7 +66,7 @@ public:
   virtual void encode_payload(uint64_t features) {
     ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(pulls, payload);
+    ::encode(pulls, payload, features);
     ::encode(cost, payload);
     ::encode(pgid.shard, payload);
     ::encode(from, payload);

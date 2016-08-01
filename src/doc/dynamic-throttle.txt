@@ -1,0 +1,127 @@
+------
+TOPIC:
+------
+Dynamic backoff throttle is been introduced in the Jewel timeframe to produce
+a stable and improved performance out from filestore. This should also improve 
+the average and 99th latency significantly.
+
+-----------
+WHAT IS IT?
+-----------
+The old throttle scheme in the filestore is to allow all the ios till the 
+outstanding io/bytes reached some limit. Once crossed the threshold, it will not
+allow any more io to go through till the outstanding ios/bytes goes below the 
+threshold. That's why once it is crossed the threshold, the write behavior 
+becomes very spiky. 
+The idea of the new throttle is, based on some user configurable parameters 
+it can start throttling (inducing delays) early and with proper parameter
+value we can prevent the outstanding io/bytes to reach to the threshold mark.
+This dynamic backoff throttle is implemented in the following scenarios within
+filestore.
+
+  1. Filestore op worker queue holds the transactions those are yet to be applied.
+     This queue needs to be bounded and a backoff throttle is used to gradually 
+     induce delays to the queueing threads if the ratio of current outstanding 
+     bytes|ops and filestore_queue_max_(bytes|ops) is more than 
+     filestore_queue_low_threshhold. The throttles will block io once the 
+     outstanding bytes|ops reaches max value (filestore_queue_max_(bytes|ops)).
+
+     User configurable config option for adjusting delay is the following.
+  
+        filestore_queue_low_threshhold:
+          Valid values should be between 0-1 and shouldn't be > *_high_threshold.
+
+        filestore_queue_high_threshhold:
+          Valid values should be between 0-1 and shouldn't be < *_low_threshold.
+
+        filestore_expected_throughput_ops:
+          Shouldn't be less than or equal to 0. 
+
+	filestore_expected_throughput_bytes:
+          Shouldn't be less than or equal to 0.
+ 
+        filestore_queue_high_delay_multiple:
+	  Shouldn't be less than 0 and shouldn't be > *_max_delay_multiple.
+          
+	filestore_queue_max_delay_multiple:
+	  Shouldn't be less than 0 and shouldn't be < *_high_delay_multiple
+
+  2. journal usage throttle is implemented to gradually slow down queue_transactions 
+     callers as the journal fills up. We don't want journal to become full as this
+     will again induce spiky behavior. The configs work very similarly to the
+     Filestore op worker queue throttle.
+
+        journal_throttle_low_threshhold
+	journal_throttle_high_threshhold
+	filestore_expected_throughput_ops
+	filestore_expected_throughput_bytes
+	journal_throttle_high_multiple
+	journal_throttle_max_multiple
+
+This scheme will not be inducing any delay between [0, low_threshold].
+In [low_threshhold, high_threshhold), delays should be injected based on a line
+from 0 at low_threshold to high_multiple * (1/expected_throughput) at high_threshhold.
+In [high_threshhold, 1), we want delays injected based on a line from
+(high_multiple * (1/expected_throughput)) at high_threshhold to 
+(high_multiple * (1/expected_throughput)) + (max_multiple * (1/expected_throughput)) 
+at 1.
+Now setting *_high_multiple and *_max_multiple to 0 should give us similar effect
+like old throttle (this is default). Setting filestore_queue_max_ops and 
+filestore_queue_max_bytes to zero should disable the entire backoff throttle.
+          
+-------------------------
+HOW TO PICK PROPER VALUE ?
+-------------------------
+
+General guideline is the following.
+
+  filestore_queue_max_bytes and filestore_queue_max_ops:
+  -----------------------------------------------------
+
+  This directly depends on how filestore op_wq will be growing in the memory. So,
+  user needs to calculate how much memory he can give to each OSD. Bigger value
+  meaning current/max ratio will be smaller and throttle will be relaxed a bit.
+  This could help in case of 100% write but in case of mixed read/write this can
+  induce more latencies for reads on the objects those are not yet been applied 
+  i.e yet to reach in it's final filesystem location. Ideally, once we reach the
+  max throughput of the backend, increasing further will only increase memory
+  usage and latency.
+
+  filestore_expected_throughput_bytes and filestore_expected_throughput_ops:
+  -------------------------------------------------------------------------
+
+  This directly co-relates to how much delay needs to be induced per throttle.
+  Ideally, this should be a bit above (or same) your backend device throughput.
+
+  *_low_threshhold *_high_threshhold :
+  ----------------------------------
+
+  If your backend is fast you may want to set this threshold value higher so that
+  initial throttle would be less and it can give a chance to back end transaction
+  to catch up.
+
+  *_high_multiple and *_max_multiple:
+  ----------------------------------
+
+  This is the delay tunables and one should do all effort here so that the current
+  doesn't reach to the max. For HDD and smaller block size, the old throttle may
+  make sense, in that case we should set these delay multiple to 0.
+
+It is recommended that user should use ceph_smalliobenchfs tool to see the effect 
+of these parameters (and decide) on your HW before deploying OSDs. 
+
+Need to supply the following parameters.
+
+  1. --journal-path
+     
+  2. --filestore-path
+    (Just mount the empty data partition and give the path here)
+
+  3. --op-dump-file 
+
+'ceph_smalliobenchfs --help' will show all the options that user can tweak.
+In case user wants to supply any ceph.conf parameter related to filestore,
+it can be done by adding '--' in front, for ex. --debug_filestore
+
+Once test is done, analyze the throughput and latency information dumped in the
+file provided in the option --op-dump-file.

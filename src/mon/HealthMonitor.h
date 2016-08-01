@@ -14,14 +14,11 @@
 #ifndef CEPH_HEALTH_MONITOR_H
 #define CEPH_HEALTH_MONITOR_H
 
-#include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthService.h"
 
-#include "messages/MMonHealth.h"
-
-#include "common/config.h"
-#include "common/Formatter.h"
+//forward declaration
+namespace ceph { class Formatter; }
 
 class HealthMonitor : public QuorumService
 {
@@ -45,7 +42,7 @@ public:
   virtual void get_health(Formatter *f,
 		     list<pair<health_status_t,string> >& summary,
 		     list<pair<health_status_t,string> > *detail);
-  virtual bool service_dispatch(Message *m);
+  virtual bool service_dispatch(MonOpRequestRef op);
 
   virtual void start_epoch() {
     for (map<int,HealthService*>::iterator it = services.begin();

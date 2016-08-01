@@ -1,5 +1,0 @@
-#  Check gpt partion for ceph tags and activate
-ACTION=="add", SUBSYSTEM=="block", \
-  ENV{DEVTYPE}=="partition", \
-  ENV{ID_PART_TABLE_TYPE}=="gpt", \
-  RUN+="/usr/sbin/ceph-disk-udev $number $name $parent"

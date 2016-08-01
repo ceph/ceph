@@ -23,6 +23,10 @@ using namespace librados;
 #include <stdlib.h>
 #include <time.h>
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   str[0] = '\0';
@@ -313,3 +317,5 @@ int main(int argc, const char **argv)
   return 0;
 }
 
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"

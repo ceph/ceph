@@ -135,7 +135,7 @@ public:
     boost::tuple<string, uint64_t, uint64_t, Bencher::OpType> ret =
       boost::make_tuple(*object_pos, cur_pos, length, (*op_dist)());
     cur_pos += length;
-    if (cur_pos > size) {
+    if (cur_pos >= size) {
       cur_pos = 0;
       ++object_pos;
     }

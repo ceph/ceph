@@ -3,22 +3,11 @@
 
 #include <ciso646>
 
-#ifdef _LIBCPP_VERSION
-
 #include <unordered_map>
 
 namespace ceph {
   using std::unordered_map;
+  using std::unordered_multimap;
 }
-
-#else
-
-#include <tr1/unordered_map>
-
-namespace ceph {
-  using std::tr1::unordered_map;
-}
-
-#endif
 
 #endif

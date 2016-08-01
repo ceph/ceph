@@ -7,7 +7,7 @@ ceph.git/ceph-object-corpus is a submodule.::
  bin/   # misc scripts
  archive/$version/objects/$type/$hash  # a sample of encoded objects from a specific version
 
-You can also mark known or deliber incompatibilities between versions with::
+You can also mark known or deliberate incompatibilities between versions with::
 
  archive/$version/forward_incompat/$type
 
@@ -16,7 +16,7 @@ decode old objects across that $version (this is normally the case).
 
 
 How to generate an object corpus
-================================
+--------------------------------
 
 We can generate an object corpus for a particular version of ceph like so.
 
@@ -24,7 +24,7 @@ We can generate an object corpus for a particular version of ceph like so.
 
 	git clone ceph.git
 	cd ceph
-	git submodule update --init
+	git submodule update --init --recursive
 
 #. Build with flag to dump objects to /tmp/foo::
 
@@ -37,7 +37,7 @@ We can generate an object corpus for a particular version of ceph like so.
 	cd src
 	MON=3 OSD=3 MDS=3 RGW=1 ./vstart.sh -n -x
 
-#. Use a much functionality of the cluster as you can, to exercise as many object encoder methods as possible::
+#. Use as much functionality of the cluster as you can, to exercise as many object encoder methods as possible::
 
 	./rados -p rbd bench 10 write -b 123
 	./ceph osd out 0

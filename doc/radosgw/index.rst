@@ -3,7 +3,7 @@
 =====================
 
 :term:`Ceph Object Gateway` is an object storage interface built on top of
-``librgw`` to provide applications with a RESTful gateway to
+``librados`` to provide applications with a RESTful gateway to
 Ceph Storage Clusters. :term:`Ceph Object Storage` supports two interfaces:
 
 #. **S3-compatible:** Provides object storage functionality with an interface 
@@ -37,8 +37,9 @@ you may write data with one API and retrieve it with the other.
 	:maxdepth: 1
 
 	Manual Install <../../install/install-ceph-gateway>
-	Simple Configuration <config>
+	Simple Configuration with FastCGI <config-fcgi>
 	Federated Configuration <federated-config>
+	Multisite Configuration <multisite>
 	Config Reference <config-ref>
 	Admin Guide <admin>
 	Purging Temp Data <purge-temp>
@@ -46,6 +47,7 @@ you may write data with one API and retrieve it with the other.
 	Swift API <swift>
 	Admin Ops API <adminops>
 	OpenStack Keystone Integration <keystone>
+	Multi-tenancy <multitenancy>
 	troubleshooting
 	Manpage radosgw <../../man/8/radosgw>
 	Manpage radosgw-admin <../../man/8/radosgw-admin>

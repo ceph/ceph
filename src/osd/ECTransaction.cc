@@ -12,23 +12,23 @@
  *
  */
 
-#include <boost/variant.hpp>
-#include <boost/optional.hpp>
 #include <iostream>
 #include <vector>
 #include <sstream>
 
-#include "ECBackend.h"
+#include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 
 struct AppendObjectsGenerator: public boost::static_visitor<void> {
-  set<hobject_t> *out;
-  AppendObjectsGenerator(set<hobject_t> *out) : out(out) {}
+  set<hobject_t, hobject_t::BitwiseComparator> *out;
+  explicit AppendObjectsGenerator(set<hobject_t, hobject_t::BitwiseComparator> *out) : out(out) {}
   void operator()(const ECTransaction::AppendOp &op) {
     out->insert(op.oid);
   }
-  void operator()(const ECTransaction::TouchOp &op) {}
+  void operator()(const ECTransaction::TouchOp &op) {
+    out->insert(op.oid);
+  }
   void operator()(const ECTransaction::CloneOp &op) {
     out->insert(op.source);
     out->insert(op.target);
@@ -49,31 +49,31 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
   void operator()(const ECTransaction::NoOp &op) {}
 };
 void ECTransaction::get_append_objects(
-  set<hobject_t> *out) const
+  set<hobject_t, hobject_t::BitwiseComparator> *out) const
 {
   AppendObjectsGenerator gen(out);
   reverse_visit(gen);
 }
 
 struct TransGenerator : public boost::static_visitor<void> {
-  map<hobject_t, ECUtil::HashInfoRef> &hash_infos;
+  map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos;
 
   ErasureCodeInterfaceRef &ecimpl;
   const pg_t pgid;
   const ECUtil::stripe_info_t sinfo;
   map<shard_id_t, ObjectStore::Transaction> *trans;
   set<int> want;
-  set<hobject_t> *temp_added;
-  set<hobject_t> *temp_removed;
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_added;
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_removed;
   stringstream *out;
   TransGenerator(
-    map<hobject_t, ECUtil::HashInfoRef> &hash_infos,
+    map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos,
     ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
     map<shard_id_t, ObjectStore::Transaction> *trans,
-    set<hobject_t> *temp_added,
-    set<hobject_t> *temp_removed,
+    set<hobject_t, hobject_t::BitwiseComparator> *temp_added,
+    set<hobject_t, hobject_t::BitwiseComparator> *temp_removed,
     stringstream *out)
     : hash_infos(hash_infos),
       ecimpl(ecimpl), pgid(pgid),
@@ -91,20 +91,17 @@ struct TransGenerator : public boost::static_visitor<void> {
       temp_removed->erase(hoid);
       temp_added->insert(hoid);
     }
-    return get_coll(shard, hoid);
+    return get_coll(shard);
   }
   coll_t get_coll_rm(shard_id_t shard, const hobject_t &hoid) {
     if (hoid.is_temp()) {
       temp_added->erase(hoid);
       temp_removed->insert(hoid);
     }
-    return get_coll(shard, hoid);
+    return get_coll(shard);
   }
-  coll_t get_coll(shard_id_t shard, const hobject_t &hoid) {
-    if (hoid.is_temp())
-      return coll_t::make_temp_coll(spg_t(pgid, shard));
-    else
-      return coll_t(spg_t(pgid, shard));
+  coll_t get_coll(shard_id_t shard) {
+    return coll_t(spg_t(pgid, shard));
   }
 
   void operator()(const ECTransaction::TouchOp &op) {
@@ -114,6 +111,20 @@ struct TransGenerator : public boost::static_visitor<void> {
       i->second.touch(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first));
+
+      /* No change, but write it out anyway in case the object did not
+       * previously exist. */
+      assert(hash_infos.count(op.oid));
+      ECUtil::HashInfoRef hinfo = hash_infos[op.oid];
+      bufferlist hbuf;
+      ::encode(
+	*hinfo,
+	hbuf);
+      i->second.setattr(
+	get_coll_ct(i->first, op.oid),
+	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
+	ECUtil::get_hinfo_key(),
+	hbuf);
     }
   }
   void operator()(const ECTransaction::AppendOp &op) {
@@ -149,13 +160,20 @@ struct TransGenerator : public boost::static_visitor<void> {
 	 ++i) {
       assert(buffers.count(i->first));
       bufferlist &enc_bl = buffers[i->first];
+      i->second.set_alloc_hint(
+	get_coll_ct(i->first, op.oid),
+	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
+	0, 0,
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE |
+	CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY);
       i->second.write(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	sinfo.logical_to_prev_chunk_offset(
 	  offset),
 	enc_bl.length(),
-	enc_bl);
+	enc_bl,
+	op.fadvise_flags);
       i->second.setattr(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
@@ -251,7 +269,7 @@ struct TransGenerator : public boost::static_visitor<void> {
       i->second.set_alloc_hint(
         get_coll_ct(i->first, op.oid),
         ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
-        object_size, write_size);
+        object_size, write_size, op.flags);
     }
   }
   void operator()(const ECTransaction::NoOp &op) {}
@@ -259,13 +277,13 @@ struct TransGenerator : public boost::static_visitor<void> {
 
 
 void ECTransaction::generate_transactions(
-  map<hobject_t, ECUtil::HashInfoRef> &hash_infos,
+  map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
   const ECUtil::stripe_info_t &sinfo,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
-  set<hobject_t> *temp_added,
-  set<hobject_t> *temp_removed,
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_added,
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_removed,
   stringstream *out) const
 {
   TransGenerator gen(

@@ -15,7 +15,7 @@
 #ifndef CEPH_AUTHNONEPROTOCOL_H
 #define CEPH_AUTHNONEPROTOCOL_H
 
-#include "../Auth.h"
+#include "auth/Auth.h"
 
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }

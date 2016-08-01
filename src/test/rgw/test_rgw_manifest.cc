@@ -29,9 +29,9 @@
 #endif
 using namespace std;
 
-static void init_bucket(rgw_bucket *bucket, const char *name)
+static void init_bucket(rgw_bucket *bucket, const char *ten, const char *name)
 {
-  *bucket = rgw_bucket(name, ".data-pool", ".index-pool", "marker.", "bucket-id", NULL);
+  *bucket = rgw_bucket(ten, name, ".data-pool", ".index-pool", "marker.", "bucket-id", NULL);
 }
 
 void append_head(list<rgw_obj> *objs, rgw_obj& head)
@@ -62,7 +62,7 @@ static void gen_obj(uint64_t obj_size, uint64_t head_max_size, uint64_t stripe_s
 {
   manifest->set_trivial_rule(head_max_size, stripe_size);
 
-  init_bucket(bucket, "buck");
+  init_bucket(bucket, "", "buck");
 
   *head = rgw_obj(*bucket, "oid");
   gen->create_begin(g_ceph_context, manifest, *bucket, *head);

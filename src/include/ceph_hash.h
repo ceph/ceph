@@ -9,5 +9,6 @@ extern unsigned ceph_str_hash_rjenkins(const char *s, unsigned len);
 
 extern unsigned ceph_str_hash(int type, const char *s, unsigned len);
 extern const char *ceph_str_hash_name(int type);
+extern bool ceph_str_hash_valid(int type);
 
 #endif

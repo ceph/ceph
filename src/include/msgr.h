@@ -1,7 +1,7 @@
 #ifndef CEPH_MSGR_H
 #define CEPH_MSGR_H
 
-#ifdef __cplusplus
+#ifndef __KERNEL__
 #include <sys/socket.h> // for struct sockaddr_storage
 #endif
 

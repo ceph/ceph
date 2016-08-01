@@ -15,7 +15,7 @@ following to ``/etc/fstab``::
 
 For example:: 
 
-	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime    0       2
+	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime,_netdev    0       2
 	
 .. important:: The ``name`` and ``secret`` or ``secretfile`` options are 
    mandatory when you have Ceph authentication running. 
@@ -30,7 +30,7 @@ To mount Ceph FS in your file systems table as a filesystem in user space, add t
 following to ``/etc/fstab``::
 
 	#DEVICE                                  PATH         TYPE      OPTIONS
-	id={user-ID}[,conf={path/to/conf.conf}] /mount/path  fuse.ceph defaults 0 0
+	id={user-ID}[,conf={path/to/conf.conf}] /mount/path  fuse.ceph defaults,_netdev 0 0
 
 For example::
 

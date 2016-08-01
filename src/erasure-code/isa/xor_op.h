@@ -26,8 +26,8 @@
 // -------------------------------------------------------------------------
 // -------------------------------------------------------------------------
 
-#define EC_ISA_ADDRESS_ALIGNMENT 32
-#define EC_ISA_VECTOR_SSE2_WORDSIZE 64
+#define EC_ISA_ADDRESS_ALIGNMENT 32u
+#define EC_ISA_VECTOR_SSE2_WORDSIZE 64u
 
 #if __GNUC__ > 4 || \
   ( (__GNUC__ == 4) && (__GNUC_MINOR__ >= 4) ) ||\

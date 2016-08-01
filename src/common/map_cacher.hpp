@@ -16,7 +16,7 @@
 #define MAPCACHER_H
 
 #include <boost/scoped_ptr.hpp>
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 #include "include/memory.h"
 #include <set>
 #include <map>

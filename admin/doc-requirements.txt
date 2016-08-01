@@ -1,3 +1,3 @@
 Sphinx == 1.1.3
 -e git+https://github.com/ceph/sphinx-ditaa.git#egg=sphinx-ditaa
--e git+https://github.com/ceph/asphyxiate.git#egg=asphyxiate
+-e git+https://github.com/michaeljones/breathe#egg=breathe

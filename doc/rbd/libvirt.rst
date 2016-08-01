@@ -1,5 +1,5 @@
 =================================
- Using ``libvirt`` with Ceph RBD
+ Using libvirt with Ceph RBD
 =================================
 
 .. index:: Ceph Block Device; livirt

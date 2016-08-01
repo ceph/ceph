@@ -17,15 +17,10 @@
 #include <memory>
 #include <sstream>
 #include <algorithm>
-
-#include "auth/AuthMethodList.h"
-#include "auth/Crypto.h"
 #include "auth/KeyRing.h"
-#include "common/ConfUtils.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "include/str_list.h"
 #include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_auth
@@ -33,21 +28,22 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "auth: "
 
-using std::auto_ptr;
 using namespace std;
 
 int KeyRing::from_ceph_context(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;
-
-  int ret = -ENOENT;
   string filename;
 
-  if (ceph_resolve_file_search(conf->keyring, filename)) {
+  int ret = ceph_resolve_file_search(conf->keyring, filename);
+  if (!ret) {
     ret = load(cct, filename);
     if (ret < 0)
       lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
+  } else {
+    lderr(cct) << "unable to find a keyring on " << conf->keyring
+	       << ": " << cpp_strerror(ret) << dendl;
   }
 
   if (!conf->key.empty()) {
@@ -110,11 +106,11 @@ int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, m
     const char *caps_entity = type + 5;
     if (!*caps_entity)
       return -EINVAL;
-      string l(val);
-      bufferlist bl;
-      ::encode(l, bl);
-      caps[caps_entity] = bl;
-      set_caps(name, caps);
+    string l(val);
+    bufferlist bl;
+    ::encode(l, bl);
+    caps[caps_entity] = bl;
+    set_caps(name, caps);
   } else if (strcmp(type, "auid") == 0) {
     uint64_t auid = strtoull(val, NULL, 0);
     set_uid(name, auid);

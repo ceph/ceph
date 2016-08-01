@@ -67,6 +67,11 @@ void PipeConnection::reset_pipe(Pipe *p)
   pipe = p->get();
 }
 
+bool PipeConnection::is_connected()
+{
+  return static_cast<SimpleMessenger*>(msgr)->is_connected(this);
+}
+
 int PipeConnection::send_message(Message *m)
 {
   assert(msgr);

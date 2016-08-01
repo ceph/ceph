@@ -112,16 +112,13 @@ e 12v
 #include "include/types.h"
 #include "mon_types.h"
 #include "include/buffer.h"
-#include "messages/PaxosServiceMessage.h"
 #include "msg/msg_types.h"
-
 #include "include/Context.h"
-
-#include "common/Timer.h"
 #include "common/perf_counters.h"
 #include <errno.h>
 
 #include "MonitorDBStore.h"
+#include "mon/MonOpRequest.h"
 
 class Monitor;
 class MMonPaxos;
@@ -281,7 +278,7 @@ public:
    *
    * @return 'true' if we are on the Recovering state; 'false' otherwise.
    */
-  bool is_recovering() const { return (state & STATE_RECOVERING); }
+  bool is_recovering() const { return (state == STATE_RECOVERING); }
   /**
    * Check if we are active.
    *
@@ -453,7 +450,7 @@ private:
    *
    * We use this variable to assess if the Leader should take into consideration
    * an uncommitted value sent by a Peon. Given that the Peon will send back to
-   * the Leader the last Proposal Number he accepted, the Leader will be able
+   * the Leader the last Proposal Number it accepted, the Leader will be able
    * to infer if this value is more recent than the one the Leader has, thus
    * more relevant.
    */
@@ -463,7 +460,7 @@ private:
    *
    * If the system fails in-between the accept replies from the Peons and the
    * instruction to commit from the Leader, then we may end up with accepted
-   * but yet-uncommitted values. During the Leader's recovery, he will attempt
+   * but yet-uncommitted values. During the Leader's recovery, it will attempt
    * to bring the whole system to the latest state, and that means committing
    * past accepted but uncommitted values.
    *
@@ -575,13 +572,31 @@ private:
    *	      fully committed.
    */
   list<Context*> waiting_for_commit;
+
   /**
+   * Pending proposal transaction
    *
+   * This is the transaction that is under construction and pending
+   * proposal.  We will add operations to it until we decide it is
+   * time to start a paxos round.
    */
-  list<Context*> proposals;
+  MonitorDBStore::TransactionRef pending_proposal;
+
   /**
-   * @}
+   * Finishers for pending transaction
+   *
+   * These are waiting for updates in the pending proposal/transaction
+   * to be committed.
    */
+  list<Context*> pending_finishers;
+
+  /**
+   * Finishers for committing transaction
+   *
+   * When the pending_proposal is submitted, pending_finishers move to
+   * this list.  When it commits, these finishers are notified.
+   */
+  list<Context*> committing_finishers;
 
   /**
    * @defgroup Paxos_h_sync_warns Synchronization warnings
@@ -610,7 +625,7 @@ private:
   class C_CollectTimeout : public Context {
     Paxos *paxos;
   public:
-    C_CollectTimeout(Paxos *p) : paxos(p) {}
+    explicit C_CollectTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -624,7 +639,7 @@ private:
   class C_AcceptTimeout : public Context {
     Paxos *paxos;
   public:
-    C_AcceptTimeout(Paxos *p) : paxos(p) {}
+    explicit C_AcceptTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -638,7 +653,7 @@ private:
   class C_LeaseAckTimeout : public Context {
     Paxos *paxos;
   public:
-    C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
+    explicit C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -652,7 +667,7 @@ private:
   class C_LeaseTimeout : public Context {
     Paxos *paxos;
   public:
-    C_LeaseTimeout(Paxos *p) : paxos(p) {}
+    explicit C_LeaseTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -666,7 +681,7 @@ private:
   class C_LeaseRenew : public Context {
     Paxos *paxos;
   public:
-    C_LeaseRenew(Paxos *p) : paxos(p) {}
+    explicit C_LeaseRenew(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -677,7 +692,7 @@ private:
   class C_Trimmed : public Context {
     Paxos *paxos;
   public:
-    C_Trimmed(Paxos *p) : paxos(p) { }
+    explicit C_Trimmed(Paxos *p) : paxos(p) { }
     void finish(int r) {
       paxos->trimming = false;
     }
@@ -746,18 +761,18 @@ private:
    *
    * Once a Peon receives a collect message from the Leader it will reply
    * with its first and last committed versions, as well as information so
-   * the Leader may know if his Proposal Number was, or was not, accepted by
+   * the Leader may know if its Proposal Number was, or was not, accepted by
    * the Peon. The Peon will accept the Leader's Proposal Number iif it is
    * higher than the Peon's currently accepted Proposal Number. The Peon may
    * also inform the Leader of accepted but uncommitted values.
    *
    * @invariant The message is an operation of type OP_COLLECT.
    * @pre We are a Peon.
-   * @post Replied to the Leader, accepting or not accepting his PN.
+   * @post Replied to the Leader, accepting or not accepting its PN.
    *
    * @param collect The collect message sent by the Leader to the Peon.
    */
-  void handle_collect(MMonPaxos *collect);
+  void handle_collect(MonOpRequestRef op);
   /**
    * Handle a response from a Peon to the Leader's collect phase.
    *
@@ -770,7 +785,7 @@ private:
    * knows something we don't and the Leader will have to abort the current
    * proposal in order to retry with the Proposal Number specified by the Peon.
    * It may also occur that the Peon replied with a lower Proposal Number, in
-   * which case we assume it is a reply to an an older value and we'll simply
+   * which case we assume it is a reply to an older value and we'll simply
    * drop it.
    * This function will also check if the Peon replied with an accepted but
    * yet uncommitted value. In this case, if its version is higher than our
@@ -788,7 +803,7 @@ private:
    *
    * @param last The message sent by the Peon to the Leader.
    */
-  void handle_last(MMonPaxos *last);
+  void handle_last(MonOpRequestRef op);
   /**
    * The Recovery Phase timed out, meaning that a significant part of the
    * quorum does not believe we are the Leader, and we thus should trigger new
@@ -841,7 +856,7 @@ private:
    * @pre We are a Peon
    * @pre We are on STATE_ACTIVE
    * @post We are on STATE_UPDATING iif we accept the Leader's proposal
-   * @post We send a reply message to the Leader iif we accept his proposal
+   * @post We send a reply message to the Leader iif we accept its proposal
    *
    * @invariant The received message is an operation of type OP_BEGIN
    *
@@ -849,7 +864,7 @@ private:
    *		  Paxos::begin function
    *
    */
-  void handle_begin(MMonPaxos *begin);
+  void handle_begin(MonOpRequestRef op);
   /**
    * Handle an Accept message sent by a Peon.
    *
@@ -874,7 +889,7 @@ private:
    * @param accept The message sent by the Peons to the Leader during the
    *		   Paxos::handle_begin function
    */
-  void handle_accept(MMonPaxos *accept);
+  void handle_accept(MonOpRequestRef op);
   /**
    * Trigger a fresh election.
    *
@@ -928,7 +943,7 @@ private:
    * @param commit The message sent by the Leader to the Peon during
    *		   Paxos::commit
    */
-  void handle_commit(MMonPaxos *commit);
+  void handle_commit(MonOpRequestRef op);
   /**
    * Extend the system's lease.
    *
@@ -969,10 +984,10 @@ private:
    *
    * @invariant The received message is an operation of type OP_LEASE
    *
-   * @param The message sent by the Leader to the Peon during the
+   * @param lease The message sent by the Leader to the Peon during the
    *	    Paxos::extend_lease function
    */
-  void handle_lease(MMonPaxos *lease);
+  void handle_lease(MonOpRequestRef op);
   /**
    * Account for all the Lease Acks the Leader receives from the Peons.
    *
@@ -989,7 +1004,7 @@ private:
    * @param ack The message sent by a Peon to the Leader during the
    *		Paxos::handle_lease function
    */
-  void handle_lease_ack(MMonPaxos *ack);
+  void handle_lease_ack(MonOpRequestRef op);
   /**
    * Call fresh elections because at least one Peon didn't acked our lease.
    *
@@ -1046,17 +1061,9 @@ private:
   void warn_on_future_time(utime_t t, entity_name_t from);
 
   /**
-   * Queue a new proposal by pushing it at the back of the queue; do not
-   * propose it.
-   *
-   * @param bl The bufferlist to be proposed
-   * @param onfinished The callback to be called once the proposal finishes
+   * Begin proposing the pending_proposal.
    */
-  void queue_proposal(bufferlist& bl, Context *onfinished);
-  /**
-   * Begin proposing the Proposal at the front of the proposals queue.
-   */
-  void propose_queued();
+  void propose_pending();
 
   /**
    * refresh state from store
@@ -1074,7 +1081,8 @@ private:
 public:
   /**
    * @param m A monitor
-   * @param mid A machine id
+   * @param name A name for the paxos service. It serves as the naming space
+   * of the underlying persistent storage for this service.
    */
   Paxos(Monitor *m, const string &name) 
 		 : mon(m),
@@ -1100,7 +1108,7 @@ public:
     return paxos_name;
   }
 
-  void dispatch(PaxosServiceMessage *m);
+  void dispatch(MonOpRequestRef op);
 
   void read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
 				     version_t from, version_t last);
@@ -1141,7 +1149,7 @@ public:
    * quorum, thus automatically assume we are on STATE_RECOVERING, which means
    * we will soon be enrolled into the Leader's collect phase.
    *
-   * @pre There is a Leader, and he's about to start the collect phase.
+   * @pre There is a Leader, and it?s about to start the collect phase.
    * @post We are on STATE_RECOVERING and will soon receive collect phase's 
    *	   messages.
    */
@@ -1174,11 +1182,6 @@ public:
    */
   bool store_state(MMonPaxos *m);
   void _sanity_check_store();
-
-  /**
-   * remove legacy paxos versions from before conversion
-   */
-  void remove_legacy_versions();
 
   /**
    * Helper function to decode a bufferlist into a transaction and append it
@@ -1214,8 +1217,14 @@ public:
    *
    * @param c A callback
    */
-  void wait_for_active(Context *c) {
+  void wait_for_active(MonOpRequestRef op, Context *c) {
+    if (op)
+      op->mark_event("paxos:wait_for_active");
     waiting_for_active.push_back(c);
+  }
+  void wait_for_active(Context *c) {
+    MonOpRequestRef o;
+    wait_for_active(o, c);
   }
 
   /**
@@ -1262,7 +1271,7 @@ public:
    * Check if a given version is readable.
    *
    * A version may not be readable for a myriad of reasons:
-   *  @li the version @v is higher that the last committed version
+   *  @li the version @e v is higher that the last committed version
    *  @li we are not the Leader nor a Peon (election may be on-going)
    *  @li we do not have a committed value yet
    *  @li we do not have a valid lease
@@ -1272,7 +1281,7 @@ public:
    */
   bool is_readable(version_t seen=0);
   /**
-   * Read version @v and store its value in @bl
+   * Read version @e v and store its value in @e bl
    *
    * @param[in] v The version we want to read
    * @param[out] bl The version's value
@@ -1292,9 +1301,15 @@ public:
    *
    * @param onreadable A callback
    */
-  void wait_for_readable(Context *onreadable) {
+  void wait_for_readable(MonOpRequestRef op, Context *onreadable) {
     assert(!is_readable());
+    if (op)
+      op->mark_event("paxos:wait_for_readable");
     waiting_for_readable.push_back(onreadable);
+  }
+  void wait_for_readable(Context *onreadable) {
+    MonOpRequestRef o;
+    wait_for_readable(o, onreadable);
   }
   /**
    * @}
@@ -1328,28 +1343,42 @@ public:
    *
    * @param c A callback
    */
-  void wait_for_writeable(Context *c) {
+  void wait_for_writeable(MonOpRequestRef op, Context *c) {
     assert(!is_writeable());
+    if (op)
+      op->mark_event("paxos:wait_for_writeable");
     waiting_for_writeable.push_back(c);
+  }
+  void wait_for_writeable(Context *c) {
+    MonOpRequestRef o;
+    wait_for_writeable(o, c);
   }
 
   /**
-   * List all queued proposals
+   * Get a transaction to submit operations to propose against
    *
-   * @param out[out] Output Stream onto which we will output the list
-   *		     of queued proposals.
+   * Apply operations to this transaction.  It will eventually be proposed
+   * to paxos.
    */
-  void list_proposals(ostream& out);
+  MonitorDBStore::TransactionRef get_pending_transaction();
+
   /**
-   * Propose a new value to the Leader.
+   * Queue a completion for the pending proposal
    *
-   * This function enables the submission of a new value to the Leader, which
-   * will trigger a new proposal.
-   *
-   * @param bl A bufferlist holding the value to be proposed
-   * @param onfinish A callback to be fired up once we finish the proposal
+   * This completion will get triggered when the pending proposal
+   * transaction commits.
    */
-  bool propose_new_value(bufferlist& bl, Context *onfinished=0);
+  void queue_pending_finisher(Context *onfinished);
+
+  /**
+   * (try to) trigger a proposal
+   *
+   * Tell paxos that it should submit the pending proposal.  Note that if it
+   * is not active (e.g., because it is already in the midst of committing
+   * something) that will be deferred (e.g., until the current round finishes).
+   */
+  bool trigger_propose();
+
   /**
    * Add oncommit to the back of the list of callbacks waiting for us to
    * finish committing.

@@ -11,13 +11,16 @@ Files: doc/*
 Copyright: (c) 2010-2012 New Dream Network and contributors
 License: Creative Commons Attribution-ShareAlike (CC BY-SA)
 
+Files: bin/git-archive-all.sh
+License: GPL3
+
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL2 or later
 
 Files: src/os/btrfs_ioctl.h
 Copyright: Copyright (C) 2007 Oracle.  All rights reserved.
-License: GPL2
+License: GPL2 (see COPYING-GPL2)
 
 Files: src/include/ceph_hash.cc
 Copyright: None
@@ -141,3 +144,13 @@ File: qa/workunits/erasure-code/jquery.js
 Files: qa/workunits/erasure-code/jquery.{flot.categories,flot}.js
   Copyright (c) 2007-2014 IOLA and Ole Laursen.
   Licensed under the MIT license.
+
+Files: src/include/timegm.h
+  Copyright (C) Copyright Howard Hinnant
+  Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
+  License: Boost Software License, Version 1.0
+
+Files: src/msg/async/AsyncConnection.cc, src/msg/simple/Pipe.cc (sigpipe suppression)
+  Copyright (C) 2010 Tomash Brechko.  All rights reserved.
+  License: GPL3
+

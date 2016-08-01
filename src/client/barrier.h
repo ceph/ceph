@@ -15,27 +15,11 @@
 #define BARRIER_H
 
 #include "include/types.h"
-
-#include <string>
-#include <list>
-#include <set>
-#include <map>
 #include <boost/intrusive/list.hpp>
 #define BOOST_ICL_USE_STATIC_BOUNDED_INTERVALS
 #include <boost/icl/interval_set.hpp>
-#include <fstream>
-#include <exception>
-
-using std::list;
-using std::set;
-using std::map;
-using std::fstream;
-
-#include <ext/hash_map>
-
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "common/config.h"
 
 class Client;
 

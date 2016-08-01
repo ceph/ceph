@@ -85,6 +85,9 @@ public:
       pgid.shard = shard_id_t::NO_SHARD;
     }
   }
+
+  void finish_decode() { }
+
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
@@ -144,7 +147,7 @@ private:
   ~MOSDSubOpReply() {}
 
 public:
-  const char *get_type_name() const { return "osd_op_reply"; }
+  const char *get_type_name() const { return "osd_subop_reply"; }
   
   void print(ostream& out) const {
     out << "osd_sub_op_reply(" << reqid

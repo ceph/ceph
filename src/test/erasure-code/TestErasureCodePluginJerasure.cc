@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -15,24 +16,28 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 #include "arch/probe.h"
 #include "arch/intel.h"
+#include "arch/arm.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
+#include "common/config.h"
 #include "gtest/gtest.h"
 
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
+  ErasureCodeProfile profile;
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(-ENOENT, instance.factory("jerasure", parameters,
-                                        &erasure_code, cerr));
+    EXPECT_EQ(-ENOENT, instance.factory("jerasure",
+					g_conf->erasure_code_dir,
+					profile,
+                                        &erasure_code, &cerr));
     EXPECT_FALSE(erasure_code);
   }
   const char *techniques[] = {
@@ -47,11 +52,14 @@ TEST(ErasureCodePlugin, factory)
   };
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
-    parameters["technique"] = *technique;
+    ErasureCodeProfile profile;
+    profile["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("jerasure", parameters,
-                                  &erasure_code, cerr));
-    EXPECT_TRUE(erasure_code);
+    EXPECT_EQ(0, instance.factory("jerasure",
+				  g_conf->erasure_code_dir,
+				  profile,
+                                  &erasure_code, &cerr));
+    EXPECT_TRUE(erasure_code.get());
   }
 }
 
@@ -65,14 +73,14 @@ TEST(ErasureCodePlugin, select)
   int arch_intel_ssse3  = ceph_arch_intel_ssse3;
   int arch_intel_sse3   = ceph_arch_intel_sse3;
   int arch_intel_sse2   = ceph_arch_intel_sse2;
+  int arch_neon		= ceph_arch_neon;
 
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  map<std::string,std::string> parameters;
+  ErasureCodeProfile profile;
   // load test plugins instead of actual plugins to assert the desired side effect
   // happens
-  parameters["jerasure-name"] = "test_jerasure";
-  parameters["directory"] = ".libs";
-  parameters["technique"] = "reed_sol_van";
+  profile["jerasure-name"] = "test_jerasure";
+  profile["technique"] = "reed_sol_van";
 
   // all features are available, load the SSE4 plugin
   {
@@ -82,11 +90,14 @@ TEST(ErasureCodePlugin, select)
     ceph_arch_intel_ssse3  = 1;
     ceph_arch_intel_sse3   = 1;
     ceph_arch_intel_sse2   = 1;
+    ceph_arch_neon	   = 0;
 
     ErasureCodeInterfaceRef erasure_code;
     int sse4_side_effect = -444;
-    EXPECT_EQ(sse4_side_effect, instance.factory("jerasure", parameters,
-                                                 &erasure_code, cerr));
+    EXPECT_EQ(sse4_side_effect, instance.factory("jerasure",
+						 g_conf->erasure_code_dir,
+						 profile,
+                                                 &erasure_code, &cerr));
   }
   // pclmul is missing, load the SSE3 plugin
   {
@@ -96,11 +107,14 @@ TEST(ErasureCodePlugin, select)
     ceph_arch_intel_ssse3  = 1;
     ceph_arch_intel_sse3   = 1;
     ceph_arch_intel_sse2   = 1;
+    ceph_arch_neon	   = 0;
 
     ErasureCodeInterfaceRef erasure_code;
     int sse3_side_effect = -333;
-    EXPECT_EQ(sse3_side_effect, instance.factory("jerasure", parameters,
-                                                 &erasure_code, cerr));
+    EXPECT_EQ(sse3_side_effect, instance.factory("jerasure",
+						 g_conf->erasure_code_dir,
+						 profile,
+                                                 &erasure_code, &cerr));
   }
   // pclmul and sse3 are missing, load the generic plugin
   {
@@ -110,11 +124,31 @@ TEST(ErasureCodePlugin, select)
     ceph_arch_intel_ssse3  = 1;
     ceph_arch_intel_sse3   = 0;
     ceph_arch_intel_sse2   = 1;
+    ceph_arch_neon	   = 0;
 
     ErasureCodeInterfaceRef erasure_code;
     int generic_side_effect = -111;
-    EXPECT_EQ(generic_side_effect, instance.factory("jerasure", parameters,
-                                                 &erasure_code, cerr));
+    EXPECT_EQ(generic_side_effect, instance.factory("jerasure",
+						    g_conf->erasure_code_dir,
+						    profile,
+						    &erasure_code, &cerr));
+  }
+  // neon is set, load the neon plugin
+  {
+    ceph_arch_intel_pclmul = 0;
+    ceph_arch_intel_sse42  = 0;
+    ceph_arch_intel_sse41  = 0;
+    ceph_arch_intel_ssse3  = 0;
+    ceph_arch_intel_sse3   = 0;
+    ceph_arch_intel_sse2   = 0;
+    ceph_arch_neon	   = 1;
+
+    ErasureCodeInterfaceRef erasure_code;
+    int generic_side_effect = -555;
+    EXPECT_EQ(generic_side_effect, instance.factory("jerasure",
+						    g_conf->erasure_code_dir,
+						    profile,
+						    &erasure_code, &cerr));
   }
 
 
@@ -125,6 +159,7 @@ TEST(ErasureCodePlugin, select)
   ceph_arch_intel_ssse3  = arch_intel_ssse3;
   ceph_arch_intel_sse3   = arch_intel_sse3;
   ceph_arch_intel_sse2   = arch_intel_sse2;
+  ceph_arch_neon	 = arch_neon;
 }
 
 TEST(ErasureCodePlugin, sse)
@@ -162,11 +197,10 @@ TEST(ErasureCodePlugin, sse)
   in.push_front(in_ptr);
 
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
-  parameters["technique"] = "reed_sol_van";
-  parameters["k"] = "2";
-  parameters["m"] = "1";
+  ErasureCodeProfile profile;
+  profile["technique"] = "reed_sol_van";
+  profile["k"] = "2";
+  profile["m"] = "1";
   for (vector<string>::iterator sse_variant = sse_variants.begin();
        sse_variant != sse_variants.end();
        ++sse_variant) {
@@ -175,9 +209,11 @@ TEST(ErasureCodePlugin, sse)
     //
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("jerasure_" + *sse_variant, parameters,
-                                  &erasure_code, cerr));
-    EXPECT_TRUE(erasure_code);
+    EXPECT_EQ(0, instance.factory("jerasure_" + *sse_variant,
+				  g_conf->erasure_code_dir,
+				  profile,
+                                  &erasure_code, &cerr));
+    EXPECT_TRUE(erasure_code.get());
 
     //
     // encode
@@ -220,6 +256,10 @@ int main(int argc, char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

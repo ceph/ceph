@@ -7,24 +7,6 @@
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
-void dump(const ceph_file_layout& l, Formatter *f)
-{
-  f->dump_unsigned("stripe_unit", l.fl_stripe_unit);
-  f->dump_unsigned("stripe_count", l.fl_stripe_count);
-  f->dump_unsigned("object_size", l.fl_object_size);
-  if (l.fl_cas_hash)
-    f->dump_unsigned("cas_hash", l.fl_cas_hash);
-  if (l.fl_object_stripe_unit)
-    f->dump_unsigned("object_stripe_unit", l.fl_object_stripe_unit);
-  if (l.fl_pg_pool)
-    f->dump_unsigned("pg_pool", l.fl_pg_pool);
-}
-
-void dump(const ceph_dir_layout& l, Formatter *f)
-{
-  f->dump_unsigned("dir_hash", l.dl_dir_hash);
-}
-
 
 /*
  * frag_info_t
@@ -158,6 +140,31 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
   return out;
 }
 
+/*
+ * quota_info_t
+ */
+void quota_info_t::dump(Formatter *f) const
+{
+  f->dump_int("max_bytes", max_bytes);
+  f->dump_int("max_files", max_files);
+}
+
+void quota_info_t::generate_test_instances(list<quota_info_t *>& ls)
+{
+  ls.push_back(new quota_info_t);
+  ls.push_back(new quota_info_t);
+  ls.back()->max_bytes = 16;
+  ls.back()->max_files = 16;
+}
+
+ostream& operator<<(ostream &out, const quota_info_t &n)
+{
+  out << "quota("
+      << "max_bytes = " << n.max_bytes
+      << " max_files = " << n.max_files
+      << ")";
+  return out;
+}
 
 /*
  * client_writeable_range_t
@@ -204,13 +211,34 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
   return out << r.range.first << '-' << r.range.last << "@" << r.follows;
 }
 
+/*
+ * inline_data_t
+ */
+void inline_data_t::encode(bufferlist &bl) const
+{
+  ::encode(version, bl);
+  if (blp)
+    ::encode(*blp, bl);
+  else
+    ::encode(bufferlist(), bl);
+}
+void inline_data_t::decode(bufferlist::iterator &p)
+{
+  ::decode(version, p);
+  uint32_t inline_len;
+  ::decode(inline_len, p);
+  if (inline_len > 0)
+    ::decode_nohead(inline_len, get_data(), p);
+  else
+    free_data();
+}
 
 /*
  * inode_t
  */
-void inode_t::encode(bufferlist &bl) const
+void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(10, 6, bl);
+  ENCODE_START(13, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -228,7 +256,7 @@ void inode_t::encode(bufferlist &bl) const
   }
 
   ::encode(dir_layout, bl);
-  ::encode(layout, bl);
+  ::encode(layout, bl, features);
   ::encode(size, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
@@ -249,15 +277,20 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(backtrace_version, bl);
   ::encode(old_pools, bl);
   ::encode(max_size_ever, bl);
-  ::encode(inline_version, bl);
   ::encode(inline_data, bl);
+  ::encode(quota, bl);
+
+  ::encode(stray_prior_path, bl);
+
+  ::encode(last_scrub_version, bl);
+  ::encode(last_scrub_stamp, bl);
 
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -313,13 +346,23 @@ void inode_t::decode(bufferlist::iterator &p)
   if (struct_v >= 8)
     ::decode(max_size_ever, p);
   if (struct_v >= 9) {
-    ::decode(inline_version, p);
     ::decode(inline_data, p);
   } else {
-    inline_version = CEPH_INLINE_NONE;
+    inline_data.version = CEPH_INLINE_NONE;
   }
   if (struct_v < 10)
     backtrace_version = 0; // force update backtrace
+  if (struct_v >= 11)
+    ::decode(quota, p);
+
+  if (struct_v >= 12) {
+    ::decode(stray_prior_path, p);
+  }
+
+  if (struct_v >= 13) {
+    ::decode(last_scrub_version, p);
+    ::decode(last_scrub_stamp, p);
+  }
 
   DECODE_FINISH(p);
 }
@@ -338,15 +381,13 @@ void inode_t::dump(Formatter *f) const
   ::dump(dir_layout, f);
   f->close_section();
 
-  f->open_object_section("layout");
-  ::dump(layout, f);
-  f->close_section();
+  f->dump_object("layout", layout);
 
   f->open_array_section("old_pools");
-  vector<int64_t>::const_iterator i = old_pools.begin();
-  while(i != old_pools.end()) {
+  for (compact_set<int64_t>::const_iterator i = old_pools.begin();
+       i != old_pools.end();
+       ++i)
     f->dump_int("pool", *i);
-  }
   f->close_section();
 
   f->dump_unsigned("size", size);
@@ -383,6 +424,8 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("file_data_version", file_data_version);
   f->dump_unsigned("xattr_version", xattr_version);
   f->dump_unsigned("backtrace_version", backtrace_version);
+
+  f->dump_string("stray_prior_path", stray_prior_path);
 }
 
 void inode_t::generate_test_instances(list<inode_t*>& ls)
@@ -396,6 +439,7 @@ void inode_t::generate_test_instances(list<inode_t*>& ls)
 int inode_t::compare(const inode_t &other, bool *divergent) const
 {
   assert(ino == other.ino);
+  *divergent = false;
   if (version == other.version) {
     if (rdev != other.rdev ||
         ctime != other.ctime ||
@@ -404,7 +448,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         gid != other.gid ||
         nlink != other.nlink ||
         memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
-        memcmp(&layout, &other.layout, sizeof(layout)) ||
+        layout != other.layout ||
         old_pools != other.old_pools ||
         size != other.size ||
         max_size_ever != other.max_size_ever ||
@@ -415,9 +459,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
-        !(*const_cast<bufferlist*>(&inline_data) ==
-            *const_cast<bufferlist*>(&other.inline_data)) ||
-        inline_version != other.inline_version ||
+        inline_data != other.inline_data ||
         client_ranges != other.client_ranges ||
         !(dirstat == other.dirstat) ||
         !(rstat == other.rstat) ||
@@ -443,7 +485,7 @@ bool inode_t::older_is_consistent(const inode_t &other) const
   if (max_size_ever < other.max_size_ever ||
       truncate_seq < other.truncate_seq ||
       time_warp_seq < other.time_warp_seq ||
-      inline_version < other.inline_version ||
+      inline_data.version < other.inline_data.version ||
       dirstat.version < other.dirstat.version ||
       rstat.version < other.rstat.version ||
       accounted_rstat.version < other.accounted_rstat.version ||
@@ -458,11 +500,11 @@ bool inode_t::older_is_consistent(const inode_t &other) const
 /*
  * old_inode_t
  */
-void old_inode_t::encode(bufferlist& bl) const
+void old_inode_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(first, bl);
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   ::encode(xattrs, bl);
   ENCODE_FINISH(bl);
 }
@@ -506,25 +548,39 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(version, bl);
   ::encode(snap_purged_thru, bl);
   ::encode(fragstat, bl);
   ::encode(accounted_fragstat, bl);
   ::encode(rstat, bl);
   ::encode(accounted_rstat, bl);
+  ::encode(damage_flags, bl);
+  ::encode(recursive_scrub_version, bl);
+  ::encode(recursive_scrub_stamp, bl);
+  ::encode(localized_scrub_version, bl);
+  ::encode(localized_scrub_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void fnode_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(version, bl);
   ::decode(snap_purged_thru, bl);
   ::decode(fragstat, bl);
   ::decode(accounted_fragstat, bl);
   ::decode(rstat, bl);
   ::decode(accounted_rstat, bl);
+  if (struct_v >= 3) {
+    ::decode(damage_flags, bl);
+  }
+  if (struct_v >= 4) {
+    ::decode(recursive_scrub_version, bl);
+    ::decode(recursive_scrub_stamp, bl);
+    ::decode(localized_scrub_version, bl);
+    ::decode(localized_scrub_stamp, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -613,20 +669,22 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 /*
  * session_info_t
  */
-void session_info_t::encode(bufferlist& bl) const
+void session_info_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 3, bl);
-  ::encode(inst, bl);
+  ENCODE_START(6, 3, bl);
+  ::encode(inst, bl, features);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
   ::encode(client_metadata, bl);
+  ::encode(completed_flushes, bl);
+  ::encode(auth_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void session_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, p);
   ::decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -644,6 +702,12 @@ void session_info_t::decode(bufferlist::iterator& p)
   used_inos.clear();
   if (struct_v >= 4) {
     ::decode(client_metadata, p);
+  }
+  if (struct_v >= 5) {
+    ::decode(completed_flushes, p);
+  }
+  if (struct_v >= 6) {
+    ::decode(auth_name, p);
   }
   DECODE_FINISH(p);
 }
@@ -932,8 +996,9 @@ void mds_load_t::generate_test_instances(list<mds_load_t*>& ls)
  * cap_reconnect_t
  */
 void cap_reconnect_t::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode_old(bl); // extract out when something changes
+  ::encode(snap_follows, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -947,6 +1012,8 @@ void cap_reconnect_t::encode_old(bufferlist& bl) const {
 void cap_reconnect_t::decode(bufferlist::iterator& bl) {
   DECODE_START(1, bl);
   decode_old(bl); // extract out when something changes
+  if (struct_v >= 2)
+    ::decode(snap_follows, bl);
   DECODE_FINISH(bl);
 }
 
@@ -973,3 +1040,73 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.back()->path = "/test/path";
   ls.back()->capinfo.cap_id = 1;
 }
+
+uint64_t MDSCacheObject::last_wait_seq = 0;
+
+void MDSCacheObject::dump(Formatter *f) const
+{
+  f->dump_bool("is_auth", is_auth());
+
+  // Fields only meaningful for auth
+  f->open_object_section("auth_state");
+  {
+    f->open_object_section("replicas");
+    const compact_map<mds_rank_t,unsigned>& replicas = get_replicas();
+    for (compact_map<mds_rank_t,unsigned>::const_iterator i = replicas.begin();
+         i != replicas.end(); ++i) {
+      std::ostringstream rank_str;
+      rank_str << i->first;
+      f->dump_int(rank_str.str().c_str(), i->second);
+    }
+    f->close_section();
+  }
+  f->close_section(); // auth_state
+
+  // Fields only meaningful for replica
+  f->open_object_section("replica_state");
+  {
+    f->open_array_section("authority");
+    f->dump_int("first", authority().first);
+    f->dump_int("second", authority().second);
+    f->close_section();
+    f->dump_unsigned("replica_nonce", get_replica_nonce());
+  }
+  f->close_section();  // replica_state
+
+  f->dump_int("auth_pins", auth_pins);
+  f->dump_int("nested_auth_pins", nested_auth_pins);
+  f->dump_bool("is_frozen", is_frozen());
+  f->dump_bool("is_freezing", is_freezing());
+
+#ifdef MDS_REF_SET
+    f->open_object_section("pins");
+    for(std::map<int, int>::const_iterator it = ref_map.begin();
+        it != ref_map.end(); ++it) {
+      f->dump_int(pin_name(it->first), it->second);
+    }
+    f->close_section();
+#endif
+    f->dump_int("nref", ref);
+}
+
+/*
+ * Use this in subclasses when printing their specialized
+ * states too.
+ */
+void MDSCacheObject::dump_states(Formatter *f) const
+{
+  if (state_test(STATE_AUTH)) f->dump_string("state", "auth");
+  if (state_test(STATE_DIRTY)) f->dump_string("state", "dirty");
+  if (state_test(STATE_NOTIFYREF)) f->dump_string("state", "notifyref");
+  if (state_test(STATE_REJOINING)) f->dump_string("state", "rejoining");
+  if (state_test(STATE_REJOINUNDEF))
+    f->dump_string("state", "rejoinundef");
+}
+
+
+ostream& operator<<(ostream &out, const mds_role_t &role)
+{
+  out << role.fscid << ":" << role.rank;
+  return out;
+}
+

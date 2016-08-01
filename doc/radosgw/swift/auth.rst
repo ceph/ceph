@@ -7,7 +7,7 @@ Swift API requests that require authentication must contain an
 The token may be retrieved from RADOS Gateway, or from another authenticator.
 To obtain a token from RADOS Gateway, you must create a user. For example:: 
 
-	sudo radosgw-admin user create --uid="{username}" --displayname="{Display Name}"
+	sudo radosgw-admin user create --uid="{username}" --display-name="{Display Name}"
 
 For details on RADOS Gateway administration, see `radosgw-admin`_. 
 

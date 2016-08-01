@@ -24,27 +24,17 @@ using std::map;
 using std::list;
 using std::set;
 
-class MDS;
+class MDSRank;
 class Session;
-class CDir;
 class CInode;
 class CDentry;
-class EMetaBlob;
 struct SnapRealm;
 
 class Message;
 
-class MDiscover;
-class MDiscoverReply;
-class MCacheExpire;
-class MDirUpdate;
-class MDentryUnlink;
 class MLock;
 
-class MClientRequest;
-
 class Capability;
-class LogSegment;
 
 class SimpleLock;
 class ScatterLock;
@@ -57,11 +47,11 @@ typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 class Locker {
 private:
-  MDS *mds;
+  MDSRank *mds;
   MDCache *mdcache;
  
  public:
-  Locker(MDS *m, MDCache *c) : mds(m), mdcache(c) {}  
+  Locker(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {}  
 
   SimpleLock *get_lock(int lock_type, MDSCacheObjectInfo &info);
   
@@ -82,7 +72,7 @@ protected:
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
-                                    ceph_file_layout **layout);
+                                    file_layout_t **layout);
 
   bool acquire_locks(MDRequestRef& mdr,
 		     set<SimpleLock*> &rdlocks,
@@ -203,7 +193,7 @@ public:
   void handle_client_caps(class MClientCaps *m);
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
-  void _do_null_snapflush(CInode *head_in, client_t client, snapid_t follows);
+  void _do_null_snapflush(CInode *head_in, client_t client);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0);
   void handle_client_cap_release(class MClientCapRelease *m);

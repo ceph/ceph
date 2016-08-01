@@ -20,7 +20,7 @@
 #include "detailed_stat_collector.h"
 #include "distribution.h"
 #include "global/global_init.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "testfilestore_backend.h"
 #include "common/perf_counters.h"
 
@@ -29,10 +29,10 @@ using namespace std;
 
 struct MorePrinting : public DetailedStatCollector::AdditionalPrinting {
   CephContext *cct;
-  MorePrinting(CephContext *cct) : cct(cct) {}
+  explicit MorePrinting(CephContext *cct) : cct(cct) {}
   void operator()(std::ostream *out) {
     bufferlist bl;
-    Formatter *f = new_formatter("json-pretty");
+    Formatter *f = Formatter::create("json-pretty");
     cct->get_perfcounters_collection()->dump_formatted(f, 0);
     f->flush(bl);
     delete f;
@@ -134,6 +134,7 @@ int main(int argc, char **argv)
 
   FileStore fs(vm["filestore-path"].as<string>(),
 	       vm["journal-path"].as<string>());
+  ObjectStore::Sequencer osr(__func__);
 
   if (fs.mkfs() < 0) {
     cout << "mkfs failed" << std::endl;
@@ -168,17 +169,16 @@ int main(int argc, char **argv)
   }
 
   for (uint64_t num = 0; num < vm["num-colls"].as<unsigned>(); ++num) {
-    stringstream coll;
-    coll << "collection_" << num;
-    std::cout << "collection " << coll.str() << std::endl;
+    spg_t pgid(pg_t(num, 0), shard_id_t::NO_SHARD);
+    std::cout << "collection " << pgid << std::endl;
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(coll.str()));
-    fs.apply_transaction(t);
+    t.create_collection(coll_t(pgid), 0);
+    fs.apply_transaction(&osr, std::move(t));
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(string("meta")));
-    fs.apply_transaction(t);
+    t.create_collection(coll_t(), 0);
+    fs.apply_transaction(&osr, std::move(t));
   }
 
   vector<ceph::shared_ptr<Bencher> > benchers(
@@ -189,10 +189,10 @@ int main(int argc, char **argv)
     set<string> objects;
     for (uint64_t num = 0; num < vm["num-objects"].as<unsigned>(); ++num) {
       unsigned col_num = num % vm["num-colls"].as<unsigned>();
-      stringstream coll, obj;
-      coll << "collection_" << col_num;
+      spg_t pgid(pg_t(col_num, 0), shard_id_t::NO_SHARD);
+      stringstream obj;
       obj << "obj_" << num << "_bencher_" << (i - benchers.begin());
-      objects.insert(coll.str() + string("/") + obj.str());
+      objects.insert(coll_t(pgid).to_str() + string("/") + obj.str());
     }
     Distribution<
       boost::tuple<string, uint64_t, uint64_t, Bencher::OpType> > *gen = 0;
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
-    (*i)->create();
+    (*i)->create("bencher");
   }
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();

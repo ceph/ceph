@@ -19,14 +19,16 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
+#include "include/ceph_features.h"
+
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 11;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 12;
+  static const int COMPAT_VERSION = 7;
 
 public:
   epoch_t map_epoch;
@@ -51,7 +53,6 @@ public:
   eversion_t old_version;
 
   SnapSet snapset;
-  SnapContext snapc;
 
   // transaction to exec
   bufferlist logbl;
@@ -69,7 +70,7 @@ public:
   map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<hobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
 
   bool first, complete;
 
@@ -85,8 +86,6 @@ public:
   map<string,bufferlist> omap_entries;
   bufferlist omap_header;
 
-  // indicates that we must fix hobject_t encoding
-  bool hobject_incorrect_pool;
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
@@ -101,7 +100,9 @@ public:
   }
 
   virtual void decode_payload() {
-    hobject_incorrect_pool = false;
+    //since we drop incorrect_pools flag, now we only support
+    //version >=7
+    assert (header.version >= 7);
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -128,7 +129,12 @@ public:
     ::decode(old_size, p);
     ::decode(old_version, p);
     ::decode(snapset, p);
-    ::decode(snapc, p);
+
+    if (header.version <= 11) {
+      SnapContext snapc_dont_need;
+      ::decode(snapc_dont_need, p);
+    }
+
     ::decode(logbl, p);
     ::decode(pg_stats, p);
     ::decode(pg_trim_to, p);
@@ -138,29 +144,15 @@ public:
     ::decode(data_subset, p);
     ::decode(clone_subsets, p);
     
-    if (header.version >= 2) {
-      ::decode(first, p);
-      ::decode(complete, p);
-    }
-    if (header.version >= 3)
-      ::decode(oloc, p);
-    if (header.version >= 4) {
-      ::decode(data_included, p);
-      recovery_info.decode(p, pgid.pool());
-      ::decode(recovery_progress, p);
-      ::decode(current_progress, p);
-    }
-    if (header.version >= 5)
-      ::decode(omap_entries, p);
-    if (header.version >= 6)
-      ::decode(omap_header, p);
-
-    if (header.version < 7) {
-      // Handle hobject_t format change
-      if (!poid.is_max() && poid.pool == -1)
-	poid.pool = pgid.pool();
-      hobject_incorrect_pool = true;
-    }
+    ::decode(first, p);
+    ::decode(complete, p);
+    ::decode(oloc, p);
+    ::decode(data_included, p);
+    recovery_info.decode(p, pgid.pool());
+    ::decode(recovery_progress, p);
+    ::decode(current_progress, p);
+    ::decode(omap_entries, p);
+    ::decode(omap_header, p);
 
     if (header.version >= 8) {
       ::decode(new_temp_oid, p);
@@ -186,6 +178,8 @@ public:
     }
   }
 
+  void finish_decode() { }
+
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
@@ -208,7 +202,13 @@ public:
     ::encode(old_size, payload);
     ::encode(old_version, payload);
     ::encode(snapset, payload);
-    ::encode(snapc, payload);
+
+    if ((features & CEPH_FEATURE_OSDSUBOP_NO_SNAPCONTEXT) == 0) {
+      header.version = 11;
+      SnapContext dummy_snapc;
+      ::encode(dummy_snapc, payload);
+    }
+
     ::encode(logbl, payload);
     ::encode(pg_stats, payload);
     ::encode(pg_trim_to, payload);
@@ -224,7 +224,7 @@ public:
     ::encode(complete, payload);
     ::encode(oloc, payload);
     ::encode(data_included, payload);
-    ::encode(recovery_info, payload);
+    ::encode(recovery_info, payload, features);
     ::encode(recovery_progress, payload);
     ::encode(current_progress, payload);
     ::encode(omap_entries, payload);
@@ -251,8 +251,7 @@ public:
       acks_wanted(aw),
       old_exists(false), old_size(0),
       version(v),
-      first(false), complete(false),
-      hobject_incorrect_pool(false) {
+      first(false), complete(false) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
@@ -271,7 +270,7 @@ public:
     if (complete)
       out << " complete";
     out << " v " << version
-	<< " snapset=" << snapset << " snapc=" << snapc;    
+	<< " snapset=" << snapset;
     if (!data_subset.empty()) out << " subset " << data_subset;
     if (updated_hit_set_history)
       out << ", has_updated_hit_set_history";

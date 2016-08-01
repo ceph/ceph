@@ -92,7 +92,7 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   env.set("SERVER_PORT", port_buf);
 }
 
-int RGWLoadGenIO::send_status(const char *status, const char *status_name)
+int RGWLoadGenIO::send_status(int status, const char *status_name)
 {
   return 0;
 }

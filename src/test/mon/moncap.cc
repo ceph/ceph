@@ -177,7 +177,7 @@ TEST(MonCap, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.is_allow_all());
-  ASSERT_TRUE(cap.is_capable(NULL, entity_name_t::CLIENT(0),
+  ASSERT_TRUE(cap.is_capable(NULL, EntityName(),
 			     "foo", "asdf", map<string,string>(), true, true, true));
 
   MonCap cap2;
@@ -191,7 +191,8 @@ TEST(MonCap, ProfileOSD) {
   bool r = cap.parse("allow profile osd", NULL);
   ASSERT_TRUE(r);
 
-  entity_name_t name = entity_name_t::OSD(123);
+  EntityName name;
+  name.from_str("osd.123");
   map<string,string> ca;
 
   ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, false, false));

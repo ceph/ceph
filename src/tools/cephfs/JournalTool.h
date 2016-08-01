@@ -12,16 +12,17 @@
  */
 
 #include "MDSUtility.h"
+#include "RoleSelector.h"
 #include <vector>
 
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
+#include "mds/events/EMetaBlob.h"
 
 #include "include/rados/librados.hpp"
 
 #include "JournalFilter.h"
 
-class EMetaBlob;
 class JournalScanner;
 
 
@@ -32,7 +33,10 @@ class JournalScanner;
 class JournalTool : public MDSUtility
 {
   private:
-    int rank;
+    MDSRoleSelector role_selector;
+    // Bit hacky, use this `rank` member to control behaviour of the
+    // various main_ functions.
+    mds_rank_t rank;
 
     // Entry points
     int main_journal(std::vector<const char*> &argv);
@@ -45,7 +49,7 @@ class JournalTool : public MDSUtility
     // Journal operations
     int journal_inspect();
     int journal_export(std::string const &path, bool import);
-    int journal_reset();
+    int journal_reset(bool hard);
 
     // Header operations
     int header_set();
@@ -55,10 +59,21 @@ class JournalTool : public MDSUtility
     librados::IoCtx io;
 
     // Metadata backing store manipulation
+    int scavenge_dentries(
+        EMetaBlob const &metablob,
+        bool const dry_run,
+        std::set<inodeno_t> *consumed_inos);
     int replay_offline(EMetaBlob const &metablob, bool const dry_run);
 
     // Splicing
     int erase_region(JournalScanner const &jp, uint64_t const pos, uint64_t const length);
+
+    // Backing store helpers
+    void encode_fullbit_as_inode(
+        const EMetaBlob::fullbit &fb,
+        const bool bare,
+        bufferlist *out_bl);
+    int consume_inos(const std::set<inodeno_t> &inos);
 
   public:
     void usage();

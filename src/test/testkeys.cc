@@ -2,6 +2,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/config.h"
+#include "common/debug.h"
 
 #define AES_KEY_LEN	16
 

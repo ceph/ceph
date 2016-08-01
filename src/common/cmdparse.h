@@ -17,7 +17,12 @@ class CephContext;
 /* this is handy; can't believe it's not standard */
 #define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
 
-typedef boost::variant<std::string, bool, int64_t, double, std::vector<std::string> > cmd_vartype;
+typedef boost::variant<std::string,
+		       bool,
+		       int64_t,
+		       double,
+		       std::vector<std::string>,
+		       std::vector<int64_t>>  cmd_vartype;
 typedef std::map<std::string, cmd_vartype> cmdmap_t;
 
 void dump_cmd_to_json(ceph::Formatter *f, const std::string& cmd);

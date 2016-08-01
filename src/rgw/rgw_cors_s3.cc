@@ -158,7 +158,7 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
 
 void RGWCORSConfiguration_S3::to_xml(ostream& out) {
   XMLFormatter f;
-  f.open_object_section("CORSConfiguration");
+  f.open_object_section_in_ns("CORSConfiguration", XMLNS_AWS_S3);
   for(list<RGWCORSRule>::iterator it = rules.begin();
       it != rules.end(); ++it) {
     (static_cast<RGWCORSRule_S3 &>(*it)).to_xml(f);

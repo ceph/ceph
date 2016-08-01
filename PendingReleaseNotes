@@ -1,26 +1,54 @@
-v0.89
------
+>= 11.0.0
+------
 
-* New ability to list all objects from all namespaces can fail or return
-  incomplete results when not all OSDs have been upgraded.  Features
-  rados --all ls, rados cppool, rados export, rados cache-flush-evict-all
-  and rados cache-try-flush-evict-all can also fail or return incomplete
-  results.
+* The list of monitor hosts/addresses for building the monmap can now be
+  obtained from DNS SRV records. The service name used in when querying the DNS 
+  is defined in the "mon_dns_srv_name" config option, which defaults to
+  "ceph-mon".
 
+* The 'osd class load list' config option is a list of object class names that
+  the OSD is permitted to load (or '*' for all classes). By default it
+  contains all existing in-tree classes for backwards compatibility.
 
-v0.90
------
+* The 'osd class default list' config option is a list of object class names
+  (or '*' for all classes) that clients may invoke having only the '*', 'x',
+  'class-read', or 'class-write' capabilities. By default it contains all
+  existing in-tree classes for backwards compatibility. Invoking classes not
+  listed in 'osd class default list' requires a capability naming the class
+  (e.g. 'allow class foo').
 
-* Previously, the formatted output of 'ceph pg stat -f ...' was a full
-  pg dump that included all metadata about all PGs in the system.  It
-  is now a concise summary of high-level PG stats, just like the
-  unformatted 'ceph pg stat' command.
+11.0.0
+------
 
+* If you have manually specified the monitor user rocksdb via the
+  ``mon keyvaluedb = rocksdb`` option, you will need to manually add a file
+  to the mon data directory to preserve this option::
 
+     echo rocksdb > /var/lib/ceph/mon/ceph-`hostname`/kv_backend
 
+  New monitors will now use rocksdb by default, but if that file is
+  not present, existing monitors will use leveldb.  The ``mon keyvaluedb`` option
+  now only affects the backend chosen when a monitor is created.
 
-* All JSON dumps of floating point values were incorrecting surrounding the
-  value with quotes.  These quotes have been removed.  Any consumer of structured
-  JSON output that was consuming the floating point values was previously having
-  to interpret the quoted string and will most likely need to be fixed to take
-  the unquoted number.
+* The 'osd crush initial weight' option allows you to specify a CRUSH
+  weight for a newly added OSD.  Previously a value of 0 (the default)
+  meant that we should use the size of the OSD's store to weight the
+  new OSD.  Now, a value of 0 means it should have a weight of 0, and
+  a negative value (the new default) means we should automatically
+  weight the OSD based on its size.  If your configuration file
+  explicitly specifies a value of 0 for this option you will need to
+  change it to a negative value (e.g., -1) to preserve the current
+  behavior.
+
+* The `osd crush location` config option is no longer supported.  Please
+  update your ceph.conf to use the `crush location` option instead.
+
+* The static libraries are not included by the debian development packages
+  (lib*-dev) any more. As it is not required per debian packaging policy.
+  And their shared versions are packaged as before.
+
+* The libtool pseudo-libraries (.la files) are not included by the debian
+  development packages (lib*-dev) any more. As it is unneeded, and per
+  https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
+  https://www.debian.org/doc/manuals/maint-guide/advanced.en.html,
+  we should remove them.

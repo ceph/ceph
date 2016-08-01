@@ -28,32 +28,22 @@ You should have a full copy of the Ceph repository.
 Install the Required Tools
 --------------------------
 
-If you do not have Sphinx and its dependencies installed, a list of
-dependencies will appear in the output. Install the dependencies on
-your system, and then execute the build.
+To build the Ceph documentation, some dependencies are required.
+To know what packages are needed, you can launch this command::
 
-To run Sphinx, at least the following are required:
+    cd ceph
+    admin/build-doc
 
-- ``python-dev``
-- ``python-pip``
-- ``python-virtualenv``
-- ``libxml2-dev``
-- ``libxslt-dev``
-- ``doxygen``
-- ``ditaa``
-- ``graphviz``
-
-Execute ``apt-get install`` for each dependency that isn't installed
-on your host.::
-
-	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant
-
+If dependencies are missing, the command above will fail
+with a message that suggests you a command to install all
+missing dependencies.
 
 
 Build the Documents
 -------------------
 
-Once you have installed all the dependencies, execute the build::
+Once you have installed all the dependencies, execute the build (the
+same command as above)::
 
 	cd ceph
 	admin/build-doc

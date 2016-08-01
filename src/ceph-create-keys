@@ -7,11 +7,27 @@ import os
 import subprocess
 import sys
 import time
+import pwd
+import grp
 
 
 LOG = logging.getLogger(os.path.basename(sys.argv[0]))
 
 QUORUM_STATES = ['leader', 'peon']
+
+def get_ceph_uid():
+    try:
+        uid = pwd.getpwnam('ceph').pw_uid
+    except:
+        uid = -1
+    return uid
+
+def get_ceph_gid():
+    try:
+        gid = grp.getgrnam('ceph').gr_gid
+    except:
+        gid = -1
+    return gid
 
 def wait_for_quorum(cluster, mon_id):
     while True:
@@ -68,10 +84,13 @@ def get_key(cluster, mon_id):
     pathdir = os.path.dirname(path)
     if not os.path.exists(pathdir):
         os.makedirs(pathdir)
+        os.chmod(pathdir, 0770)
+        os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
     while True:
         try:
             with file(tmp, 'w') as f:
                 os.fchmod(f.fileno(), 0600)
+                os.fchown(f.fileno(), get_ceph_uid(), get_ceph_gid())
                 LOG.info('Talking to monitor...')
                 returncode = subprocess.call(
                     args=[
@@ -87,7 +106,7 @@ def get_key(cluster, mon_id):
                         'client.admin',
                         'mon', 'allow *',
                         'osd', 'allow *',
-                        'mds', 'allow',
+                        'mds', 'allow *',
                         ],
                     stdout=f,
                     )
@@ -137,11 +156,14 @@ def bootstrap_key(cluster, type_):
     pathdir = os.path.dirname(path)
     if not os.path.exists(pathdir):
         os.makedirs(pathdir)
+        os.chmod(pathdir, 0770)
+        os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
 
     while True:
         try:
             with file(tmp, 'w') as f:
                 os.fchmod(f.fileno(), 0600)
+                os.fchown(f.fileno(), get_ceph_uid(), get_ceph_gid())
                 LOG.info('Talking to monitor...')
                 returncode = subprocess.call(
                     args=args,
@@ -216,6 +238,10 @@ def main():
     bootstrap_key(
         cluster=args.cluster,
         type_='osd',
+        )
+    bootstrap_key(
+        cluster=args.cluster,
+        type_='rgw',
         )
     bootstrap_key(
         cluster=args.cluster,

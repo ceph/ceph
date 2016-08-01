@@ -17,12 +17,7 @@
 
 
 #include "auth/Auth.h"
-
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "common/RWLock.h"
-
-#include "common/Timer.h"
 
 class CephContext;
 struct MAuthReply;
@@ -40,7 +35,7 @@ protected:
   RWLock lock;
 
 public:
-  AuthClientHandler(CephContext *cct_) 
+  explicit AuthClientHandler(CephContext *cct_)
     : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0),
       lock("AuthClientHandler::lock") {}
   virtual ~AuthClientHandler() {}

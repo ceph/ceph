@@ -13,11 +13,18 @@ public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() {}
 
+  int get_params();
+  int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+  bool need_object_expiration() { return true; }
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
   bool need_stats;
+
+  uint64_t get_default_max() const override {
+    return 0;
+  }
 public:
   RGWListBuckets_ObjStore_SWIFT() : need_stats(true) {}
   ~RGWListBuckets_ObjStore_SWIFT() {}
@@ -28,6 +35,7 @@ public:
   void send_response_end();
 
   bool should_get_stats() { return need_stats; }
+  bool supports_account_metadata() { return true; }
 };
 
 class RGWListBucket_ObjStore_SWIFT : public RGWListBucket_ObjStore {
@@ -40,14 +48,17 @@ public:
 
   int get_params();
   void send_response();
+  bool need_container_stats() { return true; }
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
+  map<string, bufferlist> attrs;
 public:
   RGWStatAccount_ObjStore_SWIFT() {
   }
   ~RGWStatAccount_ObjStore_SWIFT() {}
 
+  void execute();
   void send_response();
 };
 
@@ -60,6 +71,8 @@ public:
 };
 
 class RGWCreateBucket_ObjStore_SWIFT : public RGWCreateBucket_ObjStore {
+protected:
+  bool need_metadata_upload() const override { return true; }
 public:
   RGWCreateBucket_ObjStore_SWIFT() {}
   ~RGWCreateBucket_ObjStore_SWIFT() {}
@@ -77,6 +90,7 @@ public:
 };
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
+  string lo_etag;
 public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() {}
@@ -85,22 +99,32 @@ public:
   void send_response();
 };
 
-class RGWPutMetadata_ObjStore_SWIFT : public RGWPutMetadata_ObjStore {
+class RGWPutMetadataAccount_ObjStore_SWIFT : public RGWPutMetadataAccount_ObjStore {
 public:
-  RGWPutMetadata_ObjStore_SWIFT() {}
-  ~RGWPutMetadata_ObjStore_SWIFT() {}
+  RGWPutMetadataAccount_ObjStore_SWIFT() {}
+  ~RGWPutMetadataAccount_ObjStore_SWIFT() {}
 
   int get_params();
   void send_response();
 };
 
-class RGWSetTempUrl_ObjStore_SWIFT : public RGWSetTempUrl_ObjStore {
+class RGWPutMetadataBucket_ObjStore_SWIFT : public RGWPutMetadataBucket_ObjStore {
 public:
-  RGWSetTempUrl_ObjStore_SWIFT() {}
-  ~RGWSetTempUrl_ObjStore_SWIFT() {}
+  RGWPutMetadataBucket_ObjStore_SWIFT() {}
+  ~RGWPutMetadataBucket_ObjStore_SWIFT() {}
 
   int get_params();
   void send_response();
+};
+
+class RGWPutMetadataObject_ObjStore_SWIFT : public RGWPutMetadataObject_ObjStore {
+public:
+  RGWPutMetadataObject_ObjStore_SWIFT() {}
+  ~RGWPutMetadataObject_ObjStore_SWIFT() {}
+
+  int get_params();
+  void send_response();
+  bool need_object_expiration() { return true; }
 };
 
 class RGWDeleteObj_ObjStore_SWIFT : public RGWDeleteObj_ObjStore {
@@ -108,11 +132,15 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() {}
 
+  int get_params();
+  bool need_object_expiration() { return true; }
   void send_response();
 };
 
 class RGWCopyObj_ObjStore_SWIFT : public RGWCopyObj_ObjStore {
   bool sent_header;
+protected:
+  void dump_copy_info();
 public:
   RGWCopyObj_ObjStore_SWIFT() : sent_header(false) {}
   ~RGWCopyObj_ObjStore_SWIFT() {}
@@ -147,7 +175,17 @@ public:
   void send_response();
 };
 
-class RGWHandler_ObjStore_SWIFT : public RGWHandler_ObjStore {
+class RGWBulkDelete_ObjStore_SWIFT : public RGWBulkDelete_ObjStore {
+public:
+  RGWBulkDelete_ObjStore_SWIFT() {}
+  ~RGWBulkDelete_ObjStore_SWIFT() {}
+
+  int get_data(std::list<RGWBulkDelete::acct_path_t>& items,
+               bool * is_truncated);
+  void send_response();
+};
+
+class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
 protected:
   virtual bool is_acl_op() {
@@ -156,29 +194,31 @@ protected:
 
   static int init_from_header(struct req_state *s);
 public:
-  RGWHandler_ObjStore_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_SWIFT() {}
+  RGWHandler_REST_SWIFT() {}
+  virtual ~RGWHandler_REST_SWIFT() {}
 
-  int validate_bucket_name(const string& bucket);
+  static int validate_bucket_name(const string& bucket);
 
-  int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   int authorize();
+  int postauth_init();
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
-class RGWHandler_ObjStore_Service_SWIFT : public RGWHandler_ObjStore_SWIFT {
+class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   RGWOp *op_get();
   RGWOp *op_head();
   RGWOp *op_post();
+  RGWOp *op_delete();
 public:
-  RGWHandler_ObjStore_Service_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_Service_SWIFT() {}
+  RGWHandler_REST_Service_SWIFT() {}
+  virtual ~RGWHandler_REST_Service_SWIFT() {}
 };
 
-class RGWHandler_ObjStore_Bucket_SWIFT : public RGWHandler_ObjStore_SWIFT {
+class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
@@ -192,11 +232,11 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_ObjStore_Bucket_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_Bucket_SWIFT() {}
+  RGWHandler_REST_Bucket_SWIFT() {}
+  virtual ~RGWHandler_REST_Bucket_SWIFT() {}
 };
 
-class RGWHandler_ObjStore_Obj_SWIFT : public RGWHandler_ObjStore_SWIFT {
+class RGWHandler_REST_Obj_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
@@ -210,9 +250,10 @@ protected:
   RGWOp *op_post();
   RGWOp *op_copy();
   RGWOp *op_options();
+
 public:
-  RGWHandler_ObjStore_Obj_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_Obj_SWIFT() {}
+  RGWHandler_REST_Obj_SWIFT() {}
+  virtual ~RGWHandler_REST_Obj_SWIFT() {}
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
@@ -220,10 +261,7 @@ public:
   RGWRESTMgr_SWIFT() {}
   virtual ~RGWRESTMgr_SWIFT() {}
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
-    return this;
-  }
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler_REST *get_handler(struct req_state *s);
 };
 
 #endif
