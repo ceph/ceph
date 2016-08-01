@@ -22,6 +22,8 @@
 #include "include/utime.h"
 #include "include/small_encoding.h"
 #include "common/hobject.h"
+#include "compressor/Compressor.h"
+#include "common/Checksummer.h"
 
 namespace ceph {
   class Formatter;
@@ -273,76 +275,13 @@ struct bluestore_blob_t {
   };
   static string get_flags_string(unsigned flags);
 
-  enum CSumType {
-    CSUM_NONE = 0,
-    CSUM_XXHASH32 = 1,
-    CSUM_XXHASH64 = 2,
-    CSUM_CRC32C = 3,
-    CSUM_CRC32C_16 = 4, // low 16 bits of crc32c
-    CSUM_CRC32C_8 = 5,  // low 8 bits of crc32c
-    CSUM_MAX,
-  };
-  static const char *get_csum_type_string(unsigned t) {
-    switch (t) {
-    case CSUM_NONE: return "none";
-    case CSUM_XXHASH32: return "xxhash32";
-    case CSUM_XXHASH64: return "xxhash64";
-    case CSUM_CRC32C: return "crc32c";
-    case CSUM_CRC32C_16: return "crc32c_16";
-    case CSUM_CRC32C_8: return "crc32c_8";
-    default: return "???";
-    }
-  }
-  static int get_csum_string_type(const std::string &s) {
-    if (s == "none")
-      return CSUM_NONE;
-    if (s == "xxhash32")
-      return CSUM_XXHASH32;
-    if (s == "xxhash64")
-      return CSUM_XXHASH64;
-    if (s == "crc32c")
-      return CSUM_CRC32C;
-    if (s == "crc32c_16")
-      return CSUM_CRC32C_16;
-    if (s == "crc32c_8")
-      return CSUM_CRC32C_8;
-    return -EINVAL;
-  }
-
-  enum CompressionAlgorithm {
-    COMP_ALG_NONE = 0,
-    COMP_ALG_SNAPPY = 1,
-    COMP_ALG_ZLIB = 2,
-  };
-
-  static const char * get_comp_alg_name(int a) {
-    switch (a) {
-    case COMP_ALG_NONE: return "none";
-    case COMP_ALG_SNAPPY: return "snappy";
-    case COMP_ALG_ZLIB: return "zlib";
-    default: return "???";
-    }
-  }
-
-  static int get_comp_alg_type(const std::string &s) {
-    if (s == "none")
-      return COMP_ALG_NONE;
-    if (s == "snappy")
-      return COMP_ALG_SNAPPY;
-    if (s == "zlib")
-      return COMP_ALG_ZLIB;
-
-    assert(0 == "invalid compression algorithm");
-    return COMP_ALG_NONE;
-  }
-
   vector<bluestore_pextent_t> extents;///< raw data position on device
   uint64_t sbid = 0;                  ///< shared blob id (if shared)
   uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
 
-  uint8_t csum_type = CSUM_NONE;      ///< CSUM_*
+  uint8_t csum_type = Checksummer::CSUM_NONE;      ///< CSUM_*
   uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
 
   bufferptr csum_data;                ///< opaque vector of csum data
@@ -627,18 +566,8 @@ struct bluestore_blob_t {
       return get_ondisk_length();
     }
   }
+  size_t get_csum_value_size() const;
 
-  size_t get_csum_value_size() const {
-    switch (csum_type) {
-    case CSUM_NONE: return 0;
-    case CSUM_XXHASH32: return 4;
-    case CSUM_XXHASH64: return 8;
-    case CSUM_CRC32C: return 4;
-    case CSUM_CRC32C_16: return 2;
-    case CSUM_CRC32C_8: return 1;
-    default: return 0;
-    }
-  }
   size_t get_csum_count() const {
     size_t vs = get_csum_value_size();
     if (!vs)
@@ -823,7 +752,7 @@ struct bluestore_wal_transaction_t {
 WRITE_CLASS_DENC(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
-  uint8_t type = bluestore_blob_t::COMP_ALG_NONE;
+  uint8_t type = Compressor::COMP_ALG_NONE;
   uint32_t length = 0;
 
   bluestore_compression_header_t() {}
