@@ -101,6 +101,25 @@ bool PaxosService::dispatch(MonOpRequestRef op)
       } else {
 	// delay a bit
 	if (!proposal_timer) {
+	  /**
+	   * Callback class used to propose the pending value once the proposal_timer
+	   * fires up.
+	   */
+	  class C_Propose : public Context {
+	    PaxosService *ps;
+	  public:
+	    explicit C_Propose(PaxosService *p) : ps(p) { }
+	    void finish(int r) {
+	      ps->proposal_timer = 0;
+	      if (r >= 0)
+		ps->propose_pending();
+	      else if (r == -ECANCELED || r == -EAGAIN)
+		return;
+	      else
+		assert(0 == "bad return value for C_Propose");
+	    }
+	  };
+
 	  proposal_timer = new C_Propose(this);
 	  dout(10) << " setting proposal_timer " << proposal_timer << " with delay of " << delay << dendl;
 	  mon->timer.add_event_after(delay, proposal_timer);
@@ -198,6 +217,30 @@ void PaxosService::propose_pending()
 
   // apply to paxos
   proposing = true;
+  /**
+   * Callback class used to mark us as active once a proposal finishes going
+   * through Paxos.
+   *
+   * We should wake people up *only* *after* we inform the service we
+   * just went active. And we should wake people up only once we finish
+   * going active. This is why we first go active, avoiding to wake up the
+   * wrong people at the wrong time, such as waking up a C_RetryMessage
+   * before waking up a C_Active, thus ending up without a pending value.
+   */
+  class C_Committed : public Context {
+    PaxosService *ps;
+  public:
+    explicit C_Committed(PaxosService *p) : ps(p) { }
+    void finish(int r) {
+      ps->proposing = false;
+      if (r >= 0)
+	ps->_active();
+      else if (r == -ECANCELED || r == -EAGAIN)
+	return;
+      else
+	assert(0 == "bad return value for C_Committed");
+    }
+  };
   paxos->queue_pending_finisher(new C_Committed(this));
   paxos->trigger_propose();
 }
@@ -253,6 +296,23 @@ void PaxosService::_active()
   }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
+    /**
+     * Callback used to make sure we call the PaxosService::_active function
+     * whenever a condition is fulfilled.
+     *
+     * This is used in multiple situations, from waiting for the Paxos to commit
+     * our proposed value, to waiting for the Paxos to become active once an
+     * election is finished.
+     */
+    class C_Active : public Context {
+      PaxosService *svc;
+    public:
+      explicit C_Active(PaxosService *s) : svc(s) {}
+      void finish(int r) {
+	if (r >= 0)
+	  svc->_active();
+      }
+    };
     wait_for_active_ctx(new C_Active(this));
     return;
   }
