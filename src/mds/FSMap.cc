@@ -541,7 +541,14 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
       continue;
     }
 
-    if ((info.standby_for_rank == role.rank && info.standby_for_fscid == role.fscid)
+    // The mds_info_t may or may not tell us exactly which filesystem
+    // the standby_for_rank refers to: lookup via legacy_client_fscid
+    mds_role_t target_role = {
+      info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
+        legacy_client_fscid : info.standby_for_fscid,
+      info.standby_for_rank};
+
+    if ((target_role.rank == role.rank && target_role.fscid == role.fscid)
         || (name.length() && info.standby_for_name == name)) {
       // It's a named standby for *me*, use it.
       return gid;
