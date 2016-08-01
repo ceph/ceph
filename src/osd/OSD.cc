@@ -6268,12 +6268,6 @@ void OSD::_dispatch(Message *m)
   assert(osd_lock.is_locked());
   dout(20) << "_dispatch " << m << " " << *m << dendl;
 
-  logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
-  logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
-  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
-  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
-
   switch (m->get_type()) {
 
     // -- don't need lock --
@@ -6323,11 +6317,6 @@ void OSD::_dispatch(Message *m)
       dispatch_op(op);
     }
   }
-
-  logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
-  logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
-
 }
 
 void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
