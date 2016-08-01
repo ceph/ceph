@@ -10,7 +10,7 @@
 
 struct mg_connection;
 
-class RGWMongoose : public RGWStreamIOEngine,
+class RGWCivetWeb : public RGWStreamIOEngine,
                     private RGWStreamIOFacade
 {
   RGWEnv env;
@@ -31,21 +31,23 @@ class RGWMongoose : public RGWStreamIOEngine,
 public:
   void init_env(CephContext *cct);
 
-  int write_data(const char *buf, int len);
-  int read_data(char *buf, int len);
+  int write_data(const char *buf, int len) override;
+  int read_data(char *buf, int len) override;
 
-  int send_status(int status, const char *status_name);
-  int send_100_continue();
-  int complete_header();
-  int complete_request();
-  int send_content_length(uint64_t len);
+  int send_status(int status, const char *status_name) override;
+  int send_100_continue() override;
+  int send_content_length(uint64_t len) override;
+  int complete_header() override;
+  int complete_request() override;
+
+  void flush() override;
 
   RGWEnv& get_env() override {
     return env;
   }
 
-  RGWMongoose(mg_connection *_conn, int _port);
-  RGWMongoose(const RGWMongoose& rhs)
+  RGWCivetWeb(mg_connection *_conn, int _port);
+  RGWCivetWeb(const RGWCivetWeb& rhs)
     : RGWStreamIOFacade(this),
       env(rhs.env),
       conn(rhs.conn),

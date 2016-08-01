@@ -19,7 +19,7 @@ static int civetweb_callback(struct mg_connection* conn) {
     OpsLogSocket* olog = pe->olog;
 
     RGWRequest req(store->get_new_req_id());
-    RGWMongoose real_client_io(conn, pe->port);
+    RGWCivetWeb real_client_io(conn, pe->port);
     RGWStreamIOLegacyWrapper client_io(&real_client_io);
 
     int ret = process_request(pe->store, rest, &req, &client_io, olog);
