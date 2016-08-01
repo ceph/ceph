@@ -121,7 +121,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   version_t keys_ver = mon->key_server.get_ver();
   if (version == keys_ver)
     return;
-  assert(version >= keys_ver);
+  assert(version > keys_ver);
 
   version_t latest_full = get_version_latest_full();
 
@@ -721,7 +721,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       ::decode(keyring, iter);
     } catch (const buffer::error &ex) {
       ss << "error decoding keyring" << " " << ex.what();
-      rs = err;
+      err = -EINVAL;
       goto done;
     }
     import_keyring(keyring);
