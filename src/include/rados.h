@@ -474,11 +474,16 @@ enum {
 	CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE = 32,
 	CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED = 64,
 	CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED = 128,
-	CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
-	CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
 };
 
+enum {
+	CEPH_OSD_COMP_FLAG_COMPRESSIBLE = 1,
+	CEPH_OSD_COMP_FLAG_INCOMPRESSIBLE = 2
+};
+
+
 const char *ceph_osd_alloc_hint_flag_name(int f);
+const char *ceph_osd_compress_flag_name(int f);
 
 /*
  * an individual object operation.  each may be accompanied by some data

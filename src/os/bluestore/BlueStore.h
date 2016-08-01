@@ -1569,6 +1569,7 @@ private:
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags,
+	     uint8_t comp_flags,
 	     uint8_t comp_alg,
 	     uint8_t comp_ratio);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
@@ -1579,6 +1580,7 @@ private:
 		uint64_t offset, uint64_t length,
 		bufferlist& bl,
 		uint32_t fadvise_flags,
+		uint8_t comp_flags,
 		uint8_t comp_alg,
 		uint8_t comp_ratio);
   int _touch(TransContext *txc,
