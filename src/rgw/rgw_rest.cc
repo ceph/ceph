@@ -769,8 +769,13 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end,
 
   /* dumping range into temp buffer first, as libfcgi will fail to digest
    * %lld */
-  snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs,
-	   (long long)end, (long long)total);
+
+  if (!total) {
+    snprintf(range_buf, sizeof(range_buf), "*/%lld", (long long)total);
+  } else {
+    snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs,
+		(long long)end, (long long)total);
+  }
   int r = STREAM_IO(s)->print("Content-Range: bytes %s\r\n", range_buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
