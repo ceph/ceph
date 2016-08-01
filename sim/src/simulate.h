@@ -207,7 +207,7 @@ namespace crimson {
 	  while (it != end && *it < start_edge) { ++it; }
 
 	  for (auto time_edge = start_edge + measure_unit;
-	       time_edge < latest_finish;
+	       time_edge <= latest_finish + measure_unit;
 	       time_edge += measure_unit) {
 	    int count = 0;
 	    for (; it != end && *it < time_edge; ++count, ++it) { /* empty */ }
