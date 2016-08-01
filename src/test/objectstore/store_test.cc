@@ -3184,17 +3184,6 @@ public:
 	break;
       }
     }
-    {
-      boost::uniform_int<> u(0, 3);
-      switch (u(*rng)) {
-      case 1:
-	f |= CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE;
-	break;
-      case 2:
-	f |= CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE;
-	break;
-      }
-    }
     return f;
   }
 

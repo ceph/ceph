@@ -434,6 +434,7 @@ public:
 	  __le32 alloc_hint_flags;      //OP_SETALLOCHINT
 	};
 	struct {                        //OP_WRITE
+	  uint8_t comp_flags;
 	  uint8_t comp_alg;
 	  uint8_t comp_ratio;
 	};

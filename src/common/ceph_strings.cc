@@ -77,9 +77,17 @@ const char *ceph_osd_alloc_hint_flag_name(int f)
 		return "shortlived";
 	case CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED:
 		return "longlived";
-	case CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE:
+	default:
+		return "???";
+	}
+}
+
+const char *ceph_osd_compress_flag_name(int f)
+{
+	switch (f) {
+	case CEPH_OSD_COMP_FLAG_COMPRESSIBLE:
 		return "compressible";
-	case CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE:
+	case CEPH_OSD_COMP_FLAG_INCOMPRESSIBLE:
 		return "incompressible";
 	default:
 		return "???";
