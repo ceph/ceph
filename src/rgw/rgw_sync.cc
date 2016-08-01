@@ -693,36 +693,75 @@ public:
   }
 };
 
-class RGWReadSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_meta_sync_info> {
-  RGWMetaSyncEnv *sync_env;
+class RGWReadSyncStatusMarkersCR : public RGWShardCollectCR {
+  static constexpr int MAX_CONCURRENT_SHARDS = 16;
 
+  RGWMetaSyncEnv *env;
+  const int num_shards;
+  int shard_id{0};
+  map<uint32_t, rgw_meta_sync_marker>& markers;
+
+ public:
+  RGWReadSyncStatusMarkersCR(RGWMetaSyncEnv *env, int num_shards,
+                             map<uint32_t, rgw_meta_sync_marker>& markers)
+    : RGWShardCollectCR(env->cct, MAX_CONCURRENT_SHARDS),
+      env(env), num_shards(num_shards), markers(markers)
+  {}
+  bool spawn_next() override;
+};
+
+bool RGWReadSyncStatusMarkersCR::spawn_next()
+{
+  if (shard_id >= num_shards) {
+    return false;
+  }
+  using CR = RGWSimpleRadosReadCR<rgw_meta_sync_marker>;
+  rgw_raw_obj obj{env->store->get_zone_params().log_pool,
+                  env->shard_obj_name(shard_id)};
+  spawn(new CR(env->async_rados, env->store, obj, &markers[shard_id]), false);
+  shard_id++;
+  return true;
+}
+
+class RGWReadSyncStatusCoroutine : public RGWCoroutine {
+  RGWMetaSyncEnv *sync_env;
   rgw_meta_sync_status *sync_status;
 
 public:
   RGWReadSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
-		      rgw_meta_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store,
-									    rgw_raw_obj(_sync_env->store->get_zone_params().log_pool, _sync_env->status_oid()),
-									    &_status->sync_info),
-                                                                            sync_env(_sync_env),
-									    sync_status(_status) {
-
-  }
-
-  int handle_data(rgw_meta_sync_info& data) override;
+                             rgw_meta_sync_status *_status)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), sync_status(_status)
+  {}
+  int operate() override;
 };
 
-int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
+int RGWReadSyncStatusCoroutine::operate()
 {
-  if (retcode == -ENOENT) {
-    return 0;
-  }
-
-  RGWRados *store = sync_env->store;
-  map<uint32_t, rgw_meta_sync_marker>& markers = sync_status->sync_markers;
-  for (int i = 0; i < (int)data.num_shards; i++) {
-    spawn(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store,
-                                                         rgw_raw_obj(store->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
-                                                         &markers[i]), true);
+  reenter(this) {
+    // read sync info
+    using ReadInfoCR = RGWSimpleRadosReadCR<rgw_meta_sync_info>;
+    yield {
+      bool empty_on_enoent = false; // fail on ENOENT
+      rgw_raw_obj obj{sync_env->store->get_zone_params().log_pool,
+                      sync_env->status_oid()};
+      call(new ReadInfoCR(sync_env->async_rados, sync_env->store, obj,
+                          &sync_status->sync_info, empty_on_enoent));
+    }
+    if (retcode < 0) {
+      ldout(sync_env->cct, 4) << "failed to read sync status info with "
+          << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+    // read shard markers
+    using ReadMarkersCR = RGWReadSyncStatusMarkersCR;
+    yield call(new ReadMarkersCR(sync_env, sync_status->sync_info.num_shards,
+                                 sync_status->sync_markers));
+    if (retcode < 0) {
+      ldout(sync_env->cct, 4) << "failed to read sync status markers with "
+          << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+    return set_cr_done();
   }
   return 0;
 }
