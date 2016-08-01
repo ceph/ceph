@@ -447,7 +447,7 @@ int main(int argc, const char **argv)
 
       RGWProcessEnv env = { store, &rest, olog, port };
 
-      fe = new RGWMongooseFrontend(env, config);
+      fe = new RGWCivetWebFrontend(env, config);
     } else if (framework == "loadgen") {
       int port;
       config->get_val("port", 80, &port);

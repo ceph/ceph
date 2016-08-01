@@ -33,7 +33,7 @@ static int civetweb_callback(struct mg_connection* conn) {
   return 1;
 }
 
-int RGWMongooseFrontend::run() {
+int RGWCivetWebFrontend::run() {
   char thread_pool_buf[32];
   snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d",
 	   (int)g_conf->rgw_thread_pool_size);
@@ -78,4 +78,4 @@ int RGWMongooseFrontend::run() {
   }
 
   return 0;
-} /* RGWMongooseFrontend::run */
+} /* RGWCivetWebFrontend::run */
