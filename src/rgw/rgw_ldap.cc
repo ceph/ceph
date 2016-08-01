@@ -37,3 +37,66 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
 
   return std::move(ldap_bindpw);
 }
+
+#if defined(HAVE_OPENLDAP)
+namespace rgw {
+
+  int LDAPHelper::auth(const std::string uid, const std::string pwd) {
+    int ret;
+    std::string filter;
+    if (msad) {
+      filter = "(&(objectClass=user)(sAMAccountName=";
+      filter += uid;
+      filter += "))";
+    } else {
+      /* openldap */
+      filter = "(";
+      filter += dnattr;
+      filter += "=";
+      filter += uid;
+      filter += ")";
+    }
+    char *attrs[] = { const_cast<char*>(dnattr.c_str()), nullptr };
+    LDAPMessage *answer = nullptr, *entry = nullptr;
+    bool once = true;
+
+    lock_guard guard(mtx);
+
+  retry_bind:
+    ret = ldap_search_s(ldap, searchdn.c_str(), LDAP_SCOPE_SUBTREE,
+			filter.c_str(), attrs, 0, &answer);
+    if (ret == LDAP_SUCCESS) {
+      entry = ldap_first_entry(ldap, answer);
+      if (entry) {
+	char *dn = ldap_get_dn(ldap, entry);
+	ret = simple_bind(dn, pwd);
+	if (ret != LDAP_SUCCESS) {
+	  ldout(g_ceph_context, 10)
+	    << __func__ << " simple_bind failed uid=" << uid
+	    << dendl;
+	}
+	ldap_memfree(dn);
+      } else {
+	ldout(g_ceph_context, 12)
+	  << __func__ << " ldap_search_s no user matching uid=" << uid
+	  << dendl;
+	ret = LDAP_NO_SUCH_ATTRIBUTE; // fixup result
+      }
+      ldap_msgfree(answer);
+    } else {
+      ldout(g_ceph_context, 5)
+	<< __func__ << " ldap_search_s error uid=" << uid
+	<< " ldap err=" << ret
+	<< dendl;
+      /* search should never fail--try to rebind */
+      if (once) {
+	rebind();
+	once = false;
+	goto retry_bind;
+      }
+    }
+    return (ret == LDAP_SUCCESS) ? ret : -EACCES;
+  } /* LDAPHelper::auth */
+}
+
+#endif /* defined(HAVE_OPENLDAP) */
