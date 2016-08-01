@@ -5940,7 +5940,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask,
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
-    if (!dn->inode || dn->inode->is_any_caps()) {
+    if (!dn->inode || dn->inode->caps_issued_mask(mask)) {
       // is dn lease valid?
       utime_t now = ceph_clock_now(cct);
       if (dn->lease_mds >= 0 &&
@@ -5959,8 +5959,9 @@ int Client::_lookup(Inode *dir, const string& dname, int mask,
       }
       // dir lease?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
-	if (dn->cap_shared_gen == dir->shared_gen)
-	  goto hit_dn;
+	if (dn->cap_shared_gen == dir->shared_gen &&
+	    (!dn->inode || dn->inode->caps_issued_mask(mask)))
+	      goto hit_dn;
 	if (!dn->inode && (dir->flags & I_COMPLETE)) {
 	  ldout(cct, 10) << "_lookup concluded ENOENT locally for "
 			 << *dir << " dn '" << dname << "'" << dendl;
