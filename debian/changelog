@@ -29,6 +29,7 @@ ceph (0.94.2-1~bpo70+1.fk1) stable; urgency=low
     - multipart upload bug patch ceph http://tracker.ceph.com/issues/15886
     - erasure code bug patch http://tracker.ceph.com/issues/15745
     - civetweb make listen queue configurable https://github.com/agsha/civetweb/pull/2
+    - ceph monitor crash on adding pool to nonexistant root http://tracker.ceph.com/issues/9485
   
  -- Sharath Gururaj <sharath.g@flipkart.com>  Tue, 25 Jul 2016 12:32:34 -0700
    
