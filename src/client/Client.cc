@@ -5208,7 +5208,7 @@ int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
   /* 'name == NULL' means rmsnap */
   if (uid != 0 && name && (dir->mode & S_ISVTX)) {
     InodeRef otherin;
-    r = _lookup(dir, name, &otherin, uid, gid);
+    r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, uid, gid);
     if (r < 0)
       goto out;
     if (dir->uid != (uid_t)uid && otherin->uid != (uid_t)uid)
@@ -5897,8 +5897,8 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask, InodeRef *targe
   return r;
 }
 
-int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
-		    int uid, int gid)
+int Client::_lookup(Inode *dir, const string& dname, int mask,
+		    InodeRef *target, int uid, int gid)
 {
   int r = 0;
   Dentry *dn = NULL;
@@ -5979,7 +5979,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
     }
   }
 
-  r = _do_lookup(dir, dname, 0, target, uid, gid);
+  r = _do_lookup(dir, dname, mask, target, uid, gid);
   goto done;
 
  hit_dn:
@@ -6049,6 +6049,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
   ldout(cct, 10) << "path_walk " << path << dendl;
 
   int symlinks = 0;
+  int caps = 0;
 
   unsigned i=0;
   while (i < path.depth() && cur) {
@@ -6060,8 +6061,9 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
       int r = may_lookup(cur.get(), uid, gid);
       if (r < 0)
 	return r;
+      caps = CEPH_CAP_AUTH_SHARED;
     }
-    int r = _lookup(cur.get(), dname, &next, uid, gid);
+    int r = _lookup(cur.get(), dname, caps, &next, uid, gid);
     if (r < 0)
       return r;
     // only follow trailing symlink if followsym.  always follow
@@ -6245,7 +6247,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   //get through existing parts of path
   filepath path(relpath);
   unsigned int i;
-  int r=0;
+  int r = 0, caps = 0;
   InodeRef cur, next;
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
@@ -6253,8 +6255,9 @@ int Client::mkdirs(const char *relpath, mode_t mode)
       r = may_lookup(cur.get(), uid, gid);
       if (r < 0)
 	break;
+      caps = CEPH_CAP_AUTH_SHARED;
     }
-    r = _lookup(cur.get(), path[i].c_str(), &next, uid, gid);
+    r = _lookup(cur.get(), path[i].c_str(), caps, &next, uid, gid);
     if (r < 0)
       break;
     cur.swap(next);
@@ -9522,7 +9525,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   string dname(name);
   InodeRef in;
 
-  r = _lookup(parent, dname, &in, uid, gid);
+  r = _lookup(parent, dname, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
@@ -10850,7 +10853,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  res = _lookup(dir, name, &otherin, uid, gid);
+  res = _lookup(dir, name, 0, &otherin, uid, gid);
   if (res < 0)
     goto fail;
   req->set_other_inode(otherin.get());
@@ -10913,7 +10916,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  res = _lookup(dir, name, &in, uid, gid);
+  res = _lookup(dir, name, 0, &in, uid, gid);
   if (res < 0)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
@@ -11010,13 +11013,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, &oldin, uid, gid);
+    res = _lookup(fromdir, fromname, 0, &oldin, uid, gid);
     if (res < 0)
       goto fail;
     req->set_old_inode(oldin.get());
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
-    res = _lookup(todir, toname, &otherin, uid, gid);
+    res = _lookup(todir, toname, 0, &otherin, uid, gid);
     if (res != 0 && res != -ENOENT) {
       goto fail;
     } else if (res == 0) {
@@ -11352,7 +11355,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   InodeRef in;
-  int r = _lookup(parent, name, &in, uid, gid);
+  int r = _lookup(parent, name, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
