@@ -6681,7 +6681,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_nlink = in->nlink;
   st->st_uid = in->uid;
   st->st_gid = in->gid;
-  if (in->ctime.sec() > in->mtime.sec()) {
+  if (in->ctime > in->mtime) {
     stat_set_ctime_sec(st, in->ctime.sec());
     stat_set_ctime_nsec(st, in->ctime.nsec());
   } else {
