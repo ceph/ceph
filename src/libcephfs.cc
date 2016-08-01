@@ -1384,7 +1384,7 @@ extern "C" int ceph_ll_lookup_inode(
 
   // Request the parent inode, so that we can look up the name
   Inode *parent;
-  r = (cmount->get_client())->lookup_parent(*inode, &parent);
+  r = (cmount->get_client())->lookup_parent(*inode, perms, &parent);
   if (r && r != -EINVAL) {
     // Unexpected error
     (cmount->get_client())->ll_forget(*inode, 1);
@@ -1394,6 +1394,8 @@ extern "C" int ceph_ll_lookup_inode(
     // and don't try to look up the non-existent dentry.
     return 0;
   }
+  // FIXME: I don't think this works; lookup_parent() returns 0 if the parent
+  // is already in cache
   assert(parent != NULL);
 
   // Finally, get the name (dentry) of the requested inode
