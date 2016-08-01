@@ -247,9 +247,53 @@ int RGWStreamIOBufferingEngine<T>::complete_request()
   return sent + RGWDecoratedStreamIO<T>::complete_request();
 }
 
+
+/* Class that controls and inhibits the process of sending Content-Length HTTP
+ * header where RFC 7230 requests so. The cases worth our attention are 204 No
+ * Content as well as 304 Not Modified. */
 template <typename T>
-RGWStreamIOBufferingEngine<T> add_buffering(T&& t) {
-  return RGWStreamIOBufferingEngine<T>(std::move(t));
+class RGWStreamIOConLenControllingEngine : public RGWDecoratedStreamIO<T> {
+protected:
+  enum class ContentLengthAction {
+    FORWARD,
+    INHIBIT,
+    UNKNOWN
+  } action;
+
+public:
+  template <typename U>
+  RGWStreamIOConLenControllingEngine(U&& decoratee)
+    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+      action(ContentLengthAction::UNKNOWN) {
+  }
+
+  int send_status(const int status, const char* const status_name) override {
+    if (204 == status || 304 == status) {
+      action = ContentLengthAction::INHIBIT;
+    } else {
+      action = ContentLengthAction::FORWARD;
+    }
+
+    return RGWDecoratedStreamIO<T>::send_status(status, status_name);
+  }
+
+  int send_content_length(const uint64_t len) override {
+    switch(action) {
+    case ContentLengthAction::FORWARD:
+      return RGWDecoratedStreamIO<T>::send_content_length(len);
+    case ContentLengthAction::INHIBIT:
+      return 0;
+    case ContentLengthAction::UNKNOWN:
+    default:
+      return -EINVAL;
+    }
+  }
+};
+
+
+template <typename T>
+RGWStreamIOConLenControllingEngine<T> add_conlen_controlling(T&& t) {
+  return RGWStreamIOConLenControllingEngine<T>(std::move(t));
 }
 
 
