@@ -1826,13 +1826,12 @@ static void get_md_sync_status(list<string>& status)
     return;
   }
 
-  ret = sync.read_sync_status();
+  rgw_meta_sync_status sync_status;
+  ret = sync.read_sync_status(&sync_status);
   if (ret < 0) {
     status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
     return;
   }
-
-  const rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
   string status_str;
   switch (sync_status.sync_info.state) {
@@ -6212,13 +6211,12 @@ next:
       return -ret;
     }
 
-    ret = sync.read_sync_status();
+    rgw_meta_sync_status sync_status;
+    ret = sync.read_sync_status(&sync_status);
     if (ret < 0) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
-
-    const rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
     formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);
@@ -6255,7 +6253,7 @@ next:
     }
     ret = sync.init_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }
@@ -6336,7 +6334,7 @@ next:
 
     ret = sync.init_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }
@@ -6384,7 +6382,7 @@ next:
     }
     ret = sync.init_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }

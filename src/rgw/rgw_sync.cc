@@ -321,13 +321,14 @@ int RGWMetaSyncStatusManager::init()
 
   RGWMetaSyncEnv& sync_env = master_log.get_sync_env();
 
-  r = read_sync_status();
+  rgw_meta_sync_status sync_status;
+  r = read_sync_status(&sync_status);
   if (r < 0 && r != -ENOENT) {
     lderr(store->ctx()) << "ERROR: failed to read sync status, r=" << r << dendl;
     return r;
   }
 
-  int num_shards = master_log.get_sync_status().sync_info.num_shards;
+  int num_shards = sync_status.sync_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
     shard_objs[i] = rgw_raw_obj(store->get_zone_params().log_pool, sync_env.shard_obj_name(i));
@@ -1849,13 +1850,24 @@ void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->error_logger = error_logger;
 }
 
-int RGWRemoteMetaLog::read_sync_status()
+int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 {
   if (store->is_meta_master()) {
     return 0;
   }
-
-  return run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
+  // cannot run concurrently with run_sync(), so run in a separate manager
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWMetaSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  ret = crs.run(new RGWReadSyncStatusCoroutine(&sync_env_local, sync_status));
+  http_manager.stop();
+  return ret;
 }
 
 int RGWRemoteMetaLog::init_sync_status()
@@ -1864,30 +1876,29 @@ int RGWRemoteMetaLog::init_sync_status()
     return 0;
   }
 
-  auto& sync_info = sync_status.sync_info;
-  if (!sync_info.num_shards) {
-    rgw_mdlog_info mdlog_info;
-    int r = read_log_info(&mdlog_info);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
-      return r;
-    }
-    sync_info.num_shards = mdlog_info.num_shards;
-    auto cursor = store->period_history->get_current();
-    if (cursor) {
-      sync_info.period = cursor.get_period().get_id();
-      sync_info.realm_epoch = cursor.get_epoch();
-    }
+  rgw_mdlog_info mdlog_info;
+  int r = read_log_info(&mdlog_info);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
+    return r;
+  }
+
+  rgw_meta_sync_info sync_info;
+  sync_info.num_shards = mdlog_info.num_shards;
+  auto cursor = store->period_history->get_current();
+  if (cursor) {
+    sync_info.period = cursor.get_period().get_id();
+    sync_info.realm_epoch = cursor.get_epoch();
   }
 
   return run(new RGWInitSyncStatusCoroutine(&sync_env, sync_info));
 }
 
-int RGWRemoteMetaLog::store_sync_info()
+int RGWRemoteMetaLog::store_sync_info(const rgw_meta_sync_info& sync_info)
 {
   return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store,
                                                            rgw_raw_obj(store->get_zone_params().log_pool, sync_env.status_oid()),
-                                                           sync_status.sync_info));
+                                                           sync_info));
 }
 
 // return a cursor to the period at our sync position
@@ -1961,6 +1972,7 @@ int RGWRemoteMetaLog::run_sync()
     break;
   }
 
+  rgw_meta_sync_status sync_status;
   do {
     if (going_down.read()) {
       ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
@@ -2036,7 +2048,7 @@ int RGWRemoteMetaLog::run_sync()
         }
 
         sync_status.sync_info.state = rgw_meta_sync_info::StateSync;
-        r = store_sync_info();
+        r = store_sync_info(sync_status.sync_info);
         if (r < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to update sync status" << dendl;
           return r;
