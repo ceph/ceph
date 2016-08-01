@@ -1501,6 +1501,8 @@ private:
     unsigned fadvise_flags = 0;  ///< write flags
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
+    CompressorRef compressor;    ///< Ref to compression engine if any
+    float comp_ratio = 0;	 ///< desired max compress ratio(%)
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
 
@@ -1555,7 +1557,9 @@ private:
 	     OnodeRef& o,
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
-	     uint32_t fadvise_flags);
+	     uint32_t fadvise_flags,
+	     uint8_t comp_alg,
+	     uint8_t comp_ratio);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
   int _do_write(TransContext *txc,
@@ -1563,7 +1567,9 @@ private:
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
 		bufferlist& bl,
-		uint32_t fadvise_flags);
+		uint32_t fadvise_flags,
+		uint8_t comp_alg,
+		uint8_t comp_ratio);
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o);

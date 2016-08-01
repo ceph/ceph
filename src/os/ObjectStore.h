@@ -433,6 +433,10 @@ public:
 	struct {
 	  __le32 alloc_hint_flags;      //OP_SETALLOCHINT
 	};
+	struct {                        //OP_WRITE
+	  uint8_t comp_alg;
+	  uint8_t comp_ratio;
+	};
       };
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
