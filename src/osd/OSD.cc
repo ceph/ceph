@@ -6874,8 +6874,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     osdmap->get_all_osds(old);
     for (set<int>::iterator p = old.begin(); p != old.end(); ++p) {
       if (*p != whoami &&
-	  osdmap->have_inst(*p) &&                        // in old map
-	  (!newmap->exists(*p) || !newmap->is_up(*p))) {  // but not the new one
+	  osdmap->have_inst(*p) && // in old map
+	  !newmap->is_up(*p)) {    // but not the new one
         if (!waited_for_reservations) {
           service.await_reserved_maps();
           waited_for_reservations = true;
@@ -7332,7 +7332,7 @@ void OSD::activate_map()
     }
   } else {
     if (service.recovery_is_paused()) {
-      dout(1) << "unpausing recovery (NORECOVER flag set)" << dendl;
+      dout(1) << "unpausing recovery (NORECOVER flag unset)" << dendl;
       service.unpause_recovery();
     }
   }
@@ -8959,7 +8959,6 @@ void OSD::process_peering_events(
     }
     dispatch_context_transaction(rctx, pg, &handle);
     pg->unlock();
-    handle.reset_tp_timeout();
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);
