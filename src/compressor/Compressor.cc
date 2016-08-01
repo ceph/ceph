@@ -14,12 +14,13 @@
 
 #include "Compressor.h"
 #include "CompressionPlugin.h"
+#include "common/dout.h"
 
 
-CompressorRef Compressor::create(CephContext *cct, const string &type)
+CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 {
   CompressorRef cs_impl = NULL;
-  stringstream ss;
+  std::stringstream ss;
   PluginRegistry *reg = cct->get_plugin_registry();
   CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", type));
   if (factory == NULL) {

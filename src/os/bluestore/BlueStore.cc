@@ -3776,7 +3776,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
-  string name = bluestore_blob_t::get_comp_alg_name(chdr.type);
+  string name = Compressor::get_comp_alg_name(chdr.type);
   CompressorRef compressor = Compressor::create(cct, name);
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return
@@ -6044,7 +6044,7 @@ int BlueStore::_do_alloc_write(
       assert(b_off == 0);
       assert(wi.blob_length == l->length());
       bluestore_compression_header_t chdr;
-      chdr.type = bluestore_blob_t::get_comp_alg_type(c->get_type());
+      chdr.type = Compressor::get_comp_alg_type(c->get_type());
       // FIXME: memory alignment here is bad
       bufferlist t;
       c->compress(*l, t);
