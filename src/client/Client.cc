@@ -1550,7 +1550,7 @@ int Client::verify_reply_trace(int r,
 			 << " got_ino " << got_created_ino
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _do_lookup(d->dir->parent_inode, d->name, &target, uid, gid);
+	  r = _do_lookup(d->dir->parent_inode, d->name, request->regetattr_mask, &target, uid, gid);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
 	  assert(0 == "how did this happen?  i want logs!");
@@ -5876,7 +5876,7 @@ void Client::renew_caps(MetaSession *session)
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
+int Client::_do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
 		       int uid, int gid)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
@@ -5887,9 +5887,8 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
   req->set_filepath(path);
   req->set_inode(dir);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
-      req->head.args.getattr.mask = DEBUG_GETATTR_CAPS;
-  else
-      req->head.args.getattr.mask = 0;
+      mask |= DEBUG_GETATTR_CAPS;
+  req->head.args.getattr.mask = mask;
 
   ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
@@ -5980,7 +5979,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
     }
   }
 
-  r = _do_lookup(dir, dname, target, uid, gid);
+  r = _do_lookup(dir, dname, 0, target, uid, gid);
   goto done;
 
  hit_dn:
