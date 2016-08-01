@@ -13,7 +13,9 @@ TEST(Bencode, String)
   decode.bencode("bar", bl);
   decode.bencode("baz", bl);
 
-  ASSERT_STREQ("3:foo3:bar3:baz", bl.c_str());
+  string s(bl.c_str(), bl.length());
+
+  ASSERT_STREQ("3:foo3:bar3:baz", s.c_str());
 }
 
 TEST(Bencode, Integers)
@@ -25,7 +27,9 @@ TEST(Bencode, Integers)
   decode.bencode(-3, bl);
   decode.bencode(7, bl);
 
-  ASSERT_STREQ("i0ei-3ei7e", bl.c_str());
+  string s(bl.c_str(), bl.length());
+
+  ASSERT_STREQ("i0ei-3ei7e", s.c_str());
 }
 
 TEST(Bencode, Dict)
@@ -38,7 +42,9 @@ TEST(Bencode, Dict)
   decode.bencode("bar", "baz", bl);
   decode.bencode_end(bl);
 
-  ASSERT_STREQ("d3:fooi5e3:bar3:baze", bl.c_str());
+  string s(bl.c_str(), bl.length());
+
+  ASSERT_STREQ("d3:fooi5e3:bar3:baze", s.c_str());
 }
 
 TEST(Bencode, List)
@@ -51,5 +57,7 @@ TEST(Bencode, List)
   decode.bencode("bar", "baz", bl);
   decode.bencode_end(bl);
 
-  ASSERT_STREQ("l3:fooi5e3:bar3:baze", bl.c_str());
+  string s(bl.c_str(), bl.length());
+
+  ASSERT_STREQ("l3:fooi5e3:bar3:baze", s.c_str());
 }
