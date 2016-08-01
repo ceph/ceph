@@ -29,7 +29,7 @@ public:
   {}
 
   virtual int factory(CompressorRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     if (compressor == 0) {
       ZlibCompressor *interface = new ZlibCompressor();
