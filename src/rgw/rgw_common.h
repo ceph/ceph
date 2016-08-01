@@ -347,15 +347,29 @@ class RGWHTTPArgs
   }
 };
 
-class RGWConf;
+class RGWEnv;
+
+class RGWConf {
+  friend class RGWEnv;
+protected:
+  void init(CephContext *cct, RGWEnv* env);
+public:
+  RGWConf()
+    : enable_ops_log(1),
+      enable_usage_log(1),
+      defer_to_bucket_acls(0) {
+  }
+
+  int enable_ops_log;
+  int enable_usage_log;
+  uint8_t defer_to_bucket_acls;
+};
 
 class RGWEnv {
   std::map<string, string, ltstr_nocase> env_map;
 public:
-  RGWConf *conf; 
+  RGWConf conf;
 
-  RGWEnv();
-  ~RGWEnv();
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
   void set(const boost::string_ref& name, const boost::string_ref& val);
@@ -369,19 +383,6 @@ public:
   void remove(const char *name);
 
   std::map<string, string, ltstr_nocase>& get_map() { return env_map; }
-};
-
-class RGWConf {
-  friend class RGWEnv;
-protected:
-  void init(CephContext *cct, RGWEnv * env);
-public:
-  RGWConf() :
-    enable_ops_log(1), enable_usage_log(1), defer_to_bucket_acls(0) {}
-
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
 };
 
 enum http_op {
