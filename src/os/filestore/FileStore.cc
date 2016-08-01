@@ -1624,9 +1624,14 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      omap_store->init(g_conf->filestore_rocksdb_options);
+      ret = omap_store->init(g_conf->filestore_rocksdb_options);
     else
-      omap_store->init();
+      ret = omap_store->init();
+
+    if (ret < 0) {
+      derr << "Error initializing omap_store: " << cpp_strerror(ret) << dendl;
+      goto close_current_fd;
+    }
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -1795,6 +1800,9 @@ close_fsid_fd:
   fsid_fd = -1;
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
+  delete backend;
+  backend = NULL;
+  object_map.reset();
   return ret;
 }
 
