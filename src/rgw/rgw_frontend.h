@@ -56,10 +56,10 @@ struct RGWMongooseEnv : public RGWProcessEnv {
   RWLock mutex;
   RGWMongooseEnv(const RGWProcessEnv &env)
     : RGWProcessEnv(env),
-      mutex("RGWMongooseFrontend", false, true, prioritize_write) {}
+      mutex("RGWCivetWebFrontend", false, true, prioritize_write) {}
 };
 
-class RGWMongooseFrontend : public RGWFrontend {
+class RGWCivetWebFrontend : public RGWFrontend {
   RGWFrontendConfig* conf;
   struct mg_context* ctx;
   RGWMongooseEnv env;
@@ -72,7 +72,7 @@ class RGWMongooseFrontend : public RGWFrontend {
   }
 
 public:
-  RGWMongooseFrontend(RGWProcessEnv& pe, RGWFrontendConfig* _conf)
+  RGWCivetWebFrontend(RGWProcessEnv& pe, RGWFrontendConfig* _conf)
     : conf(_conf), ctx(nullptr), env(pe) {
   }
 
@@ -101,7 +101,7 @@ public:
     // unpause callbacks
     env.mutex.put_write();
   }
-}; /* RGWMongooseFrontend */
+}; /* RGWCivetWebFrontend */
 
 class RGWProcessFrontend : public RGWFrontend {
 protected:
