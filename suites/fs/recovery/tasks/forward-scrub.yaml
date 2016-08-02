@@ -2,7 +2,8 @@
 overrides:
   ceph:
     log-whitelist:
-      - inodes wrongly marked free
+      - inode wrongly marked free
+      - inode table repaired for inode
 
 tasks:
   - cephfs_test_runner:
