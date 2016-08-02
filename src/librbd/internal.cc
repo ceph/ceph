@@ -3827,13 +3827,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
-  void rbd_req_cb(completion_t cb, void *arg)
-  {
-    AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
-    AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
-    req->complete(comp->get_return_value());
-  }
-
   struct C_RBD_Readahead : public Context {
     ImageCtx *ictx;
     object_t oid;
