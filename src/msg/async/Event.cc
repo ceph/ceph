@@ -17,6 +17,10 @@
 #include "common/errno.h"
 #include "Event.h"
 
+#ifdef HAVE_DPDK
+#include "dpdk/EventDPDK.h"
+#endif
+
 #ifdef HAVE_EPOLL
 #include "EventEpoll.h"
 #else
@@ -102,6 +106,11 @@ int EventCenter::init(int n, unsigned i)
 
   idx = i;
 
+  if (cct->_conf->ms_async_transport_type == "dpdk") {
+#ifdef HAVE_DPDK
+    driver = new DPDKDriver(cct);
+#endif
+  } else {
 #ifdef HAVE_EPOLL
   driver = new EpollDriver(cct);
 #else
@@ -111,13 +120,14 @@ int EventCenter::init(int n, unsigned i)
   driver = new SelectDriver(cct);
 #endif
 #endif
+  }
 
   if (!driver) {
     lderr(cct) << __func__ << " failed to create event driver " << dendl;
     return -1;
   }
 
-  int r = driver->init(n);
+  int r = driver->init(this, n);
   if (r < 0) {
     lderr(cct) << __func__ << " failed to init event driver." << dendl;
     return r;
@@ -343,7 +353,7 @@ int EventCenter::process_events(int timeout_microseconds)
   bool trigger_time = false;
   auto now = clock_type::now();
 
-  bool blocking = pollers.empty() && !external_num_events.load() ? &tv : nullptr;
+  bool blocking = pollers.empty() && !external_num_events.load();
   // If exists external events or poller, don't block
   if (!blocking) {
     tv.tv_sec = 0;

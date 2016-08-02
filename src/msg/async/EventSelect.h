@@ -31,7 +31,7 @@ class SelectDriver : public EventDriver {
   explicit SelectDriver(CephContext *c): max_fd(0), cct(c) {}
   virtual ~SelectDriver() {}
 
-  int init(int nevent) override;
+  int init(EventCenter *c, int nevent) override;
   int add_event(int fd, int cur_mask, int add_mask) override;
   int del_event(int fd, int cur_mask, int del_mask) override;
   int resize_events(int newsize) override;
