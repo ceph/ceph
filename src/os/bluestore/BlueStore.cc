@@ -7614,7 +7614,7 @@ int BlueStore::_do_alloc_write(
 	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
 	dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
 		 << " -> 0x" << rawlen << " => 0x" << newlen
-		 << " with " << (int)chdr.type
+		 << " with " << c->get_type()
 		 << std::dec << dendl;
 	txc->statfs_delta.compressed() += rawlen;
 	txc->statfs_delta.compressed_original() += l->length();
@@ -7629,7 +7629,7 @@ int BlueStore::_do_alloc_write(
       } else {
 	dout(20) << __func__ << std::hex << "  0x" << l->length()
 		 << " compressed to 0x" << rawlen << " -> 0x" << newlen
-                 << " with " << (int)chdr.type
+                 << " with " << c->get_type()
                  << ", which is more than required 0x" << want_len_raw
 		 << " -> 0x" << want_len
                  << ", leaving uncompressed"
