@@ -55,6 +55,8 @@
 #include "common/errno.h"
 
 #include "erasure-code/ErasureCodePlugin.h"
+#include "compressor/Compressor.h"
+#include "common/Checksummer.h"
 
 #include "include/compat.h"
 #include "include/assert.h"
@@ -3138,7 +3140,10 @@ namespace {
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
     HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
     SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL,
-    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY};
+    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY,
+    COMPRESSION_MODE, COMPRESSION_ALGORITHM, COMPRESSION_REQUIRED_RATIO,
+    COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
+    CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3637,6 +3642,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"recovery_priority", RECOVERY_PRIORITY},
       {"recovery_op_priority", RECOVERY_OP_PRIORITY},
       {"scrub_priority", SCRUB_PRIORITY},
+      {"compression_mode", COMPRESSION_MODE},
+      {"compression_algorithm", COMPRESSION_ALGORITHM},
+      {"compression_required_ratio", COMPRESSION_REQUIRED_RATIO},
+      {"compression_max_blob_size", COMPRESSION_MAX_BLOB_SIZE},
+      {"compression_min_blob_size", COMPRESSION_MIN_BLOB_SIZE},
+      {"csum_type", CSUM_TYPE},
+      {"csum_max_block", CSUM_MAX_BLOCK},
+      {"csum_min_block", CSUM_MIN_BLOCK},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -3825,12 +3838,27 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case RECOVERY_PRIORITY:
           case RECOVERY_OP_PRIORITY:
           case SCRUB_PRIORITY:
+	  case COMPRESSION_MODE:
+	  case COMPRESSION_ALGORITHM:
+	  case COMPRESSION_REQUIRED_RATIO:
+	  case COMPRESSION_MAX_BLOB_SIZE:
+	  case COMPRESSION_MIN_BLOB_SIZE:
+	  case CSUM_TYPE:
+	  case CSUM_MAX_BLOCK:
+	  case CSUM_MIN_BLOCK:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
 	    }
 	    assert(i != ALL_CHOICES.end());
-	    p->opts.dump(i->first, f.get());
+            if(*it == CSUM_TYPE) {
+              int val;
+              p->opts.get(pool_opts_t::CSUM_TYPE, &val);
+              f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
+            }
+	    else {
+              p->opts.dump(i->first, f.get());
+            }
             break;
 	}
 	f->close_section();
@@ -3959,6 +3987,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case RECOVERY_PRIORITY:
           case RECOVERY_OP_PRIORITY:
           case SCRUB_PRIORITY:
+	  case COMPRESSION_MODE:
+	  case COMPRESSION_ALGORITHM:
+	  case COMPRESSION_REQUIRED_RATIO:
+	  case COMPRESSION_MAX_BLOB_SIZE:
+	  case COMPRESSION_MIN_BLOB_SIZE:
+	  case CSUM_TYPE:
+	  case CSUM_MAX_BLOCK:
+	  case CSUM_MIN_BLOCK:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -3967,7 +4003,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
-		ss << i->first << ": " << p->opts.get(key) << "\n";
+                if(key == pool_opts_t::CSUM_TYPE) {
+                  int val;
+                  p->opts.get(key, &val);
+  		  ss << i->first << ": " << Checksummer::get_csum_type_string(val) << "\n";
+                } else {
+  		  ss << i->first << ": " << p->opts.get(key) << "\n";
+                }
 	      }
 	    }
 	    break;
@@ -5423,6 +5465,46 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
   } else if (pool_opts_t::is_opt_name(var)) {
+    if (var == "compression_mode") {
+      auto cmode = Compressor::get_comp_mode_type(val);
+      if (!cmode) {
+	ss << "unrecognized compression mode '" << val << "'";
+	return EINVAL;
+      }
+    } else if (var == "compression_algorithm") {
+      auto alg = Compressor::get_comp_alg_type(val);
+      if (!alg) {
+        ss << "unrecognized compression_algorithm '" << val << "'";
+	return EINVAL;
+      }
+    } else if (var == "compression_required_ratio") {
+      if (floaterr.length()) {
+        ss << "error parsing float value '" << val << "': " << floaterr;
+        return -EINVAL;
+      }
+      if (f < 0 || f>1) {
+        ss << "compression_required_ratio is out of range (0-1): '" << val << "'";
+	return EINVAL;
+      }
+    } else if (var == "csum_type") {
+      auto t = val != "unset" ? Checksummer::get_csum_string_type(val) : 0;
+      if (t < 0 ) {
+        ss << "unrecognized csum_type '" << val << "'";
+	return EINVAL;
+      }
+      //preserve csum_type numeric value
+      n = t;
+      interr.clear(); 
+    } else if (var == "compression_max_blob_size" ||
+               var == "compression_min_blob_size" ||
+               var == "csum_max_block" ||
+               var == "csum_min_block") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+    }
+
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
     switch (desc.type) {
     case pool_opts_t::STR:

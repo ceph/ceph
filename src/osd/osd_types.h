@@ -43,6 +43,7 @@
 #include "OpRequest.h"
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
+#include "compressor/Compressor.h"
 #include <atomic>
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
@@ -976,7 +977,15 @@ public:
     DEEP_SCRUB_INTERVAL,
     RECOVERY_PRIORITY,
     RECOVERY_OP_PRIORITY,
-    SCRUB_PRIORITY
+    SCRUB_PRIORITY,
+    COMPRESSION_MODE,
+    COMPRESSION_ALGORITHM,
+    COMPRESSION_REQUIRED_RATIO,
+    COMPRESSION_MAX_BLOB_SIZE,
+    COMPRESSION_MIN_BLOB_SIZE,
+    CSUM_TYPE,
+    CSUM_MAX_BLOCK,
+    CSUM_MIN_BLOCK,
   };
 
   enum type_t {
