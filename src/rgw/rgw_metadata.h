@@ -232,8 +232,6 @@ class RGWMetadataManager {
   std::map<std::string, RGWMetadataLog> md_logs;
   // use the current period's log for mutating operations
   RGWMetadataLog* current_log = nullptr;
-  // oldest log's position in the period history
-  RGWPeriodHistory::Cursor oldest_log_period;
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
@@ -255,9 +253,13 @@ public:
 
   int init(const std::string& current_period);
 
-  RGWPeriodHistory::Cursor get_oldest_log_period() const {
-    return oldest_log_period;
-  }
+  /// initialize the oldest log period if it doesn't exist, and attach it to
+  /// our current history
+  RGWPeriodHistory::Cursor init_oldest_log_period();
+
+  /// read the oldest log period, and return a cursor to it in our existing
+  /// period history
+  RGWPeriodHistory::Cursor read_oldest_log_period() const;
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);
