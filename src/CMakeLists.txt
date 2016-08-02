@@ -233,6 +233,15 @@ if(HAVE_RDMA)
   list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread rt)
 endif(HAVE_RDMA)
 
+if(HAVE_DPDK)
+  set(CMAKE_CXX_FLAGS "-march=native ${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
+  list(APPEND EXTRALIBS ${DPDK_LIBRARY})
+  if(NOT USE_CRYPTOPP)
+    message(FATAL_ERROR "CRYPTOPP must be supported when enable DPDK.")
+  endif(NOT USE_CRYPTOPP)
+  list(APPEND EXTRALIBS ${DPDK_LIBRARIES})
+endif(HAVE_DPDK)
+
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
@@ -325,6 +334,24 @@ if(HAVE_RDMA)
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
 
+set(dpdk_common_srcs)
+if(HAVE_DPDK)
+  list(APPEND dpdk_common_srcs
+    msg/async/dpdk/ARP.cc
+    msg/async/dpdk/DPDK.cc
+    msg/async/dpdk/dpdk_rte.cc
+    msg/async/dpdk/DPDKStack.cc
+    msg/async/dpdk/EventDPDK.cc
+    msg/async/dpdk/IP.cc
+    msg/async/dpdk/net.cc
+    msg/async/dpdk/IPChecksum.cc
+    msg/async/dpdk/Packet.cc
+    msg/async/dpdk/TCP.cc
+    msg/async/dpdk/UserspaceEvent.cc
+    msg/async/dpdk/ethernet.cc)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
+endif(HAVE_DPDK)
+
 if(HAVE_GOOD_YASM_ELF64)
   set(yasm_srcs
     common/crc32c_intel_fast_asm.S
@@ -411,6 +438,7 @@ set(libcommon_files
   msg/async/net_handler.cc
   ${xio_common_srcs}
   ${async_rdma_common_srcs}
+  ${dpdk_common_srcs}
   msg/msg_types.cc
   common/hobject.cc
   osd/OSDMap.cc
