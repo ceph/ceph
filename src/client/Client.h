@@ -1125,7 +1125,7 @@ public:
 		  const UserPerm& perms);
   int lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   int lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
-  int lookup_name(Inode *in, Inode *parent);
+  int lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int close(int fd);
   loff_t lseek(int fd, loff_t offset, int whence, const UserPerm& perms);
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);

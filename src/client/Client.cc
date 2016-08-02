@@ -7672,7 +7672,7 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
  * Populate the parent dentry for `ino`, provided it is
  * a child of `parent`.
  */
-int Client::lookup_name(Inode *ino, Inode *parent)
+int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 {
   assert(parent->is_dir());
 
@@ -7684,7 +7684,6 @@ int Client::lookup_name(Inode *ino, Inode *parent)
   req->set_filepath(filepath(ino->ino));
   req->set_inode(ino);
 
-  UserPerm perms(get_uid(), get_gid()); // FIXME
   int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   ldout(cct, 3) << "lookup_name exit(" << ino->ino << ") = " << r << dendl;
   return r;
