@@ -199,7 +199,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, Success) {
 
   InSequence seq;
   MockResizeRequest mock_resize_request;
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
   expect_rollback_object_map(mock_image_ctx, *mock_object_map);
@@ -224,7 +224,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, BlockWritesError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
@@ -244,7 +244,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, SkipResize) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_get_image_size(mock_image_ctx, 345);
   expect_rollback_object_map(mock_image_ctx, *mock_object_map);
@@ -270,7 +270,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, ResizeError) {
 
   InSequence seq;
   MockResizeRequest mock_resize_request;
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
@@ -292,7 +292,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
 
   InSequence seq;
   MockResizeRequest mock_resize_request;
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
   expect_rollback_object_map(mock_image_ctx, mock_object_map);
@@ -316,7 +316,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
 
   InSequence seq;
   MockResizeRequest mock_resize_request;
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
   expect_rollback_object_map(mock_image_ctx, *mock_object_map);
