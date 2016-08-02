@@ -171,6 +171,8 @@ public:
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
+  uid_t get_uid() { return head.caller_uid; }
+  uid_t get_gid() { return head.caller_gid; }
   void set_data(const bufferlist &d) { data = d; }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
