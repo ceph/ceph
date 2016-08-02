@@ -6540,7 +6540,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask,
   if (ret < 0)
    return ret;
   if (mask & CEPH_SETATTR_MODE)
-    ret = _posix_acl_chmod(in, attr->st_mode, perms.uid(), perms.gid());
+    ret = _posix_acl_chmod(in, attr->st_mode, perms);
   return ret;
 }
 
@@ -12376,12 +12376,13 @@ int Client::_posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsi
   return -EAGAIN;
 }
 
-int Client::_posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid)
+int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
 {
   if (acl_type == NO_ACL)
     return 0;
 
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms.uid(), perms.gid(),
+		   in->xattr_version == 0);
   if (r < 0)
     goto out;
 
@@ -12392,8 +12393,6 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid)
       r = posix_acl_access_chmod(acl, mode);
       if (r < 0)
 	goto out;
-      // FIXME
-      UserPerm perms(uid, gid);
       r = _do_setxattr(in, ACL_EA_ACCESS, acl.c_str(), acl.length(), 0, perms);
     } else {
       r = 0;
