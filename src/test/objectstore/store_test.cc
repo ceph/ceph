@@ -758,6 +758,16 @@ void doCompressionTest(boost::scoped_ptr<ObjectStore>& store,
       expected.append(data.substr(0xf00f));
       ASSERT_TRUE(bl_eq(expected, newdata));
     }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(0x10000, statfs.allocated);
+      ASSERT_EQ((unsigned)data.size(), statfs.stored);
+      ASSERT_LE(statfs.compressed, 0x10000);
+      ASSERT_EQ((unsigned)data.size(), statfs.compressed_original);
+      ASSERT_EQ(0x10000, statfs.compressed_allocated);
+    }
   }
   std::string data2;
   data2.resize(0x10000 * 4 - 0x9000);
@@ -797,6 +807,15 @@ void doCompressionTest(boost::scoped_ptr<ObjectStore>& store,
       expected.append(data2.substr(0, 0x37000));
       expected.append(data.substr(0x3f000, 0x1000));
       ASSERT_TRUE(bl_eq(expected, newdata));
+    }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(0x40000, statfs.allocated);
+      ASSERT_LE(statfs.compressed, 0x20000);
+      ASSERT_EQ(0x20000, statfs.compressed_allocated);
+
     }
   }
   data2.resize(0x3f000);
