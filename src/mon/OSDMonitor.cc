@@ -56,6 +56,7 @@
 #include "common/errno.h"
 
 #include "erasure-code/ErasureCodePlugin.h"
+#include "compressor/Compressor.h"
 
 #include "include/compat.h"
 #include "include/assert.h"
@@ -3076,7 +3077,8 @@ namespace {
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
     HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
     SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL,
-    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY};
+    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY,
+    COMPRESS_ALGORITHM, COMPRESS_RATIO, COMPRESS_HINT};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3575,7 +3577,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("deep_scrub_interval", DEEP_SCRUB_INTERVAL)
       ("recovery_priority", RECOVERY_PRIORITY)
       ("recovery_op_priority", RECOVERY_OP_PRIORITY)
-      ("scrub_priority", SCRUB_PRIORITY);
+      ("scrub_priority", SCRUB_PRIORITY)
+      ("compress_algorithm", COMPRESS_ALGORITHM)
+      ("compress_ratio", COMPRESS_RATIO)
+      ("compress_hint", COMPRESS_HINT);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3767,6 +3772,19 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    assert(i != ALL_CHOICES.end());
 	    p->opts.dump(i->first, f.get());
             break;
+	  case COMPRESS_ALGORITHM:
+            f->dump_string("compress_algorithm",
+	      Compressor::get_comp_alg_name(p->compress_algorithm));
+            break;
+	  case COMPRESS_RATIO:
+            f->dump_unsigned("compress_ratio", p->compress_ratio);
+            break;
+	  case COMPRESS_HINT:
+            f->dump_string("compress_hint",
+	      p->compress_hint ?
+		ceph_osd_compress_flag_name(p->compress_hint) :
+		std::string("default"));
+            break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3906,6 +3924,21 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      }
 	    }
 	    break;
+	  case COMPRESS_ALGORITHM:
+            ss << "compress_algorithm: " <<
+	      Compressor::get_comp_alg_name(p->compress_algorithm) << "\n";
+            break;
+	  case COMPRESS_RATIO:
+            ss << "compress_ratio: " <<
+	      (unsigned) p->compress_ratio << "\n";
+            break;
+	  case COMPRESS_HINT:
+            ss << "compress_hint: "
+	       << (p->compress_hint ?
+		    ceph_osd_compress_flag_name(p->compress_hint) :
+		    "default")
+	       << "\n";
+            break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -5330,6 +5363,34 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
+  } else if (var == "compress_algorithm") {
+    int alg = Compressor::get_comp_alg_type(val);
+    if (val != "none" && alg == Compressor::COMP_ALG_NONE) {
+      ss << "unrecognized compression_algorithm '" << val << "'";
+      return EINVAL;
+    }
+    p.compress_algorithm = alg;
+  } else if (var == "compress_ratio") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (n < 0 || n>100) {
+      ss << "compression_ratio is out of range (0-100): '" << val << "'";
+      return EINVAL;
+    }
+    p.compress_ratio = n;
+  } else if (var == "compress_hint") {
+    int f = 0;
+    if (val == "compressible") {
+      f = CEPH_OSD_COMP_FLAG_COMPRESSIBLE;
+    } else if (val == "incompressible") {
+      f = CEPH_OSD_COMP_FLAG_INCOMPRESSIBLE;
+    } else if (val != "default") {
+      ss << "unrecognized compression_hint '" << val << "'";
+      return EINVAL;
+    }
+    p.compress_hint = f;
   } else if (pool_opts_t::is_opt_name(var)) {
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
     switch (desc.type) {
