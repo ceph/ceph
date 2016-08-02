@@ -205,7 +205,7 @@ bin_DEBUGPROGRAMS += ceph_test_cls_numops
 ceph_test_cls_journal_SOURCES = test/cls_journal/test_cls_journal.cc
 ceph_test_cls_journal_LDADD = \
         libcls_journal_client.la $(LIBRADOS) \
-        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_journal
 
@@ -290,14 +290,6 @@ ceph_test_rados_api_lock_SOURCES = test/librados/lock.cc
 ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_lock
-
-if WITH_MDS
-ceph_test_rados_api_tmap_migrate_SOURCES = test/librados/tmap_migrate.cc tools/cephfs/DataScan.cc tools/cephfs/MDSUtility.cc
-ceph_test_rados_api_tmap_migrate_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(LIBMDS) libcls_cephfs_client.la  $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
-ceph_test_rados_api_tmap_migrate_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-bin_DEBUGPROGRAMS += ceph_test_rados_api_tmap_migrate
-endif
-
 
 ceph_test_stress_watch_SOURCES = test/test_stress_watch.cc
 ceph_test_stress_watch_LDADD = \
@@ -488,6 +480,7 @@ unittest_rbd_mirror_SOURCES = \
 	test/rbd_mirror/test_mock_ImageSyncThrottler.cc \
 	test/rbd_mirror/image_replayer/test_mock_BootstrapRequest.cc \
 	test/rbd_mirror/image_replayer/test_mock_CreateImageRequest.cc \
+	test/rbd_mirror/image_replayer/test_mock_EventPreprocessor.cc \
 	test/rbd_mirror/image_sync/test_mock_ImageCopyRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_ObjectCopyRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_SnapshotCopyRequest.cc \
@@ -687,6 +680,13 @@ ceph_test_cors_LDADD = \
 ceph_test_cors_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cors
 
+unittest_rgw_bencode_SOURCES = test/rgw/test_rgw_bencode.cc
+unittest_rgw_bencode_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) -lcurl -lexpat
+unittest_rgw_bencode_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_rgw_bencode
+
 ceph_test_rgw_manifest_SOURCES = test/rgw/test_rgw_manifest.cc
 ceph_test_rgw_manifest_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
@@ -714,7 +714,7 @@ ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
 ceph_test_rgw_obj_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
-	-lcurl -luuid -lexpat
+	-lcurl -lexpat
 
 ceph_test_rgw_obj_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_obj
@@ -772,25 +772,25 @@ librgw_file_cd_SOURCES = test/librgw_file_cd.cc
 librgw_file_cd_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_cd_LDADD = $(UNITTEST_LDADD) \
 	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
-noinst_PROGRAMS += librgw_file_cd
+check_PROGRAMS += librgw_file_cd
 
 librgw_file_gp_SOURCES = test/librgw_file_gp.cc
 librgw_file_gp_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_gp_LDADD = $(UNITTEST_LDADD) \
 	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
-noinst_PROGRAMS += librgw_file_gp
+check_PROGRAMS += librgw_file_gp
 
 librgw_file_aw_SOURCES = test/librgw_file_aw.cc
 librgw_file_aw_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_aw_LDADD = $(UNITTEST_LDADD) \
 	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
-noinst_PROGRAMS += librgw_file_aw
+check_PROGRAMS += librgw_file_aw
 
 librgw_file_nfsns_SOURCES = test/librgw_file_nfsns.cc
 librgw_file_nfsns_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS) ${RGW_CXXFLAGS}
 librgw_file_nfsns_LDADD = $(UNITTEST_LDADD) \
 	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
-noinst_PROGRAMS += librgw_file_nfsns
+check_PROGRAMS += librgw_file_nfsns
 
 # 
 # test_rgw_token_SOURCES = test/test_rgw_token.cc

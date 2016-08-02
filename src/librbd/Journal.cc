@@ -11,6 +11,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
+#include "journal/Settings.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -50,7 +51,8 @@ struct C_DecodeTag : public Context {
 
   int process(int r) {
     if (r < 0) {
-      lderr(cct) << "failed to allocate tag: " << cpp_strerror(r) << dendl;
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to allocate tag: " << cpp_strerror(r) << dendl;
       return r;
     }
 
@@ -60,11 +62,13 @@ struct C_DecodeTag : public Context {
     bufferlist::iterator data_it = tag.data.begin();
     r = decode(&data_it, tag_data);
     if (r < 0) {
-      lderr(cct) << "failed to decode allocated tag" << dendl;
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to decode allocated tag" << dendl;
       return r;
     }
 
-    ldout(cct, 20) << "allocated journal tag: "
+    ldout(cct, 20) << this << " " << __func__ << ": "
+                   << "allocated journal tag: "
                    << "tid=" << tag.tid << ", "
                    << "data=" << *tag_data << dendl;
     return 0;
@@ -106,13 +110,15 @@ struct C_DecodeTags : public Context {
 
   int process(int r) {
     if (r < 0) {
-      lderr(cct) << "failed to retrieve journal tags: " << cpp_strerror(r)
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to retrieve journal tags: " << cpp_strerror(r)
                  << dendl;
       return r;
     }
 
     if (tags.empty()) {
-      lderr(cct) << "no journal tags retrieved" << dendl;
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "no journal tags retrieved" << dendl;
       return -ENOENT;
     }
 
@@ -122,11 +128,13 @@ struct C_DecodeTags : public Context {
     bufferlist::iterator data_it = tags.back().data.begin();
     r = C_DecodeTag::decode(&data_it, tag_data);
     if (r < 0) {
-      lderr(cct) << "failed to decode journal tag" << dendl;
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to decode journal tag" << dendl;
       return r;
     }
 
-    ldout(cct, 20) << "most recent journal tag: "
+    ldout(cct, 20) << this << " " << __func__ << ": "
+                   << "most recent journal tag: "
                    << "tid=" << *tag_tid << ", "
                    << "data=" << *tag_data << dendl;
     return 0;
@@ -232,7 +240,8 @@ int allocate_journaler_tag(CephContext *cct, J *journaler,
 
   int r = allocate_tag_ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to allocate tag: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to allocate tag: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -357,7 +366,8 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     IoCtx data_io_ctx;
     int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
     if (r != 0) {
-      lderr(cct) << "failed to create journal: "
+      lderr(cct) << __func__ << ": "
+                 << "failed to create journal: "
 		 << "error opening journal objects pool '" << object_pool
 		 << "': " << cpp_strerror(r) << dendl;
       return r;
@@ -365,12 +375,12 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     pool_id = data_io_ctx.get_id();
   }
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   int r = journaler.create(order, splay_width, pool_id);
   if (r < 0) {
-    lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -391,7 +401,8 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
 
   r = journaler.register_client(client_data);
   if (r < 0) {
-    lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -402,13 +413,13 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   bool journal_exists;
   int r = journaler.exists(&journal_exists);
   if (r < 0) {
-    lderr(cct) << "failed to stat journal header: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to stat journal header: " << cpp_strerror(r) << dendl;
     return r;
   } else if (!journal_exists) {
     return 0;
@@ -424,13 +435,15 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   if (r == -ENOENT) {
     return 0;
   } else if (r < 0) {
-    lderr(cct) << "failed to initialize journal: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to initialize journal: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   r = journaler.remove(true);
   if (r < 0) {
-    lderr(cct) << "failed to remove journal: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to remove journal: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -441,8 +454,7 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   C_SaferCond cond;
   journaler.init(&cond);
@@ -454,7 +466,8 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   if (r == -ENOENT) {
     return 0;
   } else if (r < 0) {
-    lderr(cct) << "failed to initialize journal: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to initialize journal: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -467,20 +480,23 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     librados::Rados rados(io_ctx);
     r = rados.pool_reverse_lookup(pool_id, &pool_name);
     if (r < 0) {
-      lderr(cct) << "failed to lookup data pool: " << cpp_strerror(r) << dendl;
+      lderr(cct) << __func__ << ": "
+                 << "failed to lookup data pool: " << cpp_strerror(r) << dendl;
       return r;
     }
   }
 
   r = journaler.remove(true);
   if (r < 0) {
-    lderr(cct) << "failed to reset journal: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to reset journal: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   r = create(io_ctx, image_id, order, splay_width, pool_name, false, "");
   if (r < 0) {
-    lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -515,8 +531,7 @@ int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
-                      cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
@@ -535,8 +550,7 @@ int Journal<I>::request_resync(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
@@ -562,7 +576,8 @@ int Journal<I>::request_resync(I *image_ctx) {
 
   r = update_client_ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to update client: " << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << ": "
+               << "failed to update client: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -573,8 +588,7 @@ int Journal<I>::promote(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
@@ -688,7 +702,8 @@ int Journal<I>::demote() {
   cls::journal::Client client;
   int r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
   if (r < 0) {
-    lderr(cct) << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to retrieve client: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -702,7 +717,8 @@ int Journal<I>::demote() {
   bufferlist::iterator tag_data_bl_it = new_tag.data.begin();
   r = C_DecodeTag::decode(&tag_data_bl_it, &m_tag_data);
   if (r < 0) {
-    lderr(cct) << "failed to decode newly allocated tag" << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to decode newly allocated tag" << dendl;
     return r;
   }
 
@@ -717,7 +733,8 @@ int Journal<I>::demote() {
 
   r = ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to append demotion journal event: " << cpp_strerror(r)
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to append demotion journal event: " << cpp_strerror(r)
                << dendl;
     return r;
   }
@@ -728,7 +745,8 @@ int Journal<I>::demote() {
 
   r = flush_ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to flush demotion commit position: "
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to flush demotion commit position: "
                << cpp_strerror(r) << dendl;
     return r;
   }
@@ -751,7 +769,8 @@ void Journal<I>::allocate_local_tag(Context *on_finish) {
     cls::journal::Client client;
     int r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
     if (r < 0) {
-      lderr(cct) << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to retrieve client: " << cpp_strerror(r) << dendl;
       m_image_ctx.op_work_queue->queue(on_finish, r);
       return;
     }
@@ -947,7 +966,8 @@ void Journal<I>::commit_io_event_extent(uint64_t tid, uint64_t offset,
 
   event.pending_extents.subtract(intersect);
   if (!event.pending_extents.empty()) {
-    ldout(cct, 20) << "pending extents: " << event.pending_extents << dendl;
+    ldout(cct, 20) << this << " " << __func__ << ": "
+                   << "pending extents: " << event.pending_extents << dendl;
     return;
   }
   complete_event(it, event.ret_val);
@@ -988,7 +1008,7 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 }
 
 template <typename I>
-void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
+void Journal<I>::commit_op_event(uint64_t op_tid, int r, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": op_tid=" << op_tid << ", "
                  << "r=" << r << dendl;
@@ -1015,7 +1035,7 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
 
   op_finish_future.flush(create_async_context_callback(
     m_image_ctx, new C_OpEventSafe(this, op_tid, op_start_future,
-                                   op_finish_future)));
+                                   op_finish_future, on_safe)));
 }
 
 template <typename I>
@@ -1069,7 +1089,8 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
   Event &event = it->second;
   if (event.safe) {
     // journal entry already safe
-    ldout(cct, 20) << "journal entry already safe" << dendl;
+    ldout(cct, 20) << this << " " << __func__ << ": "
+                   << "journal entry already safe" << dendl;
     m_image_ctx.op_work_queue->queue(on_safe, event.ret_val);
     return Future();
   }
@@ -1115,7 +1136,8 @@ void Journal<I>::handle_start_external_replay(int r,
   assert(m_journal_replay == nullptr);
 
   if (r < 0) {
-    lderr(cct) << "failed to stop recording: " << cpp_strerror(r) << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to stop recording: " << cpp_strerror(r) << dendl;
     *journal_replay = nullptr;
 
     if (m_on_replay_close_request != nullptr) {
@@ -1167,9 +1189,13 @@ void Journal<I>::create_journaler() {
   assert(m_journaler == NULL);
 
   transition_state(STATE_INITIALIZING, 0);
+  ::journal::Settings settings;
+  settings.commit_interval = m_image_ctx.journal_commit_age;
+  settings.max_payload_bytes = m_image_ctx.journal_max_payload_bytes;
+
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
-			      IMAGE_CLIENT_ID, m_image_ctx.journal_commit_age);
+			      IMAGE_CLIENT_ID, settings);
   m_journaler->init(create_async_context_callback(
     m_image_ctx, create_context_callback<
       Journal<I>, &Journal<I>::handle_initialized>(this)));
@@ -1227,7 +1253,8 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
     // event recorded to journal but failed to update disk, we cannot
     // commit this IO event. this event must be replayed.
     assert(event.safe);
-    lderr(cct) << "failed to commit IO to disk, replay required: "
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to commit IO to disk, replay required: "
                << cpp_strerror(r) << dendl;
   }
 
@@ -1275,7 +1302,8 @@ void Journal<I>::handle_initialized(int r) {
   r = m_journaler->get_cached_client(Journal<ImageCtx>::IMAGE_CLIENT_ID,
                                      &client);
   if (r < 0) {
-    lderr(cct) << "failed to locate master image client" << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to locate master image client" << dendl;
     destroy_journaler(r);
     return;
   }
@@ -1285,7 +1313,8 @@ void Journal<I>::handle_initialized(int r) {
   try {
     ::decode(client_data, bl);
   } catch (const buffer::error &err) {
-    lderr(cct) << "failed to decode client meta data: " << err.what()
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to decode client meta data: " << err.what()
                << dendl;
     destroy_journaler(-EINVAL);
     return;
@@ -1294,13 +1323,15 @@ void Journal<I>::handle_initialized(int r) {
   journal::ImageClientMeta *image_client_meta =
     boost::get<journal::ImageClientMeta>(&client_data.client_meta);
   if (image_client_meta == nullptr) {
-    lderr(cct) << "failed to extract client meta data" << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to extract client meta data" << dendl;
     destroy_journaler(-EINVAL);
     return;
   }
 
   m_tag_class = image_client_meta->tag_class;
-  ldout(cct, 20) << "client: " << client << ", "
+  ldout(cct, 20) << this << " " << __func__ << ": "
+                 << "client: " << client << ", "
                  << "image meta: " << *image_client_meta << dendl;
 
   C_DecodeTags *tags_ctx = new C_DecodeTags(
@@ -1332,6 +1363,7 @@ void Journal<I>::handle_get_tags(int r) {
 
 template <typename I>
 void Journal<I>::handle_replay_ready() {
+  CephContext *cct = m_image_ctx.cct;
   ReplayEntry replay_entry;
   {
     Mutex::Locker locker(m_lock);
@@ -1339,7 +1371,6 @@ void Journal<I>::handle_replay_ready() {
       return;
     }
 
-    CephContext *cct = m_image_ctx.cct;
     ldout(cct, 20) << this << " " << __func__ << dendl;
     if (!m_journaler->try_pop_front(&replay_entry)) {
       return;
@@ -1352,11 +1383,20 @@ void Journal<I>::handle_replay_ready() {
 
   bufferlist data = replay_entry.get_data();
   bufferlist::iterator it = data.begin();
+
+  journal::EventEntry event_entry;
+  int r = m_journal_replay->decode(&it, &event_entry);
+  if (r < 0) {
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to decode journal event entry" << dendl;
+    handle_replay_process_safe(replay_entry, r);
+    return;
+  }
+
   Context *on_ready = create_context_callback<
     Journal<I>, &Journal<I>::handle_replay_process_ready>(this);
   Context *on_commit = new C_ReplayProcessSafe(this, std::move(replay_entry));
-
-  m_journal_replay->process(&it, on_ready, on_commit);
+  m_journal_replay->process(event_entry, on_ready, on_commit);
 }
 
 template <typename I>
@@ -1432,7 +1472,8 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
 
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
   if (r < 0) {
-    lderr(cct) << "failed to commit journal event to disk: " << cpp_strerror(r)
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to commit journal event to disk: " << cpp_strerror(r)
                << dendl;
 
     if (m_state == STATE_REPLAYING) {
@@ -1552,7 +1593,8 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
   // journal will be flushed before closing
   assert(m_state == STATE_READY || m_state == STATE_STOPPING);
   if (r < 0) {
-    lderr(cct) << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
   }
 
   AioObjectRequests aio_object_requests;
@@ -1582,7 +1624,8 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
     }
   }
 
-  ldout(cct, 20) << "completing tid=" << tid << dendl;
+  ldout(cct, 20) << this << " " << __func__ << ": "
+                 << "completing tid=" << tid << dendl;
   for (AioObjectRequests::iterator it = aio_object_requests.begin();
        it != aio_object_requests.end(); ++it) {
     if (r < 0) {
@@ -1605,7 +1648,8 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 template <typename I>
 void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
                                       const Future &op_start_future,
-                                      const Future &op_finish_future) {
+                                      const Future &op_finish_future,
+                                      Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
@@ -1613,14 +1657,15 @@ void Journal<I>::handle_op_event_safe(int r, uint64_t tid,
   // journal will be flushed before closing
   assert(m_state == STATE_READY || m_state == STATE_STOPPING);
   if (r < 0) {
-    lderr(cct) << "failed to commit op event: "  << cpp_strerror(r) << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to commit op event: "  << cpp_strerror(r) << dendl;
   }
 
   m_journaler->committed(op_start_future);
   m_journaler->committed(op_finish_future);
 
   // reduce the replay window after committing an op event
-  m_journaler->flush_commit_position(nullptr);
+  m_journaler->flush_commit_position(on_safe);
 }
 
 template <typename I>
@@ -1703,7 +1748,8 @@ int Journal<I>::check_resync_requested_internal(bool *do_resync) {
   cls::journal::Client client;
   int r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
   if (r < 0) {
-     lderr(cct) << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+     lderr(cct) << this << " " << __func__ << ": "
+                << "failed to retrieve client: " << cpp_strerror(r) << dendl;
      return r;
   }
 
@@ -1712,14 +1758,16 @@ int Journal<I>::check_resync_requested_internal(bool *do_resync) {
   try {
     ::decode(client_data, bl_it);
   } catch (const buffer::error &err) {
-    lderr(cct) << "failed to decode client data: " << err << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to decode client data: " << err << dendl;
     return -EINVAL;
   }
 
   journal::ImageClientMeta *image_client_meta =
     boost::get<journal::ImageClientMeta>(&client_data.client_meta);
   if (image_client_meta == nullptr) {
-    lderr(cct) << "failed to access image client meta struct" << dendl;
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to access image client meta struct" << dendl;
     return -EINVAL;
   }
 
@@ -1746,7 +1794,8 @@ void Journal<I>::handle_metadata_updated() {
     bool do_resync = false;
     int r = check_resync_requested_internal(&do_resync);
     if (r < 0) {
-      lderr(cct) << "failed to check if a resync was requested" << dendl;
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to check if a resync was requested" << dendl;
       return;
     }
 

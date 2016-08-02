@@ -39,14 +39,9 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    27 /* cluster internal */
-
-class filepath;
+#define CEPH_MDS_PROTOCOL    28 /* cluster internal */
 
 class MonClient;
-
-class Objecter;
-class Filer;
 
 class Server;
 class Locker;
@@ -54,16 +49,9 @@ class MDCache;
 class MDBalancer;
 class MDSInternalContextBase;
 
-class CInode;
-class CDir;
-class CDentry;
-
 class Messenger;
 class Message;
 
-class MMDSBeacon;
-
-class InoTable;
 class SnapServer;
 class SnapClient;
 

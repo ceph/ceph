@@ -15,6 +15,7 @@
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/scoped_ptr.hpp>
+#include <boost/optional.hpp>
 
 #include <stdlib.h>
 
@@ -256,15 +257,17 @@ struct pgid_object_list {
 struct lookup_ghobject : public action_on_object_t {
   pgid_object_list _objects;
   const string _name;
+  const boost::optional<std::string> _namespace;
   bool _need_snapset;
 
-  lookup_ghobject(const string& name, bool need_snapset = false) : _name(name),
-		  _need_snapset(need_snapset) { }
+  lookup_ghobject(const string& name, const boost::optional<std::string>& nspace, bool need_snapset = false) : _name(name),
+		  _namespace(nspace), _need_snapset(need_snapset) { }
 
   virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
     if (_need_snapset && !ghobj.hobj.has_snapset())
       return 0;
-    if (_name.length() == 0 || ghobj.hobj.oid.name == _name)
+    if ((_name.length() == 0 || ghobj.hobj.oid.name == _name) &&
+        (!_namespace || ghobj.hobj.nspace == _namespace))
       _objects.insert(coll, ghobj);
     return 0;
   }
@@ -344,29 +347,28 @@ void myexit(int ret)
 }
 
 int get_log(ObjectStore *fs, __u8 struct_ver,
-   coll_t coll, spg_t pgid, const pg_info_t &info,
-   PGLog::IndexedLog &log, pg_missing_t &missing,
-   map<eversion_t, hobject_t> &divergent_priors)
+	    coll_t coll, spg_t pgid, const pg_info_t &info,
+	    PGLog::IndexedLog &log, pg_missing_t &missing)
 {
   try {
     ostringstream oss;
     assert(struct_ver > 0);
-    PGLog::read_log(fs, coll,
+    PGLog::read_log_and_missing(fs, coll,
 		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
-		    info, divergent_priors, log, missing, oss);
+		    info, log, missing, oss);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
   catch (const buffer::error &e) {
-    cerr << "read_log threw exception error " << e.what() << std::endl;
+    cerr << "read_log_and_missing threw exception error " << e.what() << std::endl;
     return -EFAULT;
   }
   return 0;
 }
 
 void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
-      pg_missing_t &missing, map<eversion_t, hobject_t> &divergent_priors)
+	      pg_missing_t &missing)
 {
   formatter->open_object_section("op_log");
   formatter->open_object_section("pg_log_t");
@@ -378,15 +380,6 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
   formatter->close_section();
   formatter->flush(out);
   formatter->open_object_section("map");
-  formatter->open_array_section("divergent_priors");
-  for (map<eversion_t, hobject_t>::iterator it = divergent_priors.begin();
-       it != divergent_priors.end(); ++ it) {
-      formatter->open_object_section("item");
-      formatter->dump_stream("eversion") << it->first;
-      formatter->dump_stream("hobject") << it->second;
-      formatter->close_section();
-  }
-  formatter->close_section();
   formatter->close_section();
   formatter->close_section();
   formatter->flush(out);
@@ -493,16 +486,28 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   return ret;
 }
 
+typedef map<eversion_t, hobject_t> divergent_priors_t;
+
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
-    map<eversion_t, hobject_t> &divergent_priors)
+	     pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
+	     divergent_priors_t &divergent,
+	     pg_missing_t &missing)
 {
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
   coll_t coll(info.pgid);
   map<string,bufferlist> km;
-  PGLog::write_log(t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors, true);
+
+  if (!divergent.empty()) {
+    assert(missing.get_items().empty());
+    PGLog::write_log_and_missing_wo_missing(
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true);
+  } else {
+    pg_missing_tracker_t tmissing(missing);
+    PGLog::write_log_and_missing(
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true);
+  }
   t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
   return 0;
 }
@@ -771,19 +776,17 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
-  map<eversion_t, hobject_t> divergent_priors;
 
   cerr << "Exporting " << pgid << std::endl;
 
-  int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing,
-                    divergent_priors);
+  int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
   if (ret > 0)
       return ret;
 
   if (debug) {
     Formatter *formatter = Formatter::create("json-pretty");
     assert(formatter);
-    dump_log(formatter, cerr, log, missing, divergent_priors);
+    dump_log(formatter, cerr, log, missing);
     delete formatter;
   }
   write_super();
@@ -799,7 +802,13 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 
   // The metadata_section is now before files, so import can detect
   // errors and abort without wasting time.
-  metadata_section ms(struct_ver, map_epoch, info, log, past_intervals, divergent_priors);
+  metadata_section ms(
+    struct_ver,
+    map_epoch,
+    info,
+    log,
+    past_intervals,
+    missing);
   ret = add_osdmap(fs, ms);
   if (ret)
     return ret;
@@ -1031,15 +1040,6 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   formatter->flush(cout);
   cout << std::endl;
 
-  formatter->open_array_section("divergent_priors");
-  for (map<eversion_t, hobject_t>::iterator it = ms.divergent_priors.begin();
-       it != ms.divergent_priors.end(); ++ it) {
-      formatter->open_object_section("item");
-      formatter->dump_stream("eversion") << it->first;
-      formatter->dump_stream("hobject") << it->second;
-      formatter->close_section();
-  }
-  formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
 #endif
@@ -1123,8 +1123,6 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
 
   return 0;
 }
-
-typedef map<eversion_t, hobject_t> divergent_priors_t;
 
 // out: pg_log_t that only has entries that apply to import_pgid using curmap
 // reject: Entries rejected from "in" are in the reject.log.  Other fields not set.
@@ -1367,10 +1365,23 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
         cerr << "Skipping divergent_prior " << *i << std::endl;
     }
 
+    ms.missing.filter_objects([&](const hobject_t &obj) {
+	if (obj.nspace == g_ceph_context->_conf->osd_hit_set_namespace)
+	  return false;
+	assert(!obj.is_temp());
+	object_t oid = obj.oid;
+	object_locator_t loc(obj);
+	pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
+	pg_t _pgid = curmap.raw_pg_to_pg(raw_pgid);
+
+	return pgid.pgid != _pgid;
+      });
+
+
     if (debug) {
       pg_missing_t missing;
       Formatter *formatter = Formatter::create("json-pretty");
-      dump_log(formatter, cerr, newlog, missing, ms.divergent_priors);
+      dump_log(formatter, cerr, newlog, ms.missing);
       delete formatter;
     }
 
@@ -1378,7 +1389,14 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     if (skipped_objects)
       ms.info.stats.stats_invalid = true;
 
-    ret = write_pg(t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
+    ret = write_pg(
+      t,
+      ms.map_epoch,
+      ms.info,
+      newlog,
+      ms.past_intervals,
+      ms.divergent_priors,
+      ms.missing);
     if (ret) return ret;
   }
 
@@ -1396,11 +1414,11 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   return 0;
 }
 
-int do_list(ObjectStore *store, string pgidstr, string object,
+int do_list(ObjectStore *store, string pgidstr, string object, boost::optional<std::string> nspace,
 	    Formatter *formatter, bool debug, bool human_readable, bool head)
 {
   int r;
-  lookup_ghobject lookup(object, head);
+  lookup_ghobject lookup(object, nspace, head);
   if (pgidstr.length() > 0) {
     r = action_on_all_objects_in_pg(store, pgidstr, lookup, debug);
   } else {
@@ -1416,7 +1434,8 @@ int do_list(ObjectStore *store, string pgidstr, string object,
 int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug, bool human_readable)
 {
   int r;
-  lookup_ghobject lookup(object);
+  boost::optional<std::string> nspace; // Not specified
+  lookup_ghobject lookup(object, nspace);
   r = action_on_all_objects_in_exact_pg(store, coll_t::meta(), lookup, debug);
   if (r)
     return r;
@@ -1425,8 +1444,25 @@ int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug,
   return 0;
 }
 
+int remove_object(coll_t coll, ghobject_t &ghobj,
+  SnapMapper &mapper,
+  MapCacher::Transaction<std::string, bufferlist> *_t,
+  ObjectStore::Transaction *t)
+{
+  int r = mapper.remove_oid(ghobj.hobj, _t);
+  if (r < 0 && r != -ENOENT) {
+    cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  t->remove(coll, ghobj);
+  return 0;
+}
+
+int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss, bool silent);
+
 int do_remove_object(ObjectStore *store, coll_t coll,
-		     ghobject_t &ghobj,
+		     ghobject_t &ghobj, bool all, bool force,
 		     ObjectStore::Sequencer &osr)
 {
   spg_t pg;
@@ -1444,20 +1480,52 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     return r;
   }
 
-  cout << "remove " << ghobj << std::endl;
-  if (dry_run)
-    return 0;
-  ObjectStore::Transaction t;
-  OSDriver::OSTransaction _t(driver.get_transaction(&t));
-  r = mapper.remove_oid(ghobj.hobj, &_t);
-  if (r < 0 && r != -ENOENT) {
-    cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
-    return r;
+  SnapSet ss;
+  if (ghobj.hobj.has_snapset()) {
+    r = get_snapset(store, coll, ghobj, ss, false);
+    if (r < 0) {
+      cerr << "Can't get snapset error " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (!ss.snaps.empty() && !all) {
+      if (force) {
+        cout << "WARNING: only removing "
+             << (ghobj.hobj.is_head() ? "head" : "snapdir")
+             << " with snapshots present" << std::endl;
+        ss.snaps.clear();
+      } else {
+        cerr << "Snapshots are present, use removeall to delete everything" << std::endl;
+        return -EINVAL;
+      }
+    }
   }
 
-  t.remove(coll, ghobj);
+  ObjectStore::Transaction t;
+  OSDriver::OSTransaction _t(driver.get_transaction(&t));
 
-  store->apply_transaction(&osr, std::move(t));
+  cout << "remove " << ghobj << std::endl;
+
+  if (!dry_run) {
+    r = remove_object(coll, ghobj, mapper, &_t, &t);
+    if (r < 0)
+      return r;
+  }
+
+  ghobject_t snapobj = ghobj;
+  for (vector<snapid_t>::iterator i = ss.snaps.begin() ;
+       i != ss.snaps.end() ; ++i) {
+    snapobj.hobj.snap = *i;
+    cout << "remove " << snapobj << std::endl;
+    if (!dry_run) {
+      r = remove_object(coll, snapobj, mapper, &_t, &t);
+      if (r < 0)
+        return r;
+    }
+  }
+
+  if (!dry_run)
+    store->apply_transaction(&osr, std::move(t));
+
   return 0;
 }
 
@@ -2156,7 +2224,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> set-omaphdr [file]" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> list-attrs" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
-    cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> remove|removeall" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> dump" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>" << std::endl;
@@ -2193,7 +2261,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format;
+  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format, argnspace;
+  boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
   ghobject_t ghobj;
@@ -2210,7 +2279,7 @@ int main(int argc, char **argv)
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
-     "path to journal, mandatory for filestore type")
+     "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
@@ -2230,6 +2299,7 @@ int main(int argc, char **argv)
     ("skip-mount-omap", "Disable mounting of omap")
     ("head", "Find head/snapdir when searching for objects by name")
     ("dry-run", "Don't modify the objectstore")
+    ("namespace", po::value<string>(&argnspace), "Specify namespace when searching for objects")
     ;
 
   po::options_description positional("Positional options");
@@ -2277,6 +2347,9 @@ int main(int argc, char **argv)
   } else {
     force = true;
   }
+
+  if (vm.count("namespace"))
+    nspace = argnspace;
 
   if (vm.count("dry-run"))
     dry_run = true;
@@ -2540,7 +2613,7 @@ int main(int argc, char **argv)
         // Special: Need head/snapdir so set even if user didn't specify
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;
-	lookup_ghobject lookup(object, head);
+	lookup_ghobject lookup(object, nspace, head);
 	if (action_on_all_objects(fs, lookup, debug)) {
 	  throw std::runtime_error("Internal error");
 	} else {
@@ -2741,7 +2814,8 @@ int main(int argc, char **argv)
   }
 
   if (op == "list") {
-    ret = do_list(fs, pgidstr, object, formatter, debug, human_readable, head);
+    ret = do_list(fs, pgidstr, object, nspace, formatter, debug,
+                  human_readable, head);
     if (ret < 0) {
       cerr << "do_list failed: " << cpp_strerror(ret) << std::endl;
     }
@@ -2828,8 +2902,9 @@ int main(int argc, char **argv)
 
     if (vm.count("objcmd")) {
       ret = 0;
-      if (objcmd == "remove") {
-        ret = do_remove_object(fs, coll, ghobj, *osr);
+      if (objcmd == "remove" || objcmd == "removeall") {
+        bool all = (objcmd == "removeall");
+        ret = do_remove_object(fs, coll, ghobj, all, force, *osr);
         goto out;
       } else if (objcmd == "list-attrs") {
         ret = do_list_attrs(fs, coll, ghobj);
@@ -3097,13 +3172,11 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      map<eversion_t, hobject_t> divergent_priors;
-      ret = get_log(fs, struct_ver, coll, pgid, info, log, missing,
-                    divergent_priors);
+      ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
       if (ret < 0)
           goto out;
 
-      dump_log(formatter, cout, log, missing, divergent_priors);
+      dump_log(formatter, cout, log, missing);
     } else if (op == "rm-past-intervals") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;

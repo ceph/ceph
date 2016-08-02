@@ -519,6 +519,7 @@ void rgw_bucket::dump(Formatter *f) const
   encode_json("index_pool", index_pool, f);
   encode_json("marker", marker, f);
   encode_json("bucket_id", bucket_id, f);
+  encode_json("tenant", tenant, f);
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
@@ -528,6 +529,7 @@ void rgw_bucket::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const
@@ -810,6 +812,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("domain_root", domain_root.data_pool, f);
   encode_json("control_pool", control_pool.data_pool, f);
   encode_json("gc_pool", gc_pool.data_pool, f);
+  encode_json("lc_pool", lc_pool.data_pool, f);
   encode_json("log_pool", log_pool.data_pool, f);
   encode_json("intent_log_pool", intent_log_pool.data_pool, f);
   encode_json("usage_log_pool", usage_log_pool.data_pool, f);
@@ -854,6 +857,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   ::decode_json("domain_root", domain_root, obj);
   ::decode_json("control_pool", control_pool, obj);
   ::decode_json("gc_pool", gc_pool, obj);
+  ::decode_json("lc_pool", lc_pool, obj);
   ::decode_json("log_pool", log_pool, obj);
   ::decode_json("intent_log_pool", intent_log_pool, obj);
   ::decode_json("usage_log_pool", usage_log_pool, obj);

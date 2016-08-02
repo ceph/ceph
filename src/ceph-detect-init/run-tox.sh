@@ -25,8 +25,15 @@ fi
 # run from the ceph-detect-init directory or from its parent
 : ${CEPH_DETECT_INIT_VIRTUALENV:=/tmp/ceph-detect-init-virtualenv}
 test -d ceph-detect-init && cd ceph-detect-init
+
+if [ -e tox.ini ]; then
+    TOX_PATH=`readlink -f tox.ini`
+else
+    TOX_PATH=`readlink -f $(dirname $0)/tox.ini`
+fi
+
 source ${CEPH_DETECT_INIT_VIRTUALENV}/bin/activate
-tox > ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out 2>&1
+tox -c ${TOX_PATH} > ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out 2>&1
 status=$?
 grep -v InterpreterNotFound < ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out
 exit $status

@@ -207,17 +207,23 @@ void AsyncCompletePayload::dump(Formatter *f) const {
 }
 
 void ResizePayload::encode(bufferlist &bl) const {
-  ::encode(size, bl);
   AsyncRequestPayloadBase::encode(bl);
+  ::encode(size, bl);
+  ::encode(allow_shrink, bl);
 }
 
 void ResizePayload::decode(__u8 version, bufferlist::iterator &iter) {
-  ::decode(size, iter);
   AsyncRequestPayloadBase::decode(version, iter);
+  ::decode(size, iter);
+
+  if (version >= 4) {
+    ::decode(allow_shrink, iter);
+  }
 }
 
 void ResizePayload::dump(Formatter *f) const {
   f->dump_unsigned("size", size);
+  f->dump_bool("allow_shrink", allow_shrink);
   AsyncRequestPayloadBase::dump(f);
 }
 
@@ -275,7 +281,7 @@ bool NotifyMessage::check_for_refresh() const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -354,7 +360,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
   o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(ResizePayload(123, AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(SnapCreatePayload("foo")));
   o.push_back(new NotifyMessage(SnapRemovePayload("foo")));
   o.push_back(new NotifyMessage(SnapProtectPayload("foo")));

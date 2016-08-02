@@ -186,6 +186,31 @@ private:
   uint64_t m_length;
 };
 
+class DiscardIO : public IO {
+public:
+  DiscardIO(action_id_t ionum,
+	    uint64_t start_time,
+	    thread_id_t thread_id,
+            const io_set_t& deps,
+	    imagectx_id_t imagectx,
+	    uint64_t offset,
+	    uint64_t length)
+    : IO(ionum, start_time, thread_id, deps),
+      m_imagectx(imagectx),
+      m_offset(offset),
+      m_length(length) {
+  }
+
+  virtual void encode(bufferlist &bl) const;
+
+  void write_debug(std::ostream& out) const;
+
+private:
+  imagectx_id_t m_imagectx;
+  uint64_t m_offset;
+  uint64_t m_length;
+};
+
 class AioReadIO : public IO {
 public:
   AioReadIO(action_id_t ionum,
@@ -220,6 +245,31 @@ public:
 	     imagectx_id_t imagectx,
 	     uint64_t offset,
 	     uint64_t length)
+    : IO(ionum, start_time, thread_id, deps),
+      m_imagectx(imagectx),
+      m_offset(offset),
+      m_length(length) {
+  }
+
+  virtual void encode(bufferlist &bl) const;
+
+  void write_debug(std::ostream& out) const;
+
+private:
+  imagectx_id_t m_imagectx;
+  uint64_t m_offset;
+  uint64_t m_length;
+};
+
+class AioDiscardIO : public IO {
+public:
+  AioDiscardIO(action_id_t ionum,
+	       uint64_t start_time,
+	       thread_id_t thread_id,
+               const io_set_t& deps,
+	       imagectx_id_t imagectx,
+	       uint64_t offset,
+	       uint64_t length)
     : IO(ionum, start_time, thread_id, deps),
       m_imagectx(imagectx),
       m_offset(offset),

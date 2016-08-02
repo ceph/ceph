@@ -3,6 +3,7 @@ set(libradostest_srcs
   test.cc 
   TestCase.cc)
 add_library(radostest STATIC ${libradostest_srcs})
+target_link_libraries(radostest common json_spirit)
 set_target_properties(radostest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # ceph_test_rados_api_cmd
@@ -141,16 +142,6 @@ set_target_properties(ceph_test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_snapshots
   librados ${UNITTEST_LIBS} radostest)
 
-# ceph_test_rados_api_tmap_migrate
-add_executable(ceph_test_rados_api_tmap_migrate
-  ${CMAKE_SOURCE_DIR}/src/tools/cephfs/DataScan.cc
-  ${CMAKE_SOURCE_DIR}/src/tools/cephfs/MDSUtility.cc
-  tmap_migrate.cc
-  )
-set_target_properties(ceph_test_rados_api_tmap_migrate PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rados_api_tmap_migrate
-  librados mds osdc global cls_cephfs_client ${UNITTEST_LIBS} radostest)
 install(TARGETS
   ceph_test_rados_api_aio
   ceph_test_rados_api_c_read_operations
@@ -164,7 +155,6 @@ install(TARGETS
   ceph_test_rados_api_snapshots
   ceph_test_rados_api_stat
   ceph_test_rados_api_tier
-  ceph_test_rados_api_tmap_migrate
   ceph_test_rados_api_watch_notify
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 

@@ -17,6 +17,7 @@
 
 #include <list>
 #include <map>
+#include <utility>
 #include "common/Mutex.h"
 #include "librbd/ImageCtx.h"
 #include "include/Context.h"
@@ -59,24 +60,27 @@ public:
                   ContextWQ *work_queue, Context *on_finish,
                   ProgressContext *progress_ctx = nullptr);
 
-  void cancel_sync(const std::string& mirror_uuid);
+  void cancel_sync(librados::IoCtx &local_io_ctx,
+                   const std::string local_image_id);
 
   void set_max_concurrent_syncs(uint32_t max);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
 private:
+  typedef std::pair<int64_t, std::string> PoolImageId;
 
   struct C_SyncHolder : public Context {
     ImageSyncThrottler<ImageCtxT> *m_sync_throttler;
-    std::string m_local_image_id;
-    ImageSync<ImageCtxT> *m_sync;
+    PoolImageId m_local_pool_image_id;
+    ImageSync<ImageCtxT> *m_sync = nullptr;
     Context *m_on_finish;
 
     C_SyncHolder(ImageSyncThrottler<ImageCtxT> *sync_throttler,
-                 const std::string& local_image_id, Context *on_finish)
-      : m_sync_throttler(sync_throttler), m_local_image_id(local_image_id),
-        m_sync(nullptr), m_on_finish(on_finish) {}
+                 const PoolImageId &local_pool_image_id, Context *on_finish)
+      : m_sync_throttler(sync_throttler),
+        m_local_pool_image_id(local_pool_image_id), m_on_finish(on_finish) {
+    }
 
     virtual void finish(int r) {
       m_sync_throttler->handle_sync_finished(this);
@@ -93,7 +97,7 @@ private:
   uint32_t m_max_concurrent_syncs;
   Mutex m_lock;
   std::list<C_SyncHolder *> m_sync_queue;
-  std::map<std::string, C_SyncHolder *> m_inflight_syncs;
+  std::map<PoolImageId, C_SyncHolder *> m_inflight_syncs;
 
 };
 

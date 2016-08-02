@@ -70,7 +70,7 @@ TYPE(pg_interval_t)
 TYPE_FEATUREFUL(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
-TYPE(pg_missing_t::item)
+TYPE(pg_missing_item)
 TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
 TYPE(pg_nls_response_t)
@@ -115,7 +115,7 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#if !defined(__FreeBSD__)
+#ifdef WITH_LIBAIO
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)

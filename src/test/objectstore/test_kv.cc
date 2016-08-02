@@ -83,6 +83,37 @@ TEST_P(KVTest, OpenCloseReopenClose) {
   fini();
 }
 
+/*
+ * Basic write and read test case in same database session.
+ */
+TEST_P(KVTest, OpenWriteRead) {
+  ASSERT_EQ(0, db->create_and_open(cout));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist value;
+    value.append("value");
+    t->set("prefix", "key", value);
+    value.clear();
+    value.append("value2");
+    t->set("prefix", "key2", value);
+    value.clear();
+    value.append("value3");
+    t->set("prefix", "key3", value);
+    db->submit_transaction_sync(t);
+
+    bufferlist v1, v2;
+    ASSERT_EQ(0, db->get("prefix", "key", &v1));
+    ASSERT_EQ(v1.length(), 5u);
+    (v1.c_str())[v1.length()] = 0x0;
+    ASSERT_EQ(std::string(v1.c_str()), std::string("value"));
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 6u);
+    (v2.c_str())[v2.length()] = 0x0;
+    ASSERT_EQ(std::string(v2.c_str()), std::string("value2"));
+  }
+  fini();
+}
+
 TEST_P(KVTest, PutReopen) {
   ASSERT_EQ(0, db->create_and_open(cout));
   {
@@ -168,6 +199,7 @@ struct AppendMOP : public KeyValueDB::MergeOperator {
     const char *ldata, size_t llen,
     const char *rdata, size_t rlen,
     std::string *new_value) {
+
     *new_value = std::string(ldata, llen) + std::string(rdata, rlen);
   }
   // We use each operator name and each prefix to construct the
@@ -227,7 +259,7 @@ TEST_P(KVTest, Merge) {
 INSTANTIATE_TEST_CASE_P(
   KeyValueDB,
   KVTest,
-  ::testing::Values("leveldb", "rocksdb"));
+  ::testing::Values("leveldb", "rocksdb", "memdb"));
 
 #else
 
@@ -250,7 +282,7 @@ int main(int argc, char **argv) {
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
-    "rocksdb");
+    "rocksdb, memdb");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);

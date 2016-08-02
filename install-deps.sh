@@ -146,7 +146,14 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-$interpreter
 
     if ! test -d $env_dir ; then
-        virtualenv --python $interpreter $env_dir
+        # Make a temporary virtualenv to get a fresh version of virtualenv
+        # because CentOS 7 has a buggy old version (v1.10.1)
+        # https://github.com/pypa/virtualenv/issues/463
+        virtualenv ${env_dir}_tmp
+        ${env_dir}_tmp/bin/pip install --upgrade virtualenv
+        ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
+        rm -rf ${env_dir}_tmp
+
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir

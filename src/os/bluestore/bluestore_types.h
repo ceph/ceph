@@ -56,18 +56,73 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
-/// pextent: physical extent
-struct bluestore_pextent_t {
-  const static uint64_t INVALID_OFFSET = ~0ull;
+class AllocExtent {
+public:
+  uint64_t offset;
+  uint32_t length;
 
-  uint64_t offset, length;    ///< location on device
+  AllocExtent() { 
+    offset = 0;
+    length = 0;
+  }
 
-  bluestore_pextent_t() : offset(0), length(0) {}
-  bluestore_pextent_t(uint64_t o, uint64_t l) : offset(o), length(l) {}
-
+  AllocExtent(int64_t off, int32_t len) : offset(off), length(len) { }
   uint64_t end() const {
     return offset + length;
   }
+};
+
+class ExtentList {
+  std::vector<AllocExtent> *m_extents;
+  int64_t m_num_extents;
+  int64_t m_block_size;
+  uint64_t m_max_alloc_size;
+
+public:
+  void init(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+    m_extents = extents;
+    m_num_extents = 0;
+    m_block_size = block_size;
+    m_max_alloc_size = max_alloc_size;
+  }
+
+  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size) {
+    init(extents, block_size, 0);
+  }
+
+  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+    init(extents, block_size, max_alloc_size);
+  }
+
+  void reset() {
+    m_num_extents = 0;
+  }
+
+  void add_extents(int64_t start, int64_t count);
+
+  std::vector<AllocExtent> *get_extents() {
+    return m_extents;
+  }
+
+  std::pair<int64_t, int64_t> get_nth_extent(int index) {
+      return std::make_pair
+            ((*m_extents)[index].offset / m_block_size,
+             (*m_extents)[index].length / m_block_size);
+  }
+
+  int64_t get_extent_count() {
+    return m_num_extents;
+  }
+};
+
+
+/// pextent: physical extent
+struct bluestore_pextent_t : public AllocExtent{
+  const static uint64_t INVALID_OFFSET = ~0ull;
+
+  bluestore_pextent_t() : AllocExtent() {}
+  bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
+  bluestore_pextent_t(AllocExtent &ext) : AllocExtent(ext.offset, ext.length) { }
 
   bool is_valid() const {
     return offset != INVALID_OFFSET;
@@ -120,6 +175,14 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
+  //raw reference insertion that assumes no conflicts/interference with the existing references
+  void fill(uint32_t offset, uint32_t len, int refs = 1) {
+    auto p = ref_map.insert(
+        map<uint32_t,record_t>::value_type(offset,
+                                           record_t(len, refs))).first;
+    _maybe_merge_left(p);
+  }
+
   void get(uint32_t offset, uint32_t len);
   void put(uint32_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
@@ -155,6 +218,7 @@ struct bluestore_blob_t {
     FLAG_COMPRESSED = 2,      ///< blob is compressed
     FLAG_CSUM = 4,            ///< blob has checksums
     FLAG_HAS_UNUSED = 8,      ///< blob has unused map
+    FLAG_HAS_REFMAP  = 16,    ///< blob has non-empty reference map
   };
   static string get_flags_string(unsigned flags);
 
@@ -194,7 +258,35 @@ struct bluestore_blob_t {
     return -EINVAL;
   }
 
+  enum CompressionAlgorithm {
+    COMP_ALG_NONE = 0,
+    COMP_ALG_SNAPPY = 1,
+    COMP_ALG_ZLIB = 2,
+  };
+
+  static const char * get_comp_alg_name(int a) {
+    switch (a) {
+    case COMP_ALG_NONE: return "none";
+    case COMP_ALG_SNAPPY: return "snappy";
+    case COMP_ALG_ZLIB: return "zlib";
+    default: return "???";
+    }
+  }
+
+  static int get_comp_alg_type(const std::string &s) {
+    if (s == "none")
+      return COMP_ALG_NONE;
+    if (s == "snappy")
+      return COMP_ALG_SNAPPY;
+    if (s == "zlib")
+      return COMP_ALG_ZLIB;
+
+    assert(0 == "invalid compression algorithm");
+    return COMP_ALG_NONE;
+  }
+
   vector<bluestore_pextent_t> extents;///< raw data position on device
+  uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
 
@@ -228,8 +320,9 @@ struct bluestore_blob_t {
     return get_flags_string(flags);
   }
 
-  void set_compressed(uint64_t clen) {
+  void set_compressed(uint64_t clen_orig, uint64_t clen) {
     set_flag(FLAG_COMPRESSED);
+    compressed_length_orig = clen_orig;
     compressed_length = clen;
   }
   bool is_mutable() const {
@@ -244,6 +337,9 @@ struct bluestore_blob_t {
   bool has_unused() const {
     return has_flag(FLAG_HAS_UNUSED);
   }
+  bool has_refmap() const {
+    return has_flag(FLAG_HAS_REFMAP);
+  }
 
   /// return chunk (i.e. min readable block) size for the blob
   uint64_t get_chunk_size(uint64_t dev_block_size) {
@@ -254,6 +350,9 @@ struct bluestore_blob_t {
   }
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
+  }
+  uint32_t get_compressed_payload_original_length() const {
+    return is_compressed() ? compressed_length_orig : 0;
   }
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
@@ -283,6 +382,7 @@ struct bluestore_blob_t {
     }
     b_len += b_off;
     while (b_len) {
+      assert(p != extents.end());
       if (!p->is_valid()) {
 	return false;
       }
@@ -347,9 +447,15 @@ struct bluestore_blob_t {
     }
   }
 
+  /// get logical references
+  void get_ref(uint64_t offset, uint64_t length);
   /// put logical references, and get back any released extents
-  void put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
-	       vector<bluestore_pextent_t> *r);
+  bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+              vector<bluestore_pextent_t> *r);
+  /// put logical references using external ref_map, and get back any released extents
+  bool put_ref_external( bluestore_extent_ref_map_t& ref_map,
+               uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+               vector<bluestore_pextent_t> *r);
 
   void map(uint64_t x_off, uint64_t x_len,
 	   std::function<void(uint64_t,uint64_t)> f) const {
@@ -361,6 +467,7 @@ struct bluestore_blob_t {
       assert(p != extents.end());
     }
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       f(p->offset + x_off, l);
       x_off = 0;
@@ -381,6 +488,7 @@ struct bluestore_blob_t {
     bufferlist::iterator it = bl.begin();
     uint64_t x_len = bl.length();
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
@@ -575,7 +683,21 @@ struct bluestore_onode_t {
 
   /// punch a logical hole.  add lextents to deref to target list.
   void punch_hole(uint64_t offset, uint64_t length,
-		  vector<bluestore_lextent_t> *deref);
+		  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
+
+  /// put new lextent into lextent_map overwriting existing ones if any and update references accordingly
+  void set_lextent(uint64_t offset,
+		   const bluestore_lextent_t& lext,
+		   bluestore_blob_t* b,
+		   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
+
+  /// post process removed lextent to take care of blob references
+  /// returns true is underlying blob has to be released
+  bool deref_lextent(uint64_t offset,
+               bluestore_lextent_t& lext,
+               bluestore_blob_t* b,
+               uint64_t min_alloc_size,
+               vector<bluestore_pextent_t>* r);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -609,9 +731,7 @@ struct bluestore_wal_transaction_t {
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
-  int64_t _bytes;  ///< cached byte count
-
-  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -621,11 +741,11 @@ struct bluestore_wal_transaction_t {
 WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
-  std::string type;
+  uint8_t type = bluestore_blob_t::COMP_ALG_NONE;
   uint32_t length = 0;
 
   bluestore_compression_header_t() {}
-  bluestore_compression_header_t(const std::string& _type)
+  bluestore_compression_header_t(uint8_t _type)
     : type(_type) {}
 
   void encode(bufferlist& bl) const;

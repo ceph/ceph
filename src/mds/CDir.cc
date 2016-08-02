@@ -2211,11 +2211,19 @@ void CDir::_commit(version_t want, int op_prio)
 void CDir::_committed(int r, version_t v)
 {
   if (r < 0) {
-    dout(1) << "commit error " << r << " v " << v << dendl;
-    cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
-			      << " errno " << r << "\n";
-    cache->mds->handle_write_error(r);
-    return;
+    // the directory could be partly purged during MDS failover
+    if (r == -ENOENT && committed_version == 0 &&
+	inode->inode.nlink == 0 && inode->snaprealm) {
+      inode->state_set(CInode::STATE_MISSINGOBJS);
+      r = 0;
+    }
+    if (r < 0) {
+      dout(1) << "commit error " << r << " v " << v << dendl;
+      cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
+				<< " errno " << r << "\n";
+      cache->mds->handle_write_error(r);
+      return;
+    }
   }
 
   dout(10) << "_committed v " << v << " on " << *this << dendl;
@@ -3039,7 +3047,7 @@ int CDir::scrub_dentry_next(MDSInternalContext *cb, CDentry **dnout)
     dout(20) << __func__ << " inserted to directories scrubbing: "
       << *dnout << dendl;
     scrub_infop->directories_scrubbing.insert((*dnout)->key());
-  } else if (rval < 0 || rval == EAGAIN) {
+  } else if (rval == EAGAIN) {
     // we don't need to do anything else
   } else { // we emptied out the directory scrub set
     assert(rval == ENOENT);

@@ -109,6 +109,12 @@ add_executable(unittest_bit_alloc
 add_ceph_unittest(unittest_bit_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bit_alloc)
 target_link_libraries(unittest_bit_alloc os global)
 
+add_executable(unittest_alloc
+  Allocator_test.cc
+  )
+add_ceph_unittest(unittest_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_alloc)
+target_link_libraries(unittest_alloc os global)
+
 # unittest_bluefs
 add_executable(unittest_bluefs
   test_bluefs.cc

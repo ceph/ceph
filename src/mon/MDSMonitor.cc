@@ -645,7 +645,23 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), fsmap.get_epoch(), state, seq,
 			CEPH_FEATURES_SUPPORTED_DEFAULT));
+    } else if (info.state == MDSMap::STATE_STANDBY && state != info.state) {
+      // Standby daemons should never modify their own
+      // state.  Reject any attempts to do so.
+      derr << "standby " << gid << " attempted to change state to "
+           << ceph_mds_state_name(state) << ", rejecting" << dendl;
+      return true;
+    } else if (info.state != MDSMap::STATE_STANDBY && state != info.state &&
+               !MDSMap::state_transition_valid(info.state, state)) {
+      // Validate state transitions for daemons that hold a rank
+      derr << "daemon " << gid << " (rank " << info.rank << ") "
+           << "reported invalid state transition "
+           << ceph_mds_state_name(info.state) << " -> "
+           << ceph_mds_state_name(state) << dendl;
+      return true;
     } else {
+      // Made it through special cases and validations, record the
+      // daemon's reported state to the FSMap.
       pending_fsmap.modify_daemon(gid, [state, seq](MDSMap::mds_info_t *info) {
         info->state = state;
         info->state_seq = seq;
@@ -2641,8 +2657,10 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
   bufferlist bl;
   int r = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  if (r)
+  if (r) {
+    dout(1) << "Unable to load 'last_metadata'" << dendl;
     return r;
+  }
 
   bufferlist::iterator it = bl.begin();
   ::decode(m, it);
@@ -2840,11 +2858,9 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
 	do_propose = true;
       }
     }
-  }
-
-  // There were no failures to replace, so try using any available standbys
-  // as standby-replay daemons.
-  if (failed.empty()) {
+  } else {
+    // There were no failures to replace, so try using any available standbys
+    // as standby-replay daemons.
     for (const auto &j : pending_fsmap.standby_daemons) {
       const auto &gid = j.first;
       const auto &info = j.second;

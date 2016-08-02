@@ -141,6 +141,9 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
 test_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${clone_image}
 
+expect_failure "is non-primary" clone_image ${CLUSTER1} ${PARENT_POOL} \
+    ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
+
 testlog "TEST: disable mirroring / delete non-primary image"
 image2=test2
 image3=test3
@@ -170,6 +173,8 @@ unprotect_snapshot ${CLUSTER2} ${POOL} ${image5} 'snap2'
 for i in ${image3} ${image5}; do
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
+  # workaround #16555: before removing make sure it is not still bootstrapped
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
   remove_image ${CLUSTER2} ${POOL} ${i}
 done
 
@@ -185,6 +190,14 @@ for i in ${image2} ${image4}; do
   wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${i}
   compare_images ${POOL} ${i}
 done
+
+testlog "TEST: snapshot rename"
+snap_name='snap_rename'
+create_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_0"
+for i in `seq 1 20`; do
+  rename_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_$(expr ${i} - 1)" "${snap_name}_${i}"
+done
+wait_for_snap_present ${CLUSTER1} ${POOL} ${image2} "${snap_name}_${i}"
 
 testlog "TEST: disable mirror while daemon is stopped"
 stop_mirror ${CLUSTER1}

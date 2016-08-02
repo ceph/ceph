@@ -27,6 +27,7 @@
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 #include "include/assert.h"
 #include "include/unordered_map.h"
@@ -199,19 +200,19 @@ public:
 
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     Cache *cache;
-    state_list_t writing;
+    map<uint64_t, state_list_t> writing_map;
 
     BufferSpace(Cache *c) : cache(c) {}
     ~BufferSpace() {
       assert(buffer_map.empty());
-      assert(writing.empty());
+      assert(writing_map.empty());
     }
 
     void _add_buffer(Buffer *b, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-	writing.push_back(*b);
+        writing_map[b->seq].push_back(*b);
       } else {
 	cache->_add_buffer(b, level, near);
       }
@@ -223,7 +224,12 @@ public:
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
-	writing.erase(writing.iterator_to(*p->second));
+        uint64_t seq = (*p->second.get()).seq;
+        auto it = writing_map.find(seq);
+        assert(it != writing_map.end());
+        it->second.erase(it->second.iterator_to(*p->second));
+        if (it->second.empty())
+          writing_map.erase(it);
       } else {
 	cache->_rm_buffer(p->second.get());
       }
@@ -1272,7 +1278,7 @@ private:
     string what,
     const BlobMap& blob_map,
     map<int64_t,bluestore_extent_ref_map_t>& v,
-    interval_set<uint64_t> &used_blocks,
+    boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);
 
 public:
@@ -1498,7 +1504,7 @@ private:
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
 
-    vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
+    vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
 
     struct write_item {
       Blob *b;

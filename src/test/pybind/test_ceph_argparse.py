@@ -92,10 +92,16 @@ class TestArgparse:
 class TestBasic:
 
     def test_non_ascii_in_non_options(self):
-        # unicode() is not able to convert this str parameter into unicode
-        # using the default encoding 'ascii'. and validate_command() should
-        # not choke on it.
+        # ArgumentPrefix("no match for {0}".format(s)) is not able to convert
+        # unicode str parameter into str. and validate_command() should not
+        # choke on it.
+        assert_is_none(validate_command(sigdict, [u'章鱼和鱿鱼']))
+        assert_is_none(validate_command(sigdict, [u'–w']))
+        # actually we always pass unicode strings to validate_command() in "ceph"
+        # CLI, but we also use bytestrings in our tests, so make sure it does not
+        # break.
         assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
+        assert_is_none(validate_command(sigdict, ['–w']))
 
 
 class TestPG(TestArgparse):
@@ -482,6 +488,10 @@ class TestMDS(TestArgparse):
 
 
 class TestFS(TestArgparse):
+    
+    def test_dump(self):
+        self.check_0_or_1_natural_arg('fs', 'dump')
+    
     def test_fs_new(self):
         self.assert_valid_command(['fs', 'new', 'default', 'metadata', 'data'])
 

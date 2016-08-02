@@ -727,3 +727,29 @@ MDSMap::availability_t MDSMap::is_cluster_available() const
     return STUCK_UNAVAILABLE;
   }
 }
+
+bool MDSMap::state_transition_valid(DaemonState prev, DaemonState next)
+{
+  bool state_valid = true;
+  if (next != prev) {
+    if (prev == MDSMap::STATE_REPLAY) {
+      if (next != MDSMap::STATE_RESOLVE && next != MDSMap::STATE_RECONNECT) {
+        state_valid = false;
+      }
+    } else if (prev == MDSMap::STATE_REJOIN) {
+      if (next != MDSMap::STATE_ACTIVE
+          && next != MDSMap::STATE_CLIENTREPLAY
+          && next != MDSMap::STATE_STOPPED) {
+        state_valid = false;
+      }
+    } else if (prev >= MDSMap::STATE_RECONNECT && prev < MDSMap::STATE_ACTIVE) {
+      // Once I have entered replay, the only allowable transitions are to
+      // the next next along in the sequence.
+      if (next != prev + 1) {
+        state_valid = false;
+      }
+    }
+  }
+
+  return state_valid;
+}

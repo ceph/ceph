@@ -66,11 +66,15 @@ function(distutils_install_cython_module name)
        COMMAND env
            CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
            CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-           CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
+           CC=${CMAKE_C_COMPILER}
+           CPPFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"
+           LDFLAGS=\"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\"
            ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --build-base ${CYTHON_MODULE_DIR} --verbose
-           install \${options} --verbose
-           --single-version-externally-managed --record /dev/null
+           build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
+           install \${options} --single-version-externally-managed --record /dev/null
+           egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
+           --verbose
        WORKING_DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\"
        RESULT_VARIABLE install_res)
     if(NOT \"\${install_res}\" STREQUAL 0)

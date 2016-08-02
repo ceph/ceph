@@ -369,7 +369,7 @@ enum {
 
 extern const char *ceph_mds_op_name(int op);
 
-
+#ifndef CEPH_SETATTR_MODE
 #define CEPH_SETATTR_MODE	(1 << 0)
 #define CEPH_SETATTR_UID	(1 << 1)
 #define CEPH_SETATTR_GID	(1 << 2)
@@ -377,6 +377,7 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_ATIME	(1 << 4)
 #define CEPH_SETATTR_SIZE	(1 << 5)
 #define CEPH_SETATTR_CTIME	(1 << 6)
+#endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 

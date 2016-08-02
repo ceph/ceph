@@ -456,11 +456,11 @@ public:
   void set_layout(file_layout_t const *l);
   void set_readonly();
   void set_writeable();
-  void set_write_pos(int64_t p) {
+  void set_write_pos(uint64_t p) {
     lock_guard l(lock);
     prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = p;
   }
-  void set_read_pos(int64_t p) {
+  void set_read_pos(uint64_t p) {
     lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
     assert(requested_pos == received_pos);
@@ -468,11 +468,11 @@ public:
     read_buf.clear();
   }
   uint64_t append_entry(bufferlist& bl);
-  void set_expire_pos(int64_t ep) {
+  void set_expire_pos(uint64_t ep) {
       lock_guard l(lock);
       expire_pos = ep;
   }
-  void set_trimmed_pos(int64_t p) {
+  void set_trimmed_pos(uint64_t p) {
       lock_guard l(lock);
       trimming_pos = trimmed_pos = p;
   }

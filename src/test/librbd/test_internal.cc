@@ -113,7 +113,7 @@ TEST_F(TestInternal, ResizeLocksImage) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, no_op));
+  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, true, no_op));
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -128,7 +128,7 @@ TEST_F(TestInternal, ResizeFailsToLockImage) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(-EROFS, ictx->operations->resize(m_image_size >> 1, no_op));
+  ASSERT_EQ(-EROFS, ictx->operations->resize(m_image_size >> 1, true, no_op));
 }
 
 TEST_F(TestInternal, SnapCreateLocksImage) {
@@ -336,7 +336,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     size -= MIN(size, 1<<18);
     {
       RWLock::RLocker l(ictx->owner_lock);
-      ictx->operations->execute_resize(size, prog_ctx, &ctx, 0);
+      ictx->operations->execute_resize(size, true, prog_ctx, &ctx, 0);
     }
 
     // try to interrupt the in-progress resize
@@ -384,7 +384,7 @@ TEST_F(TestInternal, MultipleResize) {
 
     RWLock::RLocker l(ictx->owner_lock);
     contexts.push_back(new C_SaferCond());
-    ictx->operations->execute_resize(new_size, prog_ctx, contexts.back(), 0);
+    ictx->operations->execute_resize(new_size, true, prog_ctx, contexts.back(), 0);
   }
 
   for (uint32_t i = 0; i < contexts.size(); ++i) {
@@ -610,9 +610,9 @@ TEST_F(TestInternal, ResizeCopyup)
   // verify full / partial object removal properly copyup
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (1 << order) - 32,
-                                         no_op));
+                                         true, no_op));
   ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (2 << order) - 32,
-                                         no_op));
+                                         true, no_op));
   ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
 
   {
@@ -631,6 +631,9 @@ TEST_F(TestInternal, ResizeCopyup)
 TEST_F(TestInternal, DiscardCopyup)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
+  REQUIRE(!cct->_conf->rbd_skip_partial_discard);
 
   m_image_name = get_temp_image_name();
   m_image_size = 1 << 14;
@@ -699,7 +702,7 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, no_op));
+  ASSERT_EQ(0, ictx->operations->resize(m_image_size >> 1, true, no_op));
 
   ASSERT_TRUE(c->is_complete());
   ASSERT_EQ(0, c->wait_for_complete());
@@ -781,7 +784,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, ictx->operations->resize(1 << ictx->order, no_op));
+  ASSERT_EQ(0, ictx->operations->resize(1 << ictx->order, true, no_op));
 
   bufferlist bl;
   bl.append(std::string(1 << ictx->order, '1'));

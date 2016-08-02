@@ -30,7 +30,6 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-#include "common/Throttle.h"
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
@@ -123,7 +122,7 @@ class Processor {
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
-  int start(Worker *w);
+  void start(Worker *w);
   void accept();
 };
 
@@ -157,7 +156,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(entity_addr_t& addr);
+  void set_addr_unknowns(const entity_addr_t &addr) override;
 
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
@@ -222,8 +221,6 @@ public:
    * @{
    */
 
-  Connection *create_anon_connection();
-
   /**
    * @} // Inner classes
    */
@@ -285,16 +282,6 @@ private:
   friend class Processor;
   DispatchQueue dispatch_queue;
 
-  class C_handle_reap : public EventCallback {
-    AsyncMessenger *msgr;
-
-   public:
-    explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
-    void do_request(int id) {
-      // judge whether is a time event
-      msgr->reap_dead();
-    }
-  };
   // the worker run messenger's cron jobs
   Worker *local_worker;
 

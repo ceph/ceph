@@ -24,6 +24,12 @@ class BitMapAllocator : public Allocator {
 
   void insert_free(uint64_t offset, uint64_t len);
 
+  int alloc_extents_cont(uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+                         int64_t hint, std::vector<AllocExtent> *extents, int *count);
+
+  int alloc_extents_dis(uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+                        int64_t hint, std::vector<AllocExtent> *extents, int *count);
+
 public:
   BitMapAllocator();
   BitMapAllocator(int64_t device_size, int64_t block_size);
@@ -35,6 +41,10 @@ public:
   int allocate(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
+
+  int alloc_extents(
+    uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+    int64_t hint, std::vector<AllocExtent> *extents, int *count);
 
   int release(
     uint64_t offset, uint64_t length);

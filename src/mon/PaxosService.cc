@@ -207,7 +207,7 @@ bool PaxosService::should_stash_full()
    */
   return (!latest_full ||
 	  (latest_full <= get_trim_to()) ||
-	  (get_last_committed() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
+	  (get_last_committed() - latest_full > (version_t)g_conf->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
@@ -325,7 +325,7 @@ void PaxosService::maybe_trim()
 	     << " > paxos_service_trim_max, limiting to " << g_conf->paxos_service_trim_max
 	     << dendl;
     trim_to = get_first_committed() + g_conf->paxos_service_trim_max;
-    to_remove = trim_to - get_first_committed();
+    to_remove = g_conf->paxos_service_trim_max;
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;

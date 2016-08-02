@@ -79,10 +79,7 @@ void AioImageRequest<I>::aio_read(
     I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
     char *buf, bufferlist *pbl, int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_READ);
-
   AioImageRead req(*ictx, c, extents, buf, pbl, op_flags);
-  req.start_op();
   req.send();
 }
 
@@ -90,10 +87,7 @@ template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                   uint64_t off, size_t len, char *buf,
                                   bufferlist *pbl, int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_READ);
-
   AioImageRead req(*ictx, c, off, len, buf, pbl, op_flags);
-  req.start_op();
   req.send();
 }
 
@@ -101,35 +95,29 @@ template <typename I>
 void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                    uint64_t off, size_t len, const char *buf,
                                    int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_WRITE);
-
   AioImageWrite req(*ictx, c, off, len, buf, op_flags);
-  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                      uint64_t off, uint64_t len) {
-  c->init_time(ictx, librbd::AIO_TYPE_DISCARD);
-
   AioImageDiscard req(*ictx, c, off, len);
-  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
-  c->init_time(ictx, librbd::AIO_TYPE_FLUSH);
-
+  assert(c->is_initialized(AIO_TYPE_FLUSH));
   AioImageFlush req(*ictx, c);
-  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::send() {
   assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_aio_comp->is_initialized(get_aio_type()));
+  assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << get_request_type() << ": ictx=" << &m_image_ctx << ", "
@@ -264,6 +252,8 @@ void AbstractAioImageWrite::send_request() {
                   !m_image_ctx.journal->is_journal_replaying());
   }
 
+  prune_object_extents(object_extents);
+
   if (!object_extents.empty()) {
     uint64_t journal_tid = 0;
     m_aio_comp->set_request_count(
@@ -392,6 +382,24 @@ uint64_t AioImageDiscard::append_journal_event(
   return tid;
 }
 
+void AioImageDiscard::prune_object_extents(ObjectExtents &object_extents) {
+  CephContext *cct = m_image_ctx.cct;
+  if (!cct->_conf->rbd_skip_partial_discard) {
+    return;
+  }
+
+  for (auto p = object_extents.begin(); p != object_extents.end(); ) {
+    if (p->offset + p->length < m_image_ctx.layout.object_size) {
+      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~"
+		     << p->length << " from " << p->buffer_extents
+		     << ": skip partial discard" << dendl;
+      p = object_extents.erase(p);
+    } else {
+      ++p;
+    }
+  }
+}
+
 uint32_t AioImageDiscard::get_cache_request_count(bool journaling) const {
   // extra completion request is required for tracking journal commit
   return (m_image_ctx.object_cacher != nullptr && journaling ? 1 : 0);
@@ -415,8 +423,6 @@ void AioImageDiscard::send_cache_requests(const ObjectExtents &object_extents,
 AioObjectRequest *AioImageDiscard::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
-  CephContext *cct = m_image_ctx.cct;
-
   AioObjectRequest *req;
   if (object_extent.length == m_image_ctx.layout.object_size) {
     req = new AioObjectRemove(&m_image_ctx, object_extent.oid.name,
@@ -427,10 +433,6 @@ AioObjectRequest *AioImageDiscard::create_object_request(
                                 object_extent.objectno, object_extent.offset,
                                 snapc, on_finish);
   } else {
-    if(cct->_conf->rbd_skip_partial_discard) {
-      delete on_finish;
-      return NULL;
-    }
     req = new AioObjectZero(&m_image_ctx, object_extent.oid.name,
                             object_extent.objectno, object_extent.offset,
                             object_extent.length, snapc, on_finish);

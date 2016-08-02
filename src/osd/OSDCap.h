@@ -31,6 +31,7 @@
 using std::ostream;
 
 #include "include/types.h"
+#include "OpRequest.h"
 
 static const __u8 OSD_CAP_R     = (1 << 1);      // read
 static const __u8 OSD_CAP_W     = (1 << 2);      // write
@@ -140,15 +141,12 @@ struct OSDCap {
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
-   * @param op_may_class_read whether the operation needs to call a
-   *                          read class method
-   * @param op_may_class_write whether the operation needs to call a
-   *                          write class method
+   * @param classes (class-name, rd, wr, whitelisted-flag) tuples
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 		  const string& object, bool op_may_read, bool op_may_write,
-		  bool op_may_class_read, bool op_may_class_write) const;
+		  const std::vector<OpRequest::ClassInfo>& classes) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 

@@ -887,7 +887,7 @@ int Pipe::connect()
   __u32 cseq = connect_seq;
   __u32 gseq = msgr->get_global_seq();
 
-  // stop reader thrad
+  // stop reader thread
   join_reader();
 
   pipe_lock.Unlock();
@@ -1736,7 +1736,7 @@ void Pipe::writer()
       state = STATE_CLOSED;
       state_closed.set(1);
       pipe_lock.Unlock();
-      if (sd) {
+      if (sd >= 0) {
 	// we can ignore return value, actually; we don't care if this succeeds.
 	int r = ::write(sd, &tag, 1);
 	(void)r;
@@ -2554,7 +2554,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 
   /* nothing left in the prefetch buffer */
 
-  if (len > (size_t)recv_max_prefetch) {
+  if (left > recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     ssize_t ret = do_recv(buf, left, flags );
     if (ret < 0) {

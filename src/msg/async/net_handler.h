@@ -29,7 +29,7 @@ namespace ceph {
     explicit NetHandler(CephContext *c): cct(c) {}
     int set_nonblock(int sd);
     void set_close_on_exec(int sd);
-    void set_socket_options(int sd);
+    void set_socket_options(int sd, bool nodelay, int size);
     int connect(const entity_addr_t &addr);
     
     /**

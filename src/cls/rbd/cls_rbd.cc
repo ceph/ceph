@@ -295,33 +295,24 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   bufferlist sizebl;
-  ::encode(size, sizebl);
-  r = cls_cxx_map_set_val(hctx, "size", &sizebl);
-  if (r < 0)
-    return r;
-
   bufferlist orderbl;
-  ::encode(order, orderbl);
-  r = cls_cxx_map_set_val(hctx, "order", &orderbl);
-  if (r < 0)
-    return r;
-
   bufferlist featuresbl;
-  ::encode(features, featuresbl);
-  r = cls_cxx_map_set_val(hctx, "features", &featuresbl);
-  if (r < 0)
-    return r;
-
   bufferlist object_prefixbl;
-  ::encode(object_prefix, object_prefixbl);
-  r = cls_cxx_map_set_val(hctx, "object_prefix", &object_prefixbl);
-  if (r < 0)
-    return r;
-
   bufferlist snap_seqbl;
   uint64_t snap_seq = 0;
+  ::encode(size, sizebl);
+  ::encode(order, orderbl);
+  ::encode(features, featuresbl);
+  ::encode(object_prefix, object_prefixbl);
   ::encode(snap_seq, snap_seqbl);
-  r = cls_cxx_map_set_val(hctx, "snap_seq", &snap_seqbl);
+
+  map<string, bufferlist> omap_vals;
+  omap_vals["size"] = sizebl;
+  omap_vals["order"] = orderbl;
+  omap_vals["features"] = featuresbl;
+  omap_vals["object_prefix"] = object_prefixbl;
+  omap_vals["snap_seq"] = snap_seqbl;
+  r = cls_cxx_map_set_vals(hctx, &omap_vals);
   if (r < 0)
     return r;
 

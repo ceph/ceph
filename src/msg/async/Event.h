@@ -114,7 +114,7 @@ class EventCenter {
   int nevent;
   // Used only to external event
   pthread_t owner;
-  std::mutex external_lock, file_lock;;
+  std::mutex external_lock;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
@@ -151,7 +151,7 @@ class EventCenter {
 
   int init(int nevent, unsigned idx);
   void set_owner();
-  unsigned get_id() { return idx; }
+  unsigned get_id() const { return idx; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
@@ -183,8 +183,9 @@ class EventCenter {
       lock.lock();
       cond.notify_all();
       done = true;
+      bool del = nonwait;
       lock.unlock();
-      if (nonwait)
+      if (del)
         delete this;
     }
     void wait() {

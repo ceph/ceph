@@ -27,6 +27,7 @@ using namespace libradosstriper;
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/obj_bencher.h"
+#include "common/TextTable.h"
 #include "include/stringify.h"
 #include "mds/inode_backtrace.h"
 #include "auth/Crypto.h"
@@ -220,6 +221,8 @@ void usage(ostream& out)
 "   --read-percent                   percent of operations that are read\n"
 "   --target-throughput              target throughput (in bytes)\n"
 "   --run-length                     total time (in seconds)\n"
+"CACHE POOLS OPTIONS:\n"
+"   --with-clones                    include clones when doing flush or evict\n"
     ;
 }
 
@@ -374,7 +377,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
     if (locator.size())
         src_name += "(@" + locator + ")";
     cout << src_pool << ":" << src_name  << " => "
-      << target_pool << ":" << target_name << std::endl;
+         << target_pool << ":" << target_name << std::endl;
 
     src_ctx.locator_set_key(locator);
     src_ctx.set_namespace(nspace);
@@ -451,7 +454,8 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
   }
   ret = 0;
  out:
-  VOID_TEMP_FAILURE_RETRY(close(fd));
+  if (fd != STDOUT_FILENO)
+    VOID_TEMP_FAILURE_RETRY(close(fd));
   delete[] buf;
   return ret;
 }
@@ -1190,22 +1194,59 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
 	io_ctx.locator_set_key(string());
       }
       io_ctx.set_namespace(i->get_nspace());
-      if (blocking)
-	r = do_cache_flush(io_ctx, i->get_oid());
-      else
-	r = do_cache_try_flush(io_ctx, i->get_oid());
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      r = io_ctx.list_snaps(i->get_oid(), &ls);
       if (r < 0) {
-	cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
-	     << cpp_strerror(r) << std::endl;
-	++errors;
-	continue;
+        cerr << "error listing snap shots " << i->get_nspace() << "/" << i->get_oid() << ": "
+             << cpp_strerror(r) << std::endl;
+        ++errors;
+        continue;
       }
-      r = do_cache_evict(io_ctx, i->get_oid());
-      if (r < 0) {
-	cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
-	     << cpp_strerror(r) << std::endl;
-	++errors;
-	continue;
+      std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+      // no snapshots
+      if (ci == ls.clones.end()) {
+        io_ctx.snap_set_read(CEPH_NOSNAP);
+        if (blocking)
+          r = do_cache_flush(io_ctx, i->get_oid());
+        else
+          r = do_cache_try_flush(io_ctx, i->get_oid());
+        if (r < 0) {
+          cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
+               << cpp_strerror(r) << std::endl;
+          ++errors;
+          continue;
+        }
+        r = do_cache_evict(io_ctx, i->get_oid());
+        if (r < 0) {
+          cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
+               << cpp_strerror(r) << std::endl;
+          ++errors;
+          continue;
+        }
+      } else {
+      // has snapshots
+        for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+             ci != ls.clones.end(); ++ci) {
+          io_ctx.snap_set_read(ci->cloneid);
+          if (blocking)
+	    r = do_cache_flush(io_ctx, i->get_oid());
+          else
+	    r = do_cache_try_flush(io_ctx, i->get_oid());
+          if (r < 0) {
+	    cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
+	         << cpp_strerror(r) << std::endl;
+	    ++errors;
+	    break;
+          }
+          r = do_cache_evict(io_ctx, i->get_oid());
+          if (r < 0) {
+	    cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
+	         << cpp_strerror(r) << std::endl;
+	    ++errors;
+	    break;
+          }
+        }
       }
     }
   }
@@ -1512,6 +1553,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool cleanup = true;
   bool no_verify = false;
   bool use_striper = false;
+  bool with_clones = false;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
@@ -1719,6 +1761,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     bench_write_dest |= static_cast<int>(OP_WRITE_DEST_XATTR);
   }
+  i = opts.find("with-clones");
+  if (i != opts.end()) {
+    with_clones = true;
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -1862,13 +1908,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
 
+    TextTable tab;
+
     if (!formatter) {
-      printf("%-15s "
-	     "%12s %12s %12s %12s "
-	     "%12s %12s %12s %12s %12s\n",
-	     "pool name",
-	     "KB", "objects", "clones", "degraded",
-	     "unfound", "rd", "rd KB", "wr", "wr KB");
+      tab.define_column("POOL_NAME", TextTable::LEFT, TextTable::LEFT);
+      tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("CLONES", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("COPIES", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("DEGRAED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("RD_OPS", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("RD", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("WR_OPS", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("WR", TextTable::LEFT, TextTable::RIGHT);
     } else {
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
@@ -1879,17 +1933,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       const char *pool_name = i->first.c_str();
       librados::pool_stat_t& s = i->second;
       if (!formatter) {
-	printf("%-15s "
-	       "%12lld %12lld %12lld %12lld "
-	       "%12lld %12lld %12lld %12lld %12lld\n",
-	       pool_name,
-	       (long long)s.num_kb,
-	       (long long)s.num_objects,
-	       (long long)s.num_object_clones,
-	       (long long)s.num_objects_degraded,
-	       (long long)s.num_objects_unfound,
-	       (long long)s.num_rd, (long long)s.num_rd_kb,
-	         (long long)s.num_wr, (long long)s.num_wr_kb);
+        tab << pool_name
+            << si_t(s.num_bytes)
+            << s.num_objects
+            << s.num_object_clones
+            << s.num_object_copies
+            << s.num_objects_missing_on_primary
+            << s.num_objects_unfound
+            << s.num_objects_degraded
+            << s.num_rd
+            << si_t(s.num_rd_kb << 10)
+            << s.num_wr
+            << si_t(s.num_wr_kb << 10)
+            << TextTable::endrow;
       } else {
         formatter->open_object_section("pool");
         int64_t pool_id = rados.pool_lookup(pool_name);
@@ -1914,6 +1970,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
     }
 
+    if (!formatter) {
+      cout << tab;
+    }
+
     // total
     cluster_stat_t tstats;
     ret = rados.cluster_stat(tstats);
@@ -1922,10 +1982,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     if (!formatter) {
-      printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
-	     (long long unsigned)tstats.num_objects);
-      printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
-      printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
+      cout << std::endl;
+      cout << "total_objects    " << tstats.num_objects
+           << std::endl;
+      cout << "total_used       " << si_t(tstats.kb_used << 10)
+           << std::endl;
+      cout << "total_avail      " << si_t(tstats.kb_avail << 10)
+           << std::endl;
+      cout << "total_space      " << si_t(tstats.kb << 10)
+           << std::endl;
     } else {
       formatter->close_section();
       formatter->dump_format("total_objects", "%lld", (long long unsigned)tstats.num_objects);
@@ -3151,31 +3216,100 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = do_cache_flush(io_ctx, oid);
-    if (ret < 0) {
-      cerr << "error from cache-flush " << oid << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (with_clones) {
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      ret = io_ctx.list_snaps(oid, &ls);
+      if (ret < 0) {
+        cerr << "error listing snapshots " << pool_name << "/" << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+           ci != ls.clones.end(); ++ci) {
+        if (snapid != CEPH_NOSNAP && ci->cloneid > snapid)
+          break;
+        io_ctx.snap_set_read(ci->cloneid);
+        ret = do_cache_flush(io_ctx, oid);
+        if (ret < 0) {
+          cerr << "error from cache-flush " << oid << ": "
+               << cpp_strerror(ret) << std::endl;
+          goto out;
+        }
+      }
+    } else {
+      ret = do_cache_flush(io_ctx, oid);
+      if (ret < 0) {
+        cerr << "error from cache-flush " << oid << ": "
+	     << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
   } else if (strcmp(nargs[0], "cache-try-flush") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = do_cache_try_flush(io_ctx, oid);
-    if (ret < 0) {
-      cerr << "error from cache-try-flush " << oid << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (with_clones) {
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      ret = io_ctx.list_snaps(oid, &ls);
+      if (ret < 0) {
+        cerr << "error listing snapshots " << pool_name << "/" << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+           ci != ls.clones.end(); ++ci) {
+        if (snapid != CEPH_NOSNAP && ci->cloneid > snapid)
+          break;
+        io_ctx.snap_set_read(ci->cloneid);
+        ret = do_cache_try_flush(io_ctx, oid);
+        if (ret < 0) {
+          cerr << "error from cache-flush " << oid << ": "
+               << cpp_strerror(ret) << std::endl;
+          goto out;
+        }
+      }
+    } else {
+      ret = do_cache_try_flush(io_ctx, oid);
+      if (ret < 0) {
+        cerr << "error from cache-flush " << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
   } else if (strcmp(nargs[0], "cache-evict") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    ret = do_cache_evict(io_ctx, oid);
-    if (ret < 0) {
-      cerr << "error from cache-evict " << oid << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (with_clones) {
+      snap_set_t ls;
+      io_ctx.snap_set_read(LIBRADOS_SNAP_DIR);
+      ret = io_ctx.list_snaps(oid, &ls);
+      if (ret < 0) {
+        cerr << "error listing snapshots " << pool_name << "/" << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      for (std::vector<clone_info_t>::iterator ci = ls.clones.begin();
+           ci != ls.clones.end(); ++ci) {
+        if (snapid != CEPH_NOSNAP && ci->cloneid > snapid)
+          break;
+        io_ctx.snap_set_read(ci->cloneid);
+        ret = do_cache_evict(io_ctx, oid);
+        if (ret < 0) {
+          cerr << "error from cache-flush " << oid << ": "
+               << cpp_strerror(ret) << std::endl;
+          goto out;
+        }
+      }
+    } else {
+      ret = do_cache_evict(io_ctx, oid);
+      if (ret < 0) {
+        cerr << "error from cache-flush " << oid << ": "
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
   } else if (strcmp(nargs[0], "cache-flush-evict-all") == 0) {
     if (!pool_name)
@@ -3215,6 +3349,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ret = PoolDump(file_fd).dump(&io_ctx);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
     if (ret < 0) {
       cerr << "error from export: "
 	   << cpp_strerror(ret) << std::endl;
@@ -3260,6 +3399,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ret = RadosImport(file_fd, 0, dry_run).import(io_ctx, no_overwrite);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
     if (ret < 0) {
       cerr << "error from import: "
 	   << cpp_strerror(ret) << std::endl;
@@ -3418,6 +3562,8 @@ int main(int argc, const char **argv)
       opts["write-dest-obj"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
       opts["write-dest-xattr"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
+      opts["with-clones"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();

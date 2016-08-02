@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
+#include <array>
 #include <string.h>
 
 #include "common/ceph_crypto.h"
@@ -785,7 +786,10 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
   }
 
   RGWXMLDecoder::XMLParser parser;
-  parser.init();
+  if (!parser.init()) {
+    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    return -EIO;
+  }
 
   if (!parser.parse(data, len, 1)) {
     string str(data, len);
@@ -2260,6 +2264,65 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+void RGWGetLC_ObjStore_S3::execute()
+{
+
+  config.set_ctx(s->cct);
+
+  map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_LC);
+  if (aiter == s->bucket_attrs.end()) {
+    ret = -ENOENT;
+    return;
+  }
+
+  bufferlist::iterator iter(&aiter->second);
+  try {
+      config.decode(iter);
+    } catch (const buffer::error& e) {
+      ldout(s->cct, 0) << __func__ <<  "decode life cycle config failed" << dendl;
+      ret = -EIO;
+      return;
+    }
+}
+
+void RGWGetLC_ObjStore_S3::send_response()
+{
+  if (ret) {
+    if (ret == -ENOENT) {	
+      set_req_state_err(s, ERR_NO_SUCH_LC);
+    } else {
+      set_req_state_err(s, ret);
+    }
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  config.dump_xml(s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWPutLC_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+}
+
+void RGWDeleteLC_ObjStore_S3::send_response()
+{
+  if (ret == 0)
+      ret = STATUS_NO_CONTENT;
+  if (ret) {   
+    set_req_state_err(s, ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+}
+
 void RGWGetCORS_ObjStore_S3::send_response()
 {
   if (op_ret) {
@@ -2812,6 +2875,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetRequestPayment_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
+  } else if(is_lc_op()) {
+    return new RGWGetLC_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -2844,6 +2909,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutCORS_ObjStore_S3;
   } else if (is_request_payment_op()) {
     return new RGWSetRequestPayment_ObjStore_S3;
+  } else if(is_lc_op()) {
+    return new RGWPutLC_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -2852,6 +2919,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
+  } else if(is_lc_op()) {
+    return new RGWDeleteLC_ObjStore_S3;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -2866,7 +2935,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 {
-  if ( s->info.request_params == "delete" ) {
+  if (s->info.args.exists("delete")) {
     return new RGWDeleteMultiObj_ObjStore_S3;
   }
 

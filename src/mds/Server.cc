@@ -817,8 +817,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       // we recovered it, and it's ours.  take note.
       dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
 	       << " on " << *in << dendl;
-      in->reconnect_cap(from, p->second.capinfo, session);
-      mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
+      in->reconnect_cap(from, p->second, session);
+      mdcache->add_reconnected_cap(from, p->first, p->second);
       recover_filelocks(in, p->second.flockbl, m->get_orig_source().num());
       continue;
     }
@@ -827,11 +827,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       // not mine.
       dout(10) << "non-auth " << *in << ", will pass off to authority" << dendl;
       // add to cap export list.
-      mdcache->rejoin_export_caps(p->first, from, p->second.capinfo,
+      p->second.path.clear(); // we don't need path
+      mdcache->rejoin_export_caps(p->first, from, p->second,
 				  in->authority().first);
     } else {
       // don't know if the inode is mine
       dout(10) << "missing ino " << p->first << ", will load later" << dendl;
+      p->second.path.clear(); // we don't need path
       mdcache->rejoin_recovered_caps(p->first, from, p->second, MDS_RANK_NONE);
     }
   }
@@ -3002,6 +3004,8 @@ void Server::handle_client_open(MDRequestRef& mdr)
     if (pi->is_truncating()) {
       dout(10) << " waiting for pending truncate from " << pi->truncate_from
 	       << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+      mds->locker->drop_locks(mdr.get());
+      mdr->drop_local_auth_pins();
       cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
@@ -7151,10 +7155,13 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
-  CInode *srci;
+  CInode *srci = nullptr;
   r = mdcache->path_traverse(mdr, NULL, NULL, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);
+
+  // srcpath must not point to a null dentry
+  assert(srci != nullptr);
       
   CDentry *srcdn = trace[trace.size()-1];
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();

@@ -1624,9 +1624,14 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      omap_store->init(g_conf->filestore_rocksdb_options);
+      ret = omap_store->init(g_conf->filestore_rocksdb_options);
     else
-      omap_store->init();
+      ret = omap_store->init();
+
+    if (ret < 0) {
+      derr << "Error initializing omap_store: " << cpp_strerror(ret) << dendl;
+      goto close_current_fd;
+    }
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -1795,6 +1800,9 @@ close_fsid_fd:
   fsid_fd = -1;
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
+  delete backend;
+  backend = NULL;
+  object_map.reset();
   return ret;
 }
 
@@ -3339,7 +3347,9 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
  
   if (replaying || m_disable_wbthrottle) {
     if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED) {
+#ifdef HAVE_POSIX_FADVISE
         posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
     }
   } else {
     wbthrottle.queue_wb(fd, oid, offset, len,
@@ -5423,7 +5433,10 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
   dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
 
   FDRef fd;
-  int ret;
+  int ret = 0;
+
+  if (expected_object_size == 0 || expected_write_size == 0)
+    goto out;
 
   ret = lfn_open(cid, oid, false, &fd);
   if (ret < 0)

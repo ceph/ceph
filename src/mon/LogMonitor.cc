@@ -236,9 +236,12 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 
 version_t LogMonitor::get_trim_to()
 {
+  if (!mon->is_leader())
+    return 0;
+
   unsigned max = g_conf->mon_max_log_epochs;
   version_t version = get_last_committed();
-  if (mon->is_leader() && version > max)
+  if (version > max)
     return version - max;
   return 0;
 }

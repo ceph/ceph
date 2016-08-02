@@ -250,13 +250,12 @@ LIBMON += -ljemalloc
 LIBOSD += -ljemalloc
 LIBMDS += -ljemalloc
 LIBRGW += -ljemalloc
+LIBCLIENT_FUSE += -ljemalloc
 endif # WITH_JEMALLOC
 
 if ENABLE_COVERAGE
 EXTRALIBS += -lgcov
 endif # ENABLE_COVERAGE
-
-LIBCOMMON += -luuid
 
 # Libosd always needs osdc and os
 LIBOSD += $(LIBOSDC) $(LIBOS)
@@ -265,6 +264,7 @@ LIBOSD += $(LIBOSDC) $(LIBOS)
 LIBMON += $(LIBPERFGLUE)
 LIBOSD += $(LIBPERFGLUE)
 LIBMDS += $(LIBPERFGLUE)
+LIBCLIENT_FUSE += $(LIBPERFGLUE)
 
 # OSD needs types
 LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)

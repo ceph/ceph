@@ -20,6 +20,7 @@
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Settings.h"
 #include "librbd/journal/Types.h"
 
 namespace rbd {
@@ -171,7 +172,7 @@ class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
 	    const std::string &client_id) :
-    ::journal::Journaler(io_ctx, journal_id, client_id, 5) {
+    ::journal::Journaler(io_ctx, journal_id, client_id, {}) {
   }
 
   int init() {
@@ -511,7 +512,9 @@ static int do_export_journal(librados::IoCtx& io_ctx,
       std::cerr << "rbd: error creating " << path << std::endl;
       return r;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   JournalExporter exporter(io_ctx, journal_id, fd, no_error, verbose);
@@ -719,7 +722,9 @@ static int do_import_journal(librados::IoCtx& io_ctx,
       std::cerr << "rbd: error opening " << path << std::endl;
       return r;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   JournalImporter importer(io_ctx, journal_id, fd, no_error, verbose);
