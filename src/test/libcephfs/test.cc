@@ -1374,3 +1374,37 @@ TEST(LibCephFS, OpenNoClose) {
   // shutdown should force close opened file/dir
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, Nlink) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  Inode *root, *dir, *file;
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  char dirname[32], filename[32], linkname[32];
+  sprintf(dirname, "nlinkdir%x", getpid());
+  sprintf(filename, "nlinkorig%x", getpid());
+  sprintf(linkname, "nlinklink%x", getpid());
+
+  struct stat	st;
+  Fh *fh;
+
+  ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &st, &dir, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_create(cmount, dir, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
+			   &st, &file, &fh, getuid(), getgid()), 0);
+  ASSERT_EQ(st.st_nlink, (nlink_t)1);
+
+  ASSERT_EQ(ceph_ll_link(cmount, file, dir, linkname, &st, getuid(), getgid()), 0);
+  ASSERT_EQ(st.st_nlink, (nlink_t)2);
+
+  ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &st, &file, getuid(), getgid()), 0);
+  ASSERT_EQ(st.st_nlink, (nlink_t)1);
+
+  ceph_shutdown(cmount);
+}
