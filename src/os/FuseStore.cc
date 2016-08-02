@@ -848,7 +848,8 @@ int os_flush(const char *path, struct fuse_file_info *fi)
 
   switch (f) {
   case FN_OBJECT_DATA:
-    t.write(cid, oid, 0, pbl->length(), *pbl);
+    t.write(cid, oid, 0, pbl->length(), *pbl, 0,
+      ObjectStore::Transaction::write_params_t());
     break;
 
   case FN_OBJECT_ATTR_VAL:

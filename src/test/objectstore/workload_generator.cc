@@ -268,7 +268,7 @@ void WorkloadGenerator::do_write_object(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
     stat->written_data += bl.length();
 
-  t->write(coll, ghobject_t(obj), 0, bl.length(), bl);
+  t->write(coll, ghobject_t(obj), 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
 }
 
 void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
@@ -342,7 +342,7 @@ void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
       stat->written_data += bl.length();
 
   uint64_t s = pg_log_size[entry->m_coll];
-  t->write(coll_t::meta(), log_obj, s, bl.length(), bl);
+  t->write(coll_t::meta(), log_obj, s, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   pg_log_size[entry->m_coll] += bl.length();
 }
 

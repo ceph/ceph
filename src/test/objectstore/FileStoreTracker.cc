@@ -105,7 +105,9 @@ void FileStoreTracker::write(const pair<coll_t, string> &obj,
 		ghobject_t(hobject_t(sobject_t(obj.second, CEPH_NOSNAP))),
 		offset,
 		len,
-		to_write);
+		to_write,
+		0,
+		ObjectStore::Transaction::write_params_t());
   out->in_flight->push_back(make_pair(obj, set_content(obj, contents)));
 }
 

@@ -692,7 +692,7 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
   if (dry_run)
     return 0;
   ObjectStore::Transaction t;
-  t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
+  t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   t.truncate(coll_t::meta(), inc_oid, bl.length());
   int ret = store->apply_transaction(&osr, std::move(t));
   if (ret) {
@@ -739,7 +739,7 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
   if (dry_run)
     return 0;
   ObjectStore::Transaction t;
-  t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
+  t.write(coll_t::meta(), full_oid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   t.truncate(coll_t::meta(), full_oid, bl.length());
   int ret = store->apply_transaction(&osr, std::move(t));
   if (ret) {
@@ -838,7 +838,7 @@ int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
 
   if (debug)
     cerr << "\tdata: offset " << ds.offset << " len " << ds.len << std::endl;
-  t->write(coll, hoid, ds.offset, ds.len,  ds.databl);
+  t->write(coll, hoid, ds.offset, ds.len,  ds.databl, 0, ObjectStore::Transaction::write_params_t());
   return 0;
 }
 
@@ -1645,7 +1645,7 @@ int do_set_bytes(ObjectStore *store, coll_t coll,
     if (debug)
       cerr << "\tdata: offset " << offset << " bytes " << bytes << std::endl;
     if (!dry_run)
-      t->write(coll, ghobj, offset, bytes,  rawdatabl);
+      t->write(coll, ghobj, offset, bytes,  rawdatabl, 0, ObjectStore::Transaction::write_params_t());
 
     offset += bytes;
     // XXX: Should we apply_transaction() every once in a while for very large files

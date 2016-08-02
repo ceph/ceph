@@ -47,7 +47,7 @@ class Transaction {
   void write(coll_t cid, const ghobject_t& oid, uint64_t off, uint64_t len,
              const bufferlist& data) {
     uint64_t start_time = Cycles::rdtsc();
-    t.write(cid, oid, off, len, data);
+    t.write(cid, oid, off, len, data, 0, ObjectStore::Transaction::write_params_t());
     write_ticks.add(Cycles::rdtsc() - start_time);
   }
   void setattr(coll_t cid, const ghobject_t& oid, const string &name,

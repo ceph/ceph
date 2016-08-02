@@ -1525,7 +1525,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
-    t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+    t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl, 0,
+            ObjectStore::Transaction::write_params_t());
     ret = store->apply_transaction(osr.get(), std::move(t));
     if (ret) {
       derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
@@ -2864,7 +2865,8 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+  t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl, 0,
+	  ObjectStore::Transaction::write_params_t());
 }
 
 int OSD::read_superblock()
@@ -5602,7 +5604,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	object_t oid(nm);
 	hobject_t soid(sobject_t(oid, 0));
 	ObjectStore::Transaction t;
-	t.write(coll_t(), ghobject_t(soid), 0, osize, bl);
+	t.write(coll_t(), ghobject_t(soid), 0, osize, bl, 0,
+		ObjectStore::Transaction::write_params_t());
 	store->queue_transaction(osr.get(), std::move(t), NULL);
 	cleanupt.remove(coll_t(), ghobject_t(soid));
       }
@@ -5634,7 +5637,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       object_t oid(nm);
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction t;
-      t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl);
+      t.write(coll_t::meta(), ghobject_t(soid), offset, bsize, bl, 0,
+	      ObjectStore::Transaction::write_params_t());
       store->queue_transaction(osr.get(), std::move(t), NULL);
       if (!onum || !osize)
 	cleanupt.remove(coll_t::meta(), ghobject_t(soid));
@@ -6732,7 +6736,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
-      t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
+      t.write(coll_t::meta(), fulloid, 0, bl.length(), bl, 0,
+	      ObjectStore::Transaction::write_params_t());
       pin_map_bl(e, bl);
       pinned_maps.push_back(add_map(o));
 
@@ -6745,7 +6750,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(10) << "handle_osd_map  got inc map for epoch " << e << dendl;
       bufferlist& bl = p->second;
       ghobject_t oid = get_inc_osdmap_pobject_name(e);
-      t.write(coll_t::meta(), oid, 0, bl.length(), bl);
+      t.write(coll_t::meta(), oid, 0, bl.length(), bl, 0,
+	      ObjectStore::Transaction::write_params_t());
       pin_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
@@ -6790,7 +6796,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       got_full_map(e);
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
-      t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
+      t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl, 0,
+	      ObjectStore::Transaction::write_params_t());
       pin_map_bl(e, fbl);
       pinned_maps.push_back(add_map(o));
       continue;
