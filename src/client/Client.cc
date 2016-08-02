@@ -9097,7 +9097,7 @@ int Client::_interrupt_filelock(MetaRequest *req)
   intr_req->head.args.filelock_change.rule = lock_type;
   intr_req->head.args.filelock_change.type = CEPH_LOCK_UNLOCK;
 
-  UserPerm perms(get_uid(), get_gid()); // FIXME
+  UserPerm perms(req->get_uid(), req->get_gid());
   return make_request(intr_req, perms, NULL, NULL, -1);
 }
 
