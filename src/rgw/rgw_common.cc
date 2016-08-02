@@ -1349,6 +1349,37 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
   return false;
 }
 
+std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
+{
+  static constexpr size_t shard_len{12}; // ":4294967295\0"
+  const size_t max_len = tenant.size() + sizeof(tenant_delim) +
+      name.size() + sizeof(id_delim) + bucket_id.size() + shard_len;
+
+  std::string key;
+  key.reserve(max_len);
+  if (!tenant.empty() && tenant_delim) {
+    key.append(tenant);
+    key.append(1, tenant_delim);
+  }
+  key.append(name);
+  if (!bucket_id.empty() && id_delim) {
+    key.append(1, id_delim);
+    key.append(bucket_id);
+  }
+  return key;
+}
+
+std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim,
+                                      char shard_delim) const
+{
+  auto key = bucket.get_key(tenant_delim, id_delim);
+  if (shard_id >= 0 && shard_delim) {
+    key.append(1, shard_delim);
+    key.append(std::to_string(shard_id));
+  }
+  return key;
+}
+
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
                   {"read",  RGW_OP_TYPE_READ},
 		  {"write", RGW_OP_TYPE_WRITE},

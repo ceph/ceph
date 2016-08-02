@@ -753,6 +753,10 @@ struct rgw_bucket {
     DECODE_FINISH(bl);
   }
 
+  // format a key for the bucket/instance. pass delim=0 to skip a field
+  std::string get_key(char tenant_delim = '/',
+                      char id_delim = ':') const;
+
   const string& get_data_extra_pool() {
     if (data_extra_pool.empty()) {
       return data_pool;
@@ -797,7 +801,10 @@ struct rgw_bucket_shard {
   int shard_id;
 
   rgw_bucket_shard() : shard_id(-1) {}
-  rgw_bucket_shard(rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+  rgw_bucket_shard(const rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+
+  std::string get_key(char tenant_delim = '/', char id_delim = ':',
+                      char shard_delim = ':') const;
 
   bool operator<(const rgw_bucket_shard& b) const {
     if (bucket < b.bucket) {
