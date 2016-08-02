@@ -37,9 +37,12 @@ struct Cap {
   uint64_t seq, issue_seq;
   __u32 mseq;  // migration seq
   __u32 gen;
+  uid_t latest_uid;
+  gid_t latest_gid;
 
   Cap() : session(NULL), inode(NULL), cap_item(this), cap_id(0), issued(0),
-	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
+	  implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0),
+	  latest_uid(-1), latest_gid(-1) {}
 
   void dump(Formatter *f) const;
 };

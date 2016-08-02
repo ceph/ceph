@@ -813,7 +813,8 @@ void Client::_fragmap_remove_non_leaves(Inode *in)
 }
 
 Inode * Client::add_update_inode(InodeStat *st, utime_t from,
-				 MetaSession *session)
+				 MetaSession *session,
+				 uid_t request_uid, gid_t request_gid)
 {
   Inode *in;
   bool was_new = false;
@@ -910,7 +911,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   }
 
   if (in->snapid == CEPH_NOSNAP) {
-    add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
+    add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq,
+		   st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags,
+		   request_uid, request_gid);
     if (in->auth_cap && in->auth_cap->session == session)
       in->max_size = st->max_size;
   } else
@@ -1144,7 +1147,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
       ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
 
-      Inode *in = add_update_inode(&ist, request->sent_stamp, session);
+      Inode *in = add_update_inode(&ist, request->sent_stamp, session,
+				   request->get_uid(), request->get_gid());
       Dentry *dn;
       if (diri->dir->dentries.count(dname)) {
 	Dentry *olddn = diri->dir->dentries[dname];
@@ -1299,12 +1303,14 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	  assert(0 == "MDS reply does not contain xattrs");
     }
 
-    in = add_update_inode(&ist, request->sent_stamp, session);
+    in = add_update_inode(&ist, request->sent_stamp, session,
+			  request->get_uid(), request->get_gid());
   }
 
   Inode *diri = NULL;
   if (reply->head.is_dentry) {
-    diri = add_update_inode(&dirst, request->sent_stamp, session);
+    diri = add_update_inode(&dirst, request->sent_stamp, session,
+			    request->get_uid(), request->get_gid());
     update_dir_dist(diri, &dst);  // dir stat info is attached to ..
 
     if (in) {
@@ -3736,7 +3742,7 @@ void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
 
 void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
-			    int flags)
+			    int flags, uid_t cap_uid, gid_t cap_gid)
 {
   Cap *cap = 0;
   mds_rank_t mds = mds_session->mds_num;
@@ -3769,6 +3775,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
       ldout(cct, 15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
     }
     in->caps[mds] = cap = new Cap;
+
     mds_session->caps.push_back(&cap->cap_item);
     cap->session = mds_session;
     cap->inode = in;
@@ -3797,6 +3804,8 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   cap->seq = seq;
   cap->issue_seq = seq;
   cap->mseq = mseq;
+  cap->latest_uid = cap_uid;
+  cap->latest_gid = cap_gid;
   ldout(cct, 10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap->issued)
 	   << " from mds." << mds
 	   << " on " << *in
@@ -4571,17 +4580,25 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " IMPORT from mds." << mds << dendl;
 
+  const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
+  Cap *cap = NULL;
+  uid_t cap_uid = -1;
+  gid_t cap_gid = -1;
+  if (m->peer.cap_id && in->caps.count(peer_mds)) {
+    cap = in->caps[peer_mds];
+    if (cap) {
+      cap_uid = cap->latest_uid;
+      cap_gid = cap->latest_gid;
+    }
+  }
+
   // add/update it
   update_snap_trace(m->snapbl);
   add_update_cap(in, session, m->get_cap_id(),
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
-		 CEPH_CAP_FLAG_AUTH);
-
-  const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
-
-  if (m->peer.cap_id && in->caps.count(peer_mds)) {
-    Cap *cap = in->caps[peer_mds];
-    if (cap && cap->cap_id == m->peer.cap_id)
+		 CEPH_CAP_FLAG_AUTH, cap_uid, cap_gid);
+  
+  if (cap && cap->cap_id == m->peer.cap_id) {
       remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
   }
   
@@ -4628,7 +4645,8 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
       } else {
 	add_update_cap(in, tsession, m->peer.cap_id, cap->issued,
 		       m->peer.seq - 1, m->peer.mseq, (uint64_t)-1,
-		       cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0);
+		       cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0,
+		       cap->latest_uid, cap->latest_gid);
       }
     } else {
       if (cap == in->auth_cap)
