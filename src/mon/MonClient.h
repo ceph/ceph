@@ -26,7 +26,6 @@
 #include "auth/RotatingKeyRing.h"
 #include "common/SimpleRNG.h"
 
-
 class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
@@ -106,7 +105,7 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  MonClientState state;
+  map<entity_addr_t, MonClientState> state_map;
 
   Messenger *messenger;
 
@@ -147,6 +146,11 @@ private:
 
   // monitor session
   bool hunting;
+  bool reopened;
+  int auth_progress;
+  // 0 -- set when none authenticating to incr on need 37
+  // 1 -- set when need 37 to incr on need 32
+  // 2 -- set when need 32 to reset 0 on need 0 have session
 
   struct C_Tick : public Context {
     MonClient *monc;
@@ -185,7 +189,41 @@ private:
   void _reopen_session() {
     _reopen_session(-1, string());
   }
+  void _mark_down_all() {
+    state_map.clear(); //this wasn't really done before... ACTUALLLY:
+    //it was, state was singular and tied to cur_con, both were eliminated by force in
+    //reopen_session when it was set to a new con and negotiating state.
+    //we'll be able to tell if we should acknowledge a connection as a current con as
+    //under the old paradigm if it has a state in the state_map... in theory
+    if (cur_con) {
+      cur_con->mark_down();
+    }
+    messenger->mark_down_all();
+  }
+  void _set_state(entity_addr_t addr, MonClientState new_state, bool force=false) {
+    if (force) {
+      state_map[addr] = new_state;
+    } else if (state_map.count(addr) == 0) {
+      state_map[addr] = new_state;
+    }
+  }
+  bool _check_state(entity_addr_t addr, MonClientState compare_state) {
+    if (state_map.count(addr) == 0) {
+      return compare_state == MC_STATE_NONE;
+    } else {
+      return compare_state == state_map[addr];
+    }
+  }
+  bool _check_state(ConnectionRef con, MonClientState compare_state) {
+    if (con) {
+      if (state_map.count(con->get_peer_addr()) != 0) {
+	return compare_state == state_map[con->get_peer_addr()];
+      }
+    }
+    return compare_state == MC_STATE_NONE;
+  }
   void _send_mon_message(Message *m, bool force=false);
+  void _send_mon_message(Message *m, ConnectionRef con, bool force=false);
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
