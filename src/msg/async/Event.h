@@ -112,6 +112,44 @@ class EventCenter {
     TimeEvent(): id(0), time_cb(NULL) {}
   };
 
+ public:
+  /**
+     * A Poller object is invoked once each time through the dispatcher's
+     * inner polling loop.
+     */
+  class Poller {
+   public:
+    explicit Poller(EventCenter* center, const string& pollerName);
+    virtual ~Poller();
+
+    /**
+     * This method is defined by a subclass and invoked once by the
+     * center during each pass through its inner polling loop.
+     *
+     * \return
+     *      1 means that this poller did useful work during this call.
+     *      0 means that the poller found no work to do.
+     */
+    virtual int poll() = 0;
+
+   private:
+    /// The EventCenter object that owns this Poller.  NULL means the
+    /// EventCenter has been deleted.
+    EventCenter* owner;
+
+    /// Human-readable string name given to the poller to make it
+    /// easy to identify for debugging. For most pollers just passing
+    /// in the subclass name probably makes sense.
+    string poller_name;
+
+    /// Index of this Poller in EventCenter::pollers.  Allows deletion
+    /// without having to scan all the entries in pollers. -1 means
+    /// this poller isn't currently in EventCenter::pollers (happens
+    /// after EventCenter::reset).
+    int slot;
+  };
+
+ private:
   CephContext *cct;
   int nevent;
   // Used only to external event
@@ -122,6 +160,10 @@ class EventCenter {
   vector<FileEvent> file_events;
   EventDriver *driver;
   std::multimap<clock_type::time_point, TimeEvent> time_events;
+  // Keeps track of all of the pollers currently defined.  We don't
+  // use an intrusive list here because it isn't reentrant: we need
+  // to add/remove elements while the center is traversing the list.
+  std::vector<Poller*> pollers;
   std::map<uint64_t, std::multimap<clock_type::time_point, TimeEvent>::iterator> event_map;
   uint64_t time_event_next_id;
   int notify_receive_fd;
