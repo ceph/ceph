@@ -23,7 +23,7 @@ gnuplot << EOF
 clear
 reset
 
-set terminal pdfcairo font "Gill Sans,5" linewidth 1 rounded fontscale .8 noenhanced
+set terminal pdfcairo size 7in,5in font "Gill Sans,5" linewidth 1 rounded fontscale .8 noenhanced
 set output "${output_file}.pdf"
 
 # starts multiplot
