@@ -1170,6 +1170,27 @@ namespace librbd {
     return r;
   }
 
+  ssize_t Image::writesame(uint64_t ofs, size_t len, bufferlist& bl)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    size_t data_len = bl.length();
+    tracepoint(librbd, writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+               ictx->read_only, ofs, len, data_len > 0 ? NULL : bl.c_str(), data_len);
+
+    if (len == 0) {
+      ictx->snap_lock.get_read();
+      len = ictx->get_image_size(ictx->snap_id) - ofs;
+      ictx->snap_lock.put_read();
+    }
+    if (data_len == 0 || len % data_len) {
+      tracepoint(librbd, writesame_exit, -EINVAL);
+      return -EINVAL;
+    }
+    int r = ictx->aio_work_queue->writesame(ofs, len, bl.c_str(), data_len, 0);
+    tracepoint(librbd, writesame_exit, r);
+    return r;
+  }
+
    ssize_t Image::write2(uint64_t ofs, size_t len, bufferlist& bl, int op_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -1181,6 +1202,27 @@ namespace librbd {
     }
     int r = ictx->aio_work_queue->write(ofs, len, bl.c_str(), op_flags);
     tracepoint(librbd, write_exit, r);
+    return r;
+  }
+
+  ssize_t Image::writesame2(uint64_t ofs, size_t len, bufferlist& bl, int op_flags)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    size_t data_len = bl.length();
+    tracepoint(librbd, writesame2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+               ictx->read_only, ofs, len, data_len > 0 ? NULL : bl.c_str(), data_len, op_flags);
+
+    if (len == 0) {
+      ictx->snap_lock.get_read();
+      len = ictx->get_image_size(ictx->snap_id) - ofs;
+      ictx->snap_lock.put_read();
+    }
+    if (data_len == 0 || len % data_len) {
+      tracepoint(librbd, writesame_exit, -EINVAL);
+      return -EINVAL;
+    }
+    int r = ictx->aio_work_queue->writesame(ofs, len, bl.c_str(), data_len, op_flags);
+    tracepoint(librbd, writesame_exit, r);
     return r;
   }
 
@@ -1225,6 +1267,51 @@ namespace librbd {
     ictx->aio_work_queue->aio_write(get_aio_completion(c), off, len, bl.c_str(),
                                     op_flags);
     tracepoint(librbd, aio_write_exit, 0);
+    return 0;
+  }
+
+  int Image::aio_writesame(uint64_t off, size_t len, bufferlist& bl, RBD::AioCompletion *c)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    size_t data_len = bl.length();
+    tracepoint(librbd, aio_writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+               ictx->read_only, off, len, data_len > 0 ? NULL : bl.c_str(), data_len, c->pc);
+
+    if (len == 0) {
+      ictx->snap_lock.get_read();
+      len = ictx->get_image_size(ictx->snap_id) - off;
+      ictx->snap_lock.put_read();
+    }
+    if (data_len == 0 || len % data_len) {
+      tracepoint(librbd, aio_writesame_exit, -EINVAL);
+      return -EINVAL;
+    }
+    ictx->aio_work_queue->aio_writesame(get_aio_completion(c), off, len, bl.c_str(), data_len, 0);
+
+    tracepoint(librbd, aio_writesame_exit, 0);
+    return 0;
+  }
+
+  int Image::aio_writesame2(uint64_t off, size_t len, bufferlist& bl,
+                            RBD::AioCompletion *c, int op_flags)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    size_t data_len = bl.length();
+    tracepoint(librbd, aio_writesame2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+               ictx->read_only, off, len, data_len > 0 ? NULL : bl.c_str(), data_len, c->pc, op_flags);
+
+    if (len == 0) {
+      ictx->snap_lock.get_read();
+      len = ictx->get_image_size(ictx->snap_id) - off;
+      ictx->snap_lock.put_read();
+    }
+    if (data_len == 0 || len % data_len) {
+      tracepoint(librbd, aio_writesame_exit, -EINVAL);
+      return -EINVAL;
+    }
+    ictx->aio_work_queue->aio_writesame(get_aio_completion(c), off, len, bl.c_str(), data_len, op_flags);
+
+    tracepoint(librbd, aio_writesame_exit, 0);
     return 0;
   }
 
@@ -2639,6 +2726,49 @@ extern "C" ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
   return r;
 }
 
+extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
+			     const char *buf, size_t data_len)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+             ictx->read_only, ofs, len, buf, data_len);
+
+  if (len == 0) {
+    ictx->snap_lock.get_read();
+    len = ictx->get_image_size(ictx->snap_id) - ofs;
+    ictx->snap_lock.put_read();
+  }
+  if (data_len == 0 || len % data_len) {
+    tracepoint(librbd, writesame_exit, -EINVAL);
+    return -EINVAL;
+  }
+  int r = ictx->aio_work_queue->writesame(ofs, len, buf, data_len, 0);
+
+  tracepoint(librbd, writesame_exit, r);
+  return r;
+}
+
+extern "C" ssize_t rbd_writesame2(rbd_image_t image, uint64_t ofs, size_t len,
+			     const char *buf, size_t data_len, int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, writesame2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+             ictx->read_only, ofs, len, buf, data_len, op_flags);
+
+  if (len == 0) {
+    ictx->snap_lock.get_read();
+    len = ictx->get_image_size(ictx->snap_id) - ofs;
+    ictx->snap_lock.put_read();
+  }
+  if (data_len == 0 || len % data_len) {
+    tracepoint(librbd, writesame_exit, -EINVAL);
+    return -EINVAL;
+  }
+  int r = ictx->aio_work_queue->writesame(ofs, len, buf, data_len, op_flags);
+
+  tracepoint(librbd, writesame_exit, r);
+  return r;
+}
 
 extern "C" int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
 {
@@ -2683,6 +2813,51 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   return 0;
 }
 
+extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
+			     const char *buf, size_t data_len, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  tracepoint(librbd, aio_writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+             ictx->read_only, off, len, buf, data_len, comp->pc);
+
+  if (len == 0) {
+    ictx->snap_lock.get_read();
+    len = ictx->get_image_size(ictx->snap_id) - off;
+    ictx->snap_lock.put_read();
+  }
+  if (data_len == 0 || len % data_len) {
+    tracepoint(librbd, aio_writesame_exit, -EINVAL);
+    return -EINVAL;
+  }
+  ictx->aio_work_queue->aio_writesame(get_aio_completion(comp), off, len, buf, data_len, 0);
+
+  tracepoint(librbd, aio_writesame_exit, 0);
+  return 0;
+}
+
+extern "C" int rbd_aio_writesame2(rbd_image_t image, uint64_t off, size_t len,
+			     const char *buf, size_t data_len, rbd_completion_t c, int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  tracepoint(librbd, aio_writesame2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+             ictx->read_only, off, len, buf, data_len, comp->pc, op_flags);
+
+  if (len == 0) {
+    ictx->snap_lock.get_read();
+    len = ictx->get_image_size(ictx->snap_id) - off;
+    ictx->snap_lock.put_read();
+  }
+  if (data_len == 0 || len % data_len) {
+    tracepoint(librbd, aio_writesame_exit, -EINVAL);
+    return -EINVAL;
+  }
+  ictx->aio_work_queue->aio_writesame(get_aio_completion(comp), off, len, buf, data_len, op_flags);
+
+  tracepoint(librbd, aio_writesame_exit, 0);
+  return 0;
+}
 
 extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
 			       rbd_completion_t c)
