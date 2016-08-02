@@ -35,6 +35,11 @@ int RGWMongooseFrontend::run() {
   char thread_pool_buf[32];
   snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d",
 	   (int)g_conf->rgw_thread_pool_size);
+
+  char req_timeout_buf[32];
+  snprintf(req_timeout_buf, sizeof(req_timeout_buf), "%d",
+	   (int)g_conf->rgw_op_thread_timeout * 1000);
+
   string port_str;
   map<string, string> conf_map = conf->get_config_map();
   conf->get_val("port", "80", &port_str);
@@ -42,6 +47,7 @@ int RGWMongooseFrontend::run() {
   conf_map["listening_ports"] = port_str;
   set_conf_default(conf_map, "enable_keep_alive", "yes");
   set_conf_default(conf_map, "num_threads", thread_pool_buf);
+  set_conf_default(conf_map, "request_timeout_ms", req_timeout_buf);
   set_conf_default(conf_map, "decode_url", "no");
 
   // Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
