@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 
 from teuthology.config import config as teuth_config
 from teuthology.exceptions import CommandFailedError, AnsibleFailedError
+from teuthology.job_status import set_status
 from teuthology.repo_utils import fetch_repo
 
 from . import Task
@@ -269,6 +270,7 @@ class Ansible(Task):
                 remote.reconnect()
 
     def _handle_failure(self, command, status):
+        self._set_status('dead')
         failures = None
         with open(self.failure_log.name, 'r') as fail_log:
             try:
@@ -285,6 +287,12 @@ class Ansible(Task):
             self._archive_failures()
             raise AnsibleFailedError(failures)
         raise CommandFailedError(command, status)
+
+    def _set_status(self, status):
+        """
+        Not implemented in the base class
+        """
+        pass
 
     def _archive_failures(self):
         if self.ctx.archive:
@@ -380,6 +388,9 @@ class CephLab(Ansible):
             with open(vault_pass_path, 'a'):
                 pass
         super(CephLab, self).begin()
+
+    def _set_status(self, status):
+        set_status(self.ctx.summary, status)
 
 
 task = Ansible
