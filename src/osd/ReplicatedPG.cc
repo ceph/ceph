@@ -5090,10 +5090,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
 	if (result < 0)
 	  break;
+	ObjectStore::Transaction::write_params_t params(pool.info.compress_hint,
+							pool.info.compress_algorithm,
+							pool.info.compress_ratio);
 	if (pool.info.require_rollback()) {
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags, params);
 	} else {
-	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags, params);
 	}
 
 	maybe_create_new_object(ctx);
@@ -5125,6 +5128,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
 	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
+	ObjectStore::Transaction::write_params_t extra_params(pool.info.compress_hint,
+							pool.info.compress_algorithm,
+							pool.info.compress_ratio);
 	if (pool.info.require_rollback()) {
 	  if (obs.exists) {
 	    if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
@@ -5134,7 +5140,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	  ctx->mod_desc.create();
-	  t->append(soid, 0, op.extent.length, osd_op.indata, op.flags);
+	  t->append(soid, 0, op.extent.length, osd_op.indata, op.flags, extra_params);
 	  if (obs.exists) {
 	    map<string, bufferlist> to_set = ctx->obc->attr_cache;
 	    map<string, boost::optional<bufferlist> > &overlay =
@@ -5153,7 +5159,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	} else {
 	  ctx->mod_desc.mark_unrollbackable();
-	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags);
+	  t->write(soid, 0, op.extent.length, osd_op.indata, op.flags, extra_params);
 	  if (obs.exists && op.extent.length < oi.size) {
 	    t->truncate(soid, op.extent.length);
 	  }
@@ -7525,12 +7531,16 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
       }
     }
     cop->results.data_digest = cop->data.crc32c(cop->results.data_digest);
+    ObjectStore::Transaction::write_params_t params(pool.info.compress_hint,
+						    pool.info.compress_algorithm,
+						    pool.info.compress_ratio);
     t->append(
       cop->results.temp_oid,
       cop->temp_cursor.data_offset,
       cop->data.length(),
       cop->data,
-      cop->dest_obj_fadvise_flags);
+      cop->dest_obj_fadvise_flags,
+      params);
     cop->data.clear();
   }
   if (pool.info.supports_omap()) {
@@ -11731,7 +11741,7 @@ void ReplicatedPG::hit_set_persist()
   bufferlist boi(sizeof(ctx->new_obs.oi));
   ::encode(ctx->new_obs.oi, boi, get_osdmap()->get_up_osd_features());
 
-  ctx->op_t->append(oid, 0, bl.length(), bl, 0);
+  ctx->op_t->append(oid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   map <string, bufferlist> attrs;
   attrs[OI_ATTR].claim(boi);
   attrs[SS_ATTR].claim(bss);

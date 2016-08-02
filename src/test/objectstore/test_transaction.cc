@@ -101,7 +101,7 @@ ObjectStore::Transaction generate_transaction()
   bufferlist bl;
   bl.append_zero(4096);
 
-  a.write(cid, oid, 1, 4096, bl, 0);
+  a.write(cid, oid, 1, 4096, bl, 0, ObjectStore::Transaction::write_params_t());
 
   a.omap_setkeys(acid, aoid, bl);
 
@@ -138,7 +138,7 @@ TEST(Transaction, GetNumBytes)
   bufferlist bl;
   bl.append_zero(4096);
 
-  a.write(cid, oid, 1, 4096, bl, 0);
+  a.write(cid, oid, 1, 4096, bl, 0, ObjectStore::Transaction::write_params_t());
   ASSERT_TRUE(a.get_encoded_bytes() == a.get_encoded_bytes_test());
 
   a.omap_setkeys(acid, aoid, bl);
