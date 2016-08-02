@@ -89,7 +89,6 @@ public:
   }
 }; // class HeapFixture1
 
-
 TEST(IndIntruHeap, shared_ptr) {
   crimson::IndIntruHeap<std::shared_ptr<Elem>,
 			Elem,
@@ -219,6 +218,180 @@ TEST(IndIntruHeap, regular_ptr) {
   EXPECT_TRUE(heap.empty());
 }
 
+
+TEST(IndIntruHeap, K_3) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			3> heap;
+
+  EXPECT_TRUE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(2));
+
+  EXPECT_FALSE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(99));
+  heap.push(std::make_shared<Elem>(1));
+  heap.push(std::make_shared<Elem>(-5));
+  heap.push(std::make_shared<Elem>(12));
+  heap.push(std::make_shared<Elem>(-12));
+  heap.push(std::make_shared<Elem>(-7));
+
+  // std::cout << heap << std::endl;
+
+  EXPECT_FALSE(heap.empty());
+
+  EXPECT_EQ(-12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-7, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-5, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(1, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(2, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(99, heap.top().data);
+
+  EXPECT_FALSE(heap.empty());
+  heap.pop();
+  EXPECT_TRUE(heap.empty());
+}
+
+TEST(IndIntruHeap, K_1) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			1> heap;
+
+  EXPECT_TRUE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(2));
+
+  EXPECT_FALSE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(99));
+  heap.push(std::make_shared<Elem>(1));
+  heap.push(std::make_shared<Elem>(-5));
+  heap.push(std::make_shared<Elem>(12));
+  heap.push(std::make_shared<Elem>(-12));
+  heap.push(std::make_shared<Elem>(-7));
+
+  // std::cout << heap << std::endl;
+
+  EXPECT_FALSE(heap.empty());
+
+  EXPECT_EQ(-12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-7, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-5, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(1, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(2, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(99, heap.top().data);
+
+  EXPECT_FALSE(heap.empty());
+  heap.pop();
+  EXPECT_TRUE(heap.empty());
+}
+
+
+TEST(IndIntruHeap, K_4) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			4> heap;
+
+  EXPECT_TRUE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(2));
+
+  EXPECT_FALSE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(99));
+  heap.push(std::make_shared<Elem>(1));
+  heap.push(std::make_shared<Elem>(-5));
+  heap.push(std::make_shared<Elem>(12));
+  heap.push(std::make_shared<Elem>(-12));
+  heap.push(std::make_shared<Elem>(-7));
+
+  // std::cout << heap << std::endl;
+
+  EXPECT_FALSE(heap.empty());
+
+  EXPECT_EQ(-12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-7, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-5, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(1, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(2, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(99, heap.top().data);
+
+  EXPECT_FALSE(heap.empty());
+  heap.pop();
+  EXPECT_TRUE(heap.empty());
+}
+
+
+TEST(IndIntruHeap, K_10) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			10> heap;
+
+  EXPECT_TRUE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(2));
+
+  EXPECT_FALSE(heap.empty());
+
+  heap.push(std::make_shared<Elem>(99));
+  heap.push(std::make_shared<Elem>(1));
+  heap.push(std::make_shared<Elem>(-5));
+  heap.push(std::make_shared<Elem>(12));
+  heap.push(std::make_shared<Elem>(-12));
+  heap.push(std::make_shared<Elem>(-7));
+
+  // std::cout << heap << std::endl;
+
+  EXPECT_FALSE(heap.empty());
+
+  EXPECT_EQ(-12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-7, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(-5, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(1, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(2, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(12, heap.top().data);
+  heap.pop();
+  EXPECT_EQ(99, heap.top().data);
+
+  EXPECT_FALSE(heap.empty());
+  heap.pop();
+  EXPECT_TRUE(heap.empty());
+}
 
 TEST(IndIntruHeap, demote) {
   crimson::IndIntruHeap<std::unique_ptr<Elem>,
