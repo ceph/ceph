@@ -290,7 +290,7 @@ if [ "$overwrite_conf" -eq 0 ]; then
     RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
 else
-	[ -e "$conf_fn" ] && rm -- "$conf_fn"
+	[ -e "$conf_fn" -a "$new" = "1" ] && rm -- "$conf_fn"
 fi
 
 if [ "$start_all" -eq 1 ]; then
