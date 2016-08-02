@@ -82,7 +82,7 @@ function bench() {
         --erasures $erasures \
         --parameter k=$k \
         --parameter m=$m \
-        --erasure-code-dir $PLUGIN_DIRECTORY)
+        --plugin-dir $PLUGIN_DIRECTORY)
     result=$($command "$@")
     echo -e "$result\t$plugin\t$k\t$m\t$workload\t$iterations\t$size\t$erasures\t$command ""$@"
 }

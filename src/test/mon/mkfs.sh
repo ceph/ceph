@@ -44,7 +44,6 @@ function mon_mkfs() {
     ceph-mon \
         --id $MON_ID \
         --fsid $fsid \
-        --erasure-code-dir=$CEPH_LIB \
         --plugin-dir=$CEPH_LIB \
         --mkfs \
         --mon-data=$MON_DIR \
@@ -59,7 +58,6 @@ function mon_run() {
         --chdir= \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --erasure-code-dir=$CEPH_LIB \
         --plugin-dir=$CEPH_LIB \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
@@ -87,7 +85,7 @@ function auth_none() {
         --id $MON_ID \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --erasure-code-dir=$CEPH_LIB \
+        --plugin-dir=$CEPH_LIB \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
 
@@ -138,7 +136,6 @@ function auth_cephx_key() {
 
     [ -f $MON_DIR/keyring ] || return 1
     grep $key $MON_DIR/keyring
-
     mon_run
 
     timeout $TIMEOUT ceph \
@@ -155,7 +152,7 @@ function makedir() {
         --id $MON_ID \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --erasure-code-dir=$CEPH_LIB \
+        --plugin-dir=$CEPH_LIB \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log
     grep 'toodeep.*No such file' $DIR/makedir.log > /dev/null

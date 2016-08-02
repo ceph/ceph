@@ -356,7 +356,6 @@ function run_mon() {
         --mon-data-avail-crit=1 \
         --paxos-propose-interval=0.1 \
         --osd-crush-chooseleaf-type=0 \
-        --erasure-code-dir=$CEPH_LIB \
         --plugin-dir=$CEPH_LIB \
         --debug-mon 20 \
         --debug-ms 20 \
@@ -590,7 +589,6 @@ function activate_osd() {
     ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
-    ceph_args+=" --erasure-code-dir=$CEPH_LIB"
     ceph_args+=" --plugin-dir=$CEPH_LIB"
     ceph_args+=" --osd-class-dir=$CEPH_LIB"
     ceph_args+=" --run-dir=$dir"
