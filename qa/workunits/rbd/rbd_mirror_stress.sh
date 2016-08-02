@@ -153,7 +153,7 @@ do
 done
 
 testlog "TEST: image deletions should propagate"
-wait_for_pool_images ${CLUSTER2} ${POOL} 0
+wait_for_pool_images ${CLUSTER1} ${POOL} 0
 wait_for_pool_healthy ${CLUSTER1} ${POOL} 0
 for i in `seq 1 ${IMAGE_COUNT}`
 do
