@@ -279,6 +279,8 @@ struct Inode {
   int caps_wanted();
   int caps_mds_wanted();
   int caps_dirty();
+  uid_t get_best_cap_uid();
+  gid_t get_best_cap_gid();
 
   bool have_valid_size();
   Dir *open_dir();

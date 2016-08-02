@@ -7865,7 +7865,7 @@ int Client::_renew_caps(Inode *in)
     req->head.args.open.mask = 0;
   req->set_inode(in);
 
-  UserPerm perms(get_uid(), get_gid()); // FIXME
+  UserPerm perms(in->get_best_cap_uid(), in->get_best_cap_gid());
   int ret = make_request(req, perms);
   return ret;
 }

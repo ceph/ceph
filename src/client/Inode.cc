@@ -288,6 +288,28 @@ int Inode::caps_dirty()
   return dirty_caps | flushing_caps;
 }
 
+uid_t Inode::get_best_cap_uid()
+{
+  uid_t any = -1;
+  for (const auto ci : caps) {
+    if (ci.second->latest_uid == uid)
+      return uid;
+    any = ci.second->latest_uid;
+  }
+  return any;
+}
+
+gid_t Inode::get_best_cap_gid()
+{
+  gid_t any = -1;
+  for (const auto ci : caps) {
+    if (ci.second->latest_gid == uid)
+      return uid;
+    any = ci.second->latest_gid;
+  }
+  return any;
+}
+
 bool Inode::have_valid_size()
 {
   // RD+RDCACHE or WR+WRBUFFER => valid size
