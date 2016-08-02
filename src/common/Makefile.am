@@ -169,7 +169,6 @@ noinst_HEADERS += \
 
 # important; libmsg before libauth!
 LIBCOMMON_DEPS += \
-	$(LIBERASURE_CODE) \
 	$(LIBCOMPRESSOR) \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
@@ -177,11 +176,14 @@ LIBCOMMON_DEPS += \
 	$(RESOLV_LIBS)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt -lblkid
+LIBCOMMON_DEPS += -lrt -lblkid -ldl
 endif # LINUX
 
 libcommon_la_SOURCES = common/buffer.cc
 libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
+if LINUX
+libcommon_la_LDFLAGS = -ldl
+endif # LINUX
 noinst_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \

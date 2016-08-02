@@ -20,10 +20,29 @@
  */
 
 #include "ceph_ver.h"
+#include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodeExample.h"
+ 
+class ErasureCodePluginShecSse3 : public ErasureCodePlugin {
+public:
 
-extern "C" const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+  ErasureCodePluginShecSse3(CephContext* cct) : ErasureCodePlugin(cct)
+  {}
+  
+  virtual int factory(ErasureCodeProfile &profile,
+                      ErasureCodeInterfaceRef *erasure_code,
+                      ostream *ss)
+  {
+    return -333;
+  }
+};
 
-extern "C" int __erasure_code_init(char *plugin_name, char *directory)
+extern "C" const char *__ceph_plugin_version() { return CEPH_GIT_NICE_VER; }
+
+extern "C" int __ceph_plugin_init(CephContext *cct,
+                                  const std::string& type,
+                                  const std::string& name)
 {
-  return -333;
+  PluginRegistry *instance = cct->get_plugin_registry();
+  return instance->add(type, name, new ErasureCodePluginShecSse3(cct));
 }

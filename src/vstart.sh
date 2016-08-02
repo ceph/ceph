@@ -814,7 +814,7 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-echo "export PYTHONPATH=./pybind:$PYTHONPATH"
+echo "export PYTHONPATH=./pybind"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"
 
 if [ "$CEPH_DIR" != "$PWD" ]; then

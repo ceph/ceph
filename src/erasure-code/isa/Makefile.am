@@ -67,11 +67,11 @@ libisa_la_CXXFLAGS = ${AM_CXXFLAGS}
 libisa_la_CCASFLAGS = ${AM_CCASFLAGS} -I $(srcdir)/erasure-code/isa/isa-l/include/
 libisa_la_LIBTOOLFLAGS = --tag=CC
 
-libec_isa_la_SOURCES =
-libec_isa_la_LIBADD = libisa.la $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_isa_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
+libceph_isa_la_SOURCES =
+libceph_isa_la_LIBADD = libisa.la $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
+libceph_isa_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
 if LINUX
-libec_isa_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+libceph_isa_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 
-erasure_codelib_LTLIBRARIES += libec_isa.la
+erasure_codelib_LTLIBRARIES += libceph_isa.la

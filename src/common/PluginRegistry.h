@@ -62,8 +62,7 @@ namespace ceph {
 
     int load(const std::string& type,
 	     const std::string& name);
-    int preload();
-    int preload(const std::string& type);
+    int preload(const std::string &plugins, const std::string &type);
   };
 }
 
