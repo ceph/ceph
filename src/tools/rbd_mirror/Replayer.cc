@@ -740,7 +740,9 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer
           }
        }
     );
-    m_image_deleter->wait_for_scheduled_deletion(image_name.get(), ctx, false);
+
+    m_image_deleter->wait_for_scheduled_deletion(
+      m_local_pool_id, image_replayer->get_global_image_id(), ctx, false);
   }
 }
 
@@ -752,7 +754,9 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 
   // TODO: check how long it is stopping and alert if it is too long.
   if (image_replayer->is_stopped()) {
-    m_image_deleter->cancel_waiter(image_replayer->get_local_image_name());
+    m_image_deleter->cancel_waiter(m_local_pool_id,
+                                   image_replayer->get_global_image_id());
+
     if (!m_stopping.read()) {
       dout(20) << "scheduling delete" << dendl;
       m_image_deleter->schedule_image_delete(

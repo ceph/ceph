@@ -192,18 +192,18 @@ void ImageDeleter::run() {
 }
 
 void ImageDeleter::schedule_image_delete(RadosRef local_rados,
-                                         uint64_t local_pool_id,
+                                         int64_t local_pool_id,
                                          const std::string& local_image_id,
                                          const std::string& local_image_name,
                                          const std::string& global_image_id) {
   dout(20) << "enter" << dendl;
 
-  Mutex::Locker l(m_delete_lock);
+  Mutex::Locker locker(m_delete_lock);
 
-  auto del_info = find_delete_info(local_image_name);
+  auto del_info = find_delete_info(local_pool_id, global_image_id);
   if (del_info != nullptr) {
-    dout(20) << "image " << local_image_name << " was already scheduled for "
-             << "deletion" << dendl;
+    dout(20) << "image " << local_image_name << " (" << global_image_id << ") "
+             << "was already scheduled for deletion" << dendl;
     return;
   }
 
@@ -213,7 +213,8 @@ void ImageDeleter::schedule_image_delete(RadosRef local_rados,
   m_delete_queue_cond.Signal();
 }
 
-void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
+void ImageDeleter::wait_for_scheduled_deletion(int64_t local_pool_id,
+                                               const std::string &global_image_id,
                                                Context *ctx,
                                                bool notify_on_failed_retry) {
 
@@ -221,8 +222,8 @@ void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
       m_work_queue->queue(ctx, r);
     });
 
-  Mutex::Locker l(m_delete_lock);
-  auto del_info = find_delete_info(image_name);
+  Mutex::Locker locker(m_delete_lock);
+  auto del_info = find_delete_info(local_pool_id, global_image_id);
   if (!del_info) {
     // image not scheduled for deletion
     ctx->complete(0);
@@ -236,9 +237,10 @@ void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
   (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
 }
 
-void ImageDeleter::cancel_waiter(const std::string& image_name) {
+void ImageDeleter::cancel_waiter(int64_t local_pool_id,
+                                 const std::string &global_image_id) {
   Mutex::Locker locker(m_delete_lock);
-  auto del_info = find_delete_info(image_name);
+  auto del_info = find_delete_info(local_pool_id, global_image_id);
   if (!del_info) {
     return;
   }
@@ -405,8 +407,7 @@ bool ImageDeleter::process_image_delete() {
   }
 
   librbd::NoOpProgressContext ctx;
-  r = librbd::remove(ioctx, m_active_delete->local_image_name.c_str(), ctx,
-                     true);
+  r = librbd::remove(ioctx, "", m_active_delete->local_image_id, ctx, true);
   if (r < 0 && r != -ENOENT) {
     derr << "error removing image " << m_active_delete->local_image_name
          << " from local pool: " << cpp_strerror(r) << dendl;
@@ -506,21 +507,22 @@ void ImageDeleter::retry_failed_deletions() {
 }
 
 unique_ptr<ImageDeleter::DeleteInfo> const* ImageDeleter::find_delete_info(
-    const std::string& image_name) {
+    int64_t local_pool_id, const std::string &global_image_id) {
   assert(m_delete_lock.is_locked());
 
-  if (m_active_delete && m_active_delete->match(image_name)) {
+  if (m_active_delete && m_active_delete->match(local_pool_id,
+                                                global_image_id)) {
     return &m_active_delete;
   }
 
   for (const auto& del_info : m_delete_queue) {
-    if (del_info->match(image_name)) {
+    if (del_info->match(local_pool_id, global_image_id)) {
       return &del_info;
     }
   }
 
   for (const auto& del_info : m_failed_queue) {
-    if (del_info->match(image_name)) {
+    if (del_info->match(local_pool_id, global_image_id)) {
       return &del_info;
     }
   }
