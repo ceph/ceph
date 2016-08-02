@@ -594,7 +594,7 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     nullfd = open(os.devnull, "w")
     errors=0
-    print "Test removeall"
+    print("Test removeall")
     kill_daemons()
     for nspace in db.keys():
         for basename in db[nspace].keys():
