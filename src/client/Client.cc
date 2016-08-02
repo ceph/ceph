@@ -6390,7 +6390,8 @@ int Client::_do_setattr(Inode *in, struct stat *attr, int mask,
   }
   if ((mask & CEPH_SETATTR_SIZE) &&
       (unsigned long)attr->st_size > in->size &&
-      is_quota_bytes_exceeded(in, (unsigned long)attr->st_size - in->size)) {
+      is_quota_bytes_exceeded(in, (unsigned long)attr->st_size - in->size,
+			      perms)) {
     return -EDQUOT;
   }
 
@@ -8463,9 +8464,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // check quota
   uint64_t endoff = offset + size;
-  UserPerm perms(f->actor_uid, f->actor_gid); //
-  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size))
+  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
+						   f->actor_perms)) {
     return -EDQUOT;
+  }
 
   // use/adjust fd pos?
   if (offset < 0) {
@@ -8634,7 +8636,7 @@ success:
     in->size = totalwritten + offset;
     mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
-    if (is_quota_bytes_approaching(in)) {
+    if (is_quota_bytes_approaching(in, f->actor_perms)) {
       check_caps(in, true);
     } else {
       if ((in->size << 1) >= in->max_size &&
@@ -8934,7 +8936,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   assert(root != nullptr);
-  Inode *quota_root = root->quota.is_enable() ? root : get_quota_root(root);
+  Inode *quota_root = root->quota.is_enable() ? root : get_quota_root(root, perms);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -9009,17 +9011,16 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
   int ret;
   bufferlist bl;
 
-  UserPerm perms(fh->actor_uid, fh->actor_gid);
   if (sleep && switch_interrupt_cb) {
     // enable interrupt
     switch_interrupt_cb(callback_handle, req->get());
-    ret = make_request(req, perms, NULL, NULL, -1, &bl);
+    ret = make_request(req, fh->actor_perms, NULL, NULL, -1, &bl);
 
     // disable interrupt
     switch_interrupt_cb(callback_handle, NULL);
     put_request(req);
   } else {
-    ret = make_request(req, perms, NULL, NULL, -1, &bl);
+    ret = make_request(req, fh->actor_perms, NULL, NULL, -1, &bl);
   }
 
   if (ret == 0) {
@@ -10490,7 +10491,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  if (is_quota_files_exceeded(dir)) {
+  if (is_quota_files_exceeded(dir, perms)) {
     return -EDQUOT;
   }
 
@@ -10578,7 +10579,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  if (is_quota_files_exceeded(dir)) {
+  if (is_quota_files_exceeded(dir, perms)) {
     return -EDQUOT;
   }
 
@@ -10671,7 +10672,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
     return -EROFS;
   }
-  if (is_quota_files_exceeded(dir)) {
+  if (is_quota_files_exceeded(dir, perm)) {
     return -EDQUOT;
   }
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ?
@@ -10759,7 +10760,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  if (is_quota_files_exceeded(dir)) {
+  if (is_quota_files_exceeded(dir, perms)) {
     return -EDQUOT;
   }
 
@@ -10979,7 +10980,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
       fromdir != todir &&
       (fromdir->quota.is_enable() ||
        todir->quota.is_enable() ||
-       get_quota_root(fromdir) != get_quota_root(todir))) {
+       get_quota_root(fromdir, perm) != get_quota_root(todir, perm))) {
     return -EXDEV;
   }
 
@@ -11089,7 +11090,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
   if (in->snapid != CEPH_NOSNAP || dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  if (is_quota_files_exceeded(dir)) {
+  if (is_quota_files_exceeded(dir, perm)) {
     return -EDQUOT;
   }
 
@@ -11642,7 +11643,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   uint64_t size = offset + length;
   if (!(mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)) &&
       size > in->size &&
-      is_quota_bytes_exceeded(in, size - in->size)) {
+      is_quota_bytes_exceeded(in, size - in->size, fh->actor_perms)) {
     return -EDQUOT;
   }
 
@@ -11719,7 +11720,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
-      if (is_quota_bytes_approaching(in)) {
+      if (is_quota_bytes_approaching(in, fh->actor_perms)) {
         check_caps(in, true);
       } else {
         if ((in->size << 1) >= in->max_size &&
@@ -12120,7 +12121,7 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
   return true;
 }
 
-Inode *Client::get_quota_root(Inode *in)
+Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
   if (!cct->_conf->client_quota)
     return NULL;
@@ -12168,7 +12169,6 @@ Inode *Client::get_quota_root(Inode *in)
     req->set_inode(cur);
 
     InodeRef parent_ref;
-    UserPerm perms(get_uid(), get_gid());
     int ret = make_request(req, perms, &parent_ref);
     if (ret < 0) {
       ldout(cct, 1) << __func__ << " " << in->vino()
@@ -12194,8 +12194,8 @@ Inode *Client::get_quota_root(Inode *in)
  * Traverse quota ancestors of the Inode, return true
  * if any of them passes the passed function
  */
-bool Client::check_quota_condition(
-    Inode *in, std::function<bool (const Inode &in)> test)
+bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
+				   std::function<bool (const Inode &in)> test)
 {
   if (!cct->_conf->client_quota)
     return false;
@@ -12211,33 +12211,34 @@ bool Client::check_quota_condition(
       return false;
     } else {
       // Continue up the tree
-      in = get_quota_root(in);
+      in = get_quota_root(in, perms);
     }
   }
 
   return false;
 }
 
-bool Client::is_quota_files_exceeded(Inode *in)
+bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
 {
-  return check_quota_condition(in, 
+  return check_quota_condition(in, perms,
       [](const Inode &in) {
         return in.quota.max_files && in.rstat.rsize() >= in.quota.max_files;
       });
 }
 
-bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes)
+bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+				     const UserPerm& perms)
 {
-  return check_quota_condition(in, 
+  return check_quota_condition(in, perms,
       [&new_bytes](const Inode &in) {
         return in.quota.max_bytes && (in.rstat.rbytes + new_bytes)
                > in.quota.max_bytes;
       });
 }
 
-bool Client::is_quota_bytes_approaching(Inode *in)
+bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
 {
-  return check_quota_condition(in, 
+  return check_quota_condition(in, perms,
       [](const Inode &in) {
         if (in.quota.max_bytes) {
           if (in.rstat.rbytes >= in.quota.max_bytes) {
