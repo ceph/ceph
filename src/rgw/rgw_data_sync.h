@@ -524,6 +524,7 @@ public:
 class RGWDefaultSyncModule : public RGWSyncModule {
 public:
   RGWDefaultSyncModule() {}
+  bool supports_data_export() override { return true; }
   int create_instance(map<string, string>& config, RGWSyncModuleInstanceRef *instance) override;
 };
 

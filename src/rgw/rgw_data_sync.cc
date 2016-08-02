@@ -1597,6 +1597,27 @@ int RGWRemoteDataLog::run_sync(int num_shards)
 
 int RGWDataSyncStatusManager::init()
 {
+  auto zone_def_iter = store->zone_by_id.find(source_zone);
+  if (zone_def_iter == store->zone_by_id.end()) {
+    ldout(store->ctx(), 0) << "ERROR: failed to find zone config info for zone=" << source_zone << dendl;
+    return -EIO;
+  }
+
+  auto& zone_def = zone_def_iter->second;
+
+  map<string, string> sync_module_config;
+
+  if (!store->get_sync_modules_manager()->supports_data_export(zone_def.tier_type)) {
+    return -ENOTSUP;
+  }
+
+  int r = store->get_sync_modules_manager()->create_instance(zone_def.tier_type, sync_module_config, &sync_module);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to init sync module instance, r=" << r << dendl;
+    finalize();
+    return r;
+  }
+
   conn = store->get_zone_conn_by_id(source_zone);
   if (!conn) {
     ldout(store->ctx(), 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
@@ -1605,7 +1626,7 @@ int RGWDataSyncStatusManager::init()
 
   const char *log_pool = store->get_zone_params().log_pool.name.c_str();
   librados::Rados *rados = store->get_rados_handle();
-  int r = rados->ioctx_create(log_pool, ioctx);
+  r = rados->ioctx_create(log_pool, ioctx);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << dendl;
     return r;
@@ -1614,14 +1635,6 @@ int RGWDataSyncStatusManager::init()
   source_status_obj = rgw_obj(store->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(source_zone));
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
-
-  map<string, string> sync_module_config;
-  r = store->get_sync_modules_manager()->create_instance("default", sync_module_config, &sync_module);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to init sync module instance, r=" << r << dendl;
-    finalize();
-    return r;
-  }
 
   r = source_log.init(source_zone, conn, error_logger, sync_module);
   if (r < 0) {
