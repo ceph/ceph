@@ -95,6 +95,18 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
    **NOTE:** You can also use `rbd create`_ to create an image, but we
    recommend ensuring that QEMU is working properly.
 
+.. tip:: Optionally, if you wish to enable debug logs and the admin socket for
+   this client, you can add the following section to ``/etc/ceph/ceph.conf``::
+
+	[client.libvirt]
+	log file = /var/log/ceph/qemu-guest-$pid.log
+	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
+
+   The ``client.libvirt`` section name should match the cephx user you created
+   above. If SELinux or AppArmor is enabled, note that this could prevent the
+   client process (qemu via libvirt) from writing the logs or admin socket to
+   the destination locations (``/var/log/ceph`` or ``/var/run/ceph``).
+
 
 
 Preparing the VM Manager
