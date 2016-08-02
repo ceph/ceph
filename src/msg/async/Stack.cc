@@ -49,6 +49,7 @@ void NetworkStack::add_thread(unsigned i, std::function<void ()> &thread)
         }
       }
       w->reset();
+      w->destroy();
     }
   );
 }
