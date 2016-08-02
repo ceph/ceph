@@ -198,7 +198,7 @@ namespace crimson {
     IndIntruHeap() :
       count(0)
     {
-      assert(K > 0);
+      // empty
     }
 
     IndIntruHeap(const IndIntruHeap<I,T,heap_info,C,K>& other) :
