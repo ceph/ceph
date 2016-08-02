@@ -465,7 +465,6 @@ void OSDService::start_shutdown()
 {
   {
     Mutex::Locker l(agent_timer_lock);
-    agent_timer.cancel_all_events();
     agent_timer.shutdown();
   }
 }
