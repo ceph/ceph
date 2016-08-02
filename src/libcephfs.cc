@@ -1399,7 +1399,7 @@ extern "C" int ceph_ll_lookup_inode(
   assert(parent != NULL);
 
   // Finally, get the name (dentry) of the requested inode
-  r = (cmount->get_client())->lookup_name(*inode, parent);
+  r = (cmount->get_client())->lookup_name(*inode, parent, perms);
   if (r) {
     // Unexpected error
     (cmount->get_client())->ll_forget(parent, 1);
