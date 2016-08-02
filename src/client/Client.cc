@@ -7708,7 +7708,7 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 }
 
 
-Fh *Client::_create_fh(Inode *in, int flags, int cmode)
+ Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
   // yay
   Fh *f = new Fh;
@@ -7718,6 +7718,7 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   // inode
   assert(in);
   f->inode = in;
+  f->actor_perms = perms;
 
   ldout(cct, 10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
 
@@ -7826,7 +7827,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
   // success?
   if (result >= 0) {
     if (fhp)
-      *fhp = _create_fh(in, flags, cmode);
+      *fhp = _create_fh(in, flags, cmode, perms);
   } else {
     in->put_open_ref(cmode);
   }
@@ -9009,7 +9010,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
   int ret;
   bufferlist bl;
 
-  UserPerm perms(get_uid(), get_gid()); // FIXME
+  UserPerm perms(fh->actor_uid, fh->actor_gid);
   if (sleep && switch_interrupt_cb) {
     // enable interrupt
     switch_interrupt_cb(callback_handle, req->get());
@@ -10639,7 +10640,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   /* If the caller passed a value in fhp, do the open */
   if(fhp) {
     (*inp)->get_open_ref(cmode);
-    *fhp = _create_fh(inp->get(), flags, cmode);
+    *fhp = _create_fh(inp->get(), flags, cmode, perms);
   }
 
  reply_error:
