@@ -53,6 +53,42 @@ class C_handle_notify : public EventCallback {
 #undef dout_prefix
 #define dout_prefix _event_prefix(_dout)
 
+/**
+ * Construct a Poller.
+ *
+ * \param center
+ *      EventCenter object through which the poller will be invoked (defaults
+ *      to the global #RAMCloud::center object).
+ * \param pollerName
+ *      Human readable name that can be printed out in debugging messages
+ *      about the poller. The name of the superclass is probably sufficient
+ *      for most cases.
+ */
+EventCenter::Poller::Poller(EventCenter* center, const string& name)
+    : owner(center), poller_name(name), slot(owner->pollers.size())
+{
+  owner->pollers.push_back(this);
+}
+
+/**
+ * Destroy a Poller.
+ */
+EventCenter::Poller::~Poller()
+{
+  // Erase this Poller from the vector by overwriting it with the
+  // poller that used to be the last one in the vector.
+  //
+  // Note: this approach is reentrant (it is safe to delete a
+  // poller from a poller callback, which means that the poll
+  // method is in the middle of scanning the list of all pollers;
+  // the worst that will happen is that the poller that got moved
+  // may not be invoked in the current scan).
+  owner->pollers[slot] = owner->pollers.back();
+  owner->pollers[slot]->slot = slot;
+  owner->pollers.pop_back();
+  slot = -1;
+}
+
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " nevent=" << nevent
@@ -261,8 +297,11 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  ldout(cct, 2) << __func__ << dendl;
+  // No need to wake up since we never sleep
+  if (!pollers.empty())
+    return ;
 
+  ldout(cct, 2) << __func__ << dendl;
   char buf = 'c';
   // wake up "event_wait"
   int n = write(notify_send_fd, &buf, sizeof(buf));
@@ -304,8 +343,9 @@ int EventCenter::process_events(int timeout_microseconds)
   bool trigger_time = false;
   auto now = clock_type::now();
 
-  // If exists external events, don't block
-  if (external_num_events.load()) {
+  bool blocking = pollers.empty() && !external_num_events.load() ? &tv : nullptr;
+  // If exists external events or poller, don't block
+  if (!blocking) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
   } else {
@@ -374,6 +414,12 @@ int EventCenter::process_events(int timeout_microseconds)
       numevents++;
     }
   }
+
+  if (!numevents && !blocking) {
+    for (uint32_t i = 0; i < pollers.size(); i++)
+      numevents += pollers[i]->poll();
+  }
+
   return numevents;
 }
 
