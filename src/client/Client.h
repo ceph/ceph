@@ -759,7 +759,7 @@ private:
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
 
-  Fh *_create_fh(Inode *in, int flags, int cmode);
+  Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
