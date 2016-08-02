@@ -585,13 +585,13 @@ protected:
 
   int authenticate();
 
-  Inode* get_quota_root(Inode *in);
-  bool check_quota_condition(
-      Inode *in,
-      std::function<bool (const Inode &)> test);
-  bool is_quota_files_exceeded(Inode *in);
-  bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
-  bool is_quota_bytes_approaching(Inode *in);
+  Inode* get_quota_root(Inode *in, const UserPerm& perms);
+  bool check_quota_condition(Inode *in, const UserPerm& perms,
+			     std::function<bool (const Inode &)> test);
+  bool is_quota_files_exceeded(Inode *in, const UserPerm& perms);
+  bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+			       const UserPerm& perms);
+  bool is_quota_bytes_approaching(Inode *in, const UserPerm& perms);
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
   list<Cond*> waiting_for_pool_perm;
