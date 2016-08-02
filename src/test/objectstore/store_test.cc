@@ -690,15 +690,11 @@ TEST_P(StoreTest, BufferCacheReadTest) {
   }
 }
 
-TEST_P(StoreTest, CompressionTest) {
+void doCompressionTest(boost::scoped_ptr<ObjectStore>& store,
+		       const ObjectStore::Transaction::write_params_t& wparams) {
   ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
-  if (string(GetParam()) != "bluestore")
-    return;
-
-  g_conf->set_val("bluestore_compression", "force");
-  g_ceph_context->_conf->apply_changes(NULL);
 
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   {
@@ -734,7 +730,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData (4xAU) Write" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -771,7 +767,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data2);
-    t.write(cid, hoid, 0x8000, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0x8000, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData partial overwrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -810,7 +806,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data2);
-    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData partial overwrite, two extents overlapped, single one to be removed" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -848,7 +844,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0x3f000-1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0x3f000-1, bl.length(), bl, 0, wparams);
     cerr << "Small chunk partial overwrite, two extents overlapped, single one to be removed" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -882,7 +878,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData large blob" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -899,6 +895,29 @@ TEST_P(StoreTest, CompressionTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
+
+TEST_P(StoreTest, CompressionTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  //using global compression settings
+  g_conf->set_val("bluestore_compression", "force");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  doCompressionTest(store, ObjectStore::Transaction::write_params_t());
+
+  g_conf->set_val("bluestore_compression", "passive");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  //using per-write compression settings
+
+  ObjectStore::Transaction::write_params_t wparams(
+    CEPH_OSD_COMP_FLAG_COMPRESSIBLE,
+    Compressor::COMP_ALG_ZLIB, 
+    90);
+  doCompressionTest(store, wparams);
+
   g_conf->set_val("bluestore_compression", "none");
   g_ceph_context->_conf->apply_changes(NULL);
 }
