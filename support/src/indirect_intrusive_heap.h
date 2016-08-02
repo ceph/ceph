@@ -36,7 +36,11 @@ namespace crimson {
    *
    * K is the branching factor of the heap, default is 2 (binary heap).
    */
-  template<typename I, typename T, IndIntruHeapData T::*heap_info, typename C, uint K = 2>
+  template<typename I,
+	   typename T,
+	   IndIntruHeapData T::*heap_info,
+	   typename C,
+	   uint K = 2>
   class IndIntruHeap {
 
     static_assert(
@@ -48,6 +52,7 @@ namespace crimson {
       typename std::result_of<C(const T&,const T&)>::type>::value,
       "class C must define operator() to take two const T& and return a bool");
 
+    static_assert(K >= 2, "K (degree of branching) must be at least 2");
 
     class Iterator {
       friend IndIntruHeap<I, T, heap_info, C, K>;

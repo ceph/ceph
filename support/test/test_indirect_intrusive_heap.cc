@@ -262,49 +262,6 @@ TEST(IndIntruHeap, K_3) {
   EXPECT_TRUE(heap.empty());
 }
 
-TEST(IndIntruHeap, K_1) {
-  crimson::IndIntruHeap<std::shared_ptr<Elem>,
-			Elem,
-			&Elem::heap_data,
-			ElemCompare,
-			1> heap;
-
-  EXPECT_TRUE(heap.empty());
-
-  heap.push(std::make_shared<Elem>(2));
-
-  EXPECT_FALSE(heap.empty());
-
-  heap.push(std::make_shared<Elem>(99));
-  heap.push(std::make_shared<Elem>(1));
-  heap.push(std::make_shared<Elem>(-5));
-  heap.push(std::make_shared<Elem>(12));
-  heap.push(std::make_shared<Elem>(-12));
-  heap.push(std::make_shared<Elem>(-7));
-
-  // std::cout << heap << std::endl;
-
-  EXPECT_FALSE(heap.empty());
-
-  EXPECT_EQ(-12, heap.top().data);
-  heap.pop();
-  EXPECT_EQ(-7, heap.top().data);
-  heap.pop();
-  EXPECT_EQ(-5, heap.top().data);
-  heap.pop();
-  EXPECT_EQ(1, heap.top().data);
-  heap.pop();
-  EXPECT_EQ(2, heap.top().data);
-  heap.pop();
-  EXPECT_EQ(12, heap.top().data);
-  heap.pop();
-  EXPECT_EQ(99, heap.top().data);
-
-  EXPECT_FALSE(heap.empty());
-  heap.pop();
-  EXPECT_TRUE(heap.empty());
-}
-
 
 TEST(IndIntruHeap, K_4) {
   crimson::IndIntruHeap<std::shared_ptr<Elem>,
@@ -392,6 +349,76 @@ TEST(IndIntruHeap, K_10) {
   heap.pop();
   EXPECT_TRUE(heap.empty());
 }
+
+
+TEST(IndIntruHeap, multi_K) {
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			2> heap2;
+
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			3> heap3;
+
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			4> heap4;
+
+  crimson::IndIntruHeap<std::shared_ptr<Elem>,
+			Elem,
+			&Elem::heap_data,
+			ElemCompare,
+			10> heap10;
+
+  // 250 should give us at least 4 levels on all heaps
+  constexpr size_t count = 250;
+
+  std::srand(std::time(0)); // use current time as seed for random generator
+
+  // insert same set of random values into the four heaps
+  for (size_t i = 0; i < count; ++i) {
+    int value = std::rand() % 201 - 100; // -100...+100
+    auto data = std::make_shared<Elem>(value);
+    heap2.push(data);
+    heap3.push(data);
+    heap4.push(data);
+    heap10.push(data);
+  }
+
+  auto bound = std::numeric_limits<decltype(Elem::data)>::min();
+
+  for (size_t i = 0; i < count; ++i) {
+    auto current = heap2.top().data;
+
+    EXPECT_GE(current, bound) <<
+      "we should never go down, only increase or remain the same";
+    EXPECT_EQ(current, heap3.top().data) <<
+      "heap1's data and heap3's data should match";
+    EXPECT_EQ(current, heap4.top().data) <<
+      "heap1's data and heap4's data should match";
+    EXPECT_EQ(current, heap10.top().data) <<
+      "heap1's data and heap10's data should match";
+
+    heap2.pop();
+    heap3.pop();
+    heap4.pop();
+    heap10.pop();
+
+    bound = current;
+  }
+  
+  EXPECT_TRUE(heap2.empty()) << "should be empty after all elements popped";
+  EXPECT_TRUE(heap3.empty()) << "should be empty after all elements popped";
+  EXPECT_TRUE(heap4.empty()) << "should be empty after all elements popped";
+  EXPECT_TRUE(heap10.empty()) << "should be empty after all elements popped";
+}
+
 
 TEST(IndIntruHeap, demote) {
   crimson::IndIntruHeap<std::unique_ptr<Elem>,
