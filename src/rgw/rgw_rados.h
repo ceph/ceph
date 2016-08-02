@@ -9,6 +9,7 @@
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "common/ceph_time.h"
+#include "common/lru_map.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -1699,6 +1700,17 @@ struct bucket_info_entry {
   map<string, bufferlist> attrs;
 };
 
+struct tombstone_entry {
+  ceph::real_time mtime;
+  uint32_t zone_short_id;
+  uint64_t pg_ver;
+
+  tombstone_entry() = default;
+  tombstone_entry(const RGWObjState& state)
+    : mtime(state.mtime), zone_short_id(state.zone_short_id),
+      pg_ver(state.pg_ver) {}
+};
+
 class RGWRados
 {
   friend class RGWGC;
@@ -1800,14 +1812,16 @@ class RGWRados
 protected:
   CephContext *cct;
 
-  librados::Rados **rados;
-  atomic_t next_rados_handle;
-  uint32_t num_rados_handles;
+  std::vector<librados::Rados> rados;
+  uint32_t next_rados_handle;
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
+
+  using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
+  tombstone_cache_t *obj_tombstone_cache;
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx objexp_pool_ctx;
@@ -1841,9 +1855,9 @@ public:
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
-               rados(NULL), next_rados_handle(0),
-               num_rados_handles(0), handle_lock("rados_handle_lock"),
-               binfo_cache(NULL),
+               next_rados_handle(0),
+               handle_lock("rados_handle_lock"),
+               binfo_cache(NULL), obj_tombstone_cache(nullptr),
                pools_initialized(false),
                quota_handler(NULL),
                finisher(NULL),
@@ -1956,16 +1970,10 @@ public:
 
   RGWDataChangesLog *data_log;
 
-  virtual ~RGWRados() {
-    for (uint32_t i=0; i < num_rados_handles; i++) {
-      if (rados[i]) {
-        rados[i]->shutdown();
-        delete rados[i];
-      }
-    }
-    if (rados) {
-      delete[] rados;
-    }
+  virtual ~RGWRados() = default;
+
+  tombstone_cache_t *get_tombstone_cache() {
+    return obj_tombstone_cache;
   }
 
   int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
