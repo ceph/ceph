@@ -37,6 +37,7 @@ public:
   RGWSyncModule() {}
   virtual ~RGWSyncModule() {}
 
+  virtual bool supports_data_export() = 0;
   virtual int create_instance(map<string, string>& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
@@ -50,9 +51,12 @@ class RGWSyncModulesManager {
 public:
   RGWSyncModulesManager() : lock("RGWSyncModulesManager") {}
 
-  void register_module(const string& name, RGWSyncModuleRef& module) {
+  void register_module(const string& name, RGWSyncModuleRef& module, bool is_default = false) {
     Mutex::Locker l(lock);
     modules[name] = module;
+    if (is_default) {
+      modules[string()] = module;
+    }
   }
 
   bool get_module(const string& name, RGWSyncModuleRef *module) {
@@ -65,6 +69,15 @@ public:
     return true;
   }
 
+
+  int supports_data_export(const string& name) {
+    RGWSyncModuleRef module;
+    if (!get_module(name, &module)) {
+      return -ENOENT;
+    }
+
+    return module.get()->supports_data_export();
+  }
 
   int create_instance(const string& name, map<string, string>& config, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
