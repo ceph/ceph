@@ -488,6 +488,7 @@ namespace rgw {
     bool is_file() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
     bool is_dir() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
     bool creating() const { return flags & FLAG_CREATING; }
+    bool deleted() const { return flags & FLAG_DELETED; }
 
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);

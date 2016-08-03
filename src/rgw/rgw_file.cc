@@ -196,6 +196,9 @@ namespace rgw {
     if (! rgw_fh->is_file())
       return -EINVAL;
 
+    if (rgw_fh->deleted())
+      return -ESTALE;
+
     RGWReadRequest req(get_context(), get_user(), rgw_fh, offset, length,
 		       buffer);
 
@@ -285,6 +288,15 @@ namespace rgw {
     /* atomicity */
     LookupFHResult fhr = lookup_fh(src_fh, _src_name, RGWFileHandle::FLAG_LOCK);
     RGWFileHandle* rgw_fh = get<0>(fhr);
+
+    /* should not happen */
+    if (! rgw_fh) {
+      ldout(get_context(), 0) << __func__
+		       << " BUG no such src renaming path="
+		       << rgw_fh->full_object_name()
+		       << dendl;
+      goto out;
+    }
 
     for (int ix : {0, 1}) {
       switch (ix) {
@@ -468,8 +480,11 @@ namespace rgw {
   {
     switch(rgw_fh->fh.fh_type) {
     case RGW_FS_TYPE_FILE:
-      break;
-    case RGW_FS_TYPE_DIRECTORY:
+    {
+      if (rgw_fh->deleted())
+	return -ESTALE;
+    }
+    break;
     default:
       break;
     };
@@ -482,6 +497,18 @@ namespace rgw {
   {
     int rc, rc2;
     buffer::list ux_key, ux_attrs;
+
+    switch(rgw_fh->fh.fh_type) {
+    case RGW_FS_TYPE_FILE:
+    {
+      if (rgw_fh->deleted())
+	return -ESTALE;
+    }
+    break;
+    default:
+      break;
+    };
+
     string obj_name{rgw_fh->relative_object_name()};
 
     RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
@@ -662,6 +689,20 @@ namespace rgw {
     file* f = get<file>(&variant_type);
     if (! f)
       return -EISDIR;
+
+    if (deleted()) {
+      lsubdout(fs->get_context(), rgw, 5)
+	<< __func__
+	<< " write attempted on deleted object "
+	<< this->object_name()
+	<< dendl;
+      /* zap write transaction, if any */
+      if (f->write_req) {
+	delete f->write_req;
+	f->write_req = nullptr;
+      }
+      return -ESTALE;
+    }
 
     if (! f->write_req) {
       /* guard--we do not support (e.g., COW-backed) partial writes */
@@ -1373,6 +1414,9 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	      rgw_uio *uio, uint32_t flags)
 {
+
+  return -ENOTSUP;
+
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
