@@ -117,16 +117,19 @@ public:
     const std::string acct_name;
     const uint32_t perm_mask;
     const bool is_admin;
+    const uint32_t acct_type;
 
   public:
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
              const uint32_t perm_mask,
-             const bool is_admin)
+             const bool is_admin,
+             const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
       acct_name(acct_name),
       perm_mask(perm_mask),
-      is_admin(is_admin) {
+      is_admin(is_admin),
+      acct_type(acct_type) {
     }
   };
 
