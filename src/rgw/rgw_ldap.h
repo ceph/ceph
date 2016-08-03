@@ -66,10 +66,11 @@ namespace rgw {
 
     int rebind() {
       if (ldap) {
-	(void) ldap_unbind(ldap);
-	(void) init();
-	return bind();
+        (void) ldap_unbind(ldap);
+        (void) init();
+        return bind();
       }
+      return -EINVAL;
     }
 
     int simple_bind(const char *dn, const std::string& pwd) {
