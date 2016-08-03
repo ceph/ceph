@@ -3798,6 +3798,8 @@ int RGWRados::init_complete()
     return ret;
   }
 
+  writeable_zone = (zone_public_config.tier_type.empty() || zone_public_config.tier_type == "rgw");
+
   init_unique_trans_id_deps();
 
   finisher = new Finisher(cct);

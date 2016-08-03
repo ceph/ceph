@@ -1903,6 +1903,7 @@ protected:
 
   RGWSyncModulesManager *sync_modules_manager{nullptr};
   RGWSyncModuleInstanceRef sync_module;
+  bool writeable_zone{false};
 
   RGWZoneGroup zonegroup;
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
@@ -2011,6 +2012,10 @@ public:
   }
   RGWZone& get_zone() {
     return zone_public_config;
+  }
+
+  bool zone_is_writeable() {
+    return writeable_zone && !get_zone().is_read_only();
   }
 
   uint32_t get_zone_short_id() const {
