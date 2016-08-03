@@ -538,14 +538,6 @@ protected:
   InodeRef cwd;
   int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
 		bool followsym=true);
-  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true,
-		int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return path_walk(fp, end, perms, followsym);
-  }
-
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
