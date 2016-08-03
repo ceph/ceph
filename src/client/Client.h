@@ -47,6 +47,7 @@ using std::fstream;
 
 #include "InodeRef.h"
 #include "UserGroups.h"
+#include "UserPerm.h"
 
 class FSMap;
 class FSMapUser;
@@ -82,19 +83,6 @@ enum {
   l_c_last,
 };
 
-
-struct UserPerm
-{
-private:
-  uid_t m_uid;
-  gid_t m_gid;
-public:
-  UserPerm() : m_uid(-1), m_gid(-1) {}
-  UserPerm(int uid, int gid) : m_uid(uid), m_gid(gid) {}
-  // the readdir code relies on UserPerm copy-constructor being a deep copy!
-  uid_t uid() const { return m_uid; }
-  gid_t gid() const { return m_gid; }
-};
 
 struct CommandOp
 {

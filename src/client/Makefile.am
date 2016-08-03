@@ -26,6 +26,7 @@ noinst_HEADERS += \
 	client/ioctl.h \
 	client/ObjecterWriteback.h \
 	client/posix_acl.h \
+	client/UserPerm.h \
 	client/UserGroups.h
 
 if WITH_FUSE
