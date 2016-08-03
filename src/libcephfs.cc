@@ -1438,7 +1438,8 @@ extern "C" int ceph_ll_walk(class ceph_mount_info *cmount, const char *name,
 			    struct Inode **i,
 			    struct stat *attr)
 {
-  return(cmount->get_client()->ll_walk(name, i, attr));
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return (cmount->get_client()->ll_walk(name, i, attr, perms));
 }
 
 extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,

@@ -9533,7 +9533,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
-int Client::ll_walk(const char* name, Inode **out, struct stat *attr)
+int Client::ll_walk(const char* name, Inode **out, struct stat *attr,
+		    const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   filepath fp(name, 0);
@@ -9544,7 +9545,7 @@ int Client::ll_walk(const char* name, Inode **out, struct stat *attr)
   tout(cct) << "ll_walk" << std::endl;
   tout(cct) << name << std::endl;
 
-  rc = path_walk(fp, &in, false);
+  rc = path_walk(fp, &in, perms, false);
   if (rc < 0) {
     attr->st_ino = 0;
     *out = NULL;
