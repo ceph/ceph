@@ -250,6 +250,62 @@ int RGWStreamIOBufferingEngine<T>::complete_request()
 }
 
 
+template <typename T>
+class RGWStreamIOChunkingEngine : public RGWDecoratedStreamIO<T> {
+  template<typename Td> friend class RGWDecoratedStreamIO;
+protected:
+  bool has_content_length;
+  bool chunking_enabled;
+
+  int write_data(const char* const buf, const int len) override {
+    if (! chunking_enabled) {
+      return RGWDecoratedStreamIO<T>::write_data(buf, len);
+    } else {
+      constexpr char HEADER_END[] = "\r\n";
+      char sizebuf[32];
+      snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
+
+      RGWDecoratedStreamIO<T>::write_data(sizebuf, strlen(sizebuf));
+      RGWDecoratedStreamIO<T>::write_data(buf, len);
+      return RGWDecoratedStreamIO<T>::write_data(HEADER_END, sizeof(HEADER_END) - 1);
+    }
+  }
+
+public:
+  template <typename U>
+  RGWStreamIOChunkingEngine(U&& decoratee)
+    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+      has_content_length(false),
+      chunking_enabled(false) {
+  }
+
+  using RGWDecoratedStreamIO<T>::send_content_length;
+  int send_content_length(const uint64_t len) override {
+    has_content_length = true;
+    return RGWDecoratedStreamIO<T>::send_content_length(len);
+  }
+
+  int complete_header() override {
+    size_t sent = 0;
+
+    if (! has_content_length) {
+      constexpr char TRANSFER_CHUNKED[] = "Transfer-Enconding: chunked\r\n";
+
+      sent += RGWDecoratedStreamIO<T>::write_data(TRANSFER_CHUNKED,
+                                                  sizeof(TRANSFER_CHUNKED) - 1);
+      chunking_enabled = true;
+    }
+
+    return sent + RGWDecoratedStreamIO<T>::complete_header();
+  }
+};
+
+template <typename T>
+RGWStreamIOChunkingEngine<T> add_chunking(T&& t) {
+  return RGWStreamIOChunkingEngine<T>(std::move(t));
+}
+
+
 /* Class that controls and inhibits the process of sending Content-Length HTTP
  * header where RFC 7230 requests so. The cases worth our attention are 204 No
  * Content as well as 304 Not Modified. */
