@@ -1611,12 +1611,7 @@ int RGWDataSyncStatusManager::init()
 
   RGWZoneParams& zone_params = store->get_zone_params();
 
-  int r = store->get_sync_modules_manager()->create_instance(zone_def.tier_type, zone_params.tier_config, &sync_module);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to init sync module instance, r=" << r << dendl;
-    finalize();
-    return r;
-  }
+  sync_module = store->get_sync_module();
 
   conn = store->get_zone_conn_by_id(source_zone);
   if (!conn) {
@@ -1626,7 +1621,7 @@ int RGWDataSyncStatusManager::init()
 
   const char *log_pool = zone_params.log_pool.name.c_str();
   librados::Rados *rados = store->get_rados_handle();
-  r = rados->ioctx_create(log_pool, ioctx);
+  int r = rados->ioctx_create(log_pool, ioctx);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to open log pool (" << zone_params.log_pool.name << " ret=" << r << dendl;
     return r;
