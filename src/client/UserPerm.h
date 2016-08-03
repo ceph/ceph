@@ -26,6 +26,8 @@ public:
   // the readdir code relies on UserPerm copy-constructor being a deep copy!
   uid_t uid() const { return m_uid; }
   gid_t gid() const { return m_gid; }
+  bool gid_in_groups(gid_t gid) const { return gid == m_gid; }
+  int get_gids(const gid_t **gids) const { return 0; }
 };
 
 
