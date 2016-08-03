@@ -294,7 +294,9 @@ public:
   void tick();
 
   UserPerm pick_my_perms() {
-    return UserPerm(get_uid(), get_gid());
+    uid_t uid = user_id >= 0 ? user_id : ::geteuid();
+    gid_t gid = group_id >= 0 ? group_id : ::getegid();
+    return UserPerm(uid, gid);
   }
 
 protected:
@@ -304,17 +306,6 @@ protected:
 
   int user_id, group_id;
   int acl_type;
-
-  int get_uid() {
-    if (user_id >= 0)
-      return user_id;
-    return ::geteuid();
-  }
-  int get_gid() {
-    if (group_id >= 0)
-      return group_id;
-    return ::getegid();
-  }
 
   void set_cap_epoch_barrier(epoch_t e);
   epoch_t cap_epoch_barrier;
