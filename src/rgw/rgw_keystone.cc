@@ -203,10 +203,15 @@ int KeystoneToken::parse(CephContext * const cct,
 
 bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
 {
-  lock.Lock();
+  Mutex::Locker l(lock);
+  return find_locked(token_id, token);
+}
+
+bool RGWKeystoneTokenCache::find_locked(const string& token_id, KeystoneToken& token)
+{
+  assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end()) {
-    lock.Unlock();
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
     return false;
   }
@@ -216,7 +221,6 @@ bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
 
   if (entry.token.expired()) {
     tokens.erase(iter);
-    lock.Unlock();
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
     return false;
   }
@@ -225,7 +229,6 @@ bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
   tokens_lru.push_front(token_id);
   entry.lru_iter = tokens_lru.begin();
 
-  lock.Unlock();
   if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
 
   return true;
@@ -235,13 +238,20 @@ bool RGWKeystoneTokenCache::find_admin(KeystoneToken& token)
 {
   Mutex::Locker l(lock);
 
-  return find(admin_token_id, token);
+  return find_locked(admin_token_id, token);
 }
 
 void RGWKeystoneTokenCache::add(const string& token_id,
                                 const KeystoneToken& token)
 {
-  lock.Lock();
+  Mutex::Locker l(lock);
+  add_locked(token_id, token);
+}
+
+void RGWKeystoneTokenCache::add_locked(const string& token_id,
+                                const KeystoneToken& token)
+{
+  assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
@@ -260,8 +270,6 @@ void RGWKeystoneTokenCache::add(const string& token_id,
     tokens.erase(iter);
     tokens_lru.pop_back();
   }
-
-  lock.Unlock();
 }
 
 void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
@@ -269,7 +277,7 @@ void RGWKeystoneTokenCache::add_admin(const KeystoneToken& token)
   Mutex::Locker l(lock);
 
   rgw_get_token_id(token.token.id, admin_token_id);
-  add(admin_token_id, token);
+  add_locked(admin_token_id, token);
 }
 
 void RGWKeystoneTokenCache::invalidate(const string& token_id)

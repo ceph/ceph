@@ -112,7 +112,7 @@ class RGWKeystoneTokenCache {
 public:
   RGWKeystoneTokenCache(CephContext *_cct, int _max)
     : cct(_cct),
-      lock("RGWKeystoneTokenCache", true /* recursive */),
+      lock("RGWKeystoneTokenCache"),
       max(_max) {
   }
 
@@ -121,6 +121,9 @@ public:
   void add(const string& token_id, const KeystoneToken& token);
   void add_admin(const KeystoneToken& token);
   void invalidate(const string& token_id);
+private:
+  void add_locked(const string& token_id, const KeystoneToken& token);
+  bool find_locked(const string& token_id, KeystoneToken& token);
 };
 
 class KeystoneAdminTokenRequest {
