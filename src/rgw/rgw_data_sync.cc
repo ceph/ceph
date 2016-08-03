@@ -1605,13 +1605,13 @@ int RGWDataSyncStatusManager::init()
 
   auto& zone_def = zone_def_iter->second;
 
-  map<string, string> sync_module_config;
-
   if (!store->get_sync_modules_manager()->supports_data_export(zone_def.tier_type)) {
     return -ENOTSUP;
   }
 
-  int r = store->get_sync_modules_manager()->create_instance(zone_def.tier_type, sync_module_config, &sync_module);
+  RGWZoneParams& zone_params = store->get_zone_params();
+
+  int r = store->get_sync_modules_manager()->create_instance(zone_def.tier_type, zone_params.tier_config, &sync_module);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init sync module instance, r=" << r << dendl;
     finalize();
@@ -1624,15 +1624,15 @@ int RGWDataSyncStatusManager::init()
     return -EINVAL;
   }
 
-  const char *log_pool = store->get_zone_params().log_pool.name.c_str();
+  const char *log_pool = zone_params.log_pool.name.c_str();
   librados::Rados *rados = store->get_rados_handle();
   r = rados->ioctx_create(log_pool, ioctx);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << dendl;
+    lderr(store->ctx()) << "ERROR: failed to open log pool (" << zone_params.log_pool.name << " ret=" << r << dendl;
     return r;
   }
 
-  source_status_obj = rgw_obj(store->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(source_zone));
+  source_status_obj = rgw_obj(zone_params.log_pool, RGWDataSyncStatusManager::sync_status_oid(source_zone));
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
@@ -1654,7 +1654,7 @@ int RGWDataSyncStatusManager::init()
   num_shards = datalog_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
-    shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, shard_obj_name(source_zone, i));
+    shard_objs[i] = rgw_obj(zone_params.log_pool, shard_obj_name(source_zone, i));
   }
 
   return 0;
