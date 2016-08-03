@@ -3182,12 +3182,6 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
   return out;
 }
 
-bool OSD::_have_pg(spg_t pgid)
-{
-  RWLock::RLocker l(pg_map_lock);
-  return pg_map.count(pgid);
-}
-
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
   RWLock::RLocker l(pg_map_lock);
@@ -3530,7 +3524,8 @@ void OSD::handle_pg_peering_evt(
     return;
   }
 
-  if (!_have_pg(pgid)) {
+  PG *pg = _lookup_lock_pg(pgid);
+  if (!pg) {
     // same primary?
     if (!osdmap->have_pg_pool(pgid.pool()))
       return;
@@ -3574,7 +3569,7 @@ void OSD::handle_pg_peering_evt(
       if (!pp->is_replicated() && role != pgid.shard)
 	role = -1;
 
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	get_map(epoch),
 	pgid, false, false,
 	role,
@@ -3604,7 +3599,7 @@ void OSD::handle_pg_peering_evt(
       pg_history_t old_history = old_pg_state->info.history;
       pg_interval_map_t old_past_intervals = old_pg_state->past_intervals;
       old_pg_state->unlock();
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	old_osd_map,
 	resurrected,
 	false,
@@ -3672,7 +3667,6 @@ void OSD::handle_pg_peering_evt(
     }
   } else {
     // already had it.  did the mapping change?
-    PG *pg = _lookup_lock_pg(pgid);
     if (epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
 	       << pg->info.history.same_interval_since
@@ -5479,10 +5473,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       r = -EINVAL;
     } else {
       spg_t pcand;
+      PG *pg = nullptr;
       if (osdmap->get_primary_shard(pgid, &pcand) &&
-	  _have_pg(pcand)) {
-	PG *pg = _lookup_lock_pg(pcand);
-	assert(pg);
+	  (pg = _lookup_lock_pg(pcand))) {
 	if (pg->is_primary()) {
 	  // simulate pg <pgid> cmd= for pg->do-command
 	  if (prefix != "pg")
