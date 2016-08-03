@@ -819,7 +819,9 @@ int SyntheticClient::run()
         int count = iargs.front();  iargs.pop_front();
         if (run_me()) {
           for (int i=0; i<count; i++) {
-            int fd = client->open("test", (rand()%2) ? (O_WRONLY|O_CREAT) : O_RDONLY);
+            int fd = client->open("test", (rand()%2) ?
+				  (O_WRONLY|O_CREAT) : O_RDONLY,
+				  perms);
             if (fd > 0) client->close(fd);
           }
         }
@@ -1153,13 +1155,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t b = t.get_int(); 
       int64_t c = t.get_int(); 
       int64_t d = t.get_int();
-      int64_t fd = client->open(a, b, c);
+      int64_t fd = client->open(a, b, perms, c);
       if (fd > 0) open_files[d] = fd;
     } else if (strcmp(op, "oldopen") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int(); 
       int64_t d = t.get_int();
-      int64_t fd = client->open(a, b, 0755);
+      int64_t fd = client->open(a, b, perms, 0755);
       if (fd > 0) open_files[d] = fd;
     } else if (strcmp(op, "close") == 0) {
       int64_t id = t.get_int();
@@ -1701,7 +1703,7 @@ int SyntheticClient::dump_placement(string& fn) {
   UserPerm perms = client->pick_my_perms();
 
   // open file
-  int fd = client->open(fn.c_str(), O_RDONLY);
+  int fd = client->open(fn.c_str(), O_RDONLY, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
   if (fd < 0) return fd;
 
@@ -1879,7 +1881,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
 
       if (more) {
         client->lstat(d, &st, perms);
-        int fd = client->open(d, O_RDONLY);
+        int fd = client->open(d, O_RDONLY, perms);
         client->unlink(d, perms);
         client->close(fd);
       }
@@ -1956,7 +1958,7 @@ int SyntheticClient::open_shared(int num, int count)
     list<int> fds;
     for (int n=0; n<num; n++) {
       snprintf(d, sizeof(d), "test/file.%d", n);
-      int fd = client->open(d,O_RDONLY);
+      int fd = client->open(d, O_RDONLY, perms);
       if (fd > 0) fds.push_back(fd);
     }
 
@@ -1979,7 +1981,7 @@ int SyntheticClient::open_shared(int num, int count)
 
 // Hits OSD 0 with writes to various files with OSD 0 as the primary.
 int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
-
+  UserPerm perms = client->pick_my_perms();
   // collect a bunch of files starting on OSD 0
   int left = n;
   int tried = 0;
@@ -1990,7 +1992,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
     dout(0) << "in OSD overload" << dendl;
     string filename = get_sarg(tried);
     dout(1) << "OSD Overload workload: trying file " << filename << dendl;
-    int fd = client->open(filename.c_str(), O_RDWR|O_CREAT);
+    int fd = client->open(filename.c_str(), O_RDWR|O_CREAT, perms);
     ++tried;
 
     // only use the file if its first primary is OSD 0
@@ -2036,8 +2038,9 @@ int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size i
   char *buf = new char[wrsize+100];   // 1 MB
   memset(buf, 7, wrsize);
   int64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
+  UserPerm perms = client->pick_my_perms();
 
-  int fd = client->open(fn.c_str(), O_RDWR|O_CREAT);
+  int fd = client->open(fn.c_str(), O_RDWR|O_CREAT, perms);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
   if (fd < 0) {
     delete[] buf;
@@ -2152,8 +2155,9 @@ int SyntheticClient::read_file(const std::string& fn, int size,
   char *buf = new char[rdsize]; 
   memset(buf, 1, rdsize);
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
+  UserPerm perms = client->pick_my_perms();
 
-  int fd = client->open(fn.c_str(), O_RDONLY);
+  int fd = client->open(fn.c_str(), O_RDONLY, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
   if (fd < 0) {
     delete[] buf;
@@ -2423,8 +2427,9 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
 int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
+  UserPerm perms = client->pick_my_perms();
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
-  int fd = client->open(fn.c_str(), O_RDWR);
+  int fd = client->open(fn.c_str(), O_RDWR, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
 
   if (fd < 0) return fd;
@@ -2552,7 +2557,8 @@ int normdist(int min, int max, int stdev) /* specifies input values */
 int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
-  int fd = client->open(fn.c_str(), O_RDWR);
+  UserPerm perms = client->pick_my_perms();
+  int fd = client->open(fn.c_str(), O_RDWR, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
   
   if (fd < 0) return fd;
@@ -2756,7 +2762,7 @@ int SyntheticClient::random_walk(int num_req)
       if (contents.empty())
         op = CEPH_MDS_OP_READDIR;
       else {
-        r = client->open( get_random_sub(), O_RDONLY );
+        r = client->open(get_random_sub(), O_RDONLY, perms);
         if (r > 0) {
           assert(open_files.count(r) == 0);
           open_files.insert(r);
@@ -2910,14 +2916,14 @@ void SyntheticClient::foo()
     const char *fn = "blah";
     char buffer[8192]; 
     client->unlink(fn, perms);
-    int handle = client->open(fn,O_CREAT|O_RDWR,S_IRWXU);
+    int handle = client->open(fn, O_CREAT|O_RDWR, perms, S_IRWXU);
     assert(handle>=0);
     int r=client->write(handle,buffer,8192);
     assert(r>=0);
     r=client->close(handle);
     assert(r>=0);
          
-    handle = client->open(fn,O_RDWR); // open the same  file, it must have some data already
+    handle = client->open(fn, O_RDWR, perms); // open the same  file, it must have some data already
     assert(handle>=0);      
     r=client->read(handle,buffer,8192);
     assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
@@ -2928,13 +2934,13 @@ void SyntheticClient::foo()
   }
   if (1) {
     dout(0) << "first" << dendl;
-    int fd = client->open("tester", O_WRONLY|O_CREAT);
+    int fd = client->open("tester", O_WRONLY|O_CREAT, perms);
     client->write(fd, "hi there", 0, 8);
     client->close(fd);
     dout(0) << "sleep" << dendl;
     sleep(10);
     dout(0) << "again" << dendl;
-    fd = client->open("tester", O_WRONLY|O_CREAT);
+    fd = client->open("tester", O_WRONLY|O_CREAT, perms);
     client->write(fd, "hi there", 0, 8);
     client->close(fd);
     return;    
@@ -2950,7 +2956,7 @@ void SyntheticClient::foo()
       char src[80];
       snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       //int fd = 
-      client->open(src, O_RDONLY);
+      client->open(src, O_RDONLY, perms);
     }
 
     return;
@@ -3312,7 +3318,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
       if (S_ISDIR(mode)) {
 	client->mkdir(f.c_str(), mode, perms);
       } else {
-	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT, mode & 0777);
+	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT, perms, mode & 0777);
 	assert(fd > 0);	
 	if (data) {
 	  client->write(fd, "", 0, size);
@@ -3353,12 +3359,12 @@ int SyntheticClient::lookup_ino(inodeno_t ino, const UserPerm& perms)
 
 int SyntheticClient::chunk_file(string &filename)
 {
-  int fd = client->open(filename.c_str(), O_RDONLY);
+  UserPerm perms = client->pick_my_perms();
+  int fd = client->open(filename.c_str(), O_RDONLY, perms);
   if (fd < 0)
     return fd;
 
   struct stat st;
-  UserPerm perms = client->pick_my_perms();
   int ret = client->fstat(fd, &st, perms);
   if (ret < 0) {
     client->close(fd);
@@ -3433,7 +3439,7 @@ void SyntheticClient::mksnapfile(const char *dir)
 
   string f = dir;
   f += "/foo";
-  int fd = client->open(f.c_str(), O_WRONLY|O_CREAT|O_TRUNC);
+  int fd = client->open(f.c_str(), O_WRONLY|O_CREAT|O_TRUNC, perms);
 
   char buf[1048576*4];
   client->write(fd, buf, sizeof(buf), 0);
@@ -3444,7 +3450,7 @@ void SyntheticClient::mksnapfile(const char *dir)
   s += "/.snap/1";
   client->mkdir(s.c_str(), 0755, perms);
 
-  fd = client->open(f.c_str(), O_WRONLY);
+  fd = client->open(f.c_str(), O_WRONLY, perms);
   client->write(fd, buf, 1048576*2, 1048576);
   client->fsync(fd, true);
   client->close(fd);

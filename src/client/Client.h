@@ -829,10 +829,6 @@ private:
   int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp,
 	    const UserPerm& perms);
-  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) {
-    UserPerm perms(uid, gid);
-    return _open(in, flags, mode, fhp, perms);
-  }
   int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
@@ -1120,8 +1116,10 @@ public:
 
   // file ops
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
-  int open(const char *path, int flags, mode_t mode=0);
-  int open(const char *path, int flags, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool);
+  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0);
+  int open(const char *path, int flags, const UserPerm& perms,
+	   mode_t mode, int stripe_unit, int stripe_count, int object_size,
+	   const char *data_pool);
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 		  const UserPerm& perms);
   int lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
