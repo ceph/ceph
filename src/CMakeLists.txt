@@ -912,3 +912,21 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 add_subdirectory(script)
+
+set(ceph_mds2_srcs
+  mds/mdstypes.cc
+  mds2/ceph_mds2.cc
+  mds2/MDSAuthCaps.cc
+  mds2/CInode.cc
+  mds2/CDir.cc
+  mds2/CDentry.cc
+  mds2/MDCache.cc
+  mds2/Server.cc
+  mds2/Locker.cc
+  mds2/Mutation.cc
+  mds2/Beacon.cc
+  mds2/SessionMap.cc
+  mds2/MDSDaemon.cc
+  mds2/MDSRank.cc)
+add_executable(ceph-mds2 ${ceph_mds2_srcs} $<TARGET_OBJECTS:common_util_obj>)
+target_link_libraries(ceph-mds2 ${ALLOC_LIBS} global)

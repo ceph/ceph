@@ -858,7 +858,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (was_new)
     ldout(cct, 12) << "add_update_inode adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
 
-  if (!st->cap.caps)
+  if (0 && !st->cap.caps)
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
 
   // only update inode if mds info is strictly newer, or it is the same and projected (odd).
