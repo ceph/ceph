@@ -796,15 +796,6 @@ private:
   int _getattr(InodeRef &in, int mask, const UserPerm& perms, bool force=false) {
     return _getattr(in.get(), mask, perms, force);
   }
-  int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
-    return _getattr(in.get(), mask, uid, gid, force);
-  }
-  int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return _getattr(in, mask, perms, force);
-  }
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
