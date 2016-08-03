@@ -11,6 +11,7 @@
 #include "include/atomic.h"
 #include "mds/mdstypes.h"
 #include "InodeRef.h"
+#include "UserPerm.h"
 
 #include "messages/MClientRequest.h"
 
