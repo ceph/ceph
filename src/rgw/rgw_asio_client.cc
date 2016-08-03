@@ -12,8 +12,10 @@
 #define dout_prefix (*_dout << "asio: ")
 
 
-RGWAsioClientIO::RGWAsioClientIO(tcp::socket&& socket, request_type&& request)
-  : socket(std::move(socket)), request(std::move(request))
+RGWAsioClientIO::RGWAsioClientIO(tcp::socket&& socket,
+                                 request_type&& request)
+  : socket(std::move(socket)),
+    request(std::move(request))
 {}
 
 RGWAsioClientIO::~RGWAsioClientIO() = default;
@@ -76,7 +78,7 @@ void RGWAsioClientIO::init_env(CephContext *cct)
   // TODO: set REMOTE_USER if authenticated
 }
 
-int RGWAsioClientIO::write_data(const char *buf, int len)
+int RGWAsioClientIO::write_data(const char* const buf, const int len)
 {
   boost::system::error_code ec;
   auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
@@ -87,7 +89,7 @@ int RGWAsioClientIO::write_data(const char *buf, int len)
   return bytes;
 }
 
-int RGWAsioClientIO::read_data(char *buf, int max)
+int RGWAsioClientIO::read_data(char* const buf, const int max)
 {
   // read data from the body's bufferlist
   auto bytes = std::min<unsigned>(max, body_iter.get_remaining());
@@ -102,46 +104,68 @@ int RGWAsioClientIO::complete_request()
 
 void RGWAsioClientIO::flush()
 {
+  return;
 }
 
-int RGWAsioClientIO::send_status(int status, const char *status_name)
+int RGWAsioClientIO::send_status(const int status,
+                                 const char* const status_name)
 {
-  return print("HTTP/1.1 %d %s\r\n", status, status_name);
+  static constexpr size_t STATUS_BUF_SIZE = 128;
+
+  char statusbuf[STATUS_BUF_SIZE];
+  const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
+                                  "HTTP/1.1 %d %s\r\n", status, status_name);
+
+  return write_data(statusbuf, statuslen);
 }
 
 int RGWAsioClientIO::send_100_continue()
 {
-  return print("HTTP/1.1 100 CONTINUE\r\n\r\n");
+  const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
+  return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
 }
 
 static constexpr size_t TIME_BUF_SIZE = 128;
-static int dump_date_header(char *timestr, size_t size)
+static size_t dump_date_header(char (&timestr)[TIME_BUF_SIZE])
 {
   const time_t gtime = time(nullptr);
   struct tm result;
   struct tm const * const tmp = gmtime_r(&gtime, &result);
-  if (tmp == nullptr)
+  if (tmp == nullptr) {
     return 0;
-  return strftime(timestr, size, "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp);
+  }
+  return strftime(timestr, sizeof(timestr),
+                  "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp);
 }
 
 int RGWAsioClientIO::complete_header()
 {
+  size_t sent = 0;
+
   char timestr[TIME_BUF_SIZE];
-  if (dump_date_header(timestr, sizeof(timestr))) {
-    print(timestr);
+  if (dump_date_header(timestr)) {
+    sent += write_data(timestr, strlen(timestr));
   }
 
   if (conn_keepalive) {
-    print("Connection: Keep-Alive\r\n");
+    constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
+    sent += write_data(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
   } else if (conn_close) {
-    print("Connection: close\r\n");
+    constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
+    sent += write_data(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
-  print("\r\n");
-  return 0;
+
+  constexpr char HEADER_END[] = "\r\n";
+  return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }
 
-int RGWAsioClientIO::send_content_length(uint64_t len)
+int RGWAsioClientIO::send_content_length(const uint64_t len)
 {
-  return print("Content-Length: %" PRIu64 "\r\n", len);
+  static constexpr size_t CONLEN_BUF_SIZE = 128;
+
+  char sizebuf[CONLEN_BUF_SIZE];
+  const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
+                                "Content-Length: %" PRIu64 "\r\n", len);
+
+  return write_data(sizebuf, sizelen);
 }
