@@ -12363,10 +12363,8 @@ int Client::_posix_acl_permission(Inode *in, const UserPerm& perms, unsigned wan
   if (acl_type == POSIX_ACL) {
     if (in->xattrs.count(ACL_EA_ACCESS)) {
       const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
-      RequestUserGroups groups(perms.uid(), perms.gid());
-      init_groups(&groups);
 
-      return posix_acl_permits(access_acl, in->uid, in->gid, perms.uid(), groups, want);
+      return posix_acl_permits(access_acl, in->uid, in->gid, perms, want);
     }
   }
   return -EAGAIN;
