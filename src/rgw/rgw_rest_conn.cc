@@ -118,7 +118,8 @@ static void set_header(T val, map<string, string>& headers, const string& header
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
-                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+                         bool prepend_metadata, bool read_data,
+                         RGWGetDataCB *cb, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -137,7 +138,11 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     const string& instance = obj.get_instance();
     params.push_back(param_pair_t("versionId", instance));
   }
-  *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
+  if (read_data) {
+    *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
+  } else {
+    *req = new RGWRESTStreamHeadRequest(cct, url, cb, NULL, &params);
+  }
   map<string, string> extra_headers;
   if (info) {
     map<string, string, ltstr_nocase>& orig_map = info->env->get_map();
@@ -166,7 +171,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)
+int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)
 {
   int ret = req->complete(etag, mtime, attrs);
   delete req;
