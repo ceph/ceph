@@ -913,6 +913,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   string realm_id;
 
+  map<string, string> tier_config;
+
   RGWZoneParams() : RGWSystemMetaObj() {}
   RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
   RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
@@ -935,7 +937,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int fix_pool_names();
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -952,11 +954,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(metadata_heap, bl);
     ::encode(realm_id, bl);
     ::encode(lc_pool, bl);
+    ::encode(tier_config, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(7, bl);
+    DECODE_START(8, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -986,6 +989,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(lc_pool, bl);
     } else {
       lc_pool = name + ".rgw.lc";
+    }
+    if (struct_v >= 8) {
+      ::decode(tier_config, bl);
     }
     DECODE_FINISH(bl);
   }
