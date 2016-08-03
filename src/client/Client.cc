@@ -8068,7 +8068,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   loff_t start_pos = offset;
 
   if (in->inline_version == 0) {
-    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, -1, -1, true);
+    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
     if (r < 0)
       return r;
     assert(in->inline_version > 0);
@@ -8142,7 +8142,7 @@ retry:
       put_cap_ref(in, CEPH_CAP_FILE_RD);
       have = 0;
       // reverify size
-      r = _getattr(in, CEPH_STAT_CAP_SIZE);
+      r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
       if (r < 0)
 	goto done;
 
@@ -8475,7 +8475,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * change out from under us.
      */
     if (f->flags & O_APPEND) {
-      int r = _lseek(f, 0, SEEK_END, f->perms);
+      int r = _lseek(f, 0, SEEK_END, f->actor_perms);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
@@ -8494,7 +8494,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   utime_t start = ceph_clock_now(cct);
 
   if (in->inline_version == 0) {
-    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, -1, -1, true);
+    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
     if (r < 0)
       return r;
     assert(in->inline_version > 0);
