@@ -69,6 +69,7 @@ public:
   list<Cond*> waitfor_safe;
 
   InodeRef target;
+  UserPerm perms;
 
   explicit MetaRequest(int op) :
     _dentry(NULL), _old_dentry(NULL), abort_rc(0),
@@ -169,10 +170,13 @@ public:
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_string2(const char *s) { path2.set_path(s, 0); }
-  void set_caller_uid(unsigned u) { head.caller_uid = u; }
-  void set_caller_gid(unsigned g) { head.caller_gid = g; }
-  uid_t get_uid() { return head.caller_uid; }
-  uid_t get_gid() { return head.caller_gid; }
+  void set_caller_perms(const UserPerm& _perms) {
+    perms = _perms;
+    head.caller_uid = perms.uid();
+    head.caller_gid = perms.gid();
+  }
+  uid_t get_uid() { return perms.uid(); }
+  uid_t get_gid() { return perms.gid(); }
   void set_data(const bufferlist &d) { data = d; }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
