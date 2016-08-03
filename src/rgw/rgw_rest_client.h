@@ -121,5 +121,11 @@ public:
 		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, "GET", _url, _cb, _headers, _params) {}
 };
 
+class RGWRESTStreamHeadRequest : public RGWRESTStreamRWRequest {
+public:
+  RGWRESTStreamHeadRequest(CephContext *_cct, const string& _url, RGWGetDataCB *_cb, param_vec_t *_headers,
+		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, "HEAD", _url, _cb, _headers, _params) {}
+};
+
 #endif
 
