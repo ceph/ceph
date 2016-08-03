@@ -5020,19 +5020,22 @@ int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 #endif
 }
 
-int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
+int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
 {
-  if (uid == 0)
+  if (perms.uid() == 0)
     return 0;
+  
+  RequestUserGroups groups(perms.uid(), perms.gid());
+  init_groups(&groups);
 
-  if (uid != in->uid && (in->mode & S_IRWXG)) {
-    int ret = _posix_acl_permission(in, uid, groups, want);
+  if (perms.uid() != in->uid && (in->mode & S_IRWXG)) {
+    int ret = _posix_acl_permission(in, perms.uid(), groups, want);
     if (ret != -EAGAIN)
       return ret;
   }
 
   // check permissions before doing anything else
-  if (!in->check_mode(uid, groups, want))
+  if (!in->check_mode(perms.uid(), groups, want))
     return -EACCES;
   return 0;
 }
