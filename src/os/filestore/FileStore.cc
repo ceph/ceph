@@ -4832,7 +4832,7 @@ int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
-  dout(20) << "objects: " << ls << dendl;
+  dout(20) << "objects: " << *ls << dendl;
 
   // HashIndex doesn't know the pool when constructing a 'next' value
   if (next && !next->is_max()) {
