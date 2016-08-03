@@ -816,13 +816,6 @@ private:
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
 	      const char *data_pool, bool *created, const UserPerm &perms);
-  int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
-              int stripe_unit, int stripe_count, int object_size, const char *data_pool,
-	      bool *created, int uid, int gid) {
-    UserPerm perms(uid, gid);
-    return _create(in, name, flags, mode, inp, fhp, stripe_unit, stripe_count,
-	    object_size, data_pool, created, perms);
-  }
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   loff_t _lseek(Fh *fh, loff_t offset, int whence, const UserPerm& perms);
