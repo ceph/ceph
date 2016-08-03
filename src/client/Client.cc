@@ -6326,7 +6326,7 @@ int Client::symlink(const char *target, const char *relpath)
   return _symlink(dir.get(), name.c_str(), target, perms);
 }
 
-int Client::readlink(const char *relpath, char *buf, loff_t size) 
+int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "readlink" << std::endl;
@@ -6334,7 +6334,7 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in, false);
+  int r = path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
 

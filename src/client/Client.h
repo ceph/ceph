@@ -1093,7 +1093,7 @@ public:
   int rmdir(const char *path);
 
   // symlinks
-  int readlink(const char *path, char *buf, loff_t size);
+  int readlink(const char *path, char *buf, loff_t size, const UserPerm& perms);
 
   int symlink(const char *existing, const char *newname);
 

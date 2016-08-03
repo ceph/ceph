@@ -1096,7 +1096,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "readlink") == 0) {
       const char *a = t.get_string(buf, p);
       char buf[100];
-      client->readlink(a, buf, 100);
+      client->readlink(a, buf, 100, perms);
     } else if (strcmp(op, "lstat") == 0) {
       struct stat st;
       const char *a = t.get_string(buf, p);
