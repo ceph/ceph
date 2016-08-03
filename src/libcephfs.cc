@@ -819,7 +819,8 @@ extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->open(path, flags, mode);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->open(path, flags, perms, mode);
 }
 
 extern "C" int ceph_open_layout(struct ceph_mount_info *cmount, const char *path, int flags,
@@ -827,7 +828,8 @@ extern "C" int ceph_open_layout(struct ceph_mount_info *cmount, const char *path
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->open(path, flags, mode, stripe_unit,
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->open(path, flags, perms, mode, stripe_unit,
       stripe_count, object_size, data_pool);
 }
 

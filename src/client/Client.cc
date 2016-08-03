@@ -7505,17 +7505,15 @@ int Client::getdir(const char *relpath, list<string>& contents,
 
 
 /****** file i/o **********/
-int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
-    int stripe_count, int object_size, const char *data_pool)
+int Client::open(const char *relpath, int flags, const UserPerm& perms,
+		 mode_t mode, int stripe_unit, int stripe_count,
+		 int object_size, const char *data_pool)
 {
   ldout(cct, 3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "open" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << flags << std::endl;
-
-  uid_t uid = get_uid();
-  gid_t gid = get_gid();
 
   Fh *fh = NULL;
 
@@ -7532,7 +7530,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   bool created = false;
   /* O_CREATE with O_EXCL enforces O_NOFOLLOW. */
   bool followsym = !((flags & O_NOFOLLOW) || ((flags & O_CREAT) && (flags & O_EXCL)));
-  int r = path_walk(path, &in, followsym, uid, gid);
+  int r = path_walk(path, &in, perms, followsym);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -7549,16 +7547,16 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     string dname = dirpath.last_dentry();
     dirpath.pop_dentry();
     InodeRef dir;
-    r = path_walk(dirpath, &dir, true, uid, gid);
+    r = path_walk(dirpath, &dir, perms, true);
     if (r < 0)
       goto out;
     if (cct->_conf->client_permissions) {
-      r = may_create(dir.get(), uid, gid);
+      r = may_create(dir.get(), perms);
       if (r < 0)
 	goto out;
     }
     r = _create(dir.get(), dname.c_str(), flags, mode, &in, &fh, stripe_unit,
-                stripe_count, object_size, data_pool, &created, uid, gid);
+                stripe_count, object_size, data_pool, &created, perms);
   }
   if (r < 0)
     goto out;
@@ -7566,14 +7564,14 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   if (!created) {
     // posix says we can only check permissions of existing files
     if (cct->_conf->client_permissions) {
-      r = may_open(in.get(), flags, uid, gid);
+      r = may_open(in.get(), flags, perms);
       if (r < 0)
 	goto out;
     }
   }
 
   if (!fh)
-    r = _open(in.get(), flags, mode, &fh, uid, gid);
+    r = _open(in.get(), flags, mode, &fh, perms);
   if (r >= 0) {
     // allocate a integer file descriptor
     assert(fh);
@@ -7588,10 +7586,10 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   return r;
 }
 
-int Client::open(const char *relpath, int flags, mode_t mode)
+int Client::open(const char *relpath, int flags, const UserPerm& perms, mode_t mode)
 {
   /* Use default file striping parameters */
-  return open(relpath, flags, mode, 0, 0, 0, NULL);
+  return open(relpath, flags, perms, mode, 0, 0, 0, NULL);
 }
 
 int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
