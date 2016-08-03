@@ -5025,11 +5025,8 @@ int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
   if (perms.uid() == 0)
     return 0;
   
-  RequestUserGroups groups(perms.uid(), perms.gid());
-  init_groups(&groups);
-
   if (perms.uid() != in->uid && (in->mode & S_IRWXG)) {
-    int ret = _posix_acl_permission(in, perms.uid(), groups, want);
+    int ret = _posix_acl_permission(in, perms, want);
     if (ret != -EAGAIN)
       return ret;
   }
@@ -12361,12 +12358,15 @@ int Client::check_pool_perm(Inode *in, int need)
   return 0;
 }
 
-int Client::_posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
+int Client::_posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want)
 {
   if (acl_type == POSIX_ACL) {
     if (in->xattrs.count(ACL_EA_ACCESS)) {
       const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
-      return posix_acl_permits(access_acl, in->uid, in->gid, uid, groups, want);
+      RequestUserGroups groups(perms.uid(), perms.gid());
+      init_groups(&groups);
+
+      return posix_acl_permits(access_acl, in->uid, in->gid, perms.uid(), groups, want);
     }
   }
   return -EAGAIN;
