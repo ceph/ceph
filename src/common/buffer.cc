@@ -21,6 +21,7 @@
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
+#include "common/deleter.h"
 #include "include/atomic.h"
 #include "common/RWLock.h"
 #include "include/types.h"
@@ -634,6 +635,17 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
+  class buffer::raw_claim_buffer : public buffer::raw {
+    deleter del;
+   public:
+    raw_claim_buffer(const char *b, unsigned l, deleter d)
+        : raw((char*)b, l), del(std::move(d)) { }
+    ~raw_claim_buffer() {}
+    raw* clone_empty() {
+      return new buffer::raw_char(len);
+    }
+  };
+
 #if defined(HAVE_XIO)
   class buffer::xio_msg_buffer : public buffer::raw {
   private:
@@ -707,6 +719,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
+  }
+  buffer::raw* buffer::claim_buffer(unsigned len, char *buf, deleter del) {
+    return new raw_claim_buffer(buf, len, std::move(del));
   }
 
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
