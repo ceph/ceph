@@ -186,9 +186,6 @@ struct dir_result_t {
   }
 
   InodeRef inode;
-  int owner_uid;
-  int owner_gid;
-
   int64_t offset;        // hash order:
 			 //   (0xff << 52) | ((24 bits hash) << 28) |
 			 //   (the nth entry has hash collision);

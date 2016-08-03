@@ -163,7 +163,7 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 // -------------
 
 dir_result_t::dir_result_t(Inode *in, const UserPerm& perms)
-  : inode(in), owner_uid(-1), owner_gid(-1), offset(0), next_offset(2),
+  : inode(in), offset(0), next_offset(2),
     release_count(0), ordered_count(0), cache_index(0), start_shared_gen(0),
     perms(perms)
   { }
@@ -6888,8 +6888,6 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
     return -ENOTDIR;
   *dirpp = new dir_result_t(in, perms);
   opened_dirs.insert(*dirpp);
-  (*dirpp)->owner_uid = perms.uid();
-  (*dirpp)->owner_gid = perms.gid();
   ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
 }
