@@ -260,7 +260,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, UserGroups& groups, unsigned want);
+  bool check_mode(const UserPerm& perms, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);
