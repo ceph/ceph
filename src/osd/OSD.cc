@@ -2920,11 +2920,19 @@ void OSD::clear_temp_objects()
     }
     if (!temps.empty()) {
       ObjectStore::Transaction t;
+      int removed = 0;
       for (vector<ghobject_t>::iterator q = temps.begin(); q != temps.end(); ++q) {
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
+        if (++removed > cct->_conf->osd_target_transaction_size) {
+          store->apply_transaction(service.meta_osr.get(), std::move(t));
+          t = ObjectStore::Transaction();
+          removed = 0;
+        }
       }
-      store->apply_transaction(service.meta_osr.get(), std::move(t));
+      if (removed) {
+        store->apply_transaction(service.meta_osr.get(), std::move(t));
+      }
     }
   }
 }
