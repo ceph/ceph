@@ -3198,16 +3198,6 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
   return pg;
 }
 
-
-PG *OSD::_lookup_pg(spg_t pgid)
-{
-  RWLock::RLocker l(pg_map_lock);
-  if (!pg_map.count(pgid))
-    return NULL;
-  PG *pg = pg_map[pgid];
-  return pg;
-}
-
 PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)
 {
   assert(pg_map.count(pgid));
