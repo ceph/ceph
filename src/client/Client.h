@@ -1188,7 +1188,7 @@ public:
 
   // expose caps
   int get_caps_issued(int fd);
-  int get_caps_issued(const char *path);
+  int get_caps_issued(const char *path, const UserPerm& perms);
 
   // low-level interface v2
   inodeno_t ll_get_inodeno(Inode *in) {
