@@ -35,7 +35,8 @@ def get_distro_from_downburst():
     """
     default_table = {u'rhel_minimal': [u'6.4', u'6.5'],
                      u'fedora': [u'17', u'18', u'19', u'20', u'22'],
-                     u'centos': [u'6.3', u'6.4', u'6.5', u'7.0'],
+                     u'centos': [u'6.3', u'6.4', u'6.5', u'7.0',
+				 u'7.2'],
                      u'opensuse': [u'12.2'],
                      u'centos_minimal': [u'6.4', u'6.5'],
                      u'ubuntu': [u'8.04(hardy)', u'9.10(karmic)',
