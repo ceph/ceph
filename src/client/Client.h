@@ -1166,7 +1166,8 @@ public:
   int lazyio_synchronize(int fd, loff_t offset, size_t count);
 
   // expose file layout
-  int describe_layout(const char *path, file_layout_t* layout);
+  int describe_layout(const char *path, file_layout_t* layout,
+		      const UserPerm& perms);
   int fdescribe_layout(int fd, file_layout_t* layout);
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
