@@ -199,6 +199,7 @@ struct rgw_bucket_entry_owner {
   void decode_json(JSONObj *obj);
 };
 
+class RGWSyncErrorLogger;
 
 struct RGWDataSyncEnv {
   CephContext *cct;
