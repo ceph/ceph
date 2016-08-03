@@ -48,6 +48,8 @@ set xlabel 'Heap Timing for different K values'
 set ylabel 'Time (nanosec)'        
 set key top right
 
+set yrange [0:*]
+
 # plot 1
 set title 'Request Addition Time'
 plot for [COL=2:($k_way + 1)] '${output_file}.dat' using COL:xticlabels(1) title columnheader
