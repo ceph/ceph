@@ -6633,6 +6633,12 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
+  // Keep a ref in the list until we get the newly received map written
+  // onto disk. This is important because as long as the refs are alive,
+  // the OSDMaps will be pinned in the cache and we won't try to read it
+  // off of disk. Otherwise these maps will probably not stay in the cache,
+  // and reading those OSDMaps before they are actually written can result
+  // in a crash. 
   list<OSDMapRef> pinned_maps;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
