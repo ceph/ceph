@@ -870,49 +870,6 @@ private:
     init_groups(&groups);
     return inode_permission(in, perms.uid(), groups, want);
   }
-  int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return xattr_permission(in, name, want, perms);
-  }
-
-  int may_setattr(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return may_setattr(in, st, mask, perms);
-  }
-  int may_open(Inode *in, int flags, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return may_open(in, flags, perms);
-  }
-  int may_lookup(Inode *dir, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return may_lookup(dir, perms);
-  }
-  int may_create(Inode *dir, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return may_create(dir, perms);
-  }
-  int may_delete(Inode *dir, const char *name, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return may_delete(dir, name, perms);
-  }
-  int may_hardlink(Inode *in, int uid=-1, int gid=-1) {
-    if (uid < 0) uid = get_uid();
-    if (gid < 0) gid = get_gid();
-    UserPerm perms(uid, gid);
-    return may_hardlink(in, perms);
-  }
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
   int _getgrouplist(gid_t **sgids, int uid, int gid);

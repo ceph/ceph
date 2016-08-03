@@ -9899,7 +9899,7 @@ int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_READ);
+    int r = xattr_permission(in.get(), name, MAY_READ, perms);
     if (r < 0)
       return r;
   }
