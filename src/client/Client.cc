@@ -5058,9 +5058,6 @@ out:
 
 int Client::may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& perms)
 {
-  RequestUserGroups groups(perms.uid(), perms.gid());
-  init_groups(&groups);
-
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -5078,7 +5075,7 @@ int Client::may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& pe
   }
   if (mask & CEPH_SETATTR_GID) {
     if (perms.uid() != 0 && (perms.uid() != in->uid ||
-      	       (!groups.is_in(st->st_gid) && st->st_gid != in->gid)))
+      	       (!perms.gid_in_groups(st->st_gid) && st->st_gid != in->gid)))
       goto out;
   }
 
@@ -5087,7 +5084,7 @@ int Client::may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& pe
       goto out;
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? st->st_gid : in->gid;
-    if (perms.uid() != 0 && !groups.is_in(i_gid))
+    if (perms.uid() != 0 && !perms.gid_in_groups(i_gid))
       st->st_mode &= ~S_ISGID;
   }
 
