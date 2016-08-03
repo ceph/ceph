@@ -11856,13 +11856,14 @@ void Client::ll_interrupt(void *d)
 
 // expose file layouts
 
-int Client::describe_layout(const char *relpath, file_layout_t *lp)
+int Client::describe_layout(const char *relpath, file_layout_t *lp,
+			    const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
 

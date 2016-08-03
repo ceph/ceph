@@ -927,7 +927,8 @@ extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   return l.stripe_unit;
@@ -940,7 +941,8 @@ extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   return l.stripe_unit;
@@ -953,7 +955,8 @@ extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   return l.stripe_count;
@@ -966,7 +969,8 @@ extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const 
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   return l.stripe_count;
@@ -979,7 +983,8 @@ extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   return l.object_size;
@@ -992,7 +997,8 @@ extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   return l.object_size;
@@ -1005,7 +1011,8 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   return l.pool_id;
@@ -1018,7 +1025,8 @@ extern "C" int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *pa
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   return l.pool_id;
@@ -1031,7 +1039,8 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   string name = cmount->get_client()->get_pool_name(l.pool_id);
@@ -1063,7 +1072,8 @@ extern "C" int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const cha
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   string name = cmount->get_client()->get_pool_name(l.pool_id);
@@ -1082,7 +1092,8 @@ extern "C" int ceph_get_file_layout(struct ceph_mount_info *cmount, int fh, int 
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   if (stripe_unit)
@@ -1103,7 +1114,8 @@ extern "C" int ceph_get_path_layout(struct ceph_mount_info *cmount, const char *
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   if (stripe_unit)
@@ -1124,7 +1136,8 @@ extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->fdescribe_layout(fh, &l, perms);
   if (r < 0)
     return r;
   int rep = cmount->get_client()->get_pool_replication(l.pool_id);
@@ -1138,7 +1151,8 @@ extern "C" int ceph_get_path_replication(struct ceph_mount_info *cmount, const c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(path, &l);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  r = cmount->get_client()->describe_layout(path, &l, perms);
   if (r < 0)
     return r;
   int rep = cmount->get_client()->get_pool_replication(l.pool_id);
