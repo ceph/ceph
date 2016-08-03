@@ -26,8 +26,7 @@ noinst_HEADERS += \
 	client/ioctl.h \
 	client/ObjecterWriteback.h \
 	client/posix_acl.h \
-	client/UserPerm.h \
-	client/UserGroups.h
+	client/UserPerm.h
 
 if WITH_FUSE
 libclient_fuse_la_SOURCES = client/fuse_ll.cc

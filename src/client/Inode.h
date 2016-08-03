@@ -23,7 +23,6 @@ struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
-class UserGroups;
 class filepath;
 
 struct Cap {

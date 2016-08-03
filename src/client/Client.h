@@ -46,7 +46,6 @@ using std::fstream;
 #include "osdc/ObjectCacher.h"
 
 #include "InodeRef.h"
-#include "UserGroups.h"
 #include "UserPerm.h"
 
 class FSMap;
@@ -822,29 +821,7 @@ private:
     MAY_READ = 4,
   };
 
-  class RequestUserGroups : public UserGroups {
-    uid_t uid;
-    gid_t gid;
-    int sgid_count;
-    gid_t *sgids;
-    public:
-    RequestUserGroups(uid_t u, gid_t g) :
-      uid(u), gid(g), sgid_count(-1), sgids(NULL) {}
-    ~RequestUserGroups() {
-      free(sgids);
-    }
-    bool is_init() { return sgid_count < 0; }
-    void init_gids(gid_t *_sgids, int count) {
-      sgids = _sgids;
-      sgid_count = count;
-    }
-    uid_t get_uid() { return uid; }
-    gid_t get_gid() { return gid; }
-    bool is_in(gid_t id);
-    int get_gids(const gid_t **out);
-  };
-  friend class RequestUserGroups;
-  void init_groups(RequestUserGroups *groups);
+  void init_groups(UserPerm *groups);
 
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want,
