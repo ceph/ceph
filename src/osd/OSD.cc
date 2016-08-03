@@ -2954,7 +2954,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
 			 INT_MAX, &objects, 0);
 
   // delete them.
-  unsigned removed = 0;
+  int removed = 0;
   for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
@@ -2963,7 +2963,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     if (r != 0 && r != -ENOENT)
       assert(0);
     t.remove(tmp, *p);
-    if (removed > 300) {
+    if (removed > g_conf->osd_target_transaction_size) {
       int r = store->apply_transaction(osr.get(), std::move(t));
       assert(r == 0);
       t = ObjectStore::Transaction();
