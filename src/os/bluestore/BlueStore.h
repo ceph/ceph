@@ -945,6 +945,7 @@ public:
 
   class OpSequencer : public Sequencer_impl {
   public:
+    int id = 0;
     std::mutex qlock;
     std::condition_variable qcond;
     typedef boost::intrusive::list<
@@ -971,9 +972,10 @@ public:
 
     uint64_t last_seq = 0;
 
-    OpSequencer()
+    OpSequencer(int i)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL) {
+      id = i;
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -1139,7 +1141,9 @@ private:
   ThreadPool wal_tp;
   WALWQ wal_wq;
 
-  Finisher finisher;
+  int m_finisher_num;
+  vector<Finisher*> finishers;
+  atomic_t next_osr_id;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;

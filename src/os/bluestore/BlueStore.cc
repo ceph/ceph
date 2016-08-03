@@ -1380,7 +1380,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     cct->_conf->bluestore_wal_thread_timeout,
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
-    finisher(cct),
+    m_finisher_num(cct->_conf->bluestore_finisher_threads),
+    next_osr_id(0),
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
@@ -1390,10 +1391,22 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
   set_cache_shards(1);
+
+  for (int i = 0; i < m_finisher_num; ++i) {
+    ostringstream oss;
+    oss << "finisher-" << i;
+    Finisher *f = new Finisher(cct, oss.str(), "finisher");
+    finishers.push_back(f);
+  }
 }
 
 BlueStore::~BlueStore()
 {
+  for (vector<Finisher*>::iterator it = finishers.begin(); it != finishers.end(); ++it) {
+    delete *it;
+    *it = NULL;
+  }
+
   g_ceph_context->_conf->remove_observer(this);
   _shutdown_logger();
   assert(!mounted);
@@ -2762,7 +2775,9 @@ int BlueStore::mount()
       goto out_coll;
   }
 
-  finisher.start();
+  for (vector<Finisher*>::iterator it = finishers.begin(); it != finishers.end(); ++it) {
+    (*it)->start();
+  }
   wal_tp.start();
   kv_sync_thread.create("bstore_kv_sync");
 
@@ -2780,8 +2795,10 @@ int BlueStore::mount()
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
-  finisher.wait_for_empty();
-  finisher.stop();
+  for (vector<Finisher*>::iterator it = finishers.begin(); it != finishers.end(); ++it) {
+    (*it)->wait_for_empty();
+    (*it)->stop();
+  }
  out_coll:
   coll_map.clear();
  out_alloc:
@@ -2814,10 +2831,12 @@ int BlueStore::umount()
   wal_wq.drain();
   dout(20) << __func__ << " stopping wal_tp" << dendl;
   wal_tp.stop();
-  dout(20) << __func__ << " draining finisher" << dendl;
-  finisher.wait_for_empty();
-  dout(20) << __func__ << " stopping finisher" << dendl;
-  finisher.stop();
+  for (vector<Finisher*>::iterator it = finishers.begin(); it != finishers.end(); ++it) {
+    dout(20) << __func__ << " draining finisher" << dendl;
+    (*it)->wait_for_empty();
+    dout(20) << __func__ << " stopping finisher" << dendl;
+    (*it)->stop();
+  }
   dout(20) << __func__ << " closing" << dendl;
 
   mounted = false;
@@ -4819,15 +4838,16 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     txc->onreadable_sync = NULL;
   }
   if (txc->onreadable) {
-    finisher.queue(txc->onreadable);
+    finishers[txc->osr->id % m_finisher_num]->queue(txc->onreadable);
     txc->onreadable = NULL;
   }
   if (txc->oncommit) {
-    finisher.queue(txc->oncommit);
+    finishers[txc->osr->id % m_finisher_num]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
   while (!txc->oncommits.empty()) {
-    finisher.queue(txc->oncommits.front());
+    auto f = txc->oncommits.front();
+    finishers[txc->osr->id % m_finisher_num]->queue(f);
     txc->oncommits.pop_front();
   }
 
@@ -5155,7 +5175,7 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
 int BlueStore::_wal_replay()
 {
   dout(10) << __func__ << " start" << dendl;
-  OpSequencerRef osr = new OpSequencer;
+  OpSequencerRef osr = new OpSequencer(next_osr_id.inc());
   int count = 0;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_WAL);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
@@ -5205,7 +5225,7 @@ int BlueStore::queue_transactions(
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer;
+    osr = new OpSequencer(next_osr_id.inc());
     osr->parent = posr;
     posr->p = osr;
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
