@@ -1047,13 +1047,13 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode, const UserPerm& perm);
-  int mkdirs(const char *path, mode_t mode);
-  int rmdir(const char *path);
+  int mkdirs(const char *path, mode_t mode, const UserPerm& perms);
+  int rmdir(const char *path, const UserPerm& perms);
 
   // symlinks
   int readlink(const char *path, char *buf, loff_t size, const UserPerm& perms);
 
-  int symlink(const char *existing, const char *newname);
+  int symlink(const char *existing, const char *newname, const UserPerm& perms);
 
   // inode stuff
   int stat(const char *path, struct stat *stbuf, const UserPerm& perms,
@@ -1077,7 +1077,7 @@ public:
   int truncate(const char *path, loff_t size, const UserPerm& perms);
 
   // file ops
-  int mknod(const char *path, mode_t mode, dev_t rdev=0);
+  int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
   int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0);
   int open(const char *path, int flags, const UserPerm& perms,
 	   mode_t mode, int stripe_unit, int stripe_count, int object_size,

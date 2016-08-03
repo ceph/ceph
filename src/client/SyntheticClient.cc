@@ -833,7 +833,7 @@ int SyntheticClient::run()
       {
         int count = iargs.front();  iargs.pop_front();
         if (run_me()) {
-	  client->mknod("test", 0777);
+	  client->mknod("test", 0777, perms);
 	  struct stat st;
 	  for (int i=0; i<count; i++) {
 	    client->lstat("test", &st, perms);
@@ -1090,11 +1090,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->mkdir(a, b, perms);
     } else if (strcmp(op, "rmdir") == 0) {
       const char *a = t.get_string(buf, p);
-      client->rmdir(a);
+      client->rmdir(a, perms);
     } else if (strcmp(op, "symlink") == 0) {
       const char *a = t.get_string(buf, p);
       const char *b = t.get_string(buf2, p);
-      client->symlink(a,b);      
+      client->symlink(a, b, perms);
     } else if (strcmp(op, "readlink") == 0) {
       const char *a = t.get_string(buf, p);
       char buf[100];
@@ -1128,11 +1128,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       int64_t c = t.get_int();
-      client->mknod(a, b, c);
+      client->mknod(a, b, perms, c);
     } else if (strcmp(op, "oldmknod") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
-      client->mknod(a, b, 0);
+      client->mknod(a, b, perms, 0);
     } else if (strcmp(op, "getdir") == 0) {
       const char *a = t.get_string(buf, p);
       list<string> contents;
@@ -1586,7 +1586,7 @@ int SyntheticClient::clean_dir(string& basedir)
 
     if ((st.st_mode & S_IFMT) == S_IFDIR) {
       clean_dir(file);
-      client->rmdir(file.c_str());
+      client->rmdir(file.c_str(), perms);
     } else {
       client->unlink(file.c_str(), perms);
     }
@@ -1761,7 +1761,7 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
   dout(3) << "make_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << dendl;
   for (int i=0; i<files; i++) {
     snprintf(d, sizeof(d), "%s/file.%d", basedir, i);
-    client->mknod(d, 0644);
+    client->mknod(d, 0644, perms);
   }
 
   if (depth == 0) return 0;
@@ -1877,7 +1877,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
     for (int n=0; n<num; n++) {
       snprintf(d, sizeof(d), "dir.%d.run%d/file.client%d.%d", priv ? whoami:0, c, whoami, n);
 
-      client->mknod(d, 0644);
+      client->mknod(d, 0644, perms);
 
       if (more) {
         client->lstat(d, &st, perms);
@@ -1912,7 +1912,7 @@ int SyntheticClient::link_test()
   utime_t start = ceph_clock_now(client->cct);
   for (int i=0; i<num; i++) {
     snprintf(d, sizeof(d), "orig/file.%d", i);
-    client->mknod(d, 0755);
+    client->mknod(d, 0755, perms);
   }
   utime_t end = ceph_clock_now(client->cct);
   end -= start;
@@ -1942,7 +1942,7 @@ int SyntheticClient::create_shared(int num)
   client->mkdir("test", 0755, perms);
   for (int n=0; n<num; n++) {
     snprintf(d, sizeof(d), "test/file.%d", n);
-    client->mknod(d, 0644);
+    client->mknod(d, 0644, perms);
   }
   
   return 0;
@@ -2721,9 +2721,9 @@ int SyntheticClient::random_walk(int num_req)
     
     if (op == CEPH_MDS_OP_RMDIR) {
       if (!subdirs.empty())
-        r = client->rmdir( get_random_subdir() );
+        r = client->rmdir(get_random_subdir(), perms);
       else
-        r = client->rmdir( cwd.c_str() );     // will pbly fail
+        r = client->rmdir(cwd.c_str(), perms);     // will pbly fail
     }
     
     if (op == CEPH_MDS_OP_SYMLINK) {
@@ -2755,7 +2755,7 @@ int SyntheticClient::random_walk(int num_req)
     }
     
     if (op == CEPH_MDS_OP_MKNOD) {
-      r = client->mknod( make_sub("mknod"), 0644);
+      r = client->mknod(make_sub("mknod"), 0644, perms);
     }
      
     if (op == CEPH_MDS_OP_OPEN) {
@@ -2896,7 +2896,7 @@ void SyntheticClient::foo()
     client->mkdir("/b", 0755, perms);
     for (int i=0; i<10; i++) {
       snprintf(a, sizeof(a), "/a/%d", i);
-      client->mknod(a, 0644);
+      client->mknod(a, 0644, perms);
     }
     while (1) {
       for (int i=0; i<10; i++) {
@@ -3019,28 +3019,28 @@ void SyntheticClient::foo()
   }
 
   // link fun
-  client->mknod("one", 0755);
-  client->mknod("two", 0755);
+  client->mknod("one", 0755, perms);
+  client->mknod("two", 0755, perms);
   client->link("one", "three", perms);
   client->mkdir("dir", 0755, perms);
   client->link("two", "/dir/twolink", perms);
   client->link("dir/twolink", "four", perms);
   
   // unlink fun
-  client->mknod("a", 0644);
+  client->mknod("a", 0644, perms);
   client->unlink("a", perms);
-  client->mknod("b", 0644);
+  client->mknod("b", 0644, perms);
   client->link("b", "c", perms);
   client->unlink("c", perms);
   client->mkdir("d", 0755, perms);
   client->unlink("d", perms);
-  client->rmdir("d");
+  client->rmdir("d", perms);
 
   // rename fun
-  client->mknod("p1", 0644);
-  client->mknod("p2", 0644);
+  client->mknod("p1", 0644, perms);
+  client->mknod("p2", 0644, perms);
   client->rename("p1","p2", perms);
-  client->mknod("p3", 0644);
+  client->mknod("p3", 0644, perms);
   client->rename("p3","p4", perms);
 
   // check dest dir ambiguity thing
@@ -3057,7 +3057,7 @@ void SyntheticClient::foo()
   client->rename("p4", "p4.l", perms);
 
   // check anchor updates
-  client->mknod("dir1/a", 0644);
+  client->mknod("dir1/a", 0644, perms);
   client->link("dir1/a", "da1", perms);
   client->link("dir1/a", "da2", perms);
   client->link("da2","da3", perms);
@@ -3068,10 +3068,10 @@ void SyntheticClient::foo()
 
   // check directory renames
   client->mkdir("dir3", 0755, perms);
-  client->mknod("dir3/asdf", 0644);
+  client->mknod("dir3/asdf", 0644, perms);
   client->mkdir("dir4", 0755, perms);
   client->mkdir("dir5", 0755, perms);
-  client->mknod("dir5/asdf", 0644);
+  client->mknod("dir5/asdf", 0644, perms);
   client->rename("dir3", "dir4", perms); // ok
   client->rename("dir4", "dir5", perms); // fail
 }
@@ -3149,18 +3149,18 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       int o = rand() % 4;
       switch (o) {
       case 0: 
-	client->mknod(src.c_str(), 0755); 
+	client->mknod(src.c_str(), 0755, perms);
 	if (renames) client->rename(src.c_str(), dst.c_str(), perms);
 	break;
       case 1: 
-	client->mknod(src.c_str(), 0755); 
+	client->mknod(src.c_str(), 0755, perms);
 	client->unlink(dst.c_str(), perms);
 	client->link(src.c_str(), dst.c_str(), perms); 
 	break;
       case 2: client->unlink(src.c_str(), perms); break;
       case 3: client->unlink(dst.c_str(), perms); break;
-	//case 4: client->mknod(src.c_str(), 0755); break;
-	//case 5: client->mknod(dst.c_str(), 0755); break;
+	//case 4: client->mknod(src.c_str(), 0755, perms); break;
+	//case 5: client->mknod(dst.c_str(), 0755, perms); break;
       }
     }
     return 0;
@@ -3307,7 +3307,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	target = filename.substr(pos + 4);
       }
       dout(10) << "symlink from '" << link << "' -> '" << target << "'" << dendl;
-      client->symlink(target.c_str(), link.c_str());
+      client->symlink(target.c_str(), link.c_str(), perms);
     } else {
       string f;
       if (base[0] != '-') {

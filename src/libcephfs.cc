@@ -583,14 +583,16 @@ extern "C" int ceph_mkdirs(struct ceph_mount_info *cmount, const char *path, mod
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->mkdirs(path, mode);
+  UserPerm perms = cmount->get_client()->pick_my_perms();  
+  return cmount->get_client()->mkdirs(path, mode, perms);
 }
 
 extern "C" int ceph_rmdir(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->rmdir(path);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->rmdir(path, perms);
 }
 
 // symlinks
@@ -608,7 +610,8 @@ extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->symlink(existing, newname);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->symlink(existing, newname, perms);
 }
 
 // inode stuff
@@ -811,7 +814,8 @@ extern "C" int ceph_mknod(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->mknod(path, mode, rdev);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->mknod(path, mode, perms, rdev);
 }
 
 extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
