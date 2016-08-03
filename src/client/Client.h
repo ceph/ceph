@@ -1009,7 +1009,8 @@ private:
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
 
-  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, int uid, int gid);
+  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
+			const UserPerm& perms);
   int _posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms);
   int _posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
 
