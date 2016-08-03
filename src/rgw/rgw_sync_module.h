@@ -10,6 +10,7 @@ struct RGWDataSyncEnv;
 struct rgw_bucket_entry_owner;
 struct rgw_obj_key;
 
+
 class RGWDataSyncModule {
 public:
   RGWDataSyncModule() {}
@@ -88,5 +89,7 @@ public:
     return module.get()->create_instance(config, instance);
   }
 };
+
+void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager);
 
 #endif

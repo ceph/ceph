@@ -3298,8 +3298,7 @@ int RGWRados::init_rados()
 
   sync_modules_manager = new RGWSyncModulesManager();
 
-  RGWSyncModuleRef default_module(new RGWDefaultSyncModule());
-  sync_modules_manager->register_module("rgw", default_module, true);
+  rgw_register_sync_modules(sync_modules_manager);
 
   auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
     new RGWCoroutinesManagerRegistry(cct)};
