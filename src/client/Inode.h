@@ -13,6 +13,7 @@
 #include "include/assert.h"
 
 #include "InodeRef.h"
+#include "UserPerm.h"
 
 class Client;
 struct MetaSession;
@@ -37,12 +38,11 @@ struct Cap {
   uint64_t seq, issue_seq;
   __u32 mseq;  // migration seq
   __u32 gen;
-  uid_t latest_uid;
-  gid_t latest_gid;
+  UserPerm latest_perms;
 
   Cap() : session(NULL), inode(NULL), cap_item(this), cap_id(0), issued(0),
 	  implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0),
-	  latest_uid(-1), latest_gid(-1) {}
+	  latest_perms()  {}
 
   void dump(Formatter *f) const;
 };
@@ -279,8 +279,7 @@ struct Inode {
   int caps_wanted();
   int caps_mds_wanted();
   int caps_dirty();
-  uid_t get_best_cap_uid();
-  gid_t get_best_cap_gid();
+  const UserPerm *get_best_perms();
 
   bool have_valid_size();
   Dir *open_dir();

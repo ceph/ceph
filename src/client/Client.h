@@ -620,7 +620,7 @@ protected:
   void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
-		      int flags, uid_t cap_uid, gid_t cap_gid);
+		      int flags, const UserPerm& perms);
   void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
@@ -705,7 +705,7 @@ protected:
 			      version_t inline_version, bufferlist& inline_data,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
-			  uid_t request_uid, gid_t request_gid);
+			  const UserPerm& request_perms);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);

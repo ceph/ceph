@@ -288,26 +288,25 @@ int Inode::caps_dirty()
   return dirty_caps | flushing_caps;
 }
 
-uid_t Inode::get_best_cap_uid()
+const UserPerm* Inode::get_best_perms()
 {
-  uid_t any = -1;
+  const UserPerm *perms = NULL;
   for (const auto ci : caps) {
-    if (ci.second->latest_uid == uid)
-      return uid;
-    any = ci.second->latest_uid;
+    const UserPerm& iperm = ci.second->latest_perms;
+    if (!perms) { // we don't have any, take what's present
+      perms = &iperm;
+    } else if (iperm.uid() == uid) {
+      if (iperm.gid() == gid) { // we have the best possible, return
+	return &iperm;
+      }
+      if (perms->uid() != uid) { // take uid > gid every time
+	perms = &iperm;
+      }
+    } else if (perms->uid() != uid && iperm.gid() == gid) {
+      perms = &iperm; // a matching gid is better than nothing
+    }
   }
-  return any;
-}
-
-gid_t Inode::get_best_cap_gid()
-{
-  gid_t any = -1;
-  for (const auto ci : caps) {
-    if (ci.second->latest_gid == uid)
-      return uid;
-    any = ci.second->latest_gid;
-  }
-  return any;
+  return perms;
 }
 
 bool Inode::have_valid_size()
