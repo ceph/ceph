@@ -4575,6 +4575,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
       if (r < 0)
 	return r;
     }
+    objects.clear();
   }
   return _destroy_collection(cid);
 }
