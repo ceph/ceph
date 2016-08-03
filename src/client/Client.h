@@ -846,7 +846,7 @@ private:
   friend class RequestUserGroups;
   void init_groups(RequestUserGroups *groups);
 
-  int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+  int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
   int may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& perms);
@@ -855,12 +855,6 @@ private:
   int may_create(Inode *dir, const UserPerm& perms);
   int may_delete(Inode *dir, const char *name, const UserPerm& perms);
   int may_hardlink(Inode *in, const UserPerm& perms);
-
-  int inode_permission(Inode *in, const UserPerm& perms, unsigned want) {
-    RequestUserGroups groups(perms.uid(), perms.gid());
-    init_groups(&groups);
-    return inode_permission(in, perms.uid(), groups, want);
-  }
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
   int _getgrouplist(gid_t **sgids, int uid, int gid);
