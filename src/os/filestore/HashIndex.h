@@ -198,6 +198,11 @@ protected:
     ghobject_t *next
     );
 private:
+  /// Internal recursively remove path and its subdirs
+  int _recursive_remove(
+    const vector<string> &path, ///< [in] path to remove
+    bool top			///< [in] internal tracking of first caller
+    ); /// @return Error Code, 0 on success
   /// Recursively remove path and its subdirs
   int recursive_remove(
     const vector<string> &path ///< [in] path to remove
