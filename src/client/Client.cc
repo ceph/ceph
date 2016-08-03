@@ -1626,8 +1626,7 @@ int Client::make_request(MetaRequest *request,
   if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)
     oldest_tid = tid;
 
-  request->set_caller_uid(perms.uid());
-  request->set_caller_gid(perms.gid());
+  request->set_caller_perms(perms);
 
   if (cct->_conf->client_inject_fixed_oldest_tid) {
     ldout(cct, 20) << __func__ << " injecting fixed oldest_client_tid(1)" << dendl;
