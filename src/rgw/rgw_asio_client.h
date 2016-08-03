@@ -24,7 +24,7 @@ class RGWBufferlistBody {
                                             Headers>;
 };
 
-class RGWAsioClientIO : public RGWStreamIO {
+class RGWAsioClientIO : public RGWStreamIOEngine {
   using tcp = boost::asio::ip::tcp;
   tcp::socket socket;
 
@@ -36,6 +36,7 @@ class RGWAsioClientIO : public RGWStreamIO {
 
   bool conn_keepalive{false};
   bool conn_close{false};
+  RGWEnv env;
 
   void init_env(CephContext *cct) override;
   int write_data(const char *buf, int len) override;
@@ -51,6 +52,10 @@ class RGWAsioClientIO : public RGWStreamIO {
   int send_100_continue() override;
   int complete_header() override;
   int send_content_length(uint64_t len) override;
+
+  RGWEnv& get_env() override {
+    return env;
+  }
 };
 
 // used by beast::http::read() to read the body into a bufferlist

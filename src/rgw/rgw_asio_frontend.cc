@@ -92,7 +92,8 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
       return;
     }
     RGWRequest req{env.store->get_new_req_id()};
-    RGWAsioClientIO client{std::move(socket), std::move(request)};
+    RGWAsioClientIO real_client{std::move(socket), std::move(request)};
+    RGWStreamIOLegacyWrapper client(&real_client);
     process_request(env.store, env.rest, &req, &client, env.olog);
   }
 
