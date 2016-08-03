@@ -331,12 +331,12 @@ Dir *Inode::open_dir()
   return dir;
 }
 
-bool Inode::check_mode(uid_t ruid, UserGroups& groups, unsigned want)
+bool Inode::check_mode(const UserPerm& perms, unsigned want)
 {
-  if (uid == ruid) {
+  if (uid == perms.uid()) {
     // if uid is owner, owner entry determines access
     want = want << 6;
-  } else if (groups.is_in(gid)) {
+  } else if (perms.gid_in_groups(gid)) {
     // if a gid or sgid matches the owning group, group entry determines access
     want = want << 3;
   }

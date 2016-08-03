@@ -5035,7 +5035,7 @@ int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
   }
 
   // check permissions before doing anything else
-  if (!in->check_mode(perms.uid(), groups, want))
+  if (!in->check_mode(perms, want))
     return -EACCES;
   return 0;
 }
