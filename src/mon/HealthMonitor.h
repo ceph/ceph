@@ -15,10 +15,10 @@
 #define CEPH_HEALTH_MONITOR_H
 
 #include "mon/QuorumService.h"
-#include "mon/HealthService.h"
 
 //forward declaration
 namespace ceph { class Formatter; }
+class HealthService;
 
 class HealthMonitor : public QuorumService
 {
@@ -44,21 +44,9 @@ public:
 		  list<pair<health_status_t,string> > *detail) override;
   bool service_dispatch(MonOpRequestRef op) override;
 
-  void start_epoch() override {
-    for (map<int,HealthService*>::iterator it = services.begin();
-         it != services.end(); ++it) {
-      it->second->start(get_epoch());
-    }
-  }
+  void start_epoch() override;
 
-  void finish_epoch() override {
-    generic_dout(20) << "HealthMonitor::finish_epoch()" << dendl;
-    for (map<int,HealthService*>::iterator it = services.begin();
-         it != services.end(); ++it) {
-      assert(it->second != NULL);
-      it->second->finish();
-    }
-  }
+  void finish_epoch() override;
 
   void cleanup() override { }
   void service_tick() override { }
