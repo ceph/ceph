@@ -41,7 +41,7 @@ done
 
 # run simulators 
 echo '' > $output_file
-for config in "$config_dir"/*
+for config in "$config_dir"/*.conf
 do
   k=1
   while [ $k -le $k_way ]
