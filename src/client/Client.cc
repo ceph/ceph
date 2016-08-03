@@ -12497,35 +12497,11 @@ void Client::handle_conf_change(const struct md_config_t *conf,
   }
 }
 
-void Client::init_groups(RequestUserGroups *groups)
+void Client::init_groups(UserPerm *perms)
 {
   gid_t *sgids;
-  int count = _getgrouplist(&sgids, groups->get_uid(), groups->get_gid());
-  groups->init_gids(sgids, count);
-}
-
-bool Client::RequestUserGroups::is_in(gid_t id)
-{
-  assert(sgid_count >= 0);
-  if (id == gid)
-    return true;
-  for (int i = 0; i < sgid_count; ++i) {
-    if (id == sgids[i])
-      return true;
-  }
-  return false;
-}
-
-int Client::RequestUserGroups::get_gids(const gid_t **out)
-{
-  assert(sgid_count >= 0);
-  if (sgid_count > 0) {
-    *out = sgids;
-    return sgid_count;
-  } else {
-    *out = &gid;
-    return 1;
-  }
+  int count = _getgrouplist(&sgids, perms->uid(), perms->gid());
+  perms->init_gids(sgids, count);
 }
 
 void intrusive_ptr_add_ref(Inode *in)

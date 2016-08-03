@@ -7,7 +7,6 @@
 #include "Dir.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
-#include "UserGroups.h"
 
 #include "mds/flock.h"
 
