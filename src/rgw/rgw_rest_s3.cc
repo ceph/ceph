@@ -1709,11 +1709,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
       err_msg = "Missing signature";
       return -EINVAL;
     }
-
     RGWUserInfo user_info;
 
     op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
     if (op_ret < 0) {
+      S3AuthFactory aplfact(store, s->account_name);
+      RGWLDAPTokenExtractor token_extr(s);
+      RGWLDAPAuthEngine ldap(s->cct, store, token_extr, &aplfact);
         // try external authenticators
       if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
 	  store->ctx()->_conf->rgw_keystone_url.empty())
@@ -1751,53 +1753,15 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  }
 	  s->perm_mask = RGW_PERM_FULL_CONTROL;
 	}
-      } else if (store->ctx()->_conf->rgw_s3_auth_use_ldap &&
-		 (! store->ctx()->_conf->rgw_ldap_uri.empty())) {
-
-	ldout(store->ctx(), 15)
-	  << __func__ << " LDAP auth uri="
-	  << store->ctx()->_conf->rgw_ldap_uri
-	  << dendl;
-
-	RGWToken token{from_base64(s3_access_key)};
-	if (! token.valid())
-	  return -EACCES;
-
-	rgw::LDAPHelper *ldh = RGW_Auth_S3::get_ldap_ctx(store);
-	if (unlikely(!ldh)) {
-	  ldout(store->ctx(), 0)
-	    << __func__ << " RGW_Auth_S3::get_ldap_ctx() failed"
-	    << dendl;
-	  return -EACCES;
-	}
-
-	ldout(store->ctx(), 10)
-	  << __func__ << " try LDAP auth uri="
-	  << store->ctx()->_conf->rgw_ldap_uri
-	  << " token.id=" << token.id
-	  << dendl;
-
-	if (ldh->auth(token.id, token.key) != 0)
-	  return -EACCES;
-
-	/* ok, succeeded */
-	user_info.user_id = token.id;
-	user_info.display_name = token.id; // cn?
-
-	/* create local account, if none exists */
-	if (rgw_get_user_info_by_uid(store, user_info.user_id,
-					user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
-					real_time(), true);
-	  if (ret < 0) {
-	    ldout(store->ctx(), 10)
-	      << "NOTICE: failed to store new user's info: ret=" << ret
-	      << dendl;
-	  }
-	}
-
-	/* set request perms */
-	s->perm_mask = RGW_PERM_FULL_CONTROL;
+  } else if (ldap.is_applicable()) {
+    auto applier = ldap.authenticate();
+    if (! applier) {
+      return -EACCES;
+    } else {
+      applier->load_acct_info(*s->user);
+      s->perm_mask = applier->get_perm_mask();
+      s->auth_identity = std::move(applier);
+    }
       } else {
 	return -EACCES;
       }
@@ -3154,27 +3118,6 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-/* RGW_Auth_S3 static members */
-std::mutex RGW_Auth_S3::mtx;
-rgw::LDAPHelper* RGW_Auth_S3::ldh;
-
-/* static */
-void RGW_Auth_S3::init_impl(RGWRados* store)
-{
-  const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
-  const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
-  const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
-  const string& ldap_dnattr =
-    store->ctx()->_conf->rgw_ldap_dnattr;
-  std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
-
-  ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
-			    ldap_searchdn, ldap_dnattr);
-
-  ldh->init();
-  ldh->bind();
-}
-
 /*
  * Try to validate S3 auth against keystone s3token interface
  */
@@ -4005,52 +3948,23 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
     }
   }
 
-  if ((external_auth_result < 0) &&
-      (store->ctx()->_conf->rgw_s3_auth_use_ldap) &&
-      (! store->ctx()->_conf->rgw_ldap_uri.empty())) {
+  S3AuthFactory aplfact(store, s->account_name);
+  RGWLDAPTokenExtractor token_extr(s);
+  RGWLDAPAuthEngine ldap(s->cct, store, token_extr, &aplfact);
 
-    RGW_Auth_S3::init(store);
-
-    ldout(store->ctx(), 15)
-      << __func__ << " LDAP auth uri="
-      << store->ctx()->_conf->rgw_ldap_uri
-      << dendl;
-
-    RGWToken token{from_base64(auth_id)};
-
-    if (! token.valid())
+  if (! ldap.is_applicable()) {
+    external_auth_result = -EACCES;
+  } else {
+    auto applier = ldap.authenticate();
+    if (!applier) {
       external_auth_result = -EACCES;
-    else {
-      ldout(store->ctx(), 10)
-	<< __func__ << " try LDAP auth uri="
-	<< store->ctx()->_conf->rgw_ldap_uri
-	<< " token.id=" << token.id
-	<< dendl;
-
-      if (ldh->auth(token.id, token.key) != 0)
-	external_auth_result = -EACCES;
-      else {
-	/* ok, succeeded */
-	external_auth_result = 0;
-
-	/* create local account, if none exists */
-	s->user->user_id = token.id;
-	s->user->display_name = token.id; // cn?
-	int ret = rgw_get_user_info_by_uid(store, s->user->user_id, *(s->user));
-	if (ret < 0) {
-	  ret = rgw_store_user_info(store, *(s->user), nullptr, nullptr,
-				    real_time(), true);
-	  if (ret < 0) {
-	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
-		     << dendl;
-	  }
-	}
-
-      /* set request perms */
-      s->perm_mask = RGW_PERM_FULL_CONTROL;
-      } /* success */
-    } /* token */
-  } /* ldap */
+    } else {
+      applier->load_acct_info(*s->user);
+      s->perm_mask = applier->get_perm_mask();
+      s->auth_identity = std::move(applier);
+      external_auth_result = 0;
+    }
+  }
 
   /* keystone failed (or not enabled); check if we want to use rados backend */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados
@@ -4066,7 +3980,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
       return external_auth_result;
     }
 
-    /* now verify signature */
+    /* now verify  signature */
     string auth_hdr;
     if (!rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr,
 					qsr)) {
@@ -4410,4 +4324,99 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
   RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
+}
+
+rgw::LDAPHelper* RGWLDAPAuthEngine::ldh = nullptr;
+std::mutex RGWLDAPAuthEngine::mtx;
+
+void RGWLDAPAuthEngine::init(CephContext* const cct)
+{
+  if (!ldh) {
+    std::lock_guard<std::mutex> lck(mtx);
+    if (!ldh) {
+      const string& ldap_uri = cct->_conf->rgw_ldap_uri;
+      const string& ldap_binddn = cct->_conf->rgw_ldap_binddn;
+      const string& ldap_searchdn = cct->_conf->rgw_ldap_searchdn;
+      const string& ldap_dnattr = cct->_conf->rgw_ldap_dnattr;
+      std::string ldap_bindpw = parse_rgw_ldap_bindpw(cct);
+
+      ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
+                                ldap_searchdn, ldap_dnattr);
+
+      ldh->init();
+      ldh->bind();
+    }
+  }
+}
+
+RGWRemoteAuthApplier::acl_strategy_t RGWLDAPAuthEngine::get_acl_strategy() const
+{
+  //This is based on the assumption that the default acl strategy in
+  // get_perms_from_aclspec, will take care. Extra acl spec is not required.
+  return nullptr;
+}
+
+RGWRemoteAuthApplier::AuthInfo
+RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
+{
+  return RGWRemoteAuthApplier::AuthInfo {
+    rgw_user(token.id),
+    token.id,
+    RGW_PERM_FULL_CONTROL,
+    true,
+    TYPE_LDAP
+  };
+}
+
+bool RGWLDAPAuthEngine::is_applicable() const noexcept
+{
+  if (!RGWTokenBasedAuthEngine::is_applicable()) {
+    return false;
+  }
+
+  if (!cct->_conf->rgw_s3_auth_use_ldap ||
+      cct->_conf->rgw_ldap_uri.empty()) {
+    return false;
+  }
+
+  if(!base64_token.valid()) {
+    return false;
+  }
+
+  return true;
+}
+
+RGWAuthApplier::aplptr_t RGWLDAPAuthEngine::authenticate() const
+{
+  //Check if a user of type other than 'ldap' is already present, if yes, then
+  //return error.
+  RGWUserInfo user_info;
+  user_info.user_id = base64_token.id;
+  if (rgw_get_user_info_by_uid(store, user_info.user_id, user_info) >= 0) {
+    if (user_info.type != TYPE_LDAP) {
+      ldout(cct, 10) << "ERROR: User id of type: " << user_info.type << " is already present" << dendl;
+      return nullptr;
+    }
+  }
+
+  if (ldh->auth(base64_token.id, base64_token.key) != 0) {
+    return nullptr;
+  }
+
+  return apl_factory->create_apl_remote(cct, get_acl_strategy(), get_creds_info(base64_token));
+}
+
+std::string RGWLDAPTokenExtractor::get_token() const
+{
+  string token = "";
+  if (!s->http_auth || !(*s->http_auth)) {
+    token = s->info.args.get("AWSAccessKeyId");
+  } else {
+    string auth_str(s->http_auth + 4);
+    int pos = auth_str.rfind(':');
+    if (pos >=0 ) {
+      token = auth_str.substr(0, pos);
+    }
+  }
+  return token;
 }
