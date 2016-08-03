@@ -12381,8 +12381,7 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
   if (acl_type == NO_ACL)
     return 0;
 
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms.uid(), perms.gid(),
-		   in->xattr_version == 0);
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0);
   if (r < 0)
     goto out;
 
@@ -12412,7 +12411,7 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
   if (S_ISLNK(*mode))
     return 0;
 
-  int r = _getattr(dir, CEPH_STAT_CAP_XATTR, perms.uid(), perms.gid(), dir->xattr_version == 0);
+  int r = _getattr(dir, CEPH_STAT_CAP_XATTR, perms, dir->xattr_version == 0);
   if (r < 0)
     goto out;
 
