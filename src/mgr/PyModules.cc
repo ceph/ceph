@@ -228,6 +228,13 @@ PyObject *PyModules::get_python(const std::string &what)
       });
     });
     return f.get();
+  } else if (what == "osd_stats") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+      pg_map.dump_osd_stats(&f);
+    });
+    return f.get();
   } else if (what == "health" || what == "mon_status") {
     PyFormatter f;
     bufferlist json;
