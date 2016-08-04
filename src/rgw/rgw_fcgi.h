@@ -17,20 +17,27 @@ class RGWFCGX : public RGWStreamIOEngine
   RGWEnv env;
 
 public:
-  void init_env(CephContext *cct);
-  int write_data(const char *buf, int len);
-  int read_data(char *buf, int len);
+  explicit RGWFCGX(FCGX_Request* const fcgx)
+    : fcgx(fcgx) {
+  }
 
-  int send_status(int status, const char *status_name);
-  int send_100_continue();
-  int complete_header();
-  int complete_request() { return 0; }
-  int send_content_length(uint64_t len);
-  explicit RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx) {}
+  void init_env(CephContext* cct) override;
+  int read_data(char* buf, int len) override;
+  int write_data(const char* buf, int len) override;
+
+  int send_status(int status, const char* status_name) override;
+  int send_100_continue() override;
+  int send_content_length(uint64_t len) override;
+  int complete_header() override;
+
   void flush();
 
   RGWEnv& get_env() override {
     return env;
+  }
+
+  int complete_request() override {
+    return 0;
   }
 };
 
