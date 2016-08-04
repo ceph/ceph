@@ -4319,10 +4319,6 @@ void OSD::tick()
   }
 
   if (is_active()) {
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
-
     check_replay_queue();
 
     service.promote_throttle_recalibrate();
@@ -4402,8 +4398,10 @@ void OSD::tick_without_osd_lock()
     map_lock.put_read();
   }
 
-  if (!scrub_random_backoff()) {
-    sched_scrub();
+  if (is_active()) {
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
   }
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
