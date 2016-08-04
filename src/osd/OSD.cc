@@ -3741,7 +3741,7 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     // split?
     if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
 		      osdmap->get_pg_num(pgid.pool()),
-		      0)) {
+		      0) && e > h.same_interval_since) {
       h.same_interval_since = e;
     }
     // up set change?
