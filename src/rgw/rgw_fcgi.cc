@@ -5,12 +5,12 @@
 
 #include "acconfig.h"
 
-int RGWFCGX::write_data(const char *buf, int len)
+int RGWFCGX::write_data(const char* const buf, const int len)
 {
   return FCGX_PutStr(buf, len, fcgx->out);
 }
 
-int RGWFCGX::read_data(char *buf, int len)
+int RGWFCGX::read_data(char* const buf, const int len)
 {
   return FCGX_GetStr(buf, len, fcgx->in);
 }
@@ -20,12 +20,12 @@ void RGWFCGX::flush()
   FCGX_FFlush(fcgx->out);
 }
 
-void RGWFCGX::init_env(CephContext *cct)
+void RGWFCGX::init_env(CephContext* const cct)
 {
   env.init(cct, (char **)fcgx->envp);
 }
 
-int RGWFCGX::send_status(int status, const char *status_name)
+int RGWFCGX::send_status(const int status, const char* const status_name)
 {
   static constexpr size_t STATUS_BUF_SIZE = 128;
 
@@ -45,7 +45,7 @@ int RGWFCGX::send_100_continue()
   return r;
 }
 
-int RGWFCGX::send_content_length(uint64_t len)
+int RGWFCGX::send_content_length(const uint64_t len)
 {
   static constexpr size_t CONLEN_BUF_SIZE = 128;
 
