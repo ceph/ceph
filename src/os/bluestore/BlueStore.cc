@@ -1157,6 +1157,7 @@ void BlueStore::Blob::discard_unallocated()
 
 void BlueStore::BlobMap::encode(bufferlist& bl) const
 {
+  RWLock::RLocker l(blob_lock); 
   uint32_t n = blob_map.size();
   ::encode(n, bl);
   for (auto p = blob_map.begin(); n--; ++p) {
@@ -2862,6 +2863,7 @@ int BlueStore::_fsck_verify_blob_map(
 {
   int errors = 0;
   dout(20) << __func__ << " " << what << " " << v << dendl;
+  RWLock::RLocker l(blob_map.blob_lock);
   for (auto& b : blob_map.blob_map) {
     auto pv = v.find(b.id);
     if (pv == v.end()) {
@@ -4656,16 +4658,11 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->state = TransContext::STATE_KV_QUEUED;
       // FIXME: use a per-txc dirty blob list?
       
-      if (txc->first_collection) {
-        (txc->first_collection)->lock.get_read();
-      }
       for (auto& o : txc->onodes) {
+        RWLock::RLocker l(o->blob_map.blob_lock);
         for (auto& p : o->blob_map.blob_map) {
 	    p.bc.finish_write(txc->seq);
 	}
-      }
-      if (txc->first_collection) {
-        (txc->first_collection)->lock.put_read();
       }
       
       if (!g_conf->bluestore_sync_transaction) {
@@ -4895,11 +4892,6 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
     osr->qcond.notify_all();
     if (osr->q.empty())
       dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
-  }
-  if (c) {
-    c->cache->trim(
-      g_conf->bluestore_onode_cache_size,
-      g_conf->bluestore_buffer_cache_size);
   }
 }
 
@@ -5382,6 +5374,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     // object operations
     RWLock::WLocker l(c->lock);
+    c->cache->trim(
+      g_conf->bluestore_onode_cache_size,
+      g_conf->bluestore_buffer_cache_size);
+
     OnodeRef &o = ovec[op->oid];
     if (!o) {
       // these operations implicity create the object
@@ -5689,6 +5685,7 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
 
 void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
 {
+  RWLock::RLocker l(bm.blob_lock);
   for (auto& b : bm.blob_map) {
     dout(log_level) << __func__ << "  " << b << dendl;
     if (b.blob.has_csum()) {

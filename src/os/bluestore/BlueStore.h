@@ -335,16 +335,20 @@ public:
     typedef boost::intrusive::set<Blob> blob_map_t;
 
     blob_map_t blob_map;
+    RWLock blob_lock;
 
+    BlobMap():blob_lock("BlobMap::blob_lock") {}
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& p, Cache *c);
 
     bool empty() const {
+      RWLock::RLocker l(blob_lock);
       return blob_map.empty();
     }
 
     Blob *get(int64_t id) {
       Blob dummy(id, nullptr);
+      RWLock::RLocker l(blob_lock);
       auto p = blob_map.find(dummy);
       if (p != blob_map.end()) {
 	return &*p;
@@ -353,6 +357,7 @@ public:
     }
 
     Blob *new_blob(Cache *c) {
+      RWLock::WLocker l(blob_lock);
       int64_t id = get_new_id();
       Blob *b = new Blob(id, c);
       blob_map.insert(*b);
@@ -361,11 +366,13 @@ public:
 
     void claim(Blob *b) {
       assert(b->id == 0);
+      RWLock::WLocker l(blob_lock);
       b->id = get_new_id();
       blob_map.insert(*b);
     }
 
     void erase(Blob *b) {
+      RWLock::WLocker l(blob_lock);
       blob_map.erase(*b);
       b->id = 0;
     }
@@ -376,16 +383,19 @@ public:
 
     // must be called under protection of the Cache lock
     void _clear() {
+      RWLock::WLocker l(blob_lock);
       while (!blob_map.empty()) {
 	Blob *b = &*blob_map.begin();
 	b->bc._clear();
-	erase(b);
+        blob_map.erase(*b);
+        b->id = 0;
 	delete b;
       }
     }
 
     friend ostream& operator<<(ostream& out, const BlobMap& m) {
       out << '{';
+      RWLock::RLocker l(m.blob_lock);
       for (auto p = m.blob_map.begin(); p != m.blob_map.end(); ++p) {
 	if (p != m.blob_map.begin()) {
 	  out << ',';
