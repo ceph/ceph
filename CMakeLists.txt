@@ -17,6 +17,10 @@ if(PROFILE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPROFILE")
 endif()
 
+if(DO_NOT_DELAY_TAG_CALC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDO_NOT_DELAY_TAG_CALC")
+endif()
+
 add_subdirectory(src)
 add_subdirectory(sim)
 
