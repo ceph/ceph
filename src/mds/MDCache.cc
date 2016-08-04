@@ -6356,10 +6356,22 @@ bool MDCache::trim(int max, int count)
   bool is_standby_replay = mds->is_standby_replay();
   int unexpirable = 0;
   list<CDentry*> unexpirables;
-  // trim dentries from the LRU
-  while (lru.lru_get_size() + unexpirable > (unsigned)max) {
+
+  // trim dentries from the LRU: only enough to satisfy `max`,
+  // unless we see null dentries at the bottom of the LRU,
+  // in which case trim all those.
+  bool trimming_nulls = true;
+  while (trimming_nulls || lru.lru_get_size() + unexpirable > (unsigned)max) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
-    if (!dn) break;
+    if (!dn) {
+      break;
+    }
+    if (!dn->get_linkage()->is_null()) {
+      trimming_nulls = false;
+      if (lru.lru_get_size() + unexpirable <= (unsigned)max) {
+        break;
+      }
+    }
     if ((is_standby_replay && dn->get_linkage()->inode &&
         dn->get_linkage()->inode->item_open_file.is_on_list()) ||
 	trim_dentry(dn, expiremap)) {
