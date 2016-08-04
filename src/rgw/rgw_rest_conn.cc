@@ -118,7 +118,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
-                         bool prepend_metadata, bool read_data,
+                         bool prepend_metadata, bool get_op, bool rgwx_stat,
                          RGWGetDataCB *cb, RGWRESTStreamRWRequest **req)
 {
   string url;
@@ -134,11 +134,14 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   if (prepend_metadata) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", self_zone_group));
   }
+  if (rgwx_stat) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "stat", "true"));
+  }
   if (!obj.get_instance().empty()) {
     const string& instance = obj.get_instance();
     params.push_back(param_pair_t("versionId", instance));
   }
-  if (read_data) {
+  if (get_op) {
     *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   } else {
     *req = new RGWRESTStreamHeadRequest(cct, url, cb, NULL, &params);
@@ -171,9 +174,10 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)
+int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime,
+                                  uint64_t *psize, map<string, string>& attrs)
 {
-  int ret = req->complete(etag, mtime, attrs);
+  int ret = req->complete(etag, mtime, psize, attrs);
   delete req;
 
   return ret;
@@ -215,7 +219,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   string etag;
   map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
+  return req.complete(etag, NULL, NULL, attrs);
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
@@ -262,7 +266,7 @@ int RGWRESTReadResource::read()
 
   string etag;
   map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
+  return req.complete(etag, NULL, NULL, attrs);
 }
 
 int RGWRESTReadResource::aio_read()
@@ -321,7 +325,7 @@ int RGWRESTPostResource::send(bufferlist& outbl)
 
   string etag;
   map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
+  return req.complete(etag, NULL, NULL, attrs);
 }
 
 int RGWRESTPostResource::aio_send(bufferlist& outbl)

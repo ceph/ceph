@@ -6771,12 +6771,13 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& src_bucket_info,
                real_time *src_mtime,
+               uint64_t *psize,
                const real_time *mod_ptr,
                const real_time *unmod_ptr,
                bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
-               map<string, bufferlist>& attrs,
+               map<string, bufferlist> *pattrs,
                string *version_id,
                string *ptag,
                string *petag)
@@ -6823,12 +6824,13 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
 
   int ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                      true, false, &cb, &in_stream_req);
+                      true /* prepend_meta */, true /* GET */, true /* rgwx-stat */,
+                      &cb, &in_stream_req);
   if (ret < 0) {
     return ret;
   }
 
-  ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
+  ret = conn->complete_request(in_stream_req, etag, &set_mtime, psize, req_headers);
   if (ret < 0) {
     return ret;
   }
@@ -6858,7 +6860,9 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
-  attrs = src_attrs;
+  if (pattrs) {
+    *pattrs = src_attrs;
+  }
 
   return 0;
 }
@@ -6980,12 +6984,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
  
   ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                      true, true, &cb, &in_stream_req);
+                      true /* prepend_meta */, true /* GET */, false /* rgwx-stat */,
+                      &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
 
-  ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
+  ret = conn->complete_request(in_stream_req, etag, &set_mtime, nullptr, req_headers);
   if (ret < 0) {
     goto set_err_state;
   }

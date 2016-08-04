@@ -160,6 +160,16 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (s->system_request &&
       s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
 
+    STREAM_IO(s)->print("Rgwx-Object-Size: %lld\r\n", (long long)total_len);
+
+    if (rgwx_stat) {
+      /*
+       * in this case, we're not returning the object's content, only the prepended
+       * extra metadata
+       */
+      total_len = 0;
+    }
+
     /* JSON encode object metadata */
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
