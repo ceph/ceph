@@ -780,7 +780,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::register_watch(Context *on_finish) {
     assert(image_watcher == NULL);
-    image_watcher = new ImageWatcher(*this);
+    image_watcher = new ImageWatcher<>(*this);
     image_watcher->register_watch(on_finish);
   }
 
@@ -1011,7 +1011,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::notify_update() {
     state->handle_update_notification();
-    ImageWatcher::notify_header_update(md_ctx, header_oid);
+    ImageWatcher<>::notify_header_update(md_ctx, header_oid);
   }
 
   void ImageCtx::notify_update(Context *on_finish) {
