@@ -44,7 +44,7 @@ set style data histogram
 set style histogram clustered
 
 set style fill solid border
-set xlabel 'Heap vs SimplePQ Timing'   
+set xlabel 'Heap Timing for different K values'   
 set ylabel 'Time (nanosec)'        
 set key top right
 
