@@ -664,7 +664,6 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
           assert(0);
         }
 
-        pci_system_init();
         spdk_nvme_retry_count = g_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)
           spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
