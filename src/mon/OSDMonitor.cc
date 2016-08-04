@@ -1366,7 +1366,7 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
 bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  Message *m = op->get_req();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
@@ -1403,7 +1403,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 bool OSDMonitor::prepare_update(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  Message *m = op->get_req();
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
