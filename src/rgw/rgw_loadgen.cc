@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
+#include <sstream>
 #include <string.h>
 
 #include "rgw_loadgen.h"
@@ -25,7 +27,7 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
   string digest;
 
   rgw_create_s3_canonical_header(request_method.c_str(),
-                                 NULL, /* const char *content_md5 */
+                                 nullptr, /* const char *content_md5 */
                                  content_type.c_str(),
                                  date_str.c_str(),
                                  meta_map,
@@ -44,16 +46,16 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
   return 0;
 }
 
-int RGWLoadGenIO::write_data(const char *buf, int len)
+int RGWLoadGenIO::write_data(const char* const buf, const int len)
 {
   return len;
 }
 
-int RGWLoadGenIO::read_data(char *buf, int len)
+int RGWLoadGenIO::read_data(char* const buf, const int len)
 {
-  int read_len = MIN(left_to_read, (uint64_t)len);
+  const int read_len = std::min(left_to_read, static_cast<uint64_t>(len));
   left_to_read -= read_len;
-  return read_len;
+  return static_cast<int>(read_len);
 }
 
 void RGWLoadGenIO::flush()
@@ -92,7 +94,7 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   env.set("SERVER_PORT", port_buf);
 }
 
-int RGWLoadGenIO::send_status(int status, const char *status_name)
+int RGWLoadGenIO::send_status(const int status, const char* const status_name)
 {
   return 0;
 }
@@ -107,7 +109,7 @@ int RGWLoadGenIO::complete_header()
   return 0;
 }
 
-int RGWLoadGenIO::send_content_length(uint64_t len)
+int RGWLoadGenIO::send_content_length(const uint64_t len)
 {
   return 0;
 }
