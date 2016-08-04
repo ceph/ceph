@@ -26,10 +26,11 @@ struct RGWLoadGenRequestEnv {
 
 /* XXX does RGWLoadGenIO actually want to perform stream/HTTP I/O,
  * or (e.g) are these NOOPs? */
-class RGWLoadGenIO : public RGWStreamIO
+class RGWLoadGenIO : public RGWStreamIOEngine
 {
   uint64_t left_to_read;
   RGWLoadGenRequestEnv *req;
+  RGWEnv env;
 public:
   void init_env(CephContext *cct);
 
@@ -44,6 +45,10 @@ public:
 
   explicit RGWLoadGenIO(RGWLoadGenRequestEnv *_re) : left_to_read(0), req(_re) {}
   void flush();
+
+  RGWEnv& get_env() override {
+    return env;
+  }
 };
 
 #endif

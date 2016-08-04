@@ -128,7 +128,8 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
   env.set_date(tm);
   env.sign(access_key);
 
-  RGWLoadGenIO client_io(&env);
+  RGWLoadGenIO real_client_io(&env);
+  RGWStreamIOLegacyWrapper client_io(&real_client_io);
 
   int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {
