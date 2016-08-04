@@ -95,6 +95,7 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
     if (session) {
       ldout(cct, 4) << "Terminating session with "
                     << session->con->get_peer_addr() << dendl;
+      session->con->mark_down();
       delete session;
       session = nullptr;
       stats_period = 0;
@@ -286,7 +287,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
   if (session == nullptr) {
-    derr << "no session, waiting" << dendl;
+    lderr(cct) << "no session, waiting" << dendl;
     wait_on_list(waiting_for_session);
   }
 
@@ -301,6 +302,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   // Leaving fsid argument null because it isn't used.
   MCommand *m = op->get_message({});
+  assert(session);
+  assert(session->con);
   session->con->send_message(m);
 
   return 0;
