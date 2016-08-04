@@ -304,6 +304,12 @@ bool DaemonServer::handle_command(MCommand *m)
   }
 
  out:
+
+  // Let the connection drop as soon as we've sent our response
+  if (m->get_connection()) {
+    m->get_connection()->mark_disposable();
+  }
+
   std::string rs;
   rs = ss.str();
   odata.append(ds);
