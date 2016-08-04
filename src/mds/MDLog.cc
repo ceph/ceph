@@ -850,6 +850,7 @@ void MDLog::replay(MDSInternalContextBase *c)
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
+    mds->mdcache->trim(-1);
     if (c) {
       c->complete(0);
     }
