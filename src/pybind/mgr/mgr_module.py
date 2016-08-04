@@ -37,6 +37,9 @@ class MgrModule(object):
         self._handle = handle
         self._logger = logging.getLogger(handle)
 
+        # Don't filter any logs at the python level, leave it to C++
+        self._logger.setLevel(logging.DEBUG)
+
         # FIXME: we should learn the log level from C++ land, and then
         # avoid calling ceph_state.log when we know a message is of
         # an insufficient level to be ultimately output
