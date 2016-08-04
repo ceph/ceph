@@ -98,12 +98,7 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
   }
 }
 
-bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
-{
-  //MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
 
-  return false;
-}
 
 class C_Updated : public Context {
   MgrMonitor *mm;
@@ -121,6 +116,29 @@ public:
     }
   }
 };
+
+bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
+{
+  MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  dout(4) << "beacon from " << m->get_gid() << dendl;
+
+  last_beacon[m->get_gid()] = ceph_clock_now(g_ceph_context);
+
+  if (pending_map.active_gid == m->get_gid()
+      && pending_map.active_addr == m->get_server_addr()
+      && pending_map.get_available() == m->get_available()) {
+    dout(4) << "Daemon already active in map" << dendl;
+    return true;
+  }
+
+  if (pending_map.standbys.count(m->get_gid()) > 0
+      && pending_map.active_gid != 0) {
+    dout(4) << "Daemon already standby in map" << dendl;
+    return true;
+  }
+
+  return false;
+}
 
 bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 {
