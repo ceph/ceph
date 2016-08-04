@@ -534,7 +534,6 @@ int RGWAsyncStatRemoteObj::_send_request()
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
   string client_id = store->zone_id() + buf;
   string op_id = store->unique_id(store->get_new_req_id());
-  map<string, bufferlist> attrs;
 
   rgw_obj src_obj(bucket_info.bucket, key.name);
   src_obj.set_instance(key.instance);
@@ -548,13 +547,14 @@ int RGWAsyncStatRemoteObj::_send_request()
                        source_zone,
                        src_obj,
                        bucket_info, /* source */
-                       nullptr, /* real_time* src_mtime, */
+                       pmtime, /* real_time* src_mtime, */
+                       psize, /* uint64_t * */
                        nullptr, /* const real_time* mod_ptr, */
                        nullptr, /* const real_time* unmod_ptr, */
                        true, /* high precision time */
                        nullptr, /* const char *if_match, */
                        nullptr, /* const char *if_nomatch, */
-                       attrs,
+                       pattrs,
                        nullptr,
                        nullptr, /* string *ptag, */
                        nullptr); /* string *petag, */

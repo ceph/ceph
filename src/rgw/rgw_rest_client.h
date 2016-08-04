@@ -106,7 +106,7 @@ public:
   virtual ~RGWRESTStreamRWRequest() {}
   int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
   int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr = NULL);
-  int complete(string& etag, real_time *mtime, map<string, string>& attrs);
+  int complete(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   void set_outbl(bufferlist& _outbl) {
     outbl.swap(_outbl);

@@ -2,6 +2,7 @@
 #define CEPH_RGW_CR_RADOS_H
 
 #include "rgw_coroutine.h"
+#include "rgw_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
@@ -796,9 +797,10 @@ class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
-  uint64_t versioned_epoch;
 
-  real_time src_mtime;
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  map<string, bufferlist> *pattrs;
 
 protected:
   int _send_request();
@@ -807,11 +809,15 @@ public:
                          const string& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
-                         uint64_t _versioned_epoch) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                         ceph::real_time *_pmtime,
+                         uint64_t *_psize,
+                         map<string, bufferlist> *_pattrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
                                                       key(_key),
-                                                      versioned_epoch(_versioned_epoch) {}
+                                                      pmtime(_pmtime),
+                                                      psize(_psize),
+                                                      pattrs(_pattrs) {}
 };
 
 class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
@@ -823,7 +829,10 @@ class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
-  uint64_t versioned_epoch;
+
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  map<string, bufferlist> *pattrs;
 
   RGWAsyncStatRemoteObj *req;
 
@@ -832,13 +841,16 @@ public:
                       const string& _source_zone,
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
-                      uint64_t _versioned_epoch,
-                      bool _if_newer) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                      ceph::real_time *_pmtime,
+                      uint64_t *_psize,
+                      map<string, bufferlist> *_pattrs) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
                                        key(_key),
-                                       versioned_epoch(_versioned_epoch),
+                                       pmtime(_pmtime),
+                                       psize(_psize),
+                                       pattrs(_pattrs),
                                        req(NULL) {}
 
 
@@ -854,8 +866,8 @@ public:
   }
 
   int send_request() {
-    req = new RGWAsyncStatRemoteObj(this, stack->create_completion_notifier(), store, source_zone, bucket_info,
-                                     key, versioned_epoch);
+    req = new RGWAsyncStatRemoteObj(this, stack->create_completion_notifier(), store, source_zone,
+                                    bucket_info, key, pmtime, psize, pattrs);
     async_rados->queue(req);
     return 0;
   }

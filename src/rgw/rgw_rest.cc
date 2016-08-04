@@ -816,6 +816,8 @@ int RGWGetObj_ObjStore::get_params()
   if (s->system_request) {
     mod_zone_id = s->info.env->get_int("HTTP_DEST_ZONE_SHORT_ID", 0);
     mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
+    rgwx_stat = s->info.args.exists(RGW_SYS_PARAM_PREFIX "stat");
+    get_data &= (!rgwx_stat);
   }
 
   /* start gettorrent */
