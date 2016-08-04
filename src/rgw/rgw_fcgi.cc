@@ -27,8 +27,13 @@ void RGWFCGX::init_env(CephContext *cct)
 
 int RGWFCGX::send_status(int status, const char *status_name)
 {
-  status_num = status;
-  return print("Status: %d %s\r\n", status, status_name);
+  static constexpr size_t STATUS_BUF_SIZE = 128;
+
+  char statusbuf[STATUS_BUF_SIZE];
+  const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
+                                  "Status: %d %s\r\n", status, status_name);
+
+  return write_data(statusbuf, statuslen);
 }
 
 int RGWFCGX::send_100_continue()
@@ -42,19 +47,17 @@ int RGWFCGX::send_100_continue()
 
 int RGWFCGX::send_content_length(uint64_t len)
 {
-  /*
-   * Status 204 should not include a content-length header
-   * RFC7230 says so
-   */
-  if (status_num == 204)
-    return 0;
+  static constexpr size_t CONLEN_BUF_SIZE = 128;
 
-  char buf[21];
-  snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\r\n", buf);
+  char sizebuf[CONLEN_BUF_SIZE];
+  const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
+                                "Content-Length: %" PRIu64 "\r\n", len);
+
+  return write_data(sizebuf, sizelen);
 }
 
 int RGWFCGX::complete_header()
 {
-  return print("\r\n");
+  constexpr char HEADER_END[] = "\r\n";
+  return write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }

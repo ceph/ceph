@@ -12,6 +12,7 @@
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
+#include "rgw_client_io_decoimpl.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -115,7 +116,9 @@ void RGWFCGXProcess::handle_request(RGWRequest* r)
 {
   RGWFCGXRequest* req = static_cast<RGWFCGXRequest*>(r);
   FCGX_Request* fcgx = req->fcgx;
-  RGWFCGX client_io(fcgx);
+  auto real_client_io = add_conlen_controlling(
+                          RGWFCGX(fcgx));
+  RGWStreamIOLegacyWrapper client_io(&real_client_io);
 
  
   int ret = process_request(store, rest, req, &client_io, olog);

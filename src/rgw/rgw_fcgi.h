@@ -11,13 +11,12 @@
 
 struct FCGX_Request;
 
-class RGWFCGX : public RGWStreamIO
+class RGWFCGX : public RGWStreamIOEngine
 {
   FCGX_Request *fcgx;
+  RGWEnv env;
 
-  int status_num;
-
-protected:
+public:
   void init_env(CephContext *cct);
   int write_data(const char *buf, int len);
   int read_data(char *buf, int len);
@@ -27,9 +26,12 @@ protected:
   int complete_header();
   int complete_request() { return 0; }
   int send_content_length(uint64_t len);
-public:
-  explicit RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx), status_num(0) {}
+  explicit RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx) {}
   void flush();
+
+  RGWEnv& get_env() override {
+    return env;
+  }
 };
 
 #endif
