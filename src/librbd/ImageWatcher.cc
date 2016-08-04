@@ -1050,6 +1050,15 @@ void ImageWatcher<I>::reregister_watch() {
 
     m_watch_state = WATCH_STATE_REGISTERED;
   }
+
+  // if the exclusive lock state machine was paused waiting for the
+  // watch to be re-registered, wake it up
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  if (m_image_ctx.exclusive_lock != nullptr) {
+    m_image_ctx.exclusive_lock->handle_watch_registered();
+  }
+
   handle_payload(HeaderUpdatePayload(), NULL);
 }
 

@@ -195,6 +195,20 @@ void ExclusiveLock<I>::release_lock(Context *on_released) {
 }
 
 template <typename I>
+void ExclusiveLock<I>::handle_watch_registered() {
+  Mutex::Locker locker(m_lock);
+  if (m_state != STATE_WAITING_FOR_REGISTER) {
+    return;
+  }
+
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+  Action active_action = get_active_action();
+  assert(active_action == ACTION_TRY_LOCK ||
+         active_action == ACTION_REQUEST_LOCK);
+  execute_next_action();
+}
+
+template <typename I>
 void ExclusiveLock<I>::handle_lock_released() {
   Mutex::Locker locker(m_lock);
   if (m_state != STATE_WAITING_FOR_PEER) {
@@ -240,6 +254,7 @@ bool ExclusiveLock<I>::is_transition_state() const {
   case STATE_INITIALIZING:
   case STATE_ACQUIRING:
   case STATE_WAITING_FOR_PEER:
+  case STATE_WAITING_FOR_REGISTER:
   case STATE_POST_ACQUIRING:
   case STATE_PRE_RELEASING:
   case STATE_RELEASING:
@@ -358,10 +373,16 @@ void ExclusiveLock<I>::send_acquire_lock() {
     return;
   }
 
-  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
   m_state = STATE_ACQUIRING;
 
   m_watch_handle = m_image_ctx.image_watcher->get_watch_handle();
+  if (m_watch_handle == 0) {
+    lderr(cct) << "image watcher not registered - delaying request" << dendl;
+    m_state = STATE_WAITING_FOR_REGISTER;
+    return;
+  }
 
   using el = ExclusiveLock<I>;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
