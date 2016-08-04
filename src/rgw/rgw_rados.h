@@ -2557,6 +2557,25 @@ public:
   };
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
+
+  int stat_remote_obj(RGWObjectCtx& obj_ctx,
+               const rgw_user& user_id,
+               const string& client_id,
+               req_info *info,
+               const string& source_zone,
+               rgw_obj& src_obj,
+               RGWBucketInfo& src_bucket_info,
+               real_time *src_mtime,
+               const real_time *mod_ptr,
+               const real_time *unmod_ptr,
+               bool high_precision_time,
+               const char *if_match,
+               const char *if_nomatch,
+               map<string, bufferlist>& attrs,
+               string *version_id,
+               string *ptag,
+               string *petag);
+
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
                        const string& client_id,

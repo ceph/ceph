@@ -525,6 +525,46 @@ int RGWAsyncFetchRemoteObj::_send_request()
   return r;
 }
 
+int RGWAsyncStatRemoteObj::_send_request()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  string user_id;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
+  string client_id = store->zone_id() + buf;
+  string op_id = store->unique_id(store->get_new_req_id());
+  map<string, bufferlist> attrs;
+
+  rgw_obj src_obj(bucket_info.bucket, key.name);
+  src_obj.set_instance(key.instance);
+
+  rgw_obj dest_obj(src_obj);
+
+  int r = store->stat_remote_obj(obj_ctx,
+                       user_id,
+                       client_id,
+                       nullptr, /* req_info */
+                       source_zone,
+                       src_obj,
+                       bucket_info, /* source */
+                       nullptr, /* real_time* src_mtime, */
+                       nullptr, /* const real_time* mod_ptr, */
+                       nullptr, /* const real_time* unmod_ptr, */
+                       true, /* high precision time */
+                       nullptr, /* const char *if_match, */
+                       nullptr, /* const char *if_nomatch, */
+                       attrs,
+                       nullptr,
+                       nullptr, /* string *ptag, */
+                       nullptr); /* string *petag, */
+
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+  }
+  return r;
+}
+
 
 int RGWAsyncRemoveObj::_send_request()
 {
