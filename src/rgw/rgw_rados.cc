@@ -6743,6 +6743,126 @@ inline ostream& operator<<(ostream& out, const obj_time_weight &o) {
   return out;
 }
 
+class RGWGetExtraDataCB : public RGWGetDataCB {
+  bufferlist extra_data;
+public:
+  RGWGetExtraDataCB() {}
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    if (extra_data.length() < extra_data_len) {
+      off_t max = extra_data_len - extra_data.length();
+      if (max > bl_len) {
+        max = bl_len;
+      }
+      bl.splice(0, max, &extra_data);
+    }
+    return bl_len;
+  }
+
+  bufferlist& get_extra_data() {
+    return extra_data;
+  }
+};
+
+int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
+               const rgw_user& user_id,
+               const string& client_id,
+               req_info *info,
+               const string& source_zone,
+               rgw_obj& src_obj,
+               RGWBucketInfo& src_bucket_info,
+               real_time *src_mtime,
+               const real_time *mod_ptr,
+               const real_time *unmod_ptr,
+               bool high_precision_time,
+               const char *if_match,
+               const char *if_nomatch,
+               map<string, bufferlist>& attrs,
+               string *version_id,
+               string *ptag,
+               string *petag)
+{
+  /* source is in a different zonegroup, copy from there */
+
+  RGWRESTStreamRWRequest *in_stream_req;
+  string tag;
+  map<string, bufferlist> src_attrs;
+  append_rand_alpha(cct, tag, tag, 32);
+  obj_time_weight set_mtime_weight;
+  set_mtime_weight.high_precision = high_precision_time;
+
+  RGWRESTConn *conn;
+  if (source_zone.empty()) {
+    if (src_bucket_info.zonegroup.empty()) {
+      /* source is in the master zonegroup */
+      conn = rest_master_conn;
+    } else {
+      map<string, RGWRESTConn *>::iterator iter = zonegroup_conn_map.find(src_bucket_info.zonegroup);
+      if (iter == zonegroup_conn_map.end()) {
+        ldout(cct, 0) << "could not find zonegroup connection to zonegroup: " << source_zone << dendl;
+        return -ENOENT;
+      }
+      conn = iter->second;
+    }
+  } else {
+    map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
+    if (iter == zone_conn_map.end()) {
+      ldout(cct, 0) << "could not find zone connection to zone: " << source_zone << dendl;
+      return -ENOENT;
+    }
+    conn = iter->second;
+  }
+
+  RGWGetExtraDataCB cb;
+  string etag;
+  map<string, string> req_headers;
+  real_time set_mtime;
+
+  const real_time *pmod = mod_ptr;
+
+  obj_time_weight dest_mtime_weight;
+
+  int ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
+                      dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
+                      true, false, &cb, &in_stream_req);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bufferlist& extra_data_bl = cb.get_extra_data();
+  if (extra_data_bl.length()) {
+    JSONParser jp;
+    if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
+      ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
+      return -EIO;
+    }
+
+    JSONDecoder::decode_json("attrs", src_attrs, &jp);
+
+    src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+  }
+
+  if (src_mtime) {
+    *src_mtime = set_mtime;
+  }
+
+  if (petag) {
+    map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
+    if (iter != src_attrs.end()) {
+      bufferlist& etagbl = iter->second;
+      *petag = etagbl.to_str();
+    }
+  }
+
+  attrs = src_attrs;
+
+  return 0;
+}
+
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                const string& client_id,
