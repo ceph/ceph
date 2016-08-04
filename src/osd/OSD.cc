@@ -4320,15 +4320,9 @@ void OSD::tick()
 
   if (is_active()) {
     check_replay_queue();
-
-    service.promote_throttle_recalibrate();
   }
 
   do_waiters();
-
-  check_ops_in_flight();
-
-  service.kick_recovery_queue();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
 }
@@ -4402,7 +4396,11 @@ void OSD::tick_without_osd_lock()
     if (!scrub_random_backoff()) {
       sched_scrub();
     }
+    service.promote_throttle_recalibrate();
   }
+
+  check_ops_in_flight();
+  service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
