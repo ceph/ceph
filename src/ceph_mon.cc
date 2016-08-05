@@ -660,6 +660,11 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (g_conf->daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    prefork.daemonize();
+  }
+
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
@@ -746,11 +751,6 @@ int main(int argc, const char **argv)
     derr << "compacting monitor store ..." << dendl;
     mon->store->compact();
     derr << "done compacting" << dendl;
-  }
-
-  if (g_conf->daemonize) {
-    global_init_postfork_finish(g_ceph_context);
-    prefork.daemonize();
   }
 
   msgr->start();

@@ -135,6 +135,8 @@ int main(int argc, const char **argv)
       << "' is invalid and will be forbidden in a future version.  "
       "MDS names may not start with a numeric digit." << dendl;
   }
+  // daemonize
+  global_init_daemonize(g_ceph_context);
 
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
@@ -172,7 +174,6 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
-  global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   // get monmap

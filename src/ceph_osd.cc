@@ -444,6 +444,8 @@ int main(int argc, const char **argv)
 	 << " **          you specify neither or both.                             **"
 	 << TEXT_NORMAL << dendl;
   }
+  // daemonize
+  global_init_daemonize(g_ceph_context);
 
   Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::OSD(whoami), "client",
@@ -563,8 +565,7 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
-  // Set up crypto, daemonize, etc.
-  global_init_daemonize(g_ceph_context);
+  // Set up crypto etc.
   common_init_finish(g_ceph_context);
 
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
