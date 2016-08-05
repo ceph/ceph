@@ -1048,6 +1048,14 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     extra = rand() % 0xFFFFFFFF;
     bid_ss << std::hex << bid << std::hex << extra;
     id = bid_ss.str();
+
+    // ensure the image id won't overflow the fixed block name size
+    const size_t max_id_length = RBD_MAX_BLOCK_NAME_SIZE -
+                                 strlen(RBD_DATA_PREFIX) - 1;
+    if (id.length() > max_id_length) {
+      id = id.substr(id.length() - max_id_length);
+    }
+
     r = cls_client::set_id(&io_ctx, id_obj, id);
     if (r < 0) {
       lderr(cct) << "error setting image id: " << cpp_strerror(r) << dendl;
