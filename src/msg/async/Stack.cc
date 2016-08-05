@@ -20,6 +20,9 @@
 #ifdef HAVE_RDMA
 #include "rdma/RDMAStack.h"
 #endif
+#ifdef HAVE_DPDK
+#include "dpdk/DPDKStack.h"
+#endif
 
 #include "common/dout.h"
 #include "include/assert.h"
@@ -62,6 +65,10 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string 
   else if (t == "rdma")
     return std::make_shared<RDMAStack>(c, t);
 #endif
+#ifdef HAVE_DPDK
+  else if (t == "dpdk")
+    return std::make_shared<DPDKStack>(c, t);
+#endif
 
   return nullptr;
 }
@@ -73,6 +80,10 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
 #ifdef HAVE_RDMA
   else if (type == "rdma")
     return new RDMAWorker(c, i);
+#endif
+#ifdef HAVE_DPDK
+  else if (type == "dpdk")
+    return new DPDKWorker(c, i);
 #endif
   return nullptr;
 }
