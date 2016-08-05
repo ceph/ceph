@@ -826,6 +826,14 @@ class SyntheticDispatcher : public Dispatcher {
       sent.erase(*it);
     conn_sent.erase(con);
   }
+
+  void print() {
+    for (auto && p : conn_sent) {
+      if (!p.second.empty()) {
+        cerr << __func__ << " " << p.first << " wait " << p.second.size() << std::endl;
+      }
+    }
+  }
 };
 
 
@@ -997,18 +1005,29 @@ class SyntheticWorkload {
     ASSERT_EQ(available_connections.erase(conn), 1U);
   }
 
-  void print_internal_state() {
+  void print_internal_state(bool detail=false) {
     Mutex::Locker l(lock);
     cerr << "available_connections: " << available_connections.size()
          << " inflight messages: " << dispatcher.get_pending() << std::endl;
+    if (detail && !available_connections.empty()) {
+      for (auto &&c : available_connections)
+        cerr << "available connection: " << c.first << " ";
+      cerr << std::endl;
+      dispatcher.print();
+    }
   }
 
   void wait_for_done() {
-    uint64_t i = 0;
+    int64_t tick_us = 1000 * 100; // 100ms
+    int64_t timeout_us = 5 * 60 * 1000 * 1000; // 5 mins
+    int i = 0;
     while (dispatcher.get_pending()) {
-      usleep(1000*100);
+      usleep(tick_us);
+      timeout_us -= tick_us;
       if (i++ % 50 == 0)
-        print_internal_state();
+        print_internal_state(true);
+      if (timeout_us < 0)
+        assert(0 == " loop time exceed 5 mins, it looks we stuck into some problems!");
     }
     for (set<Messenger*>::iterator it = available_servers.begin();
          it != available_servers.end(); ++it) {
