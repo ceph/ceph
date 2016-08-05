@@ -34,7 +34,7 @@
 %endif
 
 # LTTng-UST enabled on Fedora, RHEL 6+, and SLES 12
-%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version} == 1315
+%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version} >= 1315
 %bcond_without lttng
 %endif
 
