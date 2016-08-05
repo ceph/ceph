@@ -79,3 +79,32 @@ target_link_libraries(ceph_test_rgw_obj
   )
 set_target_properties(ceph_test_rgw_obj PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+
+# ceph_test_rgw_crypto
+set(test_rgw_crypto_srcs test_rgw_crypto.cc)
+add_executable(unittest_rgw_crypto
+  ${test_rgw_crypto_srcs}
+  )
+add_ceph_unittest(unittest_rgw_crypto ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_crypto)
+
+target_link_libraries(unittest_rgw_crypto
+  rgw_a
+  cls_rgw_client
+  cls_lock_client
+  cls_refcount_client
+  cls_log_client
+  cls_statelog_client
+  cls_version_client
+  cls_replica_log_client
+  cls_user_client
+  librados
+  global
+  curl
+  uuid
+  expat
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  ${CRYPTO_LIBS}
+  )
+set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})

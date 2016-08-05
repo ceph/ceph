@@ -44,7 +44,9 @@ public:
   int send_response_data_error() override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
-  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB* cb, bufferlist* manifest_bl) override;
+  int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
+                         RGWGetDataCB* cb,
+                         bufferlist* manifest_bl) override;
 };
 
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
@@ -185,7 +187,12 @@ public:
   int validate_and_unwrap_available_aws4_chunked_data(bufferlist& bl_in,
                                                       bufferlist& bl_out);
 
-  int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) override;
+  int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor>* filter,
+                         RGWPutObjDataProcessor* cb) override;
+  int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
+                         RGWGetDataCB* cb,
+                         map<string, bufferlist>& attrs,
+                         bufferlist* manifest_bl) override;
 };
 
 struct post_part_field {
@@ -242,7 +249,8 @@ public:
 
   void send_response() override;
   int get_data(bufferlist& bl) override;
-  int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) override;
+  int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor>* filter,
+                         RGWPutObjDataProcessor* cb) override;
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
