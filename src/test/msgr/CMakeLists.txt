@@ -20,7 +20,7 @@ add_executable(ceph_test_async_networkstack
   )
 set_target_properties(ceph_test_async_networkstack PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_async_networkstack global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
+target_link_libraries(ceph_test_async_networkstack global ${CRYPTO_LIBS} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
 
 #ceph_perf_msgr_server
 add_executable(ceph_perf_msgr_server perf_msgr_server.cc)
