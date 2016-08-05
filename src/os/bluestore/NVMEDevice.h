@@ -119,12 +119,8 @@ class NVMEDevice : public BlockDevice {
           len, 0, data, len};
     }
 
-    void memcpy_check(char *dst, uint64_t dst_raw_len, uint64_t dst_off,
+    void memcpy_check(char *dst, uint64_t dst_off,
                       map<Offset, Extent>::iterator &it, uint64_t src_off, uint64_t copylen) {
-      if (0) {
-        assert(dst_off + copylen <= dst_raw_len);
-        assert(it->second.x_off + src_off + copylen <= it->second.data_len);
-      }
       memcpy(dst + dst_off, it->second.data + it->second.x_off + src_off, copylen);
     }
 
@@ -151,25 +147,25 @@ class NVMEDevice : public BlockDevice {
             //  <-     data    ->
             //      <-           it          ->
             copy_len = len - (it->first - off);
-            memcpy_check(buf, len, it->first - off, it, 0, copy_len);
+            memcpy_check(buf, it->first - off, it, 0, copy_len);
           } else {
             //  <-     data    ->
             //      <- it ->
             copy_len = it->second.x_len;
-            memcpy_check(buf, len, it->first - off, it, 0, copy_len);
+            memcpy_check(buf, it->first - off, it, 0, copy_len);
           }
         } else {
           if (extent_it_end > end) {
             //         <-     data    ->
             // <-           it          ->
             copy_len = len;
-            memcpy_check(buf, len, 0, it, off - it->first, copy_len);
+            memcpy_check(buf, 0, it, off - it->first, copy_len);
           } else {
             //         <-     data    ->
             // <-     it    ->
             assert(extent_it_end <= end);
             copy_len = it->first + it->second.x_len - off;
-            memcpy_check(buf, len, 0, it, off - it->first, copy_len);
+            memcpy_check(buf, 0, it, off - it->first, copy_len);
           }
         }
         copied += copy_len;
