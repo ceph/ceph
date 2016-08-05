@@ -418,8 +418,8 @@ bool MDSRankDispatcher::ms_dispatch(Message *m)
   return ret;
 }
 
-/* If this function returns true, it has put the message. If it returns false,
- * it has not put the message. */
+/* If this function returns true, it recognizes the message and has taken the
+ * reference. If it returns false, it has done neither. */
 bool MDSRank::_dispatch(Message *m, bool new_msg)
 {
   if (is_stale_message(m)) {
@@ -436,7 +436,6 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   } else {
     if (!handle_deferrable_message(m)) {
       dout(0) << "unrecognized message " << *m << dendl;
-      m->put();
       return false;
     }
   }
