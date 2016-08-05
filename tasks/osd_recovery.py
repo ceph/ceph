@@ -170,10 +170,12 @@ def test_incomplete_pgs(ctx, config):
     # move it back
     manager.raw_cluster_cmd('osd', 'in', '0', '1')
     manager.raw_cluster_cmd('osd', 'out', '2', '3')
+    time.sleep(10)
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
+    time.sleep(10)
     manager.wait_for_active()
 
     assert not manager.is_clean()
