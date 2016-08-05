@@ -221,6 +221,11 @@ private:
   // no copying allowed
   PGMonitor(const PGMonitor &rhs);
   PGMonitor &operator=(const PGMonitor &rhs);
+
+  // we don't want to include gtest.h just for FRIEND_TEST
+  friend class pgmonitor_dump_object_stat_sum_0_Test;
+  friend class pgmonitor_dump_object_stat_sum_1_Test;
+  friend class pgmonitor_dump_object_stat_sum_2_Test;
 };
 
 #endif
