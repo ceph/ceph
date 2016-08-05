@@ -5600,8 +5600,9 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   // removing a new dn?
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
-  // clean up?
-  if (straydn) {
+  // clean up ?
+  // respond_to_request() drops locks. So stray reintegration can race with us.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
     // Tip off the MDCache that this dentry is a stray that
     // might be elegible for purge.
     mdcache->notify_stray(straydn);
@@ -6448,7 +6449,8 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) {
+  // respond_to_request() drops locks. So stray reintegration can race with us.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
     mdcache->notify_stray(straydn);
   }
 }
