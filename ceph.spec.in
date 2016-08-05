@@ -34,7 +34,7 @@
 %endif
 
 # LTTng-UST enabled on Fedora, RHEL 6+, and SLES 12
-%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version} == 1315
+%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version} >= 1315
 %bcond_without lttng
 %endif
 
@@ -64,6 +64,10 @@ Group:         System/Filesystems
 %endif
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+%if 0%{?suse_version}
+Source99:       ceph-rpmlintrc
+ExclusiveArch   x86_64 aarch64
+%endif 
 #################################################################################
 # dependencies that apply across all distro families
 #################################################################################
