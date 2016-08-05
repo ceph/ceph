@@ -1210,7 +1210,8 @@ public:
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
   virtual void get_colls(list<coll_t> *out) = 0;
-  virtual void split_colls(
+  virtual void set_temp_coll() { }
+  virtual bool split_colls(
     spg_t child,
     int split_bits,
     int seed,

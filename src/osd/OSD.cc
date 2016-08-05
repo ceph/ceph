@@ -7028,12 +7028,13 @@ void OSD::split_pgs(
     dout(10) << "m_seed " << i->ps() << dendl;
     dout(10) << "split_bits is " << split_bits << dendl;
 
-    parent->split_colls(
+    if (parent->split_colls(
       *i,
       split_bits,
       i->ps(),
       &child->pool.info,
-      rctx->transaction);
+      rctx->transaction))
+        child->set_temp_coll();
     parent->split_into(
       i->pgid,
       child,
