@@ -12,7 +12,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWCivetWeb::write_data(const char *buf, int len)
+std::size_t RGWCivetWeb::write_data(const char *buf, std::size_t len)
 {
   const int ret = mg_write(conn, buf, len);
   if (ret == 0) {
@@ -32,7 +32,7 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
 {
 }
 
-int RGWCivetWeb::read_data(char *buf, int len)
+std::size_t RGWCivetWeb::read_data(char *buf, std::size_t len)
 {
   const int ret = mg_read(conn, buf, len);
   if (ret < 0) {
@@ -128,7 +128,7 @@ static inline std::size_t safe_mg_printf(Args&&... args)
   return static_cast<std::size_t>(ret);
 }
 
-int RGWCivetWeb::send_status(int status, const char *status_name)
+std::size_t RGWCivetWeb::send_status(int status, const char *status_name)
 {
   mg_set_http_status(conn, status);
 
@@ -136,13 +136,13 @@ int RGWCivetWeb::send_status(int status, const char *status_name)
                         status_name ? status_name : "");
 }
 
-int RGWCivetWeb::send_100_continue()
+std::size_t RGWCivetWeb::send_100_continue()
 {
   const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
   return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
 }
 
-int RGWCivetWeb::dump_date_header()
+std::size_t RGWCivetWeb::dump_date_header()
 {
   char timestr[TIME_BUF_SIZE];
 
@@ -162,9 +162,9 @@ int RGWCivetWeb::dump_date_header()
   return write_data(timestr, strlen(timestr));
 }
 
-int RGWCivetWeb::complete_header()
+std::size_t RGWCivetWeb::complete_header()
 {
-  size_t sent = dump_date_header();
+  std::size_t sent = dump_date_header();
 
   if (explicit_keepalive) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
@@ -178,7 +178,7 @@ int RGWCivetWeb::complete_header()
   return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }
 
-int RGWCivetWeb::send_content_length(uint64_t len)
+std::size_t RGWCivetWeb::send_content_length(uint64_t len)
 {
   return safe_mg_printf(conn, "Content-Length: %" PRIu64 "\r\n", len);
 }

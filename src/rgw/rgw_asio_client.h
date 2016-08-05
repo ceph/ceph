@@ -39,8 +39,8 @@ class RGWAsioClientIO : public RGWStreamIOEngine {
   RGWEnv env;
 
   void init_env(CephContext *cct) override;
-  int write_data(const char *buf, int len) override;
-  int read_data(char *buf, int max) override;
+  std::size_t write_data(const char *buf, std::size_t len) override;
+  std::size_t read_data(char *buf, std::size_t max) override;
 
  public:
   RGWAsioClientIO(tcp::socket&& socket, request_type&& request);
@@ -48,10 +48,10 @@ class RGWAsioClientIO : public RGWStreamIOEngine {
 
   int complete_request() override;
   void flush() override;
-  int send_status(int status, const char *status_name) override;
-  int send_100_continue() override;
-  int complete_header() override;
-  int send_content_length(uint64_t len) override;
+  std::size_t send_status(int status, const char *status_name) override;
+  std::size_t send_100_continue() override;
+  std::size_t complete_header() override;
+  std::size_t send_content_length(uint64_t len) override;
 
   RGWEnv& get_env() noexcept override {
     return env;
