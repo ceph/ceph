@@ -46,11 +46,13 @@ protected:
     return get_decoratee().init_env(cct);
   }
 
-  int read_data(char* const buf, const int max) override {
+  std::size_t read_data(char* const buf,
+                        const std::size_t max) override {
     return get_decoratee().read_data(buf, max);
   }
 
-  int write_data(const char* const buf, const int len) override {
+  std::size_t write_data(const char* const buf,
+                         const std::size_t len) override {
     return get_decoratee().write_data(buf, len);
   }
 
@@ -59,19 +61,20 @@ public:
     : decoratee(decoratee) {
   }
 
-  int send_status(const int status, const char* const status_name) override {
+  std::size_t send_status(const int status,
+                          const char* const status_name) override {
     return get_decoratee().send_status(status, status_name);
   }
 
-  int send_100_continue() override {
+  std::size_t send_100_continue() override {
     return get_decoratee().send_100_continue();
   }
 
-  int send_content_length(const uint64_t len) override {
+  std::size_t send_content_length(const uint64_t len) override {
     return get_decoratee().send_content_length(len);
   }
 
-  int complete_header() override {
+  std::size_t complete_header() override {
     return get_decoratee().complete_header();
   }
 
@@ -97,7 +100,7 @@ class RGWStreamIOAccountingEngine : public RGWDecoratedStreamIO<T>,
   uint64_t total_received;
 
 protected:
-  int read_data(char* const buf, const int max) override {
+  std::size_t read_data(char* const buf, const std::size_t max) override {
     const auto received = RGWDecoratedStreamIO<T>::read_data(buf, max);
     if (enabled) {
       total_received += received;
@@ -105,7 +108,8 @@ protected:
     return received;
   }
 
-  int write_data(const char* const buf, const int len) override {
+  std::size_t write_data(const char* const buf,
+                         const std::size_t len) override {
     const auto sent = RGWDecoratedStreamIO<T>::write_data(buf, len);
     if (enabled) {
       total_sent += sent;
@@ -122,7 +126,8 @@ public:
       total_received(0) {
   }
 
-  int send_status(const int status, const char* const status_name) override {
+  std::size_t send_status(const int status,
+                          const char* const status_name) override {
     const auto sent = RGWDecoratedStreamIO<T>::send_status(status, status_name);
     if (enabled) {
       total_sent += sent;
@@ -130,7 +135,7 @@ public:
     return sent;
   }
 
-  int send_100_continue() override {
+  std::size_t send_100_continue() override {
     const auto sent = RGWDecoratedStreamIO<T>::send_100_continue();
     if (enabled) {
       total_sent += sent;
@@ -138,7 +143,7 @@ public:
     return sent;
   }
 
-  int send_content_length(const uint64_t len) override {
+  std::size_t send_content_length(const uint64_t len) override {
     const auto sent = RGWDecoratedStreamIO<T>::send_content_length(len);
     if (enabled) {
       total_sent += sent;
@@ -146,7 +151,7 @@ public:
     return sent;
   }
 
-  int complete_header() override {
+  std::size_t complete_header() override {
     const auto sent = RGWDecoratedStreamIO<T>::complete_header();
     if (enabled) {
       total_sent += sent;
@@ -179,7 +184,7 @@ protected:
   bool has_content_length;
   bool buffer_data;
 
-  int write_data(const char* buf, const int len) override;
+  std::size_t write_data(const char* buf, const std::size_t len) override;
 
 public:
   template <typename U>
@@ -189,14 +194,14 @@ public:
       buffer_data(false) {
   }
 
-  int send_content_length(const uint64_t len) override;
-  int complete_header() override;
+  std::size_t send_content_length(const uint64_t len) override;
+  std::size_t complete_header() override;
   int complete_request() override;
 };
 
 template <typename T>
-int RGWStreamIOBufferingEngine<T>::write_data(const char* buf,
-                                              const int len)
+std::size_t RGWStreamIOBufferingEngine<T>::write_data(const char* buf,
+                                                      const std::size_t len)
 {
   if (buffer_data) {
     data.append(buf, len);
@@ -207,14 +212,14 @@ int RGWStreamIOBufferingEngine<T>::write_data(const char* buf,
 }
 
 template <typename T>
-int RGWStreamIOBufferingEngine<T>::send_content_length(const uint64_t len)
+std::size_t RGWStreamIOBufferingEngine<T>::send_content_length(const uint64_t len)
 {
   has_content_length = true;
   return RGWDecoratedStreamIO<T>::send_content_length(len);
 }
 
 template <typename T>
-int RGWStreamIOBufferingEngine<T>::complete_header()
+std::size_t RGWStreamIOBufferingEngine<T>::complete_header()
 {
   if (! has_content_length) {
     /* We will dump everything in complete_request(). */
@@ -257,7 +262,8 @@ protected:
   bool has_content_length;
   bool chunking_enabled;
 
-  int write_data(const char* const buf, const int len) override {
+  std::size_t write_data(const char* const buf,
+                         const std::size_t len) override {
     if (! chunking_enabled) {
       return RGWDecoratedStreamIO<T>::write_data(buf, len);
     } else {
@@ -279,13 +285,12 @@ public:
       chunking_enabled(false) {
   }
 
-  using RGWDecoratedStreamIO<T>::send_content_length;
-  int send_content_length(const uint64_t len) override {
+  std::size_t send_content_length(const uint64_t len) override {
     has_content_length = true;
     return RGWDecoratedStreamIO<T>::send_content_length(len);
   }
 
-  int complete_header() override {
+  std::size_t complete_header() override {
     size_t sent = 0;
 
     if (! has_content_length) {
@@ -325,7 +330,8 @@ public:
       action(ContentLengthAction::UNKNOWN) {
   }
 
-  int send_status(const int status, const char* const status_name) override {
+  std::size_t send_status(const int status,
+                          const char* const status_name) override {
     if (204 == status || 304 == status) {
       action = ContentLengthAction::INHIBIT;
     } else {
@@ -335,7 +341,7 @@ public:
     return RGWDecoratedStreamIO<T>::send_status(status, status_name);
   }
 
-  int send_content_length(const uint64_t len) override {
+  std::size_t send_content_length(const uint64_t len) override {
     switch(action) {
     case ContentLengthAction::FORWARD:
       return RGWDecoratedStreamIO<T>::send_content_length(len);
@@ -370,7 +376,8 @@ protected:
   ceph::bufferlist early_header_data;
   ceph::bufferlist header_data;
 
-  int write_data(const char* const buf, const int len) override {
+  std::size_t write_data(const char* const buf,
+                         const std::size_t len) override {
     switch (phase) {
     case ReorderState::RGW_EARLY_HEADERS:
       early_header_data.append(buf, len);
@@ -392,13 +399,14 @@ public:
       phase(ReorderState::RGW_EARLY_HEADERS) {
   }
 
-  int send_status(const int status, const char* const status_name) override {
+  std::size_t send_status(const int status,
+                          const char* const status_name) override {
     phase = ReorderState::RGW_STATUS_SEEN;
 
     return RGWDecoratedStreamIO<T>::send_status(status, status_name);
   }
 
-  int send_content_length(const uint64_t len) override {
+  std::size_t send_content_length(const uint64_t len) override {
     if (ReorderState::RGW_EARLY_HEADERS == phase) {
       /* Oh great, someone tries to send content length before status. */
       content_length = len;
@@ -408,7 +416,7 @@ public:
     }
   }
 
-  int complete_header() override {
+  std::size_t complete_header() override {
     size_t sent = 0;
 
     /* Change state in order to immediately send everything we get. */

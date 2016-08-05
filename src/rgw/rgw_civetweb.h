@@ -20,17 +20,17 @@ class RGWCivetWeb : public RGWStreamIOEngine
   bool explicit_keepalive;
   bool explicit_conn_close;
 
-  int dump_date_header();
+  std::size_t dump_date_header();
 public:
   void init_env(CephContext *cct);
 
-  int write_data(const char *buf, int len) override;
-  int read_data(char *buf, int len) override;
+  std::size_t write_data(const char *buf, std::size_t len) override;
+  std::size_t read_data(char *buf, std::size_t len) override;
 
-  int send_status(int status, const char *status_name) override;
-  int send_100_continue() override;
-  int send_content_length(uint64_t len) override;
-  int complete_header() override;
+  std::size_t send_status(int status, const char *status_name) override;
+  std::size_t send_100_continue() override;
+  std::size_t send_content_length(uint64_t len) override;
+  std::size_t complete_header() override;
   int complete_request() override;
 
   void flush() override;

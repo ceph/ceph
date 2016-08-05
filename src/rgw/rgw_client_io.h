@@ -43,8 +43,8 @@ class RGWStreamIOEngine : public RGWClientIO {
   friend class RGWStreamIOLegacyWrapper;
 
 protected:
-  virtual int read_data(char *buf, int max) = 0;
-  virtual int write_data(const char *buf, int len) = 0;
+  virtual std::size_t read_data(char *buf, std::size_t max) = 0;
+  virtual std::size_t write_data(const char *buf, std::size_t len) = 0;
 
 public:
   class Exception : public std::exception {
@@ -60,20 +60,22 @@ public:
     }
   };
 
-  virtual int send_status(int status, const char *status_name) = 0;
-  virtual int send_100_continue() = 0;
-  virtual int complete_header() = 0;
-  virtual int send_content_length(uint64_t len) = 0;
+  virtual std::size_t send_status(int status, const char *status_name) = 0;
+  virtual std::size_t send_100_continue() = 0;
+  virtual std::size_t complete_header() = 0;
+  virtual std::size_t send_content_length(uint64_t len) = 0;
   virtual void flush() = 0;
 };
 
 
+class RGWStreamIO;
+
 class RGWStreamIOFacade {
 protected:
-  RGWStreamIOEngine& engine;
+  RGWStreamIO& engine;
 
 public:
-  RGWStreamIOFacade(RGWStreamIOEngine* const engine)
+  RGWStreamIOFacade(RGWStreamIO* const engine)
     : engine(*engine) {
   }
 
@@ -87,7 +89,7 @@ public:
 
 
 /* HTTP IO: compatibility layer */
-class RGWStreamIO : public RGWStreamIOEngine,
+class RGWStreamIO : public RGWClientIO,
                     public RGWStreamIOFacade,
                     public RGWClientIOAccounter {
   bool _account;
@@ -104,6 +106,13 @@ protected:
   RGWEnv env;
 
 public:
+  virtual int read_data(char *buf, int max) = 0;
+  virtual int write_data(const char *buf, int len) = 0;
+  virtual int send_status(int status, const char *status_name) = 0;
+  virtual int send_100_continue() = 0;
+  virtual int complete_header() = 0;
+  virtual int send_content_length(uint64_t len) = 0;
+  virtual void flush() = 0;
   virtual ~RGWStreamIO() {}
   RGWStreamIO()
     : RGWStreamIOFacade(this),

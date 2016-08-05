@@ -5,7 +5,7 @@
 
 #include "acconfig.h"
 
-int RGWFCGX::write_data(const char* const buf, const int len)
+std::size_t RGWFCGX::write_data(const char* const buf, const std::size_t len)
 {
   const auto ret = FCGX_PutStr(buf, len, fcgx->out);
   if (ret < 0) {
@@ -14,7 +14,7 @@ int RGWFCGX::write_data(const char* const buf, const int len)
   return ret;
 }
 
-int RGWFCGX::read_data(char* const buf, const int len)
+std::size_t RGWFCGX::read_data(char* const buf, const std::size_t len)
 {
   const auto ret = FCGX_GetStr(buf, len, fcgx->in);
   if (ret < 0) {
@@ -33,7 +33,7 @@ void RGWFCGX::init_env(CephContext* const cct)
   env.init(cct, (char **)fcgx->envp);
 }
 
-int RGWFCGX::send_status(const int status, const char* const status_name)
+std::size_t RGWFCGX::send_status(const int status, const char* const status_name)
 {
   static constexpr size_t STATUS_BUF_SIZE = 128;
 
@@ -44,16 +44,12 @@ int RGWFCGX::send_status(const int status, const char* const status_name)
   return write_data(statusbuf, statuslen);
 }
 
-int RGWFCGX::send_100_continue()
+std::size_t RGWFCGX::send_100_continue()
 {
-  int r = send_status(100, "Continue");
-  if (r >= 0) {
-    flush();
-  }
-  return r;
+  return send_status(100, "Continue");
 }
 
-int RGWFCGX::send_content_length(const uint64_t len)
+std::size_t RGWFCGX::send_content_length(const uint64_t len)
 {
   static constexpr size_t CONLEN_BUF_SIZE = 128;
 
@@ -64,7 +60,7 @@ int RGWFCGX::send_content_length(const uint64_t len)
   return write_data(sizebuf, sizelen);
 }
 
-int RGWFCGX::complete_header()
+std::size_t RGWFCGX::complete_header()
 {
   constexpr char HEADER_END[] = "\r\n";
   return write_data(HEADER_END, sizeof(HEADER_END) - 1);

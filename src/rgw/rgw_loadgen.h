@@ -45,13 +45,13 @@ public:
   }
 
   void init_env(CephContext *cct);
-  int read_data(char *buf, int len);
-  int write_data(const char *buf, int len);
+  std::size_t read_data(char *buf, std::size_t len);
+  std::size_t write_data(const char *buf, std::size_t len);
 
-  int send_status(int status, const char *status_name);
-  int send_100_continue();
-  int complete_header();
-  int send_content_length(uint64_t len);
+  std::size_t send_status(int status, const char *status_name);
+  std::size_t send_100_continue();
+  std::size_t complete_header();
+  std::size_t send_content_length(uint64_t len);
 
   void flush();
 

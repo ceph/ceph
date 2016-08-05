@@ -46,16 +46,18 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
   return 0;
 }
 
-int RGWLoadGenIO::write_data(const char* const buf, const int len)
+std::size_t RGWLoadGenIO::write_data(const char* const buf,
+                                     const std::size_t len)
 {
   return len;
 }
 
-int RGWLoadGenIO::read_data(char* const buf, const int len)
+std::size_t RGWLoadGenIO::read_data(char* const buf, const std::size_t len)
 {
-  const int read_len = std::min(left_to_read, static_cast<uint64_t>(len));
+  const std::size_t read_len = std::min(left_to_read,
+                                        static_cast<uint64_t>(len));
   left_to_read -= read_len;
-  return static_cast<int>(read_len);
+  return read_len;
 }
 
 void RGWLoadGenIO::flush()
@@ -94,22 +96,23 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   env.set("SERVER_PORT", port_buf);
 }
 
-int RGWLoadGenIO::send_status(const int status, const char* const status_name)
+std::size_t RGWLoadGenIO::send_status(const int status,
+                                      const char* const status_name)
 {
   return 0;
 }
 
-int RGWLoadGenIO::send_100_continue()
+std::size_t RGWLoadGenIO::send_100_continue()
 {
   return 0;
 }
 
-int RGWLoadGenIO::complete_header()
+std::size_t RGWLoadGenIO::complete_header()
 {
   return 0;
 }
 
-int RGWLoadGenIO::send_content_length(const uint64_t len)
+std::size_t RGWLoadGenIO::send_content_length(const uint64_t len)
 {
   return 0;
 }

@@ -22,13 +22,13 @@ public:
   }
 
   void init_env(CephContext* cct) override;
-  int read_data(char* buf, int len) override;
-  int write_data(const char* buf, int len) override;
+  std::size_t read_data(char* buf, std::size_t len) override;
+  std::size_t write_data(const char* buf, std::size_t len) override;
 
-  int send_status(int status, const char* status_name) override;
-  int send_100_continue() override;
-  int send_content_length(uint64_t len) override;
-  int complete_header() override;
+  std::size_t send_status(int status, const char* status_name) override;
+  std::size_t send_100_continue() override;
+  std::size_t send_content_length(uint64_t len) override;
+  std::size_t complete_header() override;
 
   void flush();
 
