@@ -77,7 +77,7 @@ AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                                      const blkin_trace_info *trace_info)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-      m_hide_enoent(hide_enoent), m_trace_info(trace_info) {
+    m_hide_enoent(hide_enoent), m_trace_info(trace_info) {
 
   Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                           0, m_ictx->layout.object_size, m_parent_extents);
@@ -146,6 +146,7 @@ AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
                                 vector<pair<uint64_t,uint64_t> >& be,
                                 librados::snap_t snap_id, bool sparse,
                                Context *completion, int op_flags,
+                               const blkin_trace_info *trace_info)
   : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
                         snap_id, completion, false, trace_info),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
@@ -291,7 +292,7 @@ void AioObjectRead<I>::send() {
   librados::AioCompletion *rados_completion =
     util::create_rados_ack_callback(this);
   int r = image_ctx->data_ctx.aio_operate(this->m_oid, rados_completion, &op,
-                                        flags, nullptr, m_trace_info);
+                                        flags, nullptr, this->m_trace_info);
   assert(r == 0);
 
   rados_completion->release();
@@ -359,7 +360,7 @@ AbstractAioObjectWrite::AbstractAioObjectWrite(ImageCtx *ictx,
                                                  bool hide_enoent,
                                                  const blkin_trace_info *trace_info)
   : AioObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                       completion, hide_enoent, trace_info),
+                      completion, hide_enoent, trace_info),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());

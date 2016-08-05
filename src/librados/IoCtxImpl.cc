@@ -744,7 +744,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  AioCompletionImpl *c,
 					  int flags,
 					  bufferlist *pbl,
-            const blkin_trace_info *trace_info)
+                const blkin_trace_info *trace_info)
 {
   Context *onack = new C_aio_Ack(c);
 

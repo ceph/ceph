@@ -348,10 +348,10 @@ class ObjectCacher {
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
                  map<loff_t, BufferHead*>& rx,
-		 map<loff_t, BufferHead*>& errors,
-     const blkin_trace_info *trace_info = nullptr);
-    BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid,
-      const blkin_trace_info *trace_info = nullptr);
+                 map<loff_t, BufferHead*>& errors,
+                 const blkin_trace_info *trace_info = nullptr);
+                 BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid,
+                 const blkin_trace_info *trace_info = nullptr);
     
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);

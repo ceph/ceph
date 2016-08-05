@@ -72,9 +72,11 @@ template <typename ImageCtxT = ImageCtx>
 class AioImageRead : public AioImageRequest<ImageCtxT> {
 public:
   using typename AioImageRequest<ImageCtxT>::Extents;
+
+  AioImageRead(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                size_t len, char *buf, bufferlist *pbl, int op_flags,
                const blkin_trace_info *trace_info = nullptr)
-    : AioImageRequest(image_ctx, aio_comp, trace_info), m_buf(buf), m_pbl(pbl),
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, trace_info), m_buf(buf), m_pbl(pbl),
       m_op_flags(op_flags) {
     m_image_extents.push_back(std::make_pair(off, len));
   }
@@ -124,7 +126,7 @@ protected:
   AbstractAioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                         uint64_t off, size_t len,
                         const blkin_trace_info *trace_info = nullptr)
-    : AioImageRequest(image_ctx, aio_comp, trace_info), m_off(off), m_len(len),
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, trace_info), m_off(off), m_len(len),
       m_synchronous(false) {
   }
 
@@ -159,7 +161,8 @@ public:
   AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                 size_t len, const char *buf, int op_flags,
                 const blkin_trace_info *trace_info = nullptr)
-    : AbstractAioImageWrite(image_ctx, aio_comp, off, len, trace_info), m_buf(buf),
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, len, trace_info),
+    m_buf(buf), m_op_flags(op_flags) {
   }
 
 protected:

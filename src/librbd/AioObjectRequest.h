@@ -95,7 +95,7 @@ protected:
   Context *m_completion;
   Extents m_parent_extents;
   bool m_hide_enoent;
-    const blkin_trace_info *m_trace_info;
+  const blkin_trace_info *m_trace_info;
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -108,9 +108,10 @@ public:
                                uint64_t objectno, uint64_t offset,
                                uint64_t len, Extents &buffer_extents,
                                librados::snap_t snap_id, bool sparse,
-                               Context *completion, int op_flags) {
+                               Context *completion, int op_flags,
+                               const blkin_trace_info *trace_info = nullptr) {
     return new AioObjectRead(ictx, oid, objectno, offset, len, buffer_extents,
-                                                       snap_id, sparse, completion, op_flags);
+                              snap_id, sparse, completion, op_flags, trace_info);
   }
 
   AioObjectRead(ImageCtxT *ictx, const std::string &oid,
@@ -181,8 +182,8 @@ public:
   AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
                          uint64_t object_no, uint64_t object_off,
                          uint64_t len, const ::SnapContext &snapc,
-                           Context *completion, bool hide_enoent,
-                           const blkin_trace_info *trace_info = nullptr);
+                         Context *completion, bool hide_enoent,
+                         const blkin_trace_info *trace_info = nullptr);
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
   {
@@ -266,7 +267,7 @@ public:
                  const ::SnapContext &snapc, Context *completion,
                  int op_flags, const blkin_trace_info *trace_info =  nullptr)
     : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
-                               snapc, completion, false, trace_info),
+                             snapc, completion, false, trace_info),
       m_write_data(data), m_op_flags(op_flags) {
   }
 

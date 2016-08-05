@@ -7,6 +7,7 @@
 #include "test/librbd/mock/MockJournal.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioObjectRequest.h"
+#include "common/zipkin_trace.h"
 
 namespace librbd {
 namespace {
@@ -99,7 +100,7 @@ struct AioObjectRead<librbd::MockTestImageCtx> : public AioObjectRequest<librbd:
                                uint64_t objectno, uint64_t offset,
                                uint64_t len, Extents &buffer_extents,
                                librados::snap_t snap_id, bool sparse,
-                               Context *completion, int op_flags) {
+                               Context *completion, int op_flags, const blkin_trace_info *trace_info = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -153,9 +154,10 @@ struct TestMockAioImageRequest : public TestMockFixture {
   void expect_write_to_cache(MockImageCtx &mock_image_ctx,
                              const object_t &object,
                              uint64_t offset, uint64_t length,
-                             uint64_t journal_tid, int r) {
+                             uint64_t journal_tid, int r,
+                             const blkin_trace_info *trace_info = nullptr) {
     EXPECT_CALL(mock_image_ctx, write_to_cache(object, _, length, offset, _, _,
-                journal_tid))
+                journal_tid, nullptr))
       .WillOnce(WithArg<4>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 

@@ -47,27 +47,6 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
   return nullptr;
 }
 
-void Messenger::set_endpoint_addr(const entity_addr_t& a, 
-                                  const entity_name_t &name)
-{
-  size_t hostlen;
-  if (a.get_family() == AF_INET)
-    hostlen = sizeof(struct sockaddr_in);
-  else if (a.get_family() == AF_INET6)
-    hostlen = sizeof(struct sockaddr_in6);
-  else
-    hostlen = 0;
-
-  if (hostlen) {
-    char buf[NI_MAXHOST] = { 0 };
-    getnameinfo(a.get_sockaddr(), hostlen, buf, sizeof(buf),
-                NULL, 0, NI_NUMERICHOST);
-
-    trace_endpoint.copy_ip(buf);
-  }
-  trace_endpoint.set_port(a.get_port());
-}
-
 /*
  * Pre-calculate desired software CRC settings.  CRC computation may
  * be disabled by default for some transports (e.g., those with strong

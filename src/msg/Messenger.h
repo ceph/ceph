@@ -43,9 +43,6 @@ private:
   list <Dispatcher*> fast_dispatchers;
   ZTracer::Endpoint trace_endpoint;
 
-  void set_endpoint_addr(const entity_addr_t& a,
-                         const entity_name_t &name);
-
 protected:
   /// the "name" of the local daemon. eg client.99
   entity_inst_t my_inst;
@@ -219,10 +216,8 @@ protected:
   /**
    * set messenger's address
    */
-  virtual void set_myaddr(const entity_addr_t& a) {
-    my_inst.addr = a;
-    set_endpoint_addr(a, my_inst.name);
-  }
+  virtual void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
+  
 public:
   /**
    * @return the zipkin trace endpoint

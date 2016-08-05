@@ -170,10 +170,10 @@ struct MockImageCtx {
 
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
 
-  MOCK_METHOD7(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
-                                         size_t, uint64_t, Context *, int));
-  MOCK_METHOD7(write_to_cache, void(object_t, const bufferlist&, size_t,
-                                    uint64_t, Context *, int, uint64_t));
+  MOCK_METHOD8(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
+                                         size_t, uint64_t, Context *, int, const blkin_trace_info *trace_info));
+  MOCK_METHOD8(write_to_cache, void(object_t, const bufferlist&, size_t,
+                                    uint64_t, Context *, int, uint64_t, const blkin_trace_info *trace_info));
 
   ImageCtx *image_ctx;
   CephContext *cct;
