@@ -1714,7 +1714,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
     if (op_ret < 0) {
       S3AuthFactory aplfact(store, s->account_name);
-      RGWLDAPTokenExtractor token_extr(s);
+      RGWGetPolicyLDAPTokenExtractor token_extr(s3_access_key);
       RGWLDAPAuthEngine ldap(s->cct, store, token_extr, &aplfact);
         // try external authenticators
       if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
