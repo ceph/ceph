@@ -86,11 +86,12 @@ target_link_libraries(unittest_librbd
 add_executable(ceph_test_librbd
   test_main.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+  $<TARGET_OBJECTS:librados_api_obj>
+  $<TARGET_OBJECTS:librados_objs>
   $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd
-  librados
   rbd_test
   rbd_api
   rbd_internal
