@@ -689,6 +689,18 @@ public:
   std::string get_token() const override;
 };
 
+class RGWGetPolicyLDAPTokenExtractor : public RGWTokenBasedAuthEngine::Extractor {
+  std::string access_key_id;
+public:
+  RGWGetPolicyLDAPTokenExtractor(std::string access_key_id) {
+    access_key_id = std::move(access_key_id);
+  }
+
+  std::string get_token() const {
+    return access_key_id;
+  }
+};
+
 class S3AuthFactory : public RGWRemoteAuthApplier::Factory {
   typedef RGWAuthApplier::aplptr_t aplptr_t;
   RGWRados * const store;
