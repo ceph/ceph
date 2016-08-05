@@ -70,14 +70,22 @@ namespace rgw {
 	(void) init();
 	return bind();
       }
+      return -EINVAL;
     }
 
     int simple_bind(const char *dn, const std::string& pwd) {
       LDAP* tldap;
       int ret = ldap_initialize(&tldap, uri.c_str());
-      ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());
       if (ret == LDAP_SUCCESS) {
-	(void) ldap_unbind(tldap);
+	unsigned long ldap_ver = LDAP_VERSION3;
+	ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION,
+			      (void*) &ldap_ver);
+	if (ret == LDAP_SUCCESS) {
+	  ret = ldap_simple_bind_s(tldap, dn, pwd.c_str());
+	  if (ret == LDAP_SUCCESS) {
+	    (void) ldap_unbind(tldap);
+	  }
+	}
       }
       return ret; // OpenLDAP client error space
     }
