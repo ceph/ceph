@@ -14,12 +14,14 @@
 
 int RGWCivetWeb::write_data(const char *buf, int len)
 {
-  int r = mg_write(conn, buf, len);
-  if (r == 0) {
+  const int ret = mg_write(conn, buf, len);
+  if (ret == 0) {
     /* didn't send anything, error out */
-    return -EIO;
+    throw RGWStreamIOEngine::Exception(-EIO);
+  } else if (ret < 0) {
+    throw RGWStreamIOEngine::Exception(ret);
   }
-  return r;
+  return ret;
 }
 
 RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
@@ -32,7 +34,11 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
 
 int RGWCivetWeb::read_data(char *buf, int len)
 {
-  return mg_read(conn, buf, len);
+  const int ret = mg_read(conn, buf, len);
+  if (ret < 0) {
+    throw RGWStreamIOEngine::Exception(ret);
+  }
+  return ret;
 }
 
 void RGWCivetWeb::flush()
@@ -109,12 +115,25 @@ void RGWCivetWeb::init_env(CephContext *cct)
   }
 }
 
+template <class... Args>
+static inline std::size_t safe_mg_printf(Args&&... args)
+{
+  const int ret = mg_printf(std::forward<Args>(args)...);
+  if (ret == 0) {
+    /* didn't send anything, error out */
+    throw RGWStreamIOEngine::Exception(-EIO);
+  } else if (ret < 0) {
+    throw RGWStreamIOEngine::Exception(ret);
+  }
+  return static_cast<std::size_t>(ret);
+}
+
 int RGWCivetWeb::send_status(int status, const char *status_name)
 {
   mg_set_http_status(conn, status);
 
-  return mg_printf(conn, "HTTP/1.1 %d %s\r\n", status,
-                   status_name ? status_name : "");
+  return safe_mg_printf(conn, "HTTP/1.1 %d %s\r\n", status,
+                        status_name ? status_name : "");
 }
 
 int RGWCivetWeb::send_100_continue()
@@ -161,5 +180,5 @@ int RGWCivetWeb::complete_header()
 
 int RGWCivetWeb::send_content_length(uint64_t len)
 {
-  return mg_printf(conn, "Content-Length: %" PRIu64 "\r\n", len);
+  return safe_mg_printf(conn, "Content-Length: %" PRIu64 "\r\n", len);
 }

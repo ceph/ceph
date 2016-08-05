@@ -79,7 +79,7 @@ public:
     return get_decoratee().flush();
   }
 
-  RGWEnv& get_env() override {
+  RGWEnv& get_env() noexcept override {
     return get_decoratee().get_env();
   }
 
