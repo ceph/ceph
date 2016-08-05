@@ -188,6 +188,7 @@ enum {
   l_rgw_http_status_3xx,
   l_rgw_http_status_4xx,
   l_rgw_http_status_5xx,
+  l_rgw_http_status_NULL,
 
   l_rgw_last,
 };

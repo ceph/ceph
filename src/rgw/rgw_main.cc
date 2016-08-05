@@ -647,14 +647,7 @@ done:
   int http_ret = s->err.http_ret;
 
   req->log_format(s, "http status=%d", http_ret);
-
-  if (handler)
-    handler->put_op(op);
-  rest->put_handler(handler);
-
-  dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
-
-  switch(http_ret/100) {
+  switch (http_ret / 100) {
     case 1:
       perfcounter->inc(l_rgw_http_status_1xx);
       break;
@@ -670,7 +663,16 @@ done:
     case 5:
       perfcounter->inc(l_rgw_http_status_5xx);
       break;
+    default:
+      perfcounter->inc(l_rgw_http_status_NULL);
   }
+
+  if (handler)
+    handler->put_op(op);
+  rest->put_handler(handler);
+
+  dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
+
   return (ret < 0 ? ret : s->err.ret);
 }
 
