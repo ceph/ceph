@@ -100,7 +100,7 @@ a warm metadata cache, and speed up the process of failing over
 if the daemon serving the rank fails.
 
 An up rank may only have one standby replay daemon assigned to it,
-f two daemons are both set to be standby replay then one of them
+if two daemons are both set to be standby replay then one of them
 will arbitrarily win, and the other will become a normal non-replay
 standby.
 

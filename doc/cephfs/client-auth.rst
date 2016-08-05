@@ -33,6 +33,7 @@ for example, to restrict client ``foo`` to ``bar`` directory, we will use. ::
 
 ./ceph auth get-or-create client.foo mon 'allow r' mds 'allow r, allow rw path=/bar' osd 'allow rw pool=data'
 
+See `User Management - Add a User to a Keyring`_. for additional details on user management
 
 To restrict a client to the specfied sub-directory only, we mention the specified
 directory while mounting following the undermentioned syntax. ::
@@ -105,3 +106,5 @@ for files, but client.1 cannot.
         caps: [mon] allow r
         caps: [osd] allow rw pool=data
 
+
+.. _User Management - Add a User to a Keyring: ../rados/operations/user-management/#add-a-user-to-a-keyring
