@@ -447,7 +447,7 @@ bool TokenCache::find_barbican(rgw::keystone::TokenEnvelope& token)
 {
   Mutex::Locker l(lock);
 
-  return find(barbican_token_id, token);
+  return find_locked(barbican_token_id, token);
 }
 
 void TokenCache::add(const std::string& token_id,
@@ -494,7 +494,7 @@ void TokenCache::add_barbican(const rgw::keystone::TokenEnvelope& token)
   Mutex::Locker l(lock);
 
   rgw_get_token_id(token.token.id, barbican_token_id);
-  add(barbican_token_id, token);
+  add_locked(barbican_token_id, token);
 }
 
 void TokenCache::invalidate(const std::string& token_id)

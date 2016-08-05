@@ -92,7 +92,7 @@ public:
       off_t cnt = std::min((off_t)(iter->length() - plaintext_pos), (off_t)(size - crypt_pos));
       byte* src = (byte*)iter->c_str() + plaintext_pos;
       byte* dst = (byte*)buf.c_str() + crypt_pos;
-      for (off_t i=0; i<cnt; i++) {
+      for (off_t i = 0; i < cnt; i++) {
         dst[i] ^= src[i];
       }
       ++iter;
@@ -170,7 +170,7 @@ public:
 #else
 #error Must define USE_CRYPTOPP or USE_NSS
 #endif
-
+  /* in CTR encrypt is the same as decrypt */
   bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
 	  return encrypt(input, in_ofs, size, output, stream_offset);
   }
@@ -215,8 +215,29 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
 
 
 /**
- * Encryption in CBC mode. Chunked to 4K blocks. offset is used as IV for 4K block.
+ * Encryption in CBC mode. Chunked to 4K blocks. Offset is used as IV for each 4K block.
+ *
+ * A. Encryption
+ * 1. Input is split to 4K chunks + remainder in one, smaller chunk
+ * 2. Each full chunk is encrypted separately with CBC chained mode, with initial IV derived from offset
+ * 3. Last chunk is 16*m + n.
+ * 4. 16*m bytes are encrypted with CBC chained mode, with initial IV derived from offset
+ * 5. Last n bytes are xor-ed with pattern obtained by CBC encryption of
+ *    last encrypted 16 byte block <16m-16, 16m-15) with IV = {0}.
+ * 6. (Special case) If m == 0 then last n bytes are xor-ed with pattern
+ *    obtained by CBC encryption of {0} with IV derived from offset
+ *
+ * B. Decryption
+ * 1. Input is split to 4K chunks + remainder in one, smaller chunk
+ * 2. Each full chunk is decrypted separately with CBC chained mode, with initial IV derived from offset
+ * 3. Last chunk is 16*m + n.
+ * 4. 16*m bytes are decrypted with CBC chained mode, with initial IV derived from offset
+ * 5. Last n bytes are xor-ed with pattern obtained by CBC ENCRYPTION of
+ *    last (still encrypted) 16 byte block <16m-16,16m-15) with IV = {0}
+ * 6. (Special case) If m == 0 then last n bytes are xor-ed with pattern
+ *    obtained by CBC ENCRYPTION of {0} with IV derived from offset
  */
+
 class AES_256_CBC : public BlockCrypt {
 public:
   static const size_t AES_256_KEYSIZE = 256 / 8;
@@ -244,10 +265,13 @@ public:
 
 #ifdef USE_CRYPTOPP
 
-  bool cbc_transform(unsigned char* out, const unsigned char* in, size_t size,
+  bool cbc_transform(unsigned char* out,
+                     const unsigned char* in,
+                     size_t size,
                      const unsigned char (&iv)[AES_256_IVSIZE],
                      const unsigned char (&key)[AES_256_KEYSIZE],
-                     bool encrypt) {
+                     bool encrypt)
+  {
     if (encrypt) {
       CBC_Mode< AES >::Encryption e;
       e.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
@@ -262,10 +286,13 @@ public:
 
 #elif defined(USE_NSS)
 
-  bool cbc_transform(unsigned char* out, const unsigned char* in, size_t size,
-                   const unsigned char (&iv)[AES_256_IVSIZE],
-                   const unsigned char (&key)[AES_256_KEYSIZE],
-                   bool encrypt) {
+  bool cbc_transform(unsigned char* out,
+                     const unsigned char* in,
+                     size_t size,
+                     const unsigned char (&iv)[AES_256_IVSIZE],
+                     const unsigned char (&key)[AES_256_KEYSIZE],
+                     bool encrypt)
+  {
     bool result = false;
     PK11SlotInfo *slot;
     SECItem keyItem;
@@ -317,14 +344,14 @@ public:
 #error Must define USE_CRYPTOPP or USE_NSS
 #endif
 
-
-
-  bool cbc_transform(unsigned char* out, const unsigned char* in, size_t size,
+  bool cbc_transform(unsigned char* out,
+                     const unsigned char* in,
+                     size_t size,
                      off_t stream_offset,
                      const unsigned char (&key)[AES_256_KEYSIZE],
-                     bool encrypt) {
+                     bool encrypt)
+  {
     static CryptoAccelRef crypto_accel = get_crypto_accel(cct);
-    //compressor(Compressor::create(c, c->_conf->async_compressor_type))
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
@@ -347,41 +374,44 @@ public:
     return result;
   }
 
-  bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset)
+
+  bool encrypt(bufferlist& input,
+               off_t in_ofs,
+               size_t size,
+               bufferlist& output,
+               off_t stream_offset)
   {
     bool result = false;
-
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
     size_t unaligned_rest_size = size - aligned_size;
     output.clear();
     buffer::ptr buf(aligned_size + AES_256_IVSIZE);
     unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
     unsigned char* input_raw = reinterpret_cast<unsigned char*>(input.c_str());
-    unsigned char iv[AES_256_IVSIZE];
+
+    /* encrypt main bulk of data */
     result = cbc_transform(buf_raw,
                            input_raw + in_ofs,
                            aligned_size,
                            stream_offset, key, true);
-
-    if (result && (unaligned_rest_size != 0)) {
-      if (aligned_size > 0) {
-        /*use last chunk for unaligned part*/
-        static_assert(sizeof(iv) >= AES_256_IVSIZE, "Must fit counter");
-        memset(iv, 0, AES_256_IVSIZE);
-        result = cbc_transform(
-            buf_raw + aligned_size,
-            buf_raw + aligned_size - AES_256_IVSIZE,
-            AES_256_IVSIZE,
-            iv, key, true);
+    if (result && (unaligned_rest_size > 0)) {
+      /* remainder to encrypt */
+      if (aligned_size % CHUNK_SIZE > 0) {
+        /* use last chunk for unaligned part */
+        unsigned char iv[AES_256_IVSIZE] = {0};
+        result = cbc_transform(buf_raw + aligned_size,
+                               buf_raw + aligned_size - AES_256_IVSIZE,
+                               AES_256_IVSIZE,
+                               iv, key, true);
       } else {
-        /*use IV as base for unaligned part*/
-        unsigned char fake_iv[AES_256_IVSIZE] = {0};
-        prepare_iv(iv, stream_offset);
-        result = cbc_transform(
-            buf_raw + aligned_size,
-            iv,
-            AES_256_IVSIZE,
-            fake_iv, key, true);
+        /* 0 full blocks in current chunk, use IV as base for unaligned part */
+        unsigned char iv[AES_256_IVSIZE] = {0};
+        unsigned char data[AES_256_IVSIZE];
+        prepare_iv(data, stream_offset + aligned_size);
+        result = cbc_transform(buf_raw + aligned_size,
+                               data,
+                               AES_256_IVSIZE,
+                               iv, key, true);
       }
       if (result) {
         for(size_t i = aligned_size; i < size; i++) {
@@ -399,57 +429,49 @@ public:
     return result;
   }
 
-  bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset)
+
+  bool decrypt(bufferlist& input,
+               off_t in_ofs,
+               size_t size,
+               bufferlist& output,
+               off_t stream_offset)
   {
     bool result = false;
-
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
     size_t unaligned_rest_size = size - aligned_size;
     output.clear();
     buffer::ptr buf(aligned_size + AES_256_IVSIZE);
     unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
     unsigned char* input_raw = reinterpret_cast<unsigned char*>(input.c_str());
-    unsigned char iv[AES_256_IVSIZE];
 
-    if (aligned_size > 0) {
-      if (unaligned_rest_size == 0) {
-        /* size of data is just perfect */
-        prepare_iv(iv, stream_offset);
-        result = cbc_transform(
-            (unsigned char*)buf.raw_c_str(),
-            (unsigned char*)input.c_str() + in_ofs,
-            aligned_size,
-            stream_offset, key, false);
-      } else {
+    /* decrypt main bulk of data */
+    result = cbc_transform(buf_raw,
+                           input_raw + in_ofs,
+                           aligned_size,
+                           stream_offset, key, false);
+    if (result && unaligned_rest_size > 0) {
+      /* remainder to decrypt */
+      if (aligned_size % CHUNK_SIZE > 0) {
         /*use last chunk for unaligned part*/
-        static_assert(sizeof(iv) >= AES_256_IVSIZE, "Must fit counter");
-        memset(iv, 0, AES_256_IVSIZE);
-        result = cbc_transform(
-            buf_raw + aligned_size,
-            input_raw + in_ofs + aligned_size - AES_256_IVSIZE,
-            AES_256_IVSIZE,
-            iv, key, true);
-        if (result) {
-          prepare_iv(iv, stream_offset);
-          result = cbc_transform(buf_raw,
-                                 input_raw + in_ofs,
-                                 aligned_size,
-                                 stream_offset, key, false);
-        }
+        unsigned char iv[AES_256_IVSIZE] = {0};
+        result = cbc_transform(buf_raw + aligned_size,
+                               input_raw + in_ofs + aligned_size - AES_256_IVSIZE,
+                               AES_256_IVSIZE,
+                               iv, key, true);
+      } else {
+        /* 0 full blocks in current chunk, use IV as base for unaligned part */
+        unsigned char iv[AES_256_IVSIZE] = {0};
+        unsigned char data[AES_256_IVSIZE];
+        prepare_iv(data, stream_offset + aligned_size);
+        result = cbc_transform(buf_raw + aligned_size,
+                               data,
+                               AES_256_IVSIZE,
+                               iv, key, true);
       }
-    } else {
-      /*0 full blocks, use IV as base for unaligned part*/
-      unsigned char fake_iv[AES_256_IVSIZE] = {0};
-      prepare_iv(iv, stream_offset);
-      result = cbc_transform(
-          buf_raw + aligned_size,
-          iv,
-          AES_256_IVSIZE,
-          fake_iv, key, true);
-    }
-    if (result) {
-      for(size_t i = aligned_size; i < size; i++) {
-        *(buf_raw + i) ^= *(input_raw + in_ofs + i);
+      if (result) {
+        for(size_t i = aligned_size; i < size; i++) {
+          *(buf_raw + i) ^= *(input_raw + in_ofs + i);
+        }
       }
     }
     if (result) {
@@ -463,7 +485,7 @@ public:
   }
 
 
-  void prepare_iv(byte iv[AES_256_IVSIZE], off_t offset) {
+  void prepare_iv(byte (&iv)[AES_256_IVSIZE], off_t offset) {
     off_t index = offset / AES_256_IVSIZE;
     off_t i = AES_256_IVSIZE - 1;
     unsigned int val;
@@ -478,13 +500,28 @@ public:
   }
 };
 
+
+std::unique_ptr<BlockCrypt> AES_256_CBC_create(CephContext* cct, const uint8_t* key, size_t len)
+{
+  auto cbc = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(cct));
+  cbc->set_key(key, AES_256_KEYSIZE);
+  return std::move(cbc);
+}
+
+
 const uint8_t AES_256_CBC::IV[AES_256_CBC::AES_256_IVSIZE] =
     { 'a', 'e', 's', '2', '5', '6', 'i', 'v', '_', 'c', 't', 'r', '1', '3', '3', '7' };
 
 
 #ifdef USE_CRYPTOPP
 
-bool AES_256_ECB_encrypt(CephContext* cct, uint8_t* key, size_t key_size, uint8_t* data_in, uint8_t* data_out, size_t data_size) {
+bool AES_256_ECB_encrypt(CephContext* cct,
+                         const uint8_t* key,
+                         size_t key_size,
+                         const uint8_t* data_in,
+                         uint8_t* data_out,
+                         size_t data_size)
+{
   bool res = false;
   if (key_size == AES_256_KEYSIZE) {
     try {
@@ -556,18 +593,22 @@ bool AES_256_ECB_encrypt(CephContext* cct, uint8_t* key, size_t key_size, uint8_
 #endif
 
 
-
-
-
-RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct, RGWGetDataCB* next, BlockCrypt* crypt):
+RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
+                                               RGWGetDataCB* next,
+                                               std::unique_ptr<BlockCrypt> crypt):
     RGWGetObj_Filter(next),
     cct(cct),
-    crypt(crypt),
-    enc_begin_skip(0), ofs(0), end(0), cache() {
-  block_size = crypt->get_block_size();
-  }
+    crypt(std::move(crypt)),
+    enc_begin_skip(0),
+    ofs(0),
+    end(0),
+    cache()
+{
+  block_size = this->crypt->get_block_size();
+}
 
-RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {}
+RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
+}
 
 int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
   parts_len.clear();
@@ -600,8 +641,8 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   off_t inp_ofs = bl_ofs;
   off_t inp_end = bl_end;
   if (parts_len.size() > 0) {
-    off_t in_ofs=bl_ofs;
-    off_t in_end=bl_end;
+    off_t in_ofs = bl_ofs;
+    off_t in_end = bl_end;
 
     size_t i = 0;
     while (i<parts_len.size() && (in_ofs > (off_t)parts_len[i])) {
@@ -631,8 +672,8 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   else
   {
     enc_begin_skip = bl_ofs & (block_size - 1);
-    ofs=bl_ofs & ~(block_size - 1);
-    end=bl_end;
+    ofs = bl_ofs & ~(block_size - 1);
+    end = bl_end;
     bl_ofs = bl_ofs & ~(block_size - 1);
     bl_end = ( bl_end & ~(block_size - 1) ) + (block_size - 1);
   }
@@ -640,6 +681,7 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
       << "] => [" << bl_ofs << "," << bl_end << "]" << dendl;
   return 0;
 }
+
 
 int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
   int res = 0;
@@ -664,7 +706,13 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
       bufferlist data;
       crypt->decrypt(cache, 0, block_size, data, part_ofs);
       part_ofs += block_size;
-      res = next->handle_data(data, enc_begin_skip, block_size - enc_begin_skip);
+
+      off_t send_size = block_size - enc_begin_skip;
+      if (ofs + enc_begin_skip + send_size > end + 1) {
+        send_size = end + 1 - ofs - enc_begin_skip;
+      }
+      res = next->handle_data(data, enc_begin_skip, send_size);
+
       enc_begin_skip = 0;
       cache.clear();
       ofs += block_size;
@@ -675,11 +723,10 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
   if (bl_len > 0) {
     off_t aligned_size = bl_len & ~(block_size - 1);
     //save remainder
-    off_t remainder = bl.length() - (bl_ofs + aligned_size);
+    off_t remainder = bl_len - aligned_size;
     if(remainder > 0) {
       cache.append(bl.get_contiguous(bl_ofs + aligned_size, remainder), remainder);
     }
-
     if (aligned_size > 0) {
       bufferlist data;
       crypt->decrypt(bl, bl_ofs, aligned_size, data, part_ofs);
@@ -691,7 +738,6 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
       res = next->handle_data(data, enc_begin_skip, send_size);
       enc_begin_skip = 0;
       ofs += aligned_size;
-
       if (res != 0)
         return res;
     }
@@ -724,14 +770,19 @@ int RGWGetObj_BlockDecrypt::flush() {
   return res;
 }
 
-RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct, RGWPutObjDataProcessor* next, BlockCrypt* crypt):
-      RGWPutObj_Filter(next), cct(cct), crypt(crypt),
-      ofs(0), cache() {
-  block_size = crypt->get_block_size();
+RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
+                                               RGWPutObjDataProcessor* next,
+                                               std::unique_ptr<BlockCrypt> crypt):
+    RGWPutObj_Filter(next),
+    cct(cct),
+    crypt(std::move(crypt)),
+    ofs(0),
+    cache()
+{
+  block_size = this->crypt->get_block_size();
 }
 
 RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
-  delete crypt;
 }
 
 int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **phandle, rgw_obj *pobj, bool *again) {
@@ -790,14 +841,14 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
       /*flush cached data*/
       bufferlist data;
       crypt->encrypt(cache, 0, cache.length(), data, ofs);
-      res=next->handle_data(data, ofs, phandle, pobj, again);
-      ofs+=cache.length();
+      res = next->handle_data(data, ofs, phandle, pobj, again);
+      ofs += cache.length();
       cache.clear();
       if (res != 0)
         return res;
     }
     /*replicate 0-sized handle_data*/
-    res=next->handle_data(cache, ofs, phandle, pobj, again);
+    res = next->handle_data(cache, ofs, phandle, pobj, again);
   }
   return res;
 }
@@ -868,7 +919,10 @@ int request_key_from_barbican(CephContext *cct,
   return res;
 }
 
-int get_actual_key_from_kms(CephContext *cct, boost::string_ref key_id, boost::string_ref key_selector, std::string& actual_key)
+int get_actual_key_from_kms(CephContext *cct,
+                            boost::string_ref key_id,
+                            boost::string_ref key_selector,
+                            std::string& actual_key)
 {
   int res = 0;
   ldout(cct, 20) << "Getting KMS encryption key for key=" << key_id << dendl;
@@ -995,6 +1049,7 @@ boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
   return src.substr(start, end - start + 1);
 }
 
+
 static boost::string_ref get_crypt_attribute(RGWEnv* env,
                                        map<string, post_form_part, const ltstr_nocase>* parts,
                                        crypt_option_e option)
@@ -1018,15 +1073,15 @@ static boost::string_ref get_crypt_attribute(RGWEnv* env,
   }
 }
 
+
 int s3_prepare_encrypt(struct req_state* s,
                        map<string, bufferlist>& attrs,
                        map<string, post_form_part, const ltstr_nocase>* parts,
-                       BlockCrypt** block_crypt,
+                       std::unique_ptr<BlockCrypt>* block_crypt,
                        std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   crypt_http_responses.clear();
-  if (block_crypt) *block_crypt = nullptr;
   {
     boost::string_ref req_sse_ca =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
@@ -1062,9 +1117,9 @@ int s3_prepare_encrypt(struct req_state* s,
       set_attr(attrs, RGW_ATTR_CRYPT_KEYMD5, keymd5_bin);
 
       if (block_crypt) {
-        AES_256_CBC* aes = new AES_256_CBC(s->cct);
+        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
         aes->set_key(reinterpret_cast<const uint8_t*>(key_bin.c_str()), AES_256_KEYSIZE);
-        *block_crypt = aes;
+        *block_crypt = std::move(aes);
       }
 
       crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
@@ -1103,9 +1158,9 @@ int s3_prepare_encrypt(struct req_state* s,
       set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
 
       if (block_crypt) {
-        AES_256_CBC* aes = new AES_256_CBC(s->cct);
+        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
         aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-        *block_crypt = aes;
+        *block_crypt = std::move(aes);
       }
       goto done;
     }
@@ -1132,9 +1187,9 @@ int s3_prepare_encrypt(struct req_state* s,
         goto done;
       }
       if (block_crypt) {
-        AES_256_CBC* aes = new AES_256_CBC(s->cct);
-        aes->set_key(actual_key, AES_256_KEYSIZE);
-        *block_crypt = aes;
+        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
+        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key), AES_256_KEYSIZE);
+        *block_crypt = std::move(aes);
       }
 
       goto done;
@@ -1144,18 +1199,18 @@ int s3_prepare_encrypt(struct req_state* s,
   return res;
 }
 
-int s3_prepare_decrypt(
-    struct req_state* s,
-    map<string, bufferlist>& attrs,
-    BlockCrypt** block_crypt,
-    std::map<std::string, std::string>& crypt_http_responses)
+
+int s3_prepare_decrypt(struct req_state* s,
+                       map<string, bufferlist>& attrs,
+                       std::unique_ptr<BlockCrypt>* block_crypt,
+                       std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
   ldout(s->cct, 15) << "Encryption mode: " << stored_mode << dendl;
-
   if (stored_mode == "SSE-C-AES256") {
     const char *req_cust_alg = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
+
     if ((nullptr == req_cust_alg) || (strcmp(req_cust_alg, "AES256") != 0)) {
       res = -ERR_INVALID_REQUEST;
       goto done;
@@ -1173,6 +1228,7 @@ int s3_prepare_decrypt(
       res = -ERR_INVALID_DIGEST;
       goto done;
     }
+
     MD5 key_hash;
     uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
     key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
@@ -1183,9 +1239,9 @@ int s3_prepare_decrypt(
       res = -ERR_INVALID_DIGEST;
       goto done;
     }
-    AES_256_CBC* aes = new AES_256_CBC(s->cct);
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key((uint8_t*)key_bin.c_str(), AES_256_CBC::AES_256_KEYSIZE);
-    if (block_crypt) *block_crypt = aes;
+    if (block_crypt) *block_crypt = std::move(aes);
 
     crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
     crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = keymd5;
@@ -1209,10 +1265,10 @@ int s3_prepare_decrypt(
       goto done;
     }
 
-    AES_256_CBC* aes = new AES_256_CBC(s->cct);
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
 
-    if (block_crypt) *block_crypt = aes;
+    if (block_crypt) *block_crypt = std::move(aes);
 
     crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
     crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id;
@@ -1240,10 +1296,9 @@ int s3_prepare_decrypt(
       res = -EIO;
       goto done;
     }
-    AES_256_CBC* aes = new AES_256_CBC(s->cct);
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key(actual_key, AES_256_KEYSIZE);
-
-    if (block_crypt) *block_crypt = aes;
+    if (block_crypt) *block_crypt = std::move(aes);
     goto done;
   }
 

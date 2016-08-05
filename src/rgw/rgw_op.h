@@ -270,8 +270,8 @@ public:
   /**
    * calculates filter used to decrypt RGW objects data
    */
-  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB* cb, bufferlist* manifest_bl) {
-    *filter = NULL;
+  virtual int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter, RGWGetDataCB* cb, bufferlist* manifest_bl) {
+    *filter = nullptr;
     return 0;
   }
 };
@@ -964,8 +964,16 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
-     *filter = NULL;
+  /* this is for cases when copying data from other object */
+  virtual int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
+                                 RGWGetDataCB* cb,
+                                 map<string, bufferlist>& attrs,
+                                 bufferlist* manifest_bl) {
+    *filter = nullptr;
+    return 0;
+  }
+  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
+     *filter = nullptr;
      return 0;
   }
 
@@ -1035,12 +1043,8 @@ public:
   void pre_exec() override;
   void execute() override;
 
-#if AKAKAK
-  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
-  void dispose_processor(RGWPutObjProcessor *processor);
-#endif
-  virtual int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
-    *filter = NULL;
+  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
+    *filter = nullptr;
     return 0;
   }
   virtual int get_params() = 0;
