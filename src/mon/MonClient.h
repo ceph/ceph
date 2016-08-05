@@ -72,7 +72,7 @@ struct MonClientPinger : public Dispatcher {
     int ret = 0;
     while (!done) {
       ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == -ETIMEDOUT)
+      if (ret == ETIMEDOUT)
         break;
     }
     return ret;
