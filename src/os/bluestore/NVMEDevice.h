@@ -69,14 +69,6 @@ class NVMEDevice : public BlockDevice {
     uint64_t left_edge = std::numeric_limits<uint64_t>::max();
     uint64_t right_edge = 0;
 
-    void verify() {
-      interval_set<uint64_t> m;
-      for (auto && it : buffered_extents) {
-        assert(!m.intersects(it.first, it.second.x_len));
-        m.insert(it.first, it.second.x_len);
-      }
-    }
-
     void insert(uint64_t off, uint64_t len, const char *data) {
       auto it = buffered_extents.lower_bound(off);
       if (it != buffered_extents.begin()) {
@@ -125,9 +117,6 @@ class NVMEDevice : public BlockDevice {
       }
       buffered_extents[off] = Extent{
           len, 0, data, len};
-
-      if (0)
-        verify();
     }
 
     void memcpy_check(char *dst, uint64_t dst_raw_len, uint64_t dst_off,
