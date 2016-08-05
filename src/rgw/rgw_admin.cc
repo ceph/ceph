@@ -232,7 +232,7 @@ void _usage()
   cout << "\nQuota options:\n";
   cout << "   --bucket                  specified bucket for quota command\n";
   cout << "   --max-objects             specify max objects (negative value to disable)\n";
-  cout << "   --max-size                specify max size (in bytes, negative value to disable)\n";
+  cout << "   --max-size                specify max size (in B/K/M/G/T, negative value to disable)\n";
   cout << "   --quota-scope             scope of quota (bucket, user)\n";
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
@@ -1021,7 +1021,11 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
 
     case OPT_QUOTA_SET:
       if (have_max_objects) {
-        quota.max_objects = max_objects;
+        if (max_objects < 0) {
+          quota.max_objects = -1;
+        } else {
+          quota.max_objects = max_objects;
+        }
       }
       if (have_max_size) {
         if (max_size < 0) {
@@ -2142,7 +2146,7 @@ int main(int argc, char **argv)
         return EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
-      max_size = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      max_size = strict_si_cast<int64_t>(val.c_str(), &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max size: " << err << std::endl;
         return EINVAL;

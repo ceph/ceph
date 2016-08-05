@@ -185,7 +185,7 @@
   Quota options:
      --bucket                  specified bucket for quota command
      --max-objects             specify max objects (negative value to disable)
-     --max-size                specify max size (in bytes, negative value to disable)
+     --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
   Orphans search options:
