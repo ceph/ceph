@@ -460,9 +460,7 @@ void OSDMonitor::on_shutdown()
   // discard failure info, waiters
   list<MonOpRequestRef> ls;
   take_all_failures(ls);
-  while (!ls.empty()) {
-    ls.pop_front();
-  }
+  ls.clear();
 }
 
 void OSDMonitor::update_logger()
