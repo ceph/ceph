@@ -75,6 +75,8 @@ void MDLog::create_logger()
   plb.add_u64(l_mdl_rdpos, "rdpos", "Journaler  read position");
   plb.add_u64(l_mdl_jlat, "jlat", "Journaler flush latency");
 
+  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
+
   // logger
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
@@ -1369,6 +1371,7 @@ void MDLog::_replay_thread()
         if (mds->is_daemon_stopping()) {
           return;
         }
+        logger->inc(l_mdl_replayed);
         le->replay(mds);
       }
     }
