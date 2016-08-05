@@ -41,8 +41,21 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
   NetworkWorkerTest() {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
-    addr = "127.0.0.1:15000";
-    port_addr = "127.0.0.1:15001";
+    if (strncmp(GetParam(), "dpdk", 4)) {
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "posix", false, false);
+      addr = "127.0.0.1:15000";
+      port_addr = "127.0.0.1:15001";
+    } else {
+      g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_debug_allow_loopback", "true", false, false);
+      g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_coremask", "0x7", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.3", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
+      addr = "172.16.218.3:15000";
+      port_addr = "172.16.218.3:15001";
+    }
     stack = NetworkStack::create(g_ceph_context, GetParam());
     stack->start();
   }
@@ -198,6 +211,7 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
         while (r == -EAGAIN) {
           ASSERT_TRUE(cb.poll(500));
           r = srv_socket.read(buf, sizeof(buf));
+          cb.reset();
         }
         ASSERT_EQ(len, r);
         ASSERT_EQ(0, memcmp(buf, message, len));
@@ -1011,7 +1025,8 @@ class StressFactory {
 };
 
 TEST_P(NetworkWorkerTest, StressTest) {
-  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024, false);
+  StressFactory factory(stack, get_addr(), 16, 16, 10000, 1024,
+                        strncmp(GetParam(), "dpdk", 4) == 0);
   StressFactory *f = &factory;
   exec_events([f](Worker *worker) mutable {
     f->start(worker);
@@ -1024,6 +1039,9 @@ INSTANTIATE_TEST_CASE_P(
   NetworkStack,
   NetworkWorkerTest,
   ::testing::Values(
+#ifdef HAVE_DPDK
+    "dpdk",
+#endif
     "posix"
   )
 );
