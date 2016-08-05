@@ -325,20 +325,21 @@
      if (temp_created)
        out->push_back(temp_coll);
    }
-   void split_colls(
+   bool split_colls(
      spg_t child,
      int split_bits,
      int seed,
      ObjectStore::Transaction *t) {
      coll_t target = coll_t::make_temp_coll(child);
      if (!temp_created)
-       return;
+       return false;
      t->create_collection(target);
      t->split_collection(
        temp_coll,
        split_bits,
        seed,
        target);
+     return true;
    }
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
@@ -352,6 +353,7 @@
     return temp_coll;
    }
    bool have_temp_coll() const { return temp_created; }
+   void set_temp_coll() { temp_created = true; }
 
    // Track contents of temp collection, clear on reset
    void add_temp_obj(const hobject_t &oid) {
