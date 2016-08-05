@@ -35,7 +35,7 @@ public:
 
   void flush() override;
 
-  RGWEnv& get_env() override {
+  RGWEnv& get_env() noexcept override {
     return env;
   }
 

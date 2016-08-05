@@ -53,7 +53,7 @@ class RGWAsioClientIO : public RGWStreamIOEngine {
   int complete_header() override;
   int send_content_length(uint64_t len) override;
 
-  RGWEnv& get_env() override {
+  RGWEnv& get_env() noexcept override {
     return env;
   }
 };

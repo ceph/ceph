@@ -7,12 +7,20 @@
 
 int RGWFCGX::write_data(const char* const buf, const int len)
 {
-  return FCGX_PutStr(buf, len, fcgx->out);
+  const auto ret = FCGX_PutStr(buf, len, fcgx->out);
+  if (ret < 0) {
+    throw RGWStreamIOEngine::Exception(ret);
+  }
+  return ret;
 }
 
 int RGWFCGX::read_data(char* const buf, const int len)
 {
-  return FCGX_GetStr(buf, len, fcgx->in);
+  const auto ret = FCGX_GetStr(buf, len, fcgx->in);
+  if (ret < 0) {
+    throw RGWStreamIOEngine::Exception(ret);
+  }
+  return ret;
 }
 
 void RGWFCGX::flush()

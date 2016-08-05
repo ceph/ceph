@@ -77,7 +77,7 @@ namespace rgw {
     int complete_header();
     int send_content_length(uint64_t len);
 
-    RGWEnv& get_env() override {
+    RGWEnv& get_env() noexcept override {
       return env;
     }
 

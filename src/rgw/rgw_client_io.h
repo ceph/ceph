@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
+#include <exception>
 #include <string>
 #include <streambuf>
 #include <istream>
@@ -21,7 +22,7 @@ public:
   virtual ~RGWClientIO() {}
 
   void init(CephContext *cct);
-  virtual RGWEnv& get_env() = 0;
+  virtual RGWEnv& get_env() noexcept = 0;
   virtual int complete_request() = 0;
 }; /* RGWClient IO */
 
@@ -46,6 +47,19 @@ protected:
   virtual int write_data(const char *buf, int len) = 0;
 
 public:
+  class Exception : public std::exception {
+    int err;
+
+  public:
+    Exception(const int err)
+      : err(err) {
+    }
+
+    int value() {
+      return err;
+    }
+  };
+
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual int complete_header() = 0;
@@ -106,7 +120,7 @@ public:
 
   std::string grab_aws4_sha256_hash();
 
-  RGWEnv& get_env() override {
+  RGWEnv& get_env() noexcept override {
     return env;
   }
 
@@ -135,17 +149,31 @@ class RGWStreamIOLegacyWrapper : public RGWStreamIO {
     return *engine;
   }
 
+#define EXCPT_TO_RC(code)                                       \
+  try {                                                         \
+    return code;                                                \
+  } catch (RGWStreamIOEngine::Exception& e) {                   \
+    return e.value();                                           \
+  }
+
+#define EXCPT_TO_VOID(code)                                     \
+  try {                                                         \
+    return code;                                                \
+  } catch (RGWStreamIOEngine::Exception& e) {                   \
+    return;                                                     \
+  }
+
 protected:
   void init_env(CephContext *cct) override {
-    return get_decoratee().init_env(cct);
+    EXCPT_TO_VOID(get_decoratee().init_env(cct));
   }
 
   int read_data(char* const buf, const int max) override {
-    return get_decoratee().read_data(buf, max);
+    EXCPT_TO_RC(get_decoratee().read_data(buf, max));
   }
 
   int write_data(const char* const buf, const int len) override {
-    return get_decoratee().write_data(buf, len);
+    EXCPT_TO_RC(get_decoratee().write_data(buf, len));
   }
 
 public:
@@ -154,31 +182,31 @@ public:
   }
 
   int send_status(const int status, const char* const status_name) override {
-    return get_decoratee().send_status(status, status_name);
+    EXCPT_TO_RC(get_decoratee().send_status(status, status_name));
   }
 
   int send_100_continue() override {
-    return get_decoratee().send_100_continue();
+    EXCPT_TO_RC(get_decoratee().send_100_continue());
   }
 
   int send_content_length(const uint64_t len) override {
-    return get_decoratee().send_content_length(len);
+    EXCPT_TO_RC(get_decoratee().send_content_length(len));
   }
 
   int complete_header() override {
-    return get_decoratee().complete_header();
+    EXCPT_TO_RC(get_decoratee().complete_header());
   }
 
   void flush() override {
-    return get_decoratee().flush();
+    EXCPT_TO_VOID(get_decoratee().flush());
   }
 
-  RGWEnv& get_env() override {
+  RGWEnv& get_env() noexcept override {
     return get_decoratee().get_env();
   }
 
   int complete_request() override {
-    return get_decoratee().complete_request();
+    EXCPT_TO_RC(get_decoratee().complete_request());
   }
 };
 
