@@ -153,6 +153,7 @@ namespace rgw {
   {
     struct rgw_file_handle fh;
     std::mutex mtx;
+
     RGWLibFS* fs;
     RGWFileHandle* bucket;
     RGWFileHandle* parent;
@@ -232,6 +233,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_LOCK =   0x0040;
     static constexpr uint32_t FLAG_DELETED = 0x0080;
     static constexpr uint32_t FLAG_UNLINK_THIS = 0x0100;
+    static constexpr uint32_t FLAG_LOCKED = 0x0200;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -805,6 +807,41 @@ namespace rgw {
       return ret;
     } /* authorize */
 
+    /* find RGWFileHandle by id  */
+    LookupFHResult lookup_fh(const fh_key& fhk,
+			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
+      using std::get;
+
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // the cast transfers a lvalue into a rvalue  in the ctor
+      // check the commit message for the full details
+      LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
+
+      RGWFileHandle::FHCache::Latch lat;
+
+    retry:
+      RGWFileHandle* fh =
+	fh_cache.find_latch(fhk.fh_hk.object /* partition selector*/,
+			    fhk /* key */, lat /* serializer */,
+			    RGWFileHandle::FHCache::FLAG_LOCK);
+      /* LATCHED */
+      if (fh) {
+	fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
+	/* need initial ref from LRU (fast path) */
+	if (! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL)) {
+	  lat.lock->unlock();
+	  fh->mtx.unlock();
+	  goto retry; /* !LATCHED */
+	}
+	/* LATCHED, LOCKED */
+	if (! (flags & RGWFileHandle::FLAG_LOCK))
+	  fh->mtx.unlock(); /* ! LOCKED */
+      }
+      lat.lock->unlock(); /* !LATCHED */
+      get<0>(fhr) = fh;
+      return fhr;
+    } /* lookup_fh(const fh_key&) */
+
     /* find or create an RGWFileHandle */
     LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name,
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
@@ -878,7 +915,7 @@ namespace rgw {
     out:
       get<0>(fhr) = fh;
       return fhr;
-    }
+    } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
     inline void unref(RGWFileHandle* fh) {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
@@ -944,7 +981,7 @@ namespace rgw {
       if (fh->flags & RGWFileHandle::FLAG_DELETED) {
 	/* for now, delay briefly and retry */
 	lat.lock->unlock();
-	fh->mtx.unlock();
+	fh->mtx.unlock(); /* !LOCKED */
 	std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	goto retry; /* !LATCHED */
       }
@@ -956,6 +993,7 @@ namespace rgw {
       /* LATCHED */
     out:
       lat.lock->unlock(); /* !LATCHED */
+      fh->mtx.unlock(); /* !LOCKED */
       return fh;
     }
 
