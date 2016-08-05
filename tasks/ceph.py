@@ -310,6 +310,16 @@ def cephfs_setup(ctx, config):
             'ceph',
             '--cluster', cluster_name,
             'mds', 'set_max_mds', str(num_active)])
+        mon_remote.run(
+            args=[
+                'sudo',
+                'adjust-ulimits',
+                'ceph-coverage',
+                coverage_dir,
+                'ceph', 'mds', 'set', 'allow_dirfrags', 'true',
+                '--yes-i-really-mean-it'],
+	    check_status=False,  # probably old version, upgrade test
+        )
 
     yield
 
