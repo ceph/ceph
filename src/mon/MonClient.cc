@@ -427,6 +427,7 @@ void MonClient::shutdown()
   monc_lock.Unlock();
 
   if (initialized) {
+    finisher.wait_for_empty();
     finisher.stop();
   }
   monc_lock.Lock();
