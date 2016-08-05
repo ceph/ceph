@@ -1492,7 +1492,7 @@ void Journaler::shutdown()
     f->complete(-EAGAIN);
   }
 
-  finish_contexts(cct, waitfor_recover, 0);
+  finish_contexts(cct, waitfor_recover, -ESHUTDOWN);
 
   std::map<uint64_t, std::list<Context*> >::iterator i;
   for (i = waitfor_safe.begin(); i != waitfor_safe.end(); ++i) {
