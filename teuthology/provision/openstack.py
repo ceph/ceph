@@ -75,7 +75,7 @@ class ProvisionOpenStack(OpenStack):
             with safe_while(sleep=2, tries=100,
                             action="volume " + volume_name) as proceed:
                 while proceed():
-                    r = misc.sh("openstack volume show  -f json " +
+                    r = misc.sh("openstack -q volume show  -f json " +
                                 volume_name)
                     status = self.get_value(json.loads(r), 'status')
                     if status == 'available':

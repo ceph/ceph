@@ -286,7 +286,7 @@ class TestTeuthologyOpenStack(object):
         ip = TeuthologyOpenStack.create_floating_ip()
         if ip:
             ip_id = TeuthologyOpenStack.get_floating_ip_id(ip)
-            misc.sh("openstack ip floating delete " + ip_id)
+            misc.sh("openstack -q ip floating delete " + ip_id)
             self.can_create_floating_ips = True
         else:
             self.can_create_floating_ips = False
@@ -378,4 +378,4 @@ openstack keypair delete {key_name} || true
         ip = TeuthologyOpenStack.get_unassociated_floating_ip()
         assert expected == ip
         ip_id = TeuthologyOpenStack.get_floating_ip_id(ip)
-        misc.sh("openstack ip floating delete " + ip_id)
+        misc.sh("openstack -q ip floating delete " + ip_id)
