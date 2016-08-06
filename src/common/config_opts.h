@@ -414,6 +414,7 @@ OPTION(fuse_debug, OPT_BOOL, false)
 OPTION(fuse_multithreaded, OPT_BOOL, true)
 OPTION(fuse_require_active_mds, OPT_BOOL, true) // if ceph_fuse requires active mds server
 OPTION(fuse_syncfs_on_mksnap, OPT_BOOL, true)
+OPTION(fuse_set_user_groups, OPT_BOOL, false) // if ceph_fuse fills in group lists or not
 
 OPTION(client_try_dentry_invalidate, OPT_BOOL, true) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
 OPTION(client_die_on_failed_remount, OPT_BOOL, true)
