@@ -220,6 +220,11 @@ STATEDIR = '/var/lib/ceph'
 
 SYSCONFDIR = '/etc/ceph'
 
+PROCDIR = ''
+if platform.system() == "FreeBSD":
+    # Use the Linux compatability tree
+    PROCDIR = '/compat/linux'
+
 prepare_lock = None
 activate_lock = None
 SUPPRESS_PREFIX = None
@@ -744,7 +749,7 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts', 'rb') as proc_mounts:
+    with file(PROCDIR + '/proc/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
@@ -3812,7 +3817,7 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with file('/proc/swaps', 'rb') as proc_swaps:
+    with file(PROCDIR + '/proc/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:
