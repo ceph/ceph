@@ -951,7 +951,7 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
-    ldout(cct, 0) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
+    ldout(cct, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
   }
   try {
@@ -3621,7 +3621,7 @@ int RGWRados::init_complete()
       lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
       return -EINVAL;
     }
-    ldout(cct, 0) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
+    ldout(cct, 1) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
     ret = init_zg_from_local(&creating_defaults);
     if (ret < 0) {
       return ret;
