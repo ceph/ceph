@@ -2169,6 +2169,9 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
   req->set_data(request->data);
   req->set_retry_attempt(request->retry_attempt++);
   req->head.num_fwd = request->num_fwd;
+  const gid_t *_gids;
+  int gid_count = request->perms.get_gids(&_gids);
+  req->set_gid_list(gid_count, _gids);
   return req;
 }
 
