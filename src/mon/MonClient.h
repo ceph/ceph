@@ -210,14 +210,19 @@ private:
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
   bool _sub_want(const string &what, version_t start, unsigned flags) {
-    if ((sub_new.count(what) == 0 &&
-	 sub_sent.count(what) &&
-	 sub_sent[what].start == start &&
-	 sub_sent[what].flags == flags) ||
-	(sub_new.count(what) &&
-	 sub_new[what].start == start &&
-	 sub_new[what].flags == flags))
+    auto sub = sub_new.find(what);
+    if (sub != sub_new.end() &&
+        sub->second.start == start &&
+        sub->second.flags == flags) {
       return false;
+    } else {
+      sub = sub_sent.find(what);
+      if (sub != sub_sent.end() &&
+	  sub->second.start == start &&
+	  sub->second.flags == flags)
+	return false;
+    }
+
     sub_new[what].start = start;
     sub_new[what].flags = flags;
     return true;
