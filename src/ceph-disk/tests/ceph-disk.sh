@@ -53,19 +53,30 @@ function setup() {
     touch $dir/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
-function teardown() {
+function teardown_no_rm() {
     local dir=$1
     if ! test -e $dir ; then
         return
     fi
     kill_daemons $dir
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if  [ `uname` != FreeBSD ] && 
+	[ $(stat -f -c '%T' .) == "btrfs" ]; then
         rm -fr $dir/*/*db
         __teardown_btrfs $dir
     fi
-    grep " $(pwd)/$dir/" < /proc/mounts | while read mounted rest ; do
+    MOUNTS="/proc/mounts"
+    if [ x`uname`x = xFreeBSDx ]; then
+        MOUNTS="/compat/linux/"$MOUNTS
+    fi
+    grep " $(pwd)/$dir/" < $MOUNTS | while read mounted rest ; do
         umount $mounted
     done
+}
+
+function teardown() {
+    locate dir=$1
+
+    teardown_no_rm $dir
     rm -fr $dir
 }
 
@@ -150,7 +161,34 @@ function test_path() {
 function test_no_path() {
     local dir=$1
     shift
-    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:$CEPH_BIN:/usr/bin:/bin ; test_activate_dir $dir) || return 1
+    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:$CEPH_BIN:/usr/bin:/bin:/usr/local/bin ; test_activate_dir $dir) || return 1
+}
+
+function run_timeout() {
+    local status
+       local cmd
+       cmd="$@"
+
+    $timeout $TIMEOUT $cmd
+    status=$?
+    case $status in
+      0)
+        return 0
+        ;;
+      124)
+        echo Command "$cmd" has timed out.
+        ;;
+      126)
+        echo Command "$cmd" was invalid
+        ;;
+      127)
+        echo Command "$cmd" does not exist
+        ;;
+      *)
+        echo Timeout for "$cmd" returned status $?
+        ;;
+    esac
+    return 1
 }
 
 function test_mark_init() {
@@ -169,7 +207,7 @@ function test_mark_init() {
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=auto \
@@ -183,7 +221,7 @@ function test_mark_init() {
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
@@ -240,14 +278,14 @@ function test_pool_read_write() {
     local osd_uuid=$1
     local TEST_POOL=rbd
 
-    $timeout $TIMEOUT ceph osd pool set $TEST_POOL size 1 || return 1
+    run_timeout ceph osd pool set $TEST_POOL size 1 || return 1
 
     local id=$(ceph osd create $osd_uuid)
     local weight=1
     ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $dir/BAR
-    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $dir/BAR || return 1
-    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $dir/BAR.copy || return 1
+    run_timeout rados --pool $TEST_POOL put BAR $dir/BAR || return 1
+    run_timeout rados --pool $TEST_POOL get BAR $dir/BAR.copy || return 1
     $diff $dir/BAR $dir/BAR.copy || return 1
 }
 
@@ -259,7 +297,7 @@ function test_activate() {
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $to_prepare || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -294,7 +332,7 @@ function test_activate_dir_bluestore() {
         prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
 
     CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --enable_experimental_unrecoverable_data_corrupting_features=* --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
-      $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+      run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -349,6 +387,8 @@ function test_ceph_osd_mkfs() {
 
 function run() {
     local dir=$1
+    local status
+
     shift
     CEPH_DISK_ARGS+=" --statedir=$dir"
     CEPH_DISK_ARGS+=" --sysconfdir=$dir"
@@ -381,9 +421,9 @@ function run() {
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
     default_actions+="test_keyring_path "
-    default_actions+="test_mark_init "
+    [ `uname` != FreeBSD ] && default_actions+="test_mark_init "
     default_actions+="test_zap "
-    default_actions+="test_activate_dir_bluestore "
+    [ `uname` != FreeBSD ] && default_actions+="test_activate_dir_bluestore "
     default_actions+="test_ceph_osd_mkfs "
     local actions=${@:-$default_actions}
     for action in $actions  ; do
