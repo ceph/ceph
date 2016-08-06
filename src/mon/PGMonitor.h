@@ -145,7 +145,7 @@ private:
 			  int threshold,
 			  vector<string>& args) const;
 
-  void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
 			    object_stat_sum_t &sum,
 			    uint64_t avail,
 			    float raw_used_rate,
