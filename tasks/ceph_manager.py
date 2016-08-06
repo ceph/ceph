@@ -286,6 +286,20 @@ class Thrasher:
             if imp_remote != exp_remote:
                 imp_remote.run(args=cmd)
 
+            # apply low split settings to each pool
+            for pool in self.ceph_manager.list_pools():
+                no_sudo_prefix = prefix[5:]
+                cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
+                       "--filestore-split-multiple 1' sudo -E "
+                       + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
+                proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
+                output = proc.stderr.getvalue()
+                if 'Couldn\'t find pool' in output:
+                    continue
+                if proc.exitstatus:
+                    raise Exception("ceph-objectstore-tool apply-layout-settings"
+                                    " failed with {status}".format(status=proc.exitstatus))
+
     def rm_past_intervals(self, osd=None):
         """
         :param osd: Osd to find pg to remove past intervals
