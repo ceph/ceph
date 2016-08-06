@@ -3153,12 +3153,12 @@ PG *OSD::_create_lock_pg(
   return pg;
 }
 
-PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
+PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 {
   Session *session = static_cast<Session*>(
     op->get_req()->get_connection()->get_priv());
   if (!session)
-    return NULL;
+    return PGRef();
   // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
   // the session_dispatch_lock must already be held.
   assert(session->session_dispatch_lock.is_locked());
@@ -3179,7 +3179,7 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
     register_session_waiting_on_pg(session, pgid);
   }
   session->put();
-  return out;
+  return PGRef(out);
 }
 
 PG *OSD::_lookup_lock_pg(spg_t pgid)
@@ -8556,7 +8556,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  PG *pg = get_pg_or_queue_for_pg(pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg) {
     op->send_map_update = share_map.should_send;
     op->sent_epoch = m->get_map_epoch();
@@ -8644,7 +8644,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     peer_session->put();
   }
 
-  PG *pg = get_pg_or_queue_for_pg(m->pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op);
   if (pg) {
     op->send_map_update = should_share_map;
     op->sent_epoch = m->map_epoch;
@@ -8669,7 +8669,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
   return false;
 }
 
-void OSD::enqueue_op(PG *pg, OpRequestRef& op)
+void OSD::enqueue_op(PGRef pg, OpRequestRef& op)
 {
   utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
   dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
