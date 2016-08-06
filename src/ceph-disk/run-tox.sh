@@ -17,6 +17,12 @@
 
 # run from the ceph-disk directory or from its parent
 : ${CEPH_DISK_VIRTUALENV:=/tmp/ceph-disk-virtualenv}
+if [ -z $CEPH_BIN ]; then
+  CEPH_BIN=$(dirname $0)/../../buid/bin
+  CEPH_BIN=`readlink -f $CEPH_BIN`
+  PATH=$CEPH_BIN:$PATH
+fi
+
 test -d ceph-disk && cd ceph-disk
 
 if [ -e tox.ini ]; then
