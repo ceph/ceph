@@ -154,11 +154,11 @@ private:
 			  int threshold,
 			  vector<string>& args) const;
 
-  void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    object_stat_sum_t &sum,
-			    uint64_t avail,
-			    float raw_used_rate,
-			    bool verbose, const pg_pool_t *pool) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+				   object_stat_sum_t &sum,
+				   uint64_t avail,
+				   float raw_used_rate,
+				   bool verbose, const pg_pool_t *pool);
 
   int64_t get_rule_avail(OSDMap& osdmap, int ruleno) const;
 

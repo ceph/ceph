@@ -1369,7 +1369,7 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
                                      object_stat_sum_t &sum, uint64_t avail,
-                                     float raw_used_rate, bool verbose, const pg_pool_t *pool) const
+                                     float raw_used_rate, bool verbose, const pg_pool_t *pool)
 {
   float curr_object_copies_rate = 0.0;
   if (sum.num_object_copies > 0)
