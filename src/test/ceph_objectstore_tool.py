@@ -67,6 +67,7 @@ def wait_for_health():
 def get_pool_id(name, nullfd):
     cmd = "{path}/ceph osd pool stats {pool}".format(pool=name, path=CEPH_BIN).split()
     # pool {pool} id # .... grab the 4 field
+    print(check_output(cmd)) # for debugging, see what is wrong with ceph-call
     return check_output(cmd, stderr=nullfd).split()[3]
 
 
