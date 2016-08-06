@@ -23,24 +23,40 @@ private:
   int gid_count;
   gid_t *gids;
   bool alloced_gids;
+  void deep_copy(UserPerm& a, const UserPerm& b) {
+    a.m_uid = b.m_uid;
+    a.m_gid = b.m_gid;
+    a.gid_count = b.gid_count;
+    a.gids = new gid_t[gid_count];
+    a.alloced_gids = true;
+    for (int i = 0; i < gid_count; ++i) {
+      a.gids[i] = b.gids[i];
+    }
+  }
 public:
   UserPerm() : m_uid(-1), m_gid(-1), gid_count(0),
 	       gids(NULL), alloced_gids(false) {}
   UserPerm(int uid, int gid) : m_uid(uid), m_gid(gid), gid_count(0),
 			       gids(NULL), alloced_gids(false) {}
   UserPerm(const UserPerm& o) {
+    deep_copy(*this, o);
+  }
+  UserPerm(UserPerm && o) {
     m_uid = o.m_uid;
     m_gid = o.m_gid;
     gid_count = o.gid_count;
-    gids = new gid_t[gid_count];
-    alloced_gids = true;
-    for (int i = 0; i < gid_count; ++i) {
-      gids[i] = o.gids[i];
-    }
+    gids = o.gids;
+    alloced_gids = o.alloced_gids;
+    o.gids = NULL;
+    o.gid_count = 0;
   }
   ~UserPerm() {
     if (alloced_gids)
       delete gids;
+  }
+  UserPerm& operator=(const UserPerm o) {
+    deep_copy(*this, o);
+    return *this;
   }
   // FIXME: stop doing a deep-copy all the time. We need it on stuff
   // that lasts longer than a single "syscall", but not for MetaRequests et al
