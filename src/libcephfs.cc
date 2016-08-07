@@ -1648,6 +1648,19 @@ extern "C" int ceph_ll_removexattr(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_removexattr(in, name, uid, gid));
 }
 
+extern "C" int ceph_ll_getlk(struct ceph_mount_info *cmount,
+			     Fh *fh, struct flock *fl, uint64_t owner)
+{
+  return (cmount->get_client()->ll_getlk(fh, fl, owner));
+}
+
+extern "C" int ceph_ll_setlk(struct ceph_mount_info *cmount,
+			     Fh *fh, struct flock *fl, uint64_t owner,
+			     int sleep)
+{
+  return (cmount->get_client()->ll_setlk(fh, fl, owner, sleep));
+}
+
 extern "C" uint32_t ceph_ll_stripe_unit(class ceph_mount_info *cmount,
 					Inode *in)
 {

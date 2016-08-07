@@ -5,6 +5,7 @@ if(${WITH_CEPHFS})
     caps.cc
     multiclient.cc
     flock.cc
+    recordlock.cc
     acl.cc
   )
   set_target_properties(ceph_test_libcephfs PROPERTIES COMPILE_FLAGS

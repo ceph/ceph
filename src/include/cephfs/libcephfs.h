@@ -1495,6 +1495,11 @@ int ceph_ll_commit_blocks(struct ceph_mount_info *cmount,
 			  struct Inode *in, uint64_t offset, uint64_t range);
 
 
+int ceph_ll_getlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner);
+int ceph_ll_setlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+
 #ifdef __cplusplus
 }
 #endif
