@@ -7,7 +7,6 @@ overrides:
         ms_inject_delay_max: 5
         client_oc_max_dirty_age: 1
 tasks:
-- ceph-fuse:
 - exec:
     client.0:
       - cd $TESTDIR/mnt.* && dd if=/dev/zero of=./foo count=100

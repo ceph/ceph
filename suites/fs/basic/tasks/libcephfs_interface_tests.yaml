@@ -1,5 +1,7 @@
+overrides:
+  ceph-fuse:
+    disabled: true
 tasks:
-- ceph-fuse:
 - workunit:
     clients:
       client.0:

@@ -1,6 +1,0 @@
-tasks:
-- ceph-fuse:
-    client.0:
-        mounted: false
-    client.1:
-        mounted: false
