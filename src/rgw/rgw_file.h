@@ -1926,8 +1926,7 @@ public:
   RGWPutObjProcessor *processor;
   buffer::list data;
   MD5 hash;
-  off_t last_off;
-  off_t next_off;
+  off_t real_ofs;
   size_t bytes_written;
   bool multipart;
   bool eio;
@@ -1935,8 +1934,8 @@ public:
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      rgw_fh(_fh), processor(nullptr), last_off(0), next_off(0),
-      bytes_written(0), multipart(false), eio(false) {
+      rgw_fh(_fh), processor(nullptr), real_ofs(0), bytes_written(0),
+      multipart(false), eio(false) {
 
     int ret = header_init();
     if (ret == 0) {
@@ -2009,10 +2008,12 @@ public:
   }
 
   void put_data(off_t off, buffer::list& _bl) {
-    if (off && (off != (ofs+1)))
+    if (off != real_ofs) {
       eio = true;
-    ofs = off;
+    }
     data.claim(_bl);
+    real_ofs += data.length();
+    ofs = off; /* consumed in exec_continue() */
   }
 
   virtual int exec_start();
