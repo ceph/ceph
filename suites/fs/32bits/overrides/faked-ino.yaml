@@ -3,5 +3,3 @@ overrides:
     conf:
       client:
         client use faked inos: true
-tasks:
-- ceph-fuse:
