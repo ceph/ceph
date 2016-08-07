@@ -1,5 +1,1 @@
-tasks:
-- workunit:
-    clients:
-      client.0:
-        - libcephfs/test.sh
+../../../../cephfs/tasks/libcephfs_interface_tests.yaml
