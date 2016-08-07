@@ -627,5 +627,38 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 }
 
+TEST_F(TestMockExclusiveLock, RequestLockWatchNotRegistered) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_block_writes(mock_image_ctx);
+  ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
+
+  EXPECT_CALL(*mock_image_ctx.image_watcher, get_watch_handle())
+    .WillOnce(DoAll(Invoke([&mock_image_ctx, &exclusive_lock]() {
+                      mock_image_ctx.image_ctx->op_work_queue->queue(
+                        new FunctionContext([&exclusive_lock](int r) {
+                          exclusive_lock.handle_watch_registered();
+                        }));
+                    }),
+                    Return(0)));
+  MockAcquireRequest request_lock_acquire;
+  expect_acquire_lock(mock_image_ctx, request_lock_acquire, 0);
+  ASSERT_EQ(0, when_request_lock(mock_image_ctx, exclusive_lock));
+  ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
+
+  MockReleaseRequest shutdown_release;
+  expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
+  ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
+  ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
+}
+
 } // namespace librbd
 

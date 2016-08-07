@@ -41,6 +41,7 @@ public:
   void request_lock(Context *on_locked);
   void release_lock(Context *on_released);
 
+  void handle_watch_registered();
   void handle_lock_released();
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
@@ -50,10 +51,13 @@ public:
 private:
 
   /**
-   * <start>                               WAITING_FOR_PEER -----------------\
-   *    |                                     ^                              |
-   *    |                                     *  (request_lock busy)         |
-   *    |                                     * * * * * * * * * * * *        |
+   * <start>                              * * > WAITING_FOR_REGISTER --------\
+   *    |                                 * (watch not registered)           |
+   *    |                                 *                                  |
+   *    |                                 * * > WAITING_FOR_PEER ------------\
+   *    |                                 * (request_lock busy)              |
+   *    |                                 *                                  |
+   *    |                                 * * * * * * * * * * * * * *        |
    *    |                                                           *        |
    *    v            (init)            (try_lock/request_lock)      *        |
    * UNINITIALIZED  -------> UNLOCKED ------------------------> ACQUIRING <--/
@@ -79,6 +83,7 @@ private:
     STATE_ACQUIRING,
     STATE_POST_ACQUIRING,
     STATE_WAITING_FOR_PEER,
+    STATE_WAITING_FOR_REGISTER,
     STATE_PRE_RELEASING,
     STATE_RELEASING,
     STATE_PRE_SHUTTING_DOWN,
