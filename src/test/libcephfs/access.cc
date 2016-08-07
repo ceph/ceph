@@ -72,7 +72,7 @@ int do_mon_command(string s, string *key)
 
 string get_unique_dir()
 {
-  return string("/ceph_test_libcephfs.") + stringify(rand());
+  return string("/ceph_test_libcephfs_access.") + stringify(rand());
 }
 
 TEST(AccessTest, Foo) {
