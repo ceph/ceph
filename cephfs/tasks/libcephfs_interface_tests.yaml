@@ -1,0 +1,8 @@
+overrides:
+  ceph-fuse:
+    disabled: true
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - libcephfs/test.sh
