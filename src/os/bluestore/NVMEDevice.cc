@@ -626,6 +626,11 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 {
   Mutex::Locker l(lock);
   int r = 0;
+  
+  string prefix = "--file-prefix";
+  prefix += sn_tag.substr(sn_tag.size() - 4);
+  char *prefix_arg = (char *)prefix.c_str();
+
   if (sn_tag.empty()) {
     r = -ENOENT;
     derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
@@ -642,11 +647,13 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   if (!init) {
     init = true;
     dpdk_thread = std::thread(
-      [this]() {
+      [this, prefix_arg]() {
         static const char *ealargs[] = {
             "ceph-osd",
             "-c 0x3", /* This must be the second parameter. It is overwritten by index in main(). */
             "-n 4",
+	    "--socket-mem=1024",
+	    prefix_arg
         };
 
         int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
