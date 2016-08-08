@@ -60,7 +60,8 @@ public:
                                         uint64_t object_off,
                                         const ceph::bufferlist &data,
                                         const ::SnapContext &snapc,
-                                        Context *completion, int op_flags);
+                                        Context *completion, int op_flags,
+                                        const blkin_trace_info *trace_info = nullptr);
   static AioObjectRequest* create_zero(ImageCtxT *ictx, const std::string &oid,
                                        uint64_t object_no, uint64_t object_off,
                                        uint64_t object_len,

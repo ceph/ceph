@@ -53,9 +53,10 @@ AioObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                   uint64_t object_no, uint64_t object_off,
                                   const ceph::bufferlist &data,
                                   const ::SnapContext &snapc,
-                                  Context *completion, int op_flags) {
+                                  Context *completion, int op_flags,
+                                  const blkin_trace_info *trace_info) {
   return new AioObjectWrite(util::get_image_ctx(ictx), oid, object_no,
-                            object_off, data, snapc, completion, op_flags);
+                            object_off, data, snapc, completion, op_flags, trace_info);
 }
 
 template <typename I>
@@ -78,7 +79,6 @@ AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
     m_hide_enoent(hide_enoent), m_trace_info(trace_info) {
-
   Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                           0, m_ictx->layout.object_size, m_parent_extents);
 
