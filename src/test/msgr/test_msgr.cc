@@ -114,7 +114,7 @@ class FakeDispatcher : public Dispatcher {
 
   void ms_handle_fast_connect(Connection *con) {
     lock.Lock();
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(con);
@@ -154,7 +154,7 @@ class FakeDispatcher : public Dispatcher {
   }
   bool ms_handle_reset(Connection *con) {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->con.reset(NULL);  // break con <-> session ref cycle
@@ -165,7 +165,7 @@ class FakeDispatcher : public Dispatcher {
   }
   void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->con.reset(NULL);  // break con <-> session ref cycle
@@ -1344,7 +1344,7 @@ class MarkdownDispatcher : public Dispatcher {
   }
 
   void ms_handle_fast_connect(Connection *con) {
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.insert(con);
   }
@@ -1377,7 +1377,7 @@ class MarkdownDispatcher : public Dispatcher {
     return true;
   }
   bool ms_handle_reset(Connection *con) {
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.erase(con);
     usleep(rand() % 500);
@@ -1386,7 +1386,7 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
     conns.erase(con);
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
   }
   void ms_fast_dispatch(Message *m) {
     assert(0);
