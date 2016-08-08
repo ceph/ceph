@@ -955,7 +955,7 @@ public:
 	 i != awaiting_throttle.end();
       ) {
       if (i->second.get() == pg) {
-	awaiting_throttle.erase(i++);
+	awaiting_throttle.erase(i);
 	return;
       } else {
 	++i;
