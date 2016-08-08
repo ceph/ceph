@@ -244,17 +244,18 @@ public:
     return max ? 0x100000000ull : hash_reverse_bits;
   }
 
+  // please remember to update set_bitwise_key_u32() also
+  // once you change build_hash_cache()
   void build_hash_cache() {
     nibblewise_key_cache = _reverse_nibbles(hash);
     hash_reverse_bits = _reverse_bits(hash);
   }
-  void set_nibblewise_key_u32(uint32_t value) {
-    hash = _reverse_nibbles(value);
-    build_hash_cache();
-  }
   void set_bitwise_key_u32(uint32_t value) {
     hash = _reverse_bits(value);
-    build_hash_cache();
+    // below is identical to build_hash_cache() and shall be
+    // updated correspondingly if you change build_hash_cache() 
+    nibblewise_key_cache = _reverse_nibbles(hash);
+    hash_reverse_bits = value;
   }
 
   const string& get_effective_key() const {

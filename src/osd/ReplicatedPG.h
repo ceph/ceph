@@ -695,7 +695,7 @@ public:
       if (op && op->get_req()) {
         return op->get_req()->get_connection()->get_features();
       }
-      return -1ll;
+      return -1ull;
     }
   };
   using OpContextUPtr = std::unique_ptr<OpContext>;
