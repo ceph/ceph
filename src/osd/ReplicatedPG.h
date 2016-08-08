@@ -176,7 +176,7 @@ public:
   protected:
     CopyCallback() {}
     /**
-     * results.get<0>() is the return code: 0 for success; -ECANCELLED if
+     * results.get<0>() is the return code: 0 for success; -ECANCELED if
      * the operation was cancelled by the local OSD; -errno for other issues.
      * results.get<1>() is a pointer to a CopyResults object, which you are
      * responsible for deleting.

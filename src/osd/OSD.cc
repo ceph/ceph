@@ -465,7 +465,6 @@ void OSDService::start_shutdown()
 {
   {
     Mutex::Locker l(agent_timer_lock);
-    agent_timer.cancel_all_events();
     agent_timer.shutdown();
   }
 }
@@ -1116,6 +1115,7 @@ void OSDService::dec_scrubs_active()
   dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
 	   << " (max " << cct->_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
   --scrubs_active;
+  assert(scrubs_active >= 0);
   sched_scrub_lock.Unlock();
 }
 
