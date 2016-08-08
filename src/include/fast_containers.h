@@ -17,6 +17,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 #include <assert.h>
 #include <list>
 
@@ -72,10 +73,10 @@ namespace ceph {
 // If you use this allocator with those containers, you'll corrupt memory. Fortunately, this situation is detected
 // automatically, but only after the fact. Violations will result in an assert failure at run-time see ~fs_allocator
 //
-template<typename T,size_t stackSize, size_t heapSize = stackSize>
+template<typename T,size_t stackSize, size_t heapSize>
 class fs_allocator {
    //
-   // Stores one Object OR if it's free, exactly one pointer to a in a free slot list.
+   // Stores one Object OR if it's free exactly one pointer to a slot_t in a free slot list.
    // Since this is raw memory, we don't want to declare something of type "T" to avoid
    // accidental constructor/destructor calls.
    //
@@ -83,7 +84,6 @@ class fs_allocator {
       enum { SLOT_SIZE_IN_POINTERS = (sizeof(T) + sizeof(slot_t *) - 1) / sizeof(slot_t *) };
       slot_t *storage[SLOT_SIZE_IN_POINTERS];
    };
-
    //
    // Exactly one of these as part of this object (the slab on the stack :))
    //
@@ -91,29 +91,44 @@ class fs_allocator {
       slot_t slots[stackSize];
    };
    //
-   // These are malloc/freeded.
+   // These are malloc/freeded when you exceed the number of slots allocated in the stackSlab
    //
    struct heapSlab_t {
       heapSlab_t *next;
    };
- 
+   //
+   // Free a slot of unknown origin
+   //
    void freeslot(slot_t *s) {
       s->storage[0] = freelist;
       freelist = s;
       ++freeSlotCount;
    }
-
    //
    // Danger, because of the my_actual_allocator hack. You can't rely on T to be correct, nor any value or offset that's
    // derived directly or indirectly from T.
    //
    void addSlab(size_t slabSize) {
+       //
+       // I need to compute the size of this structure
+       //
+       //   struct .... {
+       //        heapSlab_t *next;
+       //        T          slots[slabSize];
+       //   };
+       //
+       // However, here sizeof(T) isn't correct [see warning above, 'T' might not be correct]
+       // so I use the sizeof(T) that's actually correct: 'trueSlotSize'
+       //
        size_t sz = sizeof(heapSlab_t) + slabSize * trueSlotSize;
+       //
+       // Allocate the slab and put it on the list of malloc'ed slabs
+       //
        heapSlab_t *s = reinterpret_cast<heapSlab_t *>(::malloc(sz));
        s->next = heapSlabs;
        heapSlabs = s;
        //
-       // Now, free the slots. This is a bit ugly because slotSize isn't known at compile time (because T is incorrect)
+       // Now, put the new slots on the free list. This is a bit ugly because slotSize isn't known at compile time (because T is incorrect)
        //
        char *raw = reinterpret_cast<char *>(s+1);
        for (size_t i = 0; i < slabSize; ++i) {
@@ -163,6 +178,9 @@ public:
    template<typename U> struct rebind { typedef fs_allocator<U,stackSize,heapSize> other; };
 
    fs_allocator() : freelist(nullptr), heapSlabs(nullptr), freeSlotCount(0), allocSlotCount(stackSize), trueSlotSize(sizeof(slot_t)) {
+      //
+      // For the "in the stack" slots, put them on the free list
+      //
       for (size_t i = 0; i < stackSize; ++i) {
          freeslot(&stackSlab.slots[i]);
       }
@@ -230,6 +248,16 @@ private:
 };
 
 //
+// Simple function to compute the size of a heapSlab
+//
+//   we assume that we want heapSlabs to be about 1KBytes.
+//
+
+inline size_t defaultHeapCount(size_t nodeSize) {
+   return std::max(1024 / nodeSize,size_t(1));
+}
+
+//
 // Extended containers
 //
 
@@ -237,7 +265,7 @@ template<
    typename key,
    typename value,
    size_t   stackCount, 
-   size_t   heapCount = stackCount, 
+   size_t   heapCount = defaultHeapCount(sizeof(key) + sizeof(value)), 
    typename compare = std::less<key> >
    struct fast_map : public std::map<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount> > {
    //
@@ -274,7 +302,7 @@ template<
    typename key,
    typename value,
    size_t   stackCount, 
-   size_t   heapCount = stackCount, 
+   size_t   heapCount = defaultHeapCount(sizeof(key) + sizeof(value)), 
    typename compare = std::less<key> >
    struct fast_multimap : public std::multimap<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount> > {
    //
@@ -309,7 +337,7 @@ private:
 template<
    typename key,
    size_t   stackCount, 
-   size_t   heapCount = stackCount, 
+   size_t   heapCount = defaultHeapCount(sizeof(key)), 
    typename compare = std::less<key> >
    struct fast_set : public std::set<key,compare,fs_allocator<key,stackCount,heapCount> > {
    //
@@ -344,7 +372,7 @@ private:
 template<
    typename key,
    size_t   stackCount, 
-   size_t   heapCount = stackCount, 
+   size_t   heapCount = defaultHeapCount(sizeof(key)), 
    typename compare = std::less<key> >
    struct fast_multiset : public std::multiset<key,compare,fs_allocator<key,stackCount,heapCount> > {
    //
@@ -379,7 +407,7 @@ private:
 template<
    typename node,
    size_t   stackCount, 
-   size_t   heapCount = stackCount >
+   size_t   heapCount = defaultHeapCount(sizeof(node)) >
    struct fast_list : public std::list<node,fs_allocator<node,stackCount,heapCount> > {
    fast_list() {}
 
@@ -417,7 +445,7 @@ template<
          ofirst = o.erase(ofirst);
       }
       //
-      // Copy oroginal nodes of my list to other container
+      // Copy original nodes of my list to other container
       //
       while (mfirst != mlast) {
          o.push_back(std::move(*mfirst));
@@ -443,7 +471,7 @@ private:
    // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
    // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
    // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a check for this :)
+   // we do have a cheap run-time check for this, in case you're platform doesn't match the same layout :)
    //
    // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
    // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
@@ -457,6 +485,128 @@ private:
       return alloc;
    }
 };
+
+//
+// Special allocator for vector
+//
+//  Unlike the more sophisticated allocator above, we always have the right type, so we can save a lot of machinery
+//
+template<typename T,size_t stackSize>
+class fs_vector_allocator {
+   T stackSlot[stackSize]; 			// stackSlab is always allocated with the object :)
+  
+public:
+   typedef fs_vector_allocator<T,stackSize> allocator_type;
+   typedef T value_type;
+   typedef value_type *pointer;
+   typedef const value_type * const_pointer;
+   typedef value_type& reference;
+   typedef const value_type& const_reference;
+   typedef std::size_t size_type;
+   typedef std::ptrdiff_t difference_type;
+
+   template<typename U> struct rebind { typedef fs_vector_allocator<U,stackSize> other; };
+
+   fs_vector_allocator() {
+   }
+   ~fs_vector_allocator() {
+   }
+
+   pointer allocate(size_t cnt,void *p = nullptr) {
+      if (cnt <= stackSize) return stackSlot;
+      return static_cast<pointer>(::malloc(cnt * sizeof(T)));
+   }
+
+   void deallocate(pointer p, size_type s) {
+      if (p != stackSlot) ::free(p);
+   }
+
+   void destroy(pointer p) {
+      p->~T();
+   }
+
+   template<class U> void destroy(U *p) {
+      p->~U();
+   }
+
+   void construct(pointer p,const_reference val) {
+      ::new ((void *)p) T(val);
+   }
+
+   template<class U, class... Args> void construct(U* p,Args&&... args) {
+      ::new((void *)p) U(std::forward<Args>(args)...);
+   }
+
+   bool operator==(const fs_vector_allocator&) { return true; }
+   bool operator!=(const fs_vector_allocator&) { return false; }
+
+   void selfCheck() {
+   }
+
+private:
+
+   // Can't copy or assign this guy
+   fs_vector_allocator(fs_vector_allocator&) = delete;
+   fs_vector_allocator(fs_vector_allocator&&) = delete;
+   void operator=(const fs_vector_allocator&) = delete;
+   void operator=(const fs_vector_allocator&&) = delete;
+};
+
+//
+// Vector. We rely on having an initial "reserve" call that ensures we wire-in the in-stack memory allocations
+//
+template<typename value,size_t   stackCount >
+   struct fast_vector : public std::vector<value,fs_vector_allocator<value,stackCount> > {
+
+   fast_vector() {
+      this->reserve(stackCount);
+   }
+
+   fast_vector(size_t initSize,const value& val = value()) {
+      this->reserve(std::max(initSize,stackCount));
+      for (size_t i = 0; i < initSize; ++i) this->push_back(val);
+   }
+
+   fast_vector(const fast_vector& rhs) {
+      this->reserve(stackCount);
+      *this = rhs;
+   }
+
+   fast_vector& operator=(const fast_vector& rhs) {
+      this->reserve(rhs.size());
+      this->clear();
+      for (auto& i : rhs) {
+         this->push_back(i);
+      }
+      return *this;
+   }   
+
+private:
+   typedef std::vector<value,fs_vector_allocator<value,stackCount>> vector_type;
+   //
+   // Disallowed operations
+   //
+   using vector_type::swap;
+   //
+   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
+   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
+   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
+   // we do have a check for this :)
+   //
+   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
+   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
+   // additional members.
+   // But that doesn't matter for this hack...
+   //
+   typedef fs_vector_allocator<value,stackCount> my_alloc_type;
+   my_alloc_type * get_my_actual_allocator() {
+      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
+      alloc->selfCheck();
+      return alloc;
+   }
+
+};
+
 
 };
 
