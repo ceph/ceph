@@ -2,8 +2,10 @@ add_library(librados_objs OBJECT
   IoCtxImpl.cc
   RadosXattrIter.cc
   RadosClient.cc)
+add_library(librados_api_obj OBJECT
+  librados.cc)
 add_library(librados ${CEPH_SHARED}
-  librados.cc
+  $<TARGET_OBJECTS:librados_api_obj>
   $<TARGET_OBJECTS:librados_objs>
   $<TARGET_OBJECTS:common_buffer_obj>)
 add_dependencies(librados osdc)
