@@ -1357,8 +1357,10 @@ class MarkdownDispatcher : public Dispatcher {
     Mutex::Locker l(lock);
     count.inc();
     conns.insert(m->get_connection());
-    if (conns.size() < 2 && !last_mark)
+    if (conns.size() < 2 && !last_mark) {
+      m->put();
       return true;
+    }
 
     last_mark = true;
     usleep(rand() % 500);
