@@ -4516,6 +4516,8 @@ void RGWCompleteMultipart::execute()
 
     total_parts += obj_parts.size();
     if (!truncated && total_parts != (int)parts->parts.size()) {
+      ldout(s->cct, 0) << "NOTICE: total parts mismatch: have: " << total_parts
+		       << " expected: " << parts->parts.size() << dendl;
       op_ret = -ERR_INVALID_PART;
       return;
     }
