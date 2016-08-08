@@ -3756,18 +3756,20 @@ void PrimaryLogPG::cancel_proxy_write(ProxyWriteOpRef pwop,
 
 class PromoteCallback: public PrimaryLogPG::CopyCallback {
   ObjectContextRef obc;
+  bool may_write;
   PrimaryLogPG *pg;
   utime_t start;
 public:
-  PromoteCallback(ObjectContextRef obc_, PrimaryLogPG *pg_)
+  PromoteCallback(ObjectContextRef obc_, bool may_write_, PrimaryLogPG *pg_)
     : obc(obc_),
+      may_write(may_write_),
       pg(pg_),
       start(ceph_clock_now()) {}
 
   void finish(PrimaryLogPG::CopyCallbackResults results) override {
     PrimaryLogPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote(r, results_data, obc);
+    pg->finish_promote(r, results_data, may_write, obc);
     pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now() - start);
   }
 };
@@ -3809,6 +3811,7 @@ struct PromoteFinisher : public PrimaryLogPG::OpFinisher {
     if (promote_callback->ctx->obc->obs.oi.manifest.is_redirect()) {
       promote_callback->ctx->pg->finish_promote(promote_callback->promote_results.get<0>(),
 						promote_callback->promote_results.get<1>(),
+						false,
 						promote_callback->obc);
     } else if (promote_callback->ctx->obc->obs.oi.manifest.is_chunked()) {
       promote_callback->ctx->pg->finish_promote_manifest(promote_callback->promote_results.get<0>(),
@@ -3867,7 +3870,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
     my_oloc = oloc;
     my_oloc.pool = pool.info.tier_of;
     src_hoid = obc->obs.oi.soid;
-    cb = new PromoteCallback(obc, this);
+    cb = new PromoteCallback(obc, op->may_write(), this);
   } else {
     if (obc->obs.oi.manifest.is_chunked()) {
       src_hoid = obc->obs.oi.soid;
@@ -3876,7 +3879,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
       object_locator_t src_oloc(obc->obs.oi.manifest.redirect_target);
       my_oloc = src_oloc;
       src_hoid = obc->obs.oi.manifest.redirect_target;
-      cb = new PromoteCallback(obc, this);
+      cb = new PromoteCallback(obc, op->may_write(), this);
     } else {
       ceph_abort_msg("unrecognized manifest type");
     }
@@ -9007,7 +9010,10 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // list snaps too.
     ceph_assert(cop->src.snap == CEPH_NOSNAP);
     ObjectOperation op;
-    op.list_snaps(&cop->results.snapset, NULL);
+    // we need return value of list_snaps to decide
+    // whether a whiteouted object is necessary or not.
+    op.list_snaps(&cop->results.snapset,
+		  &cop->results.list_snaps_ret);
     ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				    CEPH_SNAPDIR, NULL,
 				    flags, gather.new_sub(), NULL);
@@ -9607,6 +9613,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
 }
 
 void PrimaryLogPG::finish_promote(int r, CopyResults *results,
+				  bool maybe_write,
 				  ObjectContextRef obc)
 {
   const hobject_t& soid = obc->obs.oi.soid;
@@ -9701,7 +9708,11 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
   }
 
   bool whiteout = false;
-  if (r == -ENOENT) {
+  // also check return value of list_snaps, as it may fail on
+  // non-existent objects. but if the original op is write,
+  // a whiteouted object is still neccessary.
+  if (r == -ENOENT &&
+      (results->list_snaps_ret >= 0 || maybe_write)) {
     ceph_assert(soid.snap == CEPH_NOSNAP); // snap case is above
     dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;

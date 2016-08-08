@@ -90,6 +90,7 @@ public:
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
+    int list_snaps_ret = 0; ///< return value of list_snaps (if head)
     bool mirror_snapset;
     bool has_omap;
     uint32_t flags;    // object_copy_data_t::FLAG_*
@@ -1322,7 +1323,8 @@ protected:
   }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void finish_copyfrom(CopyFromCallback *cb);
-  void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
+  void finish_promote(int r, CopyResults *results, bool maybe_write,
+		      ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue, vector<ceph_tid_t> *tids);
   void cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids);
 
