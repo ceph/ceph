@@ -415,7 +415,6 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   string start_after;
   string filter_prefix;
   uint64_t max = (uint64_t)-1;
-  bufferlist inbl;
 
   ::encode(start_after, op.indata);
   ::encode(max, op.indata);
@@ -470,8 +469,6 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   vector<OSDOp> ops(1);
   OSDOp& op = ops[0];
   int ret;
-
-  bufferlist inbl;
 
   ::encode(start_obj, op.indata);
   ::encode(max_to_get, op.indata);
