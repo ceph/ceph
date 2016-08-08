@@ -194,10 +194,6 @@ public:
   static int get_level(int64_t total_blocks);
   static int64_t get_level_factor(int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
-  virtual bool is_allocated(ExtentList *blocks, int64_t num_blocks, int blk_off) {
-    debug_assert(0);
-    return true;
-  }
   virtual bool is_exhausted() = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
       debug_assert(0);
@@ -364,6 +360,7 @@ public:
   }
 
   int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block);
+  using BitMapArea::alloc_blocks_dis;
   int64_t alloc_blocks_dis(int64_t num_blocks,
         int64_t blk_off, ExtentList *block_list);  
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
@@ -529,7 +526,7 @@ public:
   void free_blocks_dis(int64_t num_blocks, ExtentList *block_list);
   bool is_allocated_dis(ExtentList *blocks, int64_t num_blocks);
 
-  int64_t size() {
+  int64_t total_blocks() const {
     return m_total_blocks - m_extra_blocks;
   }
   int64_t get_used_blocks() {

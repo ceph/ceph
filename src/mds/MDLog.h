@@ -34,6 +34,7 @@ enum {
   l_mdl_wrpos,
   l_mdl_rdpos,
   l_mdl_jlat,
+  l_mdl_replayed,
   l_mdl_last,
 };
 

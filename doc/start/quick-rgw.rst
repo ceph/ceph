@@ -33,7 +33,7 @@ Creating the Ceph Object Gateway Instance
 From the working directory of your administration server, create an instance of
 the Ceph Object Gateway on the ``client-node``. For example::
 
-    ceph-deploy rgw create
+    ceph-deploy rgw create <client-node>
 
 Once the gateway is running, you should be able to access it on port ``7480``.
 (e.g., ``http://client-node:7480``).

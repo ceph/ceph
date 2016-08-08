@@ -100,7 +100,7 @@ a warm metadata cache, and speed up the process of failing over
 if the daemon serving the rank fails.
 
 An up rank may only have one standby replay daemon assigned to it,
-f two daemons are both set to be standby replay then one of them
+if two daemons are both set to be standby replay then one of them
 will arbitrarily win, and the other will become a normal non-replay
 standby.
 
@@ -108,6 +108,9 @@ Once a daemon has entered the standby replay state, it will only be
 used as a standby for the rank that it is following.  If another rank
 fails, this standby replay daemon will not be used as a replacement,
 even if no other standbys are available.
+
+*Historical note:* In Ceph prior to v10.2.1, this setting (when ``false``) is
+always true when ``mds_standby_for_*`` is also set.
 
 mds_standby_for_name
 ~~~~~~~~~~~~~~~~~~~~
@@ -138,7 +141,7 @@ this if you have a daemon that you want to use for any rank, but
 only within a particular filesystem.
 
 mon_force_standby_active
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 This setting is used on monitor hosts.  It defaults to true.
 

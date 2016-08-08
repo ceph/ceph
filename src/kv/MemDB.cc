@@ -5,6 +5,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 
+#include "include/compat.h"
 #include <set>
 #include <map>
 #include <string>
@@ -36,6 +37,7 @@
 static void split_key(const string& raw_key, string *prefix, string *key)
 {
   size_t pos = raw_key.find(KEY_DELIM, 0);
+  assert(pos != std::string::npos);
   *prefix = raw_key.substr(0, pos);
   *key = raw_key.substr(pos + 1, raw_key.length());
 }
@@ -74,19 +76,19 @@ void MemDB::_save()
          << cpp_strerror(err) << std::endl;
     return;
   }
+  bufferlist bl;
   btree::btree_map<string, bufferptr>::iterator iter = m_btree.begin();
   while (iter != m_btree.end()) {
-    bufferlist bl;
     dout(10) << __func__ << " Key:"<< iter->first << dendl;
     _encode(iter, bl);
-    bl.write_fd(fd);
     iter++;
   }
+  bl.write_fd(fd);
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void MemDB::_load()
+int MemDB::_load()
 {
   std::lock_guard<std::mutex> l(m_lock);
   dout(10) << __func__ << " Reading MemDB from file: "<< _get_data_fn().c_str() << dendl;
@@ -96,21 +98,19 @@ void MemDB::_load()
   int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY));
   if (fd < 0) {
     int err = errno;
-    std::ostringstream oss;
-    oss << "can't open " << _get_data_fn().c_str() << ": "
-        << cpp_strerror(err) << std::endl;
-    return;
+    cerr << "can't open " << _get_data_fn().c_str() << ": "
+         << cpp_strerror(err) << std::endl;
+    return -err;
   }
 
   struct stat st;
   memset(&st, 0, sizeof(st));
   if (::fstat(fd, &st) < 0) {
     int err = errno;
-    std::ostringstream oss;
-    oss << "can't stat file " << _get_data_fn().c_str() << ": "
-        << cpp_strerror(err) << std::endl;
+    cerr << "can't stat file " << _get_data_fn().c_str() << ": "
+         << cpp_strerror(err) << std::endl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
-    return;
+    return -err;
   }
 
   ssize_t file_size = st.st_size;
@@ -124,27 +124,31 @@ void MemDB::_load()
 
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_btree[key] = datap;
+    m_total_bytes += datap.length();
   }
   VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return 0;
 }
 
 int MemDB::_init(bool create)
 {
+  int r;
   dout(1) << __func__ << dendl;
   if (create) {
-    int r = ::mkdir(m_db_path.c_str(), 0700);
+    r = ::mkdir(m_db_path.c_str(), 0700);
     if (r < 0) {
       r = -errno;
       if (r != -EEXIST) {
         derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
         return r;
       }
+      return 0; // ignore EEXIST
     }
- } else {
-    _load();
- }
+  } else {
+    r = _load();
+  }
 
-  return 0;
+  return r;
 }
 
 int MemDB::set_merge_operator(
@@ -260,6 +264,7 @@ int MemDB::_setkey(ms_op_t &op)
     /*
      * delete and free existing key.
      */
+    assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
     m_btree.erase(key);
   }
@@ -276,6 +281,7 @@ int MemDB::_rmkey(ms_op_t &op)
 
   bufferlist bl_old;
   if (_get(op.first.first, op.first.second, &bl_old)) {
+    assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
   }
   /*
@@ -333,6 +339,7 @@ int MemDB::_merge(ms_op_t &op)
     bl_old.clear();
   }
 
+  assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
   m_total_bytes += bytes_adjusted;
   return 0;
 }

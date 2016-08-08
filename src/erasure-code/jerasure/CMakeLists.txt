@@ -31,7 +31,7 @@ add_library(ec_jerasure_generic SHARED
   $<TARGET_OBJECTS:erasure_code_objs>
   )
 add_dependencies(ec_jerasure_generic ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_jerasure_generic crush ${EXTRALIBS})
+target_link_libraries(ec_jerasure_generic ${EXTRALIBS})
 set_target_properties(ec_jerasure_generic PROPERTIES VERSION 2.0.0 SOVERSION 2)
 install(TARGETS ec_jerasure_generic DESTINATION ${erasure_plugin_dir})
 
@@ -45,6 +45,7 @@ if(ARM_NEON OR ARM_NEON2)
     gf-complete/src/neon/gf_w32_neon.c
     gf-complete/src/neon/gf_w64_neon.c)
   add_library(neon_objs OBJECT ${neon_objs_srcs})
+  set_target_properties(neon_objs PROPERTIES COMPILE_FLAGS ${ARM_NEON_FLAGS})
 
   set(jerasure_neon_srcs
     $<TARGET_OBJECTS:ec_jerasure_objs>

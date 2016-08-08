@@ -179,8 +179,8 @@ public:
           })));
       } else {
         expect.WillOnce(WithArg<5>(Invoke([&mock_image_ctx, snap_id, state, r](Context *ctx) {
-            RWLock::RLocker snap_locker(mock_image_ctx.image_ctx->snap_lock);
-            RWLock::WLocker object_map_locker(mock_image_ctx.image_ctx->object_map_lock);
+            assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
+            assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
             mock_image_ctx.image_ctx->object_map->aio_update(snap_id, 0, 1,
                                                              state,
                                                              boost::none, ctx);
@@ -472,6 +472,8 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteSnaps) {
 }
 
 TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
+  ASSERT_EQ(0, metadata_set(m_remote_image_ctx,
+			    "conf_rbd_skip_partial_discard", "false"));
   // scribble some data
   interval_set<uint64_t> one;
   scribble(m_remote_image_ctx, 10, 102400, &one);

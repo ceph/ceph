@@ -475,7 +475,7 @@ OPTION(mds_log_events_per_segment, OPT_INT, 1024)
 OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log, default to default file_layout_t
 OPTION(mds_log_max_segments, OPT_U32, 30)
 OPTION(mds_log_max_expiring, OPT_INT, 20)
-OPTION(mds_bal_sample_interval, OPT_FLOAT, 3.0)  // every 5 seconds
+OPTION(mds_bal_sample_interval, OPT_DOUBLE, 3.0)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT, 0)
 OPTION(mds_bal_frag, OPT_BOOL, false)
@@ -628,10 +628,6 @@ OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
-OPTION(osd_compression_plugins, OPT_STR,
-       "zlib"
-       " snappy"
-       ) // list of compression plugins
 OPTION(osd_pool_default_erasure_code_profile,
        OPT_STR,
        "plugin=jerasure "
@@ -754,6 +750,7 @@ OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
 OPTION(osd_recovery_max_active, OPT_U64, 3)
 OPTION(osd_recovery_max_single_start, OPT_U64, 1)
 OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
+OPTION(osd_recovery_max_omap_entries_per_chunk, OPT_U64, 64000) // max number of omap entries per chunk; 0 to disable limit
 OPTION(osd_copyfrom_max_chunk, OPT_U64, 8<<20)   // max size of a COPYFROM chunk
 OPTION(osd_push_per_object_cost, OPT_U64, 1000)  // push cost per object
 OPTION(osd_max_push_cost, OPT_U64, 8<<20)  // max size of push message
@@ -803,6 +800,7 @@ OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
 OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
+OPTION(osd_debug_verify_missing_on_start, OPT_BOOL, false)
 OPTION(osd_debug_scrub_chance_rewrite_digest, OPT_U64, 0)
 OPTION(osd_debug_verify_snaps_on_info, OPT_BOOL, false)
 OPTION(osd_debug_verify_stray_on_activate, OPT_BOOL, false)
@@ -1248,10 +1246,14 @@ OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pendi
 OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
+OPTION(rbd_journal_max_payload_bytes, OPT_U32, 16384) // maximum journal payload size before splitting
 
 /**
  * RBD Mirror options
  */
+OPTION(rbd_mirror_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
+OPTION(rbd_mirror_journal_poll_age, OPT_DOUBLE, 5) // maximum age (in seconds) between successive journal polls
+OPTION(rbd_mirror_journal_max_fetch_bytes, OPT_U32, 32768) // maximum bytes to read from each journal data object per fetch
 OPTION(rbd_mirror_sync_point_update_age, OPT_DOUBLE, 30) // number of seconds between each update of the image sync point object number
 OPTION(rbd_mirror_concurrent_image_syncs, OPT_U32, 5) // maximum number of image syncs in parallel
 
@@ -1282,6 +1284,8 @@ OPTION(rgw_bucket_index_max_aio, OPT_U32, 8)
  */
 OPTION(rgw_enable_quota_threads, OPT_BOOL, true)
 OPTION(rgw_enable_gc_threads, OPT_BOOL, true)
+OPTION(rgw_enable_lc_threads, OPT_BOOL, true)
+
 
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, s3website, swift, swift_auth, admin")
@@ -1293,6 +1297,11 @@ OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if no
 OPTION(rgw_dns_name, OPT_STR, "") // hostname suffix on buckets
 OPTION(rgw_dns_s3website_name, OPT_STR, "") // hostname suffix on buckets for s3-website endpoint
 OPTION(rgw_content_length_compat, OPT_BOOL, false) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
+OPTION(rgw_lifecycle_enabled, OPT_BOOL, true) //rgw lifecycle enabled
+OPTION(rgw_lifecycle_thread, OPT_INT, 1) //start lifecycle thread number per radosgw
+OPTION(rgw_lifecycle_work_time, OPT_STR, "00:00-06:00") //job process lc  at 00:00-06:00s
+OPTION(rgw_lc_lock_max_time, OPT_INT, 60)  // total run time for a single gc processor work
+OPTION(rgw_lc_max_objs, OPT_INT, 32)
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
@@ -1454,6 +1463,10 @@ OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notificati
 OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
 OPTION(rgw_sync_lease_period, OPT_INT, 120) // time in second for lease that rgw takes on a specific log (or log shard)
 
+OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
+OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
+
+
 OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
@@ -1464,6 +1477,15 @@ OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entrie
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
+
+/* The following are tunables for torrent data */
+OPTION(rgw_torrent_flag, OPT_BOOL, false)    // produce torrent function flag
+OPTION(rgw_torrent_tracker, OPT_STR, "")    // torrent field annouce and annouce list
+OPTION(rgw_torrent_createby, OPT_STR, "")    // torrent field created by
+OPTION(rgw_torrent_comment, OPT_STR, "")    // torrent field comment
+OPTION(rgw_torrent_encoding, OPT_STR, "")    // torrent field encoding
+OPTION(rgw_torrent_origin, OPT_STR, "")    // torrent origin
+OPTION(rgw_torrent_sha_unit, OPT_INT, 512*1024)    //torrent field piece length 521K
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.

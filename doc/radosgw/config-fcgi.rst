@@ -1,9 +1,13 @@
-=================================
- Configuring Ceph Object Gateway
-=================================
+=====================================================
+ Configuring Ceph Object Gateway with Apache/FastCGI
+=====================================================
 
-Configuring a Ceph Object Gateway requires a running Ceph Storage Cluster, 
-and an Apache web server with the FastCGI module.
+Configuring a Ceph Object Gateway requires a running Ceph Storage Cluster.
+Since it contains an embedded webserver (civetweb), the Ceph Object Gateway
+does not require an external web server, but it can be configured to use
+Apache with the FastCGI module.
+
+.. note:: CGI can pose a security risk.
 
 The Ceph Object Gateway is a client of the Ceph Storage Cluster. As a 
 Ceph Storage Cluster client, it requires:

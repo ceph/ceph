@@ -13,6 +13,7 @@
  */
 
 #include "include/compat.h"
+#include "pthread.h"
 
 #include "common/BackTrace.h"
 #include "common/debug.h"
@@ -92,7 +93,7 @@ static void handle_fatal_signal(int signum)
   // presumably dump core-- will handle it.
   char buf[1024];
   char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
-  int r = pthread_getname_np(pthread_self(), pthread_name, sizeof(pthread_name));
+  int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
   (void)r;
 #if defined(__sun)
   char message[SIG2STR_MAX];
@@ -152,7 +153,7 @@ void install_standard_sighandlers(void)
 #include "common/Thread.h"
 #include <errno.h>
 
-void get_name_by_pid(pid_t pid, char *task_name)
+string get_name_by_pid(pid_t pid)
 {
   char proc_pid_path[PATH_MAX] = {0};
   snprintf(proc_pid_path, PATH_MAX, "/proc/%d/cmdline", pid);
@@ -163,18 +164,22 @@ void get_name_by_pid(pid_t pid, char *task_name)
     derr << "Fail to open '" << proc_pid_path 
          << "' error = " << cpp_strerror(fd) 
          << dendl;
-    return;
+    return "<unknown>";
   }
-
-  int ret = read(fd, task_name, PATH_MAX-1);
+  // assuming the cmdline length does not exceed PATH_MAX. if it
+  // really does, it's fine to return a truncated version.
+  char buf[PATH_MAX] = {0};
+  int ret = read(fd, buf, sizeof(buf));
+  close(fd);
   if (ret < 0) {
     ret = -errno;
-    derr << "Fail to read '" << proc_pid_path 
-         << "' error = " << cpp_strerror(ret) 
+    derr << "Fail to read '" << proc_pid_path
+         << "' error = " << cpp_strerror(ret)
          << dendl;
+    return "<unknown>";
   }
-   
-  close(fd);
+  std::replace(buf, buf + ret, '\0', ' ');
+  return string(buf, ret);
 }
 
  
@@ -283,14 +288,13 @@ struct SignalHandler : public Thread {
 	  if (handlers[signum]) {
 	    r = read(handlers[signum]->pipefd[0], &v, 1);
 	    if (r == 1) {
-	      char task_name[PATH_MAX] = "unknown";
 	      siginfo_t * siginfo = &handlers[signum]->info_t;
-             get_name_by_pid(siginfo->si_pid, task_name);
-             derr << "received  signal: " << sys_siglist[signum] 
-                  << " from " << " PID: " << siginfo->si_pid 
-                  << " task name: " << task_name 
-                  << " UID: " << siginfo->si_uid 
-                  << dendl;
+	      string task_name = get_name_by_pid(siginfo->si_pid);
+	      derr << "received  signal: " << sys_siglist[signum]
+		   << " from " << " PID: " << siginfo->si_pid
+		   << " task name: " << task_name
+		   << " UID: " << siginfo->si_uid
+		   << dendl;
 	      handlers[signum]->handler(signum);
 	    }
 	  }

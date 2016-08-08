@@ -377,7 +377,7 @@ int RGWCache<T>::system_obj_set_attrs(void *ctx, rgw_obj& obj,
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-   cache.remove(name);
+    cache.remove(name);
   }
 
   return ret;
@@ -396,9 +396,8 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mti
   ObjectCacheInfo info;
   info.xattrs = attrs;
   info.status = 0;
-  info.flags = CACHE_FLAG_XATTRS;
   info.data = data;
-  info.flags |= CACHE_FLAG_DATA | CACHE_FLAG_META;
+  info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
   if (objv_tracker) {
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
@@ -418,7 +417,7 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mti
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-   cache.remove(name);
+    cache.remove(name);
   }
 
   return ret;
@@ -448,7 +447,7 @@ int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, 
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
-     cache.remove(name);
+      cache.remove(name);
     }
   }
 
@@ -527,8 +526,7 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_obj& obj, Objec
   info.obj = obj;
   bufferlist bl;
   ::encode(info, bl);
-  int ret = T::distribute(normal_name, bl);
-  return ret;
+  return T::distribute(normal_name, bl);
 }
 
 template <class T>

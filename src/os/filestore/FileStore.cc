@@ -1624,9 +1624,14 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      omap_store->init(g_conf->filestore_rocksdb_options);
+      ret = omap_store->init(g_conf->filestore_rocksdb_options);
     else
-      omap_store->init();
+      ret = omap_store->init();
+
+    if (ret < 0) {
+      derr << "Error initializing omap_store: " << cpp_strerror(ret) << dendl;
+      goto close_current_fd;
+    }
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -1795,6 +1800,9 @@ close_fsid_fd:
   fsid_fd = -1;
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
+  delete backend;
+  backend = NULL;
+  object_map.reset();
   return ret;
 }
 
@@ -3339,7 +3347,9 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
  
   if (replaying || m_disable_wbthrottle) {
     if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED) {
+#ifdef HAVE_POSIX_FADVISE
         posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
     }
   } else {
     wbthrottle.queue_wb(fd, oid, offset, len,
@@ -4565,6 +4575,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
       if (r < 0)
 	return r;
     }
+    objects.clear();
   }
   return _destroy_collection(cid);
 }
@@ -4761,7 +4772,7 @@ int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
-  dout(20) << "objects: " << ls << dendl;
+  dout(20) << "objects: " << *ls << dendl;
 
   // HashIndex doesn't know the pool when constructing a 'next' value
   if (next && !next->is_max()) {

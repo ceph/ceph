@@ -28,6 +28,8 @@ librgw_la_SOURCES = \
 	rgw/rgw_auth.cc \
 	rgw/rgw_coroutine.cc \
 	rgw/rgw_cr_rados.cc \
+	rgw/rgw_lc.cc \
+	rgw/rgw_lc_s3.cc \
 	rgw/rgw_tools.cc \
 	rgw/rgw_basic_types.cc \
 	rgw/rgw_bucket.cc \
@@ -89,7 +91,8 @@ librgw_la_SOURCES = \
 	rgw/librgw.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_xml_enc.cc \
-	rgw/rgw_website.cc
+	rgw/rgw_website.cc \
+        rgw/rgw_torrent.cc
 
 if WITH_OPENLDAP
 librgw_la_SOURCES += rgw/rgw_ldap.cc
@@ -157,7 +160,7 @@ radosgw_SOURCES = \
 	civetweb/src/civetweb.c \
 	rgw/rgw_main.cc
 
-radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -I$(srcdir)/xxHash
+radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -I$(srcdir)/xxHash ${CIVETWEB_INCLUDE}
 radosgw_CXXFLAGS = ${RGW_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBCIVETWEB_DEPS) $(LIBRGW_DEPS) $(RESOLV_LIBS) \
 	$(CEPH_GLOBAL)
@@ -194,6 +197,8 @@ noinst_HEADERS += \
 	rgw/rgw_auth.h \
 	rgw/rgw_auth_decoimpl.h \
 	rgw/rgw_b64.h \
+	rgw/rgw_lc.h \
+	rgw/rgw_lc_s3.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
 	rgw/rgw_cr_rados.h \
@@ -269,6 +274,7 @@ noinst_HEADERS += \
 	rgw/rgw_civetweb_log.h \
 	rgw/rgw_website.h \
 	rgw/rgw_rest_s3website.h \
+        rgw/rgw_torrent.h \
 	civetweb/civetweb.h \
 	civetweb/include/civetweb.h \
 	civetweb/include/civetweb_conf.h \

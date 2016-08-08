@@ -9,9 +9,9 @@
 
 class bluefs_extent_t : public AllocExtent{
 public:
-  uint16_t bdev;
+  uint8_t bdev;
 
-  bluefs_extent_t(uint16_t b = 0, uint64_t o = 0, uint32_t l = 0)
+  bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
     : AllocExtent(o, l), bdev(b) {}
 
   void encode(bufferlist&) const;

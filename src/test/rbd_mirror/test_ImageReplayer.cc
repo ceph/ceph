@@ -78,6 +78,7 @@ public:
   {
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
 
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_local_cluster->pool_create(m_local_pool_name.c_str()));
@@ -566,7 +567,7 @@ TEST_F(TestImageReplayer, Resync)
 
   C_SaferCond delete_ctx;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_local_image_name(), &delete_ctx);
+    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
   EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond;
@@ -631,7 +632,7 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
 
   C_SaferCond delete_ctx;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_local_image_name(), &delete_ctx);
+    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
   EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond3;
@@ -672,7 +673,7 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
 
   C_SaferCond delete_ctx;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_local_image_name(), &delete_ctx);
+    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
   EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond2;

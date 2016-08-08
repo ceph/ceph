@@ -1008,6 +1008,8 @@ void BlueStore::BufferSpace::read(
       } else {
 	res[offset].append(b->data);
 	res_intervals.insert(offset, b->length);
+        if (b->length == length)
+          break;
 	offset += b->length;
 	length -= b->length;
       }
@@ -2838,11 +2840,24 @@ int BlueStore::umount()
   return 0;
 }
 
+void apply(uint64_t off,
+           uint64_t len,
+           uint64_t granularity,
+           boost::dynamic_bitset<> &bitset,
+          std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
+  auto end = ROUND_UP_TO(off + len, granularity);
+  while (off < end) {
+  uint64_t pos = off / granularity;
+  f( pos, bitset);
+    off += granularity;
+  }
+}
+
 int BlueStore::_fsck_verify_blob_map(
   string what,
   const BlobMap& blob_map,
   map<int64_t,bluestore_extent_ref_map_t>& v,
-  interval_set<uint64_t> &used_blocks,
+  boost::dynamic_bitset<> &used_blocks,
   store_statfs_t& expected_statfs)
 {
   int errors = 0;
@@ -2855,39 +2870,49 @@ int BlueStore::_fsck_verify_blob_map(
       ++errors;
       continue;
     }
-    if (pv->second != b.blob.ref_map) {
+    if (b.blob.has_refmap() && pv->second != b.blob.ref_map) {
       derr << " " << what << " blob " << b.id
 	   << " ref_map " << b.blob.ref_map
 	   << " != expected " << pv->second << dendl;
       ++errors;
     }
-    v.erase(pv);
-    interval_set<uint64_t> span;
     bool compressed = b.blob.is_compressed();
     if (compressed) {
       expected_statfs.compressed += b.blob.compressed_length;
-      for (auto& r : b.blob.ref_map.ref_map) {
-        expected_statfs.compressed_original += r.second.refs * r.second.length;
+      for (auto& r : b.blob.has_refmap() ? b.blob.ref_map.ref_map : v[b.id].ref_map) {
+	expected_statfs.compressed_original += r.second.refs * r.second.length;
       }
     }
+    v.erase(pv);
     for (auto& p : b.blob.extents) {
       if (!p.is_valid()) {
         continue;
       }
-      interval_set<uint64_t> e, i;
-      e.insert(p.offset, p.length);
-      i.intersection_of(e, used_blocks);
       expected_statfs.allocated += p.length;
       if (compressed) {
         expected_statfs.compressed_allocated += p.length;
       }
-      if (!i.empty()) {
-	derr << " " << what << " extent(s) " << i
-	     << " already allocated" << dendl;
+      bool already_allocated = false;
+      apply( 
+        p.offset, p.length, min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          if (bs.test(pos)) {
+            already_allocated = true;
+          } else {
+            bs.set(pos);
+          }
+        }
+      );
+
+      if (already_allocated) {
+	derr << " " << what << " extent 0x" << std::hex
+	     << p.offset << "~" << p.length
+	     << " or its' subset is already allocated" << dendl;
 	++errors;
       } else {
-	used_blocks.insert(p.offset, p.length);
 	if (p.end() > bdev->get_size()) {
+	  interval_set<uint64_t> e;
+	  e.insert(p.offset, p.length);
 	  derr << " " << what << " blob " << b.id << " extent " << e
 	       << " past end of block device" << dendl;
 	  ++errors;
@@ -2909,11 +2934,12 @@ int BlueStore::fsck()
   int errors = 0;
   set<uint64_t> used_nids;
   set<uint64_t> used_omap_head;
-  interval_set<uint64_t> used_blocks;
+  boost::dynamic_bitset<> used_blocks;
   KeyValueDB::Iterator it;
   BnodeRef bnode;
   map<int64_t,bluestore_extent_ref_map_t> hash_shared;
   store_statfs_t expected_statfs, actual_statfs;
+
 
   int r = _open_path();
   if (r < 0)
@@ -2954,9 +2980,24 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_alloc;
 
-  used_blocks.insert(0, BLUEFS_START);
+  used_blocks.resize(
+    ROUND_UP_TO(bdev->get_size(), min_alloc_size) / min_alloc_size);
+  apply(
+    0, BLUEFS_START, min_alloc_size, used_blocks,
+    [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+      bs.set(pos);
+    }
+  );
+
   if (bluefs) {
-    used_blocks.insert(bluefs_extents);
+    for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
+      apply(
+        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          bs.set(pos);
+        }
+      );
+    }
     r = bluefs->fsck();
     if (r < 0) {
       coll_map.clear();
@@ -3186,7 +3227,14 @@ int BlueStore::fsck()
       dout(20) << __func__ << "  wal " << wt.seq
 	       << " ops " << wt.ops.size()
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
-      used_blocks.insert(wt.released);
+      for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
+        apply(
+          e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+          [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+            bs.set(pos);
+          }
+        );
+      }
     }
   }
 
@@ -3195,25 +3243,31 @@ int BlueStore::fsck()
     fm->enumerate_reset();
     uint64_t offset, length;
     while (fm->enumerate_next(&offset, &length)) {
-      if (used_blocks.intersects(offset, length)) {
+      bool intersects = false;
+      apply(
+        offset, length, min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          if (bs.test(pos)) {
+            intersects = true;
+          } else {
+            bs.set(pos);
+          }
+        }
+      );
+      if (intersects) {
 	derr << __func__ << " free extent 0x" << std::hex << offset
 	     << "~" << length << std::dec
 	     << " intersects allocated blocks" << dendl;
-	interval_set<uint64_t> free, overlap;
-	free.insert(offset, length);
-	overlap.intersection_of(free, used_blocks);
-	derr << __func__ << " overlap: 0x" << std::hex << overlap
-	     << std::dec << dendl;
 	++errors;
 	continue;
       }
-      used_blocks.insert(offset, length);
     }
-    if (!used_blocks.contains(0, bdev->get_size())) {
-      derr << __func__ << " leaked some space; free+used = 0x" << std::hex
-	   << used_blocks
-	   << " != expected 0x0~" << bdev->get_size()
-	   << std::dec << dendl;
+    size_t count = used_blocks.count();
+    if (used_blocks.size() != count) {
+      assert(used_blocks.size() > count);
+      derr << __func__ << " leaked some space;"
+	   << (used_blocks.size() - count) * min_alloc_size
+	   << " bytes leaked" << dendl;
       ++errors;
     }
   }
@@ -5817,12 +5871,10 @@ void BlueStore::_do_write_small(
 			  &txc->ioc, wctx->buffered);
 	});
       b->blob.calc_csum(b_off, padded);
-      o->onode.punch_hole(offset, length, &wctx->lex_old);
       dout(20) << __func__ << "  lexold 0x" << std::hex << offset << std::dec
 	       << ": " << ep->second << dendl;
-      bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-	bluestore_lextent_t(blob, b_off + head_pad, length);
-      b->blob.ref_map.get(lex.offset, lex.length);
+      bluestore_lextent_t lex(blob, b_off + head_pad, length);
+      o->onode.set_lextent(offset, lex, &b->blob, &wctx->lex_old);
       b->blob.mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
@@ -5892,10 +5944,8 @@ void BlueStore::_do_write_small(
       dout(20) << __func__ << "  wal write 0x" << std::hex << b_off << "~"
 	       << b_len << std::dec << " of mutable " << blob << ": " << *b
 	       << " at " << op->extents << dendl;
-      o->onode.punch_hole(offset, length, &wctx->lex_old);
-      bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-	bluestore_lextent_t(blob, offset - bstart, length);
-      b->blob.ref_map.get(lex.offset, lex.length);
+      bluestore_lextent_t lex(blob, offset - bstart, length);
+      o->onode.set_lextent(offset, lex, &b->blob, &wctx->lex_old);
       b->blob.mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset
@@ -5913,10 +5963,8 @@ void BlueStore::_do_write_small(
   uint64_t b_off = P2PHASE(offset, alloc_len);
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
-  o->onode.punch_hole(offset, length, &wctx->lex_old);
-  bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-    bluestore_lextent_t(b->id, P2PHASE(offset, alloc_len), length);
-  b->blob.ref_map.get(lex.offset, lex.length);
+  bluestore_lextent_t lex(b->id, P2PHASE(offset, alloc_len), length);
+  o->onode.set_lextent(offset, lex, &b->blob, &wctx->lex_old);
   txc->statfs_delta.stored() += lex.length;
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	   << ": " << lex << dendl;
@@ -5948,9 +5996,8 @@ void BlueStore::_do_write_big(
     blp.copy(l, t);
     b->bc.write(txc->seq, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     wctx->write(b, l, 0, t, false);
-    o->onode.punch_hole(offset, l, &wctx->lex_old);
-    o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l);
-    b->blob.ref_map.get(0, l);
+    bluestore_lextent_t lex(b->id, 0, l);
+    o->onode.set_lextent(offset, lex, &b->blob, &wctx->lex_old);
     txc->statfs_delta.stored() += l;
     dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
 	     << o->onode.extent_map[offset] << dendl;
@@ -6025,7 +6072,7 @@ int BlueStore::_do_alloc_write(
 	final_length = newlen;
 	csum_length = newlen;
 	csum_order = ctz(newlen);
-	b->blob.set_compressed(rawlen);
+	b->blob.set_compressed(wi.blob_length, rawlen);
 	compressed = true;
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
@@ -6104,11 +6151,15 @@ void BlueStore::_wctx_finish(
   WriteContext *wctx)
 {
   dout(10) << __func__ << " lex_old " << wctx->lex_old << dendl;
-  for (auto &l : wctx->lex_old) {
+  set<pair<bool, Blob*> > blobs2remove;
+  for (auto &lo : wctx->lex_old) {
+    bluestore_lextent_t& l = lo.second;
     Blob *b = c->get_blob(o, l.blob);
     vector<bluestore_pextent_t> r;
     bool compressed = b->blob.is_compressed();
-    b->blob.put_ref(l.offset, l.length, min_alloc_size, &r);
+    if (o->onode.deref_lextent(lo.first, l, &b->blob, min_alloc_size, &r)) {
+      blobs2remove.insert(std::make_pair(l.blob >= 0, b));
+    }
     // we can't invalidate our logical extents as we drop them because
     // other lextents (either in our onode or others) may still
     // reference them.  but we can throw out anything that is no
@@ -6128,19 +6179,18 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
-    if (b->blob.ref_map.empty()) {
-      dout(20) << __func__ << " rm blob " << *b << dendl;
-      txc->statfs_delta.compressed() -= b->blob.get_compressed_payload_length();
-      if (l.blob >= 0) {
-	o->blob_map.erase(b);
-      } else {
-	o->bnode->blob_map.erase(b);
-      }
-    } else {
-      dout(20) << __func__ << " keep blob " << *b << dendl;
-    }
     if (l.blob < 0) {
       txc->write_bnode(o->bnode);
+    }
+  }
+  for (auto br : blobs2remove) {
+    Blob* b = br.second;
+    dout(20) << __func__ << " rm blob " << *b << dendl;
+    txc->statfs_delta.compressed() -= b->blob.get_compressed_payload_length();
+    if (br.first) {
+      o->blob_map.erase(b);
+    } else {
+      o->bnode->blob_map.erase(b);
     }
   }
 
@@ -6685,15 +6735,22 @@ int BlueStore::_clone(TransContext *txc,
       // move blobs
       map<int64_t,int64_t> moved_blobs;
       for (auto& p : oldo->onode.extent_map) {
-	if (!p.second.is_shared() && moved_blobs.count(p.second.blob) == 0) {
-	  Blob *b = oldo->blob_map.get(p.second.blob);
-	  oldo->blob_map.erase(b);
-	  newo->bnode->blob_map.claim(b);
-	  moved_blobs[p.second.blob] = b->id;
-	  dout(30) << __func__ << "  moving old onode blob " << p.second.blob
-		   << " to bnode blob " << b->id << dendl;
-	  b->blob.clear_flag(bluestore_blob_t::FLAG_MUTABLE);
-	}
+        if (!p.second.is_shared()) {
+          Blob *b;
+          if (moved_blobs.count(p.second.blob) == 0) {
+            b = oldo->blob_map.get(p.second.blob);
+            oldo->blob_map.erase(b);
+            newo->bnode->blob_map.claim(b);
+            moved_blobs[p.second.blob] = b->id;
+            dout(30) << __func__ << "  moving old onode blob " << p.second.blob
+                    << " to bnode blob " << b->id << dendl;
+            b->blob.clear_flag(bluestore_blob_t::FLAG_MUTABLE);
+            b->blob.set_flag(bluestore_blob_t::FLAG_HAS_REFMAP);
+          } else {
+            b = newo->bnode->blob_map.get(moved_blobs[p.second.blob]);
+          }
+          b->blob.get_ref(p.second.offset, p.second.length);
+        }
       }
       // update lextents
       for (auto& p : oldo->onode.extent_map) {
@@ -6702,9 +6759,7 @@ int BlueStore::_clone(TransContext *txc,
 	}
 	newo->onode.extent_map[p.first] = p.second;
         assert(p.second.blob < 0);
-	newo->bnode->blob_map.get(-p.second.blob)->blob.ref_map.get(
-	  p.second.offset,
-	  p.second.length);
+	newo->bnode->blob_map.get(-p.second.blob)->blob.get_ref(p.second.offset, p.second.length);
 	txc->statfs_delta.stored() += p.second.length;
       }
       _dump_onode(newo);

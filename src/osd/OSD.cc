@@ -193,6 +193,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HINTS);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGMETA);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_MISSING);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -3324,6 +3325,11 @@ void OSD::load_pgs()
     pg->handle_loaded(&rctx);
 
     dout(10) << "load_pgs loaded " << *pg << " " << pg->pg_log.get_log() << dendl;
+    if (pg->pg_log.is_dirty()) {
+      ObjectStore::Transaction t;
+      pg->write_if_dirty(t);
+      store->apply_transaction(pg->osr.get(), std::move(t));
+    }
     pg->unlock();
   }
   {
@@ -4302,10 +4308,6 @@ void OSD::tick()
 
   if (is_active() || is_waiting_for_healthy()) {
     maybe_update_heartbeat_peers();
-
-    heartbeat_lock.Lock();
-    heartbeat_check();
-    heartbeat_lock.Unlock();
   }
 
   if (is_waiting_for_healthy()) {
@@ -4339,6 +4341,10 @@ void OSD::tick_without_osd_lock()
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
   if (is_active() || is_waiting_for_healthy()) {
+    heartbeat_lock.Lock();
+    heartbeat_check();
+    heartbeat_lock.Unlock();
+
     map_lock.get_read();
     Mutex::Locker l(mon_report_lock);
 
@@ -5702,10 +5708,10 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       pg->lock();
 
       fout << *pg << std::endl;
-      std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mend =
-	pg->pg_log.get_missing().missing.end();
-      std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mi =
-	pg->pg_log.get_missing().missing.begin();
+      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mend =
+	pg->pg_log.get_missing().get_items().end();
+      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mi =
+	pg->pg_log.get_missing().get_items().begin();
       for (; mi != mend; ++mi) {
 	fout << mi->first << " -> " << mi->second << std::endl;
 	if (!pg->missing_loc.needs_recovery(mi->first))
@@ -6868,8 +6874,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     osdmap->get_all_osds(old);
     for (set<int>::iterator p = old.begin(); p != old.end(); ++p) {
       if (*p != whoami &&
-	  osdmap->have_inst(*p) &&                        // in old map
-	  (!newmap->exists(*p) || !newmap->is_up(*p))) {  // but not the new one
+	  osdmap->have_inst(*p) && // in old map
+	  !newmap->is_up(*p)) {    // but not the new one
         if (!waited_for_reservations) {
           service.await_reserved_maps();
           waited_for_reservations = true;
@@ -6894,9 +6900,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     }
 
     osdmap = newmap;
-
-    had_map_since = ceph_clock_now(cct);
-
     epoch_t up_epoch;
     epoch_t boot_epoch;
     service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
@@ -6912,6 +6915,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       service.set_epochs(&boot_epoch, &up_epoch, NULL);
     }
   }
+
+  had_map_since = ceph_clock_now(cct);
 
   epoch_t _bind_epoch = service.get_bind_epoch();
   if (osdmap->is_up(whoami) &&
@@ -7326,7 +7331,7 @@ void OSD::activate_map()
     }
   } else {
     if (service.recovery_is_paused()) {
-      dout(1) << "unpausing recovery (NORECOVER flag set)" << dendl;
+      dout(1) << "unpausing recovery (NORECOVER flag unset)" << dendl;
       service.unpause_recovery();
     }
   }
@@ -8953,7 +8958,6 @@ void OSD::process_peering_events(
     }
     dispatch_context_transaction(rctx, pg, &handle);
     pg->unlock();
-    handle.reset_tp_timeout();
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);

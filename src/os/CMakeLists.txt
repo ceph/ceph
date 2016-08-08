@@ -41,7 +41,7 @@ set(libos_srcs
   fs/FS.cc
   ${libos_xfs_srcs})
 
-if(HAVE_LIBFUSE)
+if(WITH_FUSE)
   list(APPEND libos_srcs
     FuseStore.cc)
 endif()
@@ -54,7 +54,7 @@ endif()
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 
 if(HAVE_LIBAIO)
-  target_link_libraries(os aio)
+  target_link_libraries(os ${AIO_LIBRARIES})
 endif()
 
 if(HAVE_LIBFUSE)

@@ -613,8 +613,7 @@ cdef class LibCephFS(object):
 
         if not isinstance(mode, int):
             raise TypeError('mode must be an int')
-        if isinstance(flags, basestring):
-            flags = cstr(flags, 'flags')
+        if isinstance(flags, str):
             cephfs_flags = 0
             if flags == '':
                 cephfs_flags = os.O_RDONLY

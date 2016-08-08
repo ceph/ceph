@@ -27,6 +27,7 @@
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 #include "include/assert.h"
 #include "include/unordered_map.h"
@@ -1277,7 +1278,7 @@ private:
     string what,
     const BlobMap& blob_map,
     map<int64_t,bluestore_extent_ref_map_t>& v,
-    interval_set<uint64_t> &used_blocks,
+    boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);
 
 public:
@@ -1503,7 +1504,7 @@ private:
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
 
-    vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
+    vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
 
     struct write_item {
       Blob *b;

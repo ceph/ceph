@@ -278,7 +278,6 @@ class MDSRank {
         MDSMap *& mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
-        Objecter *objecter_,
         Context *respawn_hook_,
         Context *suicide_hook_);
     ~MDSRank();
@@ -355,6 +354,7 @@ class MDSRank {
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
+    epoch_t get_osd_epoch() const;
 
     ceph_tid_t issue_tid() { return ++last_tid; }
 
@@ -519,7 +519,6 @@ public:
       MDSMap *& mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
-      Objecter *objecter_,
       Context *respawn_hook_,
       Context *suicide_hook_);
 };

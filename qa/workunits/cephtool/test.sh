@@ -33,7 +33,7 @@ function expect_false()
 }
 
 
-TEMP_DIR=$(mktemp -d cephtool.XXX)
+TEMP_DIR=$(mktemp -d ${TMPDIR-/tmp}/cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
 
 TMPFILE=$(mktemp $TEMP_DIR/test_invalid.XXX)
@@ -1109,6 +1109,8 @@ function test_mon_osd()
   expect_false ceph osd unset bogus
   ceph osd set require_jewel_osds
   expect_false ceph osd unset require_jewel_osds
+  ceph osd set require_kraken_osds
+  expect_false ceph osd unset require_kraken_osds
 
   ceph osd set noup
   ceph osd down 0

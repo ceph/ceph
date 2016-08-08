@@ -449,6 +449,11 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "has_unused";
   }
+  if (flags & FLAG_HAS_REFMAP) {
+    if (s.length())
+      s += '+';
+    s += "has_refmap";
+  }
 
   return s;
 }
@@ -459,6 +464,7 @@ void bluestore_blob_t::encode(bufferlist& bl) const
   small_encode(extents, bl);
   small_encode_varint(flags, bl);
   if (is_compressed()) {
+    small_encode_varint_lowz(compressed_length_orig, bl);
     small_encode_varint_lowz(compressed_length, bl);
   }
   if (has_csum()) {
@@ -466,7 +472,9 @@ void bluestore_blob_t::encode(bufferlist& bl) const
     ::encode(csum_chunk_order, bl);
     small_encode_buf_lowz(csum_data, bl);
   }
-  ::encode(ref_map, bl);
+  if (has_refmap()) {
+    ::encode(ref_map, bl);
+  }
   if (has_unused()) {
     ::encode(unused_uint_t(unused.to_ullong()), bl);
   }
@@ -479,9 +487,10 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
   small_decode(extents, p);
   small_decode_varint(flags, p);
   if (is_compressed()) {
+    small_decode_varint_lowz(compressed_length_orig, p);
     small_decode_varint_lowz(compressed_length, p);
   } else {
-    compressed_length = 0;
+    compressed_length_orig = compressed_length = 0;
   }
   if (has_csum()) {
     ::decode(csum_type, p);
@@ -491,7 +500,9 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
     csum_type = CSUM_NONE;
     csum_chunk_order = 0;
   }
-  ::decode(ref_map, p);
+  if (has_refmap()) {
+    ::decode(ref_map, p);
+  }
   if (has_unused()) {
     unused_uint_t val;
     ::decode(val, p);
@@ -507,6 +518,7 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
+  f->dump_unsigned("compressed_length_original", compressed_length_orig);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
@@ -541,7 +553,11 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " clen 0x" << std::hex << o.compressed_length << std::dec;
+      << " clen 0x" << std::hex
+      << o.compressed_length_orig
+      << " -> " << std::hex
+      << o.compressed_length
+      << std::dec;
   if (o.flags) {
     out << " " << o.get_flags_string();
   }
@@ -558,7 +574,32 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   return out;
 }
 
-void bluestore_blob_t::put_ref(
+void bluestore_blob_t::get_ref(
+  uint64_t offset,
+  uint64_t length)
+{
+  assert(has_refmap());
+  ref_map.get(offset, length);
+}
+
+bool bluestore_blob_t::put_ref(
+  uint64_t offset,
+  uint64_t length,
+  uint64_t min_release_size,
+  vector<bluestore_pextent_t> *r)
+{
+  assert(has_refmap());
+  return put_ref_external(
+    ref_map,
+    offset,
+    length,
+    min_release_size,
+    r);
+}
+
+
+bool bluestore_blob_t::put_ref_external(
+  bluestore_extent_ref_map_t& ref_map,
   uint64_t offset,
   uint64_t length,
   uint64_t min_release_size,
@@ -581,12 +622,12 @@ void bluestore_blob_t::put_ref(
     extents.resize(1);
     extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
     extents[0].length = pos;
-    return;
+    return true;
   }
 
   // we cannot do partial deallocation on compressed blobs
   if (has_flag(FLAG_COMPRESSED)) {
-    return;
+    return false;
   }
 
   // we cannot release something smaller than our csum chunk size
@@ -676,6 +717,7 @@ void bluestore_blob_t::put_ref(
     vb.flush();
     extents.swap(vb.v);
   }
+  return false;
 }
 
 void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
@@ -915,7 +957,7 @@ int bluestore_onode_t::compress_extent_map()
 void bluestore_onode_t::punch_hole(
   uint64_t offset,
   uint64_t length,
-  vector<bluestore_lextent_t> *deref)
+  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
 {
   auto p = seek_lextent(offset);
   uint64_t end = offset + length;
@@ -928,10 +970,12 @@ void bluestore_onode_t::punch_hole(
 	// split and deref middle
 	uint64_t front = offset - p->first;
 	deref->emplace_back(
-	  bluestore_lextent_t(
-	    p->second.blob,
-	    p->second.offset + front,
-	    length));
+          std::make_pair(
+            offset,
+            bluestore_lextent_t(
+              p->second.blob,
+              p->second.offset + front,
+              length)));
 	extent_map[end] = bluestore_lextent_t(
 	  p->second.blob,
 	  p->second.offset + front + length,
@@ -940,13 +984,15 @@ void bluestore_onode_t::punch_hole(
 	break;
       } else {
 	// deref tail
-	assert(p->first + p->second.length > offset); // else bug in find_lextent
+	assert(p->first + p->second.length > offset); // else bug in seek_lextent
 	uint64_t keep = offset - p->first;
 	deref->emplace_back(
-	  bluestore_lextent_t(
-	    p->second.blob,
-	    p->second.offset + keep,
-	    p->second.length - keep));
+          std::make_pair(
+            offset,
+            bluestore_lextent_t(
+              p->second.blob,
+              p->second.offset + keep,
+              p->second.length - keep)));
 	p->second.length = keep;
 	++p;
 	continue;
@@ -954,17 +1000,19 @@ void bluestore_onode_t::punch_hole(
     }
     if (p->first + p->second.length <= end) {
       // deref whole lextent
-      deref->push_back(p->second);
+      deref->push_back(std::make_pair(p->first, p->second));
       extent_map.erase(p++);
       continue;
     }
     // deref head
     uint64_t keep = (p->first + p->second.length) - end;
     deref->emplace_back(
-      bluestore_lextent_t(
-	p->second.blob,
-	p->second.offset,
-	p->second.length - keep));
+      std::make_pair(
+        p->first,
+        bluestore_lextent_t(
+          p->second.blob,
+          p->second.offset,
+          p->second.length - keep)));
     extent_map[end] = bluestore_lextent_t(
       p->second.blob,
       p->second.offset + p->second.length - keep,
@@ -974,6 +1022,50 @@ void bluestore_onode_t::punch_hole(
   }
 }
 
+void bluestore_onode_t::set_lextent(uint64_t offset,
+                   const bluestore_lextent_t& lext,
+                   bluestore_blob_t* b,
+                   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
+{
+  punch_hole(offset, lext.length, deref);
+  extent_map[offset] = lext;
+  //increment reference for shared blobs only
+  if (b->has_refmap()) {
+    b->get_ref(lext.offset, lext.length);
+  }
+}
+
+bool bluestore_onode_t::deref_lextent( uint64_t offset,
+                         bluestore_lextent_t& lext,
+                         bluestore_blob_t* b,
+                         uint64_t min_alloc_size,
+                         vector<bluestore_pextent_t>* r)
+{
+  bool empty = false;
+  if (b->has_refmap()) {
+    empty = b->put_ref(lext.offset, lext.length, min_alloc_size, r);
+  } else {
+    bluestore_extent_ref_map_t temp_ref_map;
+    assert(offset >= lext.offset);
+    //determine the range in lextents map where specific blob can be referenced to.
+    uint64_t search_offset = offset - lext.offset;
+    uint64_t search_end = search_offset +
+                          (b->is_compressed() ?
+                             b->get_compressed_payload_original_length() :
+                             b->get_ondisk_length());
+    auto lp = seek_lextent(search_offset);
+    while (lp != extent_map.end() &&
+           lp->first < search_end) {
+      if (lp->second.blob == lext.blob) {
+        temp_ref_map.fill(lp->second.offset, lp->second.length);
+      }
+      ++lp;
+    }
+    temp_ref_map.get(lext.offset, lext.length); //insert a fake reference for the removed lextent
+    empty = b->put_ref_external( temp_ref_map, lext.offset, lext.length, min_alloc_size, r);
+  }
+  return empty;
+}
 // bluestore_wal_op_t
 
 void bluestore_wal_op_t::encode(bufferlist& bl) const

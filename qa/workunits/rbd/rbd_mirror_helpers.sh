@@ -120,7 +120,29 @@ daemon_pid_file()
 
 testlog()
 {
-    echo $(date '+%F %T') $@ | tee -a "${TEMPDIR}/rbd-mirror.test.log"
+    echo $(date '+%F %T') $@ | tee -a "${TEMPDIR}/rbd-mirror.test.log" >&2
+}
+
+expect_failure()
+{
+    local expected="$1" ; shift
+    local out=${TEMPDIR}/expect_failure.out
+
+    if "$@" > ${out} 2>&1 ; then
+        cat ${out} >&2
+        return 1
+    fi
+
+    if [ -z "${expected}" ]; then
+	return 0
+    fi
+
+    if ! grep -q "${expected}" ${out} ; then
+        cat ${out} >&2
+        return 1
+    fi
+
+    return 0
 }
 
 setup()
@@ -197,6 +219,7 @@ start_mirror()
 	--pid-file=$(daemon_pid_file "${cluster}") \
 	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.\$pid.log \
 	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.asok \
+	--rbd-mirror-journal-poll-age=1 \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true
@@ -459,7 +482,7 @@ test_status_in_pool_dir()
 
     local status_log=${TEMPDIR}/${cluster}-${image}.mirror_status
     rbd --cluster ${cluster} -p ${pool} mirror image status ${image} |
-	tee ${status_log}
+	tee ${status_log} >&2
     grep "state: .*${state_pattern}" ${status_log}
     grep "description: .*${description_pattern}" ${status_log}
 }

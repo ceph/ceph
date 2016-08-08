@@ -49,14 +49,13 @@ MDSRank::MDSRank(
     MDSMap *& mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
-    Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
   :
     whoami(whoami_), incarnation(0),
     mds_lock(mds_lock_), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
-    objecter(objecter_),
+    objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
     balancer(NULL), scrubstack(NULL),
     damage_table(whoami_),
@@ -77,6 +76,8 @@ MDSRank::MDSRank(
     standby_replaying(false)
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
+
+  objecter->unset_honor_osdmap_full();
 
   finisher = new Finisher(msgr->cct);
 
@@ -136,10 +137,18 @@ MDSRank::~MDSRank()
 
   delete respawn_hook;
   respawn_hook = NULL;
+
+  delete objecter;
+  objecter = nullptr;
 }
 
 void MDSRankDispatcher::init()
 {
+  objecter->init();
+  messenger->add_dispatcher_head(objecter);
+
+  objecter->start();
+
   update_log_config();
   create_logger();
 
@@ -409,8 +418,8 @@ bool MDSRankDispatcher::ms_dispatch(Message *m)
   return ret;
 }
 
-/* If this function returns true, it has put the message. If it returns false,
- * it has not put the message. */
+/* If this function returns true, it recognizes the message and has taken the
+ * reference. If it returns false, it has done neither. */
 bool MDSRank::_dispatch(Message *m, bool new_msg)
 {
   if (is_stale_message(m)) {
@@ -427,7 +436,6 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   } else {
     if (!handle_deferrable_message(m)) {
       dout(0) << "unrecognized message " << *m << dendl;
-      m->put();
       return false;
     }
   }
@@ -1060,11 +1068,9 @@ void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 
 inline void MDSRank::standby_replay_restart()
 {
-  dout(1) << "standby_replay_restart"
-	  << (standby_replaying ? " (as standby)":" (final takeover pass)")
-	  << dendl;
   if (standby_replaying) {
     /* Go around for another pass of replaying in standby */
+    dout(4) << "standby_replay_restart (as standby)" << dendl;
     mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(
         this,
@@ -1072,6 +1078,7 @@ inline void MDSRank::standby_replay_restart()
   } else {
     /* We are transitioning out of standby: wait for OSD map update
        before making final pass */
+    dout(1) << "standby_replay_restart (final takeover pass)" << dendl;
     Context *fin = new C_OnFinisher(new C_IO_Wrapper(this,
           new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG)),
       finisher);
@@ -1409,28 +1416,7 @@ void MDSRankDispatcher::handle_mds_map(
   }
 
   // Validate state transitions while I hold a rank
-  bool state_valid = true;
-  if (state != oldstate) {
-    if (oldstate == MDSMap::STATE_REPLAY) {
-      if (state != MDSMap::STATE_RESOLVE && state != MDSMap::STATE_RECONNECT) {
-        state_valid = false;
-      }
-    } else if (oldstate == MDSMap::STATE_REJOIN) {
-      if (state != MDSMap::STATE_ACTIVE
-          && state != MDSMap::STATE_CLIENTREPLAY
-          && state != MDSMap::STATE_STOPPED) {
-        state_valid = false;
-      }
-    } else if (oldstate >= MDSMap::STATE_RECONNECT && oldstate < MDSMap::STATE_ACTIVE) {
-      // Once I have entered replay, the only allowable transitions are to
-      // the next state along in the sequence.
-      if (state != oldstate + 1) {
-        state_valid = false;
-      }
-    }
-  }
-
-  if (!state_valid) {
+  if (!MDSMap::state_transition_valid(oldstate, state)) {
     derr << "Invalid state transition " << ceph_mds_state_name(oldstate)
       << "->" << ceph_mds_state_name(state) << dendl;
     respawn();
@@ -1767,6 +1753,16 @@ bool MDSRankDispatcher::handle_asok_command(
       mdcache->dump_cache(f);
     } else {
       mdcache->dump_cache(path);
+    }
+  } else if (command == "dump tree") {
+    string root;
+    int64_t depth;
+    cmd_getval(g_ceph_context, cmdmap, "root", root);
+    if (!cmd_getval(g_ceph_context, cmdmap, "depth", depth))
+      depth = -1;
+    {
+      Mutex::Locker l(mds_lock);
+      mdcache->dump_cache(root, depth, f);
     }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);
@@ -2396,6 +2392,7 @@ void MDSRank::create_logger()
 
   mdlog->create_logger();
   server->create_logger();
+  sessionmap.register_perfcounters();
   mdcache->register_perfcounters();
 }
 
@@ -2553,11 +2550,10 @@ MDSRankDispatcher::MDSRankDispatcher(
     MDSMap *& mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
-    Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
   : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
-      msgr, monc_, objecter_, respawn_hook_, suicide_hook_)
+      msgr, monc_, respawn_hook_, suicide_hook_)
 {}
 
 bool MDSRankDispatcher::handle_command(
@@ -2626,3 +2622,9 @@ bool MDSRankDispatcher::handle_command(
     return false;
   }
 }
+
+epoch_t MDSRank::get_osd_epoch() const
+{
+  return objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));  
+}
+

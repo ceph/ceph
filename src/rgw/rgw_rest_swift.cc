@@ -1206,13 +1206,14 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
 		    : op_ret);
   dump_errno(s);
-  if (s->err.is_err()) {
-    end_header(s, NULL);
-    return 0;
-  }
 
   if (range_str) {
     dump_range(s, ofs, end, s->obj_size);
+  }
+
+  if (s->err.is_err()) {
+    end_header(s, NULL);
+    return 0;
   }
 
   dump_content_length(s, total_len);
@@ -1474,10 +1475,9 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 int RGWHandler_REST_SWIFT::authorize()
 {
   /* Factories. */
-  class SwiftAuthFactory
-    : public RGWTempURLAuthApplier::Factory,
-      public RGWLocalAuthApplier::Factory,
-      public RGWRemoteAuthApplier::Factory {
+  class SwiftAuthFactory : public RGWTempURLAuthApplier::Factory,
+                           public RGWLocalAuthApplier::Factory,
+                           public RGWRemoteAuthApplier::Factory {
     typedef RGWAuthApplier::aplptr_t aplptr_t;
 
     RGWRados * const store;
@@ -1499,8 +1499,8 @@ int RGWHandler_REST_SWIFT::authorize()
     }
 
     aplptr_t create_apl_local(CephContext * const cct,
-                           const RGWUserInfo& user_info,
-                           const std::string& subuser) const override {
+                              const RGWUserInfo& user_info,
+                              const std::string& subuser) const override {
       return aplptr_t(
         new RGWThirdPartyAccountAuthApplier<RGWLocalAuthApplier>(
           RGWLocalAuthApplier(cct, user_info, subuser),
@@ -1545,7 +1545,7 @@ int RGWHandler_REST_SWIFT::authorize()
       ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
 
       auto applier = engine->authenticate();
-      if (!applier) {
+      if (! applier) {
         /* Access denied is acknowledged by returning a std::unique_ptr with
          * nullptr inside. */
         ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;

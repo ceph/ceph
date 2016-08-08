@@ -22,30 +22,32 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
-  test_ConsistencyGroups.cc 
+  test_ConsistencyGroups.cc
   test_main.cc
-  test_mock_fixture.cc 
-  test_mock_ExclusiveLock.cc 
-  test_mock_Journal.cc 
-  test_mock_ObjectWatcher.cc 
-  exclusive_lock/test_mock_AcquireRequest.cc 
-  exclusive_lock/test_mock_ReleaseRequest.cc 
+  test_mock_fixture.cc
+  test_mock_AioImageRequest.cc
+  test_mock_ExclusiveLock.cc
+  test_mock_Journal.cc
+  test_mock_ObjectWatcher.cc
+  exclusive_lock/test_mock_AcquireRequest.cc
+  exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
-  journal/test_mock_Replay.cc 
-  object_map/test_mock_InvalidateRequest.cc 
-  object_map/test_mock_LockRequest.cc 
-  object_map/test_mock_RefreshRequest.cc 
-  object_map/test_mock_ResizeRequest.cc 
-  object_map/test_mock_SnapshotCreateRequest.cc 
-  object_map/test_mock_SnapshotRemoveRequest.cc 
-  object_map/test_mock_SnapshotRollbackRequest.cc 
-  object_map/test_mock_UnlockRequest.cc 
-  object_map/test_mock_UpdateRequest.cc 
-  operation/test_mock_ResizeRequest.cc 
-  operation/test_mock_SnapshotCreateRequest.cc 
-  operation/test_mock_SnapshotProtectRequest.cc 
-  operation/test_mock_SnapshotRemoveRequest.cc 
-  operation/test_mock_SnapshotRollbackRequest.cc 
+  journal/test_mock_Replay.cc
+  object_map/test_mock_InvalidateRequest.cc
+  object_map/test_mock_LockRequest.cc
+  object_map/test_mock_RefreshRequest.cc
+  object_map/test_mock_ResizeRequest.cc
+  object_map/test_mock_SnapshotCreateRequest.cc
+  object_map/test_mock_SnapshotRemoveRequest.cc
+  object_map/test_mock_SnapshotRollbackRequest.cc
+  object_map/test_mock_UnlockRequest.cc
+  object_map/test_mock_UpdateRequest.cc
+  operation/test_mock_Request.cc
+  operation/test_mock_ResizeRequest.cc
+  operation/test_mock_SnapshotCreateRequest.cc
+  operation/test_mock_SnapshotProtectRequest.cc
+  operation/test_mock_SnapshotRemoveRequest.cc
+  operation/test_mock_SnapshotRollbackRequest.cc
   operation/test_mock_SnapshotUnprotectRequest.cc
   )
 add_executable(unittest_librbd
@@ -84,11 +86,12 @@ target_link_libraries(unittest_librbd
 add_executable(ceph_test_librbd
   test_main.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+  $<TARGET_OBJECTS:librados_api_obj>
+  $<TARGET_OBJECTS:librados_objs>
   $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd
-  librados
   rbd_test
   rbd_api
   rbd_internal
@@ -133,6 +136,7 @@ add_executable(ceph_test_librbd_fsx
 target_link_libraries(ceph_test_librbd_fsx
   librbd
   librados
+  journal
   global
   m
   ${CMAKE_DL_LIBS}

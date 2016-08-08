@@ -8,6 +8,7 @@
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
@@ -171,6 +172,7 @@ private:
 
   AioCompletion *create_aio_modify_completion(Context *on_ready,
                                               Context *on_safe,
+                                              aio_type_t aio_type,
                                               bool *flush_required);
   AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(AioCompletion *aio_comp);

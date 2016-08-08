@@ -628,6 +628,8 @@ public:
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MDSMap*>& ls);
+
+  static bool state_transition_valid(DaemonState prev, DaemonState next);
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)

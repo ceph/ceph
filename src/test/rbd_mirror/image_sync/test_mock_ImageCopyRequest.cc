@@ -109,7 +109,7 @@ public:
   void expect_get_snap_id(librbd::MockTestImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, get_snap_id(_))
       .WillRepeatedly(Invoke([&mock_image_ctx](std::string snap_name) {
-        RWLock::RLocker snap_locker(mock_image_ctx.image_ctx->snap_lock);
+        assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
         return mock_image_ctx.image_ctx->get_snap_id(snap_name);
       }));
   }

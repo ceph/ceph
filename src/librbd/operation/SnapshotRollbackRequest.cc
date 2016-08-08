@@ -107,7 +107,7 @@ Context *SnapshotRollbackRequest<I>::handle_block_writes(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   send_resize_image();
@@ -150,7 +150,7 @@ Context *SnapshotRollbackRequest<I>::handle_resize_image(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to resize image for rollback: "
                << cpp_strerror(*result) << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   send_rollback_object_map();
@@ -224,11 +224,11 @@ Context *SnapshotRollbackRequest<I>::handle_rollback_objects(int *result) {
 
   if (*result == -ERESTART) {
     ldout(cct, 5) << "snapshot rollback operation interrupted" << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   } else if (*result < 0) {
     lderr(cct) << "failed to rollback objects: " << cpp_strerror(*result)
                << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   return send_refresh_object_map();
@@ -276,7 +276,7 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
 
   apply();
   if (image_ctx.object_cacher == NULL) {
-    return this->create_context_finisher();
+    return this->create_context_finisher(0);
   }
 
   CephContext *cct = image_ctx.cct;
@@ -300,7 +300,7 @@ Context *SnapshotRollbackRequest<I>::handle_invalidate_cache(int *result) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(*result)
                << dendl;
   }
-  return this->create_context_finisher();
+  return this->create_context_finisher(*result);
 }
 
 template <typename I>

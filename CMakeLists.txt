@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 2.8.11)
 project(ceph)
 set(VERSION "10.2.1")
 
-if (NOT (CMAKE_MAJOR_VERSION LESS 3))
+if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
   cmake_policy(SET CMP0046 OLD)
-endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
+endif()
 # we use LINK_PRIVATE keyword instead of PRIVATE, but do not specify the LINK_PUBLIC
 # for target_link_libraries() command when PUBLIC should be used instead, it's just
 # for backward compatibility with cmake 2.8.11.
@@ -16,8 +16,26 @@ endif (POLICY CMP0022)
 if (POLICY CMP0023)
 cmake_policy(SET CMP0023 OLD)
 endif (POLICY CMP0023)
+if(POLICY CMP0056)
+  cmake_policy(SET CMP0056 NEW)
+endif()
+if(POLICY CMP0065)
+  cmake_policy(SET CMP0065 NEW)
+endif()
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  set(LINUX ON)
+  FIND_PACKAGE(Threads)
+elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+  set(FREEBSD ON)
+  FIND_PACKAGE(Threads)
+elseif(APPLE)
+  set(OperatingSystem "Mac OS X")
+else()
+  message(STATUS "No systemtype selected for building")
+endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
@@ -45,15 +63,23 @@ endif(WITH_MANPAGE)
 
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
-  ${OFED_PREFIX}/include
-  ${LEVELDB_PREFIX}/include
-  ${PROJECT_SOURCE_DIR}/src
-)
+  ${PROJECT_SOURCE_DIR}/src)
 
-link_directories(
-  ${OFED_PREFIX}/lib
-  ${LEVELDB_PREFIX}/lib
-)
+if(LEVELDB_PREFIX)
+  include_directories(${LEVELDB_PREFIX}/include)
+  link_directories(${LEVELDB_PREFIX}/lib)
+endif()
+
+if(OFED_PREFIX)
+  include_directories(${OFED_PREFIX}/include)
+  link_directories(${OFED_PREFIX}/lib)
+endif()
+
+if(FREEBSD)
+  include_directories(/usr/local/include)
+  link_directories(/usr/local/lib)
+  list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
+endif(FREEBSD)
 
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -103,7 +129,9 @@ CHECK_INCLUDE_FILES("sys/types.h" HAVE_SYS_TYPES_H)
 CHECK_INCLUDE_FILES("sys/vfs.h" HAVE_SYS_VFS_H)
 CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
 CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
-CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
+if(LINUX)
+  CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
+endif(LINUX)
 CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
 
 include(CheckTypeSize)
@@ -152,23 +180,30 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
-find_package(execinfo)
+find_package(Backtrace)
 
-find_package(udev REQUIRED)
-set(HAVE_UDEV ${UDEV_FOUND})
+if(LINUX)
+  find_package(udev REQUIRED)
+  set(HAVE_UDEV ${UDEV_FOUND})
 
-option(WITH_AIO "AIO is here ON" ON)
-if(${WITH_AIO})
-find_package(aio REQUIRED)
-set(HAVE_LIBAIO ${AIO_FOUND})
-message(STATUS "${AIO_LIBS}")
-endif(${WITH_AIO})
+  find_package(aio REQUIRED)
+  set(HAVE_LIBAIO ${AIO_FOUND})
+
+  find_package(blkid REQUIRED)
+  set(HAVE_BLKID ${BLKID_FOUND})
+else()
+  set(HAVE_UDEV OFF)
+  message(STATUS "Not using udev")
+  set(HAVE_LIBAIO OFF)
+  message(STATUS "Not using AIO")
+  set(HAVE_BLKID OFF)
+  message(STATUS "Not using BLKID")
+endif(LINUX)
 
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(${WITH_OPENLDAP})
 find_package(OpenLdap REQUIRED)
 set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
-message(STATUS "${OPENLDAP_LIBS}")
 endif(${WITH_OPENLDAP})
 
 option(WITH_FUSE "Fuse is here" ON)
@@ -189,8 +224,6 @@ if(WITH_SPDK)
   find_package(dpdk REQUIRED)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
-
-find_package(blkid REQUIRED)
 
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
@@ -221,17 +254,6 @@ if(NOT ${ATOMIC_OPS_FOUND})
   set(NO_ATOMIC_OPS 1)
 endif(NOT ${ATOMIC_OPS_FOUND})
 
-option(WITH_GPERFTOOLS "gperftools is here" ON)
-if(${WITH_GPERFTOOLS})
-	find_package(gperftools)
-	set(HAVE_GPERFTOOLS ${GPERFTOOLS_FOUND})
-	if(${HAVE_GPERFTOOLS})
-		find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h PATHS /usr/include/gperftools)
-		find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h PATHS /usr/include/gperftools)
-	endif(${HAVE_GPERFTOOLS})
-endif(${WITH_GPERFTOOLS})
-
 find_package(snappy REQUIRED)
 
 #if allocator is set on command line make sure it matches below strings
@@ -260,9 +282,10 @@ else(ALLOCATOR)
   endif(Tcmalloc_FOUND)
 endif(ALLOCATOR)
 
-find_package(keyutils REQUIRED)
-
-find_package(libuuid REQUIRED)
+if(NOT FREEBSD)
+  # XXX keyutils is available, but not yet recognised
+  find_package(keyutils REQUIRED)
+endif(NOT FREEBSD)
 
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
@@ -283,17 +306,17 @@ else ()
 endif (${WITH_NSS})
 
 option(WITH_SSL "SSL build selected" ON)
-if (${USE_NSS})
+if(USE_NSS)
   #nss
   set(SSL_LIBRARIES ${NSS_LIBRARIES})
   message(STATUS "SSL with NSS selected (Libs: ${SSL_LIBRARIES})")
-else (${USE_NSS})
+else(USE_NSS)
   #openssl
   find_package(OpenSSL REQUIRED)
   set(HAVE_OPENSSL ON)
   set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
   message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
-endif(${USE_NSS})
+endif(USE_NSS)
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
@@ -344,7 +367,9 @@ option(HAVE_LIBZFS "LibZFS is enabled" OFF)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
-add_definitions(-D__linux__)
+if(LINUX)
+  add_definitions(-D__linux__)
+endif(LINUX)
 
 if(ENABLE_SHARED)
   set(Boost_USE_STATIC_LIBS   OFF)
@@ -368,18 +393,6 @@ if(WITH_SELINUX)
   endif()
   add_subdirectory(selinux)
 endif(WITH_SELINUX)
-
-# find out which platform we are building on
-if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  set(LINUX ON)
-  set(UNIX ON)
-  FIND_PACKAGE(Threads)
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-
-# find out which platform we are building on
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-set(OperatingSystem "Mac OS X")
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # enables testing and creates Make check command
 add_custom_target(tests

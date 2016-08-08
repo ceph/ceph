@@ -45,9 +45,10 @@ least one :term:`Ceph Metadata Server` running.
 .. toctree:: 
 	:maxdepth: 1
 
-	Add/Remove MDS <../../rados/deployment/ceph-deploy-mds>
+	Add/Remove MDS(s) <../../rados/deployment/ceph-deploy-mds>
 	MDS failover and standby configuration <standby>
 	MDS Configuration Settings <mds-config-ref>
+	Client Configuration Settings <client-config-ref>
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
@@ -90,6 +91,7 @@ authentication keyring.
 	File layouts <file-layouts>
 	Client eviction <eviction>
 	Handling full filesystems <full>
+    Health messages <health-messages>
 	Troubleshooting <troubleshooting>
 	Disaster recovery <disaster-recovery>
 	Client authentication <client-auth>

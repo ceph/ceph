@@ -72,6 +72,10 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
+#define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
+#define RBD_SNAP_REMOVE_FLATTEN		1 << 1
+#define RBD_SNAP_REMOVE_FORCE		(RBD_SNAP_REMOVE_UNPROTECT | RBD_SNAP_REMOVE_FLATTEN)
+
 /**
  * These types used to in set_image_notification to indicate the type of event
  * socket passed in.
@@ -146,6 +150,8 @@ enum {
   RBD_IMAGE_OPTION_JOURNAL_ORDER = 5,
   RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH = 6,
   RBD_IMAGE_OPTION_JOURNAL_POOL = 7,
+  RBD_IMAGE_OPTION_FEATURES_SET = 8,
+  RBD_IMAGE_OPTION_FEATURES_CLEAR = 9,
 };
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
@@ -326,6 +332,8 @@ CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
 CEPH_RBD_API void rbd_snap_list_end(rbd_snap_info_t *snaps);
 CEPH_RBD_API int rbd_snap_create(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove(rbd_image_t image, const char *snapname);
+CEPH_RBD_API int rbd_snap_remove2(rbd_image_t image, const char *snap_name, uint32_t flags,
+				  librbd_progress_fn_t cb, void *cbdata);
 CEPH_RBD_API int rbd_snap_rollback(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_rollback_with_progress(rbd_image_t image,
                                                  const char *snapname,

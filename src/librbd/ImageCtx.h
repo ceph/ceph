@@ -42,7 +42,7 @@ namespace librbd {
   class CopyupRequest;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
-  class ImageWatcher;
+  template <typename> class ImageWatcher;
   template <typename> class Journal;
   class LibrbdAdminSocketHook;
   class ObjectMap;
@@ -79,7 +79,7 @@ namespace librbd {
     std::string name;
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
-    ImageWatcher *image_watcher;
+    ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
 
     /**
@@ -182,6 +182,7 @@ namespace librbd {
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
     std::string journal_pool;
+    uint32_t journal_max_payload_bytes;
 
     LibrbdAdminSocketHook *asok_hook;
 

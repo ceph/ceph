@@ -422,7 +422,7 @@ void Watch::discard_state()
   obc = ObjectContextRef();
 }
 
-bool Watch::is_discarded()
+bool Watch::is_discarded() const
 {
   return discarded;
 }

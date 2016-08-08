@@ -645,7 +645,23 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), fsmap.get_epoch(), state, seq,
 			CEPH_FEATURES_SUPPORTED_DEFAULT));
+    } else if (info.state == MDSMap::STATE_STANDBY && state != info.state) {
+      // Standby daemons should never modify their own
+      // state.  Reject any attempts to do so.
+      derr << "standby " << gid << " attempted to change state to "
+           << ceph_mds_state_name(state) << ", rejecting" << dendl;
+      return true;
+    } else if (info.state != MDSMap::STATE_STANDBY && state != info.state &&
+               !MDSMap::state_transition_valid(info.state, state)) {
+      // Validate state transitions for daemons that hold a rank
+      derr << "daemon " << gid << " (rank " << info.rank << ") "
+           << "reported invalid state transition "
+           << ceph_mds_state_name(info.state) << " -> "
+           << ceph_mds_state_name(state) << dendl;
+      return true;
     } else {
+      // Made it through special cases and validations, record the
+      // daemon's reported state to the FSMap.
       pending_fsmap.modify_daemon(gid, [state, seq](MDSMap::mds_info_t *info) {
         info->state = state;
         info->state_seq = seq;

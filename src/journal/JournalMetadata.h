@@ -14,6 +14,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadataListener.h"
+#include "journal/Settings.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
@@ -44,7 +45,7 @@ public:
 
   JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                   librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &client_id, double commit_interval);
+                  const std::string &client_id, const Settings &settings);
   ~JournalMetadata();
 
   void init(Context *on_init);
@@ -73,6 +74,9 @@ public:
   void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 
+  inline const Settings &get_settings() const {
+    return m_settings;
+  }
   inline const std::string &get_client_id() const {
     return m_client_id;
   }
@@ -287,7 +291,7 @@ private:
   CephContext *m_cct;
   std::string m_oid;
   std::string m_client_id;
-  double m_commit_interval;
+  Settings m_settings;
 
   uint8_t m_order;
   uint8_t m_splay_width;

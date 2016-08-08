@@ -1,6 +1,6 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS} ${CMAKE_DL_LIBS})
+set(UNITTEST_LIBS gmock_main gmock gtest ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/googletest/googlemock/include -I${CMAKE_BINARY_DIR}/src/googletest/googlemock/include -I${CMAKE_SOURCE_DIR}/src/googletest/googletest/include -I${CMAKE_BINARY_DIR}/src/googletest/googletest/include -fno-strict-aliasing")
 
 add_subdirectory(bench)
@@ -86,7 +86,7 @@ endif(${WITH_RADOSGW})
 
 # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
 add_executable(test_build_libcephfs buildtest_skeleton.cc)
-target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+target_link_libraries(test_build_libcephfs cephfs pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 
 add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES})
@@ -155,9 +155,9 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
@@ -171,8 +171,6 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     cls_version_client
     cls_log_client
     cls_statelog_client
@@ -182,6 +180,8 @@ if(${WITH_RADOSGW})
     cls_lock_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
   set_target_properties(ceph_test_cls_rgw_meta PROPERTIES
     COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
@@ -201,8 +201,6 @@ if(${WITH_RADOSGW})
     librados
     rgw_a
     global
-    curl
-    expat
     cls_version_client
     cls_log_client
     cls_statelog_client
@@ -212,6 +210,8 @@ if(${WITH_RADOSGW})
     cls_lock_client
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}
     ${EXTRALIBS}
@@ -237,9 +237,9 @@ if(${WITH_RADOSGW})
     cls_user_client
     cls_lock_client
     global
-    curl
-    expat
     ${BLKID_LIBRARIES}
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}
     ${CRYPTO_LIBS}
@@ -338,7 +338,8 @@ set_target_properties(test_rgw_ldap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(test_rgw_ldap
   librados
-  ${OPENLDAP_LIBS}
+  common
+  ${OPENLDAP_LIBRARIES}
   ${Boost_LIBRARIES}
   ${UNITTEST_LIBS}
   )
@@ -356,8 +357,12 @@ target_link_libraries(ceph_multi_stress_watch librados global radostest
 add_executable(ceph_perf_local 
   perf_local.cc
   perf_helper.cc)
-#INTEL_SSE & INTEL_SSE2 flags
-set(PERF_LOCAL_FLAGS "-msse -msse2")
+if(HAVE_SSE)
+  set(PERF_LOCAL_FLAGS ${SSE3_FLAGS})
+endif(HAVE_SSE)
+if(HAVE_NEON)
+  set(PERF_LOCAL_FLAGS ${ARM_NEON_FLAGS})
+endif(HAVE_NEON)
 set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
   ${PERF_LOCAL_FLAGS})
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
@@ -439,7 +444,7 @@ install(TARGETS
   ceph_test_stress_watch
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(${HAVE_FUSE})
+if(WITH_FUSE)
   add_executable(ceph_test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -449,7 +454,7 @@ if(${HAVE_FUSE})
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${HAVE_FUSE})
+endif(WITH_FUSE)
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers
@@ -554,14 +559,14 @@ add_executable(unittest_encoding
   encoding.cc
   )
 add_ceph_unittest(unittest_encoding ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_encoding)
-target_link_libraries(unittest_encoding librados pthread rt m ${BLKID_LIBRARIES})
+target_link_libraries(unittest_encoding common librados pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_addrs
 add_executable(unittest_addrs
   test_addrs.cc
   )
 add_ceph_unittest(unittest_addrs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_addrs)
-target_link_libraries(unittest_addrs librados pthread rt m ${BLKID_LIBRARIES}) 
+target_link_libraries(unittest_addrs common librados pthread rt m ${BLKID_LIBRARIES})
 
 # unittest_workqueue
 add_executable(unittest_workqueue
@@ -743,7 +748,7 @@ add_executable(unittest_heartbeatmap
   heartbeat_map.cc
   )
 add_ceph_unittest(unittest_heartbeatmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_heartbeatmap)
-target_link_libraries(unittest_heartbeatmap global)
+target_link_libraries(unittest_heartbeatmap common global)
 
 if(${WITH_RADOSGW})
   # unittest_formatter

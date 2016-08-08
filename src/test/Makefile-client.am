@@ -205,7 +205,7 @@ bin_DEBUGPROGRAMS += ceph_test_cls_numops
 ceph_test_cls_journal_SOURCES = test/cls_journal/test_cls_journal.cc
 ceph_test_cls_journal_LDADD = \
         libcls_journal_client.la $(LIBRADOS) \
-        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_journal
 
@@ -680,6 +680,13 @@ ceph_test_cors_LDADD = \
 ceph_test_cors_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cors
 
+unittest_rgw_bencode_SOURCES = test/rgw/test_rgw_bencode.cc
+unittest_rgw_bencode_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) -lcurl -lexpat
+unittest_rgw_bencode_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_rgw_bencode
+
 ceph_test_rgw_manifest_SOURCES = test/rgw/test_rgw_manifest.cc
 ceph_test_rgw_manifest_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
@@ -707,7 +714,7 @@ ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
 ceph_test_rgw_obj_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
-	-lcurl -luuid -lexpat
+	-lcurl -lexpat
 
 ceph_test_rgw_obj_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_obj

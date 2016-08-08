@@ -41,6 +41,8 @@ set(rgw_a_srcs
   rgw_ldap.cc
   rgw_loadgen.cc
   rgw_log.cc
+  rgw_lc.cc
+  rgw_lc_s3.cc
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
@@ -83,14 +85,17 @@ set(rgw_a_srcs
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc
-  rgw_xml_enc.cc)
+  rgw_xml_enc.cc
+  rgw_torrent.cc)
 
 add_library(rgw_a STATIC ${rgw_a_srcs})
 target_include_directories(rgw_a PUBLIC ${FCGI_INCLUDE_DIR})
-target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
+target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
-  cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS}
-  ${CRYPTO_LIBS})
+  cls_replica_log_client cls_user_client common common_utf8 global
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
 set(radosgw_srcs
   rgw_fcgi_process.cc
@@ -104,7 +109,8 @@ target_link_libraries(radosgw rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
-  curl expat global fcgi resolv ${SSL_LIBRARIES} ${BLKID_LIBRARIES}
+  global fcgi resolv
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 # radosgw depends on cls libraries at runtime, but not as link dependencies
 add_dependencies(radosgw cls_rgw cls_lock cls_refcount
@@ -120,7 +126,8 @@ target_link_libraries(radosgw-admin rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
-  curl expat global fcgi resolv ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
+  global fcgi resolv
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -137,7 +144,8 @@ target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
-  curl expat global fcgi resolv)
+  global fcgi resolv
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
@@ -156,8 +164,10 @@ target_link_libraries(rgw LINK_PRIVATE
   cls_version_client
   cls_replica_log_client
   cls_user_client
-  curl expat global
-  resolv)
+  global
+  resolv
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES})
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 1)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})

@@ -41,6 +41,8 @@ class InoTable : public MDSTable {
   void replay_alloc_ids(interval_set<inodeno_t>& inos);
   void replay_release_ids(interval_set<inodeno_t>& inos);
   void replay_reset();
+  bool repair(inodeno_t id);
+  bool is_marked_free(inodeno_t id) const;
 
   void reset_state();
   void encode_state(bufferlist& bl) const {

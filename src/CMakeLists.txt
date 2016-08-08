@@ -95,7 +95,7 @@ else(no_yasm)
 endif(no_yasm)
 
 
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
 
 # require c++11
 if(CMAKE_VERSION VERSION_LESS "3.1")
@@ -197,11 +197,22 @@ else(INTEL_SSE4_1)
 endif(INTEL_SSE4_1)
 
 
-set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
-if(${WITH_PROFILER})
+option(WITH_PROFILER "build extra profiler binaries" OFF)
+if(WITH_PROFILER)
+  find_package(gperftools REQUIRED)
   list(APPEND EXTRALIBS profiler)
-endif(${WITH_PROFILER})
+endif(WITH_PROFILER)
+
+if(WITH_PROFILER AND ALLOCATOR STREQUAL "tcmalloc")
+  find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h
+    PATHS ${GPERFTOOLS_INCLUDE_DIR})
+  find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h
+    PATHS ${GPERFTOOLS_INCLUDE_DIR})
+  find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h
+    PATHS ${GPERFTOOLS_INCLUDE_DIR})
+endif()
 
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
@@ -303,7 +314,8 @@ list(APPEND mds_files
   mds/FSMap.cc
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
-  mds/mdstypes.cc)
+  mds/mdstypes.cc
+  mds/flock.cc)
 
 set(crush_srcs
   crush/builder.c
@@ -337,6 +349,9 @@ if(HAVE_GOOD_YASM_ELF64)
     common/crc32c_intel_fast_asm.S
     common/crc32c_intel_fast_zero_asm.S)
 endif(HAVE_GOOD_YASM_ELF64)
+
+add_library(common_buffer_obj OBJECT
+  common/buffer.cc)
 
 add_library(common_texttable_obj OBJECT
   common/TextTable.cc)
@@ -387,6 +402,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
+  $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
   log/Log.cc
   log/SubsystemMap.cc
@@ -420,7 +436,6 @@ set(libcommon_files
   common/pipe.c
   common/ceph_argparse.cc
   common/ceph_context.cc
-  common/buffer.cc
   common/code_environment.cc
   common/dout.cc
   common/signal.cc
@@ -475,13 +490,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(${HAVE_GPERFTOOLS})
+if(WITH_PROFILER)
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(${HAVE_GPERFTOOLS})
+endif()
 
 if(ENABLE_SHARED)
   list(APPEND libcommon_files
@@ -491,26 +506,22 @@ endif(ENABLE_SHARED)
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
+target_link_libraries(common json_spirit erasure_code rt resolv
+  ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
+  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
-if(${HAVE_GPERFTOOLS})
-  target_link_libraries(common profiler)
-endif(${HAVE_GPERFTOOLS})
-
-if(${HAVE_ARMV8_CRC})
+if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
   target_link_libraries(common common_crc_aarch64)
-endif(${HAVE_ARMV8_CRC})
+endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
-
-target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -575,9 +586,9 @@ if(${WITH_RADOSGW})
     cls_user_client
     cls_statelog_client
     cls_rgw_client
-    curl
-    expat
     fcgi
+    ${CURL_LIBRARIES}
+    ${EXPAT_LIBRARIES}
   )
 endif(${WITH_RADOSGW})
 if(${WITH_RBD})
@@ -636,9 +647,15 @@ install(TARGETS ceph-mon DESTINATION bin)
 if(NOT ALLOCATOR STREQUAL "jemalloc")
   set(disable_jemalloc "DISABLE_JEMALLOC=1")
 endif()
+
+set(ROCKSDB_EXTRA_CXXFLAG -fPIC -Wno-unused-variable)
+if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+  set(ROCKSDB_EXTRA_CXXFLAG ${ROCKSDB_EXTRA_CXXFLAG} -DNDEBUG)
+endif(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+
 add_custom_target(build_rocksdb
     COMMAND
-    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
+    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib CXX="${CMAKE_CXX_COMPILER}" EXTRA_CXXFLAGS="${ROCKSDB_EXTRA_CXXFLAG}"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
@@ -661,9 +678,9 @@ add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
-if(${HAVE_LIBFUSE})
+if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
-endif(${HAVE_LIBFUSE})
+endif()
 install(TARGETS ceph-osd DESTINATION bin)
 
 add_subdirectory(mds)
@@ -681,11 +698,6 @@ add_subdirectory(erasure-code)
 add_subdirectory(googletest/googlemock)
 
 add_subdirectory(test)
-set(cephfs_srcs cephfs.cc)
-add_executable(cephfstool ${cephfs_srcs})
-target_link_libraries(cephfstool common ${EXTRALIBS})
-set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
-install(TARGETS cephfstool DESTINATION bin)
 
 add_subdirectory(compressor)
 add_subdirectory(tools)
@@ -753,10 +765,14 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
+    foreach(name common client osdc)
+      set(CEPHFS_LINK_FLAGS "${CEPHFS_LINK_FLAGS} -Wl,--exclude-libs,lib${name}.a")
+    endforeach()
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
       VERSION 1.0.0
-      SOVERSION 1)
+      SOVERSION 1
+      LINK_FLAGS ${CEPHFS_LINK_FLAGS})
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
@@ -877,3 +893,5 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
     COMMAND git submodule update --force --init --recursive
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 endif()
+
+add_subdirectory(script)
