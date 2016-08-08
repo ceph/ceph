@@ -330,8 +330,7 @@ int PyModules::init()
       derr << "Error loading module '" << *module_name << "': "
         << cpp_strerror(r) << dendl;
       derr << handle_pyerror() << dendl;
-
-      return r;
+      // Don't drop out here, load the other modules
     } else {
       // Success!
       modules[*module_name] = mod;
