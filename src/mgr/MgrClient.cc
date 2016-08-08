@@ -59,7 +59,6 @@ bool MgrClient::ms_dispatch(Message *m)
 {
   Mutex::Locker l(lock);
 
-  ldout(cct, 20) << *m << dendl;
   switch(m->get_type()) {
   case MSG_MGR_MAP:
     return handle_mgr_map(static_cast<MMgrMap*>(m));
@@ -73,7 +72,7 @@ bool MgrClient::ms_dispatch(Message *m)
       return false;
     }
   default:
-    ldout(cct, 10) << "Not handling " << *m << dendl; 
+    ldout(cct, 30) << "Not handling " << *m << dendl; 
     return false;
   }
 }
@@ -81,6 +80,8 @@ bool MgrClient::ms_dispatch(Message *m)
 bool MgrClient::handle_mgr_map(MMgrMap *m)
 {
   assert(lock.is_locked_by_me());
+
+  ldout(cct, 20) << *m << dendl;
 
   map = m->get_map();
   ldout(cct, 4) << "Got map version " << map.epoch << dendl;
@@ -244,6 +245,8 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
 {
   assert(lock.is_locked_by_me());
 
+  ldout(cct, 20) << *m << dendl;
+
   if (session == nullptr) {
     lderr(cct) << "dropping unexpected configure message" << dendl;
     m->put();
@@ -312,6 +315,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 bool MgrClient::handle_command_reply(MCommandReply *m)
 {
   assert(lock.is_locked_by_me());
+
+  ldout(cct, 20) << *m << dendl;
 
   const auto tid = m->get_tid();
   const auto op = command_table.get_command(tid);
