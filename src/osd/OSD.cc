@@ -2920,11 +2920,19 @@ void OSD::clear_temp_objects()
     }
     if (!temps.empty()) {
       ObjectStore::Transaction t;
+      int removed = 0;
       for (vector<ghobject_t>::iterator q = temps.begin(); q != temps.end(); ++q) {
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
+        if (++removed > cct->_conf->osd_target_transaction_size) {
+          store->apply_transaction(service.meta_osr.get(), std::move(t));
+          t = ObjectStore::Transaction();
+          removed = 0;
+        }
       }
-      store->apply_transaction(service.meta_osr.get(), std::move(t));
+      if (removed) {
+        store->apply_transaction(service.meta_osr.get(), std::move(t));
+      }
     }
   }
 }
@@ -2946,7 +2954,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
 			 INT_MAX, &objects, 0);
 
   // delete them.
-  unsigned removed = 0;
+  int removed = 0;
   for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
@@ -2955,7 +2963,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     if (r != 0 && r != -ENOENT)
       assert(0);
     t.remove(tmp, *p);
-    if (removed > 300) {
+    if (removed > g_conf->osd_target_transaction_size) {
       int r = store->apply_transaction(osr.get(), std::move(t));
       assert(r == 0);
       t = ObjectStore::Transaction();
@@ -3174,12 +3182,6 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
   return out;
 }
 
-bool OSD::_have_pg(spg_t pgid)
-{
-  RWLock::RLocker l(pg_map_lock);
-  return pg_map.count(pgid);
-}
-
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
   RWLock::RLocker l(pg_map_lock);
@@ -3187,16 +3189,6 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
     return NULL;
   PG *pg = pg_map[pgid];
   pg->lock();
-  return pg;
-}
-
-
-PG *OSD::_lookup_pg(spg_t pgid)
-{
-  RWLock::RLocker l(pg_map_lock);
-  if (!pg_map.count(pgid))
-    return NULL;
-  PG *pg = pg_map[pgid];
   return pg;
 }
 
@@ -3532,7 +3524,8 @@ void OSD::handle_pg_peering_evt(
     return;
   }
 
-  if (!_have_pg(pgid)) {
+  PG *pg = _lookup_lock_pg(pgid);
+  if (!pg) {
     // same primary?
     if (!osdmap->have_pg_pool(pgid.pool()))
       return;
@@ -3576,7 +3569,7 @@ void OSD::handle_pg_peering_evt(
       if (!pp->is_replicated() && role != pgid.shard)
 	role = -1;
 
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	get_map(epoch),
 	pgid, false, false,
 	role,
@@ -3606,7 +3599,7 @@ void OSD::handle_pg_peering_evt(
       pg_history_t old_history = old_pg_state->info.history;
       pg_interval_map_t old_past_intervals = old_pg_state->past_intervals;
       old_pg_state->unlock();
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	old_osd_map,
 	resurrected,
 	false,
@@ -3674,7 +3667,6 @@ void OSD::handle_pg_peering_evt(
     }
   } else {
     // already had it.  did the mapping change?
-    PG *pg = _lookup_lock_pg(pgid);
     if (epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
 	       << pg->info.history.same_interval_since
@@ -5481,10 +5473,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       r = -EINVAL;
     } else {
       spg_t pcand;
+      PG *pg = nullptr;
       if (osdmap->get_primary_shard(pgid, &pcand) &&
-	  _have_pg(pcand)) {
-	PG *pg = _lookup_lock_pg(pcand);
-	assert(pg);
+	  (pg = _lookup_lock_pg(pcand))) {
 	if (pg->is_primary()) {
 	  // simulate pg <pgid> cmd= for pg->do-command
 	  if (prefix != "pg")
@@ -6642,6 +6633,12 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
+  // Keep a ref in the list until we get the newly received map written
+  // onto disk. This is important because as long as the refs are alive,
+  // the OSDMaps will be pinned in the cache and we won't try to read it
+  // off of disk. Otherwise these maps will probably not stay in the cache,
+  // and reading those OSDMaps before they are actually written can result
+  // in a crash. 
   list<OSDMapRef> pinned_maps;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
