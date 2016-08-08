@@ -298,6 +298,18 @@ namespace rgw {
       goto out;
     }
 
+    /* forbid renaming of directories (unreasonable at scale) */
+    if (rgw_fh->is_dir()) {
+      ldout(get_context(), 12) << __func__
+			<< " rejecting attempt to rename directory path="
+			<< rgw_fh->full_object_name()
+			<< dendl;
+      rgw_fh->mtx.unlock(); /* !LOCKED */
+      unref(rgw_fh); /* -ref */
+      rc = -EPERM;
+      goto out;
+    }
+
     for (int ix : {0, 1}) {
       switch (ix) {
       case 0:
