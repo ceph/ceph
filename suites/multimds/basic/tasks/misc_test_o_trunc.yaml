@@ -1,5 +1,0 @@
-tasks:
-- workunit:
-    clients:
-      all:
-        - fs/test_o_trunc.sh
