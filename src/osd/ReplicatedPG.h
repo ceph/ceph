@@ -88,6 +88,7 @@ public:
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
+    int list_snaps_ret;	     ///< return value of list_snaps (if head)
     bool mirror_snapset;
     bool has_omap;
     uint32_t flags;    // object_copy_data_t::FLAG_*
@@ -105,8 +106,8 @@ public:
     }
     CopyResults()
       : object_size(0), started_temp_obj(false),
-	user_version(0),
-	should_requeue(false), mirror_snapset(false),
+	user_version(0), should_requeue(false),
+	list_snaps_ret(0), mirror_snapset(false),
 	has_omap(false),
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
@@ -1139,6 +1140,7 @@ protected:
 		     const object_locator_t& oloc,
 		     bool in_hit_set,
 		     uint32_t recency,
+		     bool op_may_write,
 		     OpRequestRef promote_op,
 		     ObjectContextRef *promote_obc = nullptr);
   /**
@@ -1155,6 +1157,7 @@ protected:
     ObjectContextRef obc,            ///< [optional] obc
     const hobject_t& missing_object, ///< oid (if !obc)
     const object_locator_t& oloc,    ///< locator for obc|oid
+    bool op_may_write,		     ///< orig op may write or not
     OpRequestRef op,                 ///< [optional] client op
     ObjectContextRef *promote_obc = nullptr ///< [optional] new obc for object
     );
@@ -1259,7 +1262,7 @@ protected:
   }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void finish_copyfrom(OpContext *ctx);
-  void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
+  void finish_promote(int r, CopyResults *results, ObjectContextRef obc, bool may_write);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 

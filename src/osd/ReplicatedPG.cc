@@ -2444,7 +2444,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
     }
 
     if (must_promote || (!hit_set && !op->need_skip_promote())) {
-      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      promote_object(obc, missing_oid, oloc, op->may_write(), op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
 
@@ -2453,7 +2453,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
         do_proxy_write(op, missing_oid);
       } else {
 	// promote if can't proxy the write
-	promote_object(obc, missing_oid, oloc, op, promote_obc);
+	promote_object(obc, missing_oid, oloc, op->may_write(), op, promote_obc);
 	return cache_result_t::BLOCKED_PROMOTE;
       }
 
@@ -2461,6 +2461,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       if (!op->need_skip_promote() && 
           maybe_promote(obc, missing_oid, oloc, in_hit_set,
 	              pool.info.min_write_recency_for_promote,
+		      op->may_write(),
 		      OpRequestRef(),
 		      promote_obc)) {
 	return cache_result_t::BLOCKED_PROMOTE;
@@ -2480,7 +2481,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       if (!op->need_skip_promote()) {
         (void)maybe_promote(obc, missing_oid, oloc, in_hit_set,
                             pool.info.min_read_recency_for_promote,
-                            promote_op, promote_obc);
+                            op->may_write(), promote_op, promote_obc);
       }
 
       return cache_result_t::HANDLED_PROXY;
@@ -2497,7 +2498,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
     // TODO: clean this case up
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      promote_object(obc, missing_oid, oloc, op->may_write(), op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
     if (!r) { // it must be a write
@@ -2516,7 +2517,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
 	block_write_on_full_cache(missing_oid, op);
 	return cache_result_t::BLOCKED_FULL;
       }
-      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      promote_object(obc, missing_oid, oloc, op->may_write(), op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
 
@@ -2543,7 +2544,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       block_write_on_full_cache(missing_oid, op);
       return cache_result_t::BLOCKED_FULL;
     }
-    promote_object(obc, missing_oid, oloc, op, promote_obc);
+    promote_object(obc, missing_oid, oloc, op->may_write(), op, promote_obc);
     return cache_result_t::BLOCKED_PROMOTE;
 
   case pg_pool_t::CACHEMODE_READPROXY:
@@ -2555,7 +2556,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
 	block_write_on_full_cache(missing_oid, op);
 	return cache_result_t::BLOCKED_FULL;
       }
-      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      promote_object(obc, missing_oid, oloc, op->may_write(), op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
 
@@ -2574,6 +2575,7 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 				 const object_locator_t& oloc,
 				 bool in_hit_set,
 				 uint32_t recency,
+				 bool op_may_write,
 				 OpRequestRef promote_op,
 				 ObjectContextRef *promote_obc)
 {
@@ -2623,7 +2625,7 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
     dout(10) << __func__ << " promote throttled" << dendl;
     return false;
   }
-  promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
+  promote_object(obc, missing_oid, oloc, op_may_write, promote_op, promote_obc);
   return true;
 }
 
@@ -2988,18 +2990,20 @@ void ReplicatedPG::cancel_proxy_write(ProxyWriteOpRef pwop)
 
 class PromoteCallback: public ReplicatedPG::CopyCallback {
   ObjectContextRef obc;
+  bool may_write;
   ReplicatedPG *pg;
   utime_t start;
 public:
-  PromoteCallback(ObjectContextRef obc_, ReplicatedPG *pg_)
+  PromoteCallback(ObjectContextRef obc_, bool may_write_, ReplicatedPG *pg_)
     : obc(obc_),
+      may_write(may_write_),
       pg(pg_),
       start(ceph_clock_now(NULL)) {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results) {
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote(r, results_data, obc);
+    pg->finish_promote(r, results_data, obc, may_write);
     pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now(NULL) - start);
   }
 };
@@ -3007,6 +3011,7 @@ public:
 void ReplicatedPG::promote_object(ObjectContextRef obc,
 				  const hobject_t& missing_oid,
 				  const object_locator_t& oloc,
+				  bool op_may_write,
 				  OpRequestRef op,
 				  ObjectContextRef *promote_obc)
 {
@@ -3043,7 +3048,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
     src_fadvise_flags |= LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   }
 
-  PromoteCallback *cb = new PromoteCallback(obc, this);
+  PromoteCallback *cb = new PromoteCallback(obc, op_may_write, this);
   object_locator_t my_oloc = oloc;
   my_oloc.pool = pool.info.tier_of;
 
@@ -7331,7 +7336,9 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // list snaps too.
     assert(cop->src.snap == CEPH_NOSNAP);
     ObjectOperation op;
-    op.list_snaps(&cop->results.snapset, NULL);
+    // we need return value of list_snaps to decide
+    // whether a whiteouted object is necessary or not.
+    op.list_snaps(&cop->results.snapset, &cop->results.list_snaps_ret);
     ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				    CEPH_SNAPDIR, NULL,
 				    flags, gather.new_sub(), NULL);
@@ -7709,7 +7716,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
 }
 
 void ReplicatedPG::finish_promote(int r, CopyResults *results,
-				  ObjectContextRef obc)
+				  ObjectContextRef obc,
+                                  bool may_write)
 {
   const hobject_t& soid = obc->obs.oi.soid;
   dout(10) << __func__ << " " << soid << " r=" << r
@@ -7796,7 +7804,11 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
   }
 
   bool whiteout = false;
-  if (r == -ENOENT) {
+  // also check return value of list_snaps, as it may fail on
+  // non-existent objects. but when the original op is write
+  // a whiteouted object is still neccessary.
+  if (r == -ENOENT &&
+      (results->list_snaps_ret >= 0 || may_write)) {
     assert(soid.snap == CEPH_NOSNAP); // snap case is above
     dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;
