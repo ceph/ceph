@@ -290,7 +290,7 @@ struct SignalHandler : public Thread {
 	    if (r == 1) {
 	      siginfo_t * siginfo = &handlers[signum]->info_t;
 	      string task_name = get_name_by_pid(siginfo->si_pid);
-	      derr << "received  signal: " << sys_siglist[signum]
+	      derr << "received  signal: " << sig_str(signum)
 		   << " from " << " PID: " << siginfo->si_pid
 		   << " task name: " << task_name
 		   << " UID: " << siginfo->si_uid
