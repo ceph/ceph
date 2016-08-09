@@ -119,6 +119,7 @@ public:
   void close(Context *on_finish);
 
   bool is_tag_owner() const;
+  uint64_t get_tag_tid() const;
   journal::TagData get_tag_data() const;
   int demote();
 
