@@ -199,6 +199,25 @@ done:
 
   req->log_format(s, "op status=%d", op_ret);
   req->log_format(s, "http status=%d", http_ret);
+  switch (http_ret / 100) {
+    case 1:
+      perfcounter->inc(l_rgw_http_status_1xx);
+      break;
+    case 2:
+      perfcounter->inc(l_rgw_http_status_2xx);
+      break;
+    case 3:
+      perfcounter->inc(l_rgw_http_status_3xx);
+      break;
+    case 4:
+      perfcounter->inc(l_rgw_http_status_4xx);
+      break;
+    case 5:
+      perfcounter->inc(l_rgw_http_status_5xx);
+      break;
+    default:
+      perfcounter->inc(l_rgw_http_status_NULL);
+  }
 
   if (handler)
     handler->put_op(op);
