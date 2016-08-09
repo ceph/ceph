@@ -133,7 +133,12 @@ def main(ctx):
         except SkipJob:
             continue
 
-        job.delete()
+        # This try/except block is to keep the worker from dying when
+        # beanstalkc throws a SocketError
+        try:
+            job.delete()
+        except Exception:
+            log.exception("Saw exception while trying to delete job")
 
 
 def prep_job(job_config, log_file_path, archive_dir):
