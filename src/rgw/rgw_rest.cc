@@ -759,6 +759,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
 
 void dump_continue(struct req_state *s)
 {
+  perfcounter->inc(l_rgw_http_1xx_count);
   STREAM_IO(s)->send_100_continue();
 }
 

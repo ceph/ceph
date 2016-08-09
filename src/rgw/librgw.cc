@@ -293,6 +293,25 @@ namespace rgw {
     int http_ret = s->err.http_ret;
 
     req->log_format(s, "http status=%d", http_ret);
+    switch (http_ret / 100) {
+      case 1:
+        perfcounter->inc(l_rgw_http_1xx_count);
+        break;
+      case 2:
+        perfcounter->inc(l_rgw_http_2xx_count);
+        break;
+      case 3:
+        perfcounter->inc(l_rgw_http_3xx_count);
+        break;
+      case 4:
+        perfcounter->inc(l_rgw_http_4xx_count);
+        break;
+      case 5:
+        perfcounter->inc(l_rgw_http_5xx_count);
+        break;
+      default:
+        perfcounter->inc(l_rgw_http_NULL_count);
+    }
 
     dout(1) << "====== " << __func__
 	    << " req done req=" << hex << req << dec << " http_status="

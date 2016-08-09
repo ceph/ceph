@@ -227,6 +227,13 @@ enum {
   l_rgw_keystone_token_cache_hit,
   l_rgw_keystone_token_cache_miss,
 
+  l_rgw_http_1xx_count,
+  l_rgw_http_2xx_count,
+  l_rgw_http_3xx_count,
+  l_rgw_http_4xx_count,
+  l_rgw_http_5xx_count,
+  l_rgw_http_NULL_count,
+
   l_rgw_last,
 };
 
