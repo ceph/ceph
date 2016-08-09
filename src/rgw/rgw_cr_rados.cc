@@ -701,6 +701,29 @@ int RGWRadosTimelogTrimCR::request_complete()
   return r;
 }
 
+
+RGWSyncLogTrimCR::RGWSyncLogTrimCR(RGWRados *store, const std::string& oid,
+                                   const std::string& to_marker,
+                                   std::string *last_trim_marker)
+  : RGWRadosTimelogTrimCR(store, oid, real_time{}, real_time{},
+                          std::string{}, to_marker),
+    cct(store->ctx()), last_trim_marker(last_trim_marker)
+{
+}
+
+int RGWSyncLogTrimCR::request_complete()
+{
+  int r = RGWRadosTimelogTrimCR::request_complete();
+  if (r < 0 && r != -ENODATA) {
+    return r;
+  }
+  if (*last_trim_marker < to_marker) {
+    *last_trim_marker = to_marker;
+  }
+  return 0;
+}
+
+
 int RGWAsyncStatObj::_send_request()
 {
   return store->raw_obj_stat(obj, psize, pmtime, pepoch,

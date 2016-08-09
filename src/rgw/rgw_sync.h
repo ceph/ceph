@@ -447,5 +447,4 @@ public:
   int operate();
 };
 
-
 #endif
