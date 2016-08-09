@@ -681,6 +681,9 @@ namespace rgw {
     struct rgw_fs fs;
     RGWFileHandle root_fh;
 
+    static constexpr std::chrono::seconds gc_interval =
+      std::chrono::seconds(120);
+
     mutable std::atomic<uint64_t> refcnt;
 
     RGWFileHandle::FHCache fh_cache;
