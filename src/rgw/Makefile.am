@@ -100,7 +100,7 @@ librgw_la_SOURCES += rgw/rgw_ldap.cc
 endif
 
 librgw_la_CXXFLAGS = -Woverloaded-virtual -fPIC -I$(srcdir)/xxHash \
-	${AM_CXXFLAGS}
+	${AM_CXXFLAGS} ${RGW_CXXFLAGS}
 # noinst_LTLIBRARIES += librgw.la
 
 LIBRGW_DEPS += \
