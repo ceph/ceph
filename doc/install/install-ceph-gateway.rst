@@ -167,7 +167,7 @@ directory, you will want to maintain those paths in your Ceph configuration
 file if you used something other than default paths.
 
 A typical Ceph Object Gateway configuration file for an Apache-based deployment
-looks something similar as the following::
+looks something similar as the following:
 
 On Red Hat Enterprise Linux::
 
