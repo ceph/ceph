@@ -2923,6 +2923,8 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
   }
 }
 
+} // anonymous namespace
+
 class DataLogTrimCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http;
@@ -3063,8 +3065,6 @@ int DataLogTrimPollCR::operate()
   }
   return 0;
 }
-
-} // anonymous namespace
 
 RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
                                       RGWHTTPManager *http,
