@@ -295,7 +295,8 @@ private:
     return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
   }
   bool is_replaying_() const {
-    return m_state == STATE_REPLAYING;
+    return (m_state == STATE_REPLAYING ||
+            m_state == STATE_REPLAY_FLUSHING);
   }
 
   bool update_mirror_image_status(bool force, const OptionalState &state);
