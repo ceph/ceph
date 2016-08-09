@@ -177,6 +177,9 @@ public:
     return (t < o.t) || ((t == o.t) && (u < o.u));
   }
 };
+
+std::ostream& operator <<(std::ostream& m, const Principal& p);
+std::string to_string(const Principal& p);
 }
 }
 

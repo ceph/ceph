@@ -22,6 +22,7 @@ export LC_ALL=C # the following is vulnerable to i18n
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/git \
+        devel/gperf \
         devel/gmake \
         devel/cmake \
         devel/yasm \

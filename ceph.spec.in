@@ -97,6 +97,7 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 BuildRequires:	bc
+BuildRequires:	gperf
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel

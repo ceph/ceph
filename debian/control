@@ -9,6 +9,7 @@ Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>
 Build-Depends: bc,
                btrfs-tools,
+	       gperf,
 	       cmake,
                cpio,
 	       cryptsetup-bin | cryptsetup,
