@@ -306,8 +306,8 @@ private:
   void handle_mirror_status_update(int r);
   void reschedule_update_status_task(int new_interval = 0);
 
-  void shut_down(int r, Context *on_start);
-  void handle_shut_down(int r, Context *on_start);
+  void shut_down(int r);
+  void handle_shut_down(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);
