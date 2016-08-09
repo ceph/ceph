@@ -3695,6 +3695,9 @@ void FileStore::sync_entry()
     if (force_sync) {
       dout(20) << "sync_entry force_sync set" << dendl;
       force_sync = false;
+    } else if (stop) {
+      dout(20) << __func__ << " stop set" << dendl;
+      break;
     } else {
       // wait for at least the min interval
       utime_t woke = ceph_clock_now(g_ceph_context);
@@ -4616,6 +4619,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
       if (r < 0)
 	return r;
     }
+    objects.clear();
   }
   return _destroy_collection(cid);
 }
@@ -4829,7 +4833,7 @@ int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
-  dout(20) << "objects: " << ls << dendl;
+  dout(20) << "objects: " << *ls << dendl;
 
   // HashIndex doesn't know the pool when constructing a 'next' value
   if (next && !next->is_max()) {

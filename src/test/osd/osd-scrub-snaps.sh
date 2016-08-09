@@ -156,6 +156,46 @@ function TEST_scrub_snaps() {
     fi
     grep 'log_channel' $dir/osd.0.log
 
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pgid || return 1
+
+    rados list-inconsistent-snapset $pgid > $dir/json || return 1
+    test $(jq '.inconsistents | length' $dir/json) = "20" || return 1
+
+    jq -c '.inconsistents | sort' > $dir/checkcsjson << EOF
+{"epoch":18,"inconsistents":[{"name":"obj1","nspace":"","locator":"","snap":1,
+"errors":["headless"]},{"name":"obj10","nspace":"","locator":"","snap":1,
+"errors":["size_mismatch"]},{"name":"obj11","nspace":"","locator":"","snap":1,
+"errors":["headless"]},{"name":"obj14","nspace":"","locator":"","snap":1,
+"errors":["size_mismatch"]},{"name":"obj6","nspace":"","locator":"","snap":1,
+"errors":["headless"]},{"name":"obj7","nspace":"","locator":"","snap":1,
+"errors":["headless"]},{"name":"obj9","nspace":"","locator":"","snap":1,
+"errors":["size_mismatch"]},{"name":"obj2","nspace":"","locator":"","snap":4,
+"errors":["headless"]},{"name":"obj5","nspace":"","locator":"","snap":4,
+"errors":["size_mismatch"]},{"name":"obj2","nspace":"","locator":"","snap":7,
+"errors":["headless"]},{"name":"obj5","nspace":"","locator":"","snap":7,
+"errors":["oi_attr_missing","headless"]},{"name":"obj11","nspace":"",
+"locator":"","snap":"head","errors":["extra_clones"],"extra clones":[1]},
+{"name":"obj12","nspace":"","locator":"","snap":"head",
+"errors":["head_mismatch"]},{"name":"obj3","nspace":"","locator":"",
+"snap":"head","errors":["size_mismatch"]},{"name":"obj5","nspace":"",
+"locator":"","snap":"head","errors":["extra_clones","clone_missing"],
+"extra clones":[7],"missing":[2,1]},{"name":"obj6","nspace":"","locator":"",
+"snap":"head","errors":["extra_clones"],"extra clones":[1]},{"name":"obj7",
+"nspace":"","locator":"","snap":"head","errors":["head_mismatch",
+"extra_clones"],"extra clones":[1]},{"name":"obj8","nspace":"","locator":"",
+"snap":"head","errors":["snapset_mismatch"]},{"name":"obj2","nspace":"",
+"locator":"","snap":"snapdir","errors":["ss_attr_missing","extra_clones"],
+"extra clones":[7,4]},{"name":"obj4","nspace":"","locator":"","snap":"snapdir",
+"errors":["clone_missing"],"missing":[7]}]}
+EOF
+
+    jq -c '.inconsistents | sort' $dir/json > $dir/csjson
+    diff $dir/csjson $dir/checkcsjson || return 1
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
@@ -189,15 +229,15 @@ function TEST_scrub_snaps() {
     err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj3:head on disk size [(]3840[)] does not match object info size [(]768[)] adjusted for ondisk to [(]768[)]"
     err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj6:1 is an unexpected clone"
     err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:snapdir no 'snapset' attr"
-    err_strings[14]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj2:7 clone ignored due to missing snapset"
-    err_strings[15]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj2:4 clone ignored due to missing snapset"
+    err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:7 clone ignored due to missing snapset"
+    err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:4 clone ignored due to missing snapset"
     err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj4:snapdir expected clone .*:::obj4:7"
     err_strings[17]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj4:snapdir 1 missing clone[(]s[)]"
     err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj1:1 is an unexpected clone"
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj9:1 is missing in clone_size"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 is an unexpected clone"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 size 1032 != clone_size 1033"
-    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 19 errors"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 21 errors"
 
     for i in `seq 0 ${#err_strings[@]}`
     do

@@ -465,9 +465,23 @@ template <typename I>
 void ImageReplayer<I>::start_replay() {
   dout(20) << dendl;
 
-  Context *ctx = create_context_callback<
-    ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
-  m_local_image_ctx->journal->start_external_replay(&m_local_replay, ctx);
+  assert(m_local_journal == nullptr);
+  {
+    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+    if (m_local_image_ctx->journal != nullptr) {
+      m_local_journal = m_local_image_ctx->journal;
+
+      Context *start_ctx = create_context_callback<
+        ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
+      Context *stop_ctx = create_context_callback<
+        ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
+      m_local_journal->start_external_replay(&m_local_replay, start_ctx,
+                                             stop_ctx);
+      return;
+    }
+  }
+
+  on_start_fail(-EINVAL, "error starting journal replay");
 }
 
 template <typename I>
@@ -475,6 +489,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
+    m_local_journal = nullptr;
     derr << "error starting external replay on local image "
 	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
     on_start_fail(r, "error starting replay on local image");
@@ -515,6 +530,19 @@ void ImageReplayer<I>::handle_start_replay(int r) {
 }
 
 template <typename I>
+void ImageReplayer<I>::handle_stop_replay_request(int r) {
+  if (r < 0) {
+    // error starting or we requested the stop -- ignore
+    return;
+  }
+
+  // journal close has been requested, stop replay so the journal
+  // can be closed (since it will wait on replay to finish)
+  dout(20) << dendl;
+  on_stop_journal_replay();
+}
+
+template <typename I>
 void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
 {
   dout(20) << "r=" << r << dendl;
@@ -533,6 +561,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
 
       set_state_description(r, desc);
       update_mirror_image_status(false, boost::none);
+      reschedule_update_status_task(-1);
       shut_down(r, on_start_finish);
     });
   m_threads->work_queue->queue(ctx, 0);
@@ -608,11 +637,13 @@ void ImageReplayer<I>::on_stop_journal_replay()
       // might be invoked multiple times while stopping
       return;
     }
+    m_stop_requested = true;
     m_state = STATE_STOPPING;
   }
 
   set_state_description(0, "");
   update_mirror_image_status(false, boost::none);
+  reschedule_update_status_task(-1);
   shut_down(0, nullptr);
 }
 
@@ -662,7 +693,7 @@ void ImageReplayer<I>::flush(Context *on_finish)
 
   {
     Mutex::Locker locker(m_lock);
-    if (m_state == STATE_REPLAYING || m_state == STATE_REPLAYING) {
+    if (m_state == STATE_REPLAYING) {
       Context *ctx = new FunctionContext(
         [on_finish](int r) {
           if (on_finish != nullptr) {
@@ -786,18 +817,46 @@ template <typename I>
 void ImageReplayer<I>::replay_flush() {
   dout(20) << dendl;
 
+  {
+    Mutex::Locker locker(m_lock);
+    m_state = STATE_REPLAY_FLUSHING;
+  }
+
+  // shut down the replay to flush all IO and ops and create a new
+  // replayer to handle the new tag epoch
   Context *ctx = create_context_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_replay_flush>(this);
-  flush(ctx);
+  ctx = new FunctionContext([this, ctx](int r) {
+      m_local_image_ctx->journal->stop_external_replay();
+      m_local_replay = nullptr;
+
+      if (r < 0) {
+        ctx->complete(r);
+        return;
+      }
+
+      Context *stop_ctx = create_context_callback<
+        ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
+      m_local_journal->start_external_replay(&m_local_replay, ctx, stop_ctx);
+    });
+  m_local_replay->shut_down(true, ctx);
 }
 
 template <typename I>
 void ImageReplayer<I>::handle_replay_flush(int r) {
   dout(20) << "r=" << r << dendl;
 
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_REPLAY_FLUSHING);
+    m_state = STATE_REPLAYING;
+  }
+
   if (r < 0) {
     derr << "replay flush encountered an error: " << cpp_strerror(r) << dendl;
     handle_replay_complete(r, "replay flush encountered an error");
+    return;
+  } else if (on_replay_interrupted()) {
     return;
   }
 
@@ -864,7 +923,7 @@ void ImageReplayer<I>::allocate_local_tag() {
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_allocate_local_tag>(this);
-  m_local_image_ctx->journal->allocate_tag(
+  m_local_journal->allocate_tag(
     mirror_uuid, predecessor_mirror_uuid,
     m_replay_tag_data.predecessor_commit_valid,
     m_replay_tag_data.predecessor_tag_tid,
@@ -1024,6 +1083,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     }
     break;
   case STATE_REPLAYING:
+  case STATE_REPLAY_FLUSHING:
     status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING;
     {
       Context *on_req_finish = new FunctionContext(
@@ -1148,6 +1208,18 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_STOPPING);
+
+    // if status updates are in-flight, wait for them to complete
+    // before proceeding
+    if (m_in_flight_status_updates > 0) {
+      dout(20) << "waiting for in-flight status update" << dendl;
+      assert(m_on_update_status_finish == nullptr);
+      m_on_update_status_finish = new FunctionContext(
+        [this, r, on_start](int _r) {
+          shut_down(r, on_start);
+        });
+      return;
+    }
   }
 
   // chain the shut down sequence (reverse order)
@@ -1178,7 +1250,8 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
         if (r < 0) {
           derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
         }
-        m_local_image_ctx->journal->stop_external_replay();
+        m_local_journal->stop_external_replay();
+        m_local_journal = nullptr;
         m_local_replay = nullptr;
         ctx->complete(0);
       });
@@ -1213,7 +1286,7 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
       dout(20) << "waiting for in-flight status update" << dendl;
       assert(m_on_update_status_finish == nullptr);
       m_on_update_status_finish = new FunctionContext(
-        [this, r, on_start](int r) {
+        [this, r, on_start](int _r) {
           handle_shut_down(r, on_start);
         });
       return;
@@ -1252,6 +1325,8 @@ std::string ImageReplayer<I>::to_string(const State state) {
     return "Starting";
   case ImageReplayer<I>::STATE_REPLAYING:
     return "Replaying";
+  case ImageReplayer<I>::STATE_REPLAY_FLUSHING:
+    return "ReplayFlushing";
   case ImageReplayer<I>::STATE_STOPPING:
     return "Stopping";
   case ImageReplayer<I>::STATE_STOPPED:

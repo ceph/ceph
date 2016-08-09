@@ -28,7 +28,7 @@ int KqueueDriver::init(int nevent)
   if (!events) {
     lderr(cct) << __func__ << " unable to malloc memory: "
                            << cpp_strerror(errno) << dendl;
-    return -errno;
+    return -ENOMEM;
   }
   memset(events, 0, sizeof(struct kevent)*nevent);
 
@@ -58,7 +58,7 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
     if (kevent(kqfd, &ke, 1, NULL, 0, NULL) == -1) {
       lderr(cct) << __func__ << " unable to add event: "
                              << cpp_strerror(errno) << dendl;
-      return -1;
+      return -errno;
     }
   }
 
@@ -80,7 +80,7 @@ int KqueueDriver::del_event(int fd, int cur_mask, int delmask)
     if ((r = kevent(kqfd, &ke, 1, NULL, 0, NULL)) < 0) {
       lderr(cct) << __func__ << " kevent: delete fd=" << fd << " mask=" << filter
                  << " failed." << cpp_strerror(errno) << dendl;
-      return r;
+      return -errno;
     }
   }
   return 0;

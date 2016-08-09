@@ -38,7 +38,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
     return -errno;
   }
 
-  /* Make sure connection-intensive things like the benckmark
+  /* Make sure connection-intensive things like the benchmark
    * will be able to close/open sockets a zillion of times */
   if (reuse_addr) {
     if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {

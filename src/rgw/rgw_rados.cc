@@ -238,13 +238,15 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints)
 {
-  if (is_master && *is_master) {
-    if (!master_zone.empty() && master_zone != zone_params.get_id()) {
-      ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone  << dendl;
+  if (is_master) {
+    if (*is_master) {
+      if (!master_zone.empty() && master_zone != zone_params.get_id()) {
+        ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone << dendl;
+      }
+      master_zone = zone_params.get_id();
+    } else if (master_zone == zone_params.get_id()) {
+      master_zone.clear();
     }
-    master_zone = zone_params.get_id();
-  } else if (master_zone == zone_params.get_id()) {
-    master_zone ="";
   }
 
   RGWZone& zone = zones[zone_params.get_id()];
@@ -2519,7 +2521,7 @@ int RGWRados::unwatch(uint64_t watch_handle)
     ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
     return r;
   }
-  r = rados[0]->watch_flush();
+  r = rados[0].watch_flush();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
     return r;
@@ -3160,6 +3162,7 @@ void RGWRados::finalize()
     cr_registry->put();
   }
   delete binfo_cache;
+  delete obj_tombstone_cache;
 }
 
 /** 
@@ -3169,58 +3172,32 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
+  auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
 
-  num_rados_handles = cct->_conf->rgw_num_rados_handles;
-
-  rados = new librados::Rados *[num_rados_handles];
-  if (!rados) {
-    ret = -ENOMEM;
-    return ret;
-  }
-
-  for (uint32_t i=0; i < num_rados_handles; i++) {
-
-    rados[i] = new Rados();
-    if (!rados[i]) {
-      ret = -ENOMEM;
-      goto fail;
+  for (auto& r : handles) {
+    ret = r.init_with_context(cct);
+    if (ret < 0) {
+      return ret;
     }
 
-    ret = rados[i]->init_with_context(cct);
+    ret = r.connect();
     if (ret < 0) {
-      goto fail;
-    }
-
-    ret = rados[i]->connect();
-    if (ret < 0) {
-      goto fail;
+      return ret;
     }
   }
 
-  cr_registry = new RGWCoroutinesManagerRegistry(cct);
-  ret =  cr_registry->hook_to_admin_command("cr dump");
+  auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
+    new RGWCoroutinesManagerRegistry(cct)};
+  ret = crs->hook_to_admin_command("cr dump");
   if (ret < 0) {
-    goto fail;
+    return ret;
   }
 
   meta_mgr = new RGWMetadataManager(cct, this);
   data_log = new RGWDataChangesLog(cct, this);
+  cr_registry = crs.release();
 
-  return ret;
-
-fail:
-  for (uint32_t i=0; i < num_rados_handles; i++) {
-    if (rados[i]) {
-      delete rados[i];
-      rados[i] = NULL;
-    }
-  }
-  num_rados_handles = 0;
-  if (rados) {
-    delete[] rados;
-    rados = NULL;
-  }
-
+  std::swap(handles, rados);
   return ret;
 }
 
@@ -3772,6 +3749,12 @@ int RGWRados::init_complete()
   binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
   binfo_cache->init(this);
 
+  bool need_tombstone_cache = !zone_conn_map.empty();
+
+  if (need_tombstone_cache) {
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+  }
+
   return ret;
 }
 
@@ -3963,7 +3946,7 @@ int RGWRados::init_watch()
 {
   const char *control_pool = get_zone_params().control_pool.name.c_str();
 
-  librados::Rados *rad = rados[0];
+  librados::Rados *rad = &rados[0];
   int r = rad->ioctx_create(control_pool, control_pool_ctx);
 
   if (r == -ENOENT) {
@@ -6491,7 +6474,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (ret < 0)
       return ret;
 
-    if (dest_state->exists) {
+    if (!real_clock::is_zero(dest_state->mtime)) {
       dest_mtime_weight.init(dest_state);
       pmod = &dest_mtime_weight.mtime;
     }
@@ -7584,6 +7567,11 @@ int RGWRados::Object::Delete::delete_obj()
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0) {
+    tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
+    if (obj_tombstone_cache) {
+      tombstone_entry entry{*state};
+      obj_tombstone_cache->add(obj, entry);
+    }
     r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), state->mtime, params.remove_objs);
   } else {
     int ret = index_op.cancel();
@@ -7804,7 +7792,16 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
-    s->mtime = real_time();
+    tombstone_entry entry;
+    if (obj_tombstone_cache && obj_tombstone_cache->find(obj, entry)) {
+      s->mtime = entry.mtime;
+      s->zone_short_id = entry.zone_short_id;
+      s->pg_ver = entry.pg_ver;
+      ldout(cct, 20) << __func__ << "(): found obj in tombstone cache: obj=" << obj
+          << " mtime=" << s->mtime << " pgv=" << s->pg_ver << dendl;
+    } else {
+      s->mtime = real_time();
+    }
     return 0;
   }
   if (r < 0)
@@ -11308,6 +11305,8 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_
   librados::IoCtx index_ctx;
   string dir_oid;
 
+  uint8_t suggest_flag = (get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+
   int r = open_bucket_index(bucket, index_ctx, dir_oid);
   if (r < 0)
     return r;
@@ -11322,7 +11321,7 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_
     rgw_bucket_dir_entry entry;
     entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
     key.transform(&entry.key);
-    updates.append(CEPH_RGW_REMOVE);
+    updates.append(CEPH_RGW_REMOVE | suggest_flag);
     ::encode(entry, updates);
   }
 
@@ -11339,6 +11338,8 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
                                RGWObjEnt& object,
                                bufferlist& suggested_updates)
 {
+  uint8_t suggest_flag = (get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+
   rgw_obj obj;
   std::string oid, instance, loc, ns;
   rgw_obj_key key;
@@ -11435,7 +11436,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   list_state.meta.owner_display_name = owner.get_display_name();
 
   list_state.exists = true;
-  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
   return 0;
 }
 
@@ -12086,8 +12087,8 @@ void RGWStoreManager::close_storage(RGWRados *store)
 
 librados::Rados* RGWRados::get_rados_handle()
 {
-  if (num_rados_handles == 1) {
-    return rados[0];
+  if (rados.size() == 1) {
+    return &rados[0];
   } else {
     handle_lock.get_read();
     pthread_t id = pthread_self();
@@ -12095,19 +12096,17 @@ librados::Rados* RGWRados::get_rados_handle()
 
     if (it != rados_map.end()) {
       handle_lock.put_read();
-      return rados[it->second];
+      return &rados[it->second];
     } else {
       handle_lock.put_read();
       handle_lock.get_write();
-      uint32_t handle = next_rados_handle.read();
-      if (handle == num_rados_handles) {
-        next_rados_handle.set(0);
-        handle = 0;
-      }
+      const uint32_t handle = next_rados_handle;
       rados_map[id] = handle;
-      next_rados_handle.inc();
+      if (++next_rados_handle == rados.size()) {
+        next_rados_handle = 0;
+      }
       handle_lock.put_write();
-      return rados[handle];
+      return &rados[handle];
     }
   }
 }

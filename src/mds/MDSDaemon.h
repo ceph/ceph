@@ -39,7 +39,7 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    27 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    28 /* cluster internal */
 
 class filepath;
 

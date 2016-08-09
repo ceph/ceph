@@ -809,8 +809,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       // we recovered it, and it's ours.  take note.
       dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
 	       << " on " << *in << dendl;
-      in->reconnect_cap(from, p->second.capinfo, session);
-      mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
+      in->reconnect_cap(from, p->second, session);
+      mdcache->add_reconnected_cap(from, p->first, p->second);
       recover_filelocks(in, p->second.flockbl, m->get_orig_source().num());
       continue;
     }
@@ -819,11 +819,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       // not mine.
       dout(10) << "non-auth " << *in << ", will pass off to authority" << dendl;
       // add to cap export list.
-      mdcache->rejoin_export_caps(p->first, from, p->second.capinfo,
+      p->second.path.clear(); // we don't need path
+      mdcache->rejoin_export_caps(p->first, from, p->second,
 				  in->authority().first);
     } else {
       // don't know if the inode is mine
       dout(10) << "missing ino " << p->first << ", will load later" << dendl;
+      p->second.path.clear(); // we don't need path
       mdcache->rejoin_recovered_caps(p->first, from, p->second, MDS_RANK_NONE);
     }
   }
@@ -5598,8 +5600,9 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   // removing a new dn?
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
-  // clean up?
-  if (straydn) {
+  // clean up ?
+  // respond_to_request() drops locks. So stray reintegration can race with us.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
     // Tip off the MDCache that this dentry is a stray that
     // might be elegible for purge.
     mdcache->notify_stray(straydn);
@@ -6446,7 +6449,8 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) {
+  // respond_to_request() drops locks. So stray reintegration can race with us.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
     mdcache->notify_stray(straydn);
   }
 }

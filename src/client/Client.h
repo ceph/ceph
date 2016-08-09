@@ -654,7 +654,7 @@ protected:
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
+  void flush_snaps(Inode *in, bool all_again=false);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
@@ -663,7 +663,7 @@ protected:
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
-  void _try_to_trim_inode(Inode *in);
+  void _try_to_trim_inode(Inode *in, bool sched_inval);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
   void _invalidate_inode_cache(Inode *in);
@@ -1016,7 +1016,7 @@ public:
   int fake_write_size(int fd, loff_t size);
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
-  int fstat(int fd, struct stat *stbuf);
+  int fstat(int fd, struct stat *stbuf, int mask=CEPH_STAT_CAP_INODE_ALL);
   int fallocate(int fd, int mode, loff_t offset, loff_t length);
 
   // full path xattr ops

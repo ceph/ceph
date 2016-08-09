@@ -248,7 +248,6 @@ int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
   if (r < 0) {
     lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                << dendl;
-    return r;
   }
 
   ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
@@ -341,7 +340,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   if (r < 0) {
     lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                << dendl;
-    return r;
   }
 
   header_oid = ::journal::Journaler::header_oid(ictx->id);
@@ -395,7 +393,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
   if (remove) {
     r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(cct) << "failed to remove image from mirroring directory: "
                  << cpp_strerror(r) << dendl;
       return r;
@@ -1689,7 +1687,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     // avoid accepting new requests from peers while we manipulate
     // the image features
     if (ictx->exclusive_lock != nullptr) {
-      ictx->exclusive_lock->block_requests();
+      ictx->exclusive_lock->block_requests(0);
     }
     BOOST_SCOPE_EXIT_ALL( (ictx) ) {
       if (ictx->exclusive_lock != nullptr) {
@@ -1827,7 +1825,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             }
           } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
             r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
-            if (r < 0) {
+            if (r < 0 && r != -ENOENT) {
               lderr(cct) << "failed to remove image from mirroring directory: "
                          << cpp_strerror(r) << dendl;
               return r;
@@ -2125,58 +2123,66 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     }
 
     if (old_format || unknown_format) {
-      ldout(cct, 2) << "removing rbd image from directory..." << dendl;
+      ldout(cct, 2) << "removing rbd image from v1 directory..." << dendl;
       r = tmap_rm(io_ctx, imgname);
       old_format = (r == 0);
       if (r < 0 && !unknown_format) {
         if (r != -ENOENT) {
-	  lderr(cct) << "error removing img from old-style directory: "
-		     << cpp_strerror(-r) << dendl;
+          lderr(cct) << "error removing image from v1 directory: "
+                     << cpp_strerror(-r) << dendl;
         }
 	return r;
       }
     }
     if (!old_format) {
-      r = Journal<>::remove(io_ctx, id);
-      if (r < 0 && r != -ENOENT) {
-        lderr(cct) << "error removing image journal" << dendl;
-        return r;
+      if (id.empty()) {
+        ldout(cct, 5) << "attempting to determine image id" << dendl;
+        r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "error getting id of image" << dendl;
+          return r;
+        }
       }
+      if (!id.empty()) {
+        ldout(cct, 10) << "removing journal..." << dendl;
+        r = Journal<>::remove(io_ctx, id);
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "error removing image journal" << dendl;
+          return r;
+        }
 
-      r = ObjectMap::remove(io_ctx, id);
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error removing image object map" << dendl;
-        return r;
+        ldout(cct, 10) << "removing object map..." << dendl;
+        r = ObjectMap::remove(io_ctx, id);
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "error removing image object map" << dendl;
+          return r;
+        }
+
+        ldout(cct, 10) << "removing image from rbd_mirroring object..."
+                       << dendl;
+        r = cls_client::mirror_image_remove(&io_ctx, id);
+        if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
+          lderr(cct) << "failed to remove image from mirroring directory: "
+                     << cpp_strerror(r) << dendl;
+          return r;
+        }
       }
 
       ldout(cct, 2) << "removing id object..." << dendl;
       r = io_ctx.remove(util::id_obj_name(imgname));
       if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error removing id object: " << cpp_strerror(r) << dendl;
+	lderr(cct) << "error removing id object: " << cpp_strerror(r)
+                   << dendl;
 	return r;
       }
 
-      r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error getting id of image" << dendl;
-	return r;
-      }
-
-      ldout(cct, 2) << "removing rbd image from directory..." << dendl;
+      ldout(cct, 2) << "removing rbd image from v2 directory..." << dendl;
       r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, imgname, id);
       if (r < 0) {
         if (r != -ENOENT) {
-	  lderr(cct) << "error removing img from new-style directory: "
-		     << cpp_strerror(-r) << dendl;
+          lderr(cct) << "error removing image from v2 directory: "
+                     << cpp_strerror(-r) << dendl;
         }
-	return r;
-      }
-
-      ldout(cct, 2) << "removing image from rbd_mirroring object..." << dendl;
-      r = cls_client::mirror_image_remove(&io_ctx, id);
-      if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
-        lderr(cct) << "failed to remove image from mirroring directory: "
-                   << cpp_strerror(r) << dendl;
         return r;
       }
     }
@@ -3199,7 +3205,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       if (r < 0) {
         lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                    << dendl;
-        return r;
       }
     }
 
@@ -3355,7 +3360,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                  << dendl;
-      return r;
     }
     return 0;
   }

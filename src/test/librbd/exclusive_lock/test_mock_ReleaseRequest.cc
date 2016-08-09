@@ -19,6 +19,15 @@ template class librbd::exclusive_lock::ReleaseRequest<librbd::MockImageCtx>;
 namespace librbd {
 namespace exclusive_lock {
 
+namespace {
+
+struct MockContext : public Context {
+  MOCK_METHOD1(complete, void(int));
+  MOCK_METHOD1(finish, void(int));
+};
+
+} // anonymous namespace
+
 using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Return;
@@ -29,6 +38,10 @@ static const std::string TEST_COOKIE("auto 123");
 class TestMockExclusiveLockReleaseRequest : public TestMockFixture {
 public:
   typedef ReleaseRequest<MockImageCtx> MockReleaseRequest;
+
+  void expect_complete_context(MockContext &mock_context, int r) {
+    EXPECT_CALL(mock_context, complete(r));
+  }
 
   void expect_test_features(MockImageCtx &mock_image_ctx, uint64_t features,
                             bool enabled) {
@@ -105,15 +118,16 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   mock_image_ctx.object_map = mock_object_map;
   expect_close_object_map(mock_image_ctx, *mock_object_map);
 
+  MockContext mock_releasing_ctx;
+  expect_complete_context(mock_releasing_ctx, 0);
   expect_unlock(mock_image_ctx, 0);
 
-  C_SaferCond release_ctx;
   C_SaferCond ctx;
   MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
                                                        TEST_COOKIE,
-                                                       &release_ctx, &ctx);
+                                                       &mock_releasing_ctx,
+                                                       &ctx);
   req->send();
-  ASSERT_EQ(0, release_ctx.wait());
   ASSERT_EQ(0, ctx.wait());
 }
 

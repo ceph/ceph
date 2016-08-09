@@ -92,8 +92,13 @@ int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_of
     bufferlist &bl = iter->second;
     s->redirect = string(bl.c_str(), bl.length());
     s->err.http_ret = 301;
-    ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirectng per x-amz-website-redirect-location=" << s->redirect << dendl;
+    ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirecting per x-amz-website-redirect-location=" << s->redirect << dendl;
     op_ret = -ERR_WEBSITE_REDIRECT;
+    set_req_state_err(s, op_ret);
+    dump_errno(s);
+    dump_content_length(s, 0);
+    dump_redirect(s, s->redirect);
+    end_header(s, this);
     return op_ret;
   } else {
     return RGWGetObj_ObjStore_S3::send_response_data(bl, bl_ofs, bl_len);
@@ -246,9 +251,14 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   }
 
 done:
-  set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
-		    : op_ret);
-  dump_errno(s);
+  if (custom_http_ret) {
+    set_req_state_err(s, 0);
+    dump_errno(s, custom_http_ret);
+  } else {
+    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
+          	  : op_ret);
+    dump_errno(s);
+  }
 
   for (riter = response_attrs.begin(); riter != response_attrs.end();
        ++riter) {
@@ -3197,6 +3207,8 @@ static void aws4_uri_encode(const string& src, string& dst)
   }
 }
 
+static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "SignedHeaders", "Signature" };
+
 /*
  * handle v4 signatures (rados auth only)
  */
@@ -3205,8 +3217,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   string::size_type pos;
   bool using_qs;
 
-  time_t now, now_req=0;
-  time(&now);
+  uint64_t now_req = 0;
+  uint64_t now = ceph_clock_now(s->cct);
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
@@ -3245,7 +3257,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
         return -EPERM;
       }
       /* handle expiration in epoch time */
-      now_req = mktime(&date_t);
+      now_req = (uint64_t)timegm(&date_t);
       if (now >= now_req + exp) {
         dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
         return -EPERM;
@@ -3276,72 +3288,42 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* ------------------------- handle Credential header */
 
     using_qs = false;
-    s->aws4_auth->credential = s->http_auth;
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(17, s->aws4_auth->credential.length());
+    string auth_str = s->http_auth;
 
-    pos = s->aws4_auth->credential.find("Credential");
-    if (pos == std::string::npos) {
+#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
+#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
+    uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
+    if (auth_str.length() < min_len) {
+      ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
       return -EINVAL;
     }
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos, s->aws4_auth->credential.find(","));
+    list<string> auth_list;
+    get_str_list(auth_str.substr(min_len), ",", auth_list);
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
+    map<string, string> kv;
 
-    pos = s->aws4_auth->credential.find("=");
-
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
-
-    /* ------------------------- handle SignedHeaders header */
-
-    s->aws4_auth->signedheaders = s->http_auth;
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(17, s->aws4_auth->signedheaders.length());
-
-    pos = s->aws4_auth->signedheaders.find("SignedHeaders");
-    if (pos == std::string::npos) {
-      return -EINVAL;
+    for (string& s : auth_list) {
+      string key, val;
+      int ret = parse_key_value(s, key, val);
+      if (ret < 0) {
+        ldout(store->ctx(), 10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
+        return -EINVAL;
+      }
+      kv[key] = std::move(val);
     }
 
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos, s->aws4_auth->signedheaders.length());
-
-    pos = s->aws4_auth->signedheaders.find(",");
-    if (pos == std::string::npos) {
-      return -EINVAL;
+    for (string& k : aws4_presigned_required_keys) {
+      if (kv.find(k) == kv.end()) {
+        ldout(store->ctx(), 10) << "NOTICE: auth header missing key: " << k << dendl;
+        return -EINVAL;
+      }
     }
 
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(0, pos);
-
-    pos = s->aws4_auth->signedheaders.find("=");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos + 1, s->aws4_auth->signedheaders.length());
-
-    /* host;user-agent;x-amz-content-sha256;x-amz-date */
-    dout(10) << "v4 signedheaders format = " << s->aws4_auth->signedheaders << dendl;
-
-    /* ------------------------- handle Signature header */
-
-    s->aws4_auth->signature = s->http_auth;
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(17, s->aws4_auth->signature.length());
-
-    pos = s->aws4_auth->signature.find("Signature");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos, s->aws4_auth->signature.length());
-
-    pos = s->aws4_auth->signature.find("=");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos + 1, s->aws4_auth->signature.length());
+    s->aws4_auth->credential = std::move(kv["Credential"]);
+    s->aws4_auth->signedheaders = std::move(kv["SignedHeaders"]);
+    s->aws4_auth->signature = std::move(kv["Signature"]);
 
     /* sig hex str */
     dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
@@ -3474,7 +3456,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   map<string, string> canonical_hdrs_map;
   istringstream sh(s->aws4_auth->signedheaders);
   string token;
-  string port = s->info.env->get("SERVER_PORT");
+  string port = s->info.env->get("SERVER_PORT", "");
+  string secure_port = s->info.env->get("SERVER_PORT_SECURE", "");
 
   while (getline(sh, token, ';')) {
     string token_env = "HTTP_" + token;
@@ -3500,8 +3483,13 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       }
     }
     string token_value = string(t);
-    if (using_qs && (token == "host"))
-      token_value = token_value + ":" + port;
+    if (using_qs && (token == "host")) {
+      if (!port.empty() && port != "80") {
+        token_value = token_value + ":" + port;
+      } else if (!secure_port.empty() && secure_port != "443") {
+        token_value = token_value + ":" + secure_port;
+      }
+    }
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
@@ -3959,52 +3947,87 @@ RGWOp* RGWHandler_REST_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_REST_S3Website::get_errordoc(const string& errordoc_key,
-					    std::string* error_content) {
-  ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has "
-    "<Error>" << dendl;
-  *error_content = errordoc_key;
-  // 1. Check if errordoc exists
-  // 2. Check if errordoc is public
-  // 3. Fetch errordoc content
-  /*
-   * FIXME maybe:  need to make sure all of the fields for conditional
-   * requests are cleared
-   */
-  RGWGetObj_ObjStore_S3Website* getop =
-    new RGWGetObj_ObjStore_S3Website(true);
-  getop->set_get_data(true);
+int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errordoc_key) {
+  int ret = 0;
+  s->formatter->reset(); /* Try to throw it all away */
+
+  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( (RGWGetObj_ObjStore_S3Website*) op_get() );
+  if (getop.get() == NULL) {
+    return -1; // Trigger double error handler
+  }
   getop->init(store, s, this);
+  getop->range_str = NULL;
+  getop->if_mod = NULL;
+  getop->if_unmod = NULL;
+  getop->if_match = NULL;
+  getop->if_nomatch = NULL;
+  s->object = errordoc_key;
 
-  RGWGetObj_CB cb(getop);
-  rgw_obj obj(s->bucket, errordoc_key);
-  RGWObjectCtx rctx(store);
-  //RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-  RGWRados::Object op_target(store, s->bucket_info, rctx, obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  int ret;
-  int64_t ofs = 0; 
-  int64_t end = -1;
-  ret = read_op.prepare(&ofs, &end);
+  ret = init_permissions(getop.get());
   if (ret < 0) {
-    goto done;
+    ldout(s->cct, 20) << "serve_errordoc failed, init_permissions ret=" << ret << dendl;
+    return -1; // Trigger double error handler
   }
 
-  ret = read_op.iterate(ofs, end, &cb); // FIXME: need to know the final size?
-done:
-  delete getop;
-  return ret;
+  ret = read_permissions(getop.get());
+  if (ret < 0) {
+    ldout(s->cct, 20) << "serve_errordoc failed, read_permissions ret=" << ret << dendl;
+    return -1; // Trigger double error handler
+  }
+
+  if (http_ret) {
+     getop->set_custom_http_response(http_ret);
+  }
+
+  ret = getop->init_processing();
+  if (ret < 0) {
+    ldout(s->cct, 20) << "serve_errordoc failed, init_processing ret=" << ret << dendl;
+    return -1; // Trigger double error handler
+  }
+
+  ret = getop->verify_op_mask();
+  if (ret < 0) {
+    ldout(s->cct, 20) << "serve_errordoc failed, verify_op_mask ret=" << ret << dendl;
+    return -1; // Trigger double error handler
+  }
+
+  ret = getop->verify_permission();
+  if (ret < 0) {
+    ldout(s->cct, 20) << "serve_errordoc failed, verify_permission ret=" << ret << dendl;
+    return -1; // Trigger double error handler
+  }
+
+  ret = getop->verify_params();
+  if (ret < 0) {
+    ldout(s->cct, 20) << "serve_errordoc failed, verify_params ret=" << ret << dendl;
+    return -1; // Trigger double error handler
+  }
+
+  // No going back now
+  getop->pre_exec();
+  /*
+   * FIXME Missing headers:
+   * With a working errordoc, the s3 error fields are rendered as HTTP headers,
+   *   x-amz-error-code: NoSuchKey
+   *   x-amz-error-message: The specified key does not exist.
+   *   x-amz-error-detail-Key: foo
+   */
+  getop->execute();
+  getop->complete();
+  return 0;
+
 }
-  
+
 int RGWHandler_REST_S3Website::error_handler(int err_no,
 					    string* error_content) {
+  int new_err_no = -1;
   const struct rgw_http_errors* r;
   int http_error_code = -1;
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
+  r = search_err(err_no > 0 ? err_no : -err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
     http_error_code = r->http_ret;
   }
+  ldout(s->cct, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
   RGWBWRoutingRule rrule;
   bool should_redirect =
@@ -4025,9 +4048,18 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
 		      << " proto+host:" << protocol << "://" << hostname
 		      << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
+  } else if (err_no == -ERR_WEBSITE_REDIRECT) {
+    // Do nothing here, this redirect will be handled in abort_early's ERR_WEBSITE_REDIRECT block
+    // Do NOT fire the ErrorDoc handler
   } else if (!s->bucket_info.website_conf.error_doc.empty()) {
-    RGWHandler_REST_S3Website::get_errordoc(
-      s->bucket_info.website_conf.error_doc, error_content);
+    /* This serves an entire page!
+       On success, it will return zero, and no further content should be sent to the socket
+       On failure, we need the double-error handler
+     */
+    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket_info.website_conf.error_doc);
+    if (new_err_no && new_err_no != -1) {
+      err_no = new_err_no;
+    }
   } else {
     ldout(s->cct, 20) << "No special error handling today!" << dendl;
   }

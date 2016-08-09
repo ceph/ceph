@@ -2885,14 +2885,8 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
     assert(0);
   }
 
-  PGPool p = PGPool(id, createmap->get_pool_name(id),
-		    createmap->get_pg_pool(id)->auid);
+  PGPool p = PGPool(createmap, id);
 
-  const pg_pool_t *pi = createmap->get_pg_pool(id);
-  p.info = *pi;
-  p.snapc = pi->get_snap_context();
-
-  pi->build_removed_snaps(p.cached_removed_snaps);
   dout(10) << "_get_pool " << p.id << dendl;
   return p;
 }
@@ -6343,7 +6337,7 @@ OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
       pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
 
     sched_time += scrub_min_interval;
-    double r = rand() / RAND_MAX;
+    double r = rand() / (double)RAND_MAX;
     sched_time +=
       scrub_min_interval * g_conf->osd_scrub_interval_randomize_ratio * r;
     deadline += scrub_max_interval;
@@ -7527,6 +7521,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     history.epoch_created = created;
     history.last_scrub_stamp = ci->second;
     history.last_deep_scrub_stamp = ci->second;
+    history.last_clean_scrub_stamp = ci->second;
 
     // project history from created epoch (handle_pg_peering_evt does
     // it from msg send epoch)

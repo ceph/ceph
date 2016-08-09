@@ -103,12 +103,6 @@ Context *ReleaseRequest<I>::handle_block_writes(int *ret_val) {
     return m_on_finish;
   }
 
-  if (m_on_releasing != nullptr) {
-    // alert caller that we no longer own the exclusive lock
-    m_on_releasing->complete(0);
-    m_on_releasing = nullptr;
-  }
-
   send_flush_notifies();
   return nullptr;
 }
@@ -210,6 +204,12 @@ template <typename I>
 void ReleaseRequest<I>::send_unlock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
+
+  if (m_on_releasing != nullptr) {
+    // alert caller that we no longer own the exclusive lock
+    m_on_releasing->complete(0);
+    m_on_releasing = nullptr;
+  }
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);

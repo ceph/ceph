@@ -36,6 +36,7 @@ using namespace std;
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
+#include "common/simple_spin.h"
 
 
 class AsyncMessenger;
@@ -65,8 +66,9 @@ class Worker : public Thread {
 
  public:
   EventCenter center;
+  std::atomic_uint references;
   Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
+    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
     center.init(InitEventNumber);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
@@ -133,7 +135,6 @@ class WorkerPool {
   WorkerPool(const WorkerPool &);
   WorkerPool& operator=(const WorkerPool &);
   CephContext *cct;
-  uint64_t seq;
   vector<Worker*> workers;
   vector<int> coreids;
   // Used to indicate whether thread started
@@ -141,6 +142,7 @@ class WorkerPool {
   Mutex barrier_lock;
   Cond barrier_cond;
   atomic_t barrier_count;
+  simple_spinlock_t pool_spin = SIMPLE_SPINLOCK_INITIALIZER;
 
   class C_barrier : public EventCallback {
     WorkerPool *pool;
@@ -158,9 +160,8 @@ class WorkerPool {
   explicit WorkerPool(CephContext *c);
   virtual ~WorkerPool();
   void start();
-  Worker *get_worker() {
-    return workers[(seq++)%workers.size()];
-  }
+  Worker *get_worker();
+  void release_worker(EventCenter* c);
   int get_cpuid(int id) {
     if (coreids.empty())
       return -1;
@@ -525,6 +526,7 @@ public:
    */
   void unregister_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(deleted_lock);
+    conn->release_worker();
     deleted_conns.insert(conn);
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
@@ -540,6 +542,10 @@ public:
    * See "deleted_conns"
    */
   int reap_dead();
+  
+  void release_worker(EventCenter* c) {
+    pool->release_worker(c);
+  }
 
   /**
    * @} // AsyncMessenger Internals

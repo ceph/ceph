@@ -48,7 +48,7 @@ class TestAlarm
 {
 public:
   TestAlarm() {
-    alarm(360);
+    alarm(1200);
   }
   ~TestAlarm() {
     alarm(0);
