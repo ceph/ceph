@@ -1,5 +1,5 @@
 CephFS Snapshots
-==============
+================
 
 CephFS supports snapshots, generally created by invoking mkdir against the
 (hidden, special) .snap directory.
@@ -18,7 +18,7 @@ features that make CephFS snapshots different from what you might expect:
   very fast.
 
 Important Data Structures
------------
+-------------------------
 * SnapRealm: A `SnapRealm` is created whenever you create a snapshot at a new
   point in the hierarchy (or, when a snapshotted inode is moved outside of its
   parent snapshot). SnapRealms contain an `sr_t srnode`, links to `past_parents`
@@ -32,7 +32,7 @@ Important Data Structures
   the inode number and first `snapid` of the inode/snapshot referenced.
 
 Creating a snapshot
-----------
+-------------------
 To make a snapshot on directory "/1/2/3/foo", the client invokes "mkdir" on
 "/1/2/3/foo/.snaps" directory. This is transmitted to the MDS Server as a
 CEPH_MDS_OP_MKSNAP-tagged `MClientRequest`, and initially handled in
@@ -50,32 +50,32 @@ update the `SnapContext` they are using with that data. Note that this
 *is not* a synchronous part of the snapshot creation!
 
 Updating a snapshot
-----------
+-------------------
 If you delete a snapshot, or move data out of the parent snapshot's hierarchy,
 a similar process is followed. Extra code paths check to see if we can break
 the `past_parent` links between SnapRealms, or eliminate them entirely.
 
 Generating a SnapContext
----------
+------------------------
 A RADOS `SnapContext` consists of a snapshot sequence ID (`snapid`) and all
 the snapshot IDs that an object is already part of. To generate that list, we
 generate a list of all `snapids` associated with the SnapRealm and all its
 `past_parents`.
 
 Storing snapshot data
-----------
+---------------------
 File data is stored in RADOS "self-managed" snapshots. Clients are careful to
 use the correct `SnapContext` when writing file data to the OSDs.
 
 Storing snapshot metadata
-----------
+-------------------------
 Snapshotted dentries (and their inodes) are stored in-line as part of the
 directory they were in at the time of the snapshot. *All dentries* include a
 `first` and `last` snapid for which they are valid. (Non-snapshotted dentries
 will have their `last` set to CEPH_NOSNAP).
 
 Snapshot writeback
----------
+------------------
 There is a great deal of code to handle writeback efficiently. When a Client
 receives an `MClientSnap` message, it updates the local `SnapRealm`
 representation and its links to specific `Inodes`, and generates a `CapSnap`
@@ -88,7 +88,7 @@ process for flushing them. Dentries with outstanding `CapSnap` data is kept
 pinned and in the journal.
 
 Deleting snapshots
---------
+------------------
 Snapshots are deleted by invoking "rmdir" on the ".snaps" directory they are
 rooted in. (Attempts to delete a directory which roots snapshots *will fail*;
 you must delete the snapshots first.) Once deleted, they are entered into the
@@ -97,7 +97,7 @@ Metadata is cleaned up as the directory objects are read in and written back
 out again.
 
 Hard links
----------
+----------
 Hard links do not interact well with snapshots. A file is snapshotted when its
 primary link is part of a SnapRealm; other links *will not* preserve data.
 Generally the location where a file was first created will be its primary link,
