@@ -90,7 +90,7 @@ class TestFailover(CephFSTestCase):
 
 
 class TestStandbyReplay(CephFSTestCase):
-    MDSS_REQUIRED = 3
+    MDSS_REQUIRED = 4
     REQUIRE_FILESYSTEM = False
 
     def set_standby_for(self, leader, follower, replay):
@@ -110,9 +110,8 @@ class TestStandbyReplay(CephFSTestCase):
         log.warn(json.dumps(mds_info, indent=2))
         raise RuntimeError("MDS '{0}' not found".format(mds_name))
 
-
     def test_standby_replay_unused(self):
-        # Pick out exactly 2 daemons to be run during test
+        # Pick out exactly 3 daemons to be run during test
         use_daemons = sorted(self.mds_cluster.mds_ids[0:3])
         mds_a, mds_b, mds_c = use_daemons
         log.info("Using MDS daemons: {0}".format(use_daemons))
@@ -167,8 +166,6 @@ class TestStandbyReplay(CephFSTestCase):
         mds_a, mds_b = use_daemons
         log.info("Using MDS daemons: {0}".format(use_daemons))
 
-
-
         # Configure two pairs of MDSs that are standby for each other
         self.set_standby_for(mds_a, mds_b, True)
         self.set_standby_for(mds_b, mds_a, False)
@@ -201,6 +198,59 @@ class TestStandbyReplay(CephFSTestCase):
         self.assertEqual(mds_map['failed'], [])
         self.assertEqual(mds_map['damaged'], [])
         self.assertEqual(mds_map['stopped'], [])
+
+    def test_rank_stopped(self):
+        """
+        That when a rank is STOPPED, standby replays for
+        that rank get torn down
+        """
+        # Pick out exactly 2 daemons to be run during test
+        use_daemons = sorted(self.mds_cluster.mds_ids[0:4])
+        mds_a, mds_b, mds_a_s, mds_b_s = use_daemons
+        log.info("Using MDS daemons: {0}".format(use_daemons))
+
+        # a and b both get a standby
+        self.set_standby_for(mds_a, mds_a_s, True)
+        self.set_standby_for(mds_b, mds_b_s, True)
+
+        # Create FS alpha and get mds_a to come up as active
+        fs_a = self.mds_cluster.get_filesystem("alpha")
+        fs_a.create()
+        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name,
+                                         'allow_multimds', "true",
+                                         "--yes-i-really-mean-it")
+        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name, 'max_mds', "2")
+
+        self.mds_cluster.mds_restart(mds_a)
+        self.wait_until_equal(lambda: fs_a.get_active_names(), [mds_a], 30)
+        self.mds_cluster.mds_restart(mds_b)
+        fs_a.wait_for_daemons()
+        self.assertEqual(sorted(fs_a.get_active_names()), [mds_a, mds_b])
+
+        # Start the standbys
+        self.mds_cluster.mds_restart(mds_b_s)
+        self.wait_for_daemon_start([mds_b_s])
+        self.mds_cluster.mds_restart(mds_a_s)
+        self.wait_for_daemon_start([mds_a_s])
+        info_b_s = self.get_info_by_name(fs_a, mds_b_s)
+        self.assertEqual(info_b_s['state'], "up:standby-replay")
+        info_a_s = self.get_info_by_name(fs_a, mds_a_s)
+        self.assertEqual(info_a_s['state'], "up:standby-replay")
+
+        # Shrink the cluster
+        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name, 'max_mds', "1")
+        fs_a.mon_manager.raw_cluster_cmd("mds", "stop", "{0}:1".format(fs_a.name))
+        self.wait_until_equal(
+            lambda: fs_a.get_active_names(), [mds_a],
+            60
+        )
+
+        # Both 'b' and 'b_s' should go back to being standbys
+        self.wait_until_equal(
+            lambda: self.mds_cluster.get_standby_daemons(), {mds_b, mds_b_s},
+            60
+        )
+
 
 class TestMultiFilesystems(CephFSTestCase):
     CLIENTS_REQUIRED = 2
