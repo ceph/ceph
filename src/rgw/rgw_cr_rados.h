@@ -1091,6 +1091,16 @@ class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
   int request_complete() override;
 };
 
+// wrapper to update last_trim_marker on success
+class RGWSyncLogTrimCR : public RGWRadosTimelogTrimCR {
+  CephContext *cct;
+  std::string *last_trim_marker;
+ public:
+  RGWSyncLogTrimCR(RGWRados *store, const std::string& oid,
+                   const std::string& to_marker, std::string *last_trim_marker);
+  int request_complete() override;
+};
+
 class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   RGWBucketInfo bucket_info;

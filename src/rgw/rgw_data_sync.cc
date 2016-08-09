@@ -2936,29 +2936,6 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
   }
 }
 
-// wrapper to update last_trim_marker on success
-class LastTimelogTrimCR : public RGWRadosTimelogTrimCR {
-  CephContext *cct;
-  std::string *last_trim_marker;
- public:
-  LastTimelogTrimCR(RGWRados *store, const std::string& oid,
-                    const std::string& to_marker, std::string *last_trim_marker)
-    : RGWRadosTimelogTrimCR(store, oid, real_time{}, real_time{},
-                            std::string{}, to_marker),
-      cct(store->ctx()), last_trim_marker(last_trim_marker)
-  {}
-  int request_complete() override {
-    int r = RGWRadosTimelogTrimCR::request_complete();
-    if (r < 0 && r != -ENODATA) {
-      ldout(cct, 1) << "failed to trim datalog: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    ldout(cct, 10) << "datalog trimmed to marker " << to_marker << dendl;
-    *last_trim_marker = to_marker;
-    return 0;
-  }
-};
-
 class DataLogTrimCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http;
@@ -3036,7 +3013,7 @@ int DataLogTrimCR::operate()
         ldout(cct, 10) << "trimming log shard " << i
             << " at marker=" << stable
             << " last_trim=" << last_trim[i] << dendl;
-        using TrimCR = LastTimelogTrimCR;
+        using TrimCR = RGWSyncLogTrimCR;
         spawn(new TrimCR(store, store->data_log->get_oid(i),
                          stable, &last_trim[i]),
               true);
