@@ -40,11 +40,8 @@ struct MockJournal {
 
   MOCK_CONST_METHOD0(is_tag_owner, bool());
   MOCK_CONST_METHOD1(is_tag_owner, int(bool *));
-  MOCK_METHOD6(allocate_tag, void(const std::string &mirror_uuid,
-                                  const std::string &predecessor_mirror_uuid,
-                                  bool predecessor_commit_valid,
-                                  uint64_t predecessor_tag_tid,
-                                  uint64_t predecessor_entry_tid,
+  MOCK_METHOD3(allocate_tag, void(const std::string &mirror_uuid,
+                                  const journal::TagPredecessor &predecessor,
                                   Context *on_finish));
 
   MOCK_METHOD1(open, void(Context *));
