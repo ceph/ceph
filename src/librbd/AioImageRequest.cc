@@ -454,23 +454,27 @@ void AioImageFlush::send_request() {
                   !m_image_ctx.journal->is_journal_replaying());
   }
 
-  m_aio_comp->set_request_count(journaling ? 2 : 1);
-
   if (journaling) {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = m_image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()),
       AioObjectRequests(), 0, 0, false);
 
+    m_aio_comp->set_request_count(2);
+
     C_FlushJournalCommit *ctx = new C_FlushJournalCommit(m_image_ctx,
                                                          m_aio_comp,
                                                          journal_tid);
+    C_AioRequest *req_comp = new C_AioRequest(m_aio_comp);
     m_image_ctx.journal->flush_event(journal_tid, ctx);
     m_aio_comp->associate_journal_event(journal_tid);
+    m_image_ctx.flush_async_operations(req_comp);
+  } else {
+    // flush rbd cache only when journaling is not enabled
+    m_aio_comp->set_request_count(1);
+    C_AioRequest *req_comp = new C_AioRequest(m_aio_comp);
+    m_image_ctx.flush(req_comp);
   }
-
-  C_AioRequest *req_comp = new C_AioRequest(m_aio_comp);
-  m_image_ctx.flush(req_comp);
 
   // track flush op for block writes
   m_aio_comp->start_op(true);
