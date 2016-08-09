@@ -696,6 +696,11 @@ bool Journal<I>::is_tag_owner() const {
 }
 
 template <typename I>
+uint64_t Journal<I>::get_tag_tid() const {
+  return m_tag_tid;
+}
+
+template <typename I>
 journal::TagData Journal<I>::get_tag_data() const {
   return m_tag_data;
 }

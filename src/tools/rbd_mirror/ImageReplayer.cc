@@ -982,6 +982,10 @@ void ImageReplayer<I>::allocate_local_tag() {
     predecessor_mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
   }
 
+  dout(20) << "mirror_uuid=" << mirror_uuid << ", "
+           << "predecessor_mirror_uuid=" << predecessor_mirror_uuid << ", "
+           << "replay_tag_tid=" << m_replay_tag_tid << ", "
+           << "replay_tag_data=" << m_replay_tag_data << dendl;
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_allocate_local_tag>(this);
   m_local_journal->allocate_tag(
