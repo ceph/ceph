@@ -122,7 +122,11 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-if not check_sanity():
+if 'BUILD_DOC' in os.environ.keys():
+    pass
+elif check_sanity():
+    pass
+else:
     sys.exit(1)
 
 cmdclass = {}
