@@ -5119,9 +5119,6 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                                   &selected_placement_rule_name, &rule_info);
     if (ret < 0)
       return ret;
-    bufferlist bl;
-    uint32_t nop = 0;
-    ::encode(nop, bl);
 
     if (!pmaster_bucket) {
       uint64_t iid = instance_id();
