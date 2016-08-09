@@ -1107,7 +1107,7 @@ void OSDMonitor::maybe_prime_pg_temp()
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
     for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
       n -= prime_pg_temp(next, pg_map, *p);
-      if (--n <= 0) {
+      if (n <= 0) {
 	n = chunk;
 	if (ceph_clock_now(NULL) > stop) {
 	  dout(10) << __func__ << " consumed more than "
