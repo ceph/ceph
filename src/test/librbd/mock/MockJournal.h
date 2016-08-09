@@ -50,6 +50,7 @@ struct MockJournal {
   MOCK_METHOD1(open, void(Context *));
   MOCK_METHOD1(close, void(Context *));
 
+  MOCK_CONST_METHOD0(get_tag_tid, uint64_t());
   MOCK_CONST_METHOD0(get_tag_data, journal::TagData());
 
   MOCK_METHOD0(allocate_op_tid, uint64_t());
