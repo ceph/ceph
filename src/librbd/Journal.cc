@@ -329,6 +329,7 @@ Journal<I>::~Journal() {
   assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   assert(m_journaler == NULL);
   assert(m_journal_replay == NULL);
+  assert(m_on_replay_close_request == nullptr);
   assert(m_wait_for_state_contexts.empty());
 }
 
@@ -651,6 +652,12 @@ void Journal<I>::close(Context *on_finish) {
 
   if (m_state == STATE_READY) {
     stop_recording();
+  }
+
+  // interrupt external replay if active
+  if (m_on_replay_close_request != nullptr) {
+    m_on_replay_close_request->complete(0);
+    m_on_replay_close_request = nullptr;
   }
 
   m_close_pending = true;
@@ -1071,23 +1078,26 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
 
 template <typename I>
 void Journal<I>::start_external_replay(journal::Replay<I> **journal_replay,
-                                       Context *on_finish) {
+                                       Context *on_start,
+                                       Context *on_close_request) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_READY);
   assert(m_journal_replay == nullptr);
+  assert(m_on_replay_close_request == nullptr);
+  m_on_replay_close_request = on_close_request;
 
-  on_finish = util::create_async_context_callback(m_image_ctx, on_finish);
-  on_finish = new FunctionContext(
-    [this, journal_replay, on_finish](int r) {
-      handle_start_external_replay(r, journal_replay, on_finish);
+  on_start = util::create_async_context_callback(m_image_ctx, on_start);
+  on_start = new FunctionContext(
+    [this, journal_replay, on_start](int r) {
+      handle_start_external_replay(r, journal_replay, on_start);
     });
 
   // safely flush all in-flight events before starting external replay
   m_journaler->stop_append(util::create_async_context_callback(m_image_ctx,
-                                                               on_finish));
+                                                               on_start));
 }
 
 template <typename I>
@@ -1104,6 +1114,11 @@ void Journal<I>::handle_start_external_replay(int r,
   if (r < 0) {
     lderr(cct) << "failed to stop recording: " << cpp_strerror(r) << dendl;
     *journal_replay = nullptr;
+
+    if (m_on_replay_close_request != nullptr) {
+      m_on_replay_close_request->complete(r);
+      m_on_replay_close_request = nullptr;
+    }
 
     // get back to a sane-state
     start_append();
@@ -1123,8 +1138,18 @@ void Journal<I>::stop_external_replay() {
   assert(m_journal_replay != nullptr);
   assert(m_state == STATE_REPLAYING);
 
+  if (m_on_replay_close_request != nullptr) {
+    m_on_replay_close_request->complete(-ECANCELED);
+    m_on_replay_close_request = nullptr;
+  }
+
   delete m_journal_replay;
   m_journal_replay = nullptr;
+
+  if (m_close_pending) {
+    destroy_journaler(0);
+    return;
+  }
 
   start_append();
 }
