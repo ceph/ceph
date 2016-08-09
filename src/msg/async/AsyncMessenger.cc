@@ -327,7 +327,6 @@ class WorkerPool {
       delete this;
     }
   };
-  friend class C_barrier;
   public:
   std::atomic_uint pending;
   explicit WorkerPool(CephContext *c);
