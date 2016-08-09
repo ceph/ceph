@@ -490,7 +490,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
     dout(10) << ": decoded remote tag " << tag.tid << ": "
              << remote_tag_data << dendl;
     if (remote_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
-        remote_tag_data.predecessor_mirror_uuid == m_local_mirror_uuid) {
+        remote_tag_data.predecessor.mirror_uuid == m_local_mirror_uuid) {
       // remote tag is chained off a local tag demotion
       break;
     }
@@ -517,7 +517,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
 
     if (local_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
 	remote_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
-	remote_tag_data.predecessor_mirror_uuid == m_local_mirror_uuid) {
+	remote_tag_data.predecessor.mirror_uuid == m_local_mirror_uuid) {
       dout(20) << ": local image was demoted" << dendl;
     } else if (local_tag_data.mirror_uuid == m_remote_mirror_uuid &&
 	       m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING) {

@@ -974,26 +974,20 @@ void ImageReplayer<I>::allocate_local_tag() {
     m_stop_requested = true;
   }
 
-  std::string predecessor_mirror_uuid =
-    m_replay_tag_data.predecessor_mirror_uuid;
-  if (predecessor_mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
-    predecessor_mirror_uuid = m_remote_mirror_uuid;
-  } else if (predecessor_mirror_uuid == m_local_mirror_uuid) {
-    predecessor_mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
+  librbd::journal::TagPredecessor predecessor(m_replay_tag_data.predecessor);
+  if (predecessor.mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    predecessor.mirror_uuid = m_remote_mirror_uuid;
+  } else if (predecessor.mirror_uuid == m_local_mirror_uuid) {
+    predecessor.mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
   }
 
   dout(20) << "mirror_uuid=" << mirror_uuid << ", "
-           << "predecessor_mirror_uuid=" << predecessor_mirror_uuid << ", "
+           << "predecessor_mirror_uuid=" << predecessor.mirror_uuid << ", "
            << "replay_tag_tid=" << m_replay_tag_tid << ", "
            << "replay_tag_data=" << m_replay_tag_data << dendl;
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_allocate_local_tag>(this);
-  m_local_journal->allocate_tag(
-    mirror_uuid, predecessor_mirror_uuid,
-    m_replay_tag_data.predecessor_commit_valid,
-    m_replay_tag_data.predecessor_tag_tid,
-    m_replay_tag_data.predecessor_entry_tid,
-    ctx);
+  m_local_journal->allocate_tag(mirror_uuid, predecessor, ctx);
 }
 
 template <typename I>
