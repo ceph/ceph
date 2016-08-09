@@ -840,6 +840,8 @@ if(${WITH_RADOSGW})
     target_include_directories(civetweb_common_objs PUBLIC
       "${SSL_INCLUDE_DIR}")
   endif(HAVE_SSL)
+  set_property(TARGET civetweb_common_objs
+    APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
   add_subdirectory(rgw)
 endif(${WITH_RADOSGW})
 
