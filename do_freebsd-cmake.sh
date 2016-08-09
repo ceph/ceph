@@ -12,6 +12,7 @@ if [ x"$1"x = x"--deps"x ]; then
 fi
 rm -rf build && ./do_cmake.sh "$*" \
 	-D CMAKE_BUILD_TYPE=Debug \
+	-D CMAKE_CXX_FLAGS_DEBUG="-O0 -g" \
 	-D ENABLE_GIT_VERSION=OFF \
 	-D WITH_BLKID=OFF \
 	-D WITH_FUSE=OFF \
