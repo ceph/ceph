@@ -45,6 +45,7 @@
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
+%{!?python3_pkgversion: %global python3_pkgversion 3}
 
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
@@ -153,6 +154,16 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
+%endif
+# python34-... for RHEL, python3-... for all other supported distros
+%if 0%{?rhel}
+BuildRequires:	python34-devel
+BuildRequires:	python34-setuptools
+BuildRequires:	python34-Cython
+%else
+BuildRequires:	python3-devel
+BuildRequires:	python3-setuptools
+BuildRequires:	python3-Cython
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
@@ -399,13 +410,23 @@ This package contains libraries and headers needed to develop programs
 that use RADOS gateway client library.
 
 %package -n python-rados
-Summary:	Python libraries for the RADOS object store
+Summary:	Python 2 libraries for the RADOS object store
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 %description -n python-rados
-This package contains Python libraries for interacting with Cephs RADOS
+This package contains Python 2 libraries for interacting with Cephs RADOS
+object store.
+
+%package -n python%{python3_pkgversion}-rados
+Summary:	Python 3 libraries for the RADOS object store
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	python%{python3_pkgversion}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+%description -n python%{python3_pkgversion}-rados
+This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
 
 %package -n libradosstriper1
@@ -459,14 +480,24 @@ This package contains libraries and headers needed to develop programs
 that use RADOS block device.
 
 %package -n python-rbd
-Summary:	Python libraries for the RADOS block device
+Summary:	Python 2 libraries for the RADOS block device
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 %description -n python-rbd
-This package contains Python libraries for interacting with Cephs RADOS
+This package contains Python 2 libraries for interacting with Cephs RADOS
+block device.
+
+%package -n python%{python3_pkgversion}-rbd
+Summary:	Python 3 libraries for the RADOS block device
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	python%{python3_pkgversion}-rados = %{epoch}:%{version}-%{release}
+%description -n python%{python3_pkgversion}-rbd
+This package contains Python 3 libraries for interacting with Cephs RADOS
 block device.
 
 %package -n libcephfs1
@@ -497,15 +528,35 @@ This package contains libraries and headers needed to develop programs
 that use Cephs distributed file system.
 
 %package -n python-cephfs
-Summary:	Python libraries for Ceph distributed file system
+Summary:	Python 2 libraries for Ceph distributed file system
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 %description -n python-cephfs
-This package contains Python libraries for interacting with Cephs distributed
+This package contains Python 2 libraries for interacting with Cephs distributed
 file system.
+
+%package -n python%{python3_pkgversion}-cephfs
+Summary:	Python 3 libraries for Ceph distributed file system
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
+Requires:	python%{python3_pkgversion}-rados = %{epoch}:%{version}-%{release}
+%description -n python%{python3_pkgversion}-cephfs
+This package contains Python 3 libraries for interacting with Cephs distributed
+file system.
+
+%package -n python%{python3_pkgversion}-ceph-argparse
+Summary:	Python 3 utility libraries for Ceph CLI
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+%description -n python%{python3_pkgversion}-ceph-argparse
+This package contains types and routines for Python 3 used by the Ceph CLI as
+well as the RESTful interface. These have to do with querying the daemons for
+command-description information, validating user command input against those
+descriptions, and submitting the command to the appropriate daemon.
 
 %package -n ceph-test
 Summary:	Ceph benchmarks and test tools
@@ -1266,6 +1317,12 @@ fi
 %{python_sitearch}/rados-*.egg-info
 
 #################################################################################
+%files -n python%{python3_pkgversion}-rados
+%defattr(-,root,root,-)
+%{python3_sitearch}/rados.cpython*.so
+%{python3_sitearch}/rados-*.egg-info
+
+#################################################################################
 %files -n libradosstriper1
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
@@ -1338,6 +1395,12 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python_sitearch}/rbd-*.egg-info
 
 #################################################################################
+%files -n python%{python3_pkgversion}-rbd
+%defattr(-,root,root,-)
+%{python3_sitearch}/rbd.cpython*.so
+%{python3_sitearch}/rbd-*.egg-info
+
+#################################################################################
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
@@ -1361,6 +1424,22 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python_sitearch}/cephfs.so
 %{python_sitearch}/cephfs-*.egg-info
 %{python_sitelib}/ceph_volume_client.py*
+
+#################################################################################
+%files -n python%{python3_pkgversion}-cephfs
+%defattr(-,root,root,-)
+%{python3_sitearch}/cephfs.cpython*.so
+%{python3_sitearch}/cephfs-*.egg-info
+%{python3_sitelib}/ceph_volume_client.py
+%{python3_sitelib}/__pycache__/ceph_volume_client.cpython*.py*
+
+#################################################################################
+%files -n python%{python3_pkgversion}-ceph-argparse
+%defattr(-,root,root,-)
+%{python3_sitelib}/ceph_argparse.py
+%{python3_sitelib}/__pycache__/ceph_argparse.cpython*.py*
+%{python3_sitelib}/ceph_daemon.py
+%{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
 
 #################################################################################
 %files -n ceph-test
