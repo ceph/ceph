@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <fcntl.h>
 
 #ifdef __cplusplus
 extern "C" {
