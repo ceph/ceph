@@ -450,5 +450,4 @@ public:
   int operate() override;
 };
 
-
 #endif
