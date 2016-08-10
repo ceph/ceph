@@ -1110,7 +1110,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   OnodeRef o = po->second;
 
   // install a non-existent onode at old location
-  oldo.reset(new Onode(this, old_oid, o->key));
+  oldo.reset(new Onode(o->collection, this, old_oid, o->key));
   po->second = oldo;
   cache->_add_onode(po->second, 1);
 
@@ -1318,11 +1318,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       return OnodeRef();
 
     // new
-    on = new Onode(&onode_map, oid, key);
+    on = new Onode(this, &onode_map, oid, key);
   } else {
     // loaded
     assert(r >=0);
-    on = new Onode(&onode_map, oid, key);
+    on = new Onode(this, &onode_map, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
@@ -4655,19 +4655,28 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       // FIXME: use a per-txc dirty blob list?
-      
-      if (txc->first_collection) {
-        (txc->first_collection)->lock.get_read();
-      }
-      for (auto& o : txc->onodes) {
-        for (auto& p : o->blob_map.blob_map) {
+
+      // finish writes. lock the collection so that we can safely
+      // traverse the blob_map.
+      {
+	Collection *c = nullptr;
+	for (auto& o : txc->onodes) {
+	  if (o->collection != c) {
+	    if (c) {
+	      c->lock.put_read();
+	    }
+	    c = o->collection;
+	    c->lock.get_read();
+	  }
+	  for (auto& p : o->blob_map.blob_map) {
 	    p.bc.finish_write(txc->seq);
+	  }
+	}
+	if (c) {
+	  c->lock.put_read();
 	}
       }
-      if (txc->first_collection) {
-        (txc->first_collection)->lock.put_read();
-      }
-      
+
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
 	  _txc_finalize_kv(txc, txc->t);
