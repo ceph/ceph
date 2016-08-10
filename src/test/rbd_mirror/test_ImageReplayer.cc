@@ -829,6 +829,9 @@ TEST_F(TestImageReplayer, Disconnect)
 {
   bootstrap();
 
+  // Make sure rbd_mirroring_resync_after_disconnect is not set
+  EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirroring_resync_after_disconnect", "false"));
+
   // Test start fails if disconnected
 
   librbd::ImageCtx *ictx;
@@ -889,4 +892,24 @@ TEST_F(TestImageReplayer, Disconnect)
   C_SaferCond cond4;
   m_replayer->start(&cond4);
   ASSERT_EQ(-ENOTCONN, cond4.wait());
+
+  // Test automatic resync if rbd_mirroring_resync_after_disconnect is set
+
+  EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirroring_resync_after_disconnect", "true"));
+
+  // Resync is flagged on first start attempt
+  C_SaferCond cond5;
+  m_replayer->start(&cond5);
+  ASSERT_EQ(-ENOTCONN, cond5.wait());
+  C_SaferCond delete_cond1;
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond1);
+  EXPECT_EQ(0, delete_cond1.wait());
+
+  C_SaferCond cond6;
+  m_replayer->start(&cond6);
+  ASSERT_EQ(0, cond6.wait());
+  wait_for_replay_complete();
+
+  stop();
 }
