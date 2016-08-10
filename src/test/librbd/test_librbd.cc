@@ -604,6 +604,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
     if (it != image_names.end()) {
       printf("found %s\n", expected);
       image_names.erase(it);
+      printf("erased %s\n", expected);
     } else {
       ADD_FAILURE() << "Unable to find image " << expected;
       va_end(ap);

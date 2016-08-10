@@ -116,6 +116,7 @@ private:
   uint64_t m_flags;
   std::string m_object_prefix;
   parent_info m_parent_md;
+  cls::rbd::GroupSpec m_group_spec;
 
   ::SnapContext m_snapc;
   std::vector<std::string> m_snap_names;

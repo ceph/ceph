@@ -178,6 +178,101 @@ std::string get_pool_name(const po::variables_map &vm,
   return pool_name;
 }
 
+int get_special_pool_group_names(const po::variables_map &vm,
+				 size_t *arg_index,
+				 std::string *group_pool_name,
+				 std::string *group_name) {
+  if (nullptr == group_pool_name) return -EINVAL;
+  if (nullptr == group_name) return -EINVAL;
+  std::string pool_key = at::POOL_NAME;
+
+  std::string group_pool_key = "group-" + at::POOL_NAME;
+  std::string group_key = at::GROUP_NAME;
+
+  if (vm.count(group_pool_key)) {
+    *group_pool_name = vm[group_pool_key].as<std::string>();
+  }
+
+  if (vm.count(group_key)) {
+    *group_name = vm[group_key].as<std::string>();
+  }
+
+  int r;
+  if (group_name->empty()) {
+    std::string spec = utils::get_positional_argument(vm, (*arg_index)++);
+    if (!spec.empty()) {
+      r = utils::extract_group_spec(spec, group_pool_name, group_name);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (group_pool_name->empty()) {
+    *group_pool_name = vm[pool_key].as<std::string>();
+  }
+
+  if (group_pool_name->empty()) {
+    *group_pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (group_name->empty()) {
+    std::cerr << "rbd: consistency group name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int get_special_pool_image_names(const po::variables_map &vm,
+				 size_t *arg_index,
+				 std::string *image_pool_name,
+				 std::string *image_name) {
+  if (nullptr == image_pool_name) return -EINVAL;
+  if (nullptr == image_name) return -EINVAL;
+
+  std::string pool_key = at::POOL_NAME;
+
+  std::string image_pool_key = "image-" + at::POOL_NAME;
+  std::string image_key = at::IMAGE_NAME;
+
+  if (vm.count(image_pool_key)) {
+    *image_pool_name = vm[image_pool_key].as<std::string>();
+  }
+
+  if (vm.count(image_key)) {
+    *image_name = vm[image_key].as<std::string>();
+  }
+
+  int r;
+  if (image_name->empty()) {
+    std::string spec = utils::get_positional_argument(vm, (*arg_index)++);
+    if (!spec.empty()) {
+      r = utils::extract_spec(spec, image_pool_name,
+                              image_name, nullptr,
+			      utils::SPEC_VALIDATION_NONE);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (image_pool_name->empty()) {
+    *image_pool_name = vm[pool_key].as<std::string>();
+  }
+
+  if (image_pool_name->empty()) {
+    *image_pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (image_name->empty()) {
+    std::cerr << "rbd: image name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int get_pool_group_names(const po::variables_map &vm,
 			 at::ArgumentModifier mod,
 			 size_t *spec_arg_index,

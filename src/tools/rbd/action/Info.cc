@@ -5,6 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/types.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include <iostream>
@@ -116,6 +117,16 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
   prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
 
+  librbd::group_spec_t group_spec;
+  r = image.get_group(&group_spec);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string group_string = "";
+  if (-1 != group_spec.pool)
+    group_string = stringify(group_spec.pool) + "." + group_spec.name;
+
   if (f) {
     f->open_object_section("image");
     f->dump_string("name", imgname);
@@ -136,12 +147,21 @@ static int do_show_info(const char *imgname, librbd::Image& image,
               << "\tblock_name_prefix: " << prefix
               << std::endl
               << "\tformat: " << (old_format ? "1" : "2")
-              << std::endl;
+	      << std::endl;
   }
 
   if (!old_format) {
     format_features(f, features);
     format_flags(f, flags);
+  }
+
+  if (!group_string.empty()) {
+    if (f) {
+      f->dump_string("group", group_string);
+    } else {
+      std::cout << "\tconsistency group: " << group_string
+		<< std::endl;
+    }
   }
 
   // snapshot info, if present

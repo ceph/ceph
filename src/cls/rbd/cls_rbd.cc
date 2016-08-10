@@ -138,6 +138,12 @@ cls_method_handle_t h_group_create;
 cls_method_handle_t h_group_dir_list;
 cls_method_handle_t h_group_dir_add;
 cls_method_handle_t h_group_dir_remove;
+cls_method_handle_t h_group_image_remove;
+cls_method_handle_t h_group_image_list;
+cls_method_handle_t h_group_image_set;
+cls_method_handle_t h_image_add_group;
+cls_method_handle_t h_image_remove_group;
+cls_method_handle_t h_image_get_group;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -4412,6 +4418,280 @@ int group_dir_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Set state of an image in the consistency group.
+ *
+ * Input:
+ * @param image_status (cls::rbd::GroupImageStatus)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_image_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_image_set");
+
+  cls::rbd::GroupImageStatus st;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(st, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  string image_key = st.spec.image_key();
+
+  bufferlist image_val_bl;
+  ::encode(st.state, image_val_bl);
+  int r = cls_cxx_map_set_val(hctx, image_key, &image_val_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Remove reference to an image from the consistency group.
+ *
+ * Input:
+ * @param spec (cls::rbd::GroupImageSpec)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_image_remove(cls_method_context_t hctx,
+                       bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_image_remove");
+  cls::rbd::GroupImageSpec spec;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(spec, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  string image_key = spec.image_key();
+
+  int r = cls_cxx_map_remove_key(hctx, image_key);
+  if (r < 0) {
+    CLS_ERR("error removing image from group: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+/*
+ * List images in the consistency group.
+ *
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param tuples of descriptions of the images: image_id, pool_id, image reference state.
+ * @return 0 on success, negative error code on failure
+ */
+int group_image_list(cls_method_context_t hctx,
+                     bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_image_list");
+  cls::rbd::GroupImageSpec start_after;
+  uint64_t max_return;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int max_read = RBD_MAX_KEYS_READ;
+  std::map<string, bufferlist> vals;
+  string last_read = start_after.image_key();
+  std::vector<cls::rbd::GroupImageStatus> res;
+  int keys_read;
+  do {
+    keys_read = cls_cxx_map_get_vals(hctx, last_read,cls::rbd::RBD_GROUP_IMAGE_KEY_PREFIX,
+				     max_read, &vals);
+    if (keys_read < 0)
+      return keys_read;
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end() && res.size() < max_return; ++it) {
+
+      bufferlist::iterator iter = it->second.begin();
+      cls::rbd::GroupImageLinkState state;
+      try {
+	::decode(state, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding state for image: %s", it->first.c_str());
+	return -EIO;
+      }
+      cls::rbd::GroupImageSpec spec;
+      int r = cls::rbd::GroupImageSpec::from_key(it->first, &spec);
+      if (r < 0)
+	return r;
+
+      CLS_LOG(20, "Discovered image %s %" PRId64 " %d", spec.image_id.c_str(),
+	                                         spec.pool_id,
+					         (int)state);
+      res.push_back(cls::rbd::GroupImageStatus(spec, state));
+    }
+    if (res.size() > 0) {
+      last_read = res.rbegin()->spec.image_key();
+    }
+
+  } while ((keys_read == RBD_MAX_KEYS_READ) && (res.size() < max_return));
+  ::encode(res, *out);
+
+  return 0;
+}
+
+/**
+ * Reference the consistency group this image belongs to.
+ *
+ * Input:
+ * @param group_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int image_add_group(cls_method_context_t hctx,
+		    bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "image_add_group");
+  cls::rbd::GroupSpec new_group;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(new_group, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bufferlist existing_refbl;
+
+  int r = cls_cxx_map_get_val(hctx, RBD_GROUP_REF, &existing_refbl);
+  if (r == 0) {
+    // If we are trying to link this image to the same group then return success.
+    // If this image already belongs to another group then abort.
+    cls::rbd::GroupSpec old_group;
+    try {
+      bufferlist::iterator iter = existing_refbl.begin();
+      ::decode(old_group, iter);
+    } catch (const buffer::error &err) {
+      return -EINVAL;
+    }
+
+    if ((old_group.group_id != new_group.group_id)
+	|| (old_group.pool_id != new_group.pool_id)) {
+      return -EEXIST;
+    } else {
+      return 0; // In this case the values are already correct
+    }
+  } else if (r < 0 && r != -ENOENT) { // No entry means this image is not a member of any consistency group. So, we can use it.
+    return r;
+  }
+
+  bufferlist refbl;
+  ::encode(new_group, refbl);
+  r = cls_cxx_map_set_val(hctx, RBD_GROUP_REF, &refbl);
+
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Remove image's pointer to the consistency group.
+ *
+ * Input:
+ * @param cg_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int image_remove_group(cls_method_context_t hctx,
+		       bufferlist *in,
+		       bufferlist *out)
+{
+  CLS_LOG(20, "image_remove_group");
+  cls::rbd::GroupSpec spec;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(spec, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bufferlist refbl;
+  int r = cls_cxx_map_get_val(hctx, RBD_GROUP_REF, &refbl);
+  if (r < 0) {
+    return r;
+  }
+
+  cls::rbd::GroupSpec ref_spec;
+  bufferlist::iterator iter = refbl.begin();
+  try {
+    ::decode(ref_spec, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (ref_spec.pool_id != spec.pool_id || ref_spec.group_id != spec.group_id) {
+    return -EBADF;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, RBD_GROUP_REF);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Retrieve the id and pool of the consistency group this image belongs to.
+ *
+ * Input:
+ * none
+ *
+ * Output:
+ * @param GroupSpec
+ * @return 0 on success, negative error code on failure
+ */
+int image_get_group(cls_method_context_t hctx,
+		    bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "image_get_group");
+  bufferlist refbl;
+  int r = cls_cxx_map_get_val(hctx, RBD_GROUP_REF, &refbl);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  cls::rbd::GroupSpec spec;
+
+  if (r != -ENOENT) {
+    bufferlist::iterator iter = refbl.begin();
+    try {
+      ::decode(spec, iter);
+    } catch (const buffer::error &err) {
+      return -EINVAL;
+    }
+  }
+
+  ::encode(spec, *out);
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -4645,5 +4925,23 @@ void __cls_init()
   cls_register_cxx_method(h_class, "group_dir_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_dir_remove, &h_group_dir_remove);
+  cls_register_cxx_method(h_class, "group_image_remove",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_image_remove, &h_group_image_remove);
+  cls_register_cxx_method(h_class, "group_image_list",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_image_list, &h_group_image_list);
+  cls_register_cxx_method(h_class, "group_image_set",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_image_set, &h_group_image_set);
+  cls_register_cxx_method(h_class, "image_add_group",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  image_add_group, &h_image_add_group);
+  cls_register_cxx_method(h_class, "image_remove_group",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  image_remove_group, &h_image_remove_group);
+  cls_register_cxx_method(h_class, "image_get_group",
+			  CLS_METHOD_RD,
+			  image_get_group, &h_image_get_group);
   return;
 }

@@ -21,6 +21,9 @@
       flatten                     Fill clone with parent data (make it
                                   independent).
       group create                Create a consistency group.
+      group image add             Add an image to a consistency group.
+      group image list            List images in a consistency group.
+      group image remove          Remove an image from a consistency group.
       group list (group ls)       List rbd consistency groups.
       group remove (group rm)     Delete a consistency group.
       image-meta get              Image metadata get the value associated with
@@ -419,6 +422,65 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --group arg          group name
+  
+  rbd help group image add
+  usage: rbd group image add [--group-pool <group-pool>] [--group <group>] 
+                             [--image-pool <image-pool>] [--image <image>] 
+                             [--pool <pool>] 
+                             <group-spec> <image-spec> 
+  
+  Add an image to a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    --group-pool arg     group pool name
+    --group arg          group name
+    --image-pool arg     image pool name
+    --image arg          image name
+    -p [ --pool ] arg    pool name unless overridden
+  
+  rbd help group image list
+  usage: rbd group image list [--format <format>] [--pretty-format] 
+                              [--pool <pool>] [--group <group>] 
+                              <group-spec> 
+  
+  List images in a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+  
+  rbd help group image remove
+  usage: rbd group image remove [--group-pool <group-pool>] [--group <group>] 
+                                [--image-pool <image-pool>] [--image <image>] 
+                                [--pool <pool>] 
+                                <group-spec> <image-spec> 
+  
+  Remove an image from a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    --group-pool arg     group pool name
+    --group arg          group name
+    --image-pool arg     image pool name
+    --image arg          image name
+    -p [ --pool ] arg    pool name unless overridden
   
   rbd help group list
   usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 

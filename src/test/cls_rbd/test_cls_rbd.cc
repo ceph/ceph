@@ -8,6 +8,7 @@
 #include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rbd/object_map_types.h"
+#include "include/rbd_types.h"
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -953,18 +954,19 @@ TEST_F(TestClsRbd, get_mutable_metadata_features)
   std::string lock_tag;
   ::SnapContext snapc;
   parent_info parent;
+  cls::rbd::GroupSpec group_spec;
 
   ASSERT_EQ(0, get_mutable_metadata(&ioctx, oid, true, &size, &features,
 				    &incompatible_features, &lockers,
 				    &exclusive_lock, &lock_tag, &snapc,
-                                    &parent));
+                                    &parent, &group_spec));
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK), features);
   ASSERT_EQ(0U, incompatible_features);
 
   ASSERT_EQ(0, get_mutable_metadata(&ioctx, oid, false, &size, &features,
                                     &incompatible_features, &lockers,
                                     &exclusive_lock, &lock_tag, &snapc,
-                                    &parent));
+				    &parent, &group_spec));
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK), features);
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK),
 	    incompatible_features);
@@ -1834,4 +1836,182 @@ TEST_F(TestClsRbd, group_dir_remove_missing) {
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
   ASSERT_EQ(0U, keys.size());
+}
+
+void test_image_add(librados::IoCtx &ioctx, const string& group_id,
+		    const string& image_id, int64_t pool_id) {
+
+  cls::rbd::GroupImageStatus st(image_id, pool_id,
+			       cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
+  ASSERT_EQ(0, group_image_set(&ioctx, group_id, st));
+
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+
+  auto it = keys.begin();
+  ASSERT_EQ(2U, keys.size());
+
+  string image_key = cls::rbd::GroupImageSpec(image_id, pool_id).image_key();
+  ASSERT_EQ(image_key, *it);
+  ++it;
+  ASSERT_EQ("snap_seq", *it);
+}
+
+TEST_F(TestClsRbd, group_image_add) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id";
+  ASSERT_EQ(0, group_create(&ioctx, group_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  test_image_add(ioctx, group_id, image_id, pool_id);
+}
+
+TEST_F(TestClsRbd, group_image_remove) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id";
+  ASSERT_EQ(0, group_create(&ioctx, group_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  test_image_add(ioctx, group_id, image_id, pool_id);
+
+  cls::rbd::GroupImageSpec spec(image_id, pool_id);
+  ASSERT_EQ(0, group_image_remove(&ioctx, group_id, spec));
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ("snap_seq", *(keys.begin()));
+}
+
+TEST_F(TestClsRbd, group_image_list) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id";
+  ASSERT_EQ(0, group_create(&ioctx, group_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "imageid"; // Image id shouldn't contain underscores
+  test_image_add(ioctx, group_id, image_id, pool_id);
+
+  vector<cls::rbd::GroupImageStatus> images;
+  cls::rbd::GroupImageSpec empty_image_spec = cls::rbd::GroupImageSpec();
+  ASSERT_EQ(0, group_image_list(&ioctx, group_id, empty_image_spec, 1024, images));
+  ASSERT_EQ(1U, images.size());
+  ASSERT_EQ(image_id, images[0].spec.image_id);
+  ASSERT_EQ(pool_id, images[0].spec.pool_id);
+  ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE, images[0].state);
+
+  cls::rbd::GroupImageStatus last_image = *images.rbegin();
+  ASSERT_EQ(0, group_image_list(&ioctx, group_id, last_image.spec, 1024, images));
+  ASSERT_EQ(0U, images.size());
+}
+
+TEST_F(TestClsRbd, group_image_clean) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id1";
+  ASSERT_EQ(0, group_create(&ioctx, group_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  test_image_add(ioctx, group_id, image_id, pool_id);
+
+  cls::rbd::GroupImageStatus incomplete_st(image_id, pool_id,
+			       cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
+
+  ASSERT_EQ(0, group_image_set(&ioctx, group_id, incomplete_st));
+  // Set to dirty first in order to make sure that group_image_clean
+  // actually does something.
+  cls::rbd::GroupImageStatus attached_st(image_id, pool_id,
+			       cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED);
+  ASSERT_EQ(0, group_image_set(&ioctx, group_id, attached_st));
+
+  string image_key = cls::rbd::GroupImageSpec(image_id, pool_id).image_key();
+
+  map<string, bufferlist> vals;
+  ASSERT_EQ(0, ioctx.omap_get_vals(group_id, "", 10, &vals));
+
+  cls::rbd::GroupImageLinkState ref_state;
+  bufferlist::iterator it = vals[image_key].begin();
+  ::decode(ref_state, it);
+  ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED, ref_state);
+}
+
+TEST_F(TestClsRbd, image_add_group) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "imageid";
+
+  ASSERT_EQ(0, create_image(&ioctx, image_id, 2<<20, 0,
+			    RBD_FEATURE_LAYERING, image_id));
+
+  string group_id = "group_id";
+
+  cls::rbd::GroupSpec spec(group_id, pool_id);
+  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec));
+
+  map<string, bufferlist> vals;
+  ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
+
+  cls::rbd::GroupSpec val_spec;
+  bufferlist::iterator it = vals[RBD_GROUP_REF].begin();
+  ::decode(val_spec, it);
+
+  ASSERT_EQ(group_id, val_spec.group_id);
+  ASSERT_EQ(pool_id, val_spec.pool_id);
+}
+
+TEST_F(TestClsRbd, image_remove_group) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+
+  ASSERT_EQ(0, create_image(&ioctx, image_id, 2<<20, 0,
+			    RBD_FEATURE_LAYERING, image_id));
+
+  string group_id = "group_id";
+
+  cls::rbd::GroupSpec spec(group_id, pool_id);
+  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec));
+  // Add reference in order to make sure that image_remove_group actually
+  // does something.
+  ASSERT_EQ(0, image_remove_group(&ioctx, image_id, spec));
+
+  map<string, bufferlist> vals;
+  ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
+
+  ASSERT_EQ(0U, vals.size());
+}
+
+TEST_F(TestClsRbd, image_get_group) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "imageidgroupspec";
+
+  ASSERT_EQ(0, create_image(&ioctx, image_id, 2<<20, 0,
+			    RBD_FEATURE_LAYERING, image_id));
+
+  string group_id = "group_id_get_group_spec";
+
+  cls::rbd::GroupSpec spec_add(group_id, pool_id);
+  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec_add));
+
+  cls::rbd::GroupSpec spec;
+  ASSERT_EQ(0, image_get_group(&ioctx, image_id, spec));
+
+  ASSERT_EQ(group_id, spec.group_id);
+  ASSERT_EQ(pool_id, spec.pool_id);
 }
