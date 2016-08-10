@@ -3429,14 +3429,21 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
   dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
   if (!c->exists)
     return false;
-  RWLock::RLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
+
+  bool r = true;
+
+  {
+    RWLock::RLocker l(c->lock);
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists)
+      r = false;
+  }
+
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
-  if (!o || !o->exists)
-    return false;
-  return true;
+
+  return r;
 }
 
 int BlueStore::stat(
@@ -3461,14 +3468,18 @@ int BlueStore::stat(
   if (!c->exists)
     return -ENOENT;
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
-  RWLock::RLocker l(c->lock);
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists)
-    return -ENOENT;
-  st->st_size = o->onode.size;
-  st->st_blksize = 4096;
-  st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
-  st->st_nlink = 1;
+
+  {
+    RWLock::RLocker l(c->lock);
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists)
+      return -ENOENT;
+    st->st_size = o->onode.size;
+    st->st_blksize = 4096;
+    st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
+    st->st_nlink = 1;
+  }
+
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
@@ -3506,22 +3517,23 @@ int BlueStore::read(
 	   << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
 
   bl.clear();
-
   int r;
+  {
+    RWLock::RLocker l(c->lock);
 
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (offset == length && offset == 0)
+      length = o->onode.size;
+
+    r = _do_read(c, o, offset, length, bl, op_flags);
   }
-
-  if (offset == length && offset == 0)
-    length = o->onode.size;
-
-  r = _do_read(c, o, offset, length, bl, op_flags);
 
  out:
   c->cache->trim(
@@ -3819,57 +3831,59 @@ int BlueStore::fiemap(
   if (!c->exists)
     return -ENOENT;
   interval_set<uint64_t> m;
-  RWLock::RLocker l(c->lock);
+  {
+    RWLock::RLocker l(c->lock);
 
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    return -ENOENT;
-  }
-  _dump_onode(o);
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      return -ENOENT;
+    }
+    _dump_onode(o);
 
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size 0x" << o->onode.size << std::dec << dendl;
+    dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+	     << " size 0x" << o->onode.size << std::dec << dendl;
 
-  map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
-  if (offset > o->onode.size)
-    goto out;
+    map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
+    if (offset > o->onode.size)
+      goto out;
 
-  if (offset + length > o->onode.size) {
-    length = o->onode.size - offset;
-  }
-
-  eend = o->onode.extent_map.end();
-  ep = o->onode.extent_map.lower_bound(offset);
-  if (ep != o->onode.extent_map.begin()) {
-    --ep;
-  }
-  while (length > 0) {
-    dout(20) << __func__ << " offset " << offset << dendl;
-    if (ep != eend && ep->first + ep->second.length <= offset) {
-      ++ep;
-      continue;
+    if (offset + length > o->onode.size) {
+      length = o->onode.size - offset;
     }
 
-    uint64_t x_len = length;
-    if (ep != eend && ep->first <= offset) {
-      uint64_t x_off = offset - ep->first;
-      x_len = MIN(x_len, ep->second.length - x_off);
-      dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
-	       << x_len << std::dec << " blob " << ep->second.blob << dendl;
-      m.insert(offset, x_len);
-      length -= x_len;
+    eend = o->onode.extent_map.end();
+    ep = o->onode.extent_map.lower_bound(offset);
+    if (ep != o->onode.extent_map.begin()) {
+      --ep;
+    }
+    while (length > 0) {
+      dout(20) << __func__ << " offset " << offset << dendl;
+      if (ep != eend && ep->first + ep->second.length <= offset) {
+        ++ep;
+        continue;
+      }
+
+      uint64_t x_len = length;
+      if (ep != eend && ep->first <= offset) {
+        uint64_t x_off = offset - ep->first;
+        x_len = MIN(x_len, ep->second.length - x_off);
+        dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
+	         << x_len << std::dec << " blob " << ep->second.blob << dendl;
+        m.insert(offset, x_len);
+        length -= x_len;
+        offset += x_len;
+        if (x_off + x_len == ep->second.length)
+	  ++ep;
+        continue;
+      }
+      if (ep != eend &&
+	  ep->first > offset &&
+	  ep->first - offset < x_len) {
+        x_len = ep->first - offset;
+      }
       offset += x_len;
-      if (x_off + x_len == ep->second.length)
-	++ep;
-      continue;
+      length -= x_len;
     }
-    if (ep != eend &&
-	ep->first > offset &&
-	ep->first - offset < x_len) {
-      x_len = ep->first - offset;
-    }
-    offset += x_len;
-    length -= x_len;
   }
 
  out:
@@ -3904,22 +3918,25 @@ int BlueStore::getattr(
   dout(15) << __func__ << " " << c->cid << " " << oid << " " << name << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+
   int r;
-  string k(name);
+  {
+    RWLock::RLocker l(c->lock);
+    string k(name);
 
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
 
-  if (!o->onode.attrs.count(k)) {
-    r = -ENODATA;
-    goto out;
+    if (!o->onode.attrs.count(k)) {
+      r = -ENODATA;
+      goto out;
+    }
+    value = o->onode.attrs[k];
+    r = 0;
   }
-  value = o->onode.attrs[k];
-  r = 0;
  out:
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
@@ -3950,16 +3967,20 @@ int BlueStore::getattrs(
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
-  int r;
 
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
+  int r;
+  {
+    RWLock::RLocker l(c->lock);
+
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    aset = o->onode.attrs;
+    r = 0;
   }
-  aset = o->onode.attrs;
-  r = 0;
+
  out:
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
@@ -4033,108 +4054,112 @@ int BlueStore::collection_list(
     return -ENOENT;
   if (!sort_bitwise)
     return -EOPNOTSUPP;
-  RWLock::RLocker l(c->lock);
+
   int r = 0;
-  KeyValueDB::Iterator it;
-  string temp_start_key, temp_end_key;
-  string start_key, end_key;
-  bool set_next = false;
-  string pend;
-  bool temp;
+  {
+    RWLock::RLocker l(c->lock);
+    KeyValueDB::Iterator it;
+    string temp_start_key, temp_end_key;
+    string start_key, end_key;
+    bool set_next = false;
+    string pend;
+    bool temp;
 
-  ghobject_t static_next;
-  if (!pnext)
-    pnext = &static_next;
+    ghobject_t static_next;
+    if (!pnext)
+      pnext = &static_next;
 
-  if (start == ghobject_t::get_max() ||
-      start.hobj.is_max()) {
-    goto out;
-  }
-  get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
-		     &start_key, &end_key);
-  dout(20) << __func__
-	   << " range " << pretty_binary_string(temp_start_key)
-	   << " to " << pretty_binary_string(temp_end_key)
-	   << " and " << pretty_binary_string(start_key)
-	   << " to " << pretty_binary_string(end_key)
-	   << " start " << start << dendl;
-  it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t() ||
-      start.hobj == hobject_t() ||
-      start == c->cid.get_min_hobj()) {
-    it->upper_bound(temp_start_key);
-    temp = true;
-  } else {
-    string k;
-    get_object_key(start, &k);
-    if (start.hobj.is_temp()) {
+    if (start == ghobject_t::get_max() ||
+        start.hobj.is_max()) {
+      goto out;
+    }
+    get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
+  		     &start_key, &end_key);
+    dout(20) << __func__
+  	     << " range " << pretty_binary_string(temp_start_key)
+  	     << " to " << pretty_binary_string(temp_end_key)
+  	     << " and " << pretty_binary_string(start_key)
+  	     << " to " << pretty_binary_string(end_key)
+  	     << " start " << start << dendl;
+    it = db->get_iterator(PREFIX_OBJ);
+    if (start == ghobject_t() ||
+        start.hobj == hobject_t() ||
+        start == c->cid.get_min_hobj()) {
+      it->upper_bound(temp_start_key);
       temp = true;
-      assert(k >= temp_start_key && k < temp_end_key);
     } else {
-      temp = false;
-      assert(k >= start_key && k < end_key);
-    }
-    dout(20) << " start from " << pretty_binary_string(k)
-	     << " temp=" << (int)temp << dendl;
-    it->lower_bound(k);
-  }
-  if (end.hobj.is_max()) {
-    pend = temp ? temp_end_key : end_key;
-  } else {
-    get_object_key(end, &end_key);
-    if (end.hobj.is_temp()) {
-      if (temp)
-	pend = end_key;
-      else
-	goto out;
-    } else {
-      pend = temp ? temp_end_key : end_key;
-    }
-  }
-  dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
-  while (true) {
-    if (!it->valid() || it->key() > pend) {
-      if (!it->valid())
-	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
-      else
-	dout(20) << __func__ << " key " << pretty_binary_string(it->key())
-		 << " > " << end << dendl;
-      if (temp) {
-	if (end.hobj.is_temp()) {
-	  break;
-	}
-	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
-	temp = false;
-	it->upper_bound(start_key);
-	pend = end_key;
-	dout(30) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
-	continue;
+      string k;
+      get_object_key(start, &k);
+      if (start.hobj.is_temp()) {
+        temp = true;
+        assert(k >= temp_start_key && k < temp_end_key);
+      } else {
+        temp = false;
+        assert(k >= start_key && k < end_key);
       }
-      break;
+      dout(20) << " start from " << pretty_binary_string(k)
+  	       << " temp=" << (int)temp << dendl;
+      it->lower_bound(k);
     }
-    if (is_bnode_key(it->key())) {
-      dout(20) << __func__ << " key "
-	       << pretty_binary_string(it->key())
-	       << " (bnode, skipping)" << dendl;
+    if (end.hobj.is_max()) {
+      pend = temp ? temp_end_key : end_key;
+    } else {
+      get_object_key(end, &end_key);
+      if (end.hobj.is_temp()) {
+        if (temp)
+  	  pend = end_key;
+        else
+  	  goto out;
+      } else {
+        pend = temp ? temp_end_key : end_key;
+      }
+    }
+    dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
+    while (true) {
+      if (!it->valid() || it->key() > pend) {
+        if (!it->valid())
+  	  dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
+        else
+  	  dout(20) << __func__ << " key " << pretty_binary_string(it->key())
+  		   << " > " << end << dendl;
+        if (temp) {
+  	  if (end.hobj.is_temp()) {
+  	    break;
+  	  }
+  	  dout(30) << __func__ << " switch to non-temp namespace" << dendl;
+  	  temp = false;
+  	  it->upper_bound(start_key);
+  	  pend = end_key;
+  	  dout(30) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
+  	  continue;
+        }
+        break;
+      }
+      if (is_bnode_key(it->key())) {
+        dout(20) << __func__ << " key "
+  	         << pretty_binary_string(it->key())
+  	         << " (bnode, skipping)" << dendl;
+        it->next();
+        continue;
+      }
+      dout(20) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
+      ghobject_t oid;
+      int r = get_key_object(it->key(), &oid);
+      assert(r == 0);
+      if (ls->size() >= (unsigned)max) {
+        dout(20) << __func__ << " reached max " << max << dendl;
+        *pnext = oid;
+        set_next = true;
+        break;
+      }
+      ls->push_back(oid);
       it->next();
-      continue;
     }
-    dout(20) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
-    ghobject_t oid;
-    int r = get_key_object(it->key(), &oid);
-    assert(r == 0);
-    if (ls->size() >= (unsigned)max) {
-      dout(20) << __func__ << " reached max " << max << dendl;
-      *pnext = oid;
-      set_next = true;
-      break;
+    if (!set_next) {
+      *pnext = ghobject_t::get_max();
     }
-    ls->push_back(oid);
-    it->next();
   }
-  if (!set_next) {
-    *pnext = ghobject_t::get_max();
-  }
+
  out:
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
@@ -4876,28 +4901,32 @@ void BlueStore::_txc_finish(TransContext *txc)
 
 void BlueStore::_osr_reap_done(OpSequencer *osr)
 {
-  std::lock_guard<std::mutex> l(osr->qlock);
-  dout(20) << __func__ << " osr " << osr << dendl;
   CollectionRef c;
-  while (!osr->q.empty()) {
-    TransContext *txc = &osr->q.front();
-    dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
-	     << dendl;
-    if (txc->state != TransContext::STATE_DONE) {
-      break;
-    }
 
-    if (!c && txc->first_collection) {
-      c = txc->first_collection;
-    }
+  {
+    std::lock_guard<std::mutex> l(osr->qlock);
+    dout(20) << __func__ << " osr " << osr << dendl;
+    while (!osr->q.empty()) {
+      TransContext *txc = &osr->q.front();
+      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
+	       << dendl;
+      if (txc->state != TransContext::STATE_DONE) {
+        break;
+      }
 
-    osr->q.pop_front();
-    txc->log_state_latency(logger, l_bluestore_state_done_lat);
-    delete txc;
-    osr->qcond.notify_all();
-    if (osr->q.empty())
-      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
+      if (!c && txc->first_collection) {
+        c = txc->first_collection;
+      }
+
+      osr->q.pop_front();
+      txc->log_state_latency(logger, l_bluestore_state_done_lat);
+      delete txc;
+      osr->qcond.notify_all();
+      if (osr->q.empty())
+        dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
+    }
   }
+
   if (c) {
     c->cache->trim(
       g_conf->bluestore_onode_cache_size,
