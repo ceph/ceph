@@ -33,3 +33,6 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
+[submodule "src/blkin"]
+	path = src/blkin
+	url = https://github.com/linuxbox2/blkin
