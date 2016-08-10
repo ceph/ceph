@@ -34,9 +34,8 @@ def test_sh_fail(caplog):
             assert ('replay full' in record.message or
                     'ABC\n' == record.message)
 
-
 def test_sh_progress(caplog):
-    misc.sh("echo AB ; sleep 5 ; /bin/echo C", 2, include_stderr=True) == "ABC\n"
+    misc.sh("echo AB ; sleep 5 ; /bin/echo C", 2) == "ABC\n"
     records = caplog.records()
     assert ':sh: ' in records[0].message
     assert 'AB' == records[1].message
@@ -49,7 +48,6 @@ def test_sh_progress(caplog):
     t1 = datetime.strptime(records[1].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
     t2 = datetime.strptime(records[2].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
     assert (t2 - t1).total_seconds() > 2
-
 
 def test_wait_until_osds_up():
     ctx = argparse.Namespace()

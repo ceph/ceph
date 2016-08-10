@@ -1331,21 +1331,19 @@ def is_in_dict(searchkey, searchval, d):
         return searchval == val
 
 
-def sh(command, log_limit=1024, include_stderr=False):
+def sh(command, log_limit=1024):
     """
-    Run the shell command and return the output in ascii (stdout and optionally
-    stderr). If the command fails, raise an exception. The command and its
-    output are logged, on success and on error.
+    Run the shell command and return the output in ascii (stderr and
+    stdout).  If the command fails, raise an exception. The command
+    and its output are logged, on success and on error.
     """
     log.debug(":sh: " + command)
     proc = subprocess.Popen(
         args=command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT if include_stderr else subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         shell=True,
         bufsize=1)
-    if include_stderr is False:
-        log.debug("stderr: %s", proc.stderr.read())
     lines = []
     truncated = False
     with proc.stdout:
