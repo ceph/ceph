@@ -89,7 +89,8 @@ static void wait_shutdown()
   int val;
   int r = safe_read_exact(signal_fd[1], &val, sizeof(val));
   if (r < 0) {
-    derr << "safe_read_exact returned with error" << dendl;
+    derr << "safe_read_exact returned with error: "
+         << cpp_strerror(errno) << dendl;
   }
 }
 
