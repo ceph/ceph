@@ -58,10 +58,10 @@ class Integration(object):
         # move that to def tearDown for debug and when it works move it
         # back in tearDownClass so it is not called on every test
         ownedby = "ownedby='" + teuth_config.openstack['ip']
-        all_instances = teuthology.misc.sh("openstack server list -f json --long")
+        all_instances = teuthology.misc.sh("openstack -q server list -f json --long")
         for instance in json.loads(all_instances):
             if ownedby in instance['Properties']:
-                teuthology.misc.sh("openstack server delete --wait " + instance['ID'])
+                teuthology.misc.sh("openstack -q server delete --wait " + instance['ID'])
 
     def setup_worker(self):
         self.logs = self.d + "/log"
@@ -192,7 +192,7 @@ class TestSchedule(Integration):
         account if the instance has less than 4GB RAM.
         """
         try:
-            teuthology.misc.sh("openstack volume list")
+            teuthology.misc.sh("openstack -q volume list")
             job = 'teuthology/openstack/test/resources_hint.yaml'
             has_cinder = True
         except subprocess.CalledProcessError:

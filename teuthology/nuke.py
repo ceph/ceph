@@ -450,7 +450,7 @@ def stale_openstack_volumes(ctx, volumes):
     for volume in volumes:
         volume_id = volume.get('ID') or volume['id']
         try:
-            volume = json.loads(sh("openstack volume show -f json " +
+            volume = json.loads(sh("openstack -q volume show -f json " +
                                    volume_id))
         except subprocess.CalledProcessError:
             log.debug("stale-openstack: {id} disappeared, ignored"
