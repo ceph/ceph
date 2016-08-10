@@ -257,7 +257,7 @@ class LocalDaemon(object):
         Return PID as an integer or None if not found
         """
         ps_txt = self.controller.run(
-            args=["ps", "-xu"+str(os.getuid())]
+            args=["ps", "-xwwu"+str(os.getuid())]
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
 
