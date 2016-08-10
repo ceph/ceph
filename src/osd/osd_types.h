@@ -2690,7 +2690,7 @@ public:
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
-  void update_snaps(set<snapid_t> &old_snaps) {
+  void update_snaps(const set<snapid_t> &old_snaps) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
