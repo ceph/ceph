@@ -833,7 +833,6 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %systemd_postun ceph.target
 %endif
 
-#################################################################################
 %files common
 %defattr(-,root,root,-)
 %{_bindir}/ceph
@@ -923,7 +922,6 @@ if [ "$1" -eq "0" ] ; then
     rm -rf %{_sysconfdir}/ceph
 fi
 
-#################################################################################
 %files mds
 %{_bindir}/ceph-mds
 %{_mandir}/man8/ceph-mds.8*
@@ -971,7 +969,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files mon
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-rest-api
@@ -1022,20 +1019,17 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 %{_sbindir}/mount.fuse.ceph
 
-#################################################################################
 %files -n rbd-fuse
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
 
-#################################################################################
 %files -n rbd-mirror
 %defattr(-,root,root,-)
 %{_bindir}/rbd-mirror
@@ -1083,13 +1077,11 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files -n rbd-nbd
 %defattr(-,root,root,-)
 %{_bindir}/rbd-nbd
 %{_mandir}/man8/rbd-nbd.8*
 
-#################################################################################
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
@@ -1152,7 +1144,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files osd
 %{_bindir}/ceph-clsinfo
 %{_bindir}/ceph-bluefs-tool
@@ -1214,7 +1205,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %if %{with ocf}
 
 %files resource-agents
@@ -1227,7 +1217,6 @@ fi
 
 %endif
 
-#################################################################################
 %files -n librados2
 %defattr(-,root,root,-)
 %{_libdir}/librados.so.*
@@ -1241,7 +1230,6 @@ fi
 %postun -n librados2
 /sbin/ldconfig
 
-#################################################################################
 %files -n librados-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/rados
@@ -1261,13 +1249,11 @@ fi
 %{_bindir}/librados-config
 %{_mandir}/man8/librados-config.8*
 
-#################################################################################
 %files -n python-rados
 %defattr(-,root,root,-)
 %{python_sitearch}/rados.so
 %{python_sitearch}/rados-*.egg-info
 
-#################################################################################
 %files -n libradosstriper1
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
@@ -1278,7 +1264,6 @@ fi
 %postun -n libradosstriper1
 /sbin/ldconfig
 
-#################################################################################
 %files -n libradosstriper-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/radosstriper
@@ -1286,7 +1271,6 @@ fi
 %{_includedir}/radosstriper/libradosstriper.hpp
 %{_libdir}/libradosstriper.so
 
-#################################################################################
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
@@ -1302,7 +1286,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n librbd1
 /sbin/ldconfig
 
-#################################################################################
 %files -n librbd-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/rbd
@@ -1314,7 +1297,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_libdir}/librbd_tp.so
 %endif
 
-#################################################################################
 %files -n librgw2
 %defattr(-,root,root,-)
 %{_libdir}/librgw.so.*
@@ -1325,7 +1307,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n librgw2
 /sbin/ldconfig
 
-#################################################################################
 %files -n librgw-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/rados
@@ -1333,13 +1314,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
 
-#################################################################################
 %files -n python-rbd
 %defattr(-,root,root,-)
 %{python_sitearch}/rbd.so
 %{python_sitearch}/rbd-*.egg-info
 
-#################################################################################
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
@@ -1350,21 +1329,18 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n libcephfs1
 /sbin/ldconfig
 
-#################################################################################
 %files -n libcephfs-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
 %{_libdir}/libcephfs.so
 
-#################################################################################
 %files -n python-cephfs
 %defattr(-,root,root,-)
 %{python_sitearch}/cephfs.so
 %{python_sitearch}/cephfs-*.egg-info
 %{python_sitelib}/ceph_volume_client.py*
 
-#################################################################################
 %if 0%{with ceph_test_package}
 %files -n ceph-test
 %defattr(-,root,root,-)
@@ -1404,7 +1380,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
 %endif
 
-#################################################################################
 %if 0%{with cephfs_java}
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
@@ -1416,19 +1391,16 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n libcephfs_jni1
 /sbin/ldconfig
 
-#################################################################################
 %files -n libcephfs_jni-devel
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so
 
-#################################################################################
 %files -n cephfs-java
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
 %endif
 
-#################################################################################
 %if 0%{with selinux}
 %files selinux
 %defattr(-,root,root,-)
