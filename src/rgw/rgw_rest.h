@@ -6,6 +6,8 @@
 
 #define TIME_BUF_SIZE 128
 
+#include <boost/utility/string_ref.hpp>
+
 #include "common/ceph_json.h"
 #include "include/assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
@@ -529,10 +531,33 @@ extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, rgw_user& id, string& name,
 		       const char *section = NULL);
-extern void dump_string_header(struct req_state *s, const char *name,
-			       const char *val);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        const boost::string_ref& val);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        ceph::buffer::list& bl);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        long long val);
+extern void dump_header(struct req_state* s,
+                        const boost::string_ref& name,
+                        const utime_t& val);
+template <class... Args>
+static inline void dump_header_prefixed(struct req_state* s,
+                                        const boost::string_ref& name_prefix,
+                                        const boost::string_ref& name,
+                                        Args&&... args) {
+  char full_name_buf[name_prefix.size() + name.size() + 1];
+  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
+                            name_prefix.length(), name_prefix.data(),
+                            name.length(), name.data());
+  boost::string_ref full_name(full_name_buf, len);
+  return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
+}
 extern void dump_content_length(struct req_state *s, uint64_t len);
-extern void dump_etag(struct req_state *s, const char *etag);
+extern void dump_etag(struct req_state *s, const boost::string_ref& etag);
+extern void dump_etag(struct req_state *s, ceph::buffer::list& bl_etag);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
 extern void dump_last_modified(struct req_state *s, real_time t);
