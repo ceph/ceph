@@ -23,7 +23,7 @@ cephfs-pybind-install-exec: ${srcdir}/ceph_ver.h
 	fi ; \
 	cd $(srcdir)/pybind/cephfs; $(PY_DISTUTILS) build \
 	--build-base $(shell readlink -f $(builddir))/build \
-	--build-platlib $(shell readlink -f $(builddir))/build \
+	--build-platlib $(shell readlink -f $(builddir))/build/lib.2 \
 	install \
 	$$options $$root \
 	--single-version-externally-managed \
