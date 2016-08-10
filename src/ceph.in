@@ -66,20 +66,12 @@ def respawn_in_path(lib_path, pybind_path, pythonlib_path):
     sys.path.insert(0, os.path.join(MYDIR, pybind_path))
     sys.path.insert(0, os.path.join(MYDIR, pythonlib_path))
 
-def get_pythonlib_dir():
-    """Returns the name of a distutils build directory"""
-    import sysconfig
-    f = "lib.{platform}-{version[0]}.{version[1]}"
-    name = f.format(platform=sysconfig.get_platform(),
-                    version=sys.version_info)
-    return name
-
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
    os.path.exists(os.path.join(MYDIR, 'pybind')) and \
    os.path.exists(os.path.join(MYDIR, 'build')):
 
-    python_libpath = os.path.join(MYDIR, 'build', get_pythonlib_dir())
+    python_libpath = os.path.join(MYDIR, 'build')
     respawn_in_path(os.path.join(MYDIR, '.libs'), 'pybind', python_libpath)
     if 'PATH' in os.environ and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
@@ -100,12 +92,7 @@ elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
         lib_path = os.path.join(os.getcwd(), "lib")
         bin_path = os.path.join(os.getcwd(), "bin")
         pybind_path = os.path.join(src_path, "src", "pybind")
-
-        import sysconfig
-        f = "lib.{platform}-{version[0]}.{version[1]}"
-        name = f.format(platform=sysconfig.get_platform(),
-                        version=sys.version_info)
-        pythonlib_path = os.path.join(os.getcwd(), "lib/cython_modules", name)
+        pythonlib_path = os.path.join(lib_path, "cython_modules")
 
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
