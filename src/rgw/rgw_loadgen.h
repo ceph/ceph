@@ -50,6 +50,8 @@ public:
 
   std::size_t send_status(int status, const char *status_name);
   std::size_t send_100_continue();
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) override;
   std::size_t complete_header();
   std::size_t send_content_length(uint64_t len);
 

@@ -142,6 +142,13 @@ std::size_t RGWCivetWeb::send_100_continue()
   return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
 }
 
+std::size_t RGWCivetWeb::send_header(const boost::string_ref& name,
+                                     const boost::string_ref& value)
+{
+  return safe_mg_printf(conn, "%.*s: %.*s\r\n", name.length(), name.data(),
+                        value.length(), value.data());
+}
+
 std::size_t RGWCivetWeb::dump_date_header()
 {
   char timestr[TIME_BUF_SIZE];
