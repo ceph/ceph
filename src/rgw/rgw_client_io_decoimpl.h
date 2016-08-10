@@ -308,10 +308,8 @@ public:
     size_t sent = 0;
 
     if (! has_content_length) {
-      constexpr char TRANSFER_CHUNKED[] = "Transfer-Enconding: chunked\r\n";
-
-      sent += RGWDecoratedStreamIO<T>::write_data(TRANSFER_CHUNKED,
-                                                  sizeof(TRANSFER_CHUNKED) - 1);
+      sent += RGWDecoratedStreamIO<T>::send_header("Transfer-Enconding",
+                                                   "chunked");
       chunking_enabled = true;
     }
 

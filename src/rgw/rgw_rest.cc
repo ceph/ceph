@@ -369,48 +369,84 @@ void dump_errno(struct req_state *s, int http_ret)
   dump_status(s, http_ret, http_status_names[http_ret]);
 }
 
-void dump_string_header(struct req_state *s, const char *name, const char *val)
+void dump_header(struct req_state* const s,
+                 const boost::string_ref& name,
+                 const boost::string_ref& val)
 {
-  int r = STREAM_IO(s)->print("%s: %s\r\n", name, val);
+  const int r = STREAM_IO(s)->send_header(name, val);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+    ldout(s->cct, 0) << "ERROR: s->cio->send_header() returned err="
+                     << r << dendl;
   }
 }
 
-void dump_content_length(struct req_state *s, uint64_t len)
+void dump_header(struct req_state* const s,
+                 const boost::string_ref& name,
+                 ceph::buffer::list& bl)
+{
+  return dump_header(s, name, boost::string_ref(bl.c_str(), bl.length()));
+}
+
+void dump_header(struct req_state* const s,
+                 const boost::string_ref& name,
+                 const long long val)
+{
+  char buf[32];
+  const auto len = snprintf(buf, sizeof(buf), "%lld", val);
+
+  return dump_header(s, name, boost::string_ref(buf, len));
+}
+
+void dump_header(struct req_state* const s,
+                 const boost::string_ref& name,
+                 const utime_t& ut)
+{
+  char buf[32];
+  const auto len = snprintf(buf, sizeof(buf), "%lld.%05d",
+	                    static_cast<long long>(ut.sec()),
+                            static_cast<int>(ut.usec() / 10));
+
+  return dump_header(s, name, boost::string_ref(buf, len));
+}
+
+void dump_content_length(struct req_state* const s, const uint64_t len)
 {
   int r = STREAM_IO(s)->send_content_length(len);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << r << dendl;
   }
-  r = STREAM_IO(s)->print("Accept-Ranges: bytes\r\n");
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
-  }
+  dump_header(s, "Accept-Ranges", "bytes");
 }
 
-void dump_etag(struct req_state * const s, const char * const etag)
+void dump_etag(struct req_state* const s, const boost::string_ref& etag)
 {
-  if ('\0' == *etag) {
+  if (etag.empty()) {
     return;
   }
 
-  int r;
   if (s->prot_flags & RGW_REST_SWIFT) {
-    r = STREAM_IO(s)->print("etag: %s\r\n", etag);
+    return dump_header(s, "etag", etag);
   } else {
-    r = STREAM_IO(s)->print("ETag: \"%s\"\r\n", etag);
-  }
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+    /* We need two extra bytes for quotes. */
+    char buf[etag.size() + 2 + 1];
+    const auto len = snprintf(buf, sizeof(buf), "\"%s\"", etag.data());
+
+    return dump_header(s, "ETag", boost::string_ref(buf, len));
   }
 }
 
-void dump_pair(struct req_state *s, const char *key, const char *value)
+void dump_etag(struct req_state* const s, ceph::buffer::list& bl_etag)
+{
+  return dump_etag(s, boost::string_ref(bl_etag.c_str(), bl_etag.length()));
+}
+
+void dump_pair(struct req_state* const s,
+               const char* const key,
+               const char* const value)
 {
   if ( (strlen(key) > 0) && (strlen(value) > 0))
-    STREAM_IO(s)->print("%s: %s\r\n", key, value);
+    STREAM_IO(s)->send_header(key, value);
 }
 
 void dump_bucket_from_state(struct req_state *s)
@@ -425,7 +461,7 @@ void dump_bucket_from_state(struct req_state *s)
       } else {
         url_encode(s->bucket_name, b);
       }
-      STREAM_IO(s)->print("Bucket: %s\r\n", b.c_str());
+      STREAM_IO(s)->send_header("Bucket", b);
     }
   }
 }
@@ -447,12 +483,11 @@ void dump_uri_from_state(struct req_state *s)
       location += "/";
       if (!s->object.empty()) {
 	location += s->object.name;
-	STREAM_IO(s)->print("Location: %s\r\n", location.c_str());
+	dump_header(s, "Location", location);
       }
     }
-  }
-  else {
-    STREAM_IO(s)->print("Location: \"%s\"\r\n", s->info.request_uri.c_str());
+  } else {
+    dump_header(s, "Location", "\"" + s->info.request_uri + "\"");
   }
 }
 
@@ -461,11 +496,11 @@ void dump_redirect(struct req_state *s, const string& redirect)
   if (redirect.empty())
     return;
 
-  STREAM_IO(s)->print("Location: %s\r\n", redirect.c_str());
+  STREAM_IO(s)->send_header("Location", redirect);
 }
 
-static bool dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
-                                  const real_time t)
+static std::size_t dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
+                                         const real_time t)
 {
   const utime_t ut(t);
   time_t secs = static_cast<time_t>(ut.sec());
@@ -473,29 +508,23 @@ static bool dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
   struct tm result;
   const struct tm * const tmp = gmtime_r(&secs, &result);
   if (tmp == nullptr) {
-    return false;
+    return 0;
   }
 
-  if (strftime(timestr, sizeof(timestr),
-               "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0) {
-    return false;
-  }
-
-  return true;
+  return strftime(timestr, sizeof(timestr),
+                  "%a, %d %b %Y %H:%M:%S %Z", tmp);
 }
 
 void dump_time_header(struct req_state *s, const char *name, real_time t)
 {
   char timestr[TIME_BUF_SIZE];
 
-  if (! dump_time_header_impl(timestr, t)) {
+  const std::size_t len = dump_time_header_impl(timestr, t);
+  if (len == 0) {
     return;
   }
 
-  int r = STREAM_IO(s)->print("%s: %s\r\n", name, timestr);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
-  }
+  return dump_header(s, name, boost::string_ref(timestr, len));
 }
 
 std::string dump_time_to_str(const real_time& t)
@@ -515,14 +544,12 @@ void dump_last_modified(struct req_state *s, real_time t)
 void dump_epoch_header(struct req_state *s, const char *name, real_time t)
 {
   utime_t ut(t);
-  char sec_buf[32], nsec_buf[32];
-  snprintf(sec_buf, sizeof(sec_buf), "%lld", (long long)ut.sec());
-  snprintf(nsec_buf, sizeof(nsec_buf), "%09lld", (long long)ut.nsec());
+  char buf[65];
+  const auto len = snprintf(buf, sizeof(buf), "%lld.%09lld",
+                            (long long)ut.sec(),
+                            (long long)ut.nsec());
 
-  int r = STREAM_IO(s)->print("%s: %s.%s\r\n", name, sec_buf, nsec_buf);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
-  }
+  return dump_header(s, name, boost::string_ref(buf, len));
 }
 
 void dump_time(struct req_state *s, const char *name, real_time *t)
@@ -549,24 +576,27 @@ void dump_access_control(struct req_state *s, const char *origin,
 			 const char *hdr, const char *exp_hdr,
 			 uint32_t max_age) {
   if (origin && (origin[0] != '\0')) {
-    STREAM_IO(s)->print("Access-Control-Allow-Origin: %s\r\n", origin);
+    dump_header(s, "Access-Control-Allow-Origin", origin);
     /* If the server specifies an origin host rather than "*",
      * then it must also include Origin in the Vary response header
      * to indicate to clients that server responses will differ
      * based on the value of the Origin request header.
      */
-    if (strcmp(origin, "*") != 0)
-      STREAM_IO(s)->print("Vary: Origin\r\n");
+    if (strcmp(origin, "*") != 0) {
+      dump_header(s, "Vary", "Origin");
+    }
 
-    if (meth && (meth[0] != '\0'))
-      STREAM_IO(s)->print("Access-Control-Allow-Methods: %s\r\n", meth);
-    if (hdr && (hdr[0] != '\0'))
-      STREAM_IO(s)->print("Access-Control-Allow-Headers: %s\r\n", hdr);
+    if (meth && (meth[0] != '\0')) {
+      dump_header(s, "Access-Control-Allow-Methods", meth);
+    }
+    if (hdr && (hdr[0] != '\0')) {
+      dump_header(s, "Access-Control-Allow-Headers", hdr);
+    }
     if (exp_hdr && (exp_hdr[0] != '\0')) {
-      STREAM_IO(s)->print("Access-Control-Expose-Headers: %s\r\n", exp_hdr);
+      dump_header(s, "Access-Control-Expose-Headers", exp_hdr);
     }
     if (max_age != CORS_MAX_AGE_INVALID) {
-      STREAM_IO(s)->print("Access-Control-Max-Age: %d\r\n", max_age);
+      dump_header(s, "Access-Control-Max-Age", max_age);
     }
   }
 }
@@ -597,10 +627,9 @@ void dump_start(struct req_state *s)
 void dump_trans_id(req_state *s)
 {
   if (s->prot_flags & RGW_REST_SWIFT) {
-    STREAM_IO(s)->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
-  }
-  else if (s->trans_id.length()) {
-    STREAM_IO(s)->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
+    dump_header(s, "X-Trans-Id", s->trans_id);
+  } else if (s->trans_id.length()) {
+    dump_header(s, "x-amz-request-id", s->trans_id);
   }
 }
 
@@ -615,7 +644,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   if ((!s->err.is_err()) &&
       (s->bucket_info.owner != s->user->user_id) &&
       (s->bucket_info.requester_pays)) {
-    STREAM_IO(s)->print("x-amz-request-charged: requester\r\n");
+    dump_header(s, "x-amz-request-charged", "requester");
   }
 
   if (op) {
@@ -673,15 +702,10 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
     }
   }
 
-  int r;
   if (content_type) {
-      r = STREAM_IO(s)->print("Content-Type: %s\r\n", content_type);
-      if (r < 0) {
-	ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->print() returned err=" << r
-			 << dendl;
-      }
+    dump_header(s, "Content-Type", content_type);
   }
-  r = STREAM_IO(s)->complete_header();
+  int r = STREAM_IO(s)->complete_header();
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->complete_header() returned err="
 		     << r << dendl;
@@ -773,24 +797,27 @@ void dump_continue(struct req_state *s)
   STREAM_IO(s)->send_100_continue();
 }
 
-void dump_range(struct req_state *s, uint64_t ofs, uint64_t end,
-		uint64_t total)
+void dump_range(struct req_state* const s,
+                const uint64_t ofs,
+                const uint64_t end,
+		const uint64_t total)
 {
-  char range_buf[128];
-
   /* dumping range into temp buffer first, as libfcgi will fail to digest
    * %lld */
+  char range_buf[128];
+  std::size_t len;
 
-  if (!total) {
-    snprintf(range_buf, sizeof(range_buf), "*/%lld", (long long)total);
+  if (! total) {
+    len = snprintf(range_buf, sizeof(range_buf), "bytes */%lld",
+                   static_cast<long long>(total));
   } else {
-    snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs,
-		(long long)end, (long long)total);
+    len = snprintf(range_buf, sizeof(range_buf), "bytes %lld-%lld/%lld",
+                   static_cast<long long>(ofs),
+                   static_cast<long long>(end),
+                   static_cast<long long>(total));
   }
-  int r = STREAM_IO(s)->print("Content-Range: bytes %s\r\n", range_buf);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
-  }
+
+  return dump_header(s, "Content-Range", boost::string_ref(range_buf, len));
 }
 
 int RGWGetObj_ObjStore::get_params()
