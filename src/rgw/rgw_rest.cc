@@ -600,7 +600,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
 
 void dump_continue(struct req_state *s)
 {
-  perfcounter->inc(l_rgw_http_status_1xx);
+  perfcounter->inc(l_rgw_http_1xx_count);
   s->cio->send_100_continue();
 }
 
