@@ -184,6 +184,7 @@ namespace librbd {
     std::string journal_pool;
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
+    bool mirroring_resync_after_disconnect;
 
     LibrbdAdminSocketHook *asok_hook;
 

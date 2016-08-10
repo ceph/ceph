@@ -531,6 +531,10 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
 
   if (client.state != cls::journal::CLIENT_STATE_CONNECTED) {
     dout(5) << "client flagged disconnected, stopping image replay" << dendl;
+    if (m_local_image_ctx->mirroring_resync_after_disconnect) {
+      Mutex::Locker locker(m_lock);
+      m_stopping_for_resync = true;
+    }
     on_start_fail(-ENOTCONN, "disconnected");
     return;
   }

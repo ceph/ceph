@@ -1172,6 +1172,7 @@ OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will 
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
+OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 
 /*
  * The following options change the behavior for librbd's image creation methods that

@@ -930,7 +930,8 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_object_flush_age", false)(
         "rbd_journal_pool", false)(
         "rbd_journal_max_payload_bytes", false)(
-        "rbd_journal_max_concurrent_object_sets", false);
+        "rbd_journal_max_concurrent_object_sets", false)(
+        "rbd_mirroring_resync_after_disconnect", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -987,6 +988,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_pool);
     ASSIGN_OPTION(journal_max_payload_bytes);
     ASSIGN_OPTION(journal_max_concurrent_object_sets);
+    ASSIGN_OPTION(mirroring_resync_after_disconnect);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

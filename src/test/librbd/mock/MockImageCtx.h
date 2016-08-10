@@ -93,7 +93,9 @@ struct MockImageCtx {
       journal_pool(image_ctx.journal_pool),
       journal_max_payload_bytes(image_ctx.journal_max_payload_bytes),
       journal_max_concurrent_object_sets(
-          image_ctx.journal_max_concurrent_object_sets)
+          image_ctx.journal_max_concurrent_object_sets),
+      mirroring_resync_after_disconnect(
+          image_ctx.mirroring_resync_after_disconnect)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -260,6 +262,7 @@ struct MockImageCtx {
   std::string journal_pool;
   uint32_t journal_max_payload_bytes;
   int journal_max_concurrent_object_sets;
+  bool mirroring_resync_after_disconnect;
 };
 
 } // namespace librbd
