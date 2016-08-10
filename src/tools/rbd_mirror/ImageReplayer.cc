@@ -455,7 +455,14 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
     if (do_resync) {
       Context *on_finish = m_on_start_finish;
+      m_stopping_for_resync = true;
       FunctionContext *ctx = new FunctionContext([this, on_finish](int r) {
+	  if (r < 0) {
+	    if (on_finish) {
+	      on_finish->complete(r);
+	    }
+	    return;
+	  }
           resync_image(on_finish);
         });
       m_on_start_finish = ctx;
