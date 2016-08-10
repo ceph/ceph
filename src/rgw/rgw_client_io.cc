@@ -23,32 +23,6 @@ void RGWClientIO::init(CephContext *cct) {
 }
 
 
-int RGWStreamIOFacade::print(const char *format, ...)
-{
-#define LARGE_ENOUGH 128
-  int size = LARGE_ENOUGH;
-
-  va_list ap;
-
-  while(1) {
-    char buf[size];
-    va_start(ap, format);
-    int ret = vsnprintf(buf, size, format, ap);
-    va_end(ap);
-
-    if (ret >= 0 && ret < size) {
-      return write(buf, ret);
-    }
-
-    if (ret >= 0)
-      size = ret + 1;
-    else
-      size *= 2;
-  }
-
-  /* not reachable */
-}
-
 int RGWStreamIOFacade::write(const char *buf, int len)
 {
   if (len == 0) {

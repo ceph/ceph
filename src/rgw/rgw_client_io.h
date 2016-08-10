@@ -90,7 +90,6 @@ public:
   /* High-level utilities to move out to a client's facade. Those functions
    * are not intended for overriding by a front-end glue code. That's the
    * reason why they aren't virtuals. */
-  int print(const char *format, ...);
   int write(const char *buf, int len);
   int read(char *buf, int max, int *actual);
 };
