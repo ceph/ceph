@@ -601,8 +601,6 @@ endif()
 
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
-  $<TARGET_OBJECTS:krbd_objs>
-  $<TARGET_OBJECTS:parse_secret_objs>
   $<TARGET_OBJECTS:common_texttable_obj>
   )
 if(${WITH_RADOSGW})
@@ -611,15 +609,7 @@ if(${WITH_RADOSGW})
   )
   set(DENCODER_EXTRALIBS
     rgw_a
-    cls_version_client
-    cls_log_client
-    cls_refcount_client
-    cls_user_client
-    cls_statelog_client
     cls_rgw_client
-    fcgi
-    ${CURL_LIBRARIES}
-    ${EXPAT_LIBRARIES}
   )
 endif(${WITH_RADOSGW})
 if(${WITH_RBD})
@@ -630,14 +620,11 @@ endif(${WITH_RBD})
 
 add_executable(ceph-dencoder ${dencoder_srcs})
 target_link_libraries(ceph-dencoder
-  librados
-  librbd
   global
   os
   osd
   mds
   mon
-  osdc
   journal
   ${DENCODER_EXTRALIBS}
   cls_lock_client
@@ -649,10 +636,6 @@ target_link_libraries(ceph-dencoder
   cls_user_client
   cls_journal_client
   cls_timeindex_client
-  blkid
-  udev
-  keyutils
-  rbd_replay
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
