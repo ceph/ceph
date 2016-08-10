@@ -1,4 +1,5 @@
 
+
 ceph (0.94.6-1) stable; urgency=low
 
   * New upstream release
@@ -33,6 +34,14 @@ ceph (0.94.2-1~bpo70+1.fk1) stable; urgency=low
   
  -- Sharath Gururaj <sharath.g@flipkart.com>  Tue, 25 Jul 2016 12:32:34 -0700
    
+
+ceph (0.94.2-1~bpo70+1.fk2) stable; urgency=low
+
+  * Flipkart New upstream release
+    - HTTP Status count for RGW requests http://tracker.ceph.com/issues/16971
+
+ -- Prashant Kumar <prashant.kr@flipkart.com>  Wed, 10 Aug 2016 17:10:00 -0700
+
 ceph (0.94.2-1) stable; urgency=low
 
   * New upstream release
