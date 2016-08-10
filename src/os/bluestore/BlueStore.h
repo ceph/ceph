@@ -468,9 +468,11 @@ public:
   };
 
   struct OnodeSpace;
+  struct Collection;
 
   /// an in-memory object
   struct Onode {
+    Collection *collection;
     std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
@@ -490,8 +492,9 @@ public:
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(OnodeSpace *s, const ghobject_t& o, const string& k)
-      : nref(0),
+    Onode(Collection *c, OnodeSpace *s, const ghobject_t& o, const string& k)
+      : collection(c),
+	nref(0),
 	oid(o),
 	key(k),
 	space(s),
