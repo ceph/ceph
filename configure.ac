@@ -637,7 +637,8 @@ AS_IF([test "$with_profiler" = yes -o \
       [AC_LANG_PUSH([C++])
        AC_CHECK_HEADERS([gperftools/heap-profiler.h \
                          gperftools/malloc_extension.h \
-                         gperftools/profiler.h])
+                         gperftools/profiler.h], [],
+                         [AC_MSG_FAILURE([gperftools headers not found (use --without-profiler or disable tcmalloc)])])
        AC_LANG_POP([C++])])
 
 # error out if --with-jemalloc and ! --without-tcmalloc

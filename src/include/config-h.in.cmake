@@ -105,15 +105,6 @@
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
 
-/* Define to 1 if you have the <gperftools/heap-profiler.h> header file. */
-#cmakedefine HAVE_GPERFTOOLS_HEAP_PROFILER_H 1
-
-/* Define to 1 if you have the <gperftools/malloc_extension.h> header file. */
-#cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H 1
-
-/* Define to 1 if you have the <gperftools/profiler.h> header file. */
-#cmakedefine HAVE_GPERFTOOLS_PROFILER_H 1
-
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
 
