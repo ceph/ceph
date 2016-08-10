@@ -77,3 +77,9 @@ add_executable(unittest_osd_osdcap
 add_ceph_unittest(unittest_osd_osdcap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_osd_osdcap)
 target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
 
+# unittest PGTransaction
+add_executable(unittest_pg_transaction
+  test_pg_transaction.cc
+)
+add_ceph_unittest(unittest_pg_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pg_transaction)
+target_link_libraries(unittest_pg_transaction osd global ${BLKID_LIBRARIES})
