@@ -73,6 +73,8 @@ namespace librbd {
       bufferlist parent_bl;
       ::encode(snap, parent_bl);
       op->exec("rbd", "get_parent", parent_bl);
+
+      op->exec("rbd", "image_get_group", empty_bl);
       rados::cls::lock::get_lock_info_start(op, RBD_LOCK_NAME);
     }
 
@@ -82,7 +84,8 @@ namespace librbd {
                                     std::map<rados::cls::lock::locker_id_t,
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
-                                    ::SnapContext *snapc, parent_info *parent) {
+				    ::SnapContext *snapc, parent_info *parent,
+				    cls::rbd::GroupSpec *group_ref) {
       assert(size);
       assert(features);
       assert(incompatible_features);
@@ -90,6 +93,7 @@ namespace librbd {
       assert(exclusive_lock);
       assert(snapc);
       assert(parent);
+      assert(group_ref);
 
       try {
 	uint8_t order;
@@ -106,6 +110,8 @@ namespace librbd {
 	::decode(parent->spec.image_id, *it);
 	::decode(parent->spec.snap_id, *it);
 	::decode(parent->overlap, *it);
+	// group_image_get_group
+	::decode(*group_ref, *it);
 
 	// get_lock_info
 	ClsLockType lock_type = LOCK_NONE;
@@ -131,7 +137,8 @@ namespace librbd {
                              bool *exclusive_lock,
 			     string *lock_tag,
 			     ::SnapContext *snapc,
-			     parent_info *parent)
+			     parent_info *parent,
+			     cls::rbd::GroupSpec *group_ref)
     {
       librados::ObjectReadOperation op;
       get_mutable_metadata_start(&op, read_only);
@@ -146,7 +153,7 @@ namespace librbd {
       return get_mutable_metadata_finish(&it, size, features,
                                          incompatible_features, lockers,
                                          exclusive_lock, lock_tag, snapc,
-                                         parent);
+                                         parent, group_ref);
     }
 
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -1505,6 +1512,84 @@ namespace librbd {
       ::encode(name, in);
       ::encode(id, in);
       return ioctx->exec(oid, "rbd", "group_dir_remove", in, out);
+    }
+
+    int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
+			   const cls::rbd::GroupImageSpec &spec)
+    {
+      bufferlist bl, bl2;
+      ::encode(spec, bl);
+
+      return ioctx->exec(oid, "rbd", "group_image_remove", bl, bl2);
+    }
+
+    int group_image_list(librados::IoCtx *ioctx,
+			 const std::string &oid, const cls::rbd::GroupImageSpec &start,
+			 uint64_t max_return,
+			 std::vector<cls::rbd::GroupImageStatus>& images)
+    {
+      bufferlist bl, bl2;
+      ::encode(start, bl);
+      ::encode(max_return, bl);
+
+      int r = ioctx->exec(oid, "rbd", "group_image_list", bl, bl2);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = bl2.begin();
+      try {
+	::decode(images, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
+			const cls::rbd::GroupImageStatus &st)
+    {
+      bufferlist bl, bl2;
+      ::encode(st, bl);
+
+      return ioctx->exec(oid, "rbd", "group_image_set", bl, bl2);
+    }
+
+    int image_add_group(librados::IoCtx *ioctx, const std::string &oid,
+	                const cls::rbd::GroupSpec &group_spec)
+    {
+      bufferlist bl, bl2;
+      ::encode(group_spec, bl);
+
+      return ioctx->exec(oid, "rbd", "image_add_group", bl, bl2);
+    }
+
+    int image_remove_group(librados::IoCtx *ioctx, const std::string &oid,
+			   const cls::rbd::GroupSpec &group_spec)
+    {
+      bufferlist bl, bl2;
+      ::encode(group_spec, bl);
+
+      return ioctx->exec(oid, "rbd", "image_remove_group", bl, bl2);
+    }
+
+    int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
+			cls::rbd::GroupSpec &group_spec)
+    {
+      bufferlist in, out;
+
+      int r = ioctx->exec(oid, "rbd", "image_get_group", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(group_spec, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
     }
 
   } // namespace cls_client

@@ -61,3 +61,31 @@ TEST_F(TestLibCG, group_create)
   ASSERT_EQ(0, rbd.group_list(ioctx, groups));
   ASSERT_EQ(0U, groups.size());
 }
+
+TEST_F(TestLibCG, add_image)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  const char *group_name = "mycg";
+  const char *image_name = "myimage";
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.group_create(ioctx, group_name));
+  int order = 14;
+  ASSERT_EQ(0, rbd.create2(ioctx, image_name, 65535,
+	                   RBD_FEATURE_LAYERING, &order)); // Specified features make image of new format.
+
+  ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx, image_name));
+
+  vector<librbd::group_image_status_t> images;
+  ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, images));
+  ASSERT_EQ(1U, images.size());
+  ASSERT_EQ("myimage", images[0].name);
+  ASSERT_EQ(ioctx.get_id(), images[0].pool);
+
+  ASSERT_EQ(0, rbd.group_image_remove(ioctx, group_name, ioctx, image_name));
+
+  images.clear();
+  ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, images));
+  ASSERT_EQ(0U, images.size());
+}

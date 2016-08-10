@@ -1965,3 +1965,91 @@ TRACEPOINT_EVENT(librbd, update_unwatch_exit,
         ctf_integer(int, retval, retval)
     )
 )
+
+TRACEPOINT_EVENT(librbd, group_image_add_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, image_pool_name,
+        int64_t, image_id,
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(image_pool_name, image_pool_name)
+        ctf_integer(int64_t, image_id, image_id)
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_image_add_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_image_remove_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, image_pool_name,
+        int64_t, image_id,
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(image_pool_name, image_pool_name)
+        ctf_integer(int64_t, image_id, image_id)
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_image_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_image_list_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_image_list_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, image_get_group_enter,
+    TP_ARGS(
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, image_get_group_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

@@ -35,7 +35,6 @@ struct MockImageCtx {
     assert(s_instance != nullptr);
     return s_instance;
   }
-
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
@@ -73,6 +72,7 @@ struct MockImageCtx {
       name(image_ctx.name),
       parent_md(image_ctx.parent_md),
       format_string(image_ctx.format_string),
+      group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
@@ -222,6 +222,7 @@ struct MockImageCtx {
   std::string name;
   parent_info parent_md;
   char *format_string;
+  cls::rbd::GroupSpec group_spec;
 
   file_layout_t layout;
 
