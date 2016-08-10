@@ -147,14 +147,14 @@ struct MockJournalerProxy {
     MockJournaler::get_instance().construct();
   }
 
-  int exists(bool *header_exists) const {
-    return -EINVAL;
+  void exists(Context *on_finish) const {
+    on_finish->complete(-EINVAL);
   }
-  int create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
-    return -EINVAL;
+  void create(uint8_t order, uint8_t splay_width, int64_t pool_id, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
-  int remove(bool force) {
-    return -EINVAL;
+  void remove(bool force, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
   int register_client(const bufferlist &data) {
     return -EINVAL;

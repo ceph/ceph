@@ -17,6 +17,8 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
+#include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/CreateRequest.h"
 
 #include <boost/scope_exit.hpp>
 
@@ -152,21 +154,6 @@ public:
   }
   virtual ~ThreadPoolSingleton() {
     stop();
-  }
-};
-
-class SafeTimerSingleton : public SafeTimer {
-public:
-  Mutex lock;
-
-  explicit SafeTimerSingleton(CephContext *cct)
-      : SafeTimer(cct, lock, true),
-        lock("librbd::Journal::SafeTimerSingleton::lock") {
-    init();
-  }
-  virtual ~SafeTimerSingleton() {
-    Mutex::Locker locker(lock);
-    shutdown();
   }
 };
 
@@ -324,12 +311,7 @@ Journal<I>::Journal(I &image_ctx)
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
                                cct->_conf->rbd_op_thread_timeout,
                                thread_pool_singleton);
-
-  SafeTimerSingleton *safe_timer_singleton;
-  cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-    safe_timer_singleton, "librbd::journal::safe_timer");
-  m_timer = safe_timer_singleton;
-  m_timer_lock = &safe_timer_singleton->lock;
+  ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 }
 
 template <typename I>
@@ -355,58 +337,25 @@ bool Journal<I>::is_journal_supported(I &image_ctx) {
 
 template <typename I>
 int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
-		       uint8_t order, uint8_t splay_width,
-		       const std::string &object_pool, bool non_primary,
-                       const std::string &primary_mirror_uuid) {
+                       uint8_t order, uint8_t splay_width,
+                       const std::string &object_pool) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  librados::Rados rados(io_ctx);
-  int64_t pool_id = -1;
-  if (!object_pool.empty()) {
-    IoCtx data_io_ctx;
-    int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
-    if (r != 0) {
-      lderr(cct) << __func__ << ": "
-                 << "failed to create journal: "
-		 << "error opening journal objects pool '" << object_pool
-		 << "': " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    pool_id = data_io_ctx.get_id();
-  }
+  C_SaferCond cond;
+  journal::TagData tag_data(LOCAL_MIRROR_UUID);
+  ContextWQ op_work_queue("librbd::op_work_queue",
+                          cct->_conf->rbd_op_thread_timeout,
+                          ImageCtx::get_thread_pool_instance(cct));
+  journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
+    io_ctx, image_id, order, splay_width, object_pool, cls::journal::Tag::TAG_CLASS_NEW,
+    tag_data, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+  req->send();
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
+  int r = cond.wait();
+  op_work_queue.drain();
 
-  int r = journaler.create(order, splay_width, pool_id);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  cls::journal::Client client;
-  cls::journal::Tag tag;
-  journal::TagData tag_data;
-
-  assert(non_primary ^ primary_mirror_uuid.empty());
-  std::string mirror_uuid = (non_primary ? primary_mirror_uuid :
-                                           LOCAL_MIRROR_UUID);
-  r = allocate_journaler_tag(cct, &journaler, client,
-                             cls::journal::Tag::TAG_CLASS_NEW,
-                             tag_data, mirror_uuid, &tag);
-
-  bufferlist client_data;
-  ::encode(journal::ClientData{journal::ImageClientMeta{tag.tag_class}},
-           client_data);
-
-  r = journaler.register_client(client_data);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to register client: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -414,40 +363,18 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
-
-  bool journal_exists;
-  int r = journaler.exists(&journal_exists);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to stat journal header: " << cpp_strerror(r) << dendl;
-    return r;
-  } else if (!journal_exists) {
-    return 0;
-  }
-
   C_SaferCond cond;
-  journaler.init(&cond);
-  BOOST_SCOPE_EXIT_ALL(&journaler) {
-    journaler.shut_down();
-  };
+  ContextWQ op_work_queue("librbd::op_work_queue",
+                          cct->_conf->rbd_op_thread_timeout,
+                          ImageCtx::get_thread_pool_instance(cct));
+  journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
+    io_ctx, image_id, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+  req->send();
 
-  r = cond.wait();
-  if (r == -ENOENT) {
-    return 0;
-  } else if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to initialize journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  int r = cond.wait();
+  op_work_queue.drain();
 
-  r = journaler.remove(true);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to remove journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -487,14 +414,16 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     }
   }
 
-  r = journaler.remove(true);
+  C_SaferCond ctx1;
+  journaler.remove(true, &ctx1);
+  r = ctx1.wait();
   if (r < 0) {
     lderr(cct) << __func__ << ": "
                << "failed to reset journal: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  r = create(io_ctx, image_id, order, splay_width, pool_name, false, "");
+  r = create(io_ctx, image_id, order, splay_width, pool_name);
   if (r < 0) {
     lderr(cct) << __func__ << ": "
                << "failed to create journal: " << cpp_strerror(r) << dendl;

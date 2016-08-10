@@ -175,15 +175,22 @@ struct C_MutableMetadata : public C_AioExec {
 
 } // anonymous namespace
 
+void create(librados::ObjectWriteOperation *op,
+            uint8_t order, uint8_t splay, int64_t pool_id) {
+  bufferlist bl;
+  ::encode(order, bl);
+  ::encode(splay, bl);
+  ::encode(pool_id, bl);
+
+  op->exec("journal", "create", bl);
+}
+
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
            uint8_t splay, int64_t pool_id) {
-  bufferlist inbl;
-  ::encode(order, inbl);
-  ::encode(splay, inbl);
-  ::encode(pool_id, inbl);
+  librados::ObjectWriteOperation op;
+  create(&op, order, splay, pool_id);
 
-  bufferlist outbl;
-  int r = ioctx.exec(oid, "journal", "create", inbl, outbl);
+  int r = ioctx.operate(oid, &op);
   if (r < 0) {
     return r;
   }

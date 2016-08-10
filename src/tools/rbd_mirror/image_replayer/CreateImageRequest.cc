@@ -12,6 +12,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/image/CreateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -59,35 +60,25 @@ template <typename I>
 void CreateImageRequest<I>::create_image() {
   dout(20) << dendl;
 
-  // TODO: librbd should provide an AIO image creation method -- this is
-  //       blocking so we execute in our worker thread
-  Context *ctx = new FunctionContext([this](int r) {
-      // TODO: rbd-mirror should offer a feature mask capability
-      RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
-      int order = m_remote_image_ctx->order;
+  using klass = CreateImageRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_create_image>(this);
 
-      CephContext *cct = reinterpret_cast<CephContext*>(m_local_io_ctx.cct());
-      uint64_t journal_order = cct->_conf->rbd_journal_order;
-      uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
-      std::string journal_pool = cct->_conf->rbd_journal_pool;
+  RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
+  int order = m_remote_image_ctx->order;
 
-      // NOTE: bid is 64bit but overflow will result due to
-      // RBD_MAX_BLOCK_NAME_SIZE being too small
-      librados::Rados rados(m_local_io_ctx);
-      uint64_t bid = rados.get_instance_id();
+  CephContext *cct = reinterpret_cast<CephContext*>(m_local_io_ctx.cct());
+  uint64_t journal_order = cct->_conf->rbd_journal_order;
+  uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
+  std::string journal_pool = cct->_conf->rbd_journal_pool;
+  std::string id = librbd::util::generate_image_id(m_local_io_ctx);
 
-      r = utils::create_image(m_local_io_ctx, m_remote_image_ctx,
-                              m_local_image_name.c_str(), bid,
-                              m_remote_image_ctx->size, order,
-                              m_remote_image_ctx->features,
-                              m_remote_image_ctx->stripe_unit,
-                              m_remote_image_ctx->stripe_count,
-                              journal_order, journal_splay_width,
-                              journal_pool, m_global_image_id,
-                              m_remote_mirror_uuid);
-      handle_create_image(r);
-    });
-  m_work_queue->queue(ctx, 0);
+  librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
+    m_local_io_ctx, m_local_image_name, id, m_remote_image_ctx->size,
+    order, m_remote_image_ctx->features, m_remote_image_ctx->stripe_unit,
+    m_remote_image_ctx->stripe_count, journal_order, journal_splay_width,
+    journal_pool, m_global_image_id, m_remote_mirror_uuid,
+    m_remote_image_ctx->op_work_queue, ctx);
+  req->send();
 }
 
 template <typename I>

@@ -36,5 +36,24 @@ librados::AioCompletion *create_rados_ack_callback(Context *on_finish) {
   return create_rados_ack_callback<Context, &Context::complete>(on_finish);
 }
 
+std::string generate_image_id(librados::IoCtx &ioctx) {
+  librados::Rados rados(ioctx);
+
+  uint64_t bid = rados.get_instance_id();
+  uint32_t extra = rand() % 0xFFFFFFFF;
+
+  ostringstream bid_ss;
+  bid_ss << std::hex << bid << std::hex << extra;
+  std::string id = bid_ss.str();
+
+  // ensure the image id won't overflow the fixed block name size
+  const size_t max_id_length = RBD_MAX_BLOCK_NAME_SIZE - strlen(RBD_DATA_PREFIX) - 1;
+  if (id.length() > max_id_length) {
+    id = id.substr(id.length() - max_id_length);
+  }
+
+  return id;
+}
+
 } // namespace util
 } // namespace librbd

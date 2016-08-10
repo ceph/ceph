@@ -14,6 +14,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 #include "librbd/parent_types.h"
+#include "common/WorkQueue.h"
 
 enum {
   l_librbd_first = 26000,
@@ -97,6 +98,13 @@ namespace librbd {
 		    std::set<std::pair<std::string, std::string> > & names);
   int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
              std::map<std::pair<int64_t, std::string >, std::set<std::string> >& image_info);
+  void create_v2(IoCtx& io_ctx, std::string &imgname, uint64_t size,
+                 int order, uint64_t features, uint64_t stripe_unit,
+                 uint64_t stripe_count, uint8_t journal_order,
+                 uint8_t journal_splay_width, const std::string &journal_pool,
+                 const std::string &non_primary_global_image_id,
+                 const std::string &primary_mirror_uuid,
+                 ContextWQ *op_work_queue, Context *ctx);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -106,13 +114,6 @@ namespace librbd {
 	     ImageOptions& opts,
              const std::string &non_primary_global_image_id,
              const std::string &primary_mirror_uuid);
-  int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
-                int order, uint64_t features, uint64_t stripe_unit,
-                uint64_t stripe_count, uint8_t journal_order,
-                uint8_t journal_splay_width,
-                const std::string &journal_pool,
-                const std::string &non_primary_global_image_id,
-                const std::string &primary_mirror_uuid);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
