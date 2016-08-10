@@ -70,6 +70,11 @@ public:
     return get_decoratee().send_100_continue();
   }
 
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) override {
+    return get_decoratee().send_header(name, value);
+  }
+
   std::size_t send_content_length(const uint64_t len) override {
     return get_decoratee().send_content_length(len);
   }
@@ -137,6 +142,15 @@ public:
 
   std::size_t send_100_continue() override {
     const auto sent = RGWDecoratedStreamIO<T>::send_100_continue();
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) override {
+    const auto sent = RGWDecoratedStreamIO<T>::send_header(name, value);
     if (enabled) {
       total_sent += sent;
     }

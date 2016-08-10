@@ -10,8 +10,9 @@
 #include <istream>
 #include <stdlib.h>
 
-#include "include/types.h"
+#include <boost/utility/string_ref.hpp>
 
+#include "include/types.h"
 #include "rgw_common.h"
 
 class RGWClientIO {
@@ -62,8 +63,15 @@ public:
 
   virtual std::size_t send_status(int status, const char *status_name) = 0;
   virtual std::size_t send_100_continue() = 0;
-  virtual std::size_t complete_header() = 0;
+
+  /* Send header to client. On success returns number of bytes sent to the direct
+   * client of RadosGW. On failure throws int containing errno. boost::string_ref
+   * is being used because of length it internally carries. */
+  virtual std::size_t send_header(const boost::string_ref& name,
+                                  const boost::string_ref& value) = 0;
+
   virtual std::size_t send_content_length(uint64_t len) = 0;
+  virtual std::size_t complete_header() = 0;
   virtual void flush() = 0;
 };
 
@@ -110,6 +118,8 @@ public:
   virtual int write_data(const char *buf, int len) = 0;
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
+  virtual std::size_t send_header(const boost::string_ref& name,
+                                  const boost::string_ref& value) noexcept = 0;
   virtual int complete_header() = 0;
   virtual int send_content_length(uint64_t len) = 0;
   virtual void flush() = 0;
@@ -192,6 +202,11 @@ public:
 
   int send_status(const int status, const char* const status_name) override {
     EXCPT_TO_RC(get_decoratee().send_status(status, status_name));
+  }
+
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) noexcept override {
+    EXCPT_TO_RC(get_decoratee().send_header(name, value));
   }
 
   int send_100_continue() override {

@@ -50,8 +50,10 @@ class RGWAsioClientIO : public RGWStreamIOEngine {
   void flush() override;
   std::size_t send_status(int status, const char *status_name) override;
   std::size_t send_100_continue() override;
-  std::size_t complete_header() override;
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) override;
   std::size_t send_content_length(uint64_t len) override;
+  std::size_t complete_header() override;
 
   RGWEnv& get_env() noexcept override {
     return env;

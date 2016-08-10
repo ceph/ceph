@@ -46,7 +46,23 @@ std::size_t RGWFCGX::send_status(const int status, const char* const status_name
 
 std::size_t RGWFCGX::send_100_continue()
 {
-  return send_status(100, "Continue");
+  const auto sent = send_status(100, "Continue");
+  flush();
+  return sent;
+}
+
+std::size_t RGWFCGX::send_header(const boost::string_ref& name,
+                                 const boost::string_ref& value)
+{
+  char hdrbuf[name.size() + 2 + value.size() + 2 + 1];
+  const auto hdrlen = snprintf(hdrbuf, sizeof(hdrbuf),
+                               "%.*s: %.*s\r\n",
+                               static_cast<int>(name.length()),
+                               name.data(),
+                               static_cast<int>(value.length()),
+                               value.data());
+
+  return write_data(hdrbuf, hdrlen);
 }
 
 std::size_t RGWFCGX::send_content_length(const uint64_t len)
@@ -62,6 +78,6 @@ std::size_t RGWFCGX::send_content_length(const uint64_t len)
 
 std::size_t RGWFCGX::complete_header()
 {
-  constexpr char HEADER_END[] = "\r\n";
+  static constexpr char HEADER_END[] = "\r\n";
   return write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }
