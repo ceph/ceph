@@ -876,6 +876,10 @@ void ImageReplayer<I>::replay_flush() {
 
   {
     Mutex::Locker locker(m_lock);
+    if (m_state != STATE_REPLAYING) {
+      dout(20) << "replay interrupted" << dendl;
+      return;
+    }
     m_state = STATE_REPLAY_FLUSHING;
   }
 
