@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/WorkQueue.h"
+#include "common/Timer.h"
 
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioCompletion.h"
@@ -59,6 +60,21 @@ public:
   }
   virtual ~ThreadPoolSingleton() {
     stop();
+  }
+};
+
+class SafeTimerSingleton : public SafeTimer {
+public:
+  Mutex lock;
+
+  explicit SafeTimerSingleton(CephContext *cct)
+      : SafeTimer(cct, lock, true),
+        lock("librbd::Journal::SafeTimerSingleton::lock") {
+    init();
+  }
+  virtual ~SafeTimerSingleton() {
+    Mutex::Locker locker(lock);
+    shutdown();
   }
 };
 
@@ -181,9 +197,7 @@ struct C_InvalidateCache : public Context {
 
     memset(&header, 0, sizeof(header));
 
-    ThreadPoolSingleton *thread_pool_singleton;
-    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::thread_pool");
+    ThreadPool *thread_pool_singleton = get_thread_pool_instance(cct);
     aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
                                            cct->_conf->rbd_op_thread_timeout,
                                            thread_pool_singleton);
@@ -1043,5 +1057,21 @@ struct C_InvalidateCache : public Context {
     assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
+  }
+
+  ThreadPool *ImageCtx::get_thread_pool_instance(CephContext *cct) {
+    ThreadPoolSingleton *thread_pool_singleton;
+    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "librbd::thread_pool");
+    return thread_pool_singleton;
+  }
+
+  void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
+                                    Mutex **timer_lock) {
+    SafeTimerSingleton *safe_timer_singleton;
+    cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
+      safe_timer_singleton, "librbd::journal::safe_timer");
+    *timer = safe_timer_singleton;
+    *timer_lock = &safe_timer_singleton->lock;
   }
 }

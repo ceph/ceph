@@ -30,12 +30,15 @@ set(librbd_internal_srcs
   exclusive_lock/ReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
   image/CloseRequest.cc
+  image/CreateRequest.cc
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
   image/SetSnapRequest.cc
   image_watcher/Notifier.cc
   image_watcher/NotifyLockOwner.cc
+  journal/RemoveRequest.cc
+  journal/CreateRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   object_map/InvalidateRequest.cc

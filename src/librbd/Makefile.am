@@ -35,12 +35,15 @@ librbd_internal_la_SOURCES = \
 	librbd/exclusive_lock/ReleaseRequest.cc \
 	librbd/exclusive_lock/StandardPolicy.cc \
 	librbd/image/CloseRequest.cc \
+	librbd/image/CreateRequest.cc \
 	librbd/image/OpenRequest.cc \
 	librbd/image/RefreshParentRequest.cc \
 	librbd/image/RefreshRequest.cc \
 	librbd/image/SetSnapRequest.cc \
 	librbd/image_watcher/Notifier.cc \
 	librbd/image_watcher/NotifyLockOwner.cc \
+	librbd/journal/RemoveRequest.cc \
+	librbd/journal/CreateRequest.cc \
 	librbd/journal/Replay.cc \
 	librbd/journal/StandardPolicy.cc \
 	librbd/object_map/InvalidateRequest.cc \
@@ -123,12 +126,15 @@ noinst_HEADERS += \
 	librbd/exclusive_lock/ReleaseRequest.h \
 	librbd/exclusive_lock/StandardPolicy.h \
 	librbd/image/CloseRequest.h \
+	librbd/image/CreateRequest.h \
 	librbd/image/OpenRequest.h \
 	librbd/image/RefreshParentRequest.h \
 	librbd/image/RefreshRequest.h \
 	librbd/image/SetSnapRequest.h \
 	librbd/image_watcher/Notifier.h \
 	librbd/image_watcher/NotifyLockOwner.h \
+	librbd/journal/RemoveRequest.h \
+	librbd/journal/CreateRequest.h \
 	librbd/journal/Policy.h \
 	librbd/journal/Replay.h \
 	librbd/journal/StandardPolicy.h \

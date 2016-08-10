@@ -163,7 +163,10 @@ TEST_F(TestJournalTrimmer, RemoveObjects) {
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
 
-  ASSERT_EQ(0, trimmer->remove_objects(false));
+  C_SaferCond cond;
+  trimmer->remove_objects(false, &cond);
+  ASSERT_EQ(0, cond.wait());
+
   ASSERT_TRUE(wait_for_update(metadata));
 
   ASSERT_EQ(-ENOENT, assert_exists(oid + ".0"));
@@ -183,7 +186,13 @@ TEST_F(TestJournalTrimmer, RemoveObjectsWithOtherClient) {
   ASSERT_TRUE(wait_for_update(metadata));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
-  ASSERT_EQ(-EBUSY, trimmer->remove_objects(false));
-  ASSERT_EQ(0, trimmer->remove_objects(true));
+
+  C_SaferCond ctx1;
+  trimmer->remove_objects(false, &ctx1);
+  ASSERT_EQ(-EBUSY, ctx1.wait());
+
+  C_SaferCond ctx2;
+  trimmer->remove_objects(true, &ctx2);
+  ASSERT_EQ(0, ctx2.wait());
 }
 

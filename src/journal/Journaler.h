@@ -58,9 +58,9 @@ public:
 	    const std::string &client_id, const Settings &settings);
   ~Journaler();
 
-  int exists(bool *header_exists) const;
-  int create(uint8_t order, uint8_t splay_width, int64_t pool_id);
-  int remove(bool force);
+  void exists(Context *on_finish) const;
+  void create(uint8_t order, uint8_t splay_width, int64_t pool_id, Context *ctx);
+  void remove(bool force, Context *on_finish);
 
   void init(Context *on_init);
   void shut_down();

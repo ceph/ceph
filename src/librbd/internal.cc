@@ -25,6 +25,7 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/image/CreateRequest.h"
 #include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -1067,8 +1068,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return r;
   }
 
-  int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t bid,
-		uint64_t size, int order)
+  int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t size, int order)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
 
@@ -1084,6 +1084,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 		 << dendl;
       return r;
     }
+
+    Rados rados(io_ctx);
+    uint64_t bid = rados.get_instance_id();
 
     ldout(cct, 2) << "creating rbd image..." << dendl;
     struct rbd_obj_header_ondisk header;
@@ -1110,196 +1113,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
-  int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
-		int order, uint64_t features, uint64_t stripe_unit,
-		uint64_t stripe_count, uint8_t journal_order,
-                uint8_t journal_splay_width, const std::string &journal_pool,
-                const std::string &non_primary_global_image_id,
-                const std::string &primary_mirror_uuid)
-  {
-    ostringstream bid_ss;
-    uint32_t extra;
-    string id, id_obj, header_oid;
-    int remove_r;
-    ostringstream oss;
-    CephContext *cct = (CephContext *)io_ctx.cct();
-
-    file_layout_t layout;
-    bool force_non_primary = !non_primary_global_image_id.empty();
-
-    int r = validate_pool(io_ctx, cct);
-    if (r < 0) {
-      return r;
-    }
-
-    id_obj = util::id_obj_name(imgname);
-
-    r = io_ctx.create(id_obj, true);
-    if (r < 0) {
-      lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
-		 << dendl;
-      return r;
-    }
-
-    extra = rand() % 0xFFFFFFFF;
-    bid_ss << std::hex << bid << std::hex << extra;
-    id = bid_ss.str();
-
-    // ensure the image id won't overflow the fixed block name size
-    const size_t max_id_length = RBD_MAX_BLOCK_NAME_SIZE -
-                                 strlen(RBD_DATA_PREFIX) - 1;
-    if (id.length() > max_id_length) {
-      id = id.substr(id.length() - max_id_length);
-    }
-
-    r = cls_client::set_id(&io_ctx, id_obj, id);
-    if (r < 0) {
-      lderr(cct) << "error setting image id: " << cpp_strerror(r) << dendl;
-      goto err_remove_id;
-    }
-
-    ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-    r = cls_client::dir_add_image(&io_ctx, RBD_DIRECTORY, imgname, id);
-    if (r < 0) {
-      lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
-		 << dendl;
-      goto err_remove_id;
-    }
-
-    oss << RBD_DATA_PREFIX << id;
-    header_oid = util::header_name(id);
-    r = cls_client::create_image(&io_ctx, header_oid, size, order,
-				 features, oss.str());
-    if (r < 0) {
-      lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
-      goto err_remove_from_dir;
-    }
-
-    if ((stripe_unit || stripe_count) &&
-	(stripe_count != 1 || stripe_unit != (1ull << order))) {
-      r = cls_client::set_stripe_unit_count(&io_ctx, header_oid,
-					    stripe_unit, stripe_count);
-      if (r < 0) {
-	lderr(cct) << "error setting striping parameters: "
-		   << cpp_strerror(r) << dendl;
-	goto err_remove_header;
-      }
-    }
-
-    if ((features & RBD_FEATURE_FAST_DIFF) != 0 &&
-        (features & RBD_FEATURE_OBJECT_MAP) == 0) {
-      lderr(cct) << "cannot use fast diff without object map" << dendl;
-      goto err_remove_header;
-    } else if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-        lderr(cct) << "cannot use object map without exclusive lock" << dendl;
-        goto err_remove_header;
-      }
-
-      layout = file_layout_t();
-      layout.object_size = 1ull << order;
-      if (stripe_unit == 0 || stripe_count == 0) {
-        layout.stripe_unit = layout.object_size;
-        layout.stripe_count = 1;
-      } else {
-        layout.stripe_unit = stripe_unit;
-        layout.stripe_count = stripe_count;
-      }
-
-      if (!ObjectMap::is_compatible(layout, size)) {
-        lderr(cct) << "image size not compatible with object map" << dendl;
-        goto err_remove_header;
-      }
-
-      librados::ObjectWriteOperation op;
-      cls_client::object_map_resize(&op, Striper::get_num_objects(layout, size),
-                                    OBJECT_NONEXISTENT);
-      r = io_ctx.operate(ObjectMap::object_map_name(id, CEPH_NOSNAP), &op);
-      if (r < 0) {
-        lderr(cct) << "error creating initial object map: "
-                   << cpp_strerror(r) << dendl;
-        goto err_remove_header;
-      }
-    }
-
-    if ((features & RBD_FEATURE_JOURNALING) != 0) {
-      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-        lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
-        goto err_remove_object_map;
-      }
-
-      rbd_mirror_mode_t mirror_mode;
-      r = librbd::mirror_mode_get(io_ctx, &mirror_mode);
-      if (r < 0) {
-        lderr(cct) << "error in retrieving pool mirroring status: "
-                   << cpp_strerror(r) << dendl;
-        goto err_remove_object_map;
-      }
-
-      r = Journal<>::create(io_ctx, id, journal_order, journal_splay_width,
-			    journal_pool, force_non_primary,
-                            primary_mirror_uuid);
-      if (r < 0) {
-        lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
-        goto err_remove_object_map;
-      }
-
-      if (mirror_mode == RBD_MIRROR_MODE_POOL || force_non_primary) {
-        r = mirror_image_enable(cct, io_ctx, id, non_primary_global_image_id);
-        if (r < 0) {
-          lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
-                     << dendl;
-          goto err_remove_journal;
-        }
-      }
-    } else if (force_non_primary) {
-      // journaling should have been enabled
-      assert(false);
-    }
-
-    ldout(cct, 2) << "done." << dendl;
-    return 0;
-
-  err_remove_journal:
-    if ((features & RBD_FEATURE_JOURNALING) != 0) {
-      remove_r = Journal<>::remove(io_ctx, id);
-      if (remove_r < 0) {
-        lderr(cct) << "error cleaning up journal after creation failed: "
-                   << cpp_strerror(remove_r) << dendl;
-      }
-    }
-
-  err_remove_object_map:
-    if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-      remove_r = ObjectMap::remove(io_ctx, id);
-      if (remove_r < 0) {
-        lderr(cct) << "error cleaning up object map after creation failed: "
-                   << cpp_strerror(remove_r) << dendl;
-      }
-    }
-
-  err_remove_header:
-    remove_r = io_ctx.remove(header_oid);
-    if (remove_r < 0) {
-      lderr(cct) << "error cleaning up image header after creation failed: "
-		 << cpp_strerror(remove_r) << dendl;
-    }
-  err_remove_from_dir:
-    remove_r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY,
-					    imgname, id);
-    if (remove_r < 0) {
-      lderr(cct) << "error cleaning up image from rbd_directory object "
-		 << "after creation failed: " << cpp_strerror(remove_r)
-		 << dendl;
-    }
-  err_remove_id:
-    remove_r = io_ctx.remove(id_obj);
-    if (remove_r < 0) {
-      lderr(cct) << "error cleaning up id object after creation failed: "
-		 << cpp_strerror(remove_r) << dendl;
-    }
-
-    return r;
+  void create_v2(IoCtx& io_ctx, std::string &imgname, uint64_t size,
+                 int order, uint64_t features, uint64_t stripe_unit,
+                 uint64_t stripe_count, uint8_t journal_order,
+                 uint8_t journal_splay_width, const std::string &journal_pool,
+                 const std::string &non_primary_global_image_id,
+                 const std::string &primary_mirror_uuid,
+                 ContextWQ *op_work_queue, Context *ctx) {
+    std::string id = util::generate_image_id(io_ctx);
+    image::CreateRequest<> *req = image::CreateRequest<>::create(
+      io_ctx, imgname, id, size, order, features, stripe_unit,
+      stripe_count, journal_order, journal_splay_width, journal_pool,
+      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, ctx);
+    req->send();
   }
 
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -1415,9 +1241,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EDOM;
     }
 
-    Rados rados(io_ctx);
-    uint64_t bid = rados.get_instance_id();
-
     if ((features & RBD_FEATURE_STRIPINGV2) == 0 &&
 	((stripe_unit && stripe_unit != (1ull << order)) ||
 	 (stripe_count && stripe_count != 1))) {
@@ -1441,7 +1264,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       if (stripe_count && stripe_count != 1)
 	return -EINVAL;
 
-      r = create_v1(io_ctx, imgname, bid, size, order);
+      r = create_v1(io_ctx, imgname, size, order);
     } else {
       uint64_t journal_order = cct->_conf->rbd_journal_order;
       uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
@@ -1451,10 +1274,17 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       opts.get(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, &journal_splay_width);
       opts.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &journal_pool);
 
-      r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
-		    stripe_count, journal_order, journal_splay_width,
-                    journal_pool, non_primary_global_image_id,
-                    primary_mirror_uuid);
+      C_SaferCond cond;
+      ContextWQ op_work_queue("librbd::op_work_queue",
+                              cct->_conf->rbd_op_thread_timeout,
+                              ImageCtx::get_thread_pool_instance(cct));
+      std::string imagename(imgname);
+      create_v2(io_ctx, imagename, size, order, features, stripe_unit,
+                stripe_count, journal_order, journal_splay_width, journal_pool,
+                non_primary_global_image_id, primary_mirror_uuid,
+                &op_work_queue, &cond);
+      r = cond.wait();
+      op_work_queue.drain();
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1906,8 +1736,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
 
           r = Journal<>::create(ictx->md_ctx, ictx->id, ictx->journal_order,
-  			        ictx->journal_splay_width,
-  			        ictx->journal_pool, false, "");
+                                ictx->journal_splay_width, ictx->journal_pool);
           if (r < 0) {
             lderr(cct) << "error creating image journal: " << cpp_strerror(r)
                        << dendl;
