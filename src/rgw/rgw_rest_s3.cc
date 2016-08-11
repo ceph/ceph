@@ -4361,7 +4361,7 @@ RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
     rgw_user(token.id),
     token.id,
     RGW_PERM_FULL_CONTROL,
-    true,
+    false,
     TYPE_LDAP
   };
 }
