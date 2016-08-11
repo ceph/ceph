@@ -265,7 +265,7 @@ scrubbing operations.
 
 ``osd scrub min interval`` 
 
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
+:Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
