@@ -215,11 +215,22 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
     rbd_store_ceph_conf = /etc/ceph/ceph.conf
     rbd_store_chunk_size = 8
 
-
-For more information about the configuration options available in Glance please see: http://docs.openstack.org/trunk/config-reference/content/section_glance-api.conf.html.
-
 .. important:: Glance has not completely moved to 'store' yet.
-    So we still need to configure the store in the DEFAULT section.
+    So we still need to configure the store in the DEFAULT section until Kilo.
+
+Kilo
+~~~~
+Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
+
+    [glance_store]
+    stores = rbd
+    default_store = rbd
+    rbd_store_pool = images
+    rbd_store_user = glance
+    rbd_store_ceph_conf = /etc/ceph/ceph.conf
+    rbd_store_chunk_size = 8
+
+For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
 
 Any OpenStack version
 ~~~~~~~~~~~~~~~~~~~~~
