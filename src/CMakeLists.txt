@@ -229,15 +229,6 @@ if(WITH_PROFILER)
   list(APPEND EXTRALIBS profiler)
 endif(WITH_PROFILER)
 
-if(WITH_PROFILER AND ALLOCATOR STREQUAL "tcmalloc")
-  find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h
-    PATHS ${GPERFTOOLS_INCLUDE_DIR})
-  find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h
-    PATHS ${GPERFTOOLS_INCLUDE_DIR})
-  find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h
-    PATHS ${GPERFTOOLS_INCLUDE_DIR})
-endif()
-
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
   if(NOT HAVE_GCOV)
@@ -291,7 +282,7 @@ endif(HAVE_XIO)
 
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS tcmalloc)
+  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
