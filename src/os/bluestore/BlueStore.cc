@@ -4056,6 +4056,7 @@ int BlueStore::collection_list(
     return -EOPNOTSUPP;
 
   int r = 0;
+  ghobject_t static_next;
   {
     RWLock::RLocker l(c->lock);
     KeyValueDB::Iterator it;
@@ -4065,7 +4066,6 @@ int BlueStore::collection_list(
     string pend;
     bool temp;
 
-    ghobject_t static_next;
     if (!pnext)
       pnext = &static_next;
 
