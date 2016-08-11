@@ -1298,7 +1298,10 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
            << " file " << h->file->fnode << dendl;
-
+  if (h->file->deleted) {
+    dout(10) << __func__ << "  deleted, no-op" << dendl;
+    return 0;
+  }
   // truncate off unflushed data?
   if (h->pos < offset &&
       h->pos + h->buffer.length() > offset) {
@@ -1417,6 +1420,10 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 {
   dout(10) << __func__ << " file " << f->fnode << " 0x"
 	   << std::hex << off << "~" << len << std::dec << dendl;
+  if (f->deleted) {
+    dout(10) << __func__ << "  deleted, no-op" << dendl;
+    return 0;
+  }
   uint64_t allocated = f->fnode.get_allocated();
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
