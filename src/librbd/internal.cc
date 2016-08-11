@@ -2944,6 +2944,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
+    // avoid accepting new requests from peers while we demote
+    // the image
+    ictx->exclusive_lock->block_requests(0);
+    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
+      if (ictx->exclusive_lock != nullptr) {
+        ictx->exclusive_lock->unblock_requests();
+      }
+    };
+
     C_SaferCond lock_ctx;
     ictx->exclusive_lock->request_lock(&lock_ctx);
 
