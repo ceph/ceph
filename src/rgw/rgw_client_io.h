@@ -43,14 +43,9 @@ class RGWStreamIOEngine : public RGWClientIO {
   friend class RGWStreamIOFacade;
   friend class RGWStreamIOLegacyWrapper;
 
-protected:
-  virtual std::size_t read_data(char *buf, std::size_t max) = 0;
-  virtual std::size_t write_data(const char *buf, std::size_t len) = 0;
-
 public:
   class Exception : public std::exception {
     int err;
-
   public:
     Exception(const int err)
       : err(err) {
@@ -72,6 +67,12 @@ public:
 
   virtual std::size_t send_content_length(uint64_t len) = 0;
   virtual std::size_t complete_header() = 0;
+
+  /* Receive body. On success Returns number of bytes sent to the direct
+   * client of RadosGW. On failure throws int containing errno. */
+  virtual std::size_t recv_body(char* buf, std::size_t max) = 0;
+  virtual std::size_t send_body(const char* buf, std::size_t len) = 0;
+
   virtual void flush() = 0;
 };
 
@@ -113,16 +114,19 @@ protected:
   RGWEnv env;
 
 public:
-  virtual int read_data(char *buf, int max) = 0;
-  virtual int write_data(const char *buf, int len) = 0;
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual std::size_t send_header(const boost::string_ref& name,
                                   const boost::string_ref& value) noexcept = 0;
-  virtual int complete_header() = 0;
   virtual int send_content_length(uint64_t len) = 0;
+  virtual int complete_header() = 0;
+
+  virtual int recv_body(char* buf, std::size_t max) = 0;
+  virtual int send_body(const char* buf, std::size_t len) = 0;
   virtual void flush() = 0;
+
   virtual ~RGWStreamIO() {}
+
   RGWStreamIO()
     : RGWStreamIOFacade(this),
       _account(false),
@@ -186,14 +190,6 @@ protected:
     EXCPT_TO_VOID(get_decoratee().init_env(cct));
   }
 
-  int read_data(char* const buf, const int max) override {
-    EXCPT_TO_RC(get_decoratee().read_data(buf, max));
-  }
-
-  int write_data(const char* const buf, const int len) override {
-    EXCPT_TO_RC(get_decoratee().write_data(buf, len));
-  }
-
 public:
   RGWStreamIOLegacyWrapper(RGWStreamIOEngine * const engine)
     : engine(engine) {
@@ -219,6 +215,15 @@ public:
   int complete_header() override {
     EXCPT_TO_RC(get_decoratee().complete_header());
   }
+
+  int recv_body(char* buf, const std::size_t max) override {
+    EXCPT_TO_RC(get_decoratee().recv_body(buf, max));
+  }
+
+  int send_body(const char* const buf, const std::size_t len) override {
+    EXCPT_TO_RC(get_decoratee().send_body(buf, len));
+  }
+
 
   void flush() override {
     EXCPT_TO_VOID(get_decoratee().flush());
