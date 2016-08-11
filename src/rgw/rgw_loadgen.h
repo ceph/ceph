@@ -38,30 +38,38 @@ class RGWLoadGenIO : public RGWStreamIOEngine
   RGWLoadGenRequestEnv* req;
   RGWEnv env;
 
+  void init_env(CephContext *cct) override;
+  std::size_t read_data(char *buf, std::size_t len);
+  std::size_t write_data(const char *buf, std::size_t len);
+
 public:
   explicit RGWLoadGenIO(RGWLoadGenRequestEnv* const req)
     : left_to_read(0),
       req(req) {
   }
 
-  void init_env(CephContext *cct);
-  std::size_t read_data(char *buf, std::size_t len);
-  std::size_t write_data(const char *buf, std::size_t len);
-
-  std::size_t send_status(int status, const char *status_name);
-  std::size_t send_100_continue();
+  std::size_t send_status(int status, const char *status_name) override;
+  std::size_t send_100_continue() override;
   std::size_t send_header(const boost::string_ref& name,
                           const boost::string_ref& value) override;
-  std::size_t complete_header();
-  std::size_t send_content_length(uint64_t len);
+  std::size_t complete_header() override;
+  std::size_t send_content_length(uint64_t len) override;
 
-  void flush();
+  std::size_t recv_body(char* buf, std::size_t max) override {
+    return read_data(buf, max);
+  }
+
+  std::size_t send_body(const char* buf, std::size_t len) override {
+    return write_data(buf, len);
+  }
+
+  void flush() override;
 
   RGWEnv& get_env() noexcept override {
     return env;
   }
 
-  int complete_request();
+  int complete_request() override;
 };
 
 #endif

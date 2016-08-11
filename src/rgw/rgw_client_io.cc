@@ -29,7 +29,7 @@ int RGWStreamIOFacade::write(const char *buf, int len)
     return 0;
   }
 
-  const auto ret = engine.write_data(buf, len);
+  const auto ret = engine.send_body(buf, len);
   if (ret < 0) {
     return ret;
   } else if (ret < len) {
@@ -42,7 +42,7 @@ int RGWStreamIOFacade::write(const char *buf, int len)
 
 int RGWStreamIOFacade::read(char *buf, int max, int *actual)
 {
-  int ret = engine.read_data(buf, max);
+  int ret = engine.recv_body(buf, max);
   if (ret < 0) {
     return ret;
   }

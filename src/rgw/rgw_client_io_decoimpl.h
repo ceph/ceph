@@ -46,19 +46,9 @@ protected:
     return get_decoratee().init_env(cct);
   }
 
-  std::size_t read_data(char* const buf,
-                        const std::size_t max) override {
-    return get_decoratee().read_data(buf, max);
-  }
-
-  std::size_t write_data(const char* const buf,
-                         const std::size_t len) override {
-    return get_decoratee().write_data(buf, len);
-  }
-
 public:
-  RGWDecoratedStreamIO(const DecorateeT& decoratee)
-    : decoratee(decoratee) {
+  RGWDecoratedStreamIO(DecorateeT&& decoratee)
+    : decoratee(std::move(decoratee)) {
   }
 
   std::size_t send_status(const int status,
@@ -83,6 +73,15 @@ public:
     return get_decoratee().complete_header();
   }
 
+  std::size_t recv_body(char* const buf, const std::size_t max) override {
+    return get_decoratee().recv_body(buf, max);
+  }
+
+  std::size_t send_body(const char* const buf,
+                        const std::size_t len) override {
+    return get_decoratee().send_body(buf, len);
+  }
+
   void flush() override {
     return get_decoratee().flush();
   }
@@ -103,24 +102,6 @@ class RGWStreamIOAccountingEngine : public RGWDecoratedStreamIO<T>,
   bool enabled;
   uint64_t total_sent;
   uint64_t total_received;
-
-protected:
-  std::size_t read_data(char* const buf, const std::size_t max) override {
-    const auto received = RGWDecoratedStreamIO<T>::read_data(buf, max);
-    if (enabled) {
-      total_received += received;
-    }
-    return received;
-  }
-
-  std::size_t write_data(const char* const buf,
-                         const std::size_t len) override {
-    const auto sent = RGWDecoratedStreamIO<T>::write_data(buf, len);
-    if (enabled) {
-      total_sent += sent;
-    }
-    return sent;
-  }
 
 public:
   template <typename U>
@@ -173,6 +154,23 @@ public:
     return sent;
   }
 
+  std::size_t recv_body(char* buf, std::size_t max) override {
+    const auto received = RGWDecoratedStreamIO<T>::recv_body(buf, max);
+    if (enabled) {
+      total_received += received;
+    }
+    return received;
+  }
+
+  std::size_t send_body(const char* const buf,
+                        const std::size_t len) override {
+    const auto sent = RGWDecoratedStreamIO<T>::send_body(buf, len);
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
   uint64_t get_bytes_sent() const override {
     return total_sent;
   }
@@ -198,8 +196,6 @@ protected:
   bool has_content_length;
   bool buffer_data;
 
-  std::size_t write_data(const char* buf, const std::size_t len) override;
-
 public:
   template <typename U>
   RGWStreamIOBufferingEngine(U&& decoratee)
@@ -210,19 +206,20 @@ public:
 
   std::size_t send_content_length(const uint64_t len) override;
   std::size_t complete_header() override;
+  std::size_t send_body(const char* buf, std::size_t len) override;
   int complete_request() override;
 };
 
 template <typename T>
-std::size_t RGWStreamIOBufferingEngine<T>::write_data(const char* buf,
-                                                      const std::size_t len)
+std::size_t RGWStreamIOBufferingEngine<T>::send_body(const char* const buf,
+                                                     const std::size_t len)
 {
   if (buffer_data) {
     data.append(buf, len);
     return 0;
   }
 
-  return RGWDecoratedStreamIO<T>::write_data(buf, len);
+  return RGWDecoratedStreamIO<T>::send_body(buf, len);
 }
 
 template <typename T>
@@ -258,8 +255,8 @@ int RGWStreamIOBufferingEngine<T>::complete_request()
     /* We are sending each buffer separately to avoid extra memory shuffling
      * that would occur on data.c_str() to provide a continuous memory area. */
     for (const auto& ptr : data.buffers()) {
-      sent += RGWDecoratedStreamIO<T>::write_data(ptr.c_str(),
-                                                  ptr.length());
+      sent += RGWDecoratedStreamIO<T>::send_body(ptr.c_str(),
+                                                 ptr.length());
     }
     data.clear();
     buffer_data = false;
@@ -275,21 +272,6 @@ class RGWStreamIOChunkingEngine : public RGWDecoratedStreamIO<T> {
 protected:
   bool has_content_length;
   bool chunking_enabled;
-
-  std::size_t write_data(const char* const buf,
-                         const std::size_t len) override {
-    if (! chunking_enabled) {
-      return RGWDecoratedStreamIO<T>::write_data(buf, len);
-    } else {
-      constexpr char HEADER_END[] = "\r\n";
-      char sizebuf[32];
-      snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
-
-      RGWDecoratedStreamIO<T>::write_data(sizebuf, strlen(sizebuf));
-      RGWDecoratedStreamIO<T>::write_data(buf, len);
-      return RGWDecoratedStreamIO<T>::write_data(HEADER_END, sizeof(HEADER_END) - 1);
-    }
-  }
 
 public:
   template <typename U>
@@ -314,6 +296,24 @@ public:
     }
 
     return sent + RGWDecoratedStreamIO<T>::complete_header();
+  }
+
+  std::size_t send_body(const char* buf,
+                        const std::size_t len) override {
+    if (! chunking_enabled) {
+      return RGWDecoratedStreamIO<T>::send_body(buf, len);
+    } else {
+      static constexpr char HEADER_END[] = "\r\n";
+      char sizebuf[32];
+      const auto slen = snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
+      std::size_t sent = 0;
+
+      sent += RGWDecoratedStreamIO<T>::send_body(sizebuf, slen);
+      sent += RGWDecoratedStreamIO<T>::send_body(buf, len);
+      sent += RGWDecoratedStreamIO<T>::send_body(HEADER_END,
+                                                  sizeof(HEADER_END) - 1);
+      return sent;
+    }
   }
 };
 
