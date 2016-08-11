@@ -91,6 +91,7 @@ typedef uint32_t osflagbits_t;
 const int SKIP_JOURNAL_REPLAY = 1 << 0;
 const int SKIP_MOUNT_OMAP = 1 << 1;
 
+
 class ObjectStore {
 protected:
   string path;
@@ -432,6 +433,11 @@ public:
 	};
 	struct {
 	  __le32 alloc_hint_flags;      //OP_SETALLOCHINT
+	};
+	struct {                        //OP_WRITE
+	  uint8_t comp_flags;
+	  uint8_t comp_alg;
+	  uint8_t comp_ratio;
 	};
       };
       __le64 expected_object_size;      //OP_SETALLOCHINT
@@ -1123,34 +1129,30 @@ public:
      * ObjectStore will omit the untouched data and store it as a
      * "hole" in the file.
      */
+    struct write_params_t{
+      uint8_t comp_flags = 0;
+      uint8_t comp_alg = 0;
+      uint8_t comp_ratio = 0;
+
+      write_params_t() {}
+      write_params_t(uint8_t cflags, uint8_t calg, uint8_t cratio) :
+	comp_flags(cflags), comp_alg(calg), comp_ratio(cratio) {
+      }
+      void encode(bufferlist& bl) const {
+        ::encode(comp_flags, bl);
+        ::encode(comp_alg, bl);
+        ::encode(comp_ratio, bl);
+      }
+      void decode(bufferlist::iterator &bl) {
+        ::decode(comp_flags, bl);
+        ::decode(comp_alg, bl);
+        ::decode(comp_ratio, bl);
+      }
+    };
+
     void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
-	       const bufferlist& write_data, uint32_t flags = 0) {
-      if (use_tbl) {
-        __u32 op = OP_WRITE;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(oid, tbl);
-        ::encode(off, tbl);
-        ::encode(len, tbl);
-        ::encode(write_data, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_WRITE;
-        _op->cid = _get_coll_id(cid);
-        _op->oid = _get_object_id(oid);
-        _op->off = off;
-        _op->len = len;
-        ::encode(write_data, data_bl);
-      }
-      assert(len == write_data.length());
-      data.fadvise_flags = data.fadvise_flags | flags;
-      if (write_data.length() > data.largest_data_len) {
-	data.largest_data_len = write_data.length();
-	data.largest_data_off = off;
-	data.largest_data_off_in_tbl = tbl.length() + sizeof(__u32);  // we are about to
-      }
-      data.ops++;
-    }
+	       const bufferlist& write_data, uint32_t flags,
+	       const write_params_t& params_extra);
     /**
      * zero out the indicated byte range within an object. Some
      * ObjectStore instances may optimize this to release the
@@ -2322,6 +2324,7 @@ public:
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
+WRITE_CLASS_ENCODER(ObjectStore::Transaction::write_params_t)
 
 static inline void intrusive_ptr_add_ref(ObjectStore::Sequencer_impl *s) {
   s->get();

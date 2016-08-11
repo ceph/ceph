@@ -174,7 +174,7 @@ TEST_P(StoreTest, SimpleRemount) {
     cerr << "create collection + write" << std::endl;
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -183,7 +183,7 @@ TEST_P(StoreTest, SimpleRemount) {
   ASSERT_EQ(0, r);
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid2, 0, bl.length(), bl);
+    t.write(cid, hoid2, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -228,7 +228,7 @@ TEST_P(StoreTest, IORemount) {
     t.create_collection(cid, 0);
     for (int n=1; n<=100; ++n) {
       ghobject_t hoid(hobject_t(sobject_t("Object " + stringify(n), CEPH_NOSNAP)));
-      t.write(cid, hoid, 0, bl.length(), bl);
+      t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     }
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -239,7 +239,7 @@ TEST_P(StoreTest, IORemount) {
     for (int n=1; n<=100; ++n) {
       ObjectStore::Transaction t;
       ghobject_t hoid(hobject_t(sobject_t("Object " + stringify(n), CEPH_NOSNAP)));
-      t.write(cid, hoid, 1, bl.length(), bl);
+      t.write(cid, hoid, 1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
       r = apply_transaction(store, &osr, std::move(t));
       ASSERT_EQ(r, 0);
     }
@@ -303,9 +303,9 @@ TEST_P(StoreTest, FiemapHoles) {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
     t.touch(cid, oid);
-    t.write(cid, oid, 0, 3, bl);
-    t.write(cid, oid, 1048576, 3, bl);
-    t.write(cid, oid, 4194304, 3, bl);
+    t.write(cid, oid, 0, 3, bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, oid, 1048576, 3, bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, oid, 4194304, 3, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -485,7 +485,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
   z.append(zp);
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, 0x1000, a);
+    t.write(cid, hoid, 0, 0x1000, a, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
 
@@ -497,7 +497,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0x1000, 0x1000, b);
+    t.write(cid, hoid, 0x1000, 0x1000, b, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
 
@@ -510,7 +510,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0x3000, 0x1000, c);
+    t.write(cid, hoid, 0x3000, 0x1000, c, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
 
@@ -525,7 +525,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0x2000, 0x1000, a);
+    t.write(cid, hoid, 0x2000, 0x1000, a, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
 
@@ -540,7 +540,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, 0x1000, c);
+    t.write(cid, hoid, 0, 0x1000, c, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -598,8 +598,8 @@ TEST_P(StoreTest, BufferCacheReadTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append("abcde");
-    t.write(cid, hoid, 0, 5, bl);
-    t.write(cid, hoid, 10, 5, bl);
+    t.write(cid, hoid, 0, 5, bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 10, 5, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "TwinWrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -619,8 +619,8 @@ TEST_P(StoreTest, BufferCacheReadTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append("edcba");
-    t.write(cid, hoid, 0, 5, bl);
-    t.write(cid, hoid, 10, 5, bl);
+    t.write(cid, hoid, 0, 5, bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 10, 5, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "TwinWrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -641,7 +641,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
     bufferlist bl2, newdata;
     bl2.append("1234567890");
 
-    t.write(cid, hoid, 20, bl2.length(), bl2);
+    t.write(cid, hoid, 20, bl2.length(), bl2, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Append" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -667,9 +667,9 @@ TEST_P(StoreTest, BufferCacheReadTest) {
     bl2.append("1234567890");
     bl3.append("BA");
 
-    t.write(cid, hoid, 30, bl2.length(), bl2);
-    t.write(cid, hoid, 1, bl.length(), bl);
-    t.write(cid, hoid, 13, bl3.length(), bl3);
+    t.write(cid, hoid, 30, bl2.length(), bl2, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 13, bl3.length(), bl3, 0, ObjectStore::Transaction::write_params_t());
     cerr << "TripleWrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -690,15 +690,11 @@ TEST_P(StoreTest, BufferCacheReadTest) {
   }
 }
 
-TEST_P(StoreTest, CompressionTest) {
+void doCompressionTest(boost::scoped_ptr<ObjectStore>& store,
+		       const ObjectStore::Transaction::write_params_t& wparams) {
   ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
-  if (string(GetParam()) != "bluestore")
-    return;
-
-  g_conf->set_val("bluestore_compression", "force");
-  g_ceph_context->_conf->apply_changes(NULL);
 
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   {
@@ -734,7 +730,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData (4xAU) Write" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -762,6 +758,16 @@ TEST_P(StoreTest, CompressionTest) {
       expected.append(data.substr(0xf00f));
       ASSERT_TRUE(bl_eq(expected, newdata));
     }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(0x10000, statfs.allocated);
+      ASSERT_EQ((unsigned)data.size(), statfs.stored);
+      ASSERT_LE(statfs.compressed, 0x10000);
+      ASSERT_EQ((unsigned)data.size(), statfs.compressed_original);
+      ASSERT_EQ(0x10000, statfs.compressed_allocated);
+    }
   }
   std::string data2;
   data2.resize(0x10000 * 4 - 0x9000);
@@ -771,7 +777,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data2);
-    t.write(cid, hoid, 0x8000, bl.length(), bl);
+    t.write(cid, hoid, 0x8000, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData partial overwrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -802,6 +808,15 @@ TEST_P(StoreTest, CompressionTest) {
       expected.append(data.substr(0x3f000, 0x1000));
       ASSERT_TRUE(bl_eq(expected, newdata));
     }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(0x40000, statfs.allocated);
+      ASSERT_LE(statfs.compressed, 0x20000);
+      ASSERT_EQ(0x20000, statfs.compressed_allocated);
+
+    }
   }
   data2.resize(0x3f000);
   for(size_t i = 0;i < data2.size(); i++)
@@ -810,7 +825,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data2);
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData partial overwrite, two extents overlapped, single one to be removed" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -848,7 +863,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0x3f000-1, bl.length(), bl);
+    t.write(cid, hoid, 0x3f000-1, bl.length(), bl, 0, wparams);
     cerr << "Small chunk partial overwrite, two extents overlapped, single one to be removed" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -882,7 +897,7 @@ TEST_P(StoreTest, CompressionTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, wparams);
     cerr << "CompressibleData large blob" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -899,6 +914,29 @@ TEST_P(StoreTest, CompressionTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
+
+TEST_P(StoreTest, CompressionTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  //using global compression settings
+  g_conf->set_val("bluestore_compression", "force");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  doCompressionTest(store, ObjectStore::Transaction::write_params_t());
+
+  g_conf->set_val("bluestore_compression", "passive");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  //using per-write compression settings
+
+  ObjectStore::Transaction::write_params_t wparams(
+    CEPH_OSD_COMP_FLAG_COMPRESSIBLE,
+    Compressor::COMP_ALG_ZLIB, 
+    90);
+  doCompressionTest(store, wparams);
+
   g_conf->set_val("bluestore_compression", "none");
   g_ceph_context->_conf->apply_changes(NULL);
 }
@@ -947,7 +985,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     bl.append("abcde");
     orig = bl;
     t.remove(cid, hoid);
-    t.write(cid, hoid, 0, 5, bl);
+    t.write(cid, hoid, 0, 5, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Remove then create" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -963,7 +1001,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     bl.append("abcde");
     exp = bl;
     exp.append(bl);
-    t.write(cid, hoid, 5, 5, bl);
+    t.write(cid, hoid, 5, 5, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Append" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -978,7 +1016,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     bufferlist bl, exp;
     bl.append("abcdeabcde");
     exp = bl;
-    t.write(cid, hoid, 0, 10, bl);
+    t.write(cid, hoid, 0, 10, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Full overwrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -992,7 +1030,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     ObjectStore::Transaction t;
     bufferlist bl;
     bl.append("abcde");
-    t.write(cid, hoid, 3, 5, bl);
+    t.write(cid, hoid, 3, 5, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Partial overwrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1010,7 +1048,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
       bufferlist bl;
       bl.append("fghij");
       t.truncate(cid, hoid, 0);
-      t.write(cid, hoid, 5, 5, bl);
+      t.write(cid, hoid, 5, 5, bl, 0, ObjectStore::Transaction::write_params_t());
       cerr << "Truncate + hole" << std::endl;
       r = apply_transaction(store, &osr, std::move(t));
       ASSERT_EQ(r, 0);
@@ -1019,7 +1057,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
       ObjectStore::Transaction t;
       bufferlist bl;
       bl.append("abcde");
-      t.write(cid, hoid, 0, 5, bl);
+      t.write(cid, hoid, 0, 5, bl, 0, ObjectStore::Transaction::write_params_t());
       cerr << "Reverse fill-in" << std::endl;
       r = apply_transaction(store, &osr, std::move(t));
       ASSERT_EQ(r, 0);
@@ -1036,7 +1074,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     ObjectStore::Transaction t;
     bufferlist bl;
     bl.append("abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234");
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "larger overwrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1067,7 +1105,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
       bl.append(s1);
       bl.append(s2);
       t.truncate(cid, hoid, 0);
-      t.write(cid, hoid, 0x1000-1, bl.length(), bl);
+      t.write(cid, hoid, 0x1000-1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
       cerr << "Write unaligned csum, stage 1" << std::endl;
       r = apply_transaction(store, &osr, std::move(t));
       ASSERT_EQ(r, 0);
@@ -1089,7 +1127,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
       ObjectStore::Transaction t;
       bufferlist bl;
       bl.append(s3);
-      t.write(cid, hoid, 1, bl.length(), bl);
+      t.write(cid, hoid, 1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
       cerr << "Write unaligned csum, stage 2" << std::endl;
       r = apply_transaction(store, &osr, std::move(t));
       ASSERT_EQ(r, 0);
@@ -1172,7 +1210,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ObjectStore::Transaction t;
     bufferlist bl;
     bl.append("abcde");
-    t.write(cid, hoid, 0, 5, bl);
+    t.write(cid, hoid, 0, 5, bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Append 5 bytes" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1195,7 +1233,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     std::string s(0x30000, 'a');
     bufferlist bl;
     bl.append(s);
-    t.write(cid, hoid, 0x10000, bl.length(), bl);
+    t.write(cid, hoid, 0x10000, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Append 0x30000 compressible bytes" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1239,8 +1277,8 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     std::string s(0x1000, 'b');
     bufferlist bl;
     bl.append(s);
-    t.write(cid, hoid, 1, bl.length(), bl);
-    t.write(cid, hoid, 0x10001, bl.length(), bl);
+    t.write(cid, hoid, 1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0x10001, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Overwrite first and second(compressible) extents" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1263,9 +1301,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     std::string s(0x10000, 'c');
     bufferlist bl;
     bl.append(s);
-    t.write(cid, hoid, 0x10000, bl.length(), bl);
-    t.write(cid, hoid, 0x20000, bl.length(), bl);
-    t.write(cid, hoid, 0x30000, bl.length(), bl);
+    t.write(cid, hoid, 0x10000, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0x20000, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 0x30000, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Overwrite compressed extent with 3 uncompressible ones" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1308,7 +1346,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     bl.append(s);
     bl.append(s);
     bl.append(s.substr(0, 0x10000-2));
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Yet another compressible write" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1391,7 +1429,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
       data[i] = i / 256 + 1;
     bufferlist bl, newdata;
     bl.append(data);
-    t.write(cid, hoid, 0, bl.length(), bl);
+    t.write(cid, hoid, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     t.zero(cid, hoid, 0x10000, 0x10000);
     cerr << "Append 3*0x10000 bytes and punch a hole 0x10000~10000" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
@@ -1434,7 +1472,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
     std::string data2(3, 'b');
     bufferlist bl, newdata;
     bl.append(data2);
-    t.write(cid, hoid, 0x20000, bl.length(), bl);
+    t.write(cid, hoid, 0x20000, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Write 3 bytes after the hole" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1465,7 +1503,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
     std::string data2(3, 'a');
     bufferlist bl, newdata;
     bl.append(data2);
-    t.write(cid, hoid, 0x10000+1, bl.length(), bl);
+    t.write(cid, hoid, 0x10000+1, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Write 3 bytes to the hole" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -1494,7 +1532,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
     bl.append(string(0x30000, 'c'));
-    t.write(cid, hoid, 0, 0x30000, bl);
+    t.write(cid, hoid, 0, 0x30000, bl, 0, ObjectStore::Transaction::write_params_t());
     t.zero(cid, hoid, 0, 0x10000);
     t.zero(cid, hoid, 0x20000, 0x10000);
     cerr << "Rewrite an object and create two holes at the begining and the end" << std::endl;
@@ -1561,13 +1599,13 @@ TEST_P(StoreTest, ManySmallWrite) {
   bl.append(bp);
   for (int i=0; i<100; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, a, i*4096, 4096, bl, 0);
+    t.write(cid, a, i*4096, 4096, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   for (int i=0; i<100; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % 1024)*4096, 4096, bl, 0);
+    t.write(cid, b, (rand() % 1024)*4096, 4096, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1607,7 +1645,7 @@ TEST_P(StoreTest, SmallSkipFront) {
     memset(bp.c_str(), 1, 4096);
     bl.append(bp);
     ObjectStore::Transaction t;
-    t.write(cid, a, 4096, 4096, bl);
+    t.write(cid, a, 4096, 4096, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1651,7 +1689,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
   bla.append(bpa);
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, 0, bla.length(), bla, 0);
+    t.write(cid, a, 0, bla.length(), bla, 0, ObjectStore::Transaction::write_params_t());
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1669,7 +1707,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
   blb.append(bpb);
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, bla.length(), blb.length(), blb, 0);
+    t.write(cid, a, bla.length(), blb.length(), blb, 0, ObjectStore::Transaction::write_params_t());
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1679,7 +1717,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
   blc.append(bpc);
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, bla.length() + blb.length(), blc.length(), blc, 0);
+    t.write(cid, a, bla.length() + blb.length(), blc.length(), blc, 0, ObjectStore::Transaction::write_params_t());
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1731,7 +1769,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
     bt.append(bla);
     bt.append("BADBADBADBAD");
     ObjectStore::Transaction t;
-    t.write(cid, a, 0, bt.length(), bt, 0);
+    t.write(cid, a, 0, bt.length(), bt, 0, ObjectStore::Transaction::write_params_t());
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1757,7 +1795,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
   blb.append(bpb);
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, min_alloc * 3, blb.length(), blb, 0);
+    t.write(cid, a, min_alloc * 3, blb.length(), blb, 0, ObjectStore::Transaction::write_params_t());
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1805,7 +1843,7 @@ TEST_P(StoreTest, SmallSequentialUnaligned) {
   bl.append(bp);
   for (int i=0; i<1000; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, a, i*len, len, bl, 0);
+    t.write(cid, a, i*len, len, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1838,21 +1876,21 @@ TEST_P(StoreTest, ManyBigWrite) {
   bl.append(bp);
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, a, i*4*1048586, 4*1048576, bl, 0);
+    t.write(cid, a, i*4*1048586, 4*1048576, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   // aligned
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % 256)*4*1048576, 4*1048576, bl, 0);
+    t.write(cid, b, (rand() % 256)*4*1048576, 4*1048576, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   // unaligned
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % (256*4096))*1024, 4*1048576, bl, 0);
+    t.write(cid, b, (rand() % (256*4096))*1024, 4*1048576, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1895,7 +1933,7 @@ TEST_P(StoreTest, BigWriteBigZero) {
   s.append(sp);
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, 0, bl.length(), bl);
+    t.write(cid, a, 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1907,7 +1945,7 @@ TEST_P(StoreTest, BigWriteBigZero) {
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, bl.length() / 2, s.length(), s);
+    t.write(cid, a, bl.length() / 2, s.length(), s, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1938,13 +1976,13 @@ TEST_P(StoreTest, MiscFragmentTests) {
   bl.append(bp);
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, 0, 524288, bl, 0);
+    t.write(cid, a, 0, 524288, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, 1048576, 524288, bl, 0);
+    t.write(cid, a, 1048576, 524288, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1957,7 +1995,7 @@ TEST_P(StoreTest, MiscFragmentTests) {
   }
   {
     ObjectStore::Transaction t;
-    t.write(cid, a, 1048576 - 4096, 524288, bl, 0);
+    t.write(cid, a, 1048576 - 4096, 524288, bl, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -1987,7 +2025,7 @@ TEST_P(StoreTest, ZeroLengthWrite) {
   {
     ObjectStore::Transaction t;
     bufferlist empty;
-    t.write(cid, hoid, 1048576, 0, empty);
+    t.write(cid, hoid, 1048576, 0, empty, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -2247,8 +2285,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.setattr(cid, hoid, "attr1", small);
     t.setattr(cid, hoid, "attr2", large);
     t.setattr(cid, hoid, "attr3", xlarge);
-    t.write(cid, hoid, 0, small.length(), small);
-    t.write(cid, hoid, 10, small.length(), small);
+    t.write(cid, hoid, 0, small.length(), small, 0, ObjectStore::Transaction::write_params_t());
+    t.write(cid, hoid, 10, small.length(), small, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Creating object and set attr " << hoid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -2261,7 +2299,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.clone(cid, hoid, hoid2);
     t.setattr(cid, hoid2, "attr2", small);
     t.rmattr(cid, hoid2, "attr1");
-    t.write(cid, hoid, 10, large.length(), large);
+    t.write(cid, hoid, 10, large.length(), large, 0, ObjectStore::Transaction::write_params_t());
     t.setattr(cid, hoid, "attr1", large);
     t.setattr(cid, hoid, "attr2", small);
     cerr << "Clone object and rm attr" << std::endl;
@@ -2310,14 +2348,14 @@ TEST_P(StoreTest, SimpleCloneTest) {
     pl.append(p);
     final.append(p);
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, pl.length(), pl);
+    t.write(cid, hoid, 0, pl.length(), pl, 0, ObjectStore::Transaction::write_params_t());
     t.clone(cid, hoid, hoid2);
     bufferptr a(4096);
     memset(a.c_str(), 2, a.length());
     bufferlist al;
     al.append(a);
     final.append(a);
-    t.write(cid, hoid, pl.length(), a.length(), al);
+    t.write(cid, hoid, pl.length(), a.length(), al, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
     bufferlist rl;
@@ -2339,7 +2377,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     pl.append(p);
     final.append(p);
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, pl.length(), pl);
+    t.write(cid, hoid, 0, pl.length(), pl, 0, ObjectStore::Transaction::write_params_t());
     t.clone(cid, hoid, hoid2);
     bufferptr z(4096);
     z.zero();
@@ -2349,7 +2387,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist al;
     al.append(a);
     final.append(a);
-    t.write(cid, hoid, pl.length() + z.length(), a.length(), al);
+    t.write(cid, hoid, pl.length() + z.length(), a.length(), al, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
     bufferlist rl;
@@ -2371,7 +2409,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     pl.append(p);
     final.append(p);
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, pl.length(), pl);
+    t.write(cid, hoid, 0, pl.length(), pl, 0, ObjectStore::Transaction::write_params_t());
     t.clone(cid, hoid, hoid2);
     bufferptr z(1000);
     z.zero();
@@ -2381,7 +2419,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist al;
     al.append(a);
     final.append(a);
-    t.write(cid, hoid, 17000, a.length(), al);
+    t.write(cid, hoid, 17000, a.length(), al, 0, ObjectStore::Transaction::write_params_t());
     ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     ASSERT_EQ((int)final.length(),
@@ -2404,13 +2442,13 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist pl;
     pl.append(p);
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, pl.length(), pl);
+    t.write(cid, hoid, 0, pl.length(), pl, 0, ObjectStore::Transaction::write_params_t());
     t.clone(cid, hoid, hoid2);
     bufferptr a(65536);
     memset(a.c_str(), 4, a.length());
     bufferlist al;
     al.append(a);
-    t.write(cid, hoid, a.length(), a.length(), al);
+    t.write(cid, hoid, a.length(), a.length(), al, 0, ObjectStore::Transaction::write_params_t());
     ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     bufferlist final;
@@ -2439,13 +2477,13 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist pl;
     pl.append(p);
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, pl.length(), pl);
+    t.write(cid, hoid, 0, pl.length(), pl, 0, ObjectStore::Transaction::write_params_t());
     t.clone(cid, hoid, hoid2);
     bufferptr a(4096);
     memset(a.c_str(), 8, a.length());
     bufferlist al;
     al.append(a);
-    t.write(cid, hoid, 32768, a.length(), al);
+    t.write(cid, hoid, 32768, a.length(), al, 0, ObjectStore::Transaction::write_params_t());
     ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     bufferlist final;
@@ -2474,13 +2512,13 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist pl;
     pl.append(p);
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 0, pl.length(), pl);
+    t.write(cid, hoid, 0, pl.length(), pl, 0, ObjectStore::Transaction::write_params_t());
     t.clone(cid, hoid, hoid2);
     bufferptr a(4096);
     memset(a.c_str(), 10, a.length());
     bufferlist al;
     al.append(a);
-    t.write(cid, hoid, 33768, a.length(), al);
+    t.write(cid, hoid, 33768, a.length(), al, 0, ObjectStore::Transaction::write_params_t());
     ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     bufferlist final;
@@ -2649,7 +2687,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
   small.append("small");
   {
     ObjectStore::Transaction t;
-    t.write(cid, hoid, 10, 5, small);
+    t.write(cid, hoid, 10, 5, small, 0, ObjectStore::Transaction::write_params_t());
     cerr << "Creating object and write bl " << hoid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -3184,17 +3222,6 @@ public:
 	break;
       }
     }
-    {
-      boost::uniform_int<> u(0, 3);
-      switch (u(*rng)) {
-      case 1:
-	f |= CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE;
-	break;
-      case 2:
-	f |= CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE;
-	break;
-      }
-    }
     return f;
   }
 
@@ -3482,7 +3509,7 @@ public:
       value.swap(data);
     }
 
-    t->write(cid, new_obj, offset, len, bl);
+    t->write(cid, new_obj, offset, len, bl, 0, ObjectStore::Transaction::write_params_t());
     ++in_flight;
     in_flight_objects.insert(new_obj);
     int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, t, new_obj));
@@ -4669,7 +4696,7 @@ TEST_P(StoreTest, Rename) {
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    t.write(cid, srcoid, 0, a.length(), a);
+    t.write(cid, srcoid, 0, a.length(), a, 0, ObjectStore::Transaction::write_params_t());
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -4678,7 +4705,7 @@ TEST_P(StoreTest, Rename) {
     ObjectStore::Transaction t;
     t.collection_move_rename(cid, srcoid, cid, dstoid);
     t.remove(cid, srcoid);
-    t.write(cid, srcoid, 0, b.length(), b);
+    t.write(cid, srcoid, 0, b.length(), b, 0, ObjectStore::Transaction::write_params_t());
     t.setattr(cid, srcoid, "attr", b);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -4739,7 +4766,7 @@ TEST_P(StoreTest, MoveRename) {
   {
     ObjectStore::Transaction t;
     t.touch(cid, temp_oid);
-    t.write(cid, temp_oid, 0, data.length(), data);
+    t.write(cid, temp_oid, 0, data.length(), data, 0, ObjectStore::Transaction::write_params_t());
     t.setattr(cid, temp_oid, "attr", attr);
     t.omap_setkeys(cid, temp_oid, omap);
     r = apply_transaction(store, &osr, std::move(t));

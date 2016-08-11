@@ -273,13 +273,18 @@ void ECBackend::handle_recovery_push(
     uint64_t start = op.data_included.range_start();
     uint64_t end = op.data_included.range_end();
     assert(op.data.length() == (end - start));
-
+    auto& pool = get_parent()->get_pool();
     m->t.write(
       coll,
       tobj,
       start,
       op.data.length(),
-      op.data);
+      op.data,
+      0,
+      ObjectStore::Transaction::write_params_t(
+        pool.compress_hint,
+        pool.compress_algorithm,
+        pool.compress_ratio));
   } else {
     assert(op.data.length() == 0);
   }

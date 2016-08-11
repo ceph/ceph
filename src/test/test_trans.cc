@@ -66,7 +66,7 @@ int main(int argc, const char **argv)
     char f[30];
     snprintf(f, sizeof(f), "foo%d\n", i);
     sobject_t soid(f, CEPH_NOSNAP);
-    t.write(coll_t(), ghobject_t(hobject_t(soid)), 0, bl.length(), bl);
+    t.write(coll_t(), ghobject_t(hobject_t(soid)), 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   }
   
   dout(0) << "starting thread" << dendl;

@@ -136,6 +136,21 @@ string ceph_osd_alloc_hint_flag_string(unsigned flags)
   return string("-");
 }
 
+string ceph_osd_compress_flag_string(unsigned flags)
+{
+  string s;
+  for (unsigned i=0; i<sizeof(flags) * 8; ++i) {
+    if (flags & (1u<<i)) {
+      if (s.length())
+    s += "+";
+      s += ceph_osd_compress_flag_name(1u << i);
+    }
+  }
+  if (s.length())
+    return s;
+  return string("-");
+}
+
 void pg_shard_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -1192,6 +1207,9 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
+  f->dump_unsigned("compress_algorithm", compress_algorithm);
+  f->dump_unsigned("compress_ratio", compress_ratio);
+  f->dump_string("compress_hint", ceph_osd_compress_flag_string(compress_ratio));
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -1494,7 +1512,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(24, 5, bl);
+  ENCODE_START(25, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1543,12 +1561,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(hit_set_grade_decay_rate, bl);
   ::encode(hit_set_search_last_n, bl);
   ::encode(opts, bl);
+  ::encode(compress_algorithm, bl);
+  ::encode(compress_ratio, bl);
+  ::encode(compress_hint, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(24, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(25, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1690,6 +1711,15 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 24) {
     ::decode(opts, bl);
   }
+  if (struct_v >= 25) {
+    ::decode(compress_algorithm, bl);
+    ::decode(compress_ratio, bl);
+    ::decode(compress_hint, bl);
+  } else {
+    compress_algorithm = Compressor::COMP_ALG_NONE;
+    compress_ratio = 0;
+    compress_hint = 0;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1807,6 +1837,12 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " expected_num_objects " << p.expected_num_objects;
   if (p.fast_read)
     out << " fast_read " << p.fast_read;
+  if (p.compress_algorithm)
+    out << " calg " << Compressor::get_comp_alg_name(p.compress_algorithm);
+  if (p.compress_ratio)
+    out << " cratio " << float(p.compress_ratio) / 100;
+  if (p.compress_hint)
+    out << " chint " << ceph_osd_compress_flag_string(p.compress_hint);
   out << p.opts;
   return out;
 }

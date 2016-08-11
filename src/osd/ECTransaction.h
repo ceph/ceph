@@ -27,8 +27,10 @@ public:
     uint64_t off;
     bufferlist bl;
     uint32_t fadvise_flags;
-    AppendOp(const hobject_t &oid, uint64_t off, bufferlist &bl, uint32_t flags)
-      : oid(oid), off(off), bl(bl), fadvise_flags(flags) {}
+    ObjectStore::Transaction::write_params_t extra_params;
+    AppendOp(const hobject_t &oid, uint64_t off, bufferlist &bl, uint32_t flags,
+             const ObjectStore::Transaction::write_params_t& extra)
+      : oid(oid), off(off), bl(bl), fadvise_flags(flags), extra_params(extra) {}
   };
   struct CloneOp {
     hobject_t source;
@@ -113,14 +115,15 @@ public:
     uint64_t off,
     uint64_t len,
     bufferlist &bl,
-    uint32_t fadvise_flags) {
+    uint32_t fadvise_flags,
+    const ObjectStore::Transaction::write_params_t& extra ) {
     if (len == 0) {
       touch(hoid);
       return;
     }
     written += len;
     assert(len == bl.length());
-    ops.push_back(AppendOp(hoid, off, bl, fadvise_flags));
+    ops.push_back(AppendOp(hoid, off, bl, fadvise_flags, extra));
   }
   void stash(
     const hobject_t &hoid,

@@ -133,7 +133,7 @@ void DeterministicOpSequence::note_txn(ObjectStore::Transaction *t)
   bufferlist bl;
   ::encode(txn, bl);
   t->truncate(txn_coll, ghobject_t(txn_object), 0);
-  t->write(txn_coll, ghobject_t(txn_object), 0, bl.length(), bl);
+  t->write(txn_coll, ghobject_t(txn_object), 0, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   dout(10) << __func__ << " " << txn << dendl;
 }
 
@@ -486,7 +486,7 @@ void DeterministicOpSequence::_do_write(coll_t coll, hobject_t& obj,
 {
   ObjectStore::Transaction t;
   note_txn(&t);
-  t.write(coll, ghobject_t(obj), off, len, data);
+  t.write(coll, ghobject_t(obj), off, len, data, 0, ObjectStore::Transaction::write_params_t());
   m_store->apply_transaction(&m_osr, std::move(t));
 }
 
@@ -520,7 +520,7 @@ void DeterministicOpSequence::_do_write_and_clone_range(coll_t coll,
 {
   ObjectStore::Transaction t;
   note_txn(&t);
-  t.write(coll, ghobject_t(orig_obj), srcoff, bl.length(), bl);
+  t.write(coll, ghobject_t(orig_obj), srcoff, bl.length(), bl, 0, ObjectStore::Transaction::write_params_t());
   t.clone_range(coll, ghobject_t(orig_obj), ghobject_t(new_obj),
 		srcoff, srclen, dstoff);
   m_store->apply_transaction(&m_osr, std::move(t));

@@ -173,7 +173,8 @@ struct TransGenerator : public boost::static_visitor<void> {
 	  offset),
 	enc_bl.length(),
 	enc_bl,
-	op.fadvise_flags);
+	op.fadvise_flags,
+	op.extra_params);
       i->second.setattr(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),

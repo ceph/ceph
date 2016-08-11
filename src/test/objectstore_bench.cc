@@ -119,7 +119,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
       size_t count = len < cfg.block_size ? len : (size_t)cfg.block_size;
 
       auto t = new ObjectStore::Transaction;
-      t->write(cid, oid, offset, count, data);
+      t->write(cid, oid, offset, count, data, 0, ObjectStore::Transaction::write_params_t());
       tls.push_back(std::move(*t));
       delete t;
 

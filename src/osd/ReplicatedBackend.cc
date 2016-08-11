@@ -347,10 +347,16 @@ public:
     uint64_t off,
     uint64_t len,
     bufferlist &bl,
-    uint32_t fadvise_flags
-    ) {
+    uint32_t fadvise_flags,
+    const ObjectStore::Transaction::write_params_t& params_extra ) {
     written += len;
-    t.write(get_coll_ct(hoid), ghobject_t(hoid), off, len, bl, fadvise_flags);
+    t.write(get_coll_ct(hoid),
+	    ghobject_t(hoid),
+	    off,
+	    len,
+	    bl,
+	    fadvise_flags,
+            params_extra);
   }
   void remove(
     const hobject_t &hoid
@@ -1702,7 +1708,11 @@ void ReplicatedBackend::submit_push_data(
     bufferlist bit;
     bit.substr_of(data_included, off, p.get_len());
     t->write(coll, ghobject_t(target_oid),
-	     p.get_start(), p.get_len(), bit, fadvise_flags);
+	     p.get_start(), p.get_len(), bit, fadvise_flags,
+	     ObjectStore::Transaction::write_params_t(
+	      get_parent()->get_pool().compress_hint,
+	      get_parent()->get_pool().compress_algorithm,
+	      get_parent()->get_pool().compress_ratio));
     off += p.get_len();
   }
 

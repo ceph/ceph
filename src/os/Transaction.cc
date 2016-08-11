@@ -8,6 +8,40 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
+void ObjectStore::Transaction::write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
+                                     const bufferlist& write_data, uint32_t flags,
+                                     const write_params_t& params_extra) {
+  if (use_tbl) {
+    __u32 op = OP_WRITE;
+    ::encode(op, tbl);
+    ::encode(cid, tbl);
+    ::encode(oid, tbl);
+    ::encode(off, tbl);
+    ::encode(len, tbl);
+    ::encode(params_extra, tbl);
+    ::encode(write_data, tbl);
+  } else {
+    Op* _op = _get_next_op();
+    _op->op = OP_WRITE;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    _op->off = off;
+    _op->len = len;
+    _op->comp_flags = params_extra.comp_flags;
+    _op->comp_alg = params_extra.comp_alg;
+    _op->comp_ratio = params_extra.comp_ratio;
+    ::encode(write_data, data_bl);
+  }
+  assert(len == write_data.length());
+  data.fadvise_flags = data.fadvise_flags | flags;
+  if (write_data.length() > data.largest_data_len) {
+    data.largest_data_len = write_data.length();
+    data.largest_data_off = off;
+    data.largest_data_off_in_tbl = tbl.length() + sizeof(__u32);  // we are about to
+  }
+  data.ops++;
+}
+
 void ObjectStore::Transaction::_build_actions_from_tbl()
 {
   //used only for tbl encode
@@ -54,15 +88,17 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
 	ghobject_t oid;
 	uint64_t off;
 	uint64_t len;
+	write_params_t params_extra;
 	bufferlist bl;
 
 	::decode(cid, p);
 	::decode(oid, p);
 	::decode(off, p);
 	::decode(len, p);
+	::decode(params_extra, p);
 	::decode(bl, p);
 
-	write(cid, oid, off, len, bl);
+	write(cid, oid, off, len, bl, 0, params_extra);
       }
       break;
 
@@ -948,7 +984,7 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->touch(c, o1);
   bufferlist bl;
   bl.append("some data");
-  t->write(c, o1, 1, bl.length(), bl);
+  t->write(c, o1, 1, bl.length(), bl, 0, Transaction::write_params_t());
   t->zero(c, o1, 22, 33);
   t->truncate(c, o1, 99);
   t->remove(c, o1);

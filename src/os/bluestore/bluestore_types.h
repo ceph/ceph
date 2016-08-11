@@ -22,6 +22,7 @@
 #include "include/utime.h"
 #include "include/small_encoding.h"
 #include "common/hobject.h"
+#include "compressor/Compressor.h"
 
 namespace ceph {
   class Formatter;
@@ -256,33 +257,6 @@ struct bluestore_blob_t {
     if (s == "crc32c_8")
       return CSUM_CRC32C_8;
     return -EINVAL;
-  }
-
-  enum CompressionAlgorithm {
-    COMP_ALG_NONE = 0,
-    COMP_ALG_SNAPPY = 1,
-    COMP_ALG_ZLIB = 2,
-  };
-
-  static const char * get_comp_alg_name(int a) {
-    switch (a) {
-    case COMP_ALG_NONE: return "none";
-    case COMP_ALG_SNAPPY: return "snappy";
-    case COMP_ALG_ZLIB: return "zlib";
-    default: return "???";
-    }
-  }
-
-  static int get_comp_alg_type(const std::string &s) {
-    if (s == "none")
-      return COMP_ALG_NONE;
-    if (s == "snappy")
-      return COMP_ALG_SNAPPY;
-    if (s == "zlib")
-      return COMP_ALG_ZLIB;
-
-    assert(0 == "invalid compression algorithm");
-    return COMP_ALG_NONE;
   }
 
   vector<bluestore_pextent_t> extents;///< raw data position on device
@@ -741,7 +715,7 @@ struct bluestore_wal_transaction_t {
 WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
-  uint8_t type = bluestore_blob_t::COMP_ALG_NONE;
+  uint8_t type = Compressor::COMP_ALG_NONE;
   uint32_t length = 0;
 
   bluestore_compression_header_t() {}

@@ -3838,7 +3838,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
-  string name = bluestore_blob_t::get_comp_alg_name(chdr.type);
+  string name = Compressor::get_comp_alg_name(chdr.type);
   CompressorRef compressor = Compressor::create(cct, name);
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return
@@ -5484,7 +5484,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	uint32_t fadvise_flags = i.get_fadvise_flags();
         bufferlist bl;
         i.decode_bl(bl);
-	r = _write(txc, c, o, off, len, bl, fadvise_flags);
+	r = _write(txc, c, o, off, len, bl, fadvise_flags, op->comp_flags, op->comp_alg, op->comp_ratio);
       }
       break;
 
@@ -6108,12 +6108,12 @@ int BlueStore::_do_alloc_write(
     bool compressed = false;
     if (wctx->compress &&
 	wi.blob_length > min_alloc_size &&
-	(c = compressor) != nullptr) {
+	(c = wctx->compressor) != nullptr) {
       // compress
       assert(b_off == 0);
       assert(wi.blob_length == l->length());
       bluestore_compression_header_t chdr;
-      chdr.type = bluestore_blob_t::get_comp_alg_type(c->get_type());
+      chdr.type = Compressor::get_comp_alg_type(c->get_type());
       // FIXME: memory alignment here is bad
       bufferlist t;
       c->compress(*l, t);
@@ -6122,8 +6122,7 @@ int BlueStore::_do_alloc_write(
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
       uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-      uint64_t dstlen = final_length *
-        g_conf->bluestore_compression_required_ratio;
+      uint64_t dstlen = final_length * wctx->comp_ratio;
       dstlen = P2ROUNDUP(dstlen, min_alloc_size);
       if (newlen <= dstlen && newlen < final_length) {
         // Cool. We compressed at least as much as we were hoping to.
@@ -6132,7 +6131,7 @@ int BlueStore::_do_alloc_write(
 	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
 	dout(20) << __func__ << hex << "  compressed 0x" << wi.blob_length
 		 << " -> 0x" << rawlen << " => 0x" << newlen
-		 << " with " << chdr.type
+		 << " with " << c->get_type()
 		 << dec << dendl;
 	txc->statfs_delta.compressed() += rawlen;
 	txc->statfs_delta.compressed_original() += l->length();
@@ -6145,7 +6144,7 @@ int BlueStore::_do_alloc_write(
 	compressed = true;
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
-                 << " -> 0x" << rawlen << " with " << chdr.type
+                 << " -> 0x" << rawlen << " with " << c->get_type()
                  << ", which is more than required 0x" << dstlen
                  << ", leaving uncompressed"
                  << dec << dendl;
@@ -6272,7 +6271,10 @@ int BlueStore::_do_write(
   uint64_t offset,
   uint64_t length,
   bufferlist& bl,
-  uint32_t fadvise_flags)
+  uint32_t fadvise_flags,
+  uint8_t comp_flags,
+  uint8_t comp_alg,
+  uint8_t comp_ratio)
 {
   int r = 0;
 
@@ -6308,9 +6310,27 @@ int BlueStore::_do_write(
   wctx.compress =
     (comp_mode == COMP_FORCE) ||
     (comp_mode == COMP_AGGRESSIVE &&
-     (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
+     (comp_flags & CEPH_OSD_COMP_FLAG_INCOMPRESSIBLE) == 0) ||
     (comp_mode == COMP_PASSIVE &&
-     (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
+     (comp_flags & CEPH_OSD_COMP_FLAG_COMPRESSIBLE));
+
+  if (wctx.compress) {
+    wctx.compressor = compressor;
+    wctx.comp_ratio = comp_ratio ? (float)comp_ratio / 100 : g_conf->bluestore_compression_required_ratio;
+
+    if (comp_alg != Compressor::COMP_ALG_NONE) {
+      std::string comp_alg_name = Compressor::get_comp_alg_name(comp_alg);
+      if (comp_alg_name != compressor->get_type()) {
+	wctx.compressor = Compressor::create(cct, comp_alg_name);
+	if (!wctx.compressor) {
+	  derr << __func__ << " unable to initialize " << comp_alg_name << " compressor"
+	       << ", disabling compression."
+	       << dendl;
+	  wctx.compress = false;
+	}
+      }
+    }
+  }
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
@@ -6384,14 +6404,19 @@ int BlueStore::_write(TransContext *txc,
 		      OnodeRef& o,
 		     uint64_t offset, size_t length,
 		     bufferlist& bl,
-		     uint32_t fadvise_flags)
+		     uint32_t fadvise_flags,
+		     uint8_t comp_flags,
+		     uint8_t comp_alg,
+		     uint8_t comp_ratio)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
+	   << " compress:" << Compressor::get_comp_alg_name(comp_alg) << "/" << (float)comp_ratio / 100
+	   <<  "/" << ceph_osd_compress_flag_string(comp_flags)
 	   << dendl;
   o->exists = true;
   _assign_nid(txc, o);
-  int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+  int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags, comp_flags, comp_alg, comp_ratio);
   txc->write_onode(o);
 
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -6843,7 +6868,7 @@ int BlueStore::_clone(TransContext *txc,
     if (r < 0)
       goto out;
 
-    r = _do_write(txc, c, newo, 0, oldo->onode.size, bl, 0);
+    r = _do_write(txc, c, newo, 0, oldo->onode.size, bl, 0, 0, Compressor::COMP_ALG_NONE, 0);
     if (r < 0)
       goto out;
   }
@@ -6910,7 +6935,7 @@ int BlueStore::_clone_range(TransContext *txc,
   if (r < 0)
     goto out;
 
-  r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+  r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0, 0, Compressor::COMP_ALG_NONE, 0);
   if (r < 0)
     goto out;
 

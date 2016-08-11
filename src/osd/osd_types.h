@@ -43,6 +43,7 @@
 #include "OpRequest.h"
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
+#include "compressor/Compressor.h"
 #include <atomic>
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
@@ -88,6 +89,8 @@ string ceph_osd_flag_string(unsigned flags);
 string ceph_osd_op_flag_string(unsigned flags);
 /// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a string
 string ceph_osd_alloc_hint_flag_string(unsigned flags);
+/// conver CEPH_OSD_COMP_FLAG_* op flags to a string
+string ceph_osd_compress_flag_string(unsigned flags);
 
 struct pg_shard_t {
   int32_t osd;
@@ -1293,6 +1296,10 @@ public:
                                  ///< user does not specify any expected value
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
+  uint8_t compress_algorithm;    ///< desired compression algorithm to apply
+  uint8_t compress_ratio;        ///< desired compression ratio to have
+  uint8_t compress_hint;         ///< desired compression mode to apply
+
   pool_opts_t opts; ///< options
 
 private:
@@ -1343,6 +1350,9 @@ public:
       stripe_width(0),
       expected_num_objects(0),
       fast_read(false),
+      compress_algorithm(Compressor::COMP_ALG_NONE),
+      compress_ratio(0),
+      compress_hint(0),
       opts()
   { }
 
