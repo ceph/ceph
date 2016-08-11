@@ -141,7 +141,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   version_t version = get_last_committed();
   if (version == osdmap.epoch)
     return;
-  assert(version >= osdmap.epoch);
+  assert(version > osdmap.epoch);
 
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
