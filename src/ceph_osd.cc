@@ -15,7 +15,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <uuid/uuid.h>
 #include <boost/scoped_ptr.hpp>
 
 #include <iostream>
