@@ -237,7 +237,7 @@ option(WITH_RBD "Remote block storage is here" ON)
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(${WITH_LEVELDB})
 find_package(leveldb REQUIRED)
-find_file(HAVE_LEVELDB_FILTER_POLICY filter_policy.h PATHS /usr/include/leveldb)
+find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
 endif(${WITH_LEVELDB})
 
 option(WITH_EXPAT "EXPAT is here" ON)
