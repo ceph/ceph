@@ -77,13 +77,14 @@ tasks:
    - workload_x
    - upgrade-sequence_x
 - print: "**** done parallel -x branch"
-# Run test.sh on the -x upgraded cluster
+# Run librados tests on the -x upgraded cluster
 - install.upgrade:
     client.1:
 - workunit:
+    branch: jewel
     clients:
       client.1:
-      - rados/test.sh
+      - rados/test-upgrade-v11.0.0.sh
       - cls
 - print: "**** done final test on -x cluster"
 #######################
@@ -150,15 +151,16 @@ workload_x:
        branch: jewel
        clients:
          client.1:
-         - rados/test.sh
+         - rados/test-upgrade-v11.0.0.sh
          - cls
-   - print: "**** done rados/test.sh &  cls workload_x NOT upgraded  client"
+   - print: "**** done rados/test-upgrade-v11.0.0.sh &  cls workload_x NOT upgraded  client"
    - workunit:
+       branch: jewel
        clients:
          client.0:
-         - rados/test.sh
+         - rados/test-upgrade-v11.0.0.sh
          - cls
-   - print: "**** done rados/test.sh &  cls workload_x upgraded client"
+   - print: "**** done rados/test-upgrade-v11.0.0.sh &  cls workload_x upgraded client"
    - rgw: [client.1]
    - print: "**** done rgw workload_x"
    - s3tests:
