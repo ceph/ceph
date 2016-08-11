@@ -1216,8 +1216,7 @@ private:
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
-				KeyValueDB::Transaction t);
+  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents);
   void _commit_bluefs_freespace(const vector<bluestore_pextent_t>& extents);
 
   CollectionRef _get_collection(const coll_t& cid);
