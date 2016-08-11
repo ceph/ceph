@@ -62,29 +62,26 @@ class ProvisionOpenStack(OpenStack):
         for i in range(volumes['count']):
             volume_name = name + '-' + str(i)
             try:
-                misc.sh("openstack volume show -f json " +
-                         volume_name)
+                self.run("volume show -f json " + volume_name)
             except subprocess.CalledProcessError as e:
                 if 'No volume with a name or ID' not in e.output:
                     raise e
-                misc.sh("openstack volume create -f json " +
-                        config['openstack'].get('volume-create', '') + " " +
-                        " --property ownedby=" + config.openstack['ip'] +
-                        " --size " + str(volumes['size']) + " " +
-                        volume_name)
+                self.run("volume create -f json " +
+                         config['openstack'].get('volume-create', '') + " " +
+                         " --property ownedby=" + config.openstack['ip'] +
+                         " --size " + str(volumes['size']) + " " +
+                         volume_name)
             with safe_while(sleep=2, tries=100,
                             action="volume " + volume_name) as proceed:
                 while proceed():
-                    r = misc.sh("openstack -q volume show  -f json " +
-                                volume_name)
+                    r = self.run("volume show  -f json " + volume_name)
                     status = self.get_value(json.loads(r), 'status')
                     if status == 'available':
                         break
                     else:
                         log.info("volume " + volume_name +
                                  " not available yet")
-            misc.sh("openstack server add volume " +
-                    name + " " + volume_name)
+            self.run("server add volume " + name + " " + volume_name)
 
     @staticmethod
     def ip2name(prefix, ip):
@@ -145,9 +142,9 @@ class ProvisionOpenStack(OpenStack):
             for instance in instances:
                 ip = instance.get_ip(network)
                 name = self.ip2name(self.basename, ip)
-                misc.sh("openstack server set " +
-                        "--name " + name + " " +
-                        instance['ID'])
+                self.run("server set " +
+                         "--name " + name + " " +
+                         instance['ID'])
                 fqdn = name + '.' + config.lab_domain
                 if not misc.ssh_keyscan_wait(fqdn):
                     raise ValueError('ssh_keyscan_wait failed for ' + fqdn)
