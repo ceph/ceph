@@ -2546,11 +2546,11 @@ void PG::_update_calc_stats()
 
     // a misplaced object is not stored on the correct OSD
     uint64_t misplaced = 0;
-    unsigned i = 0;
     unsigned in_place = 0;
-    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p, ++i) {
-      pg_shard_t s(*p,
-		   pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
+    for (set<pg_shard_t>::const_iterator p = upset.begin();
+	 p != upset.end();
+	 ++p) {
+      const pg_shard_t &s = *p;
       if (actingset.count(s)) {
 	++in_place;
       } else {
