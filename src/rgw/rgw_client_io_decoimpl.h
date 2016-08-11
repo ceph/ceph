@@ -385,20 +385,18 @@ protected:
 
   boost::optional<uint64_t> content_length;
 
-  ceph::bufferlist early_header_data;
-  ceph::bufferlist header_data;
+  std::vector<std::pair<std::string, std::string>> headers;
 
-  std::size_t write_data(const char* const buf,
-                         const std::size_t len) override {
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) override {
     switch (phase) {
     case ReorderState::RGW_EARLY_HEADERS:
-      early_header_data.append(buf, len);
-      return len;
     case ReorderState::RGW_STATUS_SEEN:
-      header_data.append(buf, len);
-      return len;
+      headers.emplace_back(std::make_pair(name.to_string(),
+                                          value.to_string()));
+      return 0;
     case ReorderState::RGW_DATA:
-      return RGWDecoratedStreamIO<T>::write_data(buf, len);
+      return RGWDecoratedStreamIO<T>::send_header(name, value);
     }
 
     return -EIO;
@@ -436,38 +434,14 @@ public:
 
     /* Sent content length if necessary. */
     if (content_length) {
-      ssize_t rc = RGWDecoratedStreamIO<T>::send_content_length(*content_length);
-      if (rc < 0) {
-        return rc;
-      } else {
-        sent += rc;
-      }
+      sent += RGWDecoratedStreamIO<T>::send_content_length(*content_length);
     }
 
     /* Header data in buffers are already counted. */
-    if (header_data.length()) {
-      ssize_t rc = RGWDecoratedStreamIO<T>::write_data(header_data.c_str(),
-                                                       header_data.length());
-      if (rc < 0) {
-        return rc;
-      } else {
-        sent += rc;
-      }
-
-      header_data.clear();
+    for (const auto& kv : headers) {
+      sent += RGWDecoratedStreamIO<T>::send_header(kv.first, kv.second);
     }
-
-    if (early_header_data.length()) {
-      ssize_t rc = RGWDecoratedStreamIO<T>::write_data(early_header_data.c_str(),
-                                                       early_header_data.length());
-      if (rc < 0) {
-        return rc;
-      } else {
-        sent += rc;
-      }
-
-      early_header_data.clear();
-    }
+    headers.clear();
 
     return sent + RGWDecoratedStreamIO<T>::complete_header();
   }
