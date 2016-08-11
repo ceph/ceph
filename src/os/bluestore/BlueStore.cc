@@ -2256,18 +2256,22 @@ int BlueStore::_reconcile_bluefs_freespace()
   int r = bluefs->get_block_extents(bluefs_shared_bdev, &bset);
   assert(r == 0);
   if (bset == bluefs_extents) {
-    dout(10) << __func__ << " we agree bluefs has " << bset << dendl;
+    dout(10) << __func__ << " we agree bluefs has 0x" << std::hex << bset
+	     << std::dec << dendl;
     return 0;
   }
-  dout(10) << __func__ << " bluefs says " << bset << dendl;
-  dout(10) << __func__ << " super says  " << bluefs_extents << dendl;
+  dout(10) << __func__ << " bluefs says 0x" << std::hex << bset << std::dec
+	   << dendl;
+  dout(10) << __func__ << " super says  0x" << std::hex << bluefs_extents
+	   << std::dec << dendl;
 
   interval_set<uint64_t> overlap;
   overlap.intersection_of(bset, bluefs_extents);
 
   bset.subtract(overlap);
   if (!bset.empty()) {
-    derr << __func__ << " bluefs extra " << bset << dendl;
+    derr << __func__ << " bluefs extra 0x" << std::hex << bset << std::dec
+	 << dendl;
     return -EIO;
   }
 
@@ -4662,7 +4666,8 @@ int BlueStore::_open_super_meta()
     }
     catch (buffer::error& e) {
     }
-    dout(10) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
+    dout(10) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
+	     << std::dec << dendl;
   }
   return 0;
 }
@@ -5084,8 +5089,8 @@ void BlueStore::_kv_sync_thread()
 	  }
 	  bufferlist bl;
 	  ::encode(bluefs_extents, bl);
-	  dout(10) << __func__ << " bluefs_extents now " << bluefs_extents
-		   << dendl;
+	  dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
+		   << bluefs_extents << std::dec << dendl;
 	  t->set(PREFIX_SUPER, "bluefs_extents", bl);
 	}
       }
