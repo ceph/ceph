@@ -3017,7 +3017,7 @@ bool MDSMonitor::try_standby_replay(
 }
 
 MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
-  : PaxosService(mn, p, service_name)
+  : PaxosService(mn, p, std::move(service_name))
 {
   handlers.push_back(std::make_shared<SetHandler>());
   handlers.push_back(std::make_shared<LegacyHandler<SetHandler> >("mds set"));
