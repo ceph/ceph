@@ -186,6 +186,24 @@ def _yum_unset_check_obsoletes(remote):
                check_status=False)
 
 
+def _rpm_package_overrides(pkgs, os):
+    """
+    Replaces some package names with their distro-specific equivalents
+    (currently "python3-*" -> "python34-*" for CentOS)
+
+    :param pkgs: list of RPM package names
+    :param os: the teuthology.orchestra.opsys.OS object
+    """
+    is_rhel = os.name in ['centos', 'rhel']
+    result = []
+    for pkg in pkgs:
+        if is_rhel:
+            if pkg.startswith('python3-') or pkg == 'python3':
+                pkg = pkg.replace('3', '34', count=1)
+        result.append(pkg)
+    return result
+
+
 def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     """
     Installs the ceph-release package for the relevant branch, then installs
@@ -198,6 +216,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     :param rpm: list of packages names to install
     :param config: the config dict
     """
+    rpm = _rpm_package_overrides(rpm, remote.os)
     gitbuilder = _get_gitbuilder_project(ctx, remote, config)
     log.info('Pulling from %s', gitbuilder.base_url)
     log.info('Package version is %s', gitbuilder.version)
@@ -410,6 +429,7 @@ def _remove_rpm(ctx, config, remote, rpm):
     :param remote: the teuthology.orchestra.remote.Remote object
     :param rpm: list of packages names to remove
     """
+    rpm = _rpm_package_overrides(rpm, remote.os)
     log.info("Removing packages: {pkglist} on rpm system.".format(
         pkglist=", ".join(rpm)))
     gitbuilder = _get_gitbuilder_project(ctx, remote, config)
