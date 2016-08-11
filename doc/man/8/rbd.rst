@@ -510,9 +510,9 @@ To map an image via the kernel with cephx enabled::
 
        rbd map mypool/myimage --id admin --keyfile secretfile
 
-To map an image via the kernel with different cluster name other than default *ceph*.
+To map an image via the kernel with different cluster name other than default *ceph*::
 
-       rbd map mypool/myimage --cluster *cluster name*
+       rbd map mypool/myimage --cluster cluster name
 
 To unmap an image::
 
