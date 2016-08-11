@@ -1313,6 +1313,7 @@ BitAllocator::shutdown()
 {
   lock_excl();
   serial_lock();
+  unlock();
 }
 
 void BitAllocator::unreserve_blocks(int64_t unused)
