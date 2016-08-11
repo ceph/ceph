@@ -76,6 +76,10 @@ setup(
                       'pyopenssl>=0.13',
                       'ndg-httpsclient',
                       'pyasn1',
+                      # Work around regression in 0.9.2 that caused
+                      # `openstack ip floating list -f json` to fail and return
+                      # "Connection failure that may be retried."
+                      'openstacksdk != 0.9.2',
                       # python-novaclient is specified here, even though it is
                       # redundant, because python-openstackclient requires
                       # Babel, and installs 2.3.3, which is forbidden by
