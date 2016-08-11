@@ -1,6 +1,8 @@
 #ifndef CEPH_CDENTRY_H
 #define CEPH_CDENTRY_H
 #include "CObject.h"
+#include "SimpleLock.h"
+#include "LocalLock.h"
 
 class LogSegment;
 
@@ -19,8 +21,7 @@ public:
   // -- states --
   static const int STATE_NEW =          (1<<0);
 
-  CDentry(CDir *d, const std::string &n, snapid_t f=2, snapid_t l=CEPH_NOSNAP)
-    : CObject("CDentry"), dir(d), name(n), first(f), last(l) {}
+  CDentry(CDir *d, const std::string &n, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
 
   CDir *get_dir() const { return dir; }
   CInode *get_dir_inode() const;
@@ -28,6 +29,8 @@ public:
   snapid_t get_first() const { return first; }
   snapid_t get_last() const { return last; }
   dentry_key_t get_key() const { return dentry_key_t(last, name.c_str()); }
+
+  bool is_lt(const CObject *r) const;
 
   struct linkage_t {
     CInode *inode;
@@ -84,6 +87,13 @@ public:
   bool is_new() const { return state_test(STATE_NEW); }
   void mark_new();
   void clear_new();
+
+protected:
+  static LockType lock_type;
+  static LockType versionlock_type;
+public:
+  SimpleLock lock;
+  LocalLock versionlock;
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);

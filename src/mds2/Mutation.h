@@ -18,6 +18,7 @@
 #include "mds/mdstypes.h"
 #include "include/elist.h"
 #include "CObject.h"
+#include "SimpleLock.h"
 
 class LogSegment;
 class Session;
@@ -29,24 +30,37 @@ struct MutationImpl {
   __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
 
-private:
   utime_t mds_stamp; ///< mds-local timestamp (real time)
   utime_t op_stamp;  ///< op timestamp (client provided)
 
-  // cache pins (so things don't expire)
-  set<CObject* > pins;
+  set<CObjectRef> pins;
 
   // for applying projected inode/fnode changes
   list<CObject*> projected_nodes[2];
 
   // mutex locks we hold
   set<CObject*> locked_objects;
-public:
+
+  // held locks
+  set< SimpleLock* > rdlocks;  // always local.
+  set< SimpleLock* > wrlocks;  // always local.
+  set< SimpleLock* > xlocks;   // local or remote.
+  set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
+
+  SimpleLock *locking;
+
+  bool done_locking;
+  std::atomic<bool> committing;
+
   // keep our default values synced with MDRequestParam's
   MutationImpl()
-    : attempt(0), ls(0) { }
+    : attempt(0), ls(0),
+      locking(NULL), done_locking(false),
+      committing(ATOMIC_VAR_INIT(false)) { }
   MutationImpl(metareqid_t ri, __u32 att=0)
-    : reqid(ri), attempt(att), ls(0) {}
+    : reqid(ri), attempt(att), ls(0),
+      locking(NULL), done_locking(false),
+      committing(ATOMIC_VAR_INIT(false)) { }
   virtual ~MutationImpl() { }
 
   client_t get_client() {
@@ -78,11 +92,12 @@ public:
   void add_projected_fnode(CDir *dir, bool early);
   void pop_and_dirty_projected_nodes();
   void pop_and_dirty_early_projected_nodes();
+  CObject* pop_early_projected_node();
 
   void lock_object(CObject *o);
   void unlock_object(CObject *o);
   void unlock_all_objects();
- void add_locked_object(CObject *o);
+  void add_locked_object(CObject *o);
   bool is_object_locked(CObject *o) {
     return locked_objects.count(o);
   }
@@ -90,9 +105,19 @@ public:
     return !locked_objects.empty();
   }
 
+  void start_locking(SimpleLock *lock);
+  void finish_locking(SimpleLock *lock);
+
   void apply();
   void early_apply();
   void cleanup();
+
+  void start_committing() {
+    std::atomic_store_explicit(&committing, true, std::memory_order_acquire);
+  }
+  void wait_committing() {
+    while(!std::atomic_exchange_explicit(&committing, false, std::memory_order_acquire));
+  }
 
   virtual void print(ostream &out) const {
     out << "mutation(" << this << ")";
@@ -132,7 +157,11 @@ struct MDRequestImpl : public MutationImpl {
 
   bufferlist reply_extra_bl;
 
+
   bool hold_rename_dir_mutex;
+  bool did_early_reply;
+
+  int retries;
 
   // ---------------------------------------------------
   struct Params {
@@ -146,8 +175,9 @@ struct MDRequestImpl : public MutationImpl {
     MutationImpl(params.reqid, params.attempt),
     client_request(params.client_req),
     straydn(NULL), tracei(-1), tracedn(-1),
-    hold_rename_dir_mutex(false) {
-  }
+    hold_rename_dir_mutex(false),
+    did_early_reply(false),
+    retries(0) { }
   ~MDRequestImpl();
   
   const filepath& get_filepath();

@@ -3,15 +3,25 @@
 #include "mds/mdstypes.h"
 #include "CObject.h"
 
+#include "SimpleLock.h"
+#include "ScatterLock.h"
+#include "LocalLock.h"
+#include "Capability.h"
+
+#include "include/elist.h"
+
+
 class LogSegment;
+class EMetaBlob;
 class Session;
 class MDCache;
 
 typedef std::map<string, bufferptr> xattr_map_t;
 
 class CInode : public CObject {
+public:
+  MDCache* const mdcache;
 protected:
-  MDCache *mdcache;
 
   inode_t inode;
   std::string symlink;
@@ -34,22 +44,29 @@ protected:
   CDentry *parent;
   list<CDentry*> projected_parent;
 
-  CDir *dir;
+  map<frag_t,CDir*> dirfrags;
 
   void first_get();
   void last_put();
 public:
   // pins
   static const int PIN_DIRFRAG =		-1;
+  static const int PIN_DIRTYRSTAT =		21;
   // states
   static const unsigned STATE_FREEING =		(1<<0);
+  static const unsigned STATE_DIRTYRSTAT =	(1<<15);
 
-  CInode(MDCache *_mdcache) :
-    CObject("CInode"), mdcache(_mdcache), parent(NULL), dir(NULL) {}
+  CInode(MDCache *_mdcache);
 
   inodeno_t ino() const { return inode.ino; }
   vinodeno_t vino() const { return vinodeno_t(inode.ino, CEPH_NOSNAP); }
   uint8_t d_type() const { return IFTODT(inode.mode); }
+
+  bool is_head() const { return true; }
+  bool is_lt(const CObject *r) const {
+    const CInode *o = static_cast<const CInode*>(r);
+    return vino() < o->vino();
+  }
 
   bool is_root() const { return ino() == MDS_INO_ROOT; }
   bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
@@ -64,9 +81,17 @@ public:
   bool is_file() const { return inode.is_file(); }
   bool is_symlink() const { return inode.is_symlink(); }
 
+  void name_stray_dentry(string& dname) const;
 
   inode_t* __get_inode() {  return &inode; }
   const inode_t* get_inode() const {  return &inode; }
+  inode_t* __get_projected_inode() {
+    mutex_assert_locked_by_me();
+    if (projected_nodes.empty())
+      return &inode;
+    else
+      return &projected_nodes.back().inode;
+  }
   const inode_t* get_projected_inode() const {
     mutex_assert_locked_by_me();
     if (projected_nodes.empty())
@@ -140,14 +165,114 @@ public:
   }
   CDirRef get_dirfrag(frag_t fg) {
     mutex_assert_locked_by_me();
-    assert(fg == frag_t());
-    return CDirRef(dir);
+    CDirRef ref;
+    auto p = dirfrags.find(fg);
+    if (p != dirfrags.end())
+      ref = p->second;
+    return ref;
   }
+  void get_dirfrags(list<CDirRef>& ls );
   CDirRef get_or_open_dirfrag(frag_t fg);
 
   int encode_inodestat(bufferlist& bl, Session *session, unsigned max_bytes);
 
-  void name_stray_dentry(string& dname) const;
+protected:
+  static LockType versionlock_type;
+  static LockType authlock_type;
+  static LockType linklock_type;
+  static LockType dirfragtreelock_type;
+  static LockType filelock_type;
+  static LockType xattrlock_type;
+  static LockType snaplock_type;
+  static LockType nestlock_type;
+  static LockType flocklock_type;
+  static LockType policylock_type;
+
+public:
+  LocalLock  versionlock;
+  SimpleLock authlock;
+  SimpleLock linklock;
+  ScatterLock dirfragtreelock;
+  ScatterLock filelock;
+  SimpleLock xattrlock;
+  SimpleLock snaplock;
+  ScatterLock nestlock;
+  SimpleLock flocklock;
+  SimpleLock policylock;
+
+  SimpleLock* get_lock(int type) {
+    switch (type) {
+    case CEPH_LOCK_IFILE: return &filelock;
+    case CEPH_LOCK_IAUTH: return &authlock;
+    case CEPH_LOCK_ILINK: return &linklock;
+    case CEPH_LOCK_IDFT: return &dirfragtreelock;
+    case CEPH_LOCK_IXATTR: return &xattrlock;
+    case CEPH_LOCK_ISNAP: return &snaplock;
+    case CEPH_LOCK_INEST: return &nestlock;
+    case CEPH_LOCK_IFLOCK: return &flocklock;
+    case CEPH_LOCK_IPOLICY: return &policylock;
+    }
+    return 0;
+  }
+
+protected:
+  std::map<client_t, Capability*> client_caps;         // client -> caps
+  client_t loner_cap, want_loner_cap;
+
+public:
+  const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
+  Capability *get_client_cap(client_t client) {
+    auto p = client_caps.find(client);
+    if (p != client_caps.end())
+      return p->second;
+    return NULL;
+  }
+
+  // caps issued, wanted
+  int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
+                      int shift = 0, int mask = -1);
+  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
+  bool is_any_caps_wanted() const;
+  bool issued_caps_need_gather(SimpleLock *lock);
+
+  // caps allowed
+  int get_caps_liked() const;
+  int get_caps_allowed_ever() const;
+  int get_caps_allowed_by_type(int type) const;
+  int get_caps_careful() const;
+  int get_xlocker_mask(client_t client) const;
+  int get_caps_allowed_for_client(Session *s, inode_t *file_i) const;
+
+
+  client_t get_loner() const { return loner_cap; };
+  client_t get_wanted_loner() const { return want_loner_cap; };
+  // this is the loner state our locks should aim for
+  client_t get_target_loner() const {
+    if (loner_cap == want_loner_cap)
+      return loner_cap;
+    return -1;
+  }
+  client_t calc_ideal_loner();
+  client_t choose_ideal_loner();
+  void set_loner_cap(client_t l);
+  bool try_set_loner();
+  bool try_drop_loner();
+
+protected:
+  void finish_scatter_update(ScatterLock *lock, CDir *dir);
+  void __finish_frag_update(CDir *dir, MutationRef& mut);
+  friend class C_Inode_FragUpdate;
+public:
+  void start_scatter(ScatterLock *lock);
+  void finish_scatter_gather_update(int type, MutationRef& mut);
+  void finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob);
+  void clear_dirty_scattered(int type);
+
+  bool is_dirty_rstat() { return state_test(STATE_DIRTYRSTAT); }
+  void mark_dirty_rstat();
+  void clear_dirty_rstat();
+
+  elist<CInode*>::item dirty_rstat_item;
 };
 
 ostream& operator<<(ostream& out, const CInode& in);

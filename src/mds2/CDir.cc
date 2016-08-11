@@ -1,4 +1,5 @@
 #include "MDCache.h"
+#include "Locker.h"
 #include "CDir.h"
 #include "CInode.h"
 #include "CDentry.h"
@@ -14,6 +15,12 @@ ostream& operator<<(ostream& out, const CDir& dir)
   return out;
 }
 
+CDir::CDir(CInode *i) :
+  CObject("CDir"), mdcache(i->mdcache), inode(i),
+  dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item))
+{
+}
+
 void CDir::first_get()
 {
   inode->get(CInode::PIN_DIRFRAG);
@@ -22,6 +29,16 @@ void CDir::first_get()
 void CDir::last_put()
 {
   inode->put(CInode::PIN_DIRFRAG);
+}
+
+dirfrag_t CDir::dirfrag() const
+{
+  return dirfrag_t(get_inode()->ino(), get_frag());
+}
+
+bool CDir::is_lt(const CObject *r) const
+{
+  return dirfrag() < (static_cast<const CDir*>(r))->dirfrag();
 }
 
 fnode_t *CDir::project_fnode()
@@ -201,4 +218,93 @@ void CDir::encode_dirstat(bufferlist& bl, mds_rank_t whoami)
   ::encode(frag, bl);
   ::encode(auth, bl);
   ::encode(dist, bl);
+}
+
+void CDir::resync_accounted_fragstat(fnode_t *pf)
+{
+  const inode_t *pi = inode->get_projected_inode();
+  if (pf->accounted_fragstat.version != pi->dirstat.version) {
+    pf->fragstat.version = pi->dirstat.version;
+    dout(10) << "resync_accounted_fragstat " << pf->accounted_fragstat << " -> " << pf->fragstat << dendl;
+    pf->accounted_fragstat = pf->fragstat;
+  }
+}
+
+/*
+ * resync rstat and accounted_rstat with inode
+ */
+void CDir::resync_accounted_rstat(fnode_t *pf)
+{
+  const inode_t *pi = inode->get_projected_inode();
+  if (pf->accounted_rstat.version != pi->rstat.version) {
+    pf->rstat.version = pi->rstat.version;
+    dout(10) << "resync_accounted_rstat " << pf->accounted_rstat << " -> " << pf->rstat << dendl;
+    pf->accounted_rstat = pf->rstat;
+  }
+}
+
+void CDir::add_dirty_rstat_inode(CInode *in)
+{
+  inode->mutex_assert_locked_by_me();
+  in->get(CInode::PIN_DIRTYRSTAT);
+  dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+  mdcache->locker->mark_updated_scatterlock(&inode->nestlock);
+}
+
+void CDir::remove_dirty_rstat_inode(CInode *in)
+{
+  inode->mutex_assert_locked_by_me();
+  in->dirty_rstat_item.remove_myself();
+  in->put(CInode::PIN_DIRTYRSTAT);
+}
+
+void CDir::assimilate_dirty_rstat_inodes(MutationRef& mut)
+{ 
+  inode->mutex_assert_locked_by_me();
+  dout(10) << "assimilate_dirty_rstat_inodes" << dendl;
+  for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+      !p.end(); ++p) {
+    CInode *in = *p;
+
+    in->mutex_lock();
+
+    assert(in->get_projected_parent_dn()->get_dir() == this);
+
+    mut->pin(in);
+    mut->add_projected_inode(in, true);
+    inode_t *pi = in->project_inode();
+    pi->version = in->pre_dirty();
+
+    mdcache->project_rstat_inode_to_frag(in, this, 0);
+
+    in->mutex_unlock();
+  }
+  state_set(STATE_ASSIMRSTAT);
+  dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
+}
+
+void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob)
+{
+  inode->mutex_assert_locked_by_me();
+  if (!state_test(STATE_ASSIMRSTAT))
+    return;
+
+  state_clear(STATE_ASSIMRSTAT);
+  dout(10) << "assimilate_dirty_rstat_inodes_finish" << dendl;
+
+  elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+  while (!p.end()) {
+    CInode *in = *p;
+    ++p;
+
+    in->mutex_lock();
+    in->clear_dirty_rstat();
+    //blob->add_primary_dentry(in->get_projected_parent_dn(), in, true);
+    in->mutex_unlock();
+  }
+
+  /*
+  if (!dirty_rstat_inodes.empty())
+    mdcache->locker->mark_updated_scatterlock(&inode->nestlock);
+  */
 }

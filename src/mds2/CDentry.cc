@@ -6,9 +6,20 @@
 
 #define dout_subsys ceph_subsys_mds
 
+
+LockType CDentry::lock_type(CEPH_LOCK_DN);
+LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
+
 ostream& operator<<(ostream& out, const CDentry& dn)
 {
   return out;
+}
+
+CDentry::CDentry(CDir *d, const std::string &n, snapid_t f, snapid_t l) :
+  CObject("CDentry"), dir(d), name(n), first(f), last(l),
+  lock(this, &lock_type),
+  versionlock(this, &versionlock_type)
+{
 }
 
 CInode* CDentry::get_dir_inode() const
@@ -23,6 +34,16 @@ void CDentry::last_put()
 {
 }
 
+bool CDentry::is_lt(const CObject *r) const
+{
+  const CDentry *o = static_cast<const CDentry*>(r);
+  if ((get_dir_inode()->ino() < o->get_dir_inode()->ino()) ||
+      (get_dir_inode()->ino() == o->get_dir_inode()->ino() &&
+       get_key() < o->get_key()))
+    return true;
+  return false;
+}
+
 CDentry::linkage_t* CDentry::_project_linkage()
 {
   // dirfrag must be locked
@@ -33,8 +54,16 @@ CDentry::linkage_t* CDentry::_project_linkage()
 
 void CDentry::push_projected_linkage(CInode *in)
 {
+  // dirty rstat tracking is in the projected plane
+  bool dirty_rstat = in->is_dirty_rstat();
+  if (dirty_rstat)
+    in->clear_dirty_rstat();
+
   _project_linkage()->inode = in;
   in->push_projected_parent(this);
+
+  if (dirty_rstat)
+    in->mark_dirty_rstat();
 }
 
 void CDentry::pop_projected_linkage()

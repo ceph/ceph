@@ -1,34 +1,46 @@
 #ifndef CEPH_COBJECT_H  
 #define CEPH_COBJECT_H
 #include <atomic>
-#include "common/Mutex.h"
 #include <boost/intrusive_ptr.hpp>
+#include "common/Mutex.h"
+#include "include/compact_map.h"
+#include "include/compact_set.h"
+#include "MDSContext.h"
+
+//#define __MDS_REF_SET
 
 class CObject {
 protected:
-
+#ifdef __MDS_REF_SET
+  std::map<int,int> ref_map;
+#endif
   std::atomic<int> ref;
-  std::atomic<uint64_t> state;
-
-  Mutex mutex;
 
   virtual void last_put() {}
   virtual void first_get() {}
 public:
   // -- pins --
   const static int PIN_DIRTY		= 1001;
-  static const int PIN_INTRUSIVEPTR     = 1000;
+  const static int PIN_INTRUSIVEPTR     = 1000;
+  const static int PIN_LOCK		= -1002;
   const static int PIN_REQUEST		= -1003;
+  const static int PIN_WAITER		= 1004;
+  const static int PIN_DIRTYSCATTERED	= -1005;
 
-  // -- state --
-  const static uint64_t STATE_DIRTY		= (1ULL<<48);
 
   void get(int by) {
+
+#ifdef __MDS_REF_SET
+  ref_map[by]++;
+#endif
     int old = std::atomic_fetch_add(&ref, 1);
     if (old == 0)
       first_get();
   }
   void put(int by) {
+#ifdef __MDS_REF_SET
+  assert(--ref_map[by] >= 0);
+#endif
     int old = std::atomic_fetch_sub(&ref, 1);
     assert(old >= 1);
     if (old == 1)
@@ -37,6 +49,12 @@ public:
   int get_num_ref(int by=-1) {
     return std::atomic_load(&ref);
   }
+
+protected:
+  std::atomic<uint64_t> state;
+public:
+  // -- state --
+  const static uint64_t STATE_DIRTY	= (1ULL<<48);
 
   uint64_t get_state() const {
     return std::atomic_load(&state);
@@ -54,25 +72,117 @@ public:
     return std::atomic_store(&state, mask);
   }
 
+  bool is_auth() const { return true; }
   bool is_dirty() const { return state_test(STATE_DIRTY); }
   bool is_clean() const { return !is_dirty(); }
 
+protected:
+  Mutex mutex;
+public:
   void mutex_lock() { mutex.Lock(); }
   void mutex_unlock() { mutex.Unlock(); }
   bool mutex_trylock() { return mutex.TryLock(); }
   bool mutex_is_locked_by_me() const  { return mutex.is_locked_by_me(); }
   void mutex_assert_locked_by_me() const { assert(mutex.is_locked_by_me()); }
 
-  virtual ~CObject() {}
+  class Locker {
+    CObject *o;
+  public:
+    Locker(CObject *_o) : o(_o) { if (o) o->mutex_lock(); }
+    ~Locker() { if(o) o->mutex_unlock(); }
+  };
+
+protected:
+  compact_multimap<uint64_t, pair<uint64_t, MDSInternalContextBase*> > waiting;
+  uint64_t last_wait_seq;
+public:
+  // -- wait --
+  const static uint64_t WAIT_ORDERED	= (1ull<<56);
+
+  bool is_waiting_for(uint64_t mask, uint64_t min=0) {
+    if (!min) {
+      min = mask;
+      while (min & (min-1))  // if more than one bit is set
+        min &= min-1;        //  clear LSB
+    }
+    for (auto p = waiting.lower_bound(min);
+         p != waiting.end();
+         ++p) {
+      if (p->first & mask) return true;
+      if (p->first > mask) return false;
+    }
+    return false;
+  }
+  virtual void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
+    if (waiting.empty())
+      get(PIN_WAITER);
+
+    uint64_t seq = 0;
+    if (mask & WAIT_ORDERED) {
+      seq = ++last_wait_seq;
+      mask &= ~WAIT_ORDERED;
+    }
+    waiting.insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
+		      mask,
+		      pair<uint64_t, MDSInternalContextBase*>(seq, c)));
+  }
+  virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
+    if (waiting.empty())
+      return;
+
+    // process ordered waiters in the same order that they were added.
+    std::map<uint64_t, MDSInternalContextBase*> ordered_waiters;
+
+    for (auto it = waiting.begin(); it != waiting.end(); ) {
+      if (it->first & mask) {
+	if (it->second.first > 0)
+	  ordered_waiters.insert(it->second);
+	else
+	  ls.push_back(it->second.second);
+	waiting.erase(it++);
+      } else {
+	++it;
+      }
+    }
+    for (auto it = ordered_waiters.begin(); it != ordered_waiters.end(); ++it) {
+      ls.push_back(it->second);
+    }
+    if (waiting.empty())
+      put(PIN_WAITER);
+  }
+  void finish_waiting(uint64_t mask, int result = 0) {
+    list<MDSInternalContextBase*> finished;
+    take_waiting(mask, finished);
+    finish_contexts(g_ceph_context, finished, result);
+  }
+
+  virtual void clear_dirty_scattered(int type) { assert(0); }
+
+  virtual bool is_lt(const CObject *r) const = 0;
+  struct ptr_lt {
+	  bool operator()(const CObject* l, const CObject* r) const {
+		  return l->is_lt(r);
+	  }
+  };
+
   CObject(const string &type_name) :
     ref(ATOMIC_VAR_INIT(0)), state(ATOMIC_VAR_INIT(0)),
-    mutex(type_name + "::mutex") {}
+    mutex(type_name + "::mutex"),
+    last_wait_seq(0) {}
+
+  virtual ~CObject() {}
 };
+
+inline std::ostream& operator<<(std::ostream& out, CObject &o)
+{
+  return out;
+}
 
 class CInode;
 class CDir;
 class CDentry;
 
+typedef boost::intrusive_ptr<CObject> CObjectRef;
 typedef boost::intrusive_ptr<CInode> CInodeRef;
 typedef boost::intrusive_ptr<CDir> CDirRef;
 typedef boost::intrusive_ptr<CDentry> CDentryRef;

@@ -24,6 +24,7 @@
 #include "Beacon.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
+#include "MDSContext.h"
 
 #include "common/WorkQueue.h"
 #include "common/PrioritizedQueue.h"
@@ -263,6 +264,29 @@ class MDSRank {
       }
       void _process(entity_inst_t, ThreadPool::TPHandle &handle);
     } msg_wq;
+
+    void retry_dispatch(MDRequestRef &mdr);
+};
+
+class C_MDS_RetryMessage : public MDSInternalContext {
+  protected:
+    Message *msg;
+  public:
+    C_MDS_RetryMessage(MDSRank *mds, Message *m)
+      : MDSInternalContext(mds) , msg(m) {}
+    virtual void finish(int r) {
+//      mds->retry_dispatch(m);
+    }
+};
+
+class C_MDS_RetryRequest : public MDSInternalContext {
+  MDRequestRef mdr;
+public:
+  C_MDS_RetryRequest(MDSRank *mds, MDRequestRef& r)
+    : MDSInternalContext(mds), mdr(r) {}
+  virtual void finish(int r) {
+    get_mds()->retry_dispatch(mdr);
+  }
 };
 
 /**

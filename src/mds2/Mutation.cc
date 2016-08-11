@@ -25,25 +25,16 @@
 
 void MutationImpl::pin(CObject *o)
 {
-  if (pins.count(o) == 0) {
-    o->get(CObject::PIN_REQUEST);
-    pins.insert(o);
-  }      
+  pins.insert(o);
 }
 
 void MutationImpl::unpin(CObject *o)
 {
-  assert(pins.count(o));
-  o->put(CObject::PIN_REQUEST);
   pins.erase(o);
 }
 
 void MutationImpl::drop_pins()
 {
-  for (set<CObject*>::iterator it = pins.begin();
-       it != pins.end();
-       ++it) 
-    (*it)->put(CObject::PIN_REQUEST);
   pins.clear();
 }
 
@@ -61,6 +52,14 @@ void MutationImpl::add_projected_fnode(CDir *dir, bool early)
     projected_nodes[0].push_back(dir);
   else
     projected_nodes[1].push_back(dir);
+}
+
+CObject* MutationImpl::pop_early_projected_node()
+{
+  assert(!projected_nodes[0].empty());
+  CObject *o = projected_nodes[0].front();
+  projected_nodes[0].pop_front();
+  return o;
 }
 
 void MutationImpl::pop_and_dirty_early_projected_nodes()
@@ -138,14 +137,14 @@ void MutationImpl::pop_and_dirty_projected_nodes()
 
 void MutationImpl::add_locked_object(CObject *o)
 {
-//  dout(10) << "add locked " << o << dendl;
+//  dout(10) << "add locked " << o << this << dendl;
   assert(!is_object_locked(o));
   locked_objects.insert(o);
 }
 
 void MutationImpl::lock_object(CObject *o)
 {
-//  dout(10) << "lock " << o << dendl;
+//  dout(10) << "lock " << o << " " <<this  <<dendl;
   assert(!is_object_locked(o));
   o->mutex_lock();
   locked_objects.insert(o);
@@ -153,7 +152,7 @@ void MutationImpl::lock_object(CObject *o)
 
 void MutationImpl::unlock_object(CObject *o)
 {
-//  dout(10) << "unlock " << o << dendl;
+//  dout(10) << "unlock " << o << " " << this<< dendl;
   auto it = locked_objects.find(o);
   assert(it != locked_objects.end());
   o->mutex_unlock();
@@ -162,12 +161,26 @@ void MutationImpl::unlock_object(CObject *o)
 
 void MutationImpl::unlock_all_objects()
 {
-//  dout(10) << "unlock all " << dendl;
   while (!locked_objects.empty()) {
     auto it = locked_objects.begin();
+//  dout(10) << "unlock all " << *it << " " << this << dendl;
     (*it)->mutex_unlock();
     locked_objects.erase(it);
   }
+}
+
+void MutationImpl::start_locking(SimpleLock *lock)
+{
+  assert(locking == NULL);
+  pin(lock->get_parent());
+  locking = lock;
+}
+
+void MutationImpl::finish_locking(SimpleLock *lock)
+{
+  assert(locking == lock);
+  unpin(lock->get_parent());
+  locking = NULL;
 }
 
 void MutationImpl::apply()
@@ -199,5 +212,6 @@ const filepath& MDRequestImpl::get_filepath2()
 // MDRequestImpl
 MDRequestImpl::~MDRequestImpl()
 {
+  dout(10) << "free " << this << dendl;
   client_request->put();
 }

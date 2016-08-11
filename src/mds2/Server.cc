@@ -12,8 +12,7 @@
 #define dout_subsys ceph_subsys_mds
 
 Server::Server(MDSRank *_mds)
-  : mds(_mds), mdcache(_mds->mdcache), locker(_mds->locker),
-    journal_mutex("Server::journal_mutex")
+  : mds(_mds), mdcache(_mds->mdcache), locker(_mds->locker)
 {
 }
 
@@ -93,9 +92,11 @@ void Server::handle_client_request(MClientRequest *req)
   MDRequestRef mdr = mdcache->request_start(req);
   if (!mdr)
     return;
+
   mdr->session = get_session(req);
 
-  dispatch_client_request(mdr);
+  mds->op_wq.queue(mdr);
+  //dispatch_client_request(mdr);
   return;
 }
 
@@ -159,19 +160,8 @@ void Server::encode_null_lease(bufferlist& bl)
 }
 
 void Server::set_trace_dist(Session *session, MClientReply *reply,
-			    MDRequestRef& mdr)
+			    CInode *in, CDentry *dn, MDRequestRef& mdr)
 {
-  CInode *in = NULL;
-  if (mdr->tracei >= 0) {
-    in = mdr->in[mdr->tracei].get();
-    assert(mdr->is_object_locked(in));
-  }
-  CDentry *dn = NULL;
-  if (mdr->tracedn >= 0) {
-    dn = mdr->dn[mdr->tracedn].back().get();
-    assert(mdr->is_object_locked(dn->get_dir_inode()));
-  }
-
   bufferlist bl;
   // dir + dentry?
   if (dn) {
@@ -213,21 +203,80 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
   mdcache->request_finish(mdr);
 }
 
+void Server::early_reply(MDRequestRef& mdr)
+{
+  if (!g_conf->mds_early_reply)
+    return;
+
+  MClientRequest *req = mdr->client_request;
+  Session *session = get_session(req); 
+
+  locker->set_xlocks_done(mdr.get(), req->get_op() == CEPH_MDS_OP_RENAME);
+
+  MClientReply *reply = new MClientReply(req, 0);
+  reply->set_unsafe();
+
+  if (mdr->tracei >= 0 || mdr->tracedn >= 0) {
+    CInode *in = NULL;
+    if (mdr->tracei >= 0) {
+      in = mdr->in[mdr->tracei].get();
+      assert(mdr->is_object_locked(in));
+    }
+    CDentry *dn = NULL;
+    if (mdr->tracedn >= 0) {
+      dn = mdr->dn[mdr->tracedn].back().get();
+      assert(mdr->is_object_locked(dn->get_dir_inode()));
+    }
+
+    set_trace_dist(session, reply, in, dn, mdr);
+  }
+
+  reply->set_extra_bl(mdr->reply_extra_bl);
+  req->get_connection()->send_message(reply);
+
+  mdr->did_early_reply = true;
+}
+
 void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 {
   MClientRequest *req = mdr->client_request;
   Session *session = get_session(req); 
 
-  if (mdr->tracei >= 0 || mdr->tracedn >= 0)
-    set_trace_dist(session, reply, mdr);
+  if (!mdr->did_early_reply) {
 
-  reply->set_extra_bl(mdr->reply_extra_bl);
+    if (mdr->tracei >= 0 || mdr->tracedn >= 0) {
+      set<CObject*> objs;
+
+      CInode *in = NULL;
+      if (mdr->tracei >= 0) {
+	in = mdr->in[mdr->tracei].get();
+	assert(mdr->is_object_locked(in));
+	objs.insert(in);
+      }
+      CDentry *dn = NULL;
+      if (mdr->tracedn >= 0) {
+	dn = mdr->dn[mdr->tracedn].back().get();
+	assert(mdr->is_object_locked(dn->get_dir_inode()));
+	objs.insert(dn);
+	objs.insert(dn->get_dir_inode());
+      }
+
+      // drop non-rdlocks before replying, so that we can issue leases
+      locker->drop_non_rdlocks(mdr.get(), objs);
+
+      set_trace_dist(session, reply, in, dn, mdr);
+    }
+
+    reply->set_extra_bl(mdr->reply_extra_bl);
+  }
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   req->get_connection()->send_message(reply);
 }
 
-int Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n, bool is_lookup)
+int Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
+				set<SimpleLock*> &rdlocks,
+				bool is_lookup)
 {
   const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
@@ -244,10 +293,18 @@ int Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n, bool is_lookup)
     respond_to_request(mdr, r);
     return r;
   }
+
+  for (auto& p : mdr->dn[n])
+    rdlocks.insert(&p->lock);
+
   return 0;
 }
 
-int Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n, bool okexist, bool mustexist)
+int Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
+				     set<SimpleLock*>& rdlocks,
+				     set<SimpleLock*>& wrlocks,
+				     set<SimpleLock*>& xlocks,
+				     bool okexist, bool mustexist)
 {
   const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
@@ -310,6 +367,14 @@ int Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n, bool okexist, boo
     assert(in);
   }
 
+  for (auto& p : mdr->dn[n])
+    rdlocks.insert(&p->lock);
+
+  wrlocks.insert(&diri->filelock); // also, wrlock on dir mtime
+  wrlocks.insert(&diri->nestlock); // also, wrlock on dir mtime
+
+  xlocks.insert(&dn->lock);
+
   mdr->unlock_object(diri.get());
 
   mdr->dn[n].push_back(dn);
@@ -322,23 +387,47 @@ void Server::journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
 {
   mdr->tracei = tracei;
   mdr->tracedn = tracedn;
-  
-  // start journal
-  Mutex::Locker l(journal_mutex);
-  // submit log
 
-  mdr->unlock_all_objects();
+  early_reply(mdr);
+
+  // start journal
+  mdcache->start_log_entry();
+  // submit log
 
   // use finisher to simulate log flush
   mds->finisher->queue(fin);
+ 
+  mdr->unlock_all_objects();
+
+  mdcache->submit_log_entry();
+
+  if (mdr->did_early_reply)
+    locker->drop_rdlocks(mdr.get());
+
+  mdr->start_committing();
 }
 
 void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 {
-
-  int r = rdlock_path_pin_ref(mdr, 0, is_lookup);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_pin_ref(mdr, 0, rdlocks, is_lookup);
   if (r < 0)
     return;
+
+  /*
+  int mask = req->head.args.getattr.mask;
+  if ((mask & CEPH_CAP_LINK_SHARED) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
+  if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
+  if ((mask & CEPH_CAP_FILE_SHARED) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
+  if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
+  */
+
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
 
   if (is_lookup) {
     CDentryRef &dn = mdr->dn[0].back();
@@ -356,6 +445,8 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 
 void Server::__inode_update_finish(MDRequestRef& mdr)
 {
+  mdr->wait_committing();
+
   CInodeRef& in = mdr->in[0]; 
   mdcache->lock_objects_for_update(mdr.get(), in.get(), true);
   mdr->early_apply();
@@ -375,16 +466,32 @@ public:
 
 void Server::handle_client_setattr(MDRequestRef& mdr)
 {
-  MClientRequest *req = mdr->client_request;
-
-  int r = rdlock_path_pin_ref(mdr, 0, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (r < 0)
     return;
 
   CInodeRef& in = mdr->in[0]; 
-  mdcache->lock_objects_for_update(mdr.get(), in.get(), false);
 
+  MClientRequest *req = mdr->client_request;
   __u32 mask = req->head.args.setattr.mask;
+
+  // xlock inode
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
+    xlocks.insert(&in->authlock);
+  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
+    xlocks.insert(&in->filelock);
+  if (mask & CEPH_SETATTR_CTIME)
+    wrlocks.insert(&in->versionlock);
+
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
+
+  mdcache->lock_objects_for_update(mdr.get(), in.get(), false);
 
   mdr->add_projected_inode(in.get(), true);
   inode_t *pi = in->project_inode();
@@ -481,6 +588,8 @@ CInodeRef Server::prepare_new_inode(MDRequestRef& mdr, CDentryRef& dn, inodeno_t
 
 void Server::__mknod_finish(MDRequestRef& mdr)
 {
+  mdr->wait_committing();
+
   CInodeRef& in = mdr->in[0];
   CDentryRef& dn = mdr->dn[0].back();
   CInode *diri = dn->get_dir_inode();
@@ -520,20 +629,24 @@ public:
 
 void Server::handle_client_mknod(MDRequestRef& mdr)
 {
-again:
-  int r = rdlock_path_xlock_dentry(mdr, 0, false, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
   if (r < 0)
     return;
 
   CDentryRef& dn = mdr->dn[0].back();
   CInode *diri = dn->get_dir_inode();
 
-  mdr->lock_object(diri);
-  if (!dn->get_projected_linkage()->is_null()) {
-    mdr->unlock_all_objects();
-    // race, shouldn't happen after implementing dentry lock
-    goto again;
+  rdlocks.insert(&diri->authlock);
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
   }
+
+  mdr->lock_object(diri);
+  assert(dn->get_projected_linkage()->is_null());
 
   MClientRequest *req = mdr->client_request;
   unsigned mode = req->head.args.mknod.mode;
@@ -547,6 +660,7 @@ again:
   inode_t *pi = newi->__get_inode();
   pi->version = dn->pre_dirty();
   pi->rdev = req->head.args.mknod.rdev;
+  pi->rstat.rfiles = 1;
 
   dn->push_projected_linkage(newi.get());
 
@@ -558,20 +672,24 @@ again:
 
 void Server::handle_client_symlink(MDRequestRef& mdr)
 {
-again:
-  int r = rdlock_path_xlock_dentry(mdr, 0, false, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
   if (r < 0)
     return;
 
   CDentryRef& dn = mdr->dn[0].back();
   CInode *diri = dn->get_dir_inode();
 
-  mdr->lock_object(diri);
-  if (!dn->get_projected_linkage()->is_null()) {
-    mdr->unlock_all_objects();
-    // race, shouldn't happen after implementing dentry lock
-    goto again;
+  rdlocks.insert(&diri->authlock);
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
   }
+
+  mdr->lock_object(diri);
+  assert(dn->get_projected_linkage()->is_null());
 
   MClientRequest *req = mdr->client_request;
   unsigned mode = S_IFLNK | 0777; 
@@ -585,6 +703,8 @@ again:
 
   newi->__set_symlink(req->get_path2());
   pi->size = newi->get_symlink().length();
+  pi->rstat.rbytes = pi->size;
+  pi->rstat.rfiles = 1;
 
   dn->push_projected_linkage(newi.get());
 
@@ -596,20 +716,24 @@ again:
 
 void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
-again:
-  int r = rdlock_path_xlock_dentry(mdr, 0, false, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
   if (r < 0)
     return;
 
   CDentryRef& dn = mdr->dn[0].back();
   CInode *diri = dn->get_dir_inode();
 
-  mdr->lock_object(diri);
-  if (!dn->get_projected_linkage()->is_null()) {
-    mdr->unlock_all_objects();
-    // race, shouldn't happen after implementing dentry lock
-    goto again;
+  rdlocks.insert(&diri->authlock);
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
   }
+
+  mdr->lock_object(diri);
+  assert(dn->get_projected_linkage()->is_null());
 
   MClientRequest *req = mdr->client_request;
   unsigned mode = req->head.args.mkdir.mode;
@@ -624,6 +748,7 @@ again:
 
   inode_t *pi = newi->__get_inode();
   pi->version = dn->pre_dirty();
+  pi->rstat.rsubdirs = 1;
 
   CDirRef newdir = newi->get_or_open_dirfrag(frag_t());
   newdir->__get_fnode()->version = newdir->pre_dirty();
@@ -636,13 +761,24 @@ again:
 
 void Server::handle_client_readdir(MDRequestRef& mdr)
 {
-  int r = rdlock_path_pin_ref(mdr, 0, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (r < 0)
     return;
 
   CInodeRef& diri = mdr->in[0];
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  rdlocks.insert(&diri->filelock);
+  rdlocks.insert(&diri->dirfragtreelock);
+
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
     return;
   }
 
@@ -751,6 +887,8 @@ CDentryRef Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 
 void Server::__unlink_finish(MDRequestRef& mdr, version_t dnpv)
 {
+  mdr->wait_committing();
+
   CInodeRef& in = mdr->in[0];
   CDentryRef& dn = mdr->dn[0].back();
   CDentryRef& straydn = mdr->straydn;
@@ -776,6 +914,34 @@ void Server::__unlink_finish(MDRequestRef& mdr, version_t dnpv)
   respond_to_request(mdr, 0);
 }
 
+bool Server::directory_is_nonempty(CInodeRef& diri)
+{
+  diri->mutex_assert_locked_by_me();
+  dout(10) << "directory_is_nonempty" << *diri << dendl;
+  assert(diri->filelock.can_read(-1));
+
+  frag_info_t dirstat;
+  version_t dirstat_version = diri->get_projected_inode()->dirstat.version;
+
+  list<CDirRef> ls;
+  diri->get_dirfrags(ls);
+  for (auto p = ls.begin(); p != ls.end(); ++p) {
+    CDirRef& dir = *p;
+    const fnode_t *pf = dir->get_projected_fnode();
+    if (pf->fragstat.size()) {
+      dout(10) << "directory_is_nonempty has " << pf->fragstat.size()
+	       << " items " << *dir << dendl;
+      return true;
+    }
+
+    if (pf->accounted_fragstat.version == dirstat_version)
+      dirstat.add(pf->accounted_fragstat);
+    else
+      dirstat.add(pf->fragstat);
+  }
+  return dirstat.size() != diri->get_projected_inode()->dirstat.size();
+}
+
 class C_MDS_unlink_finish : public Context {
   MDSRank *mds;
   MDRequestRef mdr;
@@ -791,65 +957,70 @@ public:
 
 void Server::handle_client_unlink(MDRequestRef& mdr)
 {
-again:
-  int r = rdlock_path_xlock_dentry(mdr, 0, true, true);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, true, true);
   if (r < 0)
     return;
 
   MClientRequest *req = mdr->client_request;
   // rmdir or unlink?
-  bool rmdir = (req->get_op() == CEPH_MDS_OP_RMDIR);
+  bool rmdir = req->get_op() == CEPH_MDS_OP_RMDIR;
 
   CDentryRef& dn = mdr->dn[0].back();
   CInodeRef& in = mdr->in[0];
 
+  mdr->lock_object(in.get());
   if (in->is_dir()) {               
     if (!rmdir) {                   
       respond_to_request(mdr, -EISDIR);
       return;                       
     }                               
-
-    mdr->lock_object(in.get());
-    CDirRef dir = in->get_dirfrag(frag_t());
-    if (dir->get_projected_fnode()->fragstat.size()) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    mdr->unlock_object(in.get());
   } else {                          
     if (rmdir) {                    
       respond_to_request(mdr, -ENOTDIR);
       return;                       
     }                               
   } 
+  
+  bool need_stray = (dn.get() == in->get_projected_parent_dn());
+  mdr->unlock_object(in.get());
+
+  CDentryRef straydn;
+  if (need_stray) {
+    straydn = prepare_stray_dentry(mdr, in.get());
+    wrlocks.insert(&straydn->get_dir_inode()->filelock);
+    wrlocks.insert(&straydn->get_dir_inode()->nestlock);
+    xlocks.insert(&straydn->lock);
+  }
+
+  xlocks.insert(&in->linklock);
+  if (rmdir)
+    rdlocks.insert(&in->filelock);   // to verify it's empty
+  
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
 
   mdcache->lock_parents_for_linkunlink(mdr, in.get(), dn.get(), false);
 
   const CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  {
-    if (dnl->is_null() ||
-	(dnl->is_primary() && dnl->get_inode() != in.get()) ||
-	(dnl->is_remote() && dnl->get_remote_ino() != in->ino())) {
-      mdr->unlock_all_objects();
-      // race, shouldn't happen after implementing dentry lock
-      goto again;
-    }
-  }
 
-  CDentryRef straydn;
-  if (dnl->is_primary()) {
-    straydn = prepare_stray_dentry(mdr, in.get());
+  if (straydn)
+    assert(dnl->is_primary() && dnl->get_inode() == in.get());
+  else
+    assert((dnl->is_remote() && dnl->get_remote_ino() == in->ino()));
+
+  if (straydn)
     mdr->lock_object(straydn->get_dir_inode());
-  }
 
   mdr->lock_object(in.get());
 
-  if (rmdir) {
-    CDirRef dir = in->get_dirfrag(frag_t());
-    if (dir->get_projected_fnode()->fragstat.size()) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;                       
-    }
+  if (rmdir && directory_is_nonempty(in)) {
+    respond_to_request(mdr, -ENOTEMPTY);
+    return;                       
   }
 
   if (straydn) {
@@ -880,6 +1051,8 @@ again:
 
 void Server::__link_finish(MDRequestRef& mdr, version_t dnpv)
 { 
+  mdr->wait_committing();
+
   CInodeRef& in = mdr->in[1];
   CDentryRef& dn = mdr->dn[0].back();
 
@@ -910,13 +1083,13 @@ class C_MDS_link_finish : public Context {
 
 void Server::handle_client_link(MDRequestRef& mdr)
 {
-again:
   int r;
-  r = rdlock_path_xlock_dentry(mdr, 0, false, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
   if (r < 0)
     return;
 
-  r = rdlock_path_pin_ref(mdr, 1, false);
+  r = rdlock_path_pin_ref(mdr, 1, rdlocks, false);
   if (r < 0)
     return;
 
@@ -928,12 +1101,17 @@ again:
     return;
   }
 
-  mdcache->lock_parents_for_linkunlink(mdr, in.get(), dn.get(), false);
-  if (!dn->get_projected_linkage()->is_null()) {
-    // race, shouldn't happen after implementing dentry lock
-    mdr->unlock_all_objects();
-    goto again;
+  xlocks.insert(&in->linklock);
+
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
   }
+
+  mdcache->lock_parents_for_linkunlink(mdr, in.get(), dn.get(), false);
+  assert(dn->get_projected_linkage()->is_null());
 
   mdr->lock_object(in.get());
 
@@ -955,6 +1133,8 @@ again:
 
 void Server::__rename_finish(MDRequestRef& mdr, version_t srcdn_pv, version_t destdn_pv)
 {
+  mdr->wait_committing();
+
   CDentryRef& srcdn = mdr->dn[1].back();
   CInodeRef& srci = mdr->in[1];
   CDentryRef& destdn = mdr->dn[0].back();
@@ -968,7 +1148,7 @@ void Server::__rename_finish(MDRequestRef& mdr, version_t srcdn_pv, version_t de
   }
 
   if (oldin && oldin != srci) {
-    if (srci.get() < oldin.get()) {
+    if (srci->is_lt(oldin.get())) {
       srci->mutex_lock();
       oldin->mutex_lock();
     } else {
@@ -1041,13 +1221,13 @@ class C_MDS_rename_finish : public Context {
 
 void Server::handle_client_rename(MDRequestRef& mdr)
 {
-again:
   int r;
-  r = rdlock_path_xlock_dentry(mdr, 0, true, false);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, true, false);
   if (r < 0)
     return;
 
-  r = rdlock_path_xlock_dentry(mdr, 1, true, true);
+  r = rdlock_path_xlock_dentry(mdr, 1, rdlocks, wrlocks, xlocks, true, true);
   if (r < 0)
     return;
 
@@ -1056,7 +1236,9 @@ again:
   CDentryRef& destdn = mdr->dn[0].back();
   CInodeRef& oldin = mdr->in[0];
 
+  bool need_stray = false;
   if (oldin) {
+    mdr->lock_object(oldin.get());
     if (oldin->is_dir() && !srci->is_dir()) {
       respond_to_request(mdr, -EISDIR);
       return;
@@ -1071,15 +1253,32 @@ again:
 	return;
       }
     }
-    mdr->lock_object(oldin.get());
-    if (oldin->is_dir()) {
-      CDirRef dir = oldin->get_dirfrag(frag_t());
-      if (dir->get_projected_fnode()->fragstat.size()) {
-	respond_to_request(mdr, -ENOTEMPTY);
-	return;
-      }
-    }
+    need_stray = (srci != oldin && destdn.get() == oldin->get_projected_parent_dn());
     mdr->unlock_object(oldin.get());
+  }
+
+  CDentryRef straydn;
+  if (need_stray) {
+    straydn = prepare_stray_dentry(mdr, oldin.get());
+    wrlocks.insert(&straydn->get_dir_inode()->filelock);
+    wrlocks.insert(&straydn->get_dir_inode()->nestlock);
+    xlocks.insert(&straydn->lock);
+  }
+
+  // we need to update srci's ctime.  xlock its least contended lock to do that...
+  xlocks.insert(&srci->linklock);
+  // xlock oldin (for nlink--)
+  if (oldin) {
+    xlocks.insert(&oldin->linklock);
+    if (oldin->is_dir())
+      rdlocks.insert(&oldin->filelock);
+  }
+
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
   }
 
   r = mdcache->lock_parents_for_rename(mdr, srci.get(), oldin.get(),
@@ -1091,28 +1290,12 @@ again:
 
   const CDentry::linkage_t *src_dnl = srcdn->get_projected_linkage();
   const CDentry::linkage_t *dest_dnl = destdn->get_projected_linkage();
-  {
-    bool retry = false;
-    if (src_dnl->is_null() ||
-	(src_dnl->is_primary() && src_dnl->get_inode() != srci.get()) ||
-	(src_dnl->is_remote() && src_dnl->get_remote_ino() != srci->ino())) {
-      retry = true;
-    }
-    if ((!oldin && !dest_dnl->is_null()) ||
-	(oldin && dest_dnl->is_primary() && dest_dnl->get_inode() != oldin.get()) ||
-	(oldin && dest_dnl->is_remote() && dest_dnl->get_remote_ino() != oldin->ino())) {
-      retry = true;
-    }
-    if (retry) {
-      // race, shouldn't happen after implementing dentry lock
-      if (mdr->hold_rename_dir_mutex) {
-	mdcache->unlock_rename_dir_mutex();
-	mdr->hold_rename_dir_mutex = false;
-      }
-      mdr->unlock_all_objects();
-      goto again;
-    }
-  }
+  
+  assert((src_dnl->is_primary() && src_dnl->get_inode() == srci.get()) ||
+	 (src_dnl->is_remote() && src_dnl->get_remote_ino() == srci->ino()));
+  assert((!oldin && dest_dnl->is_null()) ||
+	 (need_stray && dest_dnl->is_primary() && dest_dnl->get_inode() == oldin.get()) ||
+	 (!need_stray && dest_dnl->is_remote() && dest_dnl->get_remote_ino() == oldin->ino()));
 
   bool linkmerge = srci == oldin;
   if (linkmerge) {
@@ -1120,14 +1303,11 @@ again:
     assert(src_dnl->is_primary());
   }
 
-  CDentryRef straydn;
-  if (!linkmerge && dest_dnl->is_primary()) {
-    straydn = prepare_stray_dentry(mdr, oldin.get());
+  if (straydn)
     mdr->lock_object(straydn->get_dir_inode());
-  }
 
   if (oldin && oldin != srci) {
-    if (srci.get() < oldin.get()) {
+    if (srci->is_lt(oldin.get())) {
       srci->mutex_lock();
       oldin->mutex_lock();
     } else {
@@ -1140,15 +1320,12 @@ again:
     mdr->lock_object(srci.get());
   }
 
-  if (oldin && oldin->is_dir()) {
-    CDirRef dir = oldin->get_dirfrag(frag_t());
-    if (dir->get_projected_fnode()->fragstat.size()) {
-      if (mdr->hold_rename_dir_mutex) {
-	mdcache->unlock_rename_dir_mutex();
-	mdr->hold_rename_dir_mutex = false;
-      }
-      respond_to_request(mdr, -ENOTEMPTY);
+  if (oldin && oldin->is_dir() && directory_is_nonempty(oldin)) {
+    if (mdr->hold_rename_dir_mutex) {
+      mdcache->unlock_rename_dir_mutex();
+      mdr->hold_rename_dir_mutex = false;
     }
+    respond_to_request(mdr, -ENOTEMPTY);
   }
 
   inode_t *pi;

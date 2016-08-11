@@ -21,11 +21,12 @@ static const int PREDIRTY_DIR = 2;     // update parent dir mtime/size
 static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easier rollback)
 
 class MDCache {
-protected:
-  MDSRank *mds;
-  Server *server;
-  Locker *locker;
+public:
+  MDSRank* const mds;
+  Server* const &server;
+  Locker* const &locker;
 
+protected:
   Mutex inode_map_lock;
   ceph::unordered_map<vinodeno_t,CInode*> inode_map;
 
@@ -39,14 +40,12 @@ public:
   const file_layout_t& get_default_file_layout() const {
     return default_file_layout;
   }
-  inodeno_t alloc_ino() { return last_ino.inc(); }
 
   CInodeRef create_system_inode(inodeno_t ino, int mode);
   void create_empty_hierarchy();
   void create_mydir_hierarchy();
   void add_inode(CInode *in);
   void remove_inode(CInode *in);
-
 
 
   CInodeRef get_inode(const vinodeno_t &vino);
@@ -86,6 +85,9 @@ public:
   int lock_parents_for_rename(MDRequestRef& mdr, CInode *in, CInode *oldin,
 			      CDentry *srcdn, CDentry *destdn, bool apply);
   void lock_objects_for_update(MutationImpl *mut, CInode *in, bool apply);
+
+  void project_rstat_inode_to_frag(CInode *in, CDir* dir, int linkunlink);
+  void project_rstat_frag_to_inode(const fnode_t *pf, inode_t *pi);
   void predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
 				CInode *in, CDir *parent, int flags,
 				int linkunlink = 0);
@@ -95,6 +97,12 @@ public:
 
   MDCache(MDSRank *_mds);
 private: // crap
+  Mutex journal_mutex;
   ceph::atomic64_t last_ino;
+public:
+
+  void start_log_entry() { journal_mutex.Lock(); }
+  void submit_log_entry() { journal_mutex.Unlock(); }
+  inodeno_t alloc_ino() { return last_ino.inc(); }
 };
 #endif

@@ -763,7 +763,7 @@ void MDSDaemon::respawn()
 
 bool MDSDaemon::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(mds_lock);
+  /*
   if (stopping) {
     return false;
   }
@@ -774,9 +774,11 @@ bool MDSDaemon::ms_dispatch(Message *m)
     m->put();
     return true;
   }
+  */
 
   // First see if it's a daemon message
   if (is_core_message(m)) {
+    Mutex::Locker l(mds_lock);
     handle_core_message(m);
     return true;
   }

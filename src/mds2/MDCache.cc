@@ -12,6 +12,7 @@ MDCache::MDCache(MDSRank *_mds) :
   inode_map_lock("MDCache::inode_map_lock"),
   request_map_lock("MDCache::request_map_lock"),
   rename_dir_mutex("MDCache::rename_dir_mutex"),
+  journal_mutex("MDCache::journal_mutex"),
   last_ino(0x10000)
 {
   default_file_layout = file_layout_t::get_default();
@@ -311,7 +312,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
 void MDCache::dispatch_request(MDRequestRef& mdr)
 {
   if (mdr->client_request) {
-    mds->server->dispatch_client_request(mdr);
+    server->dispatch_client_request(mdr);
   } else {
     assert(0);
   }
@@ -327,6 +328,8 @@ void MDCache::request_finish(MDRequestRef& mdr)
 void MDCache::request_cleanup(MDRequestRef& mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
+
+  locker->drop_locks(mdr.get());
 
   mdr->cleanup();
 
@@ -378,7 +381,7 @@ void MDCache::lock_parents_for_linkunlink(MDRequestRef& mdr, CInode *in, CDentry
 	// primary_first = false;
       } else if (parent_dn_diri->is_projected_ancestor_of(dn->get_dir_inode())) {
 	primary_first = true;
-      } else if (parent_dn_diri < dn->get_dir_inode()) {
+      } else if (parent_dn_diri->is_lt(dn->get_dir_inode())) {
 	primary_first = true;
       }
     }
@@ -428,7 +431,7 @@ int MDCache::lock_parents_for_rename(MDRequestRef &mdr, CInode *srci, CInode *ol
 	return true;
       if (r->is_projected_ancestor_of(l))
 	return false;
-      return l < r;
+      return l->is_lt(r);
     }
   };
 
@@ -520,6 +523,33 @@ void MDCache::lock_objects_for_update(MutationImpl *mut, CInode *in, bool apply)
   mut->add_locked_object(in);
 }
 
+void MDCache::project_rstat_inode_to_frag(CInode *in, CDir *dir, int linkunlink)
+{
+  fnode_t *pf = dir->__get_projected_fnode();
+  inode_t *pi = in->__get_projected_inode();
+
+  nest_info_t delta;
+  if (linkunlink == 0) {
+    delta.add(pi->rstat);
+    delta.sub(pi->accounted_rstat);
+  } else if (linkunlink < 0) {
+    delta.sub(pi->accounted_rstat);
+  } else {
+    delta.add(pi->rstat);
+  }
+
+  pi->accounted_rstat = pi->rstat;
+  pf->rstat.add(delta);
+}
+
+void MDCache::project_rstat_frag_to_inode(const fnode_t *pf, inode_t *pi)
+{
+  nest_info_t delta = pf->rstat;
+  delta.sub(pf->accounted_rstat);
+
+  pi->rstat.add(delta);
+}
+
 void MDCache::predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
 				       int flags, int linkunlink)
@@ -547,6 +577,7 @@ void MDCache::predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
   }	
 
   bool first = true;
+  CInode *cur = in;
   while (parent) {
     CInode *pin = parent->get_inode();
 
@@ -555,13 +586,20 @@ void MDCache::predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
     pf->version = parent->pre_dirty();
 
     if (update_parent_mtime || linkunlink) {
+      assert(mut->wrlocks.count(&pin->filelock));
+      assert(mut->wrlocks.count(&pin->nestlock));
+
+      // update stale fragstat/rstat?
+      parent->resync_accounted_fragstat(pf);
+      parent->resync_accounted_rstat(pf);
+
       if (update_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
 	if (pf->fragstat.mtime > pf->rstat.rctime)
 	  pf->rstat.rctime = pf->fragstat.mtime;
       }
       if (linkunlink) {
-	if (in->is_dir())
+	if (cur->is_dir())
 	  pf->fragstat.nsubdirs += linkunlink;
 	else
 	  pf->fragstat.nfiles += linkunlink;
@@ -569,34 +607,76 @@ void MDCache::predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
     }
 
     // rstat
-    /*
     if (!parent_dn) {
-
+      // don't update parent this pass
     } else if (!linkunlink && !(pin->nestlock.can_wrlock(-1) &&
 				pin->versionlock.can_wrlock())) {
+      cur->mark_dirty_rstat();
     } else {
+      if (linkunlink)
+	assert(mut->wrlocks.count(&pin->nestlock));
 
+      if (mut->wrlocks.count(&pin->nestlock) == 0) {
+	locker->wrlock_force(&pin->nestlock, mut);
+      }
+
+      parent->resync_accounted_rstat(pf);
+      project_rstat_inode_to_frag(cur, parent, linkunlink);
+      cur->clear_dirty_rstat();
     }
-    */
 
-    if (pin->is_base())
-      break;
+    bool stop = false;
 
-    CDentry *parentdn = pin->get_projected_parent_dn();
-    if (!parentdn->get_dir_inode()->mutex_trylock()) {
-      // stop
+    CDentry *parentdn = NULL; 
+    if (!stop && !pin->is_base()) {
+      parentdn = pin->get_projected_parent_dn();
+      if (parentdn->get_dir_inode()->mutex_trylock())
+	mut->add_locked_object(parentdn->get_dir_inode());
+      else
+	stop = true;
+    }
+    if (!stop && !mut->wrlocks.count(&pin->nestlock) &&
+	(!pin->versionlock.can_wrlock() ||
+	 !locker->wrlock_start(&pin->nestlock, mut))) {
+      stop = true;
+    }
+
+    if (stop) {
+      locker->mark_updated_scatterlock(&pin->nestlock);
+      //mut->ls->dirty_dirfrag_nest.push_back(&pin->item_dirty_dirfrag_nest);
+      if (update_parent_mtime || linkunlink) {
+	locker->mark_updated_scatterlock(&pin->filelock);
+	//mut->ls->dirty_dirfrag_dir.push_back(&pin->item_dirty_dirfrag_dir);
+      }
       break;
     }
 
-    mut->add_locked_object(parentdn->get_dir_inode());
+    assert(mut->wrlocks.count(&pin->nestlock));
+    if (!mut->wrlocks.count(&pin->versionlock))
+      locker->local_wrlock_grab(&pin->versionlock, mut);
 
     mut->add_projected_inode(pin, false);
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
 
-    // frag rstat -> inode rstat
+    if (update_parent_mtime || linkunlink) {
+      bool touched_mtime = false;
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      pf->accounted_fragstat = pf->fragstat;
+      if (touched_mtime)
+	pi->mtime = pi->ctime = pi->dirstat.mtime;
+    }
 
+    // frag rstat -> inode rstat
+    project_rstat_frag_to_inode(pf, pi);
+    pf->accounted_rstat = pf->rstat;
+
+    if (pin->is_base())
+      break;
+
+    cur = pin;
     parent = parentdn->get_dir();
+
     linkunlink = 0;
     first = false;
     parent_dn = true;

@@ -3,6 +3,9 @@
 #include "CObject.h"
 #include "mds/mdstypes.h"
 
+#include "include/elist.h"
+
+
 class LogSegment;
 
 class CDir : public CObject {
@@ -11,9 +14,11 @@ class CDir : public CObject {
   void mutex_unlock();
   bool mutex_trylock();
   void mutex_assert_locked_by_me();
-protected:
-  CInode *inode;
+public:
+  MDCache* const mdcache;
+  CInode* const inode;
 
+protected:
   fnode_t fnode;
   std::list<fnode_t> projected_fnode;
   version_t projected_version;
@@ -24,9 +29,18 @@ public:
   // -- pins --
   static const int PIN_CHILD =        3;
 
+  // -- states ==
+  static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
+
+
   typedef std::map<dentry_key_t, CDentry*> map_t;
 
-  CDir(CInode *i) : CObject("CDir"), inode(i) {}
+  CDir(CInode *i);
+
+  frag_t get_frag() const { return frag_t(); }
+  dirfrag_t dirfrag() const;
+
+  bool is_lt(const CObject *r) const;
 
   CInode* get_inode() const { return inode; }
   version_t get_version() const { return fnode.version; }
@@ -38,6 +52,10 @@ public:
 
   fnode_t *__get_fnode() { return &fnode; }
   const fnode_t *get_fnode() const { return &fnode; }
+  fnode_t *__get_projected_fnode() {
+    assert(!projected_fnode.empty());
+    return &projected_fnode.back();
+  }
   const fnode_t *get_projected_fnode() const {
     if (!projected_fnode.empty())
       return &projected_fnode.back();
@@ -86,7 +104,17 @@ public:
   }
 
   void encode_dirstat(bufferlist& bl, mds_rank_t whoami);
+protected:
+
+  elist<CInode*> dirty_rstat_inodes;
+public:
+  void resync_accounted_fragstat(fnode_t *pf);
+  void resync_accounted_rstat(fnode_t *pf);
+  void add_dirty_rstat_inode(CInode *in);
+  void remove_dirty_rstat_inode(CInode *in);
+  void assimilate_dirty_rstat_inodes(MutationRef& mut);
+  void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
 };
 
-ostream& operator<<(ostream& out, const class CDir& dir);
+ostream& operator<<(ostream& out, const CDir& dir);
 #endif

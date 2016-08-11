@@ -119,6 +119,12 @@ void MDSRankDispatcher::tick()
 
   // Expose ourselves to Beacon to update health indicators
   beacon.notify_health(this);
+
+  if (is_clientreplay() || is_active() || is_stopping()) {
+    mds_lock.Unlock();
+    locker->tick();
+    mds_lock.Lock();
+  }
 }
 
 void MDSRankDispatcher::shutdown()
@@ -667,7 +673,10 @@ MDSRank::OpWQ::OpWQ(MDSRank *m, time_t ti, ThreadPool *tp)
 
 void MDSRank::OpWQ::_enqueue(MDRequestRef mdr)
 {
-  pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
+  if (mdr->retries > 0)
+    pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_HIGH, mdr);
+  else
+    pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
 }
 
 void MDSRank::OpWQ::_enqueue_front(MDRequestRef mdr)
@@ -800,4 +809,10 @@ void MDSRank::MsgWQ::_process(entity_inst_t inst, ThreadPool::TPHandle &handle)
       more_to_process.push_back(inst);
     }
   }
+}
+
+void MDSRank::retry_dispatch(MDRequestRef &mdr)
+{
+  mdr->retries++;
+  op_wq.queue(mdr);
 }

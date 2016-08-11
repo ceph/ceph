@@ -33,9 +33,9 @@ typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 class Server {
 protected:
-  MDSRank *mds;
-  MDCache *mdcache;
-  Locker *locker;
+  MDSRank* const mds;
+  MDCache* const &mdcache;
+  Locker* const &locker;
 
   Session *get_session(Message *m);
 public:
@@ -51,17 +51,29 @@ protected:
   void encode_null_lease(bufferlist& bl);
   void encode_empty_dirstat(bufferlist& bl);
   void lock_objects_for_trace(CInode *in, CDentry *dn, MDRequestRef& mdr);
-  void set_trace_dist(Session *session, MClientReply *reply, MDRequestRef& mdr);
+  void set_trace_dist(Session *session, MClientReply *reply,
+		      CInode *in, CDentry *dn, MDRequestRef& mdr);
   void respond_to_request(MDRequestRef& mdr, int r);
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
+  void early_reply(MDRequestRef& mdr);
+
   void journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
 		  	 LogEvent *le, Context *fin);
+
   CInodeRef prepare_new_inode(MDRequestRef& mdr, CDentryRef& dn, inodeno_t useino,
 			      unsigned mode, file_layout_t *layout=NULL);
   CDentryRef prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
 
-  int rdlock_path_pin_ref(MDRequestRef& mdr, int n, bool is_lookup);
-  int rdlock_path_xlock_dentry(MDRequestRef& mdr, int n, bool okexist, bool mustexist);
+  int rdlock_path_pin_ref(MDRequestRef& mdr, int n,
+			  set<SimpleLock*> &rdlocks,
+			  bool is_lookup);
+  int rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
+			       set<SimpleLock*>& rdlocks,
+			       set<SimpleLock*>& wrlocks,
+			       set<SimpleLock*>& xlocks,
+			       bool okexist, bool mustexist);
+  bool directory_is_nonempty(CInodeRef& diri);
+
   void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
   void handle_client_setattr(MDRequestRef& mdr);
   void handle_client_mknod(MDRequestRef& mdr);
@@ -82,10 +94,6 @@ protected:
   friend class C_MDS_unlink_finish;
   friend class C_MDS_link_finish;
   friend class C_MDS_rename_finish;
-
-private: // crap
-
-  Mutex journal_mutex; 
 };
 
 #endif
