@@ -1154,8 +1154,9 @@ void BlueStore::Blob::discard_unallocated()
         all_invalid = false;
       }
     }
-    assert(discard == all_invalid); //in case of compressed blob all or none pextents are invalid.
-    if(discard) {
+    assert(discard == all_invalid); // in case of compressed blob all
+				    // or none pextents are invalid.
+    if (discard) {
       bc.discard(0, blob.get_compressed_payload_original_length());
     }
   } else {
@@ -3084,11 +3085,12 @@ int BlueStore::fsck()
 	map<int64_t,bluestore_extent_ref_map_t> local_blobs;
 	uint64_t lext_next_offset = 0, lext_prev_offset = 0;
 	for (auto& l : o->onode.extent_map) {
-	  if(l.first < lext_next_offset) {
+	  if (l.first < lext_next_offset) {
 	    derr << " " << oid << " lextent at 0x" 
 		 << std::hex << l.first
 		 << "overlaps with the previous one 0x" 
-		 << lext_prev_offset << "~" << (lext_next_offset - lext_prev_offset)
+		 << lext_prev_offset << "~"
+		 << (lext_next_offset - lext_prev_offset)
 		 << std::dec << dendl;
 	    ++errors;
 	  }
