@@ -76,7 +76,6 @@
 #define CEPH_FEATURE_OSD_HITSET_GMT (1ULL<<54)
 #define CEPH_FEATURE_HAMMER_0_94_4 (1ULL<<55)
 #define CEPH_FEATURE_NEW_OSDOP_ENCODING   (1ULL<<56) /* New, v7 encoding */
-#define CEPH_FEATURE_BLKIN_TRACING (1ULL<<57) // enabled by ifdef, don't overlap
 #define CEPH_FEATURE_MON_STATEFUL_SUB (1ULL<<57) /* stateful mon subscription */
 #define CEPH_FEATURE_MON_ROUTE_OSDMAP (1ULL<<57) /* peon sends osdmaps */
 #define CEPH_FEATURE_OSDSUBOP_NO_SNAPCONTEXT (1ULL<<57) /* overlap, drop unused SnapContext in v12 */
@@ -85,6 +84,7 @@
 // duplicated since it was introduced at the same time as CEPH_FEATURE_CRUSH_TUNABLES5
 #define CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING (1ULL<<58) /* New, v7 encoding */
 #define CEPH_FEATURE_FS_FILE_LAYOUT_V2       (1ULL<<58) /* file_layout_t */
+#define CEPH_FEATURE_BLKIN_TRACING (1ULL<<59) // don't overlap
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
