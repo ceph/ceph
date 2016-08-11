@@ -1777,7 +1777,10 @@ int BlueStore::_open_fm(bool create)
     } else {
       reserved = BLUEFS_START;
     }
-    fm->allocate(0, reserved, t);
+
+    // note: we do not mark bluefs space as allocated in the freelist; we
+    // instead rely on bluefs_extents.
+    fm->allocate(0, BLUEFS_START, t);
 
     if (g_conf->bluestore_debug_prefill > 0) {
       uint64_t end = bdev->get_size() - reserved;
@@ -1850,6 +1853,8 @@ int BlueStore::_open_alloc()
                             bdev->get_size(),
                             min_alloc_size);
   uint64_t num = 0, bytes = 0;
+
+  // initialize from freelist
   fm->enumerate_reset();
   uint64_t offset, length;
   while (fm->enumerate_next(&offset, &length)) {
@@ -1860,6 +1865,14 @@ int BlueStore::_open_alloc()
   dout(10) << __func__ << " loaded " << pretty_si_t(bytes)
 	   << " in " << num << " extents"
 	   << dendl;
+
+  // also mark bluefs space as allocated
+  for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
+    alloc->init_rm_free(e.get_start(), e.get_len());
+  }
+  dout(10) << __func__ << " marked bluefs_extents 0x" << std::hex
+	   << bluefs_extents << std::dec << " as allocated" << dendl;
+
   return 0;
 }
 
@@ -2288,8 +2301,7 @@ int BlueStore::_reconcile_bluefs_freespace()
   return 0;
 }
 
-int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
-					 KeyValueDB::Transaction t)
+int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
 {
   int ret = 0;
   assert(bluefs);
@@ -2407,7 +2419,6 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
 
       bluefs_extents.erase(offset, length);
 
-      fm->release(offset, length, t);
       alloc->release(offset, length);
 
       reclaim -= length;
@@ -3016,7 +3027,7 @@ int BlueStore::fsck()
         [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
           bs.set(pos);
         }
-      );
+	);
     }
     r = bluefs->fsck();
     if (r < 0) {
@@ -3261,6 +3272,16 @@ int BlueStore::fsck()
 
   dout(1) << __func__ << " checking freelist vs allocated" << dendl;
   {
+    // remove bluefs_extents from used set since the freelist doesn't
+    // know they are allocated.
+    for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
+      apply(
+        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          bs.reset(pos);
+        }
+      );
+    }
     fm->enumerate_reset();
     uint64_t offset, length;
     while (fm->enumerate_next(&offset, &length)) {
@@ -5075,11 +5096,10 @@ void BlueStore::_kv_sync_thread()
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
-	int r = _balance_bluefs_freespace(&bluefs_gift_extents, t);
+	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
 	if (r > 0) {
 	  for (auto& p : bluefs_gift_extents) {
-	    fm->allocate(p.offset, p.length, t);
 	    bluefs_extents.insert(p.offset, p.length);
 	  }
 	  bufferlist bl;
