@@ -153,6 +153,8 @@ workload_x:
          client.1:
          - rados/test-upgrade-v11.0.0.sh
          - cls
+       env:
+         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_image'
    - print: "**** done rados/test-upgrade-v11.0.0.sh &  cls workload_x NOT upgraded  client"
    - workunit:
        branch: jewel
