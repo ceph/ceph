@@ -191,20 +191,20 @@ public:
 private:
   std::mutex lock;
 
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
   // cache
   map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
   dirty_file_list_t dirty_files;                  ///< list of dirty files
 
-  bluefs_super_t super;       ///< latest superblock (as last written)
-  uint64_t ino_last;          ///< last assigned ino (this one is in use)
-  uint64_t log_seq;           ///< last used log seq (by current pending log_t)
-  uint64_t log_seq_stable;    ///< last stable/synced log seq
-  FileWriter *log_writer;     ///< writer for the log
-  bluefs_transaction_t log_t; ///< pending, unwritten log transaction
-  bool log_flushing = false;  ///< true while flushing the log
+  bluefs_super_t super;        ///< latest superblock (as last written)
+  uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
+  uint64_t log_seq = 0;        ///< last used log seq (by current pending log_t)
+  uint64_t log_seq_stable = 0; ///< last stable/synced log seq
+  FileWriter *log_writer = 0;  ///< writer for the log
+  bluefs_transaction_t log_t;  ///< pending, unwritten log transaction
+  bool log_flushing = false;   ///< true while flushing the log
   std::condition_variable log_cond;
 
   /*
