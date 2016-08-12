@@ -14,12 +14,7 @@
 #define dout_prefix *_dout << "bluefs "
 
 BlueFS::BlueFS()
-  : logger(NULL),
-    ino_last(0),
-    log_seq(0),
-    log_seq_stable(0),
-    log_writer(NULL),
-    bdev(MAX_BDEV),
+  : bdev(MAX_BDEV),
     ioc(MAX_BDEV),
     block_all(MAX_BDEV),
     block_total(MAX_BDEV, 0)
