@@ -119,13 +119,13 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
     if (!data) {
        return -ENOMEM;
     }
-    int r = STREAM_IO(s)->read(data, cl, &read_len);
+    read_len = recv_body(s, data, cl);
     if (cl != (size_t)read_len) {
-      dout(10) << "cio->read incomplete" << dendl;
+      dout(10) << "recv_body incomplete" << dendl;
     }
-    if (r < 0) {
+    if (read_len < 0) {
       free(data);
-      return r;
+      return read_len;
     }
     bl.append(data, read_len);
   } else {
@@ -139,10 +139,10 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
       return -ENOMEM;
     }
     do {
-      int r = STREAM_IO(s)->read(data, chunk_size, &read_len);
-      if (r < 0) {
+      read_len = recv_body(s, data, chunk_size);
+      if (read_len < 0) {
 	free(data);
-	return r;
+	return read_len;
       }
       bl.append(data, read_len);
     } while (read_len == chunk_size);
