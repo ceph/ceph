@@ -127,6 +127,7 @@ noinst_HEADERS += \
 	librbd/image/SetSnapRequest.h \
 	librbd/image_watcher/Notifier.h \
 	librbd/image_watcher/NotifyLockOwner.h \
+	librbd/journal/DisabledPolicy.h \
 	librbd/journal/Policy.h \
 	librbd/journal/Replay.h \
 	librbd/journal/StandardPolicy.h \
