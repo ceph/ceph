@@ -58,10 +58,18 @@ enum {
   l_bluestore_state_wal_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_compress_lat,
+  l_bluestore_decompress_lat,
+  l_bluestore_compress_success_count,
   l_bluestore_write_pad_bytes,
   l_bluestore_wal_write_ops,
   l_bluestore_wal_write_bytes,
   l_bluestore_write_penalty_read_ops,
+  l_bluestore_allocated,
+  l_bluestore_stored,
+  l_bluestore_compressed,
+  l_bluestore_compressed_allocated,
+  l_bluestore_compressed_original,
   l_bluestore_last
 };
 
@@ -1185,6 +1193,7 @@ private:
 
   void _init_logger();
   void _shutdown_logger();
+  int _reload_logger();
 
   int _open_path();
   void _close_path();

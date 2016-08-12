@@ -1539,13 +1539,36 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_wal_cleanup_lat, "state_wal_cleanup_lat", "Average cleanup state latency");
   b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
+  b.add_time_avg(l_bluestore_compress_lat, "compress_lat", "Average compress latency");
+  b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat", "Average decompress latency");
+  b.add_u64(l_bluestore_compress_success_count, "compress_success_count", "Sum for beneficial compress ops");
 
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes", "Sum for write-op padded bytes");
   b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops", "Sum for wal write op");
   b.add_u64(l_bluestore_wal_write_bytes, "wal_write_bytes", "Sum for wal write bytes");
   b.add_u64(l_bluestore_write_penalty_read_ops, " write_penalty_read_ops", "Sum for write penalty read ops");
+  b.add_u64(l_bluestore_allocated, "bluestore_allocated", "Sum for allocated bytes");
+  b.add_u64(l_bluestore_stored, "bluestore_stored", "Sum for stored bytes");
+  b.add_u64(l_bluestore_compressed, "bluestore_compressed", "Sum for stored compressed bytes");
+  b.add_u64(l_bluestore_compressed_allocated, "bluestore_compressed_allocated", "Sum for bytes allocated for compressed data");
+  b.add_u64(l_bluestore_compressed_original, "bluestore_compressed_original", "Sum for original bytes that were compressed");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
+}
+
+int BlueStore::_reload_logger()
+{
+  struct store_statfs_t store_statfs;
+
+  int r = statfs(&store_statfs);
+  if(r >= 0) {
+    logger->set(l_bluestore_allocated, store_statfs.allocated);
+    logger->set(l_bluestore_stored, store_statfs.stored);
+    logger->set(l_bluestore_compressed, store_statfs.compressed);
+    logger->set(l_bluestore_compressed_allocated, store_statfs.compressed_allocated);
+    logger->set(l_bluestore_compressed_original, store_statfs.compressed_original);
+  }
+  return r;
 }
 
 void BlueStore::_shutdown_logger()
@@ -2780,6 +2803,10 @@ int BlueStore::mount()
   if (r < 0)
     goto out_alloc;
 
+  r = _reload_logger();
+  if (r < 0)
+    goto out_coll;
+
   if (bluefs) {
     r = _reconcile_bluefs_freespace();
     if (r < 0)
@@ -3839,6 +3866,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
+  utime_t start = ceph_clock_now(g_ceph_context);
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
@@ -3856,6 +3884,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
+  logger->tinc(l_bluestore_decompress_lat, ceph_clock_now(g_ceph_context) - start);
   return r;
 }
 
@@ -4702,6 +4731,12 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
 {
   if (txc->statfs_delta.is_empty())
     return;
+
+  logger->inc(l_bluestore_allocated, txc->statfs_delta.allocated());
+  logger->inc(l_bluestore_stored, txc->statfs_delta.stored());
+  logger->inc(l_bluestore_compressed, txc->statfs_delta.compressed());
+  logger->inc(l_bluestore_compressed_allocated, txc->statfs_delta.compressed_allocated());
+  logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
 
   bufferlist bl;
   txc->statfs_delta.encode(bl);
@@ -6114,6 +6149,9 @@ int BlueStore::_do_alloc_write(
     if (wctx->compress &&
 	wi.blob_length > min_alloc_size &&
 	(c = compressor) != nullptr) {
+
+      utime_t start = ceph_clock_now(g_ceph_context);
+
       // compress
       assert(b_off == 0);
       assert(wi.blob_length == l->length());
@@ -6121,7 +6159,9 @@ int BlueStore::_do_alloc_write(
       chdr.type = bluestore_blob_t::get_comp_alg_type(c->get_type());
       // FIXME: memory alignment here is bad
       bufferlist t;
+
       c->compress(*l, t);
+
       chdr.length = t.length();
       ::encode(chdr, compressed_bl);
       compressed_bl.claim_append(t);
@@ -6148,6 +6188,7 @@ int BlueStore::_do_alloc_write(
 	csum_order = ctz(newlen);
 	b->blob.set_compressed(wi.blob_length, rawlen);
 	compressed = true;
+        logger->inc(l_bluestore_compress_success_count);
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
                  << " -> 0x" << rawlen << " with " << chdr.type
@@ -6155,6 +6196,7 @@ int BlueStore::_do_alloc_write(
                  << ", leaving uncompressed"
                  << dec << dendl;
       }
+      logger->tinc(l_bluestore_compress_lat, ceph_clock_now(g_ceph_context) - start);
     }
     if (!compressed) {
       b->blob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
