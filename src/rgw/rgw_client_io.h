@@ -40,7 +40,6 @@ public:
 
 
 class RGWStreamIOEngine : public RGWClientIO {
-  friend class RGWStreamIOFacade;
   friend class RGWStreamIOLegacyWrapper;
 
 public:
@@ -77,29 +76,10 @@ public:
 };
 
 
-class RGWStreamIO;
-
-class RGWStreamIOFacade {
-protected:
-  RGWStreamIO& engine;
-
-public:
-  RGWStreamIOFacade(RGWStreamIO* const engine)
-    : engine(*engine) {
-  }
-
-  /* High-level utilities to move out to a client's facade. Those functions
-   * are not intended for overriding by a front-end glue code. That's the
-   * reason why they aren't virtuals. */
-  int write(const char *buf, int len);
-  int read(char *buf, int max, int *actual);
-};
-
-
 /* HTTP IO: compatibility layer */
 class RGWStreamIO : public RGWClientIO,
-                    public RGWStreamIOFacade,
                     public RGWClientIOAccounter {
+protected:
   bool _account;
   size_t bytes_sent;
   size_t bytes_received;
@@ -110,7 +90,6 @@ class RGWStreamIO : public RGWClientIO,
     return _account;
   }
 
-protected:
   RGWEnv env;
 
 public:
@@ -122,23 +101,18 @@ public:
   virtual int complete_header() = 0;
 
   virtual int recv_body(char* buf, std::size_t max) = 0;
+  virtual int recv_body(char* buf, std::size_t max, bool calculate_hash) = 0;
   virtual int send_body(const char* buf, std::size_t len) = 0;
   virtual void flush() = 0;
 
   virtual ~RGWStreamIO() {}
 
   RGWStreamIO()
-    : RGWStreamIOFacade(this),
-      _account(false),
+    : _account(false),
       bytes_sent(0),
       bytes_received(0),
       sha256_hash(nullptr) {
   }
-
-  int write(const char *buf, int len);
-
-  int read(char *buf, int max, int *actual);
-  int read(char *buf, int max, int *actual, bool hash);
 
   std::string grab_aws4_sha256_hash();
 
@@ -220,6 +194,8 @@ public:
     EXCPT_TO_RC(get_decoratee().recv_body(buf, max));
   }
 
+  int recv_body(char* buf, std::size_t max, bool calculate_hash) override;
+
   int send_body(const char* const buf, const std::size_t len) override {
     EXCPT_TO_RC(get_decoratee().send_body(buf, len));
   }
@@ -274,9 +250,8 @@ public:
       start = base;
     }
 
-    int read_len;
-    int ret = sio.read(base, window_size, &read_len);
-    if (ret < 0 || 0 == read_len) {
+    const int read_len = sio.recv_body(base, window_size, false);
+    if (read_len < 0 || 0 == read_len) {
       return traits_type::eof();
     }
 

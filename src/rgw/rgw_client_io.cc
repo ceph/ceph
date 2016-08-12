@@ -23,68 +23,18 @@ void RGWClientIO::init(CephContext *cct) {
 }
 
 
-int RGWStreamIOFacade::write(const char *buf, int len)
+int RGWStreamIOLegacyWrapper::recv_body(char *buf, std::size_t max, bool calculate_hash)
 {
-  if (len == 0) {
-    return 0;
-  }
+  const auto len = recv_body(buf, max);
 
-  const auto ret = engine.send_body(buf, len);
-  if (ret < 0) {
-    return ret;
-  } else if (ret < len) {
-    /* sent less than tried to send, error out */
-    return -EIO;
-  } else {
-    return ret;
-  }
-}
-
-int RGWStreamIOFacade::read(char *buf, int max, int *actual)
-{
-  int ret = engine.recv_body(buf, max);
-  if (ret < 0) {
-    return ret;
-  }
-
-  *actual = ret;
-  return 0;
-}
-
-
-int RGWStreamIO::write(const char* const buf, const int len)
-{
-  const auto ret = RGWStreamIOFacade::write(buf, len);
-
-  if (ret >= 0 && account()) {
-    bytes_sent += ret;
-  }
-
-  return ret;
-}
-
-int RGWStreamIO::read(char *buf, int max, int *actual)
-{
-  const auto ret = RGWStreamIOFacade::read(buf, max, actual);
-  if (ret >= 0) {
-    bytes_received += *actual;
-  }
-
-  return ret;
-}
-
-int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
-{
-  const auto ret = read(buf, max, actual);
-
-  if (ret >= 0 && hash) {
+  if (len >= 0 && calculate_hash) {
     if (!sha256_hash) {
       sha256_hash = calc_hash_sha256_open_stream();
     }
-    calc_hash_sha256_update_stream(sha256_hash, buf, *actual);
+    calc_hash_sha256_update_stream(sha256_hash, buf, len);
   }
 
-  return ret;
+  return len;
 }
 
 string RGWStreamIO::grab_aws4_sha256_hash()

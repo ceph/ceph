@@ -1298,9 +1298,10 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
 
 send_data:
   if (get_data && !op_ret) {
-    int r = STREAM_IO(s)->write(bl.c_str() + bl_ofs, bl_len);
-    if (r < 0)
+    const auto r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
+    if (r < 0) {
       return r;
+    }
   }
   rgw_flush_formatter_and_reset(s, s->formatter);
 
@@ -1411,7 +1412,7 @@ void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
      << g_conf->rgw_cross_domain_policy << "\n"
      << R"(</cross-domain-policy>)";
 
-  STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+  dump_body(s, ss.str());
 }
 
 void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
@@ -1421,7 +1422,8 @@ void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
   end_header(s, this, "application/xml");
 
   if (op_ret) {
-    STREAM_IO(s)->print("DISABLED BY FILE");
+    static constexpr char DISABLED[] = "DISABLED BY FILE";
+    dump_body(s, DISABLED, strlen(DISABLED));
   }
 }
 
@@ -1759,7 +1761,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       }
 
       htmler.generate_footer();
-      STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+      dump_body(s, ss.str());
     }
   public:
     /* Taking prefix_override by value to leverage std::string r-value ref
