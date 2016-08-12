@@ -190,7 +190,7 @@ ceph\-disk activate\-journal [\-\-activate\-key PATH] [\-\-mark\-init INITSYSTEM
 .SS activate\-all
 .sp
 Activate all tagged OSD partitions. \fBactivate\-all\fP relies on
-\fB/dev/disk/by\-parttype\-uuid/$typeuuid.$uuid\fP to find all partitions. Special
+\fB/dev/disk/by\-parttypeuuid/$typeuuid.$uuid\fP to find all partitions. Special
 \fBudev\fP rules are installed to create these links. It is triggered on ceph
 service start or run directly.
 .sp
