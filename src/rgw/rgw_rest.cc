@@ -419,6 +419,16 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
   dump_header(s, "Accept-Ranges", "bytes");
 }
 
+static void dump_chunked_encoding(struct req_state* const s)
+{
+  try {
+    STREAM_IO(s)->send_chunked_transfer_encoding();
+  } catch (RGWRestfulIOEngine::Exception& e) {
+    ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->send_chunked_transfer_encoding()"
+                     << " returned err=" << e.what() << dendl;
+  }
+}
+
 void dump_etag(struct req_state* const s,
                const boost::string_ref& etag,
                const bool quoted)
@@ -698,7 +708,9 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
     s->formatter->output_footer();
     dump_content_length(s, s->formatter->get_len());
   } else {
-    if (proposed_content_length != NO_CONTENT_LENGTH) {
+    if (proposed_content_length == CHUNKED_TRANSFER_ENCODING) {
+      dump_chunked_encoding(s);
+    } else if (proposed_content_length != NO_CONTENT_LENGTH) {
       dump_content_length(s, proposed_content_length);
     }
   }

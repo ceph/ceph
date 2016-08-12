@@ -64,7 +64,24 @@ public:
   virtual std::size_t send_header(const boost::string_ref& name,
                                   const boost::string_ref& value) = 0;
 
+  /* Inform a client about a content length. Takes number of bytes supplied in
+   * @len XOR one of the alternative modes for dealing with it passed as @mode.
+   * On success returns number of bytes sent to the direct client of RadosGW.
+   * On failure throws int containing errno.
+   *
+   * CALL ORDER:
+   *  - The method must be called EXACTLY ONE time.
+   *  - The method must be preceeded with a call to send_status().
+   *  - The method must not be called after complete_header(). */
   virtual std::size_t send_content_length(uint64_t len) = 0;
+
+  virtual std::size_t send_chunked_transfer_encoding() {
+    /* This is a null implementation. We don't send anything here, even the HTTP
+     * header. The intended behaviour should be provided through a decorator or
+     * directly by a given front-end. */
+    return 0;
+  }
+
   virtual std::size_t complete_header() = 0;
 
   /* Receive body. On success Returns number of bytes sent to the direct
@@ -98,6 +115,7 @@ public:
   virtual std::size_t send_header(const boost::string_ref& name,
                                   const boost::string_ref& value) noexcept = 0;
   virtual int send_content_length(uint64_t len) = 0;
+  virtual int send_chunked_transfer_encoding() = 0;
   virtual int complete_header() = 0;
 
   virtual int recv_body(char* buf, std::size_t max) = 0;
@@ -184,6 +202,10 @@ public:
 
   int send_content_length(const uint64_t len) override {
     EXCPT_TO_RC(get_decoratee().send_content_length(len));
+  }
+
+  int send_chunked_transfer_encoding() override {
+    EXCPT_TO_RC(get_decoratee().send_chunked_transfer_encoding());
   }
 
   int complete_header() override {
