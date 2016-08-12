@@ -1078,7 +1078,8 @@ void BlueFS::_pad_bl(bufferlist& bl)
 }
 
 int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
-				uint64_t want_seq)
+				uint64_t want_seq,
+				uint64_t jump_to)
 {
   while (log_flushing) {
     dout(10) << __func__ << " want_seq " << want_seq
@@ -1129,6 +1130,13 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
+
+  if (jump_to) {
+    dout(10) << __func__ << " jumping log offset from 0x" << std::hex
+	     << log_writer->pos << " -> 0x" << jump_to << std::dec << dendl;
+    log_writer->pos = jump_to;
+    log_writer->file->fnode.size = jump_to;
+  }
 
   // drop lock while we wait for io
   l.unlock();
