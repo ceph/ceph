@@ -37,7 +37,7 @@ For Debian and Ubuntu distributions, perform the following steps:
    with a stable Ceph release (e.g., ``hammer``, ``jewel``, etc.)
    For example::
 
-	echo deb http://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 #. Update your repository and install ``ceph-deploy``::
 
@@ -77,7 +77,7 @@ For CentOS 7, perform the following steps:
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
