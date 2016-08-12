@@ -705,12 +705,6 @@ void ImageReplayer<I>::on_stop_journal_replay()
 }
 
 template <typename I>
-void ImageReplayer<I>::close_local_image(Context *on_finish)
-{
-  m_local_image_ctx->state->close(on_finish);
-}
-
-template <typename I>
 void ImageReplayer<I>::handle_replay_ready()
 {
   dout(20) << "enter" << dendl;
