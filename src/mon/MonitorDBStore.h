@@ -597,7 +597,7 @@ class MonitorDBStore
       derr << __func__ << " error initializing "
 	   << kv_type << " db back storage in "
 	   << full_path << dendl;
-      assert(0 != "MonitorDBStore: error initializing keyvaluedb back storage");
+      assert(0 == "MonitorDBStore: error initializing keyvaluedb back storage");
     }
     db.reset(db_ptr);
 
