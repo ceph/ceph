@@ -45,7 +45,7 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
 
 ostream& operator<<(ostream& out, bluefs_extent_t e)
 {
-  return out << e.bdev << ":" << e.offset << "+" << e.length;
+  return out << (int)e.bdev << ":" << e.offset << "+" << e.length;
 }
 
 // bluefs_super_t
