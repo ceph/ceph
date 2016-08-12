@@ -48,6 +48,9 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
     // avoid recording any events to the local journal
     return true;
   }
+  virtual bool journal_disabled() const {
+    return false;
+  }
 
   virtual void allocate_tag_on_lock(Context *on_finish) {
     // rbd-mirror will manually create tags by copying them from the peer

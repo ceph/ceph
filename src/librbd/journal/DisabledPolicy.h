@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_JOURNAL_STANDARD_POLICY_H
-#define CEPH_LIBRBD_JOURNAL_STANDARD_POLICY_H
+#ifndef CEPH_LIBRBD_JOURNAL_DISABLED_POLICY_H
+#define CEPH_LIBRBD_JOURNAL_DISABLED_POLICY_H
 
 #include "librbd/journal/Policy.h"
 
@@ -12,24 +12,21 @@ struct ImageCtx;
 
 namespace journal {
 
-class StandardPolicy : public Policy {
+class DisabledPolicy : public Policy {
 public:
-  StandardPolicy(ImageCtx *image_ctx) : m_image_ctx(image_ctx) {
-  }
-
   virtual bool append_disabled() const {
+    assert(false);
     return false;
   }
   virtual bool journal_disabled() const {
-    return false;
+    return true;
   }
-  virtual void allocate_tag_on_lock(Context *on_finish);
-
-private:
-  ImageCtx *m_image_ctx;
+  virtual void allocate_tag_on_lock(Context *on_finish) {
+    assert(false);
+  }
 };
 
 } // namespace journal
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_JOURNAL_STANDARD_POLICY_H
+#endif // CEPH_LIBRBD_JOURNAL_DISABLED_POLICY_H
