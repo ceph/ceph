@@ -26,7 +26,6 @@
 #include "auth/RotatingKeyRing.h"
 #include "common/SimpleRNG.h"
 
-
 class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
@@ -48,6 +47,12 @@ enum MonClientState {
   MC_STATE_NEGOTIATING,
   MC_STATE_AUTHENTICATING,
   MC_STATE_HAVE_SESSION,
+};
+struct MonConnection {
+  ConnectionRef con;
+  string mon;
+  unique_ptr<AuthClientHandler> auth;
+  MonClientState state;
 };
 
 struct MonClientPinger : public Dispatcher {
@@ -106,12 +111,11 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  MonClientState state;
+  map<entity_addr_t, unique_ptr<MonConnection> > pending_cons;
 
   Messenger *messenger;
 
-  string cur_mon;
-  ConnectionRef cur_con;
+  unique_ptr<MonConnection> session_con;
 
   SimpleRNG rng;
 
@@ -185,7 +189,88 @@ private:
   void _reopen_session() {
     _reopen_session(-1, string());
   }
+  bool _hunting() {
+    //should tell if monclient is currently hunting
+    return hunting; //for now
+  }
+  bool _reopened() {
+    //tell if the monclient has begun opening sessions
+    if (session_con.get() != nullptr) {
+      if (session_con->con) {
+	return true;
+      }
+    }
+    if (!pending_cons.empty()) {
+      return true;
+    }
+    return false;
+  }
+  bool _is_cur_con(ConnectionRef con) {
+    if (session_con.get() != nullptr) {
+      return con == session_con->con;
+    }
+    return false;
+  }
+  bool _is_pending(ConnectionRef con) {
+    if (con) {
+      if (pending_cons.count(con->get_peer_addr()) != 0)
+	return true;
+    }
+    return false;
+  }
+  bool _have_session() {
+    if (session_con.get() != nullptr) {
+      return session_con->state == MC_STATE_HAVE_SESSION;
+    }
+    return false;
+  }
+  void _wipe_pending() {
+    for (auto t = pending_cons.begin(); t != pending_cons.end(); ++t) {
+      if (t->second.get() != nullptr) {
+	//there is data to be cleared
+	if (t->second->con)
+	  t->second->con->mark_down();
+	if (t->second->auth.get() != nullptr)
+	  t->second->auth.reset();
+	t->second.reset();
+      }
+    }
+    pending_cons.clear();
+  }
+  void _wipe_cons() {
+    _wipe_pending();
+
+    if (session_con.get() != nullptr) {
+      if (session_con->con)
+	session_con->con->mark_down();
+      session_con->mon.clear();
+      if (auth)
+	auth.reset();
+      session_con.reset();
+    }
+
+    messenger->mark_down_all();
+  }
+  bool _is_state(ConnectionRef con, MonClientState state) {
+    if (_is_pending(con)) {
+      if (pending_cons[con->get_peer_addr()].get() != nullptr) {
+        return pending_cons[con->get_peer_addr()]->state == state;
+      }
+    }
+    return state == MC_STATE_NONE;
+  }
+  void _insert_pending(ConnectionRef con, string mon) {
+    if (con) {
+      assert(pending_cons.count(con->get_peer_addr()) == 0);
+      pending_cons[con->get_peer_addr()] =
+	unique_ptr<MonConnection>(new MonConnection);
+      pending_cons[con->get_peer_addr()]->con = con;
+      pending_cons[con->get_peer_addr()]->mon = mon;
+      pending_cons[con->get_peer_addr()]->state = MC_STATE_NONE;
+    }
+  }
   void _send_mon_message(Message *m, bool force=false);
+  void _send_mon_message(Message *m, ConnectionRef con, bool force=false);
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
@@ -249,7 +334,7 @@ private:
 
   // auth tickets
 public:
-  AuthClientHandler *auth;
+  unique_ptr<AuthClientHandler> auth;
 public:
   void renew_subs() {
     Mutex::Locker l(monc_lock);
@@ -378,10 +463,18 @@ public:
 
   void set_want_keys(uint32_t want) {
     want_keys = want;
-    if (auth)
+    if (auth) {
+      assert(auth);
       auth->set_want_keys(want | CEPH_ENTITY_TYPE_MON);
+    }
   }
-
+  void add_want_keys(uint32_t want) {
+    want_keys |= want;
+    if (auth) {
+      assert(auth);
+      auth->set_want_keys(want);
+    }
+  }
   // admin commands
 private:
   uint64_t last_mon_command_tid;
