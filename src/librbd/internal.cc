@@ -3169,8 +3169,22 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
+    int r;
+    if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+      // fail early if pool still has peers registered and attempting to disable
+      std::vector<cls::rbd::MirrorPeer> mirror_peers;
+      r = cls_client::mirror_peer_list(&io_ctx, &mirror_peers);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "Failed to list peers: " << cpp_strerror(r) << dendl;
+        return r;
+      } else if (!mirror_peers.empty()) {
+        lderr(cct) << "mirror peers still registered" << dendl;
+        return -EBUSY;
+      }
+    }
+
     cls::rbd::MirrorMode current_mirror_mode;
-    int r = cls_client::mirror_mode_get(&io_ctx, &current_mirror_mode);
+    r = cls_client::mirror_mode_get(&io_ctx, &current_mirror_mode);
     if (r < 0) {
       lderr(cct) << "Failed to retrieve mirror mode: " << cpp_strerror(r)
                  << dendl;
@@ -3193,8 +3207,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (current_mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
       r = cls_client::mirror_mode_set(&io_ctx, cls::rbd::MIRROR_MODE_IMAGE);
       if (r < 0) {
-        lderr(cct) << "Failed to set mirror mode to image: "
-          << cpp_strerror(r) << dendl;
+        lderr(cct) << "failed to set mirror mode to image: "
+                   << cpp_strerror(r) << dendl;
         return r;
       }
 
@@ -3210,57 +3224,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return 0;
     }
 
-    struct rollback_state_t {
-      IoCtx *io_ctx;
-      bool do_rollback;
-      cls::rbd::MirrorMode mirror_mode;
-      bool enable;
-      std::vector<std::pair<ImageCtx *, bool> > img_ctxs;
-
-      rollback_state_t(IoCtx *io_ctx, cls::rbd::MirrorMode mirror_mode, bool enable) :
-        io_ctx(io_ctx),
-        do_rollback(true),
-        mirror_mode(mirror_mode),
-        enable(enable) {
-      }
-      ~rollback_state_t() {
-        CephContext *cct = reinterpret_cast<CephContext *>(io_ctx->cct());
-        if (do_rollback && mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
-          int r = cls_client::mirror_mode_set(io_ctx, mirror_mode);
-          if (r < 0) {
-            lderr(cct) << "Failed to rollback mirror mode: " << cpp_strerror(r)
-              << dendl;
-          }
-
-          r = MirroringWatcher<>::notify_mode_updated(*io_ctx, mirror_mode);
-          if (r < 0) {
-            lderr(cct) << "failed to send update notification: "
-                       << cpp_strerror(r) << dendl;
-          }
-        }
-        for (const auto& pair : img_ctxs) {
-          if (do_rollback && pair.second) {
-            int r = enable ? mirror_image_disable(pair.first, false) :
-              mirror_image_enable(pair.first);
-            if (r < 0) {
-              lderr(cct) << "Failed to rollback mirroring state for image id "
-                << pair.first->id << ": " << cpp_strerror(r) << dendl;
-            }
-          }
-
-          int r = pair.first->state->close();
-          if (r < 0) {
-            lderr(cct) << "error closing image " << pair.first->id << ": "
-              << cpp_strerror(r) << dendl;
-          }
-        }
-      }
-    } rb_state(&io_ctx, current_mirror_mode,
-                     next_mirror_mode == cls::rbd::MIRROR_MODE_POOL);
-
-
     if (next_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
-
       map<string, string> images;
       r = list_images_v2(io_ctx, images);
       if (r < 0) {
@@ -3270,11 +3234,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
       for (const auto& img_pair : images) {
         uint64_t features;
-        r = cls_client::get_features(&io_ctx, util::header_name(img_pair.second),
+        r = cls_client::get_features(&io_ctx,
+                                     util::header_name(img_pair.second),
                                      CEPH_NOSNAP, &features);
         if (r < 0) {
           lderr(cct) << "error getting features for image " << img_pair.first
-            << ": " << cpp_strerror(r) << dendl;
+                     << ": " << cpp_strerror(r) << dendl;
           return r;
         }
 
@@ -3284,7 +3249,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           r = img_ctx->state->open();
           if (r < 0) {
             lderr(cct) << "error opening image "<< img_pair.first << ": "
-              << cpp_strerror(r) << dendl;
+                       << cpp_strerror(r) << dendl;
             delete img_ctx;
             return r;
           }
@@ -3292,16 +3257,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           r = mirror_image_enable(img_ctx);
           if (r < 0) {
             lderr(cct) << "error enabling mirroring for image "
-              << img_pair.first << ": " << cpp_strerror(r) << dendl;
-            rb_state.img_ctxs.push_back(std::make_pair(img_ctx, false));
+                       << img_pair.first << ": " << cpp_strerror(r) << dendl;
             return r;
           }
 
-          rb_state.img_ctxs.push_back(std::make_pair(img_ctx, true));
+          r = img_ctx->state->close();
+          if (r < 0) {
+            lderr(cct) << "failed to close image " << img_pair.first << ": "
+                       << cpp_strerror(r) << dendl;
+            return r;
+          }
         }
       }
     } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
-
       std::set<std::string> image_ids;
       r = list_mirror_images(io_ctx, image_ids);
       if (r < 0) {
@@ -3315,12 +3283,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           r = cls_client::mirror_image_get(&io_ctx, img_id, &mirror_image);
           if (r < 0 && r != -ENOENT) {
             lderr(cct) << "failed to retrieve mirroring state for image id "
-              << img_id << ": " << cpp_strerror(r) << dendl;
+                       << img_id << ": " << cpp_strerror(r) << dendl;
             return r;
           }
           if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
             lderr(cct) << "Failed to disable mirror mode: there are still "
-              "images with mirroring enabled" << dendl;
+                       << "images with mirroring enabled" << dendl;
             return -EINVAL;
           }
         } else {
@@ -3328,7 +3296,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           r = img_ctx->state->open();
           if (r < 0) {
             lderr(cct) << "error opening image id "<< img_id << ": "
-              << cpp_strerror(r) << dendl;
+                       << cpp_strerror(r) << dendl;
             delete img_ctx;
             return r;
           }
@@ -3336,17 +3304,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           r = mirror_image_disable(img_ctx, false);
           if (r < 0) {
             lderr(cct) << "error disabling mirroring for image id " << img_id
-              << cpp_strerror(r) << dendl;
-            rb_state.img_ctxs.push_back(std::make_pair(img_ctx, false));
+                       << cpp_strerror(r) << dendl;
             return r;
           }
 
-          rb_state.img_ctxs.push_back(std::make_pair(img_ctx, true));
+          r = img_ctx->state->close();
+          if (r < 0) {
+            lderr(cct) << "failed to close image id " << img_id << ": "
+                       << cpp_strerror(r) << dendl;
+            return r;
+          }
         }
       }
     }
-
-    rb_state.do_rollback = false;
 
     r = cls_client::mirror_mode_set(&io_ctx, next_mirror_mode);
     if (r < 0) {
