@@ -1380,8 +1380,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     cct->_conf->bluestore_wal_thread_timeout,
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
-    m_finisher_num(cct->_conf->bluestore_finisher_threads),
-    next_osr_id(0),
+    m_finisher_num(1),
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
@@ -1391,6 +1390,10 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
   set_cache_shards(1);
+
+  if (cct->_conf->bluestore_use_multiple_finishers) {
+    m_finisher_num = cct->_conf->osd_op_num_shards;
+  }
 
   for (int i = 0; i < m_finisher_num; ++i) {
     ostringstream oss;
@@ -4838,16 +4841,16 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     txc->onreadable_sync = NULL;
   }
   if (txc->onreadable) {
-    finishers[txc->osr->id % m_finisher_num]->queue(txc->onreadable);
+    finishers[txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num)]->queue(txc->onreadable);
     txc->onreadable = NULL;
   }
   if (txc->oncommit) {
-    finishers[txc->osr->id % m_finisher_num]->queue(txc->oncommit);
+    finishers[txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num)]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
   while (!txc->oncommits.empty()) {
     auto f = txc->oncommits.front();
-    finishers[txc->osr->id % m_finisher_num]->queue(f);
+    finishers[txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num)]->queue(f);
     txc->oncommits.pop_front();
   }
 
@@ -5175,7 +5178,7 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
 int BlueStore::_wal_replay()
 {
   dout(10) << __func__ << " start" << dendl;
-  OpSequencerRef osr = new OpSequencer(next_osr_id.inc());
+  OpSequencerRef osr = new OpSequencer;
   int count = 0;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_WAL);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
@@ -5225,7 +5228,7 @@ int BlueStore::queue_transactions(
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer(next_osr_id.inc());
+    osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
