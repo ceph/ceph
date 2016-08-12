@@ -353,7 +353,7 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    sf.rgw_fh->create_stat(&st, create_mask);
 
 	    /* open handle */
-	    rc = rgw_open(fs, sf.fh, 0 /* flags */);
+	    rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
 	    ASSERT_EQ(rc, 0);
 	    ASSERT_TRUE(sf.rgw_fh->is_open());
 	    /* stage seq write */
@@ -425,7 +425,7 @@ TEST(LibRGW, SETATTR) {
 	sf.rgw_fh->create_stat(&st, create_mask);
 
 	/* open handle */
-	rc = rgw_open(fs, sf.fh, 0 /* flags */);
+	rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
 	ASSERT_EQ(rc, 0);
 	ASSERT_TRUE(sf.rgw_fh->is_open());
 	/* stage seq write */
@@ -782,7 +782,7 @@ TEST(LibRGW, WRITEF_DIRS1) {
       fobj.sync();
 
       /* begin write transaction */
-      rc = rgw_open(fs, fobj.fh, 0 /* flags */);
+      rc = rgw_open(fs, fobj.fh, 0 /* posix flags */, 0 /* flags */);
       ASSERT_EQ(rc, 0);
       ASSERT_TRUE(fobj.rgw_fh->is_open());
 
@@ -987,7 +987,7 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
-      ret = rgw_open(fs, obj.fh, RGW_OPEN_FLAG_NONE);
+      ret = rgw_open(fs, obj.fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       ASSERT_TRUE(obj.rgw_fh->is_open());
       // unstable write data
