@@ -78,26 +78,7 @@ private:
   bool prepare_pg_stats(MonOpRequestRef op);
   void _updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op);
 
-  struct C_Stats : public C_MonOp {
-    PGMonitor *pgmon;
-    MonOpRequestRef stats_op_ack;
-    entity_inst_t who;
-    C_Stats(PGMonitor *p,
-            MonOpRequestRef op,
-            MonOpRequestRef op_ack)
-      : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
-    void _finish(int r) {
-      if (r >= 0) {
-	pgmon->_updated_stats(op, stats_op_ack);
-      } else if (r == -ECANCELED) {
-        return;
-      } else if (r == -EAGAIN) {
-	pgmon->dispatch(op);
-      } else {
-	assert(0 == "bad C_Stats return value");
-      }
-    }    
-  };
+  struct C_Stats;
 
   void handle_statfs(MonOpRequestRef op);
   bool preprocess_getpoolstats(MonOpRequestRef op);
