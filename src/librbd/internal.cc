@@ -32,6 +32,8 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/DisabledPolicy.h"
+#include "librbd/journal/StandardPolicy.h"
 #include "librbd/journal/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/ObjectMap.h"
@@ -1662,6 +1664,21 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
     };
 
+    // if disabling journaling, avoid attempting to open the journal
+    // when acquiring the exclusive lock in case the journal is corrupt
+    bool disabling_journal = false;
+    if (!enabled && ((features & RBD_FEATURE_JOURNALING) != 0)) {
+      RWLock::WLocker snap_locker(ictx->snap_lock);
+      ictx->set_journal_policy(new journal::DisabledPolicy());
+      disabling_journal = true;
+    }
+    BOOST_SCOPE_EXIT_ALL( (ictx)(disabling_journal) ) {
+      if (disabling_journal) {
+        RWLock::WLocker snap_locker(ictx->snap_lock);
+        ictx->set_journal_policy(new journal::StandardPolicy(ictx));
+      }
+    };
+
     // if disabling features w/ exclusive lock supported, we need to
     // acquire the lock to temporarily block IO against the image
     bool acquired_lock = false;
@@ -1785,13 +1802,14 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
                                              &mirror_image);
             if (r < 0 && r != -ENOENT) {
               lderr(cct) << "error retrieving mirroring state: "
-                << cpp_strerror(r) << dendl;
+                         << cpp_strerror(r) << dendl;
               return r;
             }
 
             if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
               lderr(cct) << "cannot disable journaling: image mirroring "
-                " enabled and mirror pool mode set to image" << dendl;
+                         << "enabled and mirror pool mode set to image"
+                         << dendl;
               return -EINVAL;
             }
           } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
@@ -1803,13 +1821,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             }
           }
 
-          C_SaferCond cond;
-          ictx->journal->close(&cond);
-          r = cond.wait();
-          if (r < 0) {
-            lderr(cct) << "error closing image journal: " << cpp_strerror(r)
-                       << dendl;
-            return r;
+          if (ictx->journal != nullptr) {
+            C_SaferCond cond;
+            ictx->journal->close(&cond);
+            r = cond.wait();
+            if (r < 0) {
+              lderr(cct) << "error closing image journal: " << cpp_strerror(r)
+                         << dendl;
+              return r;
+            }
           }
 
           r = Journal<>::remove(ictx->md_ctx, ictx->id);
@@ -1857,7 +1877,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           r = mirror_image_enable_internal(img_ctx);
           if (r < 0) {
             lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
-              << dendl;
+                       << dendl;
           }
           img_ctx->state->close();
         }
