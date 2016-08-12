@@ -1210,6 +1210,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   // previously allocated extents.
   bool must_dirty = false;
   if (allocated < offset + length) {
+    // we should never run out of log space here; see the min runway check
+    // in _flush_and_sync_log.
+    assert(h->file->fnode.ino != 1);
     int r = _allocate(h->file->fnode.prefer_bdev,
 		      offset + length - allocated,
 		      &h->file->fnode.extents);
