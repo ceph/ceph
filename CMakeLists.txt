@@ -245,7 +245,6 @@ if(${WITH_EXPAT})
 find_package(EXPAT REQUIRED)
 endif(${WITH_EXPAT})
 
-find_package(Cython REQUIRED)
 find_package(fcgi REQUIRED)
 
 find_package(atomic_ops REQUIRED)
