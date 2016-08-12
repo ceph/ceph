@@ -269,11 +269,10 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 # Python stuff
-find_package(PythonInterp 2 QUIET)
-if(NOT PYTHONINTERP_FOUND)
-  message(FATAL_ERROR "Python 2 interpreter not found.")
-endif(NOT PYTHONINTERP_FOUND)
-find_package(PythonLibs REQUIRED)
+find_package(PythonInterp 2 REQUIRED)
+find_package(PythonLibs 2 REQUIRED)
+find_package(Python3Interp 3 REQUIRED)
+find_package(Python3Libs 3 REQUIRED)
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")

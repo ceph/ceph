@@ -181,7 +181,7 @@ class RankEvicter(threading.Thread):
     def run(self):
         try:
             self._evict()
-        except Exception, e:
+        except Exception as e:
             self.success = False
             self.exception = e
         else:
@@ -597,7 +597,7 @@ class CephFSVolumeClient(object):
             try:
                 self.fs.stat(subpath)
             except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, 0755)
+                self.fs.mkdir(subpath, 0o755)
 
     def create_volume(self, volume_path, size=None, data_isolated=False):
         """
@@ -639,7 +639,7 @@ class CephFSVolumeClient(object):
         # Create a volume meta file, if it does not already exist, to store
         # data about auth ids having access to the volume
         fd = self.fs.open(self._volume_metadata_path(volume_path),
-                          os.O_CREAT, 0755)
+                          os.O_CREAT, 0o755)
         self.fs.close(fd)
 
         return {
@@ -789,7 +789,7 @@ class CephFSVolumeClient(object):
         @contextmanager
         def fn():
             while(1):
-                fd = self.fs.open(path, os.O_CREAT, 0755)
+                fd = self.fs.open(path, os.O_CREAT, 0o755)
                 self.fs.flock(fd, fcntl.LOCK_EX, self._id)
 
                 # The locked file will be cleaned up sometime. It could be
@@ -1300,7 +1300,7 @@ class CephFSVolumeClient(object):
 
     def _snapshot_create(self, dir_path, snapshot_name):
         # TODO: raise intelligible exception for clusters where snaps are disabled
-        self.fs.mkdir(self._snapshot_path(dir_path, snapshot_name), 0755)
+        self.fs.mkdir(self._snapshot_path(dir_path, snapshot_name), 0o755)
 
     def _snapshot_destroy(self, dir_path, snapshot_name):
         """
