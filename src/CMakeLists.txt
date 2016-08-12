@@ -277,6 +277,12 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
+# Python stuff
+find_package(PythonInterp 2 REQUIRED)
+find_package(PythonLibs 2 REQUIRED)
+find_package(Python3Interp 3 REQUIRED)
+find_package(Python3Libs 3 REQUIRED)
+
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
