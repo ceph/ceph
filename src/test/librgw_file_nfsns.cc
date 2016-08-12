@@ -498,7 +498,7 @@ TEST(LibRGW, RGW_CREATE_DIRS1) {
 			  RGW_LOOKUP_FLAG_NONE);
 	if (! sf.fh) {
 	  rc = rgw_create(fs, sf.parent_fh, sf.name.c_str(), &st, create_mask,
-			  &sf.fh, RGW_CREATE_FLAG_NONE);
+			  &sf.fh, 0 /* posix flags */, RGW_CREATE_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
 	sf.sync();
@@ -545,7 +545,7 @@ TEST(LibRGW, RGW_SETUP_RENAME1) {
 			  RGW_LOOKUP_FLAG_NONE);
 	if (! rf.fh) {
 	  rc = rgw_create(fs, rf.parent_fh, rf.name.c_str(), &st, create_mask,
-			  &rf.fh, RGW_CREATE_FLAG_NONE);
+			  &rf.fh, 0 /* posix flags */, RGW_CREATE_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	}
 	rf.sync();

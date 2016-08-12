@@ -143,8 +143,9 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 #define RGW_CREATE_FLAG_NONE     0x0000
 
 int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
-	      const char *name, struct stat *st, uint32_t mask,
-	      struct rgw_file_handle **fh, uint32_t flags);
+	       const char *name, struct stat *st, uint32_t mask,
+	       struct rgw_file_handle **fh, uint32_t posix_flags,
+	       uint32_t flags);
 
 /*
   create a new directory

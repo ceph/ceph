@@ -1114,10 +1114,10 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 /*
   generic create -- create an empty regular file
 */
-int rgw_create(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *parent_fh,
-	      const char *name, struct stat *st, uint32_t mask,
-	      struct rgw_file_handle **fh, uint32_t flags)
+int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+	       const char *name, struct stat *st, uint32_t mask,
+	       struct rgw_file_handle **fh, uint32_t posix_flags,
+	       uint32_t flags)
 {
   using std::get;
 
