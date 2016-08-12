@@ -1031,7 +1031,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 
   if (multipart_delete) {
     end_header(s, this /* RGWOp */, nullptr /* contype */,
-               NO_CONTENT_LENGTH);
+               CHUNKED_TRANSFER_ENCODING);
 
     if (deleter) {
       bulkdelete_respond(deleter->get_num_deleted(),
@@ -1387,7 +1387,8 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
   dump_errno(s);
-  end_header(s, NULL);
+  end_header(s, this /* RGWOp */, nullptr /* contype */,
+             CHUNKED_TRANSFER_ENCODING);
 
   bulkdelete_respond(deleter->get_num_deleted(),
                      deleter->get_num_unfound(),

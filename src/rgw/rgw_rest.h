@@ -513,6 +513,7 @@ public:
 };
 
 static constexpr int64_t NO_CONTENT_LENGTH = -1;
+static constexpr int64_t CHUNKED_TRANSFER_ENCODING = -2;
 
 extern void set_req_state_err(struct rgw_err &err, int err_no, int prot_flags);
 extern void set_req_state_err(struct req_state *s, int err_no);
