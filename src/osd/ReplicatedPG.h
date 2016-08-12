@@ -25,6 +25,7 @@
 #include "messages/MOSDOpReply.h"
 #include "common/sharedptr_registry.hpp"
 #include "ReplicatedBackend.h"
+#include "PGTransaction.h"
 
 class MOSDSubOpReply;
 
@@ -73,23 +74,26 @@ public:
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
     hobject_t temp_oid;    ///< temp object (if any)
+
     /**
-     * Final transaction; if non-empty the callback must execute it before any
-     * other accesses to the object (in order to complete the copy).
+     * Function to fill in transaction; if non-empty the callback
+     * must execute it before any other accesses to the object
+     * (in order to complete the copy).
      */
-    PGBackend::PGTransaction *final_tx;
+    std::function<void(PGTransaction *)> fill_in_final_tx;
+
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
-    map<string, bufferlist> attrs; ///< src user attrs
     bool has_omap;
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
     vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    map<string, bufferlist> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool is_data_digest() {
@@ -100,7 +104,7 @@ public:
     }
     CopyResults()
       : object_size(0), started_temp_obj(false),
-	final_tx(NULL), user_version(0),
+	user_version(0),
 	should_requeue(false), mirror_snapset(false),
 	has_omap(false),
 	flags(0),
@@ -478,7 +482,7 @@ public:
 
     int current_osd_subop_num;
 
-    PGBackend::PGTransactionUPtr op_t;
+    PGTransactionUPtr op_t;
     vector<pg_log_entry_t> log;
     boost::optional<pg_hit_set_history_t> updated_hset_history;
 
@@ -504,10 +508,6 @@ public:
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
-    // pending xattr updates
-    map<ObjectContextRef,
-	map<string, boost::optional<bufferlist> > > pending_attrs;
-
     list<std::function<void()>> on_applied;
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_finish;
@@ -532,29 +532,6 @@ public:
     bool sent_ack;
     bool sent_disk;
 
-    void apply_pending_attrs() {
-      for (map<ObjectContextRef,
-	     map<string, boost::optional<bufferlist> > >::iterator i =
-	     pending_attrs.begin();
-	   i != pending_attrs.end();
-	   ++i) {
-	if (i->first->obs.exists) {
-	  for (map<string, boost::optional<bufferlist> >::iterator j =
-		 i->second.begin();
-	       j != i->second.end();
-	       ++j) {
-	    if (j->second)
-	      i->first->attr_cache[j->first] = j->second.get();
-	    else
-	      i->first->attr_cache.erase(j->first);
-	  }
-	} else {
-	  i->first->attr_cache.clear();
-	}
-      }
-      pending_attrs.clear();
-    }
-
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
@@ -566,8 +543,6 @@ public:
     bool async_reads_complete() {
       return inflightreads == 0;
     }
-
-    ObjectModDesc mod_desc;
 
     ObjectContext::RWState::State lock_type;
     ObcLockManager lock_manager;
@@ -1101,7 +1076,7 @@ protected:
 
   void _make_clone(
     OpContext *ctx,
-    PGBackend::PGTransaction* t,
+    PGTransaction* t,
     ObjectContextRef obc,
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
@@ -1272,7 +1247,7 @@ protected:
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
 		  unsigned dest_obj_fadvise_flags);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
-  void _write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t);
+  void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
     uint64_t size = cct->_conf->osd_copyfrom_max_chunk;
     if (pool.info.requires_aligned_append()) {
@@ -1284,8 +1259,6 @@ protected:
     return size;
   }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
-  void _build_finish_copy_transaction(CopyOpRef cop,
-                                      PGBackend::PGTransaction *t);
   void finish_copyfrom(OpContext *ctx);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
@@ -1501,7 +1474,7 @@ private:
 			     const SnapSet& ss);
   // return true if we're creating a local object, false for a
   // whiteout or no change.
-  bool maybe_create_new_object(OpContext *ctx);
+  void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
   int _delete_oid(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
@@ -1549,25 +1522,21 @@ public:
   void on_shutdown() override;
 
   // attr cache handling
-  void replace_cached_attrs(
-    OpContext *ctx,
-    ObjectContextRef obc,
-    const map<string, bufferlist> &new_attrs);
   void setattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
-    PGBackend::PGTransaction *t,
+    PGTransaction *t,
     const string &key,
     bufferlist &val);
   void setattrs_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
-    PGBackend::PGTransaction *t,
+    PGTransaction *t,
     map<string, bufferlist> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
-    PGBackend::PGTransaction *t,
+    PGTransaction *t,
     const string &key);
   int getattr_maybe_cache(
     ObjectContextRef obc,

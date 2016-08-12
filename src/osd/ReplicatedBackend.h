@@ -340,7 +340,6 @@ private:
   };
   map<ceph_tid_t, InProgressOp> in_progress_ops;
 public:
-  PGTransaction *get_transaction();
   friend class C_OSD_OnOpCommit;
   friend class C_OSD_OnOpApplied;
   void submit_transaction(
