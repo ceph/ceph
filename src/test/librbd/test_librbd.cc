@@ -3021,12 +3021,17 @@ TEST_F(TestLibRBD, UpdateFeatures)
     return;
   }
 
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
+
   // must provide a single feature
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                       RBD_FEATURE_OBJECT_MAP |
-                                       RBD_FEATURE_FAST_DIFF, false));
+  uint64_t disable_features;
+  disable_features = features & RBD_FEATURES_MUTABLE;
+  if (disable_features != 0) {
+    ASSERT_EQ(0, image.update_features(disable_features, false));
+  }
 
   // cannot enable object map w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
