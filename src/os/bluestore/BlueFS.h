@@ -207,6 +207,11 @@ private:
   bool log_flushing = false;  ///< true while flushing the log
   std::condition_variable log_cond;
 
+  uint64_t new_log_jump_to;
+  uint64_t old_log_jump_to;
+  FileRef new_log;
+  FileWriter *new_log_writer;
+
   /*
    * There are up to 3 block devices:
    *
@@ -241,8 +246,10 @@ private:
   int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
 			  uint64_t want_seq = 0);
   uint64_t _estimate_log_size();
-  void _maybe_compact_log();
-  void _compact_log();
+  bool _should_compact_log();
+  void _compact_log_dump_metadata(bluefs_transaction_t *t);
+  void _compact_log_sync();
+  void _compact_log_async();
 
   //void _aio_finish(void *priv);
 
@@ -268,7 +275,7 @@ private:
 
   int _open_super();
   int _write_super();
-  int _replay(); ///< replay journal
+  int _replay(bool noop); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
@@ -293,6 +300,7 @@ public:
 
   int fsck();
 
+  uint64_t get_fs_usage();
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
@@ -333,13 +341,11 @@ public:
   int lock_file(const string& dirname, const string& filename, FileLock **p);
   int unlock_file(FileLock *l);
 
+  void flush_log();
+  void compact_log();
+
   /// sync any uncommitted state to disk
-  int sync();
-
   void sync_metadata();
-
-  /// compact metadata
-  int compact();
 
   int add_block_device(unsigned bdev, string path);
   uint64_t get_block_device_size(unsigned bdev);
