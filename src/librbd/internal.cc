@@ -910,13 +910,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	if (r < 0) {
 	  lderr(cct) << "error opening image: "
 		     << cpp_strerror(r) << dendl;
+          delete imctx;
 	  return r;
 	}
 	librbd::NoOpProgressContext prog_ctx;
 	r = imctx->operations->flatten(prog_ctx);
 	if (r < 0) {
-	  lderr(cct) << "error to flatten image: " << pool << "/" << id_it
+	  lderr(cct) << "error flattening image: " << pool << "/" << id_it
 		     << cpp_strerror(r) << dendl;
+          imctx->state->close();
 	  return r;
 	}
 
@@ -939,7 +941,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       pctx.update_progress(++i, size);
       assert(i <= size);
     }
-    
+
     return 0;
   }
 
