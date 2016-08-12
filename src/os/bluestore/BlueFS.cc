@@ -979,8 +979,8 @@ bool BlueFS::_should_compact_log()
   uint64_t current = log_writer->file->fnode.size;
   uint64_t expected = _estimate_log_size();
   float ratio = (float)current / (float)expected;
-  dout(10) << __func__ << " current " << current
-	   << " expected " << expected
+  dout(10) << __func__ << " current 0x" << std::hex << current
+	   << " expected " << expected << std::dec
 	   << " ratio " << ratio << dendl;
   if (current < g_conf->bluefs_log_compact_min_size ||
       ratio < g_conf->bluefs_log_compact_min_ratio)
@@ -1082,8 +1082,8 @@ void BlueFS::_pad_bl(bufferlist& bl)
 {
   uint64_t partial = bl.length() % super.block_size;
   if (partial) {
-    dout(10) << __func__ << " padding with " << super.block_size - partial
-	     << " zeros" << dendl;
+    dout(10) << __func__ << " padding with 0x" << std::hex
+	     << super.block_size - partial << " zeros" << std::dec << dendl;
     bl.append_zero(super.block_size - partial);
   }
 }
@@ -1116,8 +1116,8 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   // allocate some more space (before we run out)?
   uint64_t runway = log_writer->file->fnode.get_allocated() - log_writer->pos;
   if (runway < g_conf->bluefs_min_log_runway) {
-    dout(10) << __func__ << " allocating more log runway ("
-	     << runway << " remaining" << dendl;
+    dout(10) << __func__ << " allocating more log runway (0x"
+	     << std::hex << runway << std::dec  << " remaining)" << dendl;
     int r = _allocate(log_writer->file->fnode.prefer_bdev,
 		      g_conf->bluefs_max_log_runway,
 		      &log_writer->file->fnode.extents);
@@ -1432,7 +1432,7 @@ void BlueFS::flush_bdev()
 int BlueFS::_allocate(uint8_t id, uint64_t len, vector<bluefs_extent_t> *ev)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
-           << " from " << id << dendl;
+           << " from " << (int)id << dendl;
   assert(id < alloc.size());
   uint64_t min_alloc_size = g_conf->bluefs_alloc_size;
 
@@ -1444,17 +1444,20 @@ int BlueFS::_allocate(uint8_t id, uint64_t len, vector<bluefs_extent_t> *ev)
   if (r < 0) {
     if (id != BDEV_SLOW) {
       if (bdev[id])
-	derr << __func__ << " failed to allocate " << left << " on bdev " << id
-	     << ", free " << alloc[id]->get_free()
-	     << "; fallback to bdev " << id + 1 << dendl;
+	derr << __func__ << " failed to allocate 0x" << std::hex << left
+	     << " on bdev " << (int)id
+	     << ", free 0x" << alloc[id]->get_free()
+	     << "; fallback to bdev " << (int)id + 1
+	     << std::dec << dendl;
       return _allocate(id + 1, len, ev);
     }
     if (bdev[id])
-      derr << __func__ << " failed to allocate " << left << " on bdev " << id
-	   << ", free " << alloc[id]->get_free() << dendl;
+      derr << __func__ << " failed to allocate 0x" << std::hex << left
+	   << " on bdev " << (int)id
+	   << ", free 0x" << alloc[id]->get_free() << std::dec << dendl;
     else
-      derr << __func__ << " failed to allocate " << left << " on bdev " << id
-	   << ", dne" << dendl;
+      derr << __func__ << " failed to allocate 0x" << std::hex << left
+	   << " on bdev " << (int)id << ", dne" << std::dec << dendl;
     return r;
   }
 
