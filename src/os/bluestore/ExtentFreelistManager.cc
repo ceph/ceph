@@ -11,6 +11,12 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
 
+int ExtentFreelistManager::create(uint64_t size, KeyValueDB::Transaction txn)
+{
+  release(0, size, txn);
+  return 0;
+}
+
 int ExtentFreelistManager::init()
 {
   dout(1) << __func__ << dendl;
