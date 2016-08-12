@@ -9,9 +9,6 @@ foreach(python_version 3 2)  # Keep the default version last
     set(PYTHON_VERSION ${python_version})
   endif(${python_version} EQUAL 2)
 
-  find_package(Python${PYTHON_VERSION}Interp ${python_version} REQUIRED)
-  find_package(Python${PYTHON_VERSION}Libs ${python_version} REQUIRED)
-
   find_package(Cython REQUIRED)
 
   add_subdirectory(rados rados${PYTHON_VERSION})
