@@ -279,7 +279,7 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
     dout(5) << ": remote image is not primary -- skipping image replay"
             << dendl;
     m_ret_val = -EREMOTEIO;
-    close_remote_image();
+    update_client_state();
     return;
   }
 
@@ -294,6 +294,42 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
   }
 
   open_local_image();
+}
+
+template <typename I>
+void BootstrapRequest<I>::update_client_state() {
+  if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING) {
+    // state already set for replaying upon failover
+    close_remote_image();
+    return;
+  }
+
+  dout(20) << dendl;
+  update_progress("UPDATE_CLIENT_STATE");
+
+  librbd::journal::MirrorPeerClientMeta client_meta(*m_client_meta);
+  client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+
+  librbd::journal::ClientData client_data(client_meta);
+  bufferlist data_bl;
+  ::encode(client_data, data_bl);
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client_state>(
+      this);
+  m_journaler->update_client(data_bl, ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_update_client_state(int r) {
+  dout(20) << ": r=" << r << dendl;
+  if (r < 0) {
+    derr << ": failed to update client: " << cpp_strerror(r) << dendl;
+  } else {
+    m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;;
+  }
+
+  close_remote_image();
 }
 
 template <typename I>
@@ -335,23 +371,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     return;
   }
 
-  update_client();
-}
-
-template <typename I>
-void BootstrapRequest<I>::remove_local_image() {
-  dout(20) << dendl;
-
-  update_progress("REMOVE_LOCAL_IMAGE");
-
-  // TODO
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_remove_local_image(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  // TODO
+  update_client_image();
 }
 
 template <typename I>
@@ -386,10 +406,10 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
 }
 
 template <typename I>
-void BootstrapRequest<I>::update_client() {
+void BootstrapRequest<I>::update_client_image() {
   dout(20) << dendl;
 
-  update_progress("UPDATE_CLIENT");
+  update_progress("UPDATE_CLIENT_IMAGE");
 
   if (m_client_meta->image_id == (*m_local_image_ctx)->id) {
     // already registered local image with remote journal
@@ -408,13 +428,13 @@ void BootstrapRequest<I>::update_client() {
   ::encode(client_data, data_bl);
 
   Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client>(
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client_image>(
       this);
   m_journaler->update_client(data_bl, ctx);
 }
 
 template <typename I>
-void BootstrapRequest<I>::handle_update_client(int r) {
+void BootstrapRequest<I>::handle_update_client_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
@@ -597,10 +617,6 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::image_sync() {
-  dout(20) << dendl;
-
-  update_progress("IMAGE_SYNC");
-
   if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING) {
     // clean replay state -- no image sync required
     close_remote_image();
@@ -608,6 +624,7 @@ void BootstrapRequest<I>::image_sync() {
   }
 
   dout(20) << dendl;
+  update_progress("IMAGE_SYNC");
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(
