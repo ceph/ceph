@@ -13,6 +13,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/image/RefreshParentRequest.h"
+#include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -476,15 +477,25 @@ Context *RefreshRequest<I>::handle_v2_init_exclusive_lock(int *result) {
 
 template <typename I>
 void RefreshRequest<I>::send_v2_open_journal() {
-  if ((m_features & RBD_FEATURE_JOURNALING) == 0 ||
-      m_image_ctx.read_only ||
-      !m_image_ctx.snap_name.empty() ||
-      m_image_ctx.journal != nullptr ||
-      m_image_ctx.exclusive_lock == nullptr ||
-      !m_image_ctx.exclusive_lock->is_lock_owner()) {
+  bool journal_disabled = (
+    (m_features & RBD_FEATURE_JOURNALING) == 0 ||
+     m_image_ctx.read_only ||
+     !m_image_ctx.snap_name.empty() ||
+     m_image_ctx.journal != nullptr ||
+     m_image_ctx.exclusive_lock == nullptr ||
+     !m_image_ctx.exclusive_lock->is_lock_owner());
+  bool journal_disabled_by_policy;
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    journal_disabled_by_policy = (
+      !journal_disabled &&
+      m_image_ctx.get_journal_policy()->journal_disabled());
+  }
 
+  if (journal_disabled || journal_disabled_by_policy) {
     // journal dynamically enabled -- doesn't own exclusive lock
     if ((m_features & RBD_FEATURE_JOURNALING) != 0 &&
+        !journal_disabled_by_policy &&
         m_image_ctx.exclusive_lock != nullptr &&
         m_image_ctx.journal == nullptr) {
       m_image_ctx.aio_work_queue->set_require_lock_on_read();
