@@ -42,7 +42,6 @@ you may write data with one API and retrieve it with the other.
 	Multisite Configuration <multisite>
 	Config Reference <config-ref>
 	Admin Guide <admin>
-	Purging Temp Data <purge-temp>
 	S3 API <s3>
 	Swift API <swift>
 	Admin Ops API <adminops>
