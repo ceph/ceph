@@ -8943,7 +8943,14 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       }
     }
 
-    object_info_t oi(bv);
+    object_info_t oi;
+    try {
+      bufferlist::iterator bliter = bv.begin();
+      ::decode(oi, bliter);
+    } catch (...) {
+      dout(0) << __func__ << ": obc corrupt: " << soid << dendl;
+      return ObjectContextRef();   // -ENOENT!
+    }
 
     assert(oi.soid.pool == (int64_t)info.pgid.pool());
 
