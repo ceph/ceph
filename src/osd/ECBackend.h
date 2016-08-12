@@ -26,7 +26,6 @@ struct ECSubWrite;
 struct ECSubWriteReply;
 struct ECSubRead;
 struct ECSubReadReply;
-class ECTransaction;
 
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
@@ -88,9 +87,6 @@ public:
   void on_flushed();
 
   void dump_recovery_info(Formatter *f) const;
-
-  /// @see osd/ECTransaction.cc/h
-  PGTransaction *get_transaction();
 
   void submit_transaction(
     const hobject_t &hoid,
@@ -350,6 +346,7 @@ public:
     eversion_t trim_to;
     eversion_t trim_rollback_to;
     vector<pg_log_entry_t> log_entries;
+    map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> obc_map;
     boost::optional<pg_hit_set_history_t> updated_hit_set_history;
     Context *on_local_applied_sync;
     Context *on_all_applied;
@@ -358,7 +355,7 @@ public:
     osd_reqid_t reqid;
     OpRequestRef client_op;
 
-    std::unique_ptr<ECTransaction> t;
+    std::unique_ptr<PGTransaction> t;
 
     set<hobject_t, hobject_t::BitwiseComparator> temp_added;
     set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;

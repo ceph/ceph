@@ -351,222 +351,6 @@ void ReplicatedBackend::objects_read_async(
       new AsyncReadCallback(r, on_complete)));
 }
 
-
-class RPGTransaction : public PGBackend::PGTransaction {
-  coll_t coll;
-  set<hobject_t, hobject_t::BitwiseComparator> temp_added;
-  set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
-  mutable ObjectStore::Transaction t;
-  uint64_t written;
-  const coll_t &get_coll_ct(const hobject_t &hoid) {
-    if (hoid.is_temp()) {
-      temp_cleared.erase(hoid);
-      temp_added.insert(hoid);
-    }
-    return get_coll(hoid);
-  }
-  const coll_t &get_coll_rm(const hobject_t &hoid) {
-    if (hoid.is_temp()) {
-      temp_added.erase(hoid);
-      temp_cleared.insert(hoid);
-    }
-    return get_coll(hoid);
-  }
-  const coll_t &get_coll(const hobject_t &hoid) {
-    return coll;
-  }
-public:
-  RPGTransaction(coll_t coll)
-    : coll(coll), written(0) {}
-
-  /// Yields ownership of contained transaction
-  ObjectStore::Transaction&& get_transaction() {
-    return std::move(t);
-  }
-  const set<hobject_t, hobject_t::BitwiseComparator> &get_temp_added() {
-    return temp_added;
-  }
-  const set<hobject_t, hobject_t::BitwiseComparator> &get_temp_cleared() {
-    return temp_cleared;
-  }
-
-  void write(
-    const hobject_t &hoid,
-    uint64_t off,
-    uint64_t len,
-    bufferlist &bl,
-    uint32_t fadvise_flags
-    ) {
-    written += len;
-    t.write(get_coll_ct(hoid), ghobject_t(hoid), off, len, bl, fadvise_flags);
-  }
-  void remove(
-    const hobject_t &hoid
-    ) {
-    t.remove(get_coll_rm(hoid), ghobject_t(hoid));
-  }
-  void stash(
-    const hobject_t &hoid,
-    version_t former_version) {
-    t.collection_move_rename(
-      coll, ghobject_t(hoid), coll,
-      ghobject_t(hoid, former_version, shard_id_t::NO_SHARD));
-  }
-  void setattrs(
-    const hobject_t &hoid,
-    map<string, bufferlist> &attrs
-    ) {
-    t.setattrs(get_coll(hoid), ghobject_t(hoid), attrs);
-  }
-  void setattr(
-    const hobject_t &hoid,
-    const string &attrname,
-    bufferlist &bl
-    ) {
-    t.setattr(get_coll(hoid), ghobject_t(hoid), attrname, bl);
-  }
-  void rmattr(
-    const hobject_t &hoid,
-    const string &attrname
-    ) {
-    t.rmattr(get_coll(hoid), ghobject_t(hoid), attrname);
-  }
-  void omap_setkeys(
-    const hobject_t &hoid,
-    map<string, bufferlist> &keys
-    ) {
-    for (map<string, bufferlist>::iterator p = keys.begin(); p != keys.end(); ++p)
-      written += p->first.length() + p->second.length();
-    return t.omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys);
-  }
-  void omap_setkeys(
-    const hobject_t &hoid,
-    bufferlist &keys_bl
-    ) {
-    written += keys_bl.length();
-    return t.omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
-  }
-  void omap_rmkeys(
-    const hobject_t &hoid,
-    set<string> &keys
-    ) {
-    t.omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys);
-  }
-  void omap_rmkeys(
-    const hobject_t &hoid,
-    bufferlist &keys_bl
-    ) {
-    t.omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
-  }
-  void omap_clear(
-    const hobject_t &hoid
-    ) {
-    t.omap_clear(get_coll(hoid), ghobject_t(hoid));
-  }
-  void omap_setheader(
-    const hobject_t &hoid,
-    bufferlist &header
-    ) {
-    written += header.length();
-    t.omap_setheader(get_coll(hoid), ghobject_t(hoid), header);
-  }
-  void clone_range(
-    const hobject_t &from,
-    const hobject_t &to,
-    uint64_t fromoff,
-    uint64_t len,
-    uint64_t tooff
-    ) {
-    assert(get_coll(from) == get_coll_ct(to)  && get_coll(from) == coll);
-    t.clone_range(coll, ghobject_t(from), ghobject_t(to), fromoff, len, tooff);
-  }
-  void clone(
-    const hobject_t &from,
-    const hobject_t &to
-    ) {
-    assert(get_coll(from) == get_coll_ct(to)  && get_coll(from) == coll);
-    t.clone(coll, ghobject_t(from), ghobject_t(to));
-  }
-  void rename(
-    const hobject_t &from,
-    const hobject_t &to
-    ) {
-    t.collection_move_rename(
-      get_coll_rm(from),
-      ghobject_t(from),
-      get_coll_ct(to),
-      ghobject_t(to));
-  }
-
-  void touch(
-    const hobject_t &hoid
-    ) {
-    t.touch(get_coll_ct(hoid), ghobject_t(hoid));
-  }
-
-  void truncate(
-    const hobject_t &hoid,
-    uint64_t off
-    ) {
-    t.truncate(get_coll(hoid), ghobject_t(hoid), off);
-  }
-  void zero(
-    const hobject_t &hoid,
-    uint64_t off,
-    uint64_t len
-    ) {
-    t.zero(get_coll(hoid), ghobject_t(hoid), off, len);
-  }
-
-  void set_alloc_hint(
-    const hobject_t &hoid,
-    uint64_t expected_object_size,
-    uint64_t expected_write_size,
-    uint32_t flags
-    ) {
-    t.set_alloc_hint(get_coll(hoid), ghobject_t(hoid), expected_object_size,
-		     expected_write_size, flags);
-  }
-
-  using PGBackend::PGTransaction::append;
-  void append(
-    PGTransaction *_to_append
-    ) {
-    RPGTransaction *to_append = dynamic_cast<RPGTransaction*>(_to_append);
-    assert(to_append);
-    written += to_append->written;
-    to_append->written = 0;
-    t.append((to_append->t));
-    for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_append->temp_added.begin();
-	 i != to_append->temp_added.end();
-	 ++i) {
-      temp_cleared.erase(*i);
-      temp_added.insert(*i);
-    }
-    for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = to_append->temp_cleared.begin();
-	 i != to_append->temp_cleared.end();
-	 ++i) {
-      temp_added.erase(*i);
-      temp_cleared.insert(*i);
-    }
-  }
-  void nop() {
-    t.nop();
-  }
-  bool empty() const {
-    return t.empty(); 
-  }
-  uint64_t get_bytes_written() const {
-    return written;
-  }
-  ~RPGTransaction() { }
-};
-
-PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
-{
-  return new RPGTransaction(coll);
-}
-
 class C_OSD_OnOpCommit : public Context {
   ReplicatedBackend *pg;
   ReplicatedBackend::InProgressOp *op;
@@ -589,13 +373,158 @@ public:
   }
 };
 
+void generate_transaction(
+  PGTransactionUPtr &pgt,
+  const coll_t &coll,
+  vector<pg_log_entry_t> &log_entries,
+  ObjectStore::Transaction *t,
+  set<hobject_t, hobject_t::BitwiseComparator> *added,
+  set<hobject_t, hobject_t::BitwiseComparator> *removed)
+{
+  assert(t);
+  assert(added);
+  assert(removed);
+
+  for (auto &&le: log_entries) {
+    le.mod_desc.mark_unrollbackable();
+    auto oiter = pgt->op_map.find(le.soid);
+    if (oiter != pgt->op_map.end() && oiter->second.updated_snaps) {
+      vector<snapid_t> snaps(
+	oiter->second.updated_snaps->second.begin(),
+	oiter->second.updated_snaps->second.end());
+      ::encode(snaps, le.snaps);
+    }
+  }
+
+  pgt->safe_create_traverse(
+    [&](pair<const hobject_t, PGTransaction::ObjectOperation> &obj_op) {
+      const hobject_t &oid = obj_op.first;
+      const ghobject_t goid =
+	ghobject_t(oid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD);
+      const PGTransaction::ObjectOperation &op = obj_op.second;
+
+      if (oid.is_temp()) {
+	if (op.is_fresh_object()) {
+	  added->insert(oid);
+	} else if (op.is_delete()) {
+	  removed->insert(oid);
+	}
+      }
+
+      if (op.delete_first) {
+	t->remove(coll, goid);
+      }
+
+      match(
+	op.init_type,
+	[&](const PGTransaction::ObjectOperation::Init::None &) {
+	},
+	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
+	  t->touch(coll, goid);
+	},
+	[&](const PGTransaction::ObjectOperation::Init::Clone &op) {
+	  t->clone(
+	    coll,
+	    ghobject_t(
+	      op.source, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
+	    goid);
+	},
+	[&](const PGTransaction::ObjectOperation::Init::Rename &op) {
+	  assert(op.source.is_temp());
+	  t->collection_move_rename(
+	    coll,
+	    ghobject_t(
+	      op.source, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
+	    coll,
+	    goid);
+	});
+
+      if (op.truncate) {
+	t->truncate(coll, goid, op.truncate->first);
+	if (op.truncate->first != op.truncate->second)
+	  t->truncate(coll, goid, op.truncate->second);
+      }
+
+      if (!op.attr_updates.empty()) {
+	map<string, bufferlist> attrs;
+	for (auto &&p: op.attr_updates) {
+	  if (p.second)
+	    attrs[p.first] = *(p.second);
+	  else
+	    t->rmattr(coll, goid, p.first);
+	}
+	t->setattrs(coll, goid, attrs);
+      }
+
+      if (op.clear_omap)
+	t->omap_clear(coll, goid);
+      if (op.omap_header)
+	t->omap_setheader(coll, goid, *(op.omap_header));
+
+      for (auto &&up: op.omap_updates) {
+	using UpdateType = PGTransaction::ObjectOperation::OmapUpdateType;
+	switch (up.first) {
+	case UpdateType::Remove:
+	  t->omap_rmkeys(coll, goid, up.second);
+	  break;
+	case UpdateType::Insert:
+	  t->omap_setkeys(coll, goid, up.second);
+	  break;
+	}
+      }
+
+      // updated_snaps doesn't matter since we marked unrollbackable
+
+      if (op.alloc_hint) {
+	auto &hint = *(op.alloc_hint);
+	t->set_alloc_hint(
+	  coll,
+	  goid,
+	  hint.expected_object_size,
+	  hint.expected_write_size,
+	  hint.flags);
+      }
+
+      for (auto &&extent: op.buffer_updates) {
+	using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
+	match(
+	  extent.get_val(),
+	  [&](const BufferUpdate::Write &op) {
+	    t->write(
+	      coll,
+	      goid,
+	      extent.get_off(),
+	      extent.get_len(),
+	      op.buffer);
+	  },
+	  [&](const BufferUpdate::Zero &op) {
+	    t->zero(
+	      coll,
+	      goid,
+	      extent.get_off(),
+	      extent.get_len());
+	  },
+	  [&](const BufferUpdate::CloneRange &op) {
+	    assert(op.len == extent.get_len());
+	    t->clone_range(
+	      coll,
+	      ghobject_t(op.from, ghobject_t::NO_GEN, shard_id_t::NO_SHARD),
+	      goid,
+	      op.offset,
+	      extent.get_len(),
+	      extent.get_off());
+	  });
+      }
+    });
+}
+
 void ReplicatedBackend::submit_transaction(
   const hobject_t &soid,
   const eversion_t &at_version,
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
   const eversion_t &trim_rollback_to,
-  const vector<pg_log_entry_t> &log_entries,
+  const vector<pg_log_entry_t> &_log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
   Context *on_all_acked,
@@ -604,13 +533,19 @@ void ReplicatedBackend::submit_transaction(
   osd_reqid_t reqid,
   OpRequestRef orig_op)
 {
-  std::unique_ptr<RPGTransaction> t(
-    static_cast<RPGTransaction*>(_t.release()));
-  assert(t);
-  ObjectStore::Transaction op_t = t->get_transaction();
-
-  assert(t->get_temp_added().size() <= 1);
-  assert(t->get_temp_cleared().size() <= 1);
+  vector<pg_log_entry_t> log_entries(_log_entries);
+  ObjectStore::Transaction op_t;
+  PGTransactionUPtr t(std::move(_t));
+  set<hobject_t, hobject_t::BitwiseComparator> added, removed;
+  generate_transaction(
+    t,
+    coll,
+    log_entries,
+    &op_t,
+    &added,
+    &removed);
+  assert(added.size() <= 1);
+  assert(removed.size() <= 1);
 
   assert(!in_progress_ops.count(tid));
   InProgressOp &op = in_progress_ops.insert(
@@ -629,7 +564,6 @@ void ReplicatedBackend::submit_transaction(
     parent->get_actingbackfill_shards().begin(),
     parent->get_actingbackfill_shards().end());
 
-
   issue_op(
     soid,
     at_version,
@@ -637,18 +571,15 @@ void ReplicatedBackend::submit_transaction(
     reqid,
     trim_to,
     trim_rollback_to,
-    t->get_temp_added().empty() ? hobject_t() : *(t->get_temp_added().begin()),
-    t->get_temp_cleared().empty() ?
-      hobject_t() : *(t->get_temp_cleared().begin()),
+    added.size() ? *(added.begin()) : hobject_t(),
+    removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
     hset_history,
     &op,
     op_t);
 
-  if (!(t->get_temp_added().empty())) {
-    add_temp_objs(t->get_temp_added());
-  }
-  clear_temp_objs(t->get_temp_cleared());
+  add_temp_objs(added);
+  clear_temp_objs(removed);
 
   parent->log_operation(
     log_entries,
