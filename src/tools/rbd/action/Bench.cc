@@ -188,6 +188,14 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 		   uint64_t io_size, uint64_t io_threads,
 		   uint64_t io_bytes, bool random)
 {
+  uint64_t size = 0;
+  image.size(&size);
+  if (io_size > size) {
+    std::cerr << "rbd: io-size " << prettybyte_t(io_size) << " "
+              << "larger than image size " << prettybyte_t(size) << std::endl;
+    return -EINVAL;
+  }
+
   rbd_bencher b(&image, io_type, io_size);
 
   std::cout << "bench "
@@ -203,9 +211,6 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   utime_t start = ceph_clock_now(NULL);
   utime_t last;
   unsigned ios = 0;
-
-  uint64_t size = 0;
-  image.size(&size);
 
   vector<uint64_t> thread_offset;
   uint64_t i;
@@ -379,7 +384,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
 		     bench_bytes, bench_random);
   if (r < 0) {
-    std::cerr << "do_bench failed: " << cpp_strerror(r) << std::endl;
+    std::cerr << "bench failed: " << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
