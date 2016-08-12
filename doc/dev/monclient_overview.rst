@@ -99,7 +99,7 @@ Key Elements
 
 *hunting*
   This flag is set when a hunt begins in _reopen_session and ends when handle_auth
-  calls "finish hunting".
+  calls "finish_hunting".
   The hunting flag is also set in get_monmap_privately.
 
 *auth*
