@@ -291,7 +291,7 @@ TEST(BlueFS, test_flush_1) {
 }
 
 TEST(BlueFS, test_flush_2) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048476 * 256;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -305,7 +305,7 @@ TEST(BlueFS, test_flush_2) {
   ASSERT_EQ(0, fs.mkfs(fsid));
   ASSERT_EQ(0, fs.mount());
   {
-    uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
+    uint64_t effective_size = size - (128 * 1048576); // leaving the last 32 MB for log compaction
     uint64_t per_thread_bytes = (effective_size/(NUM_WRITERS));
     std::vector<std::thread> write_thread_multiple;
     for (int i=0; i<NUM_WRITERS; i++) {
@@ -319,7 +319,7 @@ TEST(BlueFS, test_flush_2) {
 }
 
 TEST(BlueFS, test_flush_3) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048476 * 256;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -334,7 +334,7 @@ TEST(BlueFS, test_flush_3) {
   ASSERT_EQ(0, fs.mount());
   {
     std::vector<std::thread> write_threads;
-    uint64_t effective_size = size - (11 * 1048576); // leaving the last 11 MB for log compaction
+    uint64_t effective_size = size - (64 * 1048576); // leaving the last 11 MB for log compaction
     uint64_t per_thread_bytes = (effective_size/(NUM_WRITERS));
     for (int i=0; i<NUM_WRITERS; i++) {
       write_threads.push_back(std::thread(write_data, std::ref(fs), per_thread_bytes));
