@@ -313,6 +313,18 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   return true;
 }
 
+struct LogMonitor::C_Log : public C_MonOp {
+  LogMonitor *logmon;
+  C_Log(LogMonitor *p, MonOpRequestRef o) :
+    C_MonOp(o), logmon(p) {}
+  void _finish(int r) {
+    if (r == -ECANCELED) {
+      return;
+    }
+    logmon->_updated_log(op);
+  }
+};
+
 bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
   op->mark_logmon_event("prepare_log");
