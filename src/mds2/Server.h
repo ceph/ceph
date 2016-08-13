@@ -20,23 +20,23 @@ class MDSRank;
 class MDCache;
 class Locker;
 class Session;
+class SimpleLock;
 class MClientRequest;
 class MClientReply;
 class MClientReconnect;
 class MClientSession;
 class LogEvent;
 
-struct MutationImpl;
 struct MDRequestImpl;
-typedef ceph::shared_ptr<MutationImpl> MutationRef;
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 class Server {
-protected:
+public:
   MDSRank* const mds;
   MDCache* const &mdcache;
   Locker* const &locker;
 
+protected:
   Session *get_session(Message *m);
 public:
   Server(MDSRank *_mds);
@@ -58,7 +58,7 @@ protected:
   void early_reply(MDRequestRef& mdr);
 
   void journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
-		  	 LogEvent *le, Context *fin);
+		  	 LogEvent *le, MDSInternalContextBase *fin);
 
   CInodeRef prepare_new_inode(MDRequestRef& mdr, CDentryRef& dn, inodeno_t useino,
 			      unsigned mode, file_layout_t *layout=NULL);
@@ -83,8 +83,11 @@ protected:
   void handle_client_unlink(MDRequestRef& mdr);
   void handle_client_link(MDRequestRef& mdr);
   void handle_client_rename(MDRequestRef& mdr);
+  void do_open_truncate(MDRequestRef& mdr, int cmode);
+  void handle_client_open(MDRequestRef& mdr);
+  void handle_client_openc(MDRequestRef& mdr);
 
-  void __inode_update_finish(MDRequestRef& mdr);
+  void __inode_update_finish(MDRequestRef& mdr, bool truncate_smaller);
   void __mknod_finish(MDRequestRef& mdr);
   void __unlink_finish(MDRequestRef& mdr, version_t dnpv);
   void __link_finish(MDRequestRef& mdr, version_t dnpv);

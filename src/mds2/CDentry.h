@@ -1,5 +1,6 @@
 #ifndef CEPH_CDENTRY_H
 #define CEPH_CDENTRY_H
+
 #include "CObject.h"
 #include "SimpleLock.h"
 #include "LocalLock.h"
@@ -10,7 +11,6 @@ class CDentry : public CObject {
 protected:
   CDir *dir;
   const std::string name;
-  snapid_t first, last;
 
   void first_get();
   void last_put();
@@ -21,26 +21,26 @@ public:
   // -- states --
   static const int STATE_NEW =          (1<<0);
 
-  CDentry(CDir *d, const std::string &n, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
+  CDentry(CDir *d, const std::string &n);
 
   CDir *get_dir() const { return dir; }
   CInode *get_dir_inode() const;
   const std::string& get_name() const { return name; }
-  snapid_t get_first() const { return first; }
-  snapid_t get_last() const { return last; }
-  dentry_key_t get_key() const { return dentry_key_t(last, name.c_str()); }
+  dentry_key_t get_key() const { return dentry_key_t(CEPH_NOSNAP, name.c_str()); }
 
   bool is_lt(const CObject *r) const;
 
-  struct linkage_t {
+  class linkage_t {
     CInode *inode;
     inodeno_t remote_ino;
     uint8_t remote_d_type;
+  public:
     linkage_t() : inode(NULL), remote_ino(0), remote_d_type(0) {}
     bool is_primary() const { return remote_ino == 0 && inode != 0; }
     bool is_remote() const { return remote_ino > 0; }
     bool is_null() const { return remote_ino == 0 && inode == 0; }
     CInode *get_inode() const { return inode; }
+    void set_inode(CInode *in) { inode = in; }
     inodeno_t get_remote_ino() const { return remote_ino; }
     uint8_t get_remote_d_type() const { return remote_d_type; }
     void set_remote(inodeno_t ino, unsigned char d_type) {
@@ -70,8 +70,7 @@ public:
   }
   void push_projected_linkage(inodeno_t ino, uint8_t d_type) {
     linkage_t *p = _project_linkage();
-    p->remote_ino = ino;
-    p->remote_d_type = d_type;
+    p->set_remote(ino, d_type);
   }
   void push_projected_linkage(CInode *in);
   void pop_projected_linkage();

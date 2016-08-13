@@ -16,9 +16,9 @@
 #define CEPH_MDS_MUTATION_H
 
 #include "mds/mdstypes.h"
-#include "include/elist.h"
 #include "CObject.h"
 #include "SimpleLock.h"
+#include "include/elist.h"
 
 class LogSegment;
 class Session;
@@ -48,19 +48,18 @@ struct MutationImpl {
   set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
   SimpleLock *locking;
+  bool locking_xlock;
+  bool locking_done;
 
-  bool done_locking;
+  bool has_completed;
   std::atomic<bool> committing;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl()
-    : attempt(0), ls(0),
-      locking(NULL), done_locking(false),
-      committing(ATOMIC_VAR_INIT(false)) { }
   MutationImpl(metareqid_t ri, __u32 att=0)
     : reqid(ri), attempt(att), ls(0),
-      locking(NULL), done_locking(false),
-      committing(ATOMIC_VAR_INIT(false)) { }
+      locking(NULL), locking_xlock(false), locking_done(false),
+      has_completed(false), committing(ATOMIC_VAR_INIT(false)) { }
+  MutationImpl() : MutationImpl(metareqid_t()) {}
   virtual ~MutationImpl() { }
 
   client_t get_client() {
@@ -98,6 +97,7 @@ struct MutationImpl {
   void unlock_object(CObject *o);
   void unlock_all_objects();
   void add_locked_object(CObject *o);
+  void clear_locked_objects();
   bool is_object_locked(CObject *o) {
     return locked_objects.count(o);
   }
@@ -105,7 +105,7 @@ struct MutationImpl {
     return !locked_objects.empty();
   }
 
-  void start_locking(SimpleLock *lock);
+  void start_locking(SimpleLock *lock, bool xlock);
   void finish_locking(SimpleLock *lock);
 
   void apply();

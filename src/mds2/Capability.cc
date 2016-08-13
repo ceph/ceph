@@ -13,6 +13,7 @@
  */
 
 #include "Capability.h"
+#include "SessionMap.h"
 
 #include "common/Formatter.h"
 
@@ -134,6 +135,11 @@ void Capability::revoke_info::generate_test_instances(list<Capability::revoke_in
   ls.back()->before = 1;
   ls.back()->seq = 2;
   ls.back()->last_issue = 3;
+}
+
+client_t Capability::get_client() const
+{
+  return session->get_client();
 }
 
 

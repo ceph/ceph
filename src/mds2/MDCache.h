@@ -2,10 +2,7 @@
 #define CEPH_MDCACHE_H
 
 #include "mds/mdstypes.h"
-#include "CInode.h"
-#include "CDentry.h"
-#include "CDir.h"
-#include "Mutation.h"
+#include "CObject.h"
 
 class Message;
 class MClientRequest;
@@ -14,6 +11,11 @@ class Server;
 class Locker;
 class filepath;
 class EMetaBlob;
+
+struct MutationImpl;
+struct MDRequestImpl;
+typedef ceph::shared_ptr<MutationImpl> MutationRef;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 // flags for predirty_journal_parents()
 static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
@@ -52,12 +54,7 @@ public:
   CInodeRef get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
     return get_inode(vinodeno_t(ino, s));
   }
-  CDirRef get_dirfrag(const dirfrag_t &df) {
-    CInodeRef in = get_inode(df.ino);
-    if (!in)
-      return NULL;
-    return in->get_dirfrag(df.frag);
-  }
+  CDirRef get_dirfrag(const dirfrag_t &df);
   bool trim_dentry(CDentry *dn);
   bool trim_inode(CDentry *dn, CInode *in);
 
@@ -94,6 +91,12 @@ public:
 
   void dispatch(Message *m) { assert(0); } // does not support cache message yet
   void shutdown() {}
+
+protected:
+  ceph::atomic64_t last_cap_id;
+public:
+  uint64_t get_new_cap_id() { return last_cap_id.inc(); }
+
 
   MDCache(MDSRank *_mds);
 private: // crap

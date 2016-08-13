@@ -1,14 +1,16 @@
-#include "MDCache.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
 
 #include "MDSRank.h"
-#include "MDSDaemon.h"
+#include "MDCache.h"
+#include "Mutation.h"
+
+#include "messages/MClientCaps.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "ino(" << inode.ino << ") "
+#define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.inode(" << vino() << ") "
 
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
@@ -38,7 +40,9 @@ CInode::CInode(MDCache *_mdcache) :
   snaplock(this, &snaplock_type),
   nestlock(this, &nestlock_type),
   flocklock(this, &flocklock_type),
-  policylock(this, &policylock_type)
+  policylock(this, &policylock_type),
+  loner_cap(-1), want_loner_cap(-1),
+  want_max_size(0)
 {
 
 }
@@ -228,56 +232,188 @@ bool CInode::is_projected_ancestor_of(CInode *other) const
   return false;
 }
 
+
 int CInode::encode_inodestat(bufferlist& bl, Session *session,
-			     unsigned max_bytes)
+			     unsigned max_bytes, int getattr_wants)
 {
-  mutex_assert_locked_by_me();
+  client_t client = session->get_client();
   assert(session->connection);
-  
+
   snapid_t snapid = CEPH_NOSNAP;
+  
   // pick a version!
+  const inode_t *oi = get_inode();
   const inode_t *pi = get_projected_inode();
-
+  const xattr_map_t *pxattrs = 0;
+  
   // "fake" a version that is old (stable) version, +1 if projected.
-  version_t version = (get_inode()->version * 2) + is_projected();
+  version_t version = (oi->version * 2) + is_projected();
 
-  file_layout_t layout = pi->layout;
+  Capability *cap = get_client_cap(client);
+  bool pfile = filelock.is_xlocked_by_client(client) || get_loner() == client;
+  bool pauth = authlock.is_xlocked_by_client(client) || get_loner() == client;
+  bool plink = linklock.is_xlocked_by_client(client) || get_loner() == client;
+  bool pxattr = xattrlock.is_xlocked_by_client(client) || get_loner() == client;
+  bool plocal = versionlock.get_last_wrlock_client() == client;
+  bool ppolicy = policylock.is_xlocked_by_client(client) || get_loner()==client;
+  
+  const inode_t *any_i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
+  
+  dout(20) << " pfile " << pfile << " pauth " << pauth
+	   << " plink " << plink << " pxattr " << pxattr
+	   << " plocal " << plocal << " ctime " << any_i->ctime
+	   << dendl;
+
+  // file
+  const inode_t *file_i = pfile ? pi:oi;
+  file_layout_t layout;
+  if (is_dir()) {
+    layout = (ppolicy ? pi : oi)->layout;
+  } else {
+    layout = file_i->layout;
+  }
+
   // max_size is min of projected, actual
-  uint64_t max_size = 0;
-
-  // xattr
-  bufferlist xbl;
-  version_t xattr_version;
+  uint64_t max_size;
   {
-    ::encode(*get_projected_xattrs(), xbl);
-    xattr_version = pi->xattr_version;
+    auto p = oi->client_ranges.find(client);
+    auto q = pi->client_ranges.find(client);
+    if (p == oi->client_ranges.end() ||
+	q == pi->client_ranges.end())
+      max_size = 0;
+    else
+      max_size = MIN(p->second.range.last, q->second.range.last);
   }
 
   // inline data
   version_t inline_version = CEPH_INLINE_NONE;
   bufferlist inline_data;
+#if 0
+  if (file_i->inline_data.version == CEPH_INLINE_NONE) {
+    inline_version = CEPH_INLINE_NONE;
+  } else if (!cap ||
+	     cap->client_inline_version < file_i->inline_data.version ||
+	     (getattr_wants & CEPH_CAP_FILE_RD)) { // client requests inline data
+    inline_version = file_i->inline_data.version;
+    if (file_i->inline_data.length() > 0)
+      inline_data = file_i->inline_data.get_data();
+  }
+#endif
 
-  if (max_bytes) {
-    // FIXME
+  // nest (do same as file... :/)
+  if (cap) {
+    cap->last_rbytes = file_i->rstat.rbytes;
+    cap->last_rsize = file_i->rstat.rsize();
   }
 
+  // auth
+  const inode_t *auth_i = pauth ? pi:oi;
+
+  // link
+  const inode_t *link_i = plink ? pi:oi;
+  
+  // xattr
+  const inode_t *xattr_i = pxattr ? pi:oi;
+
+  // xattr
+  bufferlist xbl;
+  version_t xattr_version;
+  if (!cap || cap->client_xattr_version < xattr_i->xattr_version ||
+      (getattr_wants & CEPH_CAP_XATTR_SHARED)) { // client requests xattrs
+    if (!pxattrs)
+      pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
+    ::encode(*pxattrs, xbl);
+    xattr_version = xattr_i->xattr_version;
+  } else {
+    xattr_version = 0;
+  }
+  
+  // do we have room?
+  if (max_bytes) {
+    unsigned bytes = 8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
+      sizeof(struct ceph_file_layout) + 4 + layout.pool_ns.size() +
+      sizeof(struct ceph_timespec) * 3 +
+      4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 +
+      8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) +
+      4;
+    bytes += sizeof(__u32);
+    bytes += (sizeof(__u32) + sizeof(__u32)) * 0 /*  dirfragtree._splits.size() */;
+    bytes += sizeof(__u32) + symlink.length();
+    bytes += sizeof(__u32) + xbl.length();
+    bytes += sizeof(version_t) + sizeof(__u32) + inline_data.length();
+    if (bytes > max_bytes)
+      return -ENOSPC;
+  }
+
+
   // encode caps
+  if (!cap) {
+    // add a new cap
+    cap = add_client_cap(client, session);
+    if (is_auth()) {
+      if (choose_ideal_loner() >= 0)
+        try_set_loner();
+      else if (get_wanted_loner() < 0)
+        try_drop_loner();
+    }
+  }
+
+  int likes = get_caps_liked();
+  int allowed = get_caps_allowed_for_client(session, file_i);
+  int issue = (cap->wanted() | likes) & allowed;
+  cap->issue_norevoke(issue);
+  issue = cap->pending();
+  cap->set_last_issue();
+  cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+  cap->clear_new();
+
   struct ceph_mds_reply_cap ecap;
-  ecap.cap_id = 0;
-  ecap.caps = 0;
-  ecap.seq = 0;
-  ecap.mseq = 0;
-  ecap.realm = 0;
-  ecap.wanted = 0;
+  ecap.caps = issue;
+  ecap.wanted = cap->wanted();
+  ecap.cap_id = cap->get_cap_id();
+  ecap.seq = cap->get_last_seq();
+  dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+           << " seq " << cap->get_last_seq() << dendl;
+  ecap.mseq = cap->get_mseq();
+  ecap.realm = CEPH_INO_ROOT;
+
   ecap.flags = CEPH_CAP_FLAG_AUTH;
+  dout(10) << "encode_inodestat caps " << ccap_string(ecap.caps)
+	   << " seq " << ecap.seq << " mseq " << ecap.mseq
+	   << " xattrv " << xattr_version << " len " << xbl.length()
+	   << dendl;
+
+  if (inline_data.length() && cap) {
+    if ((cap->pending() | getattr_wants) & CEPH_CAP_FILE_SHARED) {
+      dout(10) << "including inline version " << inline_version << dendl;
+      cap->client_inline_version = inline_version;
+    } else {
+      dout(10) << "dropping inline version " << inline_version << dendl;
+      inline_version = 0;
+      inline_data.clear();
+    }
+  }
+
+  // include those xattrs?
+  if (xbl.length() && cap) {
+    if ((cap->pending() | getattr_wants) & CEPH_CAP_XATTR_SHARED) {
+      dout(10) << "including xattrs version " << xattr_i->xattr_version << dendl;
+      cap->client_xattr_version = xattr_i->xattr_version;
+    } else {
+      dout(10) << "dropping xattrs version " << xattr_i->xattr_version << dendl;
+      xbl.clear(); // no xattrs .. XXX what's this about?!?
+      xattr_version = 0;
+    }
+  }
 
   /*
    * note: encoding matches MClientReply::InodeStat
    */
-  ::encode(pi->ino, bl);
+  ::encode(oi->ino, bl);
   ::encode(snapid, bl);
-  ::encode(pi->rdev, bl);
+  ::encode(oi->rdev, bl);
   ::encode(version, bl);
+
   ::encode(xattr_version, bl);
 
   ::encode(ecap, bl);
@@ -286,55 +422,124 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     layout.to_legacy(&legacy_layout);
     ::encode(legacy_layout, bl);
   }
-  ::encode(pi->ctime, bl);
-  ::encode(pi->mtime, bl);
-  ::encode(pi->atime, bl);
-  ::encode(pi->time_warp_seq, bl);
-  ::encode(pi->size, bl);
+  ::encode(any_i->ctime, bl);
+  ::encode(file_i->mtime, bl);
+  ::encode(file_i->atime, bl);
+  ::encode(file_i->time_warp_seq, bl);
+  ::encode(file_i->size, bl);
   ::encode(max_size, bl);
-  ::encode(pi->truncate_size, bl);
-  ::encode(pi->truncate_seq, bl);
+  ::encode(file_i->truncate_size, bl);
+  ::encode(file_i->truncate_seq, bl);
 
-  ::encode(pi->mode, bl);
-  ::encode((uint32_t)pi->uid, bl);
-  ::encode((uint32_t)pi->gid, bl);
+  ::encode(auth_i->mode, bl);
+  ::encode((uint32_t)auth_i->uid, bl);
+  ::encode((uint32_t)auth_i->gid, bl);
 
-  ::encode(pi->nlink, bl);
+  ::encode(link_i->nlink, bl);
 
-  ::encode(pi->dirstat.nfiles, bl);
-  ::encode(pi->dirstat.nsubdirs, bl);
-  ::encode(pi->rstat.rbytes, bl);
-  ::encode(pi->rstat.rfiles, bl);
-  ::encode(pi->rstat.rsubdirs, bl);
-  ::encode(pi->rstat.rctime, bl);
+  ::encode(file_i->dirstat.nfiles, bl);
+  ::encode(file_i->dirstat.nsubdirs, bl);
+  ::encode(file_i->rstat.rbytes, bl);
+  ::encode(file_i->rstat.rfiles, bl);
+  ::encode(file_i->rstat.rsubdirs, bl);
+  ::encode(file_i->rstat.rctime, bl);
 
   {
-    fragtree_t dirfragtree;
-    dirfragtree.encode(bl);
+    fragtree_t empty;
+    empty.encode(bl);
   }
+  //dirfragtree.encode(bl);
 
   ::encode(symlink, bl);
-
   if (session->connection->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
-    ::encode(pi->dir_layout, bl);
+    ::encode(file_i->dir_layout, bl);
   }
-
   ::encode(xbl, bl);
-
   if (session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     ::encode(inline_version, bl);
     ::encode(inline_data, bl);
   }
-
   if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
-    ::encode(pi->quota, bl);
+    const inode_t *policy_i = ppolicy ? pi : oi;
+    ::encode(policy_i->quota, bl);
   }
-
   if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     ::encode(layout.pool_ns, bl);
   }
 
   return 0;
+}
+
+
+void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
+{
+  assert(cap);
+
+  client_t client = cap->get_client();
+
+  bool pfile = filelock.is_xlocked_by_client(client) || (cap->issued() & CEPH_CAP_FILE_EXCL);
+  bool pauth = authlock.is_xlocked_by_client(client);
+  bool plink = linklock.is_xlocked_by_client(client);
+  bool pxattr = xattrlock.is_xlocked_by_client(client);
+
+  const inode_t *oi = get_inode();
+  const inode_t *pi = get_projected_inode();
+  const inode_t *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+
+  dout(20) << "encode_cap_message pfile " << pfile
+           << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
+           << " ctime " << i->ctime << dendl;
+
+  i = pfile ? pi:oi;
+  m->layout = i->layout;
+  m->size = i->size;
+  m->truncate_seq = i->truncate_seq;
+  m->truncate_size = i->truncate_size;
+  m->mtime = i->mtime;
+  m->atime = i->atime;
+  m->ctime = i->ctime;
+  m->time_warp_seq = i->time_warp_seq;
+
+  m->inline_version = CEPH_INLINE_NONE;
+  /*
+  if (cap->client_inline_version < i->inline_data.version) {
+    m->inline_version = cap->client_inline_version = i->inline_data.version;
+    if (i->inline_data.length() > 0)
+      m->inline_data = i->inline_data.get_data();
+  } else {
+    m->inline_version = 0;
+  }
+  */
+
+  // max_size is min of projected, actual.
+  uint64_t oldms = 0, newms = 0;
+  {
+    auto p = oi->client_ranges.find(client);
+    if (p != oi->client_ranges.end())
+      oldms = p->second.range.last;
+    auto q = pi->client_ranges.find(client);
+    if (p != pi->client_ranges.end())
+      newms = q->second.range.last;
+  }
+  m->max_size = MIN(oldms, newms);
+
+  i = pauth ? pi:oi;
+  m->head.mode = i->mode;
+  m->head.uid = i->uid;
+  m->head.gid = i->gid;
+
+  i = plink ? pi:oi;
+  m->head.nlink = i->nlink;
+
+  i = pxattr ? pi:oi;
+  const xattr_map_t *ix = pxattr ? get_projected_xattrs() : &xattrs;
+  if ((cap->pending() & CEPH_CAP_XATTR_SHARED) &&
+      i->xattr_version > cap->client_xattr_version) {
+    dout(10) << "    including xattrs v " << i->xattr_version << dendl;
+    ::encode(*ix, m->xattrbl);
+    m->head.xattr_version = i->xattr_version;
+    cap->client_xattr_version = i->xattr_version;
+  }
 }
 
 void CInode::name_stray_dentry(string& dname) const
@@ -395,7 +600,7 @@ int CInode::get_xlocker_mask(client_t client) const
     (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_allowed_for_client(Session *session, inode_t *file_i) const
+int CInode::get_caps_allowed_for_client(Session *session, const inode_t *file_i) const
 {
   client_t client = session->info.inst.name.num();
   int allowed;
@@ -566,13 +771,23 @@ void CInode::start_scatter(ScatterLock *lock)
   }
 }
 
+void CInode::__frag_update_finish(CDir *dir, MutationRef& mut)
+{
+  mut->wait_committing();
+  dout(10) << "__finish_frag_update on " << *dir << dendl;
+
+  mut->apply();
+  mut->cleanup();
+}
+
+
 class C_Inode_FragUpdate : public MDSInternalContextBase {
   CInode *in;
   CDir *dir;
   MutationRef mut;
   MDSRank *get_mds() { return in->mdcache->mds; }
   void finish(int r) {
-    in->__finish_frag_update(dir, mut);
+    in->__frag_update_finish(dir, mut);
   }
 public:
   C_Inode_FragUpdate(CInode *i, CDir *d, MutationRef& m)
@@ -631,7 +846,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir)
 
       mdcache->start_log_entry();
       // use finisher to simulate log flush
-      mdcache->mds->finisher->queue(new C_Inode_FragUpdate(this, dir, mut));
+      mdcache->mds->queue_context(new C_Inode_FragUpdate(this, dir, mut));
       mdcache->submit_log_entry();
 
       mut->start_committing();
@@ -640,15 +855,6 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir)
 	       << " scatter stat unchanged at v" << dir_accounted_version << dendl;
     }
   }
-}
-
-void CInode::__finish_frag_update(CDir *dir, MutationRef& mut)
-{
-  mut->wait_committing();
-  dout(10) << "__finish_frag_update on " << *dir << dendl;
-
-  mut->apply();
-  mut->cleanup();
 }
 
 void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
@@ -809,3 +1015,91 @@ void CInode::clear_dirty_scattered(int type)
   }
 }
 
+Capability *CInode::add_client_cap(client_t client, Session *session)
+{
+  mutex_assert_locked_by_me();
+
+  if (client_caps.empty()) {
+    get(PIN_CAPS);
+/*
+    if (conrealm)
+      containing_realm = conrealm;
+    else
+      containing_realm = find_snaprealm();
+    containing_realm->inodes_with_caps.push_back(&item_caps);
+    dout(10) << "add_client_cap first cap, joining realm " << *containing_realm << dendl;
+*/
+  }
+
+/*
+  mdcache->num_caps++;
+  if (client_caps.empty())
+    mdcache->num_inodes_with_caps++;
+*/
+
+  Capability *cap = new Capability(this, session, mdcache->get_new_cap_id());
+  assert(client_caps.count(client) == 0);
+  client_caps[client] = cap;
+
+  session->lock();
+  session->caps.push_back(&cap->item_session_caps);
+  if (session->is_stale())
+    cap->mark_stale();
+  session->unlock();
+
+  cap->client_follows = 1;
+
+//  containing_realm->add_cap(client, cap);
+
+  return cap;
+}
+
+void CInode::remove_client_cap(client_t client, Session *session)
+{
+  mutex_assert_locked_by_me();
+  assert(client_caps.count(client) == 1);
+  Capability *cap = client_caps[client];
+  assert(cap->get_session() == session);
+
+  session->lock();
+  cap->item_session_caps.remove_myself();
+  session->unlock();
+/*
+  cap->item_revoking_caps.remove_myself();
+  cap->item_client_revoking_caps.remove_myself();
+  containing_realm->remove_cap(client, cap);
+*/
+
+  if (client == loner_cap)
+    loner_cap = -1;
+
+  client_caps.erase(client);
+  delete cap;
+  if (client_caps.empty()) {
+    put(PIN_CAPS);
+//    dout(10) << "remove_client_cap last cap, leaving realm " << *containing_realm << dendl;
+//    item_caps.remove_myself();
+//    containing_realm = NULL;
+  }
+//  mdcache->num_caps--;
+
+  //clean up advisory locks
+/*
+  bool fcntl_removed = fcntl_locks ? fcntl_locks->remove_all_from(client) : false;
+  bool flock_removed = flock_locks ? flock_locks->remove_all_from(client) : false;
+  if (fcntl_removed || flock_removed) {
+    list<MDSInternalContextBase*> waiters;
+    take_waiting(CInode::WAIT_FLOCK, waiters);
+    mdcache->mds->queue_waiters(waiters);
+  }
+*/
+}
+
+void intrusive_ptr_add_ref(CInode *o)
+{
+  o->get(CObject::PIN_INTRUSIVEPTR);
+}
+void intrusive_ptr_release(CInode *o)
+{
+  o->put(CObject::PIN_INTRUSIVEPTR);
+}

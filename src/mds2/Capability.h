@@ -18,10 +18,9 @@
 
 #include "include/buffer_fwd.h"
 #include "include/xlist.h"
+#include "include/fs_types.h"
 
 #include "common/config.h"
-
-#include "mds/mdstypes.h"
 
 /*
 
@@ -58,24 +57,13 @@
  */
 
 class CInode;
+class Session;
 
 namespace ceph {
   class Formatter;
 }
 
 class Capability {
-private:
-  static boost::pool<> pool;
-public:
-  static void *operator new(size_t num_bytes) { 
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
 public:
   struct Export {
     int64_t cap_id;
@@ -108,7 +96,7 @@ public:
 
 private:
   CInode *inode;
-  client_t client;
+  Session *session;
 
   uint64_t cap_id;
 
@@ -242,9 +230,8 @@ public:
   xlist<Capability*>::item item_revoking_caps;
   xlist<Capability*>::item item_client_revoking_caps;
 
-  Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
-    inode(i), client(c),
-    cap_id(id),
+  Capability(CInode *i = NULL, Session *s=NULL, uint64_t id = 0) : 
+    inode(i), session(s), cap_id(id),
     _wanted(0), num_revoke_warnings(0),
     _pending(0), _issued(0),
     last_sent(0),
@@ -256,12 +243,12 @@ public:
     last_rbytes(0), last_rsize(0),
     item_session_caps(this), item_snaprealm_caps(this),
     item_revoking_caps(this), item_client_revoking_caps(this) {
-    g_num_cap++;
-    g_num_capa++;
+//    g_num_cap++;
+//    g_num_capa++;
   }
   ~Capability() {
-    g_num_cap--;
-    g_num_caps++;
+//    g_num_cap--;
+//    g_num_caps++;
   }
 
   Capability(const Capability& other);  // no copying
@@ -298,7 +285,8 @@ public:
   void clear_new() { state &= ~STATE_NEW; }
 
   CInode *get_inode() { return inode; }
-  client_t get_client() const { return client; }
+  Session *get_session() { return session; }
+  client_t get_client() const;
 
   // caps this client wants to hold
   int wanted() { return _wanted; }

@@ -3,8 +3,12 @@
 #include <atomic>
 #include <boost/intrusive_ptr.hpp>
 #include "common/Mutex.h"
+
 #include "include/compact_map.h"
 #include "include/compact_set.h"
+#include "include/assert.h"
+#include "common/debug.h"
+
 #include "MDSContext.h"
 
 //#define __MDS_REF_SET
@@ -26,6 +30,7 @@ public:
   const static int PIN_REQUEST		= -1003;
   const static int PIN_WAITER		= 1004;
   const static int PIN_DIRTYSCATTERED	= -1005;
+  static const int PIN_PTRWAITER	= -1007;
 
 
   void get(int by) {
@@ -186,6 +191,7 @@ typedef boost::intrusive_ptr<CObject> CObjectRef;
 typedef boost::intrusive_ptr<CInode> CInodeRef;
 typedef boost::intrusive_ptr<CDir> CDirRef;
 typedef boost::intrusive_ptr<CDentry> CDentryRef;
+
 static inline void intrusive_ptr_add_ref(CObject *o)
 {
   o->get(CObject::PIN_INTRUSIVEPTR);
@@ -194,4 +200,11 @@ static inline void intrusive_ptr_release(CObject *o)
 {
   o->put(CObject::PIN_INTRUSIVEPTR);
 }
+extern void intrusive_ptr_add_ref(CInode *in);
+extern void intrusive_ptr_release(CInode *in);
+extern void intrusive_ptr_add_ref(CDir *dir);
+extern void intrusive_ptr_release(CDir *dir);
+extern void intrusive_ptr_add_ref(CDentry *dn);
+extern void intrusive_ptr_release(CDentry *dn);
+
 #endif

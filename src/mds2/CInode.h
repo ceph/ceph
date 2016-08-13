@@ -1,5 +1,6 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
+
 #include "mds/mdstypes.h"
 #include "CObject.h"
 
@@ -10,11 +11,11 @@
 
 #include "include/elist.h"
 
-
 class LogSegment;
 class EMetaBlob;
 class Session;
 class MDCache;
+class MClientCaps;
 
 typedef std::map<string, bufferptr> xattr_map_t;
 
@@ -51,9 +52,11 @@ protected:
 public:
   // pins
   static const int PIN_DIRFRAG =		-1;
+  static const int PIN_CAPS =			2;  // client caps
   static const int PIN_DIRTYRSTAT =		21;
   // states
   static const unsigned STATE_FREEING =		(1<<0);
+  static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
   static const unsigned STATE_DIRTYRSTAT =	(1<<15);
 
   CInode(MDCache *_mdcache);
@@ -174,7 +177,9 @@ public:
   void get_dirfrags(list<CDirRef>& ls );
   CDirRef get_or_open_dirfrag(frag_t fg);
 
-  int encode_inodestat(bufferlist& bl, Session *session, unsigned max_bytes);
+  int encode_inodestat(bufferlist& bl, Session *session,
+		       unsigned max_bytes=0, int getattr_wants=0);
+  void encode_cap_message(MClientCaps *m, Capability *cap);
 
 protected:
   static LockType versionlock_type;
@@ -218,8 +223,11 @@ public:
 protected:
   std::map<client_t, Capability*> client_caps;         // client -> caps
   client_t loner_cap, want_loner_cap;
+  uint64_t want_max_size;
 
 public:
+  bool is_any_caps() { return !client_caps.empty(); }
+
   const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
     auto p = client_caps.find(client);
@@ -227,6 +235,9 @@ public:
       return p->second;
     return NULL;
   }
+
+  Capability *add_client_cap(client_t client, Session *session);
+  void remove_client_cap(client_t client, Session *session);
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
@@ -241,7 +252,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(Session *s, inode_t *file_i) const;
+  int get_caps_allowed_for_client(Session *s, const inode_t *file_i) const;
 
 
   client_t get_loner() const { return loner_cap; };
@@ -258,9 +269,19 @@ public:
   bool try_set_loner();
   bool try_drop_loner();
 
+  void set_wanted_max_size(uint64_t size) {
+    if (size > want_max_size)
+      want_max_size = size;
+  }
+  uint64_t get_clear_wanted_max_size() { 
+    uint64_t size = want_max_size;
+    want_max_size = 0;
+    return size; 
+  }
+
 protected:
   void finish_scatter_update(ScatterLock *lock, CDir *dir);
-  void __finish_frag_update(CDir *dir, MutationRef& mut);
+  void __frag_update_finish(CDir *dir, MutationRef& mut);
   friend class C_Inode_FragUpdate;
 public:
   void start_scatter(ScatterLock *lock);

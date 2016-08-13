@@ -1,15 +1,29 @@
+#include "CInode.h"
+#include "CDir.h"
+#include "CDentry.h"
+
 #include "MDSRank.h"
-#include "Server.h"
 #include "MDCache.h"
+#include "Server.h"
 #include "Locker.h"
+#include "Mutation.h"
 
 #include "messages/MClientSession.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientReconnect.h"
-#include "common/Finisher.h"
 
 #define dout_subsys ceph_subsys_mds
+
+class ServerContext : public MDSInternalContextBase {
+protected:
+  Server *server;
+  MDSRank *get_mds() { return server->mds; }
+public:
+  explicit ServerContext(Server *s) : server(s) {
+    assert(server != NULL);
+  }
+};
 
 Server::Server(MDSRank *_mds)
   : mds(_mds), mdcache(_mds->mdcache), locker(_mds->locker)
@@ -66,15 +80,42 @@ void Server::handle_client_session(MClientSession *m)
 
   switch (m->get_op()) {
     case CEPH_SESSION_REQUEST_OPEN:
-      session->set_state(Session::STATE_OPEN);
+      mds->get_session_map().mutex_lock();
+      if (session->is_closed())
+	mds->get_session_map().add_session(session);
+      mds->get_session_map().set_state(session, Session::STATE_OPEN);
+      mds->get_session_map().mutex_unlock();
       session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
       break;
     case CEPH_SESSION_REQUEST_CLOSE:
-      session->set_state(Session::STATE_CLOSED);
-      session->clear();
       session->connection->send_message(new MClientSession(CEPH_SESSION_CLOSE));
+
+      session->lock();
+      while (!session->caps.empty()) {
+	Capability *cap = session->caps.front();
+	CInodeRef in = cap->get_inode();
+	session->unlock();
+
+	in->mutex_lock();
+	dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
+	locker->remove_client_cap(in.get(), session);
+	in->mutex_unlock();
+	in.reset();
+
+	session->lock();
+      }
+
+      assert(session->requests.empty());
+      session->unlock();
+
+      mds->get_session_map().mutex_lock();
+      mds->get_session_map().set_state(session, Session::STATE_CLOSED);
+      session->clear();
+      mds->get_session_map().remove_session(session);
+      mds->get_session_map().mutex_unlock();
       break;
     case CEPH_SESSION_REQUEST_RENEWCAPS:
+      m->get_connection()->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()));
       break;
     case CEPH_SESSION_FLUSHMSG_ACK:
       break;
@@ -89,11 +130,43 @@ void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
 
+    Session *session = 0;
+    if (req->get_source().is_client()) {
+      session = get_session(req);
+      if (!session) {
+	dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
+	req->put();
+	return;
+      }
+
+      if (session->is_closed() ||
+	  session->is_closing() ||
+	  session->is_killing()) {
+	dout(5) << "session closed|closing|killing, dropping" << dendl;
+	req->put();
+	return;
+      }
+    }
+
   MDRequestRef mdr = mdcache->request_start(req);
   if (!mdr)
     return;
 
-  mdr->session = get_session(req);
+  if (session) {
+    session->lock();
+    session->requests.push_back(&mdr->item_session_request);
+    session->unlock();
+    mdr->session = session;
+  }
+
+  if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay()) {
+    client_t client = req->get_source().num();
+    for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
+	p != req->releases.end();
+	++p)
+      locker->process_request_cap_release(mdr, client, p->item, p->dname);
+    req->releases.clear();
+  }
 
   mds->op_wq.queue(mdr);
   //dispatch_client_request(mdr);
@@ -114,6 +187,15 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
       break;
     case CEPH_MDS_OP_SETATTR:
       handle_client_setattr(mdr);
+      break;
+    case CEPH_MDS_OP_CREATE:
+      if (mdr->has_completed)
+	handle_client_open(mdr);  // already created.. just open
+      else
+	handle_client_openc(mdr);
+      break;
+    case CEPH_MDS_OP_OPEN:
+      handle_client_open(mdr);
       break;
     case CEPH_MDS_OP_MKNOD:
       handle_client_mknod(mdr);
@@ -383,7 +465,7 @@ int Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 }
 
 void Server::journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
-			       LogEvent *le, Context *fin)
+			       LogEvent *le, MDSInternalContextBase *fin)
 {
   mdr->tracei = tracei;
   mdr->tracedn = tracedn;
@@ -395,7 +477,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
   // submit log
 
   // use finisher to simulate log flush
-  mds->finisher->queue(fin);
+  mds->queue_context(fin);
  
   mdr->unlock_all_objects();
 
@@ -443,24 +525,31 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 }
 
 
-void Server::__inode_update_finish(MDRequestRef& mdr)
+void Server::__inode_update_finish(MDRequestRef& mdr, bool truncate_smaller)
 {
   mdr->wait_committing();
 
   CInodeRef& in = mdr->in[0]; 
   mdcache->lock_objects_for_update(mdr.get(), in.get(), true);
   mdr->early_apply();
+
+  if (truncate_smaller /* && in->get_inode()->is_truncating() */) { // FIXME
+    mds->locker->issue_truncate(in.get());
+    // mds->mdcache->truncate_inode(in, mdr->ls);
+  }
+
   respond_to_request(mdr, 0);
 }
 
-class C_MDS_inode_update_finish : public Context {
-  MDSRank *mds;
+class C_MDS_inode_update_finish : public ServerContext {
   MDRequestRef mdr;
+  bool truncate_smaller;
 public:
-  C_MDS_inode_update_finish(MDSRank *m, MDRequestRef& r) : mds(m), mdr(r) { }
+  C_MDS_inode_update_finish(Server *srv, MDRequestRef& r, bool ts) :
+    ServerContext(srv), mdr(r), truncate_smaller(ts) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->__inode_update_finish(mdr);
+    server->__inode_update_finish(mdr, truncate_smaller);
   }
 };
 
@@ -511,15 +600,39 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     pi->atime = req->head.args.setattr.atime;
   if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
+
+  bool truncate_smaller = false;
   if (mask & CEPH_SETATTR_SIZE) {
-    // FIXME
+    uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
+    if (req->head.args.setattr.size < old_size) {
+      pi->truncate(old_size, req->head.args.setattr.size);
+      truncate_smaller = true;
+      // FIXME: 
+      pi->truncate_from = 0;
+      pi->truncate_pending--;
+    } else {
+      pi->size = req->head.args.setattr.size;
+      pi->rstat.rbytes = pi->size;
+    }
+
+    pi->mtime = mdr->get_op_stamp();
+
+    // adjust client's max_size?
+    bool max_increased = false;
+    map<client_t,client_writeable_range_t> new_ranges;
+    locker->calc_new_client_ranges(in.get(), pi->size, &new_ranges, &max_increased);
+    if (max_increased || pi->client_ranges != new_ranges) {
+      dout(10) << " client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
+      pi->client_ranges = new_ranges;
+//      ranges_changed = true;
+    }
   }
 
   mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), NULL, PREDIRTY_PRIMARY);
   // journal inode;
 
   CDentryRef null_dn; 
-  journal_and_reply(mdr, 0, -1, NULL, new C_MDS_inode_update_finish(mds, mdr));
+  journal_and_reply(mdr, 0, -1, NULL, new C_MDS_inode_update_finish(this, mdr, truncate_smaller));
 }
 
 CInodeRef Server::prepare_new_inode(MDRequestRef& mdr, CDentryRef& dn, inodeno_t useino, unsigned mode,
@@ -616,14 +729,14 @@ void Server::__mknod_finish(MDRequestRef& mdr)
   respond_to_request(mdr, 0);
 }
 
-class C_MDS_mknod_finish : public Context {
-  MDSRank *mds;
+class C_MDS_mknod_finish : public ServerContext {
   MDRequestRef mdr;
 public:
-  C_MDS_mknod_finish(MDSRank *m, MDRequestRef& r) : mds(m), mdr(r) { }
+  C_MDS_mknod_finish(Server *srv, MDRequestRef& r) :
+    ServerContext(srv), mdr(r) { }
   void finish(int r) {
     assert(r == 0);
-    mds->server->__mknod_finish(mdr);
+    server->__mknod_finish(mdr);
   }
 };
 
@@ -662,13 +775,38 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   pi->rdev = req->head.args.mknod.rdev;
   pi->rstat.rfiles = 1;
 
+  // if the client created a _regular_ file via MKNOD, it's highly likely they'll
+  // want to write to it (e.g., if they are reexporting NFS)
+  if (pi->is_file()) {
+    dout(15) << " setting a client_range too, since this is a regular file" << dendl;
+    client_t client = mdr->get_client();
+    pi->client_ranges[client].range.first = 0;
+    pi->client_ranges[client].range.last = pi->get_layout_size_increment();
+    pi->client_ranges[client].follows = 1;
+
+    // issue a cap on the file
+    int cmode = CEPH_FILE_MODE_RDWR;
+    Capability *cap = mds->locker->issue_new_caps(newi.get(), cmode, mdr->session, req->is_replay());
+    if (cap) {
+      cap->set_wanted(0);
+
+      // put locks in excl mode
+      newi->filelock.set_state(LOCK_EXCL);
+      newi->authlock.set_state(LOCK_EXCL);
+      newi->xattrlock.set_state(LOCK_EXCL);
+      cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+			  CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED|
+			  CEPH_CAP_ANY_FILE_WR);
+    }
+  }
+
   dn->push_projected_linkage(newi.get());
 
   mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(mds, mdr));
-};
+  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
+}
 
 void Server::handle_client_symlink(MDRequestRef& mdr)
 {
@@ -711,7 +849,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(mds, mdr));
+  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
 };
 
 void Server::handle_client_mkdir(MDRequestRef& mdr)
@@ -744,19 +882,33 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   assert(newi);
   mdr->add_locked_object(newi.get());
 
-  dn->push_projected_linkage(newi.get());
-
   inode_t *pi = newi->__get_inode();
   pi->version = dn->pre_dirty();
   pi->rstat.rsubdirs = 1;
 
+  // issue a cap on the directory
+  int cmode = CEPH_FILE_MODE_RDWR;
+  Capability *cap = locker->issue_new_caps(newi.get(), cmode, mdr->session, req->is_replay());
+  if (cap) {
+    cap->set_wanted(0);
+
+    // put locks in excl mode
+    newi->filelock.set_state(LOCK_EXCL);
+    newi->authlock.set_state(LOCK_EXCL);
+    newi->xattrlock.set_state(LOCK_EXCL);
+    cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+			CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED);
+  }
+
   CDirRef newdir = newi->get_or_open_dirfrag(frag_t());
   newdir->__get_fnode()->version = newdir->pre_dirty();
+
+  dn->push_projected_linkage(newi.get());
 
   mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(mds, mdr));
+  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
 }
 
 void Server::handle_client_readdir(MDRequestRef& mdr)
@@ -816,7 +968,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
       continue;
 
     if (!offset_str.empty()) {
-      dentry_key_t offset_key(dn->get_last(), offset_str.c_str());
+      dentry_key_t offset_key(CEPH_NOSNAP, offset_str.c_str());
       if (!(offset_key < dn->get_key()))
         continue;
     }
@@ -942,16 +1094,15 @@ bool Server::directory_is_nonempty(CInodeRef& diri)
   return dirstat.size() != diri->get_projected_inode()->dirstat.size();
 }
 
-class C_MDS_unlink_finish : public Context {
-  MDSRank *mds;
+class C_MDS_unlink_finish : public ServerContext {
   MDRequestRef mdr;
   version_t dnpv;
 public:
-  C_MDS_unlink_finish(MDSRank *m, MDRequestRef& r, version_t pv)
-    : mds(m), mdr(r), dnpv(pv) {}
+  C_MDS_unlink_finish(Server *srv, MDRequestRef& r, version_t pv) :
+    ServerContext(srv), mdr(r), dnpv(pv) {}
   void finish(int r) {
     assert(r==0);
-    mds->server->__unlink_finish(mdr, dnpv);
+    server->__unlink_finish(mdr, dnpv);
   }
 };
 
@@ -1046,7 +1197,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   }
 
   mdr->straydn = straydn;
-  journal_and_reply(mdr, -1, 0, NULL, new C_MDS_unlink_finish(mds, mdr, dnpv));
+  journal_and_reply(mdr, -1, 0, NULL, new C_MDS_unlink_finish(this, mdr, dnpv));
 }
 
 void Server::__link_finish(MDRequestRef& mdr, version_t dnpv)
@@ -1068,16 +1219,15 @@ void Server::__link_finish(MDRequestRef& mdr, version_t dnpv)
   mds->server->respond_to_request(mdr, 0);
 }
 
-class C_MDS_link_finish : public Context {
-  MDSRank *mds;
+class C_MDS_link_finish : public ServerContext {
   MDRequestRef mdr;
   version_t dnpv;
   public:
-  C_MDS_link_finish(MDSRank *m, MDRequestRef& r, version_t pv)
-    : mds(m), mdr(r), dnpv(pv) {}
+  C_MDS_link_finish(Server *srv, MDRequestRef& r, version_t pv)
+    : ServerContext(srv), mdr(r), dnpv(pv) {}
   void finish(int r) {
     assert(r==0);
-    mds->server->__link_finish(mdr, dnpv);
+    server->__link_finish(mdr, dnpv);
   }
 };
 
@@ -1128,7 +1278,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, 1);
   mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), 0, PREDIRTY_PRIMARY);
 
-  journal_and_reply(mdr, 1, 0, NULL, new C_MDS_link_finish(mds, mdr, dnpv));
+  journal_and_reply(mdr, 1, 0, NULL, new C_MDS_link_finish(this, mdr, dnpv));
 }
 
 void Server::__rename_finish(MDRequestRef& mdr, version_t srcdn_pv, version_t destdn_pv)
@@ -1205,17 +1355,16 @@ void Server::__rename_finish(MDRequestRef& mdr, version_t srcdn_pv, version_t de
   respond_to_request(mdr, 0);
 }
 
-class C_MDS_rename_finish : public Context {
-  MDSRank *mds;
+class C_MDS_rename_finish : public ServerContext {
   MDRequestRef mdr;
   version_t srcdn_pv;
   version_t destdn_pv;
   public:
-  C_MDS_rename_finish(MDSRank *m, MDRequestRef& r, version_t spv, version_t dpv)
-    : mds(m), mdr(r), srcdn_pv(spv), destdn_pv(dpv) {}
+  C_MDS_rename_finish(Server *srv, MDRequestRef& r, version_t spv, version_t dpv)
+    : ServerContext(srv), mdr(r), srcdn_pv(spv), destdn_pv(dpv) {}
   void finish(int r) {
     assert(r==0);
-    mds->server->__rename_finish(mdr, srcdn_pv, destdn_pv);
+    server->__rename_finish(mdr, srcdn_pv, destdn_pv);
   }
 };
 
@@ -1404,5 +1553,209 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   }
 
   mdr->straydn = straydn;
-  journal_and_reply(mdr, 1, 0, NULL, new C_MDS_rename_finish(mds, mdr, srcdn_pv, destdn_pv));
+  journal_and_reply(mdr, 1, 0, NULL, new C_MDS_rename_finish(this, mdr, srcdn_pv, destdn_pv));
+}
+
+void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
+{
+  MClientRequest *req = mdr->client_request;
+
+  CInodeRef& in = mdr->in[0];
+
+  int tracedn = -1;
+  if (req->get_dentry_wanted()) {
+    assert(!mdr->dn[0].empty());
+    CDentryRef &dn = mdr->dn[0].back();
+    mdcache->lock_parents_for_linkunlink(mdr, in.get(), dn.get(), false);
+    mdr->lock_object(in.get());
+    tracedn = 0;
+  } else {
+    mdcache->lock_objects_for_update(mdr.get(), in.get(), false);
+  }
+
+  locker->issue_new_caps(in.get(), cmode, mdr->session, req->is_replay());
+
+  mdr->add_projected_inode(in.get(), true);
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  pi->ctime = mdr->get_op_stamp();
+
+  uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  if (old_size > 0) {
+    pi->truncate(old_size, 0);
+    // FIXME: 
+    pi->truncate_from = 0;
+    pi->truncate_pending--;
+  }
+
+  // adjust client's max_size?
+  bool max_increased = false;
+  map<client_t,client_writeable_range_t> new_ranges;
+  locker->calc_new_client_ranges(in.get(), pi->size, &new_ranges, &max_increased);
+  if (max_increased || pi->client_ranges != new_ranges) {
+    dout(10) << " client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
+    pi->client_ranges = new_ranges;
+  }
+
+  mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), NULL, PREDIRTY_PRIMARY);
+  // journal inode;
+
+
+  journal_and_reply(mdr, 0, tracedn, NULL, new C_MDS_inode_update_finish(this, mdr, old_size > 0));
+}
+
+void Server::handle_client_open(MDRequestRef& mdr)
+{
+  MClientRequest *req = mdr->client_request;
+
+  int flags = req->head.args.open.flags;
+  int cmode = ceph_flags_to_mode(flags);
+
+  if (cmode < 0) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_pin_ref(mdr, 0, rdlocks, req->get_dentry_wanted());
+  if (r < 0)
+    return;
+
+  CInodeRef& in = mdr->in[0];
+
+  mdr->lock_object(in.get());
+
+  if (!in->is_file()) {
+    // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
+    cmode = CEPH_FILE_MODE_PIN;
+    // the inode is symlink and client wants to follow it, ignore the O_TRUNC flag.
+    if (in->is_symlink() && !(flags & O_NOFOLLOW))
+      flags &= ~O_TRUNC;
+  }
+
+  if ((flags & O_DIRECTORY) && !in->is_dir() && !in->is_symlink()) {
+    dout(7) << "specified O_DIRECTORY on non-directory " << *in << dendl;
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  if ((flags & O_TRUNC) && !in->is_file()) {
+    dout(7) << "specified O_TRUNC on !(file|symlink) " << *in << dendl;
+    // we should return -EISDIR for directory, return -EINVAL for other non-regular
+    respond_to_request(mdr, in->is_dir() ? -EISDIR : -EINVAL);
+    return;
+  }
+
+  if ((flags & O_TRUNC) && !mdr->has_completed)  {
+    xlocks.insert(&in->filelock);
+  }
+
+  mdr->unlock_object(in.get());
+
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
+
+  if ((flags & O_TRUNC) && !mdr->has_completed)  {
+    do_open_truncate(mdr, cmode);
+    return;
+  }
+
+  if (req->get_dentry_wanted()) {
+    assert(!mdr->dn[0].empty());
+    CDentryRef &dn = mdr->dn[0].back();
+    mdr->lock_object(dn->get_dir_inode());
+    mdr->tracedn = 0;
+  }
+
+  mdr->lock_object(in.get());
+
+  if (in->is_file() || in->is_dir()) {
+    // register new cap
+    Capability *cap = mds->locker->issue_new_caps(in.get(), cmode, mdr->session, req->is_replay());
+    if (cap)
+      dout(12) << "open issued caps " << ccap_string(cap->pending())
+	       << " for " << req->get_source() << " on " << *in << dendl;
+  }
+
+  // increase max_size?
+  if (cmode & CEPH_FILE_MODE_WR) {
+    bool parent_locked = false;
+    if (!in->is_base()) {
+      CDentry *dn = in->get_projected_parent_dn();
+      parent_locked = mdr->is_object_locked(dn->get_dir_inode());
+    } 
+    locker->check_inode_max_size(in.get(), parent_locked);
+  }
+
+  mdr->tracei = 0;
+  respond_to_request(mdr, 0);
+}
+
+void Server::handle_client_openc(MDRequestRef& mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+  if (cmode < 0) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  bool excl = (req->head.args.open.flags & O_EXCL);
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false);
+  if (r < 0)
+    return;
+
+  if (mdr->in[0]) {
+    assert(!excl);
+    handle_client_open(mdr);
+    return;
+  }
+
+  CDentryRef& dn = mdr->dn[0].back();
+  CInode *diri = dn->get_dir_inode();
+
+  rdlocks.insert(&diri->authlock);
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
+
+  mdr->lock_object(diri);
+  assert(dn->get_projected_linkage()->is_null());
+
+  unsigned mode = req->head.args.open.mode | S_IFREG;
+  CInodeRef newi = prepare_new_inode(mdr, dn, inodeno_t(req->head.ino), mode);
+  assert(newi);
+  mdr->add_locked_object(newi.get());
+
+  inode_t *pi = newi->__get_inode();
+  pi->version = dn->pre_dirty();
+  pi->rstat.rfiles = 1;
+
+  if (cmode & CEPH_FILE_MODE_WR) {
+    client_t client = mdr->get_client();
+    pi->client_ranges[client].range.first = 0;
+    pi->client_ranges[client].range.last = pi->get_layout_size_increment();
+    pi->client_ranges[client].follows = 1;
+  }
+
+  // do the open
+  locker->issue_new_caps(newi.get(), cmode, mdr->session, req->is_replay());
+  newi->authlock.set_state(LOCK_EXCL);
+  newi->xattrlock.set_state(LOCK_EXCL);
+
+  dn->push_projected_linkage(newi.get());
+
+  mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+
+  mdr->in[0] = newi;
+  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
 }

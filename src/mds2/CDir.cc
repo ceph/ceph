@@ -1,14 +1,15 @@
-#include "MDCache.h"
-#include "Locker.h"
-#include "CDir.h"
 #include "CInode.h"
+#include "CDir.h"
 #include "CDentry.h"
 
-#include "messages/MClientRequest.h"
-#undef dout_prefix
-#define dout_prefix *_dout << "dir(" << inode->ino() << ") "
+#include "MDSRank.h"
+#include "MDCache.h"
+#include "Locker.h"
+#include "Mutation.h"
 
 #define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
@@ -132,10 +133,10 @@ void CDir::unlink_inode(CDentry *dn)
   dn->unlink_inode_work();
 }
 
-CDentryRef CDir::add_null_dentry(const string& dname, snapid_t first, snapid_t last)
+CDentryRef CDir::add_null_dentry(const string& dname)
 {
   inode->mutex_assert_locked_by_me();
-  CDentryRef dn = new CDentry(this, dname, first, last);
+  CDentryRef dn = new CDentry(this, dname);
 
   if (items.empty())
     get(PIN_CHILD);
@@ -146,11 +147,10 @@ CDentryRef CDir::add_null_dentry(const string& dname, snapid_t first, snapid_t l
   return dn;
 }
 
-CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in,
-				    snapid_t first, snapid_t last)
+CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in)
 {
   inode->mutex_assert_locked_by_me();
-  CDentryRef dn = new CDentry(this, dname, first, last);
+  CDentryRef dn = new CDentry(this, dname);
 
   if (items.empty()) 
     get(PIN_CHILD);
@@ -164,11 +164,10 @@ CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in,
   return dn;
 }
 
-CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d_type,
-				   snapid_t first, snapid_t last)
+CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d_type)
 {
   inode->mutex_assert_locked_by_me();
-  CDentryRef dn = new CDentry(this, dname, first, last);
+  CDentryRef dn = new CDentry(this, dname);
 
   if (items.empty()) 
     get(PIN_CHILD);
@@ -197,12 +196,12 @@ void CDir::remove_dentry(CDentry *dn)
 
 CDentry* CDir::__lookup(const char *name, snapid_t snap)
 {
+  assert(snap == CEPH_NOSNAP);
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
   auto it = items.lower_bound(dentry_key_t(snap, name));
   if (it == items.end())
     return 0;
-  if (it->second->get_name() == name &&
-      it->second->get_first() <= snap) {
+  if (it->second->get_name() == name) {
     dout(20) << "  hit -> " << it->first << dendl;
     return it->second;
   }
@@ -307,4 +306,13 @@ void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blo
   if (!dirty_rstat_inodes.empty())
     mdcache->locker->mark_updated_scatterlock(&inode->nestlock);
   */
+}
+
+void intrusive_ptr_add_ref(CDir *o)
+{
+  o->get(CObject::PIN_INTRUSIVEPTR);
+}
+void intrusive_ptr_release(CDir *o)
+{
+  o->put(CObject::PIN_INTRUSIVEPTR);
 }

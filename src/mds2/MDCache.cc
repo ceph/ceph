@@ -1,7 +1,13 @@
+#include "CInode.h"
+#include "CDir.h"
+#include "CDentry.h"
+
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Server.h"
 #include "Locker.h"
+#include "Mutation.h"
+
 #include "include/filepath.h"
 #include "messages/MClientRequest.h"
 
@@ -16,6 +22,7 @@ MDCache::MDCache(MDSRank *_mds) :
   last_ino(0x10000)
 {
   default_file_layout = file_layout_t::get_default();
+  default_file_layout.pool_id = mds->mdsmap->get_first_data_pool();
 }
 
 void MDCache::add_inode(CInode *in)
@@ -61,6 +68,13 @@ CInodeRef MDCache::get_inode(const vinodeno_t &vino)
       ref.reset();
   }
   return ref;
+}
+
+CDirRef MDCache::get_dirfrag(const dirfrag_t &df) {
+  CInodeRef in = get_inode(df.ino);
+  if (!in)
+    return NULL;
+  return in->get_dirfrag(df.frag);
 }
 
 CInodeRef MDCache::create_system_inode(inodeno_t ino, int mode)
@@ -333,6 +347,13 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 
   mdr->cleanup();
 
+  if (mdr->session) {
+    mdr->session->lock();
+    mdr->item_session_request.remove_myself();
+    mdr->session->unlock();
+    mdr->session = NULL;
+  }
+
   request_map_lock.Lock();
   auto p = request_map.find(mdr->reqid);
   assert(p != request_map.end());
@@ -507,7 +528,7 @@ int MDCache::lock_parents_for_rename(MDRequestRef &mdr, CInode *srci, CInode *ol
 
 void MDCache::lock_objects_for_update(MutationImpl *mut, CInode *in, bool apply)
 {
-  if (in && in->is_base()) {
+  if (in->is_base()) {
     mut->lock_object(in);
     return;
   }
@@ -517,10 +538,8 @@ void MDCache::lock_objects_for_update(MutationImpl *mut, CInode *in, bool apply)
     dn = in->get_lock_parent_dn();
   else
     dn = in->get_lock_projected_parent_dn();
-  in->mutex_lock();
-
   mut->add_locked_object(dn->get_dir_inode());
-  mut->add_locked_object(in);
+  mut->lock_object(in);
 }
 
 void MDCache::project_rstat_inode_to_frag(CInode *in, CDir *dir, int linkunlink)

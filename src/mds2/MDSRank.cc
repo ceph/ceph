@@ -19,6 +19,7 @@
 #include "Server.h"
 #include "Locker.h"
 #include "MDSMap.h"
+#include "Mutation.h"
 
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
@@ -61,6 +62,7 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
+    sessionmap(this),
     op_tp(msgr->cct, "MDSRank::op_tp", "tp_op",  g_conf->osd_op_threads, "mds_op_threads"),
     msg_tp(msgr->cct, "MDSRank::msg_tp", "tp_msg",  g_conf->osd_op_threads, "mds_msg_threads"),
     op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
@@ -373,6 +375,12 @@ void MDSRank::send_message_client(Message *m, Session *session)
   }
 }
 
+void MDSRank::bcast_mds_map()
+{
+  dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
+  // share the map with mounted clients
+}
+
 utime_t MDSRank::get_laggy_until() const
 {
   return beacon.get_laggy_until();
@@ -578,90 +586,13 @@ void MDSRankDispatcher::handle_mds_map(
     dout(1) << "cluster recovered." << dendl;
 }
 
-bool MDSRankDispatcher::handle_asok_command(
-    std::string command, cmdmap_t& cmdmap, Formatter *f,
-		    std::ostream& ss)
-{
-  return false;
-}
-
 void MDSRank::dump_status(Formatter *f) const
 {
 }
 
-void MDSRankDispatcher::update_log_config()
+void MDSRank::queue_context(MDSInternalContextBase *c)
 {
-  map<string,string> log_to_monitors;
-  map<string,string> log_to_syslog;
-  map<string,string> log_channel;
-  map<string,string> log_prio;
-  map<string,string> log_to_graylog;
-  map<string,string> log_to_graylog_host;
-  map<string,string> log_to_graylog_port;
-  uuid_d fsid;
-  string host;
-
-  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
-			       log_channel, log_prio, log_to_graylog,
-			       log_to_graylog_host, log_to_graylog_port,
-			       fsid, host) == 0)
-    clog->update_config(log_to_monitors, log_to_syslog,
-			log_channel, log_prio, log_to_graylog,
-			log_to_graylog_host, log_to_graylog_port,
-			fsid, host);
-  dout(10) << __func__ << " log_to_monitors " << log_to_monitors << dendl;
-}
-
-
-void MDSRankDispatcher::handle_osd_map()
-{
-}
-
-void MDSRank::bcast_mds_map()
-{
-  dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
-  // share the map with mounted clients
-}
-
-
-bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
-{
-  return false;
-}
-
-MDSRankDispatcher::MDSRankDispatcher(
-    mds_rank_t whoami_,
-    Mutex &mds_lock_,
-    LogChannelRef &clog_,
-    SafeTimer &timer_,
-    Beacon &beacon_,
-    MDSMap *& mdsmap_,
-    Messenger *msgr,
-    MonClient *monc_,
-    Context *respawn_hook_,
-    Context *suicide_hook_)
-  : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
-      msgr, monc_, respawn_hook_, suicide_hook_)
-{}
-
-bool MDSRankDispatcher::handle_command(
-  const cmdmap_t &cmdmap,
-  MCommand *m,
-  int *r,
-  std::stringstream *ds,
-  std::stringstream *ss,
-  bool *need_reply)
-{
-  assert(r != nullptr);
-  assert(ds != nullptr);
-  assert(ss != nullptr);
-
-  *need_reply = true;
-
-  std::string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-
-  return false;
+  finisher->queue(c);
 }
 
 MDSRank::OpWQ::OpWQ(MDSRank *m, time_t ti, ThreadPool *tp)
@@ -815,4 +746,81 @@ void MDSRank::retry_dispatch(MDRequestRef &mdr)
 {
   mdr->retries++;
   op_wq.queue(mdr);
+}
+
+
+
+// --- MDSRankDispatcher ---
+bool MDSRankDispatcher::handle_asok_command(
+    std::string command, cmdmap_t& cmdmap, Formatter *f,
+		    std::ostream& ss)
+{
+  return false;
+}
+
+void MDSRankDispatcher::update_log_config()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  map<string,string> log_to_graylog;
+  map<string,string> log_to_graylog_host;
+  map<string,string> log_to_graylog_port;
+  uuid_d fsid;
+  string host;
+
+  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio, log_to_graylog,
+			       log_to_graylog_host, log_to_graylog_port,
+			       fsid, host) == 0)
+    clog->update_config(log_to_monitors, log_to_syslog,
+			log_channel, log_prio, log_to_graylog,
+			log_to_graylog_host, log_to_graylog_port,
+			fsid, host);
+  dout(10) << __func__ << " log_to_monitors " << log_to_monitors << dendl;
+}
+
+void MDSRankDispatcher::handle_osd_map()
+{
+}
+
+bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
+{
+  return false;
+}
+
+MDSRankDispatcher::MDSRankDispatcher(
+    mds_rank_t whoami_,
+    Mutex &mds_lock_,
+    LogChannelRef &clog_,
+    SafeTimer &timer_,
+    Beacon &beacon_,
+    MDSMap *& mdsmap_,
+    Messenger *msgr,
+    MonClient *monc_,
+    Context *respawn_hook_,
+    Context *suicide_hook_)
+  : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
+      msgr, monc_, respawn_hook_, suicide_hook_)
+{}
+
+bool MDSRankDispatcher::handle_command(
+  const cmdmap_t &cmdmap,
+  MCommand *m,
+  int *r,
+  std::stringstream *ds,
+  std::stringstream *ss,
+  bool *need_reply)
+{
+  assert(r != nullptr);
+  assert(ds != nullptr);
+  assert(ss != nullptr);
+
+  *need_reply = true;
+
+  std::string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  return false;
 }

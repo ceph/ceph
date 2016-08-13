@@ -2,10 +2,12 @@
 #include "CDir.h"
 #include "CDentry.h"
 
-#include "messages/MClientRequest.h"
+#include "MDSRank.h"
+#include "MDCache.h"
 
 #define dout_subsys ceph_subsys_mds
-
+#undef dout_prefix
+#define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.dentry(" << dir->dirfrag() << " " << name << ") "
 
 LockType CDentry::lock_type(CEPH_LOCK_DN);
 LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
@@ -15,8 +17,8 @@ ostream& operator<<(ostream& out, const CDentry& dn)
   return out;
 }
 
-CDentry::CDentry(CDir *d, const std::string &n, snapid_t f, snapid_t l) :
-  CObject("CDentry"), dir(d), name(n), first(f), last(l),
+CDentry::CDentry(CDir *d, const std::string &n) :
+  CObject("CDentry"), dir(d), name(n),
   lock(this, &lock_type),
   versionlock(this, &versionlock_type)
 {
@@ -59,7 +61,7 @@ void CDentry::push_projected_linkage(CInode *in)
   if (dirty_rstat)
     in->clear_dirty_rstat();
 
-  _project_linkage()->inode = in;
+  _project_linkage()->set_inode(in);
   in->push_projected_parent(this);
 
   if (dirty_rstat)
@@ -72,16 +74,16 @@ void CDentry::pop_projected_linkage()
   assert(!projected_linkages.empty());
   linkage_t& n = projected_linkages.front();
 
-  if (n.remote_ino) {
-    dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
-    if (n.inode) {
+  if (n.get_remote_ino()) {
+    dir->link_remote_inode(this, n.get_remote_ino(), n.get_remote_d_type());
+    if (n.get_inode()) {
 //      linkage.inode = n.inode;
 //      linkage.inode->add_remote_parent(this);
     }
-  } else if (n.inode) {
-    CDentry* dn = n.inode->pop_projected_parent();
+  } else if (n.get_inode()) {
+    CDentry* dn = n.get_inode()->pop_projected_parent();
     assert(dn == this);
-    dir->link_primary_inode(this, n.inode);
+    dir->link_primary_inode(this, n.get_inode());
   }
 
   projected_linkages.pop_front();
@@ -100,7 +102,7 @@ void CDentry::link_inode_work(CInode *in)
   in->mutex_assert_locked_by_me();
 
   assert(linkage.is_null());
-  linkage.inode = in; 
+  linkage.set_inode(in); 
   in->set_primary_parent(this);
 
   if (in->get_num_ref())
@@ -129,7 +131,7 @@ void CDentry::unlink_inode_work()
 
     // detach inode
     in->remove_primary_parent(this);
-    linkage.inode = 0;
+    linkage.set_inode(NULL);
   }
 }
 
@@ -190,4 +192,13 @@ void CDentry::clear_new()
 {
   dout(10) << " clear_new " << *this << dendl;
   state_set(STATE_NEW);
+}
+
+void intrusive_ptr_add_ref(CDentry *o)
+{
+  o->get(CObject::PIN_INTRUSIVEPTR);
+}
+void intrusive_ptr_release(CDentry *o)
+{
+  o->put(CObject::PIN_INTRUSIVEPTR);
 }

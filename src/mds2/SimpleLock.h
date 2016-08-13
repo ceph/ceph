@@ -161,8 +161,9 @@ protected:
   __s16 state;
 
 private:
-  __s16 num_rdlock;
-  __s32 num_client_lease;
+  int num_stable_waiter;
+  int num_rdlock;
+  int num_client_lease;
 
   struct unstable_bits_t {
     // local state
@@ -204,6 +205,10 @@ private:
 
 public:
 
+  bool has_stable_waiter() const { return num_stable_waiter; } 
+  void inc_stable_waiter() { ++num_stable_waiter; }
+  void dec_stable_waiter() { --num_stable_waiter; }
+
   client_t get_excl_client() const {
     return have_more() ? more()->excl_client : -1;
   }
@@ -217,6 +222,7 @@ public:
     type(lt),
     parent(o), 
     state(LOCK_SYNC),
+    num_stable_waiter(0),
     num_rdlock(0),
     num_client_lease(0),
     _unstable(NULL)

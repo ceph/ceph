@@ -1,10 +1,10 @@
 #ifndef CEPH_CDIR_H
 #define CEPH_CDIR_H
-#include "CObject.h"
+
 #include "mds/mdstypes.h"
+#include "CObject.h"
 
 #include "include/elist.h"
-
 
 class LogSegment;
 
@@ -86,14 +86,10 @@ public:
   void link_primary_inode(CDentry *dn, CInode *in);
   void unlink_inode(CDentry *dn);
 
-  CDentryRef add_null_dentry(const string& dname,
-		  	     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentryRef add_primary_dentry(const string& dname, CInode *in,
-		  		snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentryRef add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d_type,
-		  	       snapid_t first=2, snapid_t last=CEPH_NOSNAP);
+  CDentryRef add_null_dentry(const string& dname);
+  CDentryRef add_primary_dentry(const string& dname, CInode *in);
+  CDentryRef add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d_type);
   void remove_dentry(CDentry *dn);
-
 
   CDentry* __lookup(const char *nanme, snapid_t snap=CEPH_NOSNAP);
   CDentryRef lookup(const char *name, snapid_t snap=CEPH_NOSNAP) {

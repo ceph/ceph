@@ -141,6 +141,10 @@ void MutationImpl::add_locked_object(CObject *o)
   assert(!is_object_locked(o));
   locked_objects.insert(o);
 }
+void MutationImpl::clear_locked_objects()
+{
+  locked_objects.clear();
+}
 
 void MutationImpl::lock_object(CObject *o)
 {
@@ -169,11 +173,12 @@ void MutationImpl::unlock_all_objects()
   }
 }
 
-void MutationImpl::start_locking(SimpleLock *lock)
+void MutationImpl::start_locking(SimpleLock *lock, bool xlock)
 {
   assert(locking == NULL);
   pin(lock->get_parent());
   locking = lock;
+  locking_xlock = xlock;
 }
 
 void MutationImpl::finish_locking(SimpleLock *lock)
