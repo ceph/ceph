@@ -740,6 +740,27 @@ bool PGMonitor::pg_stats_have_changed(int from, const MPGStats *stats) const
   return false;
 }
 
+struct PGMonitor::C_Stats : public C_MonOp {
+  PGMonitor *pgmon;
+  MonOpRequestRef stats_op_ack;
+  entity_inst_t who;
+  C_Stats(PGMonitor *p,
+          MonOpRequestRef op,
+          MonOpRequestRef op_ack)
+    : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
+  void _finish(int r) {
+    if (r >= 0) {
+      pgmon->_updated_stats(op, stats_op_ack);
+    } else if (r == -ECANCELED) {
+      return;
+    } else if (r == -EAGAIN) {
+      pgmon->dispatch(op);
+    } else {
+      assert(0 == "bad C_Stats return value");
+    }
+  }
+};
+
 bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
