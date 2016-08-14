@@ -1296,8 +1296,7 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
   if (parent->min_peer_features() & CEPH_OSD_PARTIAL_RECOVERY) {
-    map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator it
-      = missing.get_items().find(head);
+    const auto it = missing.get_items().find(head);
     assert(it != missing.get_items().end());
     data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
       dout(10) << "calc_head_subsets " << head
