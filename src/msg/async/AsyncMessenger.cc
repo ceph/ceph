@@ -460,8 +460,13 @@ Worker* WorkerPool::get_worker()
      ldout(cct, 20) << __func__ << " creating worker" << dendl;
      current_best = new Worker(cct, this, workers.size());
      workers.push_back(current_best);
-     pending++;
-     current_best->create("ms_async_worker");
+     if (started) {
+       pending++;
+       current_best->create("ms_async_worker");
+     } else {
+       ldout(cct, 20) << __func__ << " WorkerPool not started, push " << current_best
+                      << " to workers and let WorkerPool::start to create the worker" << dendl; 
+     }
   } else {
     ldout(cct, 20) << __func__ << " picked " << current_best 
                    << " as best worker with load " << min_load << dendl;
