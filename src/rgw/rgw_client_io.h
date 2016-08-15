@@ -41,6 +41,7 @@ public:
 
 class RGWStreamIOEngine : public RGWClientIO {
   friend class RGWStreamIOLegacyWrapper;
+  template<typename T> friend class RGWDecoratedStreamIO;
 
 public:
   class Exception : public std::exception {
@@ -183,8 +184,8 @@ public:
 
 
 /* HTTP IO: compatibility layer */
-class RGWStreamIO : public RGWClientIO,
-                    public RGWClientIOAccounter {
+class RGWStreamIO : public RGWClientIOAccounter,
+                    public RGWDecoratedStreamIO<RGWStreamIOEngine*> {
 protected:
   bool _account;
   size_t bytes_sent;
@@ -199,28 +200,18 @@ protected:
   RGWEnv env;
 
 public:
-  virtual int send_status(int status, const char *status_name) = 0;
-  virtual int send_100_continue() = 0;
-  virtual std::size_t send_header(const boost::string_ref& name,
-                                  const boost::string_ref& value) noexcept = 0;
-  virtual int send_content_length(uint64_t len) = 0;
-  virtual int send_chunked_transfer_encoding() = 0;
-  virtual int complete_header() = 0;
-
-  virtual int recv_body(char* buf, std::size_t max) = 0;
-  virtual int recv_body(char* buf, std::size_t max, bool calculate_hash) = 0;
-  virtual int send_body(const char* buf, std::size_t len) = 0;
-  virtual void flush() = 0;
-
   virtual ~RGWStreamIO() {}
 
-  RGWStreamIO()
-    : _account(false),
+  RGWStreamIO(RGWStreamIOEngine* engine)
+    : RGWDecoratedStreamIO<RGWStreamIOEngine*>(std::move(engine)),
+      _account(false),
       bytes_sent(0),
       bytes_received(0),
       sha256_hash(nullptr) {
   }
 
+  using RGWDecoratedStreamIO<RGWStreamIOEngine*>::recv_body;
+  virtual int recv_body(char* buf, std::size_t max, bool calculate_hash);
   std::string grab_aws4_sha256_hash();
 
   RGWEnv& get_env() noexcept override {
@@ -246,82 +237,9 @@ public:
  * from RGWDecoratedStreamIO<> to avoid using virtual inheritance in engine.
  * Should be removed after converting all clients. */
 class RGWStreamIOLegacyWrapper : public RGWStreamIO {
-  RGWStreamIOEngine * const engine;
-
-  RGWStreamIOEngine& get_decoratee() {
-    return *engine;
-  }
-
-#define EXCPT_TO_RC(code)                                       \
-  try {                                                         \
-    return code;                                                \
-  } catch (RGWStreamIOEngine::Exception& e) {                   \
-    return e.value();                                           \
-  }
-
-#define EXCPT_TO_VOID(code)                                     \
-  try {                                                         \
-    return code;                                                \
-  } catch (RGWStreamIOEngine::Exception& e) {                   \
-    return;                                                     \
-  }
-
-protected:
-  void init_env(CephContext *cct) override {
-    EXCPT_TO_VOID(get_decoratee().init_env(cct));
-  }
-
 public:
   RGWStreamIOLegacyWrapper(RGWStreamIOEngine * const engine)
-    : engine(engine) {
-  }
-
-  int send_status(const int status, const char* const status_name) override {
-    EXCPT_TO_RC(get_decoratee().send_status(status, status_name));
-  }
-
-  std::size_t send_header(const boost::string_ref& name,
-                          const boost::string_ref& value) noexcept override {
-    EXCPT_TO_RC(get_decoratee().send_header(name, value));
-  }
-
-  int send_100_continue() override {
-    EXCPT_TO_RC(get_decoratee().send_100_continue());
-  }
-
-  int send_content_length(const uint64_t len) override {
-    EXCPT_TO_RC(get_decoratee().send_content_length(len));
-  }
-
-  int send_chunked_transfer_encoding() override {
-    EXCPT_TO_RC(get_decoratee().send_chunked_transfer_encoding());
-  }
-
-  int complete_header() override {
-    EXCPT_TO_RC(get_decoratee().complete_header());
-  }
-
-  int recv_body(char* buf, const std::size_t max) override {
-    EXCPT_TO_RC(get_decoratee().recv_body(buf, max));
-  }
-
-  int recv_body(char* buf, std::size_t max, bool calculate_hash) override;
-
-  int send_body(const char* const buf, const std::size_t len) override {
-    EXCPT_TO_RC(get_decoratee().send_body(buf, len));
-  }
-
-
-  void flush() override {
-    EXCPT_TO_VOID(get_decoratee().flush());
-  }
-
-  RGWEnv& get_env() noexcept override {
-    return get_decoratee().get_env();
-  }
-
-  int complete_request() override {
-    EXCPT_TO_RC(get_decoratee().complete_request());
+    : RGWStreamIO(std::move(engine)) {
   }
 };
 
