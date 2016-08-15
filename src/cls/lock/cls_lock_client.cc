@@ -189,6 +189,22 @@ namespace rados {
         rados_op->exec("lock", "assert_locked", in);
       }
 
+      void set_cookie(librados::ObjectWriteOperation *rados_op,
+                      const std::string& name, ClsLockType type,
+                      const std::string& cookie, const std::string& tag,
+                      const std::string& new_cookie)
+      {
+        cls_lock_set_cookie_op op;
+        op.name = name;
+        op.type = type;
+        op.cookie = cookie;
+        op.tag = tag;
+        op.new_cookie = new_cookie;
+        bufferlist in;
+        ::encode(op, in);
+        rados_op->exec("lock", "set_cookie", in);
+      }
+
       void Lock::assert_locked_exclusive(ObjectOperation *op)
       {
         assert_locked(op, name, LOCK_EXCLUSIVE, cookie, tag);
