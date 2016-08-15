@@ -694,6 +694,8 @@ def nuke_helper(ctx, should_unlock):
     log.info('Unmount ceph-fuse and killing daemons...')
     shutdown_daemons(ctx)
     log.info('All daemons killed.')
+    # Try to remove packages before reboot
+    remove_installed_packages(ctx)
 
     remotes = ctx.cluster.remotes.keys()
     reboot(ctx, remotes)
@@ -729,5 +731,6 @@ def nuke_helper(ctx, should_unlock):
     remove_testing_tree(ctx)
     log.info('Filesystem cleared.')
     remove_yum_timedhosts(ctx)
+    # Once again remove packages after reboot
     remove_installed_packages(ctx)
     log.info('Installed packages removed.')
