@@ -1483,8 +1483,8 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
     int r = get_version(e, reply->incremental_maps[e]);
     assert(r >= 0);
   }
-  reply->oldest_map = get_first_committed();
-  reply->newest_map = osdmap.get_epoch();
+  reply->oldest_map = first;
+  reply->newest_map = last;
   mon->send_reply(op, reply);
   return true;
 }
