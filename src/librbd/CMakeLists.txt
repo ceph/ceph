@@ -38,6 +38,7 @@ set(librbd_internal_srcs
   image/SetSnapRequest.cc
   image_watcher/Notifier.cc
   image_watcher/NotifyLockOwner.cc
+  image_watcher/RewatchRequest.cc
   journal/RemoveRequest.cc
   journal/CreateRequest.cc
   journal/Replay.cc
