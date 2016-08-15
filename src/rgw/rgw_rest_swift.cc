@@ -498,13 +498,13 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    int r = swift_policy.create(store,
+    const bool r = swift_policy.create(store,
                                 s->user->user_id,
                                 s->user->display_name,
                                 read_list,
                                 write_list);
-    if (r < 0) {
-      return r;
+    if (r != true) {
+      return -EINVAL;
     }
 
     *policy = swift_policy;
@@ -802,12 +802,12 @@ static int get_swift_account_settings(req_state * const s,
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    int r = swift_acct_policy.create(store,
+    const bool r = swift_acct_policy.create(store,
                                      s->user->user_id,
                                      s->user->display_name,
                                      string(acl_attr));
-    if (r < 0) {
-      return r;
+    if (r != true) {
+      return -EINVAL;
     }
 
     *policy = swift_acct_policy;
@@ -870,7 +870,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
+  if (!op_ret && (op_ret != -EINVAL)) {
     op_ret = STATUS_NO_CONTENT;
   }
   set_req_state_err(s, op_ret);
