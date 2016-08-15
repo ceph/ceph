@@ -16,6 +16,8 @@ import pwd
 import tempfile
 import netaddr
 
+from teuthology.config import config
+
 try:
     import libvirt
 except ImportError:
@@ -707,11 +709,14 @@ class VirtualConsole():
             s=self.shortname, i=interval))
 
 
-def getRemoteConsole(name, ipmiuser, ipmipass, ipmidomain, logfile=None,
-                     timeout=20):
+def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
+                     logfile=None, timeout=20):
     """
     Return either VirtualConsole or PhysicalConsole depending on name.
     """
+    ipmiuser = ipmiuser or config.ipmi_user
+    ipmipass = ipmipass or config.ipmi_password
+    ipmidomain = ipmidomain or config.ipmi_domain
     if misc.is_vm(name):
         return VirtualConsole(name, ipmiuser, ipmipass, ipmidomain, logfile,
                               timeout)
