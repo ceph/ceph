@@ -585,10 +585,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
     oss << "oload " << oload << "\n";
     oss << "max_change " << max_changef << "\n";
     oss << "max_change_osds " << max_osds << "\n";
-    char buf[128];
-    snprintf(buf, sizeof(buf), "average %04f\noverload %04f\n",
-	     average_util, overload_util);
-    oss << buf;
+    oss.precision(4);
+    oss << std::fixed << average_util << "\n";
+    oss << overload_util << "\n";
   }
   bool changed = false;
   int num_changed = 0;
@@ -664,11 +663,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
 	f->close_section();
       } else {
-	char buf[128];
-	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
-		 (float)weight / (float)0x10000,
-		 (float)new_weight / (float)0x10000);
-	oss << buf;
+        oss << "osd." << p->first << " weight "
+            << (float)weight / (float)0x10000 << " -> "
+            << (float)new_weight / (float)0x10000;
       }
       if (++num_changed >= max_osds)
 	break;
@@ -685,11 +682,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	  pending_inc.new_weight[p->first] = new_weight;
 	  changed = true;
 	}
-	char buf[128];
-	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
-		 (float)weight / (float)0x10000,
-		 (float)new_weight / (float)0x10000);
-	oss << buf;
+        oss << "osd." << p->first << " weight "
+            << (float)weight / (float)0x10000 << " -> "
+            << (float)new_weight / (float)0x10000;
 	if (++num_changed >= max_osds)
 	  break;
       }
