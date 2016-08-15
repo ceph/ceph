@@ -1967,7 +1967,7 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
   if (ofs >= max_head_size) {
     manifest->set_head_size(max_head_size);
     cur_stripe = (ofs - max_head_size) / rule.stripe_max_size;
-    cur_stripe_size =  rule.stripe_max_size;
+    cur_stripe_size = rule.stripe_max_size;
 
     if (cur_part_id == 0 && max_head_size > 0) {
       cur_stripe++;
@@ -8599,7 +8599,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     } else {
       int ret = index_op.cancel();
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
+        ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
       }
     }
   }
@@ -10570,8 +10570,8 @@ void RGWRados::get_bucket_instance_obj(const rgw_bucket& bucket, rgw_obj& obj)
 int RGWRados::get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-  int pos = meta_key.find(':');
-  if (pos < 0) {
+  size_t pos = meta_key.find(':');
+  if (pos == string::npos) {
     return -EINVAL;
   }
   string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key;
