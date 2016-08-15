@@ -126,7 +126,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
                 continue    
             
             if strict:
-                title_re = '^(?:hammer|infernalis|jewel|kraken): (cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
+                title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(cli|common|mon|msgr|osd|log|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
                 match = re.match(title_re, title)
                 if not match:
                     print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
