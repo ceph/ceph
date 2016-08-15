@@ -93,6 +93,95 @@ public:
 };
 
 
+/* Abstract decorator over any implementation of RGWStreamIOEngine. */
+template <typename DecorateeT>
+class RGWDecoratedStreamIO : public RGWStreamIOEngine {
+  template<typename T> friend class RGWDecoratedStreamIO;
+
+  typedef typename std::remove_pointer<DecorateeT>::type DerefedDecorateeT;
+
+  static_assert(std::is_base_of<RGWStreamIOEngine, DerefedDecorateeT>::value,
+                "DecorateeT must be a subclass of RGWStreamIOEngine");
+
+  DecorateeT decoratee;
+
+  /* There is an indirection layer over accessing decoratee to share the same
+   * code base between dynamic and static decorators. The difference is about
+   * what we store internally: pointer to a decorated object versus the whole
+   * object itself. */
+  template <typename T = void,
+            typename std::enable_if<
+    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
+  DerefedDecorateeT& get_decoratee() {
+    return *decoratee;
+  }
+
+  template <typename T = void,
+            typename std::enable_if<
+    ! std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
+  DerefedDecorateeT& get_decoratee() {
+    return decoratee;
+  }
+
+protected:
+  void init_env(CephContext *cct) override {
+    return get_decoratee().init_env(cct);
+  }
+
+public:
+  RGWDecoratedStreamIO(DecorateeT&& decoratee)
+    : decoratee(std::move(decoratee)) {
+  }
+
+  std::size_t send_status(const int status,
+                          const char* const status_name) override {
+    return get_decoratee().send_status(status, status_name);
+  }
+
+  std::size_t send_100_continue() override {
+    return get_decoratee().send_100_continue();
+  }
+
+  std::size_t send_header(const boost::string_ref& name,
+                          const boost::string_ref& value) override {
+    return get_decoratee().send_header(name, value);
+  }
+
+  std::size_t send_content_length(const uint64_t len) override {
+    return get_decoratee().send_content_length(len);
+  }
+
+  std::size_t send_chunked_transfer_encoding() override {
+    return get_decoratee().send_chunked_transfer_encoding();
+  }
+
+  std::size_t complete_header() override {
+    return get_decoratee().complete_header();
+  }
+
+  std::size_t recv_body(char* const buf, const std::size_t max) override {
+    return get_decoratee().recv_body(buf, max);
+  }
+
+  std::size_t send_body(const char* const buf,
+                        const std::size_t len) override {
+    return get_decoratee().send_body(buf, len);
+  }
+
+  void flush() override {
+    return get_decoratee().flush();
+  }
+
+  RGWEnv& get_env() noexcept override {
+    return get_decoratee().get_env();
+  }
+
+  int complete_request() override {
+    return get_decoratee().complete_request();
+  }
+};
+
+
 /* HTTP IO: compatibility layer */
 class RGWStreamIO : public RGWClientIO,
                     public RGWClientIOAccounter {
