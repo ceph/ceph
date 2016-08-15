@@ -452,27 +452,14 @@ void dump_etag(struct req_state* const s,
                    quoted);
 }
 
-void dump_pair(struct req_state* const s,
-               const char* const key,
-               const char* const value)
-{
-  if ( (strlen(key) > 0) && (strlen(value) > 0))
-    STREAM_IO(s)->send_header(key, value);
-}
-
 void dump_bucket_from_state(struct req_state *s)
 {
-  int expose_bucket = g_conf->rgw_expose_bucket;
-  if (expose_bucket) {
-    if (!s->bucket_name.empty()) {
-      string b;
-      if (!s->bucket_tenant.empty()) {
-        string g = s->bucket_tenant + "/" + s->bucket_name;
-        url_encode(g, b);
-      } else {
-        url_encode(s->bucket_name, b);
-      }
-      STREAM_IO(s)->send_header("Bucket", b);
+  if (g_conf->rgw_expose_bucket && ! s->bucket_name.empty()) {
+    if (! s->bucket_tenant.empty()) {
+      dump_header(s, "Bucket",
+                  url_encode(s->bucket_tenant + "/" + s->bucket_name));
+    } else {
+      dump_header(s, "Bucket", url_encode(s->bucket_name));
     }
   }
 }
@@ -502,12 +489,9 @@ void dump_uri_from_state(struct req_state *s)
   }
 }
 
-void dump_redirect(struct req_state *s, const string& redirect)
+void dump_redirect(struct req_state * const s, const std::string& redirect)
 {
-  if (redirect.empty())
-    return;
-
-  STREAM_IO(s)->send_header("Location", redirect);
+  return dump_header_if_nonempty(s, "Location", redirect);
 }
 
 static std::size_t dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
