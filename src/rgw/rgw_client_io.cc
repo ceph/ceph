@@ -23,18 +23,21 @@ void RGWClientIO::init(CephContext *cct) {
 }
 
 
-int RGWStreamIOLegacyWrapper::recv_body(char *buf, std::size_t max, bool calculate_hash)
+int RGWStreamIO::recv_body(char *buf, std::size_t max, bool calculate_hash)
 {
-  const auto len = recv_body(buf, max);
+  try {
+    const auto sent = recv_body(buf, max);
 
-  if (len >= 0 && calculate_hash) {
-    if (!sha256_hash) {
-      sha256_hash = calc_hash_sha256_open_stream();
+    if (calculate_hash) {
+      if (! sha256_hash) {
+        sha256_hash = calc_hash_sha256_open_stream();
+      }
+      calc_hash_sha256_update_stream(sha256_hash, buf, sent);
     }
-    calc_hash_sha256_update_stream(sha256_hash, buf, len);
+    return sent;
+  } catch (RGWStreamIOEngine::Exception& e) {
+    return e.value();
   }
-
-  return len;
 }
 
 string RGWStreamIO::grab_aws4_sha256_hash()

@@ -279,10 +279,11 @@ static void dump_status(struct req_state *s, int status,
 			const char *status_name)
 {
   s->formatter->set_status(status, status_name);
-  int r = STREAM_IO(s)->send_status(status, status_name);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r
-		     << dendl;
+  try {
+    STREAM_IO(s)->send_status(status, status_name);
+  } catch (RGWStreamIOEngine::Exception& e) {
+    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err="
+                     << e.value() << dendl;
   }
 }
 
@@ -373,10 +374,11 @@ void dump_header(struct req_state* const s,
                  const boost::string_ref& name,
                  const boost::string_ref& val)
 {
-  const int r = STREAM_IO(s)->send_header(name, val);
-  if (r < 0) {
+  try {
+    STREAM_IO(s)->send_header(name, val);
+  } catch (RGWStreamIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_header() returned err="
-                     << r << dendl;
+                     << e.value() << dendl;
   }
 }
 
@@ -411,10 +413,11 @@ void dump_header(struct req_state* const s,
 
 void dump_content_length(struct req_state* const s, const uint64_t len)
 {
-  int r = STREAM_IO(s)->send_content_length(len);
-  if (r < 0) {
+  try {
+    STREAM_IO(s)->send_content_length(len);
+  } catch (RGWStreamIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
-                     << r << dendl;
+                     << e.value() << dendl;
   }
   dump_header(s, "Accept-Ranges", "bytes");
 }
@@ -702,10 +705,12 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   if (content_type) {
     dump_header(s, "Content-Type", content_type);
   }
-  int r = STREAM_IO(s)->complete_header();
-  if (r < 0) {
+
+  try {
+    STREAM_IO(s)->complete_header();
+  } catch (RGWStreamIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->complete_header() returned err="
-		     << r << dendl;
+		     << e.value() << dendl;
   }
 
   STREAM_IO(s)->set_account(true);
@@ -789,9 +794,14 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
   perfcounter->inc(l_rgw_failed_req);
 }
 
-void dump_continue(struct req_state *s)
+void dump_continue(struct req_state * const s)
 {
-  STREAM_IO(s)->send_100_continue();
+  try {
+    STREAM_IO(s)->send_100_continue();
+  } catch (RGWStreamIOEngine::Exception& e) {
+    ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->send_100_continue() returned err="
+		     << e.value() << dendl;
+  }
 }
 
 void dump_range(struct req_state* const s,
@@ -822,7 +832,11 @@ int dump_body(struct req_state* const s,
               const char* const buf,
               const std::size_t len)
 {
-  return STREAM_IO(s)->send_body(buf, len);
+  try {
+    return STREAM_IO(s)->send_body(buf, len);
+  } catch (RGWStreamIOEngine::Exception& e) {
+    return e.value();
+  }
 }
 
 int dump_body(struct req_state* const s, /* const */ ceph::buffer::list& bl)
@@ -839,7 +853,11 @@ int recv_body(struct req_state* const s,
               char* const buf,
               const std::size_t max)
 {
-  return STREAM_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
+  try {
+    return STREAM_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
+  } catch (RGWStreamIOEngine::Exception& e) {
+    return e.value();
+  }
 }
 
 int RGWGetObj_ObjStore::get_params()
