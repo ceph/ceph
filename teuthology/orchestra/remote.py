@@ -479,7 +479,7 @@ class PhysicalConsole():
 
     def _exit_session(self, child, timeout=None):
         child.send('~.')
-        t = timeout
+        t = timeout or self.timeout
         if not t:
             t = self.timeout
         r = child.expect(
@@ -491,11 +491,9 @@ class PhysicalConsole():
         """
         Wait for login.  Retry if timeouts occur on commands.
         """
+        t = timeout or self.timeout
         log.debug('Waiting for login prompt on {s}'.format(s=self.shortname))
         # wait for login prompt to indicate boot completed
-        t = timeout
-        if not t:
-            t = self.timeout
         for i in range(0, attempts):
             start = time.time()
             while time.time() - start < t:
@@ -519,13 +517,11 @@ class PhysicalConsole():
         """
         Check power.  Retry if EOF encountered on power check read.
         """
-        total_timeout = timeout
-        if not total_timeout:
-            total_timeout = self.timeout
+        timeout = timeout or self.timeout
         t = 1
         total = t
         ta = time.time()
-        while total < total_timeout:
+        while total < timeout:
             c = self._exec('power status')
             r = c.expect(['Chassis Power is {s}'.format(
                 s=state), pexpect.EOF, pexpect.TIMEOUT], timeout=t)
@@ -638,8 +634,7 @@ class VirtualConsole():
     """
     Virtual Console (set from getRemoteConsole)
     """
-    def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None,
-                 timeout=20):
+    def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None):
         if libvirt is None:
             raise RuntimeError("libvirt not found")
 
@@ -719,7 +714,6 @@ def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
     ipmipass = ipmipass or config.ipmi_password
     ipmidomain = ipmidomain or config.ipmi_domain
     if misc.is_vm(name):
-        return VirtualConsole(name, ipmiuser, ipmipass, ipmidomain, logfile,
-                              timeout)
+        return VirtualConsole(name, ipmiuser, ipmipass, ipmidomain, logfile)
     return PhysicalConsole(name, ipmiuser, ipmipass, ipmidomain, logfile,
                            timeout)
