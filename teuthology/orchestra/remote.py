@@ -513,6 +513,7 @@ class PhysicalConsole():
                 self._exit_session(child)
                 if r == 0:
                     return
+        raise RuntimeError("Did not get a login prompt from %s!" % self.name)
 
     def check_power(self, state, timeout=None):
         """
