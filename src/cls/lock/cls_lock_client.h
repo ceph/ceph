@@ -59,6 +59,11 @@ namespace rados {
                                 const std::string& cookie,
                                 const std::string& tag);
 
+      extern void set_cookie(librados::ObjectWriteOperation *rados_op,
+                             const std::string& name, ClsLockType type,
+                             const std::string& cookie, const std::string& tag,
+                             const std::string& new_cookie);
+
       class Lock {
 	std::string name;
 	std::string cookie;
