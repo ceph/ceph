@@ -785,7 +785,7 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
 
   RGWDataSyncShardMarkerTrack *marker_tracker;
 
-  RGWOmapAppend *error_repo;
+  boost::intrusive_ptr<RGWOmapAppend> error_repo;
   bool remove_from_repo;
 
   set<string> keys;
@@ -826,10 +826,10 @@ public:
         if (retcode < 0) {
           ldout(sync_env->store->ctx(), 0) << "ERROR: failed to log sync failure: retcode=" << retcode << dendl;
         }
-        if (!error_repo->append(raw_key)) {
+        if (error_repo && !error_repo->append(raw_key)) {
           ldout(sync_env->store->ctx(), 0) << "ERROR: failed to log sync failure in error repo: retcode=" << retcode << dendl;
         }
-      } else if (remove_from_repo) {
+      } else if (error_repo && remove_from_repo) {
         keys = {raw_key};
         yield call(new RGWRadosRemoveOmapKeysCR(sync_env->store, error_repo->get_pool(), error_repo->get_oid(), keys));
         if (retcode < 0) {
