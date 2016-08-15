@@ -1973,7 +1973,7 @@ private:
   ~Objecter();
 
   void init();
-  void start();
+  void start(const OSDMap *o = nullptr);
   void shutdown();
 
   // These two templates replace osdmap_(get)|(put)_read. Simply wrap
