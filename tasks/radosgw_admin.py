@@ -277,8 +277,10 @@ def task(ctx, config):
                 check_status=True)
             del out1['data']['bucket_info']['bucket']['pool']
             del out1['data']['bucket_info']['bucket']['index_pool']
+            del out1['data']['bucket_info']['bucket']['data_extra_pool']
             del out2['data']['bucket_info']['bucket']['pool']
             del out2['data']['bucket_info']['bucket']['index_pool']
+            del out2['data']['bucket_info']['bucket']['data_extra_pool']
             assert out1 == out2
 
         same_region = 0
