@@ -42,6 +42,7 @@ librbd_internal_la_SOURCES = \
 	librbd/image/SetSnapRequest.cc \
 	librbd/image_watcher/Notifier.cc \
 	librbd/image_watcher/NotifyLockOwner.cc \
+	librbd/image_watcher/RewatchRequest.cc \
 	librbd/journal/Replay.cc \
 	librbd/journal/StandardPolicy.cc \
 	librbd/object_map/InvalidateRequest.cc \
@@ -129,6 +130,7 @@ noinst_HEADERS += \
 	librbd/image/SetSnapRequest.h \
 	librbd/image_watcher/Notifier.h \
 	librbd/image_watcher/NotifyLockOwner.h \
+	librbd/image_watcher/RewatchRequest.h \
 	librbd/journal/DisabledPolicy.h \
 	librbd/journal/Policy.h \
 	librbd/journal/Replay.h \
