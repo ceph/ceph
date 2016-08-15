@@ -671,12 +671,14 @@ def nuke_helper(ctx, should_unlock):
         if not console.check_status():
             # not powered on or can't get IPMI status.  Try to power on
             console.power_on()
-            # try to get status again, waiting for login prompt this time
+            # try to get status again
             log.info('checking console status of %s' % cname)
-            if not console.check_status(100):
-                log.error('Failed to get console status for %s, ' +
-                          'disabling console...' % cname)
-            log.info('console ready on %s' % cname)
+            if not console.check_status(timeout=100):
+                log.error(
+                    "Failed to get console status for %s, " % cname
+                )
+            else:
+                log.info('console ready on %s' % cname)
         else:
             log.info('console ready on %s' % cname)
 
