@@ -54,7 +54,7 @@ Parameters
 
 .. option:: --image-format format-id
 
-   Specifies which object layout to use. The default is 1.
+   Specifies which object layout to use. The default is 2.
 
    * format 1 - (deprecated) Use the original format for a new rbd image. This
      format is understood by all versions of librbd and the kernel rbd module,
