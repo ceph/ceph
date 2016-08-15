@@ -205,8 +205,8 @@ void RGWOp_Metadata_Put::send_response() {
   stringstream ver_stream;
   ver_stream << "ver:" << ondisk_version.ver
 	     <<",tag:" << ondisk_version.tag;
-  dump_pair(s, "RGWX_UPDATE_STATUS", update_status.c_str());
-  dump_pair(s, "RGWX_UPDATE_VERSION", ver_stream.str().c_str());
+  dump_header_if_nonempty(s, "RGWX_UPDATE_STATUS", update_status);
+  dump_header_if_nonempty(s, "RGWX_UPDATE_VERSION", ver_stream.str());
   end_header(s);
 }
 
