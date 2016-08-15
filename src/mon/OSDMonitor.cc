@@ -344,9 +344,13 @@ bool OSDMonitor::thrash()
   thrash_map--;
   int o;
 
+  int osd_num = osdmap.get_num_osds();
+  if (osd_num == 0)
+    return false;
+
   // mark a random osd up_thru..
   if (rand() % 4 == 0 || thrash_last_up_osd < 0)
-    o = rand() % osdmap.get_num_osds();
+    o = rand() % osd_num;
   else
     o = thrash_last_up_osd;
   if (osdmap.is_up(o)) {
@@ -355,7 +359,7 @@ bool OSDMonitor::thrash()
   }
 
   // mark a random osd up/down
-  o = rand() % osdmap.get_num_osds();
+  o = rand() % osd_num;
   if (osdmap.is_up(o)) {
     dout(5) << "thrash_map osd." << o << " down" << dendl;
     pending_inc.new_state[o] = CEPH_OSD_UP;
@@ -370,14 +374,14 @@ bool OSDMonitor::thrash()
   }
 
   // mark a random osd in
-  o = rand() % osdmap.get_num_osds();
+  o = rand() % osd_num;
   if (osdmap.exists(o)) {
     dout(5) << "thrash_map osd." << o << " in" << dendl;
     pending_inc.new_weight[o] = CEPH_OSD_IN;
   }
 
   // mark a random osd out
-  o = rand() % osdmap.get_num_osds();
+  o = rand() % osd_num;
   if (osdmap.exists(o)) {
     dout(5) << "thrash_map osd." << o << " out" << dendl;
     pending_inc.new_weight[o] = CEPH_OSD_OUT;
@@ -385,17 +389,21 @@ bool OSDMonitor::thrash()
 
   // generate some pg_temp entries.
   // let's assume the ceph::unordered_map iterates in a random-ish order.
-  int n = rand() % mon->pgmon()->pg_map.pg_stat.size();
+  int pg_num = mon->pgmon()->pg_map.pg_stat.size();
+  if (pg_num == 0)
+    return true;
+  int n = rand() % pg_num;
   ceph::unordered_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
   ceph::unordered_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
   while (n--)
     ++p;
-  for (int i=0; i<50; i++) {
+
+  for (int i = std::min(pg_num, 50); i > 0; i--) {
     unsigned size = osdmap.get_pg_size(p->first);
     vector<int> v;
     bool have_real_osd = false;
     for (int j=0; j < (int)size; j++) {
-      o = rand() % osdmap.get_num_osds();
+      o = rand() % osd_num;
       if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end()) {
 	have_real_osd = true;
 	v.push_back(o);
