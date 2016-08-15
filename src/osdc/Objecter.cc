@@ -154,6 +154,14 @@ static const char *config_keys[] = {
   NULL
 };
 
+class Objecter::RequestStateHook : public AdminSocketHook {
+  Objecter *m_objecter;
+public:
+  explicit RequestStateHook(Objecter *objecter);
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+            bufferlist& out);
+};
+
 /**
  * This is a more limited form of C_Contexts, but that requires
  * a ceph_context which we don't have here.
