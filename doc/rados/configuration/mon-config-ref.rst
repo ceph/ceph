@@ -582,20 +582,6 @@ Trimming requires that the placement groups are ``active + clean``.
 :Default: ``0.05``
 
 
-``paxos trim tolerance``
-
-:Description: The number of extra proposals tolerated before trimming.
-:Type: Integer
-:Default: ``30``
-
-
-``paxos trim disabled max versions``
-
-:Description: The maximimum number of version allowed to pass without trimming.
-:Type: Integer
-:Default: ``100``
-
-
 ``mon lease`` 
 
 :Description: The length (in seconds) of the lease on the monitor's versions.
