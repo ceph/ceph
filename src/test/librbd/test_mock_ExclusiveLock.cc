@@ -667,11 +667,13 @@ TEST_F(TestMockExclusiveLock, RequestLockWatchNotRegistered) {
   EXPECT_CALL(*mock_image_ctx.image_watcher, get_watch_handle())
     .WillOnce(DoAll(Invoke([&mock_image_ctx, &exclusive_lock]() {
                       mock_image_ctx.image_ctx->op_work_queue->queue(
-                        new FunctionContext([&exclusive_lock](int r) {
-                          exclusive_lock.handle_watch_registered();
+                        new FunctionContext([&mock_image_ctx, &exclusive_lock](int r) {
+                          RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+                          exclusive_lock.reacquire_lock();
                         }));
                     }),
                     Return(0)));
+
   MockAcquireRequest request_lock_acquire;
   expect_acquire_lock(mock_image_ctx, request_lock_acquire, 0);
   ASSERT_EQ(0, when_request_lock(mock_image_ctx, exclusive_lock));
