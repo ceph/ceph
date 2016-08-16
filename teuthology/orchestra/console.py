@@ -54,8 +54,6 @@ class PhysicalConsole():
     def _exit_session(self, child, timeout=None):
         child.send('~.')
         t = timeout or self.timeout
-        if not t:
-            t = self.timeout
         r = child.expect(
             ['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
         if r != 0:
