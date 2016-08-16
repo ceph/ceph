@@ -38,7 +38,6 @@ ImageCopyRequest<I>::ImageCopyRequest(I *local_image_ctx, I *remote_image_ctx,
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)),
     m_client_meta_copy(*client_meta) {
   assert(!m_client_meta_copy.sync_points.empty());
-  assert(!m_client_meta_copy.snap_seqs.empty());
 }
 
 template <typename I>
