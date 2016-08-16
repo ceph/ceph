@@ -20,7 +20,7 @@ from ..misc import (
 )
 from ..openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
 from ..orchestra import run
-from ..orchestra.remote import Remote, getRemoteConsole
+from ..orchestra.remote import Remote
 from ..parallel import parallel
 from ..task import install as install_task
 from ..task.internal import check_lock, add_remotes, connect
@@ -387,11 +387,7 @@ def synch_clocks(remotes):
 def check_console(hostname):
     remote = Remote(hostname)
     shortname = remote.shortname
-    console = getRemoteConsole(
-        name=hostname,
-        ipmiuser=config['ipmi_user'],
-        ipmipass=config['ipmi_password'],
-        ipmidomain=config['ipmi_domain'])
+    console = remote.console
     cname = '{host}.{domain}'.format(
         host=shortname,
         domain=config['ipmi_domain'])

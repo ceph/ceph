@@ -49,7 +49,7 @@ class Remote(object):
         self._shortname = shortname or hostname.split('.')[0]
         self._host_key = host_key
         self.keep_alive = keep_alive
-        self.console = console
+        self._console = console
         self.ssh = ssh
 
     def connect(self, timeout=None):
@@ -421,6 +421,12 @@ class Remote(object):
         node['ssh_pub_key'] = self.host_key
         node['up'] = True
         return node
+
+    @property
+    def console(self):
+        if not self._console:
+            self._console = getRemoteConsole(self.name)
+        return self._console
 
     def __del__(self):
         if self.ssh is not None:
