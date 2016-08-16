@@ -3133,7 +3133,6 @@ void RGWRados::finalize()
     data_notifier->stop();
     delete data_notifier;
   }
-  delete meta_mgr;
   delete data_log;
   if (async_rados) {
     delete async_rados;
@@ -3164,6 +3163,7 @@ void RGWRados::finalize()
   if (cr_registry) {
     cr_registry->put();
   }
+  delete meta_mgr;
   delete binfo_cache;
   delete obj_tombstone_cache;
 }
