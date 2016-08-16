@@ -299,6 +299,15 @@ int rgw_writev(struct rgw_fs *rgw_fs,
 int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	      uint32_t flags);
 
+/*
+   NFS commit operation
+*/
+
+#define RGW_COMMIT_FLAG_NONE        0x0000
+
+int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	       uint64_t offset, uint64_t length, uint32_t flags);
+
 #ifdef __cplusplus
 }
 #endif

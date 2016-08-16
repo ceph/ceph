@@ -81,6 +81,10 @@ namespace rgw {
 
   void RGWLibProcess::run()
   {
+    /* start write timer */
+    RGWLibFS::write_timer.resume();
+
+    /* gc loop */
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
       unique_lock uniq(mtx);
