@@ -694,7 +694,16 @@ namespace crimson {
 	  //
 	  // The alternative would be to maintain a proportional queue
 	  // (define USE_PROP_TAG) and do an O(1) operation here.
-	  double lowest_prop_tag = NaN; // mark unset value as NaN
+
+	  // Was unable to confirm whether equality testing on
+	  // std::numeric_limits<double>::max() is guaranteed, so
+	  // we'll use a compile-time calculated trigger that is one
+	  // third the max, which should be much larger than any
+	  // expected organic value.
+	  constexpr double lowest_prop_tag_trigger =
+	    std::numeric_limits<double>::max() / 3.0;
+
+	  double lowest_prop_tag = std::numeric_limits<double>::max();
 	  for (auto const &c : client_map) {
 	    // don't use ourselves (or anything else that might be
 	    // listed as idle) since we're now in the map
@@ -703,13 +712,15 @@ namespace crimson {
 	      if (c.second->has_request()) {
 		double p = c.second->next_request().tag.proportion +
 		  c.second->prop_delta;
-		if (std::isnan(lowest_prop_tag) || p < lowest_prop_tag) {
+		if (p < lowest_prop_tag) {
 		  lowest_prop_tag = p;
 		}
 	      }
 	    }
 	  }
-	  if (!std::isnan(lowest_prop_tag)) {
+
+	  // if this conditional does not fire, it 
+	  if (lowest_prop_tag < lowest_prop_tag_trigger) {
 	    client.prop_delta = lowest_prop_tag - time;
 	  }
 	  client.idle = false;
