@@ -2654,8 +2654,6 @@ void OSDMonitor::send_incremental(epoch_t first,
     if (req) {
       // send some maps.  it may not be all of them, but it will get them
       // started.
-      m->oldest_map = get_first_committed();
-      m->newest_map = osdmap.get_epoch();
       mon->send_reply(req, m);
     } else {
       session->con->send_message(m);
