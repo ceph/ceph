@@ -133,7 +133,7 @@ class PhysicalConsole():
         log.info('Power cycling {s}'.format(s=self.shortname))
         child = self._exec('power cycle')
         child.expect('Chassis Power Control: Cycle', timeout=self.timeout)
-        self._wait_for_login()
+        self._wait_for_login(timeout=300)
         log.info('Power cycle for {s} completed'.format(s=self.shortname))
 
     def hard_reset(self):
