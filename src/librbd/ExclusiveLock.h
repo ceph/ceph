@@ -42,7 +42,7 @@ public:
   void release_lock(Context *on_released);
 
   void handle_watch_registered();
-  void handle_lock_released();
+  void handle_peer_notification();
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
 
