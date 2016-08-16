@@ -1,18 +1,35 @@
 import logging
 import struct
 
+from cStringIO import StringIO
 from . import run
 from .. import misc
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+start_mon_cmd = 'sudo systemctl start ceph-mon@'
+stop_mon_cmd = 'sudo systemctl stop ceph-mon@'
+restart_mon_cmd = 'sudo systemctl restart ceph-mon@'
+
+start_osd_cmd = 'sudo systemctl start ceph-osd@'
+stop_osd_cmd = 'sudo systemctl stop ceph-osd@'
+restart_osd_cmd = 'sudo systemctl restart ceph-osd@'
+
+start_mds_cmd = 'sudo systemctl start ceph-mds@'
+stop_mds_cmd = 'sudo systemctl stop ceph-mds@'
+restart_mds_cmd = 'sudo systemctl restart ceph-mds@'
+
+start_rgw_cmd = 'sudo systemctl start ceph-radosgw@rgw.'
+stop_rgw_cmd = 'sudo systemctl stop ceph-radosgw@rgw.'
+restart_rgw_cmd = 'sudo systemctl restart ceph-radosgw@rgw.'
+
 
 class DaemonState(object):
     """
     Daemon State.  A daemon exists for each instance of each role.
     """
-    def __init__(self, remote, role, id_, *command_args, **command_kwargs):
+    def __init__(self, remote, role, id_, use_init=False, *command_args, **command_kwargs):
         """
         Pass remote command information as parameters to remote site
 
@@ -27,6 +44,41 @@ class DaemonState(object):
         self.command_kwargs = command_kwargs
         self.role = role
         self.id_ = id_
+        self.use_init = use_init
+        if self.use_init:
+            _, role = role.split('.')
+            self.proc_name = 'ceph-{role}'.format(role=role)
+            if (role == 'mon') or (role == 'mds') or (role == 'rgw'):
+                self.id = remote.shortname
+            else:
+                self.id = id_
+            self.proc_regex = '"' + self.proc_name + '.*--id ' + self.id + '"'
+            self.list_proc_id = ['ps', '-ef',
+                                 run.Raw('|'),
+                                 'grep',
+                                 run.Raw(self.proc_regex),
+                                 run.Raw('|'),
+                                 'grep', '-v',
+                                 'grep', run.Raw('|'),
+                                 'awk',
+                                 run.Raw("{'print $2'}")]
+            self.proc_id = None
+            if (role == 'mon'):
+                self.start_cmd = start_mon_cmd + self.id
+                self.stop_cmd = stop_mon_cmd + self.id
+                self.restart_cmd = restart_mon_cmd + self.id
+            elif (role == 'osd'):
+                self.start_cmd = start_osd_cmd + self.id
+                self.stop_cmd = stop_osd_cmd + self.id
+                self.restart_cmd = restart_osd_cmd + self.id
+            elif (role == 'rgw'):
+                self.start_cmd = start_rgw_cmd + self.id
+                self.stop_cmd = stop_rgw_cmd + self.id
+                self. restart_cmd = restart_rgw_cmd + self.id
+            elif (role == 'mds'):
+                self.start_cmd = start_mds_cmd + self.id
+                self.stop_cmd = stop_mds_cmd + self.id
+                self.restart_cmd = restart_mds_cmd + self.id
         self.log = command_kwargs.get('logger', log)
         self.proc = None
 
@@ -42,22 +94,41 @@ class DaemonState(object):
         if not self.running():
             self.log.error('tried to stop a non-running daemon')
             return
-        self.proc.stdin.close()
-        self.log.debug('waiting for process to exit')
-        try:
-            run.wait([self.proc], timeout=timeout)
-        except CommandFailedError:
-            log.exception("Error while waiting for process to exit")
-        self.proc = None
+        if self.use_init:
+            self.log.info("using init to stop")
+            self.remote.run(args=[run.Raw(self.stop_cmd)])
+        else:
+            self.proc.stdin.close()
+            self.log.debug('waiting for process to exit')
+            try:
+                run.wait([self.proc], timeout=timeout)
+            except CommandFailedError:
+                log.exception("Error while waiting for process to exit")
+            self.proc = None
         self.log.info('Stopped')
 
+    def start(self, timeout=300):
+        """
+        Start this daemon instance.
+        """
+        if not self.running():
+            self.log.error('Restarting a running daemon')
+            self.restart()
+            return
+        if self.use_init:
+            self.log.info("using init to start")
+            self.remote.run(args=[run.Raw(self.start_cmd)])
+
+    def wait(self, timeout=300):
         """
         Wait for daemon to exit
 
         Wait for daemon to stop (but don't trigger the stop).  Pass up
         any exception.  Mark the daemon as not running.
         """
-    def wait(self, timeout=300):
+        if self.use_init:
+            self.log.info("Wait not suported in systemd")
+            return
         self.log.debug('waiting for process to exit')
         try:
             run.wait([self.proc], timeout=timeout)
@@ -76,6 +147,14 @@ class DaemonState(object):
         :param kwargs: keyword arguments passed to remote.run
         """
         self.log.info('Restarting daemon')
+        if self.use_init:
+            self.log.info("using init to restart")
+            if not self.running():
+                self.log.error('starting a non-running daemon')
+                self.remote.run(args=[run.Raw(self.start_cmd)])
+            else:
+                self.remote.run(args=[run.Raw(self.restart_cmd)])
+            return
         if self.proc is not None:
             self.log.info('Stopping old one...')
             self.stop()
@@ -92,7 +171,13 @@ class DaemonState(object):
 
         :param extra_args: Extra keyword arguments to be added.
         """
-        self.log.info('Restarting daemon')
+        self.log.info('Restarting daemon with args')
+        if self.use_init:
+            self.log.info("restart with args not supported in init")
+            if not self.running():
+                self.log.error('starting a non-running daemon')
+                self.remote.run(args=[run.Raw(self.start_cmd)])
+            return
         if self.proc is not None:
             self.log.info('Stopping old one...')
             self.stop()
@@ -112,6 +197,16 @@ class DaemonState(object):
 
         :param sig: signal to send
         """
+        if self.use_init:
+            self.log.info("using init to send signal")
+            self.log.info("WARNING init may restart after kill signal")
+            out = StringIO()
+            self.remote.run(args=self.list_proc_id, stdout=out)
+            proc_id = out.getvalue().strip()
+            self.log.info("Sending signal %s to process %s", sig, proc_id)
+            sig = '-' + str(sig)
+            self.remote.run(args=['sudo', 'kill', str(sig), proc_id])
+            return
         self.proc.stdin.write(struct.pack('!b', sig))
         if not silent:
             self.log.info('Sent signal %d', sig)
@@ -121,18 +216,35 @@ class DaemonState(object):
         Are we running?
         :return: True if remote run command value is set, False otherwise.
         """
+        if self.use_init:
+            self.log.info("using init to send signal")
+            self.log.info("WARNING init may restart after kill signal")
+            out = StringIO()
+            self.remote.run(args=self.list_proc_id, stdout=out)
+            proc_id = out.getvalue().strip()
+            self.proc_id = proc_id
+            if proc_id > 0:
+                return proc_id
+            else:
+                return None
         return self.proc is not None
 
     def reset(self):
         """
         clear remote run command value.
         """
+        if self.use_init:
+            self.log.info("reset not supported with init")
+            return
         self.proc = None
 
     def wait_for_exit(self):
         """
         clear remote run command value after waiting for exit.
         """
+        if self.use_init:
+            self.log.info("wait_for_exit not supported with init")
+            return
         if self.proc:
             try:
                 run.wait([self.proc])
@@ -155,12 +267,16 @@ class DaemonGroup(object):
     """
     Collection of daemon state instances
     """
-    def __init__(self):
+    def __init__(self, use_init=False):
         """
         self.daemons is a dictionary indexed by role.  Each entry is a
         dictionary of DaemonState values indexed by an id parameter.
         """
         self.daemons = {}
+        self.use_init = False
+        if use_init:
+            # will use the systemd init instead of old sytle daemons
+            self.use_init = True
 
     def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
@@ -178,7 +294,8 @@ class DaemonGroup(object):
         self.register_daemon(remote, type_, id_, *args, **kwargs)
         cluster = kwargs.pop('cluster', 'ceph')
         role = cluster + '.' + type_
-        self.daemons[role][id_].restart()
+        if not self.use_init:
+            self.daemons[role][id_].restart()
 
     def register_daemon(self, remote, type_, id_, *args, **kwargs):
         """
@@ -200,7 +317,7 @@ class DaemonGroup(object):
         if id_ in self.daemons[role]:
             self.daemons[role][id_].stop()
             self.daemons[role][id_] = None
-        self.daemons[role][id_] = DaemonState(remote, role, id_, *args,
+        self.daemons[role][id_] = DaemonState(remote, role, id_, self.use_init, *args,
                                               **kwargs)
 
     def get_daemon(self, type_, id_, cluster='ceph'):
