@@ -202,36 +202,30 @@ void ExclusiveLock<I>::reacquire_lock(Context *on_reacquired) {
     Mutex::Locker locker(m_lock);
     assert(m_image_ctx.owner_lock.is_locked());
 
-    // ignore request if shutdown or not in a locked-related state
-    if (!is_shutdown() &&
-        (m_state == STATE_LOCKED ||
-         m_state == STATE_ACQUIRING ||
-         m_state == STATE_POST_ACQUIRING ||
-         m_state == STATE_WAITING_FOR_REGISTER ||
-         m_state == STATE_WAITING_FOR_PEER)) {
+    if (m_state == STATE_WAITING_FOR_REGISTER) {
+      // restart the acquire lock process now that watch is valid
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": "
+                                 << "woke up waiting acquire" << dendl;
+      Action active_action = get_active_action();
+      assert(active_action == ACTION_TRY_LOCK ||
+             active_action == ACTION_REQUEST_LOCK);
+      execute_next_action();
+    } else if (!is_shutdown() &&
+               (m_state == STATE_LOCKED ||
+                m_state == STATE_ACQUIRING ||
+                m_state == STATE_POST_ACQUIRING ||
+                m_state == STATE_WAITING_FOR_PEER)) {
+      // interlock the lock operation with other image state ops
       ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_REACQUIRE_LOCK, on_reacquired);
       return;
     }
   }
 
+  // ignore request if shutdown or not in a locked-related state
   if (on_reacquired != nullptr) {
     on_reacquired->complete(0);
   }
-}
-
-template <typename I>
-void ExclusiveLock<I>::handle_watch_registered() {
-  Mutex::Locker locker(m_lock);
-  if (m_state != STATE_WAITING_FOR_REGISTER) {
-    return;
-  }
-
-  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
-  Action active_action = get_active_action();
-  assert(active_action == ACTION_TRY_LOCK ||
-         active_action == ACTION_REQUEST_LOCK);
-  execute_next_action();
 }
 
 template <typename I>

@@ -43,7 +43,6 @@ public:
 
   void reacquire_lock(Context *on_reacquired = nullptr);
 
-  void handle_watch_registered();
   void handle_peer_notification();
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
