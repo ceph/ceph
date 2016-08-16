@@ -591,7 +591,7 @@ Trimming requires that the placement groups are ``active + clean``.
 
 ``paxos trim disabled max versions``
 
-:Description: The maximimum number of version allowed to pass without trimming.
+:Description: The maximum number of version allowed to pass without trimming.
 :Type: Integer
 :Default: ``100``
 
