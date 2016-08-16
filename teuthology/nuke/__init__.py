@@ -8,27 +8,22 @@ import time
 import yaml
 
 import teuthology
-from . import orchestra
-import orchestra.remote
-from .openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
-from .orchestra import run
-from .config import config, FakeNamespace
-from .lock import list_locks
-from .lock import locked_since_seconds
-from .lock import unlock_one
-from .lock import find_stale_locks
-from .lockstatus import get_status
-from .misc import canonicalize_hostname
-from .misc import config_file
-from .misc import decanonicalize_hostname
-from .misc import merge_configs
-from .misc import get_testdir
-from .misc import get_user
-from .misc import reconnect
-from .misc import sh
-from .parallel import parallel
-from .task import install as install_task
-from .task.internal import check_lock, add_remotes, connect
+
+from ..config import config, FakeNamespace
+from ..lock import (
+    list_locks, locked_since_seconds, unlock_one, find_stale_locks
+)
+from ..lockstatus import get_status
+from ..misc import (
+    canonicalize_hostname, config_file, decanonicalize_hostname, merge_configs,
+    get_testdir, get_user, reconnect, sh
+)
+from ..openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
+from ..orchestra import run
+from ..orchestra.remote import Remote, getRemoteConsole
+from ..parallel import parallel
+from ..task import install as install_task
+from ..task.internal import check_lock, add_remotes, connect
 
 log = logging.getLogger(__name__)
 
@@ -390,8 +385,9 @@ def synch_clocks(remotes):
 
 
 def check_console(hostname):
-    shortname = orchestra.remote.getShortName(hostname)
-    console = orchestra.remote.getRemoteConsole(
+    remote = Remote(hostname)
+    shortname = remote.shortname
+    console = getRemoteConsole(
         name=hostname,
         ipmiuser=config['ipmi_user'],
         ipmipass=config['ipmi_password'],
@@ -445,7 +441,7 @@ def stale_openstack_instances(ctx, instances, locked_nodes):
                       .format(instance=instance_id))
             continue
         if (i.get_created() >
-            config['max_job_time'] + OPENSTACK_DELAY):
+                config['max_job_time'] + OPENSTACK_DELAY):
             log.info(
                 "stale-openstack: destroying instance {instance}"
                 " because it was created {created} seconds ago"
@@ -711,7 +707,7 @@ def nuke_helper(ctx, should_unlock):
 
     remotes = ctx.cluster.remotes.keys()
     reboot(ctx, remotes)
-    #shutdown daemons again incase of startup
+    # shutdown daemons again incase of startup
     log.info('Stop daemons after restart...')
     shutdown_daemons(ctx)
     log.info('All daemons killed.')
