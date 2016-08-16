@@ -171,3 +171,7 @@ class SkipJob(Exception):
 
 class MaxWhileTries(Exception):
     pass
+
+
+class ConsoleError(Exception):
+    pass

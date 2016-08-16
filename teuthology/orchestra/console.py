@@ -4,6 +4,8 @@ import time
 
 from teuthology import lockstatus as ls
 
+from ..exceptions import ConsoleError
+
 import remote
 
 try:
@@ -83,7 +85,7 @@ class PhysicalConsole():
                 self._exit_session(child)
                 if r == 0:
                     return
-        raise RuntimeError("Did not get a login prompt from %s!" % self.name)
+        raise ConsoleError("Did not get a login prompt from %s!" % self.name)
 
     def check_power(self, state, timeout=None):
         """
