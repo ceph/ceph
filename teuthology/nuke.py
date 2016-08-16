@@ -400,19 +400,24 @@ def check_console(hostname):
         host=shortname,
         domain=config['ipmi_domain'])
     log.info('checking console status of %s' % cname)
-    if not console.check_status():
-        # not powered on or can't get IPMI status.  Try to power on
-        console.power_on()
-        # try to get status again
-        log.info('checking console status of %s' % cname)
-        if not console.check_status(timeout=100):
-            log.error(
-                "Failed to get console status for %s, " % cname
-            )
-        else:
-            log.info('console ready on %s' % cname)
-    else:
+    if console.check_status():
         log.info('console ready on %s' % cname)
+        return
+    if console.check_power('on'):
+        log.info('attempting to reboot %s' % cname)
+        console.power_cycle()
+    else:
+        log.info('attempting to power on %s' % cname)
+        console.power_on()
+    timeout = 100
+    log.info('checking console status of %s with timeout %s' %
+             (cname, timeout))
+    if console.check_status(timeout=timeout):
+        log.info('console ready on %s' % cname)
+    else:
+        log.error(
+            "Failed to get console status for %s, " % cname
+        )
 
 
 def stale_openstack(ctx):
