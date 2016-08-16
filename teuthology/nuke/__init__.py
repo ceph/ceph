@@ -18,6 +18,7 @@ from ..misc import (
     get_user, sh
 )
 from ..openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
+from ..orchestra.remote import Remote
 from ..parallel import parallel
 from ..task.internal import check_lock, add_remotes, connect
 
@@ -296,7 +297,13 @@ def nuke_helper(ctx, should_unlock):
     log.debug('{ctx}'.format(ctx=ctx))
     if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
-        actions.check_console(host)
+        try:
+            actions.check_console(host)
+        except Exception:
+            log.exception('')
+            log.info("Will attempt to connect via SSH")
+            remote = Remote(host)
+            remote.connect()
 
     if ctx.check_locks:
         # does not check to ensure if the node is 'up'
