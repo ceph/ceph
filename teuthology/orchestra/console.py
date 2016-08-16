@@ -59,7 +59,7 @@ class PhysicalConsole():
         if r != 0:
             self._exec('sol deactivate')
 
-    def _wait_for_login(self, timeout=None, attempts=6):
+    def _wait_for_login(self, timeout=None, attempts=2):
         """
         Wait for login.  Retry if timeouts occur on commands.
         """
