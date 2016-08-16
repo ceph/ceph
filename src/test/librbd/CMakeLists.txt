@@ -30,6 +30,7 @@ set(unittest_librbd_srcs
   test_mock_Journal.cc
   test_mock_ObjectWatcher.cc
   exclusive_lock/test_mock_AcquireRequest.cc
+  exclusive_lock/test_mock_ReacquireRequest.cc
   exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
   journal/test_mock_Replay.cc
