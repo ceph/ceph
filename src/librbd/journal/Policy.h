@@ -15,6 +15,7 @@ struct Policy {
   }
 
   virtual bool append_disabled() const = 0;
+  virtual bool journal_disabled() const = 0;
   virtual void allocate_tag_on_lock(Context *on_finish) = 0;
 };
 
