@@ -611,8 +611,9 @@ void Replayer::set_sources(const ImageIds &image_ids)
     auto it = m_image_replayers.find(image_id.id);
     if (it == m_image_replayers.end()) {
       unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
-        m_threads, m_local, m_remote, local_mirror_uuid, remote_mirror_uuid,
-        m_local_pool_id, m_remote_pool_id, image_id.id, image_id.global_id));
+        m_threads, m_image_deleter, m_local, m_remote, local_mirror_uuid,
+        remote_mirror_uuid, m_local_pool_id, m_remote_pool_id, image_id.id,
+        image_id.global_id));
       it = m_image_replayers.insert(
         std::make_pair(image_id.id, std::move(image_replayer))).first;
     }

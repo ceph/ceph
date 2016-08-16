@@ -9,6 +9,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
+#include "journal/JournalMetadataListener.h"
 #include "cls/journal/cls_journal_types.h"
 #include <list>
 #include <map>
@@ -70,6 +71,9 @@ public:
 			      int64_t *pool_id, Context *on_finish);
   void get_mutable_metadata(uint64_t *minimum_set, uint64_t *active_set,
 			    RegisteredClients *clients, Context *on_finish);
+
+  void add_listener(JournalMetadataListener *listener);
+  void remove_listener(JournalMetadataListener *listener);
 
   int register_client(const bufferlist &data);
   void register_client(const bufferlist &data, Context *on_finish);

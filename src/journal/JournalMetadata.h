@@ -13,6 +13,7 @@
 #include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/AsyncOpTracker.h"
+#include "journal/JournalMetadataListener.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
@@ -41,11 +42,6 @@ public:
   typedef std::set<Client> RegisteredClients;
   typedef std::list<Tag> Tags;
 
-  struct Listener {
-    virtual ~Listener() {};
-    virtual void handle_update(JournalMetadata *) = 0;
-  };
-
   JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                   librados::IoCtx &ioctx, const std::string &oid,
                   const std::string &client_id, double commit_interval);
@@ -62,8 +58,8 @@ public:
   void get_mutable_metadata(uint64_t *minimum_set, uint64_t *active_set,
 			    RegisteredClients *clients, Context *on_finish);
 
-  void add_listener(Listener *listener);
-  void remove_listener(Listener *listener);
+  void add_listener(JournalMetadataListener *listener);
+  void remove_listener(JournalMetadataListener *listener);
 
   void register_client(const bufferlist &data, Context *on_finish);
   void update_client(const bufferlist &data, Context *on_finish);
@@ -150,7 +146,7 @@ public:
 
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
-  typedef std::list<Listener*> Listeners;
+  typedef std::list<JournalMetadataListener*> Listeners;
 
   struct CommitEntry {
     uint64_t object_num;
