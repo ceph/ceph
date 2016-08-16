@@ -7,6 +7,8 @@
 
 #include <sstream>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/mime.h"
@@ -2160,7 +2162,7 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
   }
 
   if (! lstval.empty()) {
-    ws_conf.listing_enabled = "true" == lstval;
+    ws_conf.listing_enabled = boost::algorithm::iequals(lstval, "true");
   }
 }
 
