@@ -133,8 +133,9 @@ struct libradosstriper::RadosStriperImpl {
 			    const std::string& soid,
 			    librados::AioCompletionImpl *userCompletion,
 			    libradosstriper::MultiAioCompletionImpl *multiCompletion,
-			    uint64_t *psize) :
-      CompletionData(striper, soid, "", userCompletion),
+			    uint64_t *psize,
+                            int n = 1) :
+      CompletionData(striper, soid, "", userCompletion, n),
       m_multiCompletion(multiCompletion), m_psize(psize),
       m_statRC(0), m_getxattrRC(0) {};
     // MultiAioCompletionImpl used to handle the double aysnc
@@ -169,8 +170,9 @@ struct libradosstriper::RadosStriperImpl {
 		       librados::AioCompletionImpl *userCompletion,
 		       libradosstriper::MultiAioCompletionImpl *multiCompletion,
 		       uint64_t *psize,
-		       TimeType *pmtime) :
-      BasicStatCompletionData(striper, soid, userCompletion, multiCompletion, psize),
+		       TimeType *pmtime,
+                       int n = 1) :
+      BasicStatCompletionData(striper, soid, userCompletion, multiCompletion, psize, n),
       m_pmtime(pmtime) {};
     // where to store the file time
     TimeType *m_pmtime;
@@ -184,7 +186,7 @@ struct libradosstriper::RadosStriperImpl {
     /// constructor
     RadosRemoveCompletionData(MultiAioCompletionImpl *multiAioCompl,
 			      CephContext *context) :
-      RefCountedObject(context, 1),
+      RefCountedObject(context, 2),
       m_multiAioCompl(multiAioCompl) {};
     /// the multi asynch io completion object to be used
     MultiAioCompletionImpl *m_multiAioCompl;
@@ -197,11 +199,11 @@ struct libradosstriper::RadosStriperImpl {
     /// striper to be used to handle the locking
     librados::IoCtx* m_ioCtx;
     /// object to be locked
-    const std::string& m_oid;
+    const std::string m_oid;
     /// name of the lock
     std::string m_lockCookie;
     /// constructor : takes the lock
-    RadosExclusiveLock(librados::IoCtx* ioCtx, const std::string &oid);
+    RadosExclusiveLock(librados::IoCtx* ioCtx, const std::string oid);
     /// destructor : releases the lock
     ~RadosExclusiveLock();
   };
