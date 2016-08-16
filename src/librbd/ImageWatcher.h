@@ -64,7 +64,8 @@ private:
   enum WatchState {
     WATCH_STATE_UNREGISTERED,
     WATCH_STATE_REGISTERED,
-    WATCH_STATE_ERROR
+    WATCH_STATE_ERROR,
+    WATCH_STATE_REWATCHING
   };
 
   enum TaskCode {
@@ -226,6 +227,7 @@ private:
   WatchCtx m_watch_ctx;
   uint64_t m_watch_handle;
   WatchState m_watch_state;
+  Context *m_unregister_watch_ctx = nullptr;
 
   TaskFinisher<Task> *m_task_finisher;
 
@@ -310,7 +312,8 @@ private:
   void handle_error(uint64_t cookie, int err);
   void acknowledge_notify(uint64_t notify_id, uint64_t handle, bufferlist &out);
 
-  void reregister_watch();
+  void rewatch();
+  void handle_rewatch(int r);
 };
 
 } // namespace librbd
