@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "include/rbd/librbd.hpp"
+#include "ImageSyncThrottler.h"
 
 namespace rbd {
 namespace mirror {
@@ -17,6 +18,9 @@ namespace mirror {
 typedef shared_ptr<librados::Rados> RadosRef;
 typedef shared_ptr<librados::IoCtx> IoCtxRef;
 typedef shared_ptr<librbd::Image> ImageRef;
+
+template <typename I = librbd::ImageCtx>
+using ImageSyncThrottlerRef = std::shared_ptr<ImageSyncThrottler<I>>;
 
 struct peer_t {
   peer_t() = default;

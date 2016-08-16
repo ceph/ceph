@@ -92,6 +92,7 @@ librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/ClusterWatcher.cc \
 	tools/rbd_mirror/ImageReplayer.cc \
 	tools/rbd_mirror/ImageSync.cc \
+        tools/rbd_mirror/ImageSyncThrottler.cc \
 	tools/rbd_mirror/Mirror.cc \
 	tools/rbd_mirror/PoolWatcher.cc \
 	tools/rbd_mirror/Replayer.cc \
@@ -116,6 +117,7 @@ noinst_HEADERS += \
 	tools/rbd_mirror/ClusterWatcher.h \
 	tools/rbd_mirror/ImageReplayer.h \
 	tools/rbd_mirror/ImageSync.h \
+	tools/rbd_mirror/ImageSyncThrottler.h \
 	tools/rbd_mirror/Mirror.h \
 	tools/rbd_mirror/PoolWatcher.h \
 	tools/rbd_mirror/ProgressContext.h \

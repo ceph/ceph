@@ -21,6 +21,7 @@
 #include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -126,10 +127,11 @@ private:
   Commands commands;
 };
 
-ImageDeleter::ImageDeleter(RadosRef local_cluster, SafeTimer *timer,
-                           Mutex *timer_lock)
+ImageDeleter::ImageDeleter(RadosRef local_cluster, ContextWQ *work_queue,
+                           SafeTimer *timer, Mutex *timer_lock)
   : m_local(local_cluster),
     m_running(1),
+    m_work_queue(work_queue),
     m_delete_lock("rbd::mirror::ImageDeleter::Delete"),
     m_image_deleter_thread(this),
     m_failed_timer(timer),
@@ -214,19 +216,37 @@ void ImageDeleter::schedule_image_delete(uint64_t local_pool_id,
 void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
                                                Context *ctx,
                                                bool notify_on_failed_retry) {
-  {
-    Mutex::Locker l(m_delete_lock);
 
-    auto del_info = find_delete_info(image_name);
-    if (del_info) {
-      (*del_info)->on_delete = ctx;
-      (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
-      return;
-    }
+  ctx = new FunctionContext([this, ctx](int r) {
+      m_work_queue->queue(ctx, r);
+    });
+
+  Mutex::Locker l(m_delete_lock);
+  auto del_info = find_delete_info(image_name);
+  if (!del_info) {
+    // image not scheduled for deletion
+    ctx->complete(0);
+    return;
   }
 
-  // image not scheduled for deletion
-  ctx->complete(0);
+  if ((*del_info)->on_delete != nullptr) {
+    (*del_info)->on_delete->complete(-ESTALE);
+  }
+  (*del_info)->on_delete = ctx;
+  (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
+}
+
+void ImageDeleter::cancel_waiter(const std::string& image_name) {
+  Mutex::Locker locker(m_delete_lock);
+  auto del_info = find_delete_info(image_name);
+  if (!del_info) {
+    return;
+  }
+
+  if ((*del_info)->on_delete != nullptr) {
+    (*del_info)->on_delete->complete(-ECANCELED);
+    (*del_info)->on_delete = nullptr;
+  }
 }
 
 bool ImageDeleter::process_image_delete() {
@@ -510,8 +530,10 @@ void ImageDeleter::print_status(Formatter *f, stringstream *ss) {
 void ImageDeleter::DeleteInfo::notify(int r) {
   if (on_delete) {
     dout(20) << "executing image deletion handler r=" << r << dendl;
-    on_delete->complete(r);
+
+    Context *ctx = on_delete;
     on_delete = nullptr;
+    ctx->complete(r);
   }
 }
 

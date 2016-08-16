@@ -2,6 +2,11 @@
 #
 # rbd_mirror_stress.sh - stress test rbd-mirror daemon
 #
+# The following additional environment variables affect the test:
+#
+#  RBD_MIRROR_REDUCE_WRITES - if not empty, don't run the stress bench write
+#                             tool during the many image test
+#
 
 IMAGE_COUNT=50
 export LOCKDEP=0
@@ -37,25 +42,46 @@ compare_image_snaps()
     rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
     rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
     cmp ${rmt_export} ${loc_export}
+    rm -f ${rmt_export} ${loc_export}
 }
 
-wait_for_pool_healthy()
+wait_for_pool_images()
 {
     local cluster=$1
     local pool=$2
     local image_count=$3
     local s
     local count
+    local last_count=0
+
+    while true; do
+        for s in `seq 1 40`; do
+            count=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'images: ' | cut -d' ' -f 2)
+            test "${count}" = "${image_count}" && return 0
+
+            # reset timeout if making forward progress
+            test $count -gt $last_count && break
+            sleep 30
+        done
+
+        test $count -eq $last_count && return 1
+        $last_count=$count
+    done
+    return 1
+}
+
+wait_for_pool_healthy()
+{
+    local cluster=$1
+    local pool=$2
+    local s
     local state
 
     for s in `seq 1 40`; do
+        state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'health:' | cut -d' ' -f 2)
+        test "${state}" = "ERROR" && return 1
+        test "${state}" = "OK" && return 0
 	sleep 30
-        count=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'images: ')
-        test "${count}" = "images: ${image_count} total" || continue
-
-        state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'health:')
-        test "${state}" = "health: ERROR" && return 1
-        test "${state}" = "health: OK" && return 0
     done
     return 1
 }
@@ -90,29 +116,40 @@ remove_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 
 testlog "TEST: create many images"
+snap_name="snap"
 for i in `seq 1 ${IMAGE_COUNT}`
 do
   image="image_${i}"
   create_image ${CLUSTER2} ${POOL} ${image} '128M'
-  write_image ${CLUSTER2} ${POOL} ${image} 100
+  if [ -n "${RBD_MIRROR_REDUCE_WRITES}" ]; then
+    write_image ${CLUSTER2} ${POOL} ${image} 100
+  else
+    stress_write_image ${CLUSTER2} ${POOL} ${image}
+  fi
 done
 
-wait_for_pool_healthy ${CLUSTER2} ${POOL} ${IMAGE_COUNT}
-wait_for_pool_healthy ${CLUSTER1} ${POOL} ${IMAGE_COUNT}
+wait_for_pool_images ${CLUSTER2} ${POOL} ${IMAGE_COUNT}
+wait_for_pool_healthy ${CLUSTER2} ${POOL}
+
+wait_for_pool_images ${CLUSTER1} ${POOL} ${IMAGE_COUNT}
+wait_for_pool_healthy ${CLUSTER1} ${POOL}
 
 testlog "TEST: compare many images"
 for i in `seq 1 ${IMAGE_COUNT}`
 do
   image="image_${i}"
+  create_snap ${CLUSTER2} ${POOL} ${image} ${snap_name}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
-  compare_images ${POOL} ${image}
+  wait_for_snap_present ${CLUSTER1} ${POOL} ${image} ${snap_name}
+  compare_image_snaps ${POOL} ${image} ${snap_name}
 done
 
 testlog "TEST: delete many images"
 for i in `seq 1 ${IMAGE_COUNT}`
 do
   image="image_${i}"
+  remove_snapshot ${CLUSTER2} ${POOL} ${image} ${snap_name}
   remove_image ${CLUSTER2} ${POOL} ${image}
 done
 
