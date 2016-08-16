@@ -389,6 +389,32 @@ def synch_clocks(remotes):
         )
 
 
+def check_console(hostname):
+    shortname = orchestra.remote.getShortName(hostname)
+    console = orchestra.remote.getRemoteConsole(
+        name=hostname,
+        ipmiuser=config['ipmi_user'],
+        ipmipass=config['ipmi_password'],
+        ipmidomain=config['ipmi_domain'])
+    cname = '{host}.{domain}'.format(
+        host=shortname,
+        domain=config['ipmi_domain'])
+    log.info('checking console status of %s' % cname)
+    if not console.check_status():
+        # not powered on or can't get IPMI status.  Try to power on
+        console.power_on()
+        # try to get status again
+        log.info('checking console status of %s' % cname)
+        if not console.check_status(timeout=100):
+            log.error(
+                "Failed to get console status for %s, " % cname
+            )
+        else:
+            log.info('console ready on %s' % cname)
+    else:
+        log.info('console ready on %s' % cname)
+
+
 def stale_openstack(ctx):
     targets = dict(map(lambda i: (i['ID'], i),
                        OpenStack.list_instances()))
@@ -659,28 +685,7 @@ def nuke_helper(ctx, should_unlock):
     log.debug('{ctx}'.format(ctx=ctx))
     if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
-        console = orchestra.remote.getRemoteConsole(
-            name=host,
-            ipmiuser=config['ipmi_user'],
-            ipmipass=config['ipmi_password'],
-            ipmidomain=config['ipmi_domain'])
-        cname = '{host}.{domain}'.format(
-            host=shortname,
-            domain=config['ipmi_domain'])
-        log.info('checking console status of %s' % cname)
-        if not console.check_status():
-            # not powered on or can't get IPMI status.  Try to power on
-            console.power_on()
-            # try to get status again
-            log.info('checking console status of %s' % cname)
-            if not console.check_status(timeout=100):
-                log.error(
-                    "Failed to get console status for %s, " % cname
-                )
-            else:
-                log.info('console ready on %s' % cname)
-        else:
-            log.info('console ready on %s' % cname)
+        check_console(host)
 
     if ctx.check_locks:
         # does not check to ensure if the node is 'up'
