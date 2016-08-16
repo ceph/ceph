@@ -2,8 +2,8 @@
 #define CEPH_RGW_SYNC_MODULE_H
 
 #include "rgw_common.h"
+#include "rgw_coroutine.h"
 
-class RGWCoroutine;
 class RGWBucketInfo;
 class RGWRemoteDataLog;
 struct RGWDataSyncEnv;
@@ -87,6 +87,54 @@ public:
     }
 
     return module.get()->create_instance(config, instance);
+  }
+};
+
+class RGWStatRemoteObjCBCR : public RGWCoroutine {
+protected:
+  RGWDataSyncEnv *sync_env;
+
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+
+  ceph::real_time mtime;
+  uint64_t size;
+  map<string, bufferlist> attrs;
+public:
+  RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
+                       RGWBucketInfo& _bucket_info, rgw_obj_key& _key);
+  virtual ~RGWStatRemoteObjCBCR() {}
+
+  void set_result(ceph::real_time& _mtime,
+                  uint64_t _size,
+                  map<string, bufferlist>&& _attrs) {
+    mtime = _mtime;
+    size = _size;
+    attrs = std::move(_attrs);
+  }
+};
+
+class RGWCallStatRemoteObjCR : public RGWCoroutine {
+  ceph::real_time mtime;
+  uint64_t size{0};
+  map<string, bufferlist> attrs;
+
+protected:
+  RGWDataSyncEnv *sync_env;
+
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+
+public:
+  RGWCallStatRemoteObjCR(RGWDataSyncEnv *_sync_env,
+                     RGWBucketInfo& _bucket_info, rgw_obj_key& _key);
+
+  virtual ~RGWCallStatRemoteObjCR() {}
+
+  int operate() override;
+
+  virtual RGWStatRemoteObjCBCR *allocate_callback() {
+    return nullptr;
   }
 };
 
