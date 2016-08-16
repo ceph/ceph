@@ -437,6 +437,8 @@ set(libcommon_files
   msg/async/AsyncMessenger.cc
   msg/async/Event.cc
   msg/async/EventSelect.cc
+  msg/async/Stack.cc
+  msg/async/PosixStack.cc
   msg/async/net_handler.cc
   ${xio_common_srcs}
   msg/msg_types.cc

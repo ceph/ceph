@@ -34,7 +34,7 @@ using namespace std;
 #include "msg/Messenger.h"
 
 #include "Event.h"
-#include "net_handler.h"
+#include "Stack.h"
 
 class AsyncMessenger;
 class Worker;
@@ -50,9 +50,7 @@ static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
  */
 class AsyncConnection : public Connection {
 
-  ssize_t read_bulk(int fd, char *buf, unsigned len);
-  void suppress_sigpipe();
-  void restore_sigpipe();
+  ssize_t read_bulk(char *buf, unsigned len);
   ssize_t do_sendmsg(struct msghdr &msg, unsigned len, bool more);
   ssize_t try_send(bufferlist &bl, bool more=false) {
     std::lock_guard<std::mutex> l(write_lock);
@@ -110,11 +108,10 @@ class AsyncConnection : public Connection {
       center->delete_time_event(last_tick_id);
       last_tick_id = 0;
     }
-    if (sd >= 0) {
-      center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-      ::shutdown(sd, SHUT_RDWR);
-      ::close(sd);
-      sd = -1;
+    if (cs) {
+      center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
+      cs.shutdown();
+      cs.close();
     }
   }
   Message *_get_next_outgoing(bufferlist *bl) {
@@ -209,7 +206,7 @@ class AsyncConnection : public Connection {
     _connect();
   }
   // Only call when AsyncConnection first construct
-  void accept(int sd);
+  void accept(ConnectedSocket socket, entity_addr_t &addr);
   int send_message(Message *m) override;
 
   void send_keepalive() override;
@@ -303,7 +300,7 @@ class AsyncConnection : public Connection {
   atomic64_t ack_left, in_seq;
   int state;
   int state_after_send;
-  int sd;
+  ConnectedSocket cs;
   int port;
   Messenger::Policy policy;
 
@@ -372,16 +369,9 @@ class AsyncConnection : public Connection {
   char *state_buffer;
   // used only by "read_until"
   uint64_t state_offset;
-  NetHandler net;
   Worker *worker;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
-
-#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
-  sigset_t sigpipe_mask;
-  bool sigpipe_pending;
-  bool sigpipe_unblock;
-#endif
 
  public:
   // used by eventcallback

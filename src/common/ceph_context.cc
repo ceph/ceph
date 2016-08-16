@@ -472,6 +472,7 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
+  ceph_spin_init(&_fork_watchers_lock);
   ceph_spin_init(&_feature_lock);
   ceph_spin_init(&_cct_perf_lock);
 
@@ -575,6 +576,7 @@ CephContext::~CephContext()
 
   delete _conf;
   ceph_spin_destroy(&_service_thread_lock);
+  ceph_spin_destroy(&_fork_watchers_lock);
   ceph_spin_destroy(&_associated_objs_lock);
   ceph_spin_destroy(&_feature_lock);
   ceph_spin_destroy(&_cct_perf_lock);
