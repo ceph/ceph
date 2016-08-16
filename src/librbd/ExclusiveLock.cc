@@ -10,6 +10,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AcquireRequest.h"
+#include "librbd/exclusive_lock/ReacquireRequest.h"
 #include "librbd/exclusive_lock/ReleaseRequest.h"
 #include <sstream>
 
@@ -60,6 +61,7 @@ bool ExclusiveLock<I>::is_lock_owner() const {
   switch (m_state) {
   case STATE_LOCKED:
   case STATE_POST_ACQUIRING:
+  case STATE_REACQUIRING:
   case STATE_PRE_RELEASING:
   case STATE_PRE_SHUTTING_DOWN:
     lock_owner = true;
@@ -195,6 +197,30 @@ void ExclusiveLock<I>::release_lock(Context *on_released) {
 }
 
 template <typename I>
+void ExclusiveLock<I>::reacquire_lock(Context *on_reacquired) {
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+
+    // ignore request if shutdown or not in a locked-related state
+    if (!is_shutdown() &&
+        (m_state == STATE_LOCKED ||
+         m_state == STATE_ACQUIRING ||
+         m_state == STATE_POST_ACQUIRING ||
+         m_state == STATE_WAITING_FOR_REGISTER ||
+         m_state == STATE_WAITING_FOR_PEER)) {
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+      execute_action(ACTION_REACQUIRE_LOCK, on_reacquired);
+      return;
+    }
+  }
+
+  if (on_reacquired != nullptr) {
+    on_reacquired->complete(0);
+  }
+}
+
+template <typename I>
 void ExclusiveLock<I>::handle_watch_registered() {
   Mutex::Locker locker(m_lock);
   if (m_state != STATE_WAITING_FOR_REGISTER) {
@@ -256,6 +282,7 @@ bool ExclusiveLock<I>::is_transition_state() const {
   case STATE_WAITING_FOR_PEER:
   case STATE_WAITING_FOR_REGISTER:
   case STATE_POST_ACQUIRING:
+  case STATE_REACQUIRING:
   case STATE_PRE_RELEASING:
   case STATE_RELEASING:
   case STATE_PRE_SHUTTING_DOWN:
@@ -308,6 +335,9 @@ void ExclusiveLock<I>::execute_next_action() {
   case ACTION_TRY_LOCK:
   case ACTION_REQUEST_LOCK:
     send_acquire_lock();
+    break;
+  case ACTION_REACQUIRE_LOCK:
+    send_reacquire_lock();
     break;
   case ACTION_RELEASE_LOCK:
     send_release_lock();
@@ -455,6 +485,93 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
 
   Mutex::Locker locker(m_lock);
   complete_active_action(next_state, r);
+}
+
+template <typename I>
+void ExclusiveLock<I>::send_reacquire_lock() {
+  assert(m_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  if (m_state != STATE_LOCKED) {
+    complete_active_action(m_state, 0);
+    return;
+  }
+
+  m_watch_handle = m_image_ctx.image_watcher->get_watch_handle();
+  if (m_watch_handle == 0) {
+    // watch (re)failed while recovering
+    lderr(cct) << this << " " << __func__ << ": "
+               << "aborting reacquire due to invalid watch handle" << dendl;
+    complete_active_action(STATE_LOCKED, 0);
+    return;
+  }
+
+  m_new_cookie = encode_lock_cookie();
+  if (m_cookie == m_new_cookie) {
+    ldout(cct, 10) << this << " " << __func__ << ": "
+                   << "skipping reacquire since cookie still valid" << dendl;
+    complete_active_action(STATE_LOCKED, 0);
+    return;
+  }
+
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+  m_state = STATE_REACQUIRING;
+
+  using el = ExclusiveLock<I>;
+  ReacquireRequest<I>* req = ReacquireRequest<I>::create(
+    m_image_ctx, m_cookie, m_new_cookie,
+    util::create_context_callback<el, &el::handle_reacquire_lock>(this));
+  req->send();
+}
+
+template <typename I>
+void ExclusiveLock<I>::handle_reacquire_lock(int r) {
+  Mutex::Locker locker(m_lock);
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  assert(m_state == STATE_REACQUIRING);
+  if (r < 0) {
+    if (r == -EOPNOTSUPP) {
+      ldout(cct, 10) << this << " " << __func__ << ": "
+                     << "updating lock is not supported" << dendl;
+    } else {
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to update lock cookie: " << cpp_strerror(r)
+                 << dendl;
+    }
+
+    if (!is_shutdown()) {
+      // queue a release and re-acquire of the lock since cookie cannot
+      // be updated on older OSDs
+      execute_action(ACTION_RELEASE_LOCK, nullptr);
+
+      assert(!m_actions_contexts.empty());
+      ActionContexts &action_contexts(m_actions_contexts.front());
+
+      // reacquire completes when the request lock completes
+      Contexts contexts;
+      std::swap(contexts, action_contexts.second);
+      if (contexts.empty()) {
+        execute_action(ACTION_REQUEST_LOCK, nullptr);
+      } else {
+        for (auto ctx : contexts) {
+          ctx = new FunctionContext([ctx, r](int acquire_ret_val) {
+              if (acquire_ret_val >= 0) {
+                acquire_ret_val = r;
+              }
+              ctx->complete(acquire_ret_val);
+            });
+          execute_action(ACTION_REQUEST_LOCK, ctx);
+        }
+      }
+    }
+  } else {
+    m_cookie = m_new_cookie;
+  }
+
+  complete_active_action(STATE_LOCKED, 0);
 }
 
 template <typename I>
