@@ -29,6 +29,15 @@
 using std::chrono::seconds;
 
 
+class Journaler::C_DelayFlush : public Context {
+  Journaler *journaler;
+  public:
+  C_DelayFlush(Journaler *j) : journaler(j) {}
+  void finish(int r) {
+    journaler->_do_delayed_flush();
+  }
+};
+
 void Journaler::set_readonly()
 {
   lock_guard l(lock);
