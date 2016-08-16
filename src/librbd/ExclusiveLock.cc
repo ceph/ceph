@@ -224,7 +224,7 @@ template <typename I>
 void ExclusiveLock<I>::assert_header_locked(librados::ObjectWriteOperation *op) {
   Mutex::Locker locker(m_lock);
   rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
-                                  encode_lock_cookie(), WATCHER_LOCK_TAG);
+                                  m_cookie, WATCHER_LOCK_TAG);
 }
 
 template <typename I>
@@ -384,9 +384,11 @@ void ExclusiveLock<I>::send_acquire_lock() {
     return;
   }
 
+  m_cookie = encode_lock_cookie();
+
   using el = ExclusiveLock<I>;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
-    m_image_ctx, encode_lock_cookie(),
+    m_image_ctx, m_cookie,
     util::create_context_callback<el, &el::handle_acquiring_lock>(this),
     util::create_context_callback<el, &el::handle_acquire_lock>(this));
 
@@ -468,7 +470,7 @@ void ExclusiveLock<I>::send_release_lock() {
 
   using el = ExclusiveLock<I>;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(
-    m_image_ctx, encode_lock_cookie(),
+    m_image_ctx, m_cookie,
     util::create_context_callback<el, &el::handle_releasing_lock>(this),
     util::create_context_callback<el, &el::handle_release_lock>(this));
 
@@ -504,6 +506,7 @@ void ExclusiveLock<I>::handle_release_lock(int r) {
       lock_request_needed = m_image_ctx.aio_work_queue->is_lock_request_needed();
       m_lock.Lock();
 
+      m_cookie = "";
       m_watch_handle = 0;
     }
     complete_active_action(r < 0 ? STATE_LOCKED : STATE_UNLOCKED, r);
@@ -540,7 +543,7 @@ void ExclusiveLock<I>::send_shutdown_release() {
   std::string cookie;
   {
     Mutex::Locker locker(m_lock);
-    cookie = encode_lock_cookie();
+    cookie = m_cookie;
   }
 
   using el = ExclusiveLock<I>;
