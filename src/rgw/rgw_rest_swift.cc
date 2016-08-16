@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
@@ -1637,7 +1638,7 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
 bool RGWSwiftWebsiteHandler::is_web_mode() const
 {
   const boost::string_ref webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
-  return webmode == "true";
+  return boost::algorithm::iequals(webmode, "true");
 }
 
 bool RGWSwiftWebsiteHandler::can_be_website_req() const
