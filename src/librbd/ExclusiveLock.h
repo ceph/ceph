@@ -130,6 +130,7 @@ private:
 
   mutable Mutex m_lock;
   State m_state;
+  std::string m_cookie;
   uint64_t m_watch_handle;
 
   ActionsContexts m_actions_contexts;

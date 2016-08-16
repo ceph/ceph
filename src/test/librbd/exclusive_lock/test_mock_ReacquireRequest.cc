@@ -15,20 +15,9 @@
 #include <arpa/inet.h>
 #include <list>
 
-namespace librbd {
-namespace {
-
-struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
-    : librbd::MockImageCtx(image_ctx) {
-  }
-};
-
-} // anonymous namespace
-} // namespace librbd
-
 // template definitions
 #include "librbd/exclusive_lock/ReacquireRequest.cc"
+template class librbd::exclusive_lock::ReacquireRequest<librbd::MockImageCtx>;
 
 namespace librbd {
 namespace exclusive_lock {
@@ -40,10 +29,10 @@ using ::testing::StrEq;
 
 class TestMockExclusiveLockReacquireRequest : public TestMockFixture {
 public:
-  typedef ReacquireRequest<MockTestImageCtx> MockReacquireRequest;
-  typedef ExclusiveLock<MockTestImageCtx> MockExclusiveLock;
+  typedef ReacquireRequest<MockImageCtx> MockReacquireRequest;
+  typedef ExclusiveLock<MockImageCtx> MockExclusiveLock;
 
-  void expect_set_cookie(MockTestImageCtx &mock_image_ctx, int r) {
+  void expect_set_cookie(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("lock"),
                      StrEq("set_cookie"), _, _, _))
@@ -57,7 +46,7 @@ TEST_F(TestMockExclusiveLockReacquireRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockTestImageCtx mock_image_ctx(*ictx);
+  MockImageCtx mock_image_ctx(*ictx);
 
   InSequence seq;
   expect_set_cookie(mock_image_ctx, 0);
@@ -76,7 +65,7 @@ TEST_F(TestMockExclusiveLockReacquireRequest, NotSupported) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockTestImageCtx mock_image_ctx(*ictx);
+  MockImageCtx mock_image_ctx(*ictx);
 
   InSequence seq;
   expect_set_cookie(mock_image_ctx, -EOPNOTSUPP);
@@ -95,7 +84,7 @@ TEST_F(TestMockExclusiveLockReacquireRequest, Error) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  MockTestImageCtx mock_image_ctx(*ictx);
+  MockImageCtx mock_image_ctx(*ictx);
 
   InSequence seq;
   expect_set_cookie(mock_image_ctx, -EBUSY);
