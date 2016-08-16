@@ -574,8 +574,6 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     if (iter == scheduled_stacks.end()) {
       iter = scheduled_stacks.begin();
     }
-
-    ret = 0;
   }
 
   lock.get_write();
