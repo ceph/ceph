@@ -2868,8 +2868,6 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
 
   for (int i=0; i < max_osd; ++i) {
     dout(30) << "handle_osd_timeouts: checking up on osd " << i << dendl;
-    if (!osdmap.exists(i))
-      continue;
     if (!osdmap.is_up(i))
       continue;
     const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
