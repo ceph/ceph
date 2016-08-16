@@ -372,7 +372,8 @@ def check_console(hostname):
     console = remote.console
     cname = '{host}.{domain}'.format(
         host=shortname,
-        domain=config['ipmi_domain'])
+        domain=console.ipmidomain,
+    )
     log.info('checking console status of %s' % cname)
     if console.check_status():
         log.info('console ready on %s' % cname)
