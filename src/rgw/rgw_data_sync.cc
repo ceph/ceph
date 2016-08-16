@@ -1387,6 +1387,10 @@ public:
         /* state: building full sync maps */
         ldout(sync_env->cct, 20) << __func__ << "(): building full sync maps" << dendl;
         yield call(new RGWListBucketIndexesCR(sync_env, &sync_status));
+        if (retcode < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: failed to build full sync maps, retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
         sync_status.sync_info.state = rgw_data_sync_info::StateSync;
 
         /* update new state */
