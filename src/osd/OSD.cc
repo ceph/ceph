@@ -228,6 +228,9 @@ OSDService::OSDService(OSD *osd) :
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
   max_oldest_map(0),
+  saved_osdmaps(2),
+  next_osdmap(nullptr),
+  map_reserve_seq(0), map_completed_seq(0), map_reserved_waiters(0),
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
@@ -487,7 +490,7 @@ void OSDService::shutdown()
     backfill_request_timer.shutdown();
   }
   osdmap = OSDMapRef();
-  next_osdmap = OSDMapRef();
+  next_osdmap = nullptr;
 }
 
 void OSDService::init()
@@ -790,55 +793,58 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
-  OSDMapRef next_map = get_nextmap_reserved();
+  uint64_t seq;
+  OSDMapRaw next_map = get_nextmap_reserved(seq);
   // service map is always newer/newest
   assert(from_epoch <= next_map->get_epoch());
 
   if (next_map->is_down(peer) ||
       next_map->get_info(peer).up_from > from_epoch) {
     m->put();
-    release_map(next_map);
+    release_map(seq);
     return;
   }
   const entity_inst_t& peer_inst = next_map->get_cluster_inst(peer);
   ConnectionRef peer_con = osd->cluster_messenger->get_connection(peer_inst);
-  share_map_peer(peer, peer_con.get(), next_map);
+  share_map_peer(peer, peer_con.get(), OSDMapRef(next_map));
   peer_con->send_message(m);
-  release_map(next_map);
+  release_map(seq);
 }
 
 ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 {
-  OSDMapRef next_map = get_nextmap_reserved();
+  uint64_t seq;
+  OSDMapRaw next_map = get_nextmap_reserved(seq);
   // service map is always newer/newest
   assert(from_epoch <= next_map->get_epoch());
 
   if (next_map->is_down(peer) ||
       next_map->get_info(peer).up_from > from_epoch) {
-    release_map(next_map);
+    release_map(seq);
     return NULL;
   }
   ConnectionRef con = osd->cluster_messenger->get_connection(next_map->get_cluster_inst(peer));
-  release_map(next_map);
+  release_map(seq);
   return con;
 }
 
 pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t from_epoch)
 {
-  OSDMapRef next_map = get_nextmap_reserved();
+  uint64_t seq;
+  OSDMapRaw next_map = get_nextmap_reserved(seq);
   // service map is always newer/newest
   assert(from_epoch <= next_map->get_epoch());
 
   pair<ConnectionRef,ConnectionRef> ret;
   if (next_map->is_down(peer) ||
       next_map->get_info(peer).up_from > from_epoch) {
-    release_map(next_map);
+    release_map(seq);
     return ret;
   }
   ret.first = osd->hbclient_messenger->get_connection(next_map->get_hb_back_inst(peer));
   if (next_map->get_hb_front_addr(peer) != entity_addr_t())
     ret.second = osd->hbclient_messenger->get_connection(next_map->get_hb_front_inst(peer));
-  release_map(next_map);
+  release_map(seq);
   return ret;
 }
 
@@ -5936,7 +5942,8 @@ void OSD::ms_fast_dispatch(Message *m)
     tracepoint(osd, ms_fast_dispatch, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
-  OSDMapRef nextmap = service.get_nextmap_reserved();
+  uint64_t seq;
+  OSDMapRef nextmap(service.get_nextmap_reserved(seq));
   Session *session = static_cast<Session*>(m->get_connection()->get_priv());
   if (session) {
     {
@@ -5947,7 +5954,7 @@ void OSD::ms_fast_dispatch(Message *m)
     }
     session->put();
   }
-  service.release_map(nextmap);
+  service.release_map(seq);
 }
 
 void OSD::ms_fast_preprocess(Message *m)
