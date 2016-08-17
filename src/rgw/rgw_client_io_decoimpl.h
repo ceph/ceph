@@ -12,16 +12,16 @@
 #include "rgw_client_io.h"
 
 template <typename T>
-class RGWStreamIOAccountingEngine : public RGWDecoratedStreamIO<T>,
-                                    public RGWClientIOAccounter {
+class RGWRestfulIOAccountingEngine : public RGWDecoratedRestfulIO<T>,
+                                     public RGWClientIOAccounter {
   bool enabled;
   uint64_t total_sent;
   uint64_t total_received;
 
 public:
   template <typename U>
-  RGWStreamIOAccountingEngine(U&& decoratee)
-    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+  RGWRestfulIOAccountingEngine(U&& decoratee)
+    : RGWDecoratedRestfulIO<T>(std::move(decoratee)),
       enabled(false),
       total_sent(0),
       total_received(0) {
@@ -29,7 +29,7 @@ public:
 
   std::size_t send_status(const int status,
                           const char* const status_name) override {
-    const auto sent = RGWDecoratedStreamIO<T>::send_status(status, status_name);
+    const auto sent = RGWDecoratedRestfulIO<T>::send_status(status, status_name);
     if (enabled) {
       total_sent += sent;
     }
@@ -37,7 +37,7 @@ public:
   }
 
   std::size_t send_100_continue() override {
-    const auto sent = RGWDecoratedStreamIO<T>::send_100_continue();
+    const auto sent = RGWDecoratedRestfulIO<T>::send_100_continue();
     if (enabled) {
       total_sent += sent;
     }
@@ -46,7 +46,7 @@ public:
 
   std::size_t send_header(const boost::string_ref& name,
                           const boost::string_ref& value) override {
-    const auto sent = RGWDecoratedStreamIO<T>::send_header(name, value);
+    const auto sent = RGWDecoratedRestfulIO<T>::send_header(name, value);
     if (enabled) {
       total_sent += sent;
     }
@@ -54,7 +54,7 @@ public:
   }
 
   std::size_t send_content_length(const uint64_t len) override {
-    const auto sent = RGWDecoratedStreamIO<T>::send_content_length(len);
+    const auto sent = RGWDecoratedRestfulIO<T>::send_content_length(len);
     if (enabled) {
       total_sent += sent;
     }
@@ -62,7 +62,7 @@ public:
   }
 
   std::size_t send_chunked_transfer_encoding() override {
-    const auto sent = RGWDecoratedStreamIO<T>::send_chunked_transfer_encoding();
+    const auto sent = RGWDecoratedRestfulIO<T>::send_chunked_transfer_encoding();
     if (enabled) {
       total_sent += sent;
     }
@@ -70,7 +70,7 @@ public:
   }
 
   std::size_t complete_header() override {
-    const auto sent = RGWDecoratedStreamIO<T>::complete_header();
+    const auto sent = RGWDecoratedRestfulIO<T>::complete_header();
     if (enabled) {
       total_sent += sent;
     }
@@ -78,7 +78,7 @@ public:
   }
 
   std::size_t recv_body(char* buf, std::size_t max) override {
-    const auto received = RGWDecoratedStreamIO<T>::recv_body(buf, max);
+    const auto received = RGWDecoratedRestfulIO<T>::recv_body(buf, max);
     if (enabled) {
       total_received += received;
     }
@@ -87,7 +87,7 @@ public:
 
   std::size_t send_body(const char* const buf,
                         const std::size_t len) override {
-    const auto sent = RGWDecoratedStreamIO<T>::send_body(buf, len);
+    const auto sent = RGWDecoratedRestfulIO<T>::send_body(buf, len);
     if (enabled) {
       total_sent += sent;
     }
@@ -111,8 +111,8 @@ public:
 /* Filter for in-memory buffering incoming data and calculating the content
  * length header if it isn't present. */
 template <typename T>
-class RGWStreamIOBufferingEngine : public RGWDecoratedStreamIO<T> {
-  template<typename Td> friend class RGWDecoratedStreamIO;
+class RGWRestfulIOBufferingEngine : public RGWDecoratedRestfulIO<T> {
+  template<typename Td> friend class RGWDecoratedRestfulIO;
 protected:
   ceph::bufferlist data;
 
@@ -121,8 +121,8 @@ protected:
 
 public:
   template <typename U>
-  RGWStreamIOBufferingEngine(U&& decoratee)
-    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+  RGWRestfulIOBufferingEngine(U&& decoratee)
+    : RGWDecoratedRestfulIO<T>(std::move(decoratee)),
       has_content_length(false),
       buffer_data(false) {
   }
@@ -135,33 +135,33 @@ public:
 };
 
 template <typename T>
-std::size_t RGWStreamIOBufferingEngine<T>::send_body(const char* const buf,
-                                                     const std::size_t len)
+std::size_t RGWRestfulIOBufferingEngine<T>::send_body(const char* const buf,
+                                                      const std::size_t len)
 {
   if (buffer_data) {
     data.append(buf, len);
     return 0;
   }
 
-  return RGWDecoratedStreamIO<T>::send_body(buf, len);
+  return RGWDecoratedRestfulIO<T>::send_body(buf, len);
 }
 
 template <typename T>
-std::size_t RGWStreamIOBufferingEngine<T>::send_content_length(const uint64_t len)
+std::size_t RGWRestfulIOBufferingEngine<T>::send_content_length(const uint64_t len)
 {
   has_content_length = true;
-  return RGWDecoratedStreamIO<T>::send_content_length(len);
+  return RGWDecoratedRestfulIO<T>::send_content_length(len);
 }
 
 template <typename T>
-std::size_t RGWStreamIOBufferingEngine<T>::send_chunked_transfer_encoding()
+std::size_t RGWRestfulIOBufferingEngine<T>::send_chunked_transfer_encoding()
 {
   has_content_length = true;
-  return RGWDecoratedStreamIO<T>::send_chunked_transfer_encoding();
+  return RGWDecoratedRestfulIO<T>::send_chunked_transfer_encoding();
 }
 
 template <typename T>
-std::size_t RGWStreamIOBufferingEngine<T>::complete_header()
+std::size_t RGWRestfulIOBufferingEngine<T>::complete_header()
 {
   if (! has_content_length) {
     /* We will dump everything in complete_request(). */
@@ -169,73 +169,78 @@ std::size_t RGWStreamIOBufferingEngine<T>::complete_header()
     return 0;
   }
 
-  return RGWDecoratedStreamIO<T>::complete_header();
+  return RGWDecoratedRestfulIO<T>::complete_header();
 }
 
 template <typename T>
-int RGWStreamIOBufferingEngine<T>::complete_request()
+int RGWRestfulIOBufferingEngine<T>::complete_request()
 {
   size_t sent = 0;
 
   if (! has_content_length) {
-    sent += RGWDecoratedStreamIO<T>::send_content_length(data.length());
-    sent += RGWDecoratedStreamIO<T>::complete_header();
+    sent += RGWDecoratedRestfulIO<T>::send_content_length(data.length());
+    sent += RGWDecoratedRestfulIO<T>::complete_header();
   }
 
   if (buffer_data) {
     /* We are sending each buffer separately to avoid extra memory shuffling
      * that would occur on data.c_str() to provide a continuous memory area. */
     for (const auto& ptr : data.buffers()) {
-      sent += RGWDecoratedStreamIO<T>::send_body(ptr.c_str(),
-                                                 ptr.length());
+      sent += RGWDecoratedRestfulIO<T>::send_body(ptr.c_str(),
+                                                  ptr.length());
     }
     data.clear();
     buffer_data = false;
   }
 
-  return sent + RGWDecoratedStreamIO<T>::complete_request();
+  return sent + RGWDecoratedRestfulIO<T>::complete_request();
+}
+
+template <typename T> static inline
+RGWRestfulIOBufferingEngine<T> rgw_restful_io_add_buffering(T&& t) {
+  return RGWRestfulIOBufferingEngine<T>(std::move(t));
 }
 
 
 template <typename T>
-class RGWStreamIOChunkingEngine : public RGWDecoratedStreamIO<T> {
-  template<typename Td> friend class RGWDecoratedStreamIO;
+class RGWRestfulIOChunkingEngine : public RGWDecoratedRestfulIO<T> {
+  template<typename Td> friend class RGWDecoratedRestfulIO;
 protected:
   bool has_content_length;
   bool chunking_enabled;
 
 public:
   template <typename U>
-  RGWStreamIOChunkingEngine(U&& decoratee)
-    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+  RGWRestfulIOChunkingEngine(U&& decoratee)
+    : RGWDecoratedRestfulIO<T>(std::move(decoratee)),
       has_content_length(false),
       chunking_enabled(false) {
   }
 
   std::size_t send_content_length(const uint64_t len) override {
     has_content_length = true;
-    return RGWDecoratedStreamIO<T>::send_content_length(len);
+    return RGWDecoratedRestfulIO<T>::send_content_length(len);
   }
 
   std::size_t send_chunked_transfer_encoding() override {
     has_content_length = false;
     chunking_enabled = true;
-    return RGWDecoratedStreamIO<T>::send_header("Transfer-Encoding", "chunked");
+    return RGWDecoratedRestfulIO<T>::send_header("Transfer-Encoding", "chunked");
   }
 
   std::size_t send_body(const char* buf,
                         const std::size_t len) override {
     if (! chunking_enabled) {
-      return RGWDecoratedStreamIO<T>::send_body(buf, len);
+      return RGWDecoratedRestfulIO<T>::send_body(buf, len);
     } else {
       static constexpr char HEADER_END[] = "\r\n";
       char sizebuf[32];
       const auto slen = snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
       std::size_t sent = 0;
 
-      sent += RGWDecoratedStreamIO<T>::send_body(sizebuf, slen);
-      sent += RGWDecoratedStreamIO<T>::send_body(buf, len);
-      sent += RGWDecoratedStreamIO<T>::send_body(HEADER_END,
+      sent += RGWDecoratedRestfulIO<T>::send_body(sizebuf, slen);
+      sent += RGWDecoratedRestfulIO<T>::send_body(buf, len);
+      sent += RGWDecoratedRestfulIO<T>::send_body(HEADER_END,
                                                   sizeof(HEADER_END) - 1);
       return sent;
     }
@@ -246,17 +251,17 @@ public:
 
     if (chunking_enabled) {
       static constexpr char CHUNKED_RESP_END[] = "0\r\n\r\n";
-      sent += RGWDecoratedStreamIO<T>::send_body(CHUNKED_RESP_END,
-                                                 sizeof(CHUNKED_RESP_END) - 1);
+      sent += RGWDecoratedRestfulIO<T>::send_body(CHUNKED_RESP_END,
+                                                  sizeof(CHUNKED_RESP_END) - 1);
     }
 
-    return sent + RGWDecoratedStreamIO<T>::complete_request();
+    return sent + RGWDecoratedRestfulIO<T>::complete_request();
   }
 };
 
-template <typename T>
-RGWStreamIOChunkingEngine<T> add_chunking(T&& t) {
-  return RGWStreamIOChunkingEngine<T>(std::move(t));
+template <typename T> static inline
+RGWRestfulIOChunkingEngine<T> rgw_restful_io_add_chunking(T&& t) {
+  return RGWRestfulIOChunkingEngine<T>(std::move(t));
 }
 
 
@@ -264,7 +269,7 @@ RGWStreamIOChunkingEngine<T> add_chunking(T&& t) {
  * header where RFC 7230 requests so. The cases worth our attention are 204 No
  * Content as well as 304 Not Modified. */
 template <typename T>
-class RGWStreamIOConLenControllingEngine : public RGWDecoratedStreamIO<T> {
+class RGWRestfulIOConLenControllingEngine : public RGWDecoratedRestfulIO<T> {
 protected:
   enum class ContentLengthAction {
     FORWARD,
@@ -274,8 +279,8 @@ protected:
 
 public:
   template <typename U>
-  RGWStreamIOConLenControllingEngine(U&& decoratee)
-    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+  RGWRestfulIOConLenControllingEngine(U&& decoratee)
+    : RGWDecoratedRestfulIO<T>(std::move(decoratee)),
       action(ContentLengthAction::UNKNOWN) {
   }
 
@@ -287,13 +292,13 @@ public:
       action = ContentLengthAction::FORWARD;
     }
 
-    return RGWDecoratedStreamIO<T>::send_status(status, status_name);
+    return RGWDecoratedRestfulIO<T>::send_status(status, status_name);
   }
 
   std::size_t send_content_length(const uint64_t len) override {
     switch(action) {
     case ContentLengthAction::FORWARD:
-      return RGWDecoratedStreamIO<T>::send_content_length(len);
+      return RGWDecoratedRestfulIO<T>::send_content_length(len);
     case ContentLengthAction::INHIBIT:
       return 0;
     case ContentLengthAction::UNKNOWN:
@@ -303,16 +308,16 @@ public:
   }
 };
 
-template <typename T>
-RGWStreamIOConLenControllingEngine<T> add_conlen_controlling(T&& t) {
-  return RGWStreamIOConLenControllingEngine<T>(std::move(t));
+template <typename T> static inline
+RGWRestfulIOConLenControllingEngine<T> rgw_restful_io_add_conlen_controlling(T&& t) {
+  return RGWRestfulIOConLenControllingEngine<T>(std::move(t));
 }
 
 
-/* Filter that rectifies the wrong behaviour of some clients of the RGWStreamIO
+/* Filter that rectifies the wrong behaviour of some clients of the RGWRestfulIO
  * interface. Should be removed after fixing those clients. */
 template <typename T>
-class RGWStreamIOReorderingEngine : public RGWDecoratedStreamIO<T> {
+class RGWRestfulIOReorderingEngine : public RGWDecoratedRestfulIO<T> {
 protected:
   enum class ReorderState {
     RGW_EARLY_HEADERS,  /* Got headers sent before calling send_status. */
@@ -333,7 +338,7 @@ protected:
                                           value.to_string()));
       return 0;
     case ReorderState::RGW_DATA:
-      return RGWDecoratedStreamIO<T>::send_header(name, value);
+      return RGWDecoratedRestfulIO<T>::send_header(name, value);
     }
 
     return -EIO;
@@ -341,8 +346,8 @@ protected:
 
 public:
   template <typename U>
-  RGWStreamIOReorderingEngine(U&& decoratee)
-    : RGWDecoratedStreamIO<T>(std::move(decoratee)),
+  RGWRestfulIOReorderingEngine(U&& decoratee)
+    : RGWDecoratedRestfulIO<T>(std::move(decoratee)),
       phase(ReorderState::RGW_EARLY_HEADERS) {
   }
 
@@ -350,7 +355,7 @@ public:
                           const char* const status_name) override {
     phase = ReorderState::RGW_STATUS_SEEN;
 
-    return RGWDecoratedStreamIO<T>::send_status(status, status_name);
+    return RGWDecoratedRestfulIO<T>::send_status(status, status_name);
   }
 
   std::size_t send_content_length(const uint64_t len) override {
@@ -359,7 +364,7 @@ public:
       content_length = len;
       return 0;
     } else {
-      return RGWDecoratedStreamIO<T>::send_content_length(len);
+      return RGWDecoratedRestfulIO<T>::send_content_length(len);
     }
   }
 
@@ -371,22 +376,22 @@ public:
 
     /* Sent content length if necessary. */
     if (content_length) {
-      sent += RGWDecoratedStreamIO<T>::send_content_length(*content_length);
+      sent += RGWDecoratedRestfulIO<T>::send_content_length(*content_length);
     }
 
     /* Header data in buffers are already counted. */
     for (const auto& kv : headers) {
-      sent += RGWDecoratedStreamIO<T>::send_header(kv.first, kv.second);
+      sent += RGWDecoratedRestfulIO<T>::send_header(kv.first, kv.second);
     }
     headers.clear();
 
-    return sent + RGWDecoratedStreamIO<T>::complete_header();
+    return sent + RGWDecoratedRestfulIO<T>::complete_header();
   }
 };
 
-template <typename T>
-RGWStreamIOReorderingEngine<T> add_reordering(T&& t) {
-  return RGWStreamIOReorderingEngine<T>(std::move(t));
+template <typename T> static inline
+RGWRestfulIOReorderingEngine<T> rgw_restful_io_add_reordering(T&& t) {
+  return RGWRestfulIOReorderingEngine<T>(std::move(t));
 }
 
 #endif /* CEPH_RGW_CLIENT_IO_DECOIMPL_H */

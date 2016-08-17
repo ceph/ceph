@@ -85,7 +85,7 @@ std::size_t RGWAsioClientIO::write_data(const char* const buf,
   auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
   if (ec) {
     derr << "write_data failed with " << ec.message() << dendl;
-    throw RGWStreamIOEngine::Exception(-ec.value());
+    throw RGWRestfulIOEngine::Exception(-ec.value());
   }
   return bytes;
 }

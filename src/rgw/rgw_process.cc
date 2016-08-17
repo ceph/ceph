@@ -110,7 +110,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 }
 
 int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
-		    RGWStreamIO* client_io, OpsLogSocket* olog)
+		    RGWRestfulIO* client_io, OpsLogSocket* olog)
 {
   int ret = 0;
 

@@ -9,7 +9,7 @@ std::size_t RGWFCGX::write_data(const char* const buf, const std::size_t len)
 {
   const auto ret = FCGX_PutStr(buf, len, fcgx->out);
   if (ret < 0) {
-    throw RGWStreamIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(ret);
   }
   return ret;
 }
@@ -18,7 +18,7 @@ std::size_t RGWFCGX::read_data(char* const buf, const std::size_t len)
 {
   const auto ret = FCGX_GetStr(buf, len, fcgx->in);
   if (ret < 0) {
-    throw RGWStreamIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(ret);
   }
   return ret;
 }
