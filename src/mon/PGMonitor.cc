@@ -2127,6 +2127,10 @@ namespace {
 			    list<pair<health_status_t,string> > &summary,
 			    list<pair<health_status_t,string> > *detail,
 			    const CephContext* cct) {
+    if (cct->_conf->mon_warn_not_scrubbed == 0 &&
+      cct->_conf->mon_warn_not_deep_scrubbed == 0)
+      return;
+
     int pgs_count = 0;
     const utime_t now = ceph_clock_now(nullptr);
     for (const auto& pg_entry : pg_stats) {
