@@ -9382,7 +9382,7 @@ int RGWRados::flush_read_list(struct get_obj_data *d)
     bufferlist& bl = *iter;
     r = d->client_cb->handle_data(bl, 0, bl.length());
     if (r < 0) {
-      dout(0) << "ERROR: flush_read_list(): d->client_c->handle_data() returned " << r << dendl;
+      dout(0) << "ERROR: flush_read_list(): d->client_cb->handle_data() returned " << r << dendl;
       break;
     }
   }
