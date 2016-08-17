@@ -563,6 +563,8 @@ void AioImageDiscard<I>::update_stats(size_t length) {
 template <typename I>
 void AioImageFlush<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
+  image_ctx.user_flushed();
+
   bool journaling = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
