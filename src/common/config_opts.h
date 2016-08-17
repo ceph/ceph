@@ -167,7 +167,7 @@ OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
-OPTION(ms_type, OPT_STR, "simple")   // messenger backend
+OPTION(ms_type, OPT_STR, "async")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
 OPTION(ms_tcp_rcvbuf, OPT_INT, 0)
 OPTION(ms_tcp_prefetch_max_size, OPT_INT, 4096) // max prefetch size, we limit this to avoid extra memcpy
