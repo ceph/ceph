@@ -146,7 +146,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   {
     suppress_sigpipe();
 
-    ssize_t sent = 0;
+    size_t sent = 0;
     while (1) {
       ssize_t r;
   #if defined(MSG_NOSIGNAL)
@@ -185,7 +185,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   }
 
   virtual ssize_t send(bufferlist &bl, bool more) {
-    ssize_t sent_bytes = 0;
+    size_t sent_bytes = 0;
     std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
     uint64_t left_pbrs = bl.buffers().size();
     while (left_pbrs) {
@@ -212,7 +212,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
       // "r" is the remaining length
       sent_bytes += r;
-      if (r < msglen)
+      if (static_cast<unsigned>(r) < msglen)
         break;
       // only "r" == 0 continue
     }
@@ -227,7 +227,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
       }
     }
 
-    return sent_bytes;
+    return static_cast<ssize_t>(sent_bytes);
   }
   virtual void shutdown() {
     ::shutdown(_fd, SHUT_RDWR);
