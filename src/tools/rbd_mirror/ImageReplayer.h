@@ -199,8 +199,6 @@ protected:
 
   bool on_replay_interrupted();
 
-  void close_local_image(Context *on_finish); // for tests
-
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;

@@ -119,8 +119,8 @@ bool ReplayStatusFormatter<I>::calculate_behind_master_or_send_update() {
     }
     librbd::journal::TagData &tag_data = tag_it->second;
     m_entries_behind_master += master.entry_tid;
-    master = cls::journal::ObjectPosition(0, tag_data.predecessor_tag_tid,
-					  tag_data.predecessor_entry_tid);
+    master = cls::journal::ObjectPosition(0, tag_data.predecessor.tag_tid,
+					  tag_data.predecessor.entry_tid);
   }
   m_entries_behind_master += master.entry_tid - m_mirror_position.entry_tid;
 
@@ -139,7 +139,7 @@ bool ReplayStatusFormatter<I>::calculate_behind_master_or_send_update() {
     dout(20) << "erasing tag " <<  tag_data << "for tag_tid " << tag_tid
 	     << dendl;
 
-    tag_tid = tag_data.predecessor_tag_tid;
+    tag_tid = tag_data.predecessor.tag_tid;
     m_tag_cache.erase(tag_it);
   }
 
@@ -195,16 +195,16 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
     }
   }
 
-  if (tag_data.predecessor_tag_tid == 0) {
+  if (tag_data.predecessor.tag_tid == 0) {
     // We failed. Don't consider this fatal, just terminate retrieving.
     dout(20) << "making fake tag" << dendl;
-    tag_data.predecessor_tag_tid = mirror_tag_tid;
+    tag_data.predecessor.tag_tid = mirror_tag_tid;
   }
 
   dout(20) << "decoded tag " << master_tag_tid << ": " << tag_data << dendl;
 
   m_tag_cache.insert(std::make_pair(master_tag_tid, tag_data));
-  send_update_tag_cache(tag_data.predecessor_tag_tid, mirror_tag_tid);
+  send_update_tag_cache(tag_data.predecessor.tag_tid, mirror_tag_tid);
 }
 
 template <typename I>
