@@ -23,6 +23,7 @@
 
 #include "gtest/gtest.h"
 
+#include <chrono>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -39,6 +40,8 @@
 
 #include "test/librados/test.h"
 #include "test/librbd/test_support.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 #include "common/errno.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
@@ -51,6 +54,8 @@
 #endif
 
 using namespace std;
+
+using std::chrono::seconds;
 
 #define ASSERT_PASSED(x, args...) \
   do {                            \
@@ -449,6 +454,111 @@ TEST_F(TestLibRBD, ResizeAndStatPP)
     ASSERT_EQ(0, image.stat(info, sizeof(info)));
     ASSERT_EQ(info.size, size / 2);
     ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, UpdateWatchAndResize)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  struct Watcher {
+    static void cb(void *arg) {
+      Watcher *watcher = (Watcher *)arg;
+      watcher->handle_notify();
+    }
+    Watcher(rbd_image_t &image) : m_image(image), m_lock("lock") {}
+    void handle_notify() {
+      rbd_image_info_t info;
+      ASSERT_EQ(0, rbd_stat(m_image, &info, sizeof(info)));
+      Mutex::Locker locker(m_lock);
+      m_size = info.size;
+      m_cond.Signal();
+    }
+    void wait_for_size(size_t size) {
+      Mutex::Locker locker(m_lock);
+      while (m_size != size) {
+	CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
+	ASSERT_EQ(0, m_cond.WaitInterval(cct, m_lock, seconds(5)));
+      }
+    }
+    rbd_image_t &m_image;
+    Mutex m_lock;
+    Cond m_cond;
+    size_t m_size = 0;
+  } watcher(image);
+  uint64_t handle;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  ASSERT_EQ(0, rbd_update_watch(image, &handle, Watcher::cb, &watcher));
+
+  ASSERT_EQ(0, rbd_resize(image, size * 4));
+  watcher.wait_for_size(size * 4);
+
+  ASSERT_EQ(0, rbd_resize(image, size / 2));
+  watcher.wait_for_size(size / 2);
+
+  ASSERT_EQ(0, rbd_update_unwatch(image, handle));
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, UpdateWatchAndResizePP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 2 << 20;
+    struct Watcher : public librbd::UpdateWatchCtx {
+      Watcher(librbd::Image &image) : m_image(image), m_lock("lock") {
+      }
+      void handle_notify() {
+        librbd::image_info_t info;
+	ASSERT_EQ(0, m_image.stat(info, sizeof(info)));
+        Mutex::Locker locker(m_lock);
+        m_size = info.size;
+        m_cond.Signal();
+      }
+      void wait_for_size(size_t size) {
+	Mutex::Locker locker(m_lock);
+	while (m_size != size) {
+	  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
+	  ASSERT_EQ(0, m_cond.WaitInterval(cct, m_lock, seconds(5)));
+	}
+      }
+      librbd::Image &m_image;
+      Mutex m_lock;
+      Cond m_cond;
+      size_t m_size = 0;
+    } watcher(image);
+    uint64_t handle;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ASSERT_EQ(0, image.update_watch(&watcher, &handle));
+
+    ASSERT_EQ(0, image.resize(size * 4));
+    watcher.wait_for_size(size * 4);
+
+    ASSERT_EQ(0, image.resize(size / 2));
+    watcher.wait_for_size(size / 2);
+
+    ASSERT_EQ(0, image.update_unwatch(handle));
   }
 
   ioctx.close();

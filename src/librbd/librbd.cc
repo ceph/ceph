@@ -132,6 +132,19 @@ struct C_CloseComplete : public Context {
   }
 };
 
+struct C_UpdateWatchCB : public librbd::UpdateWatchCtx {
+  rbd_update_callback_t watch_cb;
+  void *arg;
+  uint64_t handle = 0;
+
+  C_UpdateWatchCB(rbd_update_callback_t watch_cb, void *arg) :
+    watch_cb(watch_cb), arg(arg) {
+  }
+  void handle_notify() {
+    watch_cb(arg);
+  }
+};
+
 void mirror_image_info_cpp_to_c(const librbd::mirror_image_info_t &cpp_info,
 				rbd_mirror_image_info_t *c_info) {
   c_info->global_id = strdup(cpp_info.global_id.c_str());
@@ -1295,6 +1308,22 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::mirror_image_get_status(ictx, mirror_image_status,
 					   status_size);
+  }
+
+  int Image::update_watch(UpdateWatchCtx *wctx, uint64_t *handle) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, update_watch_enter, ictx, wctx);
+    int r = ictx->state->register_update_watcher(wctx, handle);
+    tracepoint(librbd, update_watch_exit, r, *handle);
+    return r;
+  }
+
+  int Image::update_unwatch(uint64_t handle) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, update_unwatch_enter, ictx, handle);
+    int r = ictx->state->unregister_update_watcher(handle);
+    tracepoint(librbd, update_unwatch_exit, r);
+    return r;
   }
 
 } // namespace librbd
@@ -2751,6 +2780,29 @@ extern "C" int rbd_mirror_image_get_status(rbd_image_t image,
 
   mirror_image_status_cpp_to_c(cpp_status, status);
   return 0;
+}
+
+extern "C" int rbd_update_watch(rbd_image_t image, uint64_t *handle,
+				rbd_update_callback_t watch_cb, void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  C_UpdateWatchCB *wctx = new C_UpdateWatchCB(watch_cb, arg);
+  tracepoint(librbd, update_watch_enter, ictx, wctx);
+  int r = ictx->state->register_update_watcher(wctx, &wctx->handle);
+  tracepoint(librbd, update_watch_exit, r, wctx->handle);
+  *handle = reinterpret_cast<uint64_t>(wctx);
+  return r;
+}
+
+extern "C" int rbd_update_unwatch(rbd_image_t image, uint64_t handle)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  C_UpdateWatchCB *wctx = reinterpret_cast<C_UpdateWatchCB *>(handle);
+  tracepoint(librbd, update_unwatch_enter, ictx, wctx->handle);
+  int r = ictx->state->unregister_update_watcher(wctx->handle);
+  delete wctx;
+  tracepoint(librbd, update_unwatch_exit, r);
+  return r;
 }
 
 extern "C" int rbd_aio_is_complete(rbd_completion_t c)

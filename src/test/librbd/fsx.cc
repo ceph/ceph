@@ -1042,7 +1042,8 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 	char dev[4096];
 	char *devnode;
 
-	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE);
+	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE,
+			   SubProcess::KEEP);
 	process.add_cmd_arg("map");
 	std::string img;
 	img.append(pool);
