@@ -64,18 +64,6 @@ public:
     STATE_STOPPED,
   };
 
-  struct BootstrapParams {
-    std::string local_image_name;
-
-    BootstrapParams() {}
-    BootstrapParams(const std::string local_image_name) :
-      local_image_name(local_image_name) {}
-
-    bool empty() const {
-      return local_image_name.empty();
-    }
-  };
-
   ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                 RadosRef local, RadosRef remote,
@@ -94,6 +82,11 @@ public:
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
+
+  inline bool is_blacklisted() const {
+    Mutex::Locker locker(m_lock);
+    return (m_last_r == -EBLACKLISTED);
+  }
 
   inline int64_t get_local_pool_id() const {
     return m_local_pool_id;
@@ -116,9 +109,7 @@ public:
     return m_local_image_name;
   }
 
-  void start(Context *on_finish = nullptr,
-	     const BootstrapParams *bootstrap_params = nullptr,
-	     bool manual = false);
+  void start(Context *on_finish = nullptr, bool manual = false);
   void stop(Context *on_finish = nullptr, bool manual = false);
   void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
@@ -232,7 +223,7 @@ private:
   std::string m_remote_image_id, m_local_image_id, m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
-  Mutex m_lock;
+  mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
   int m_last_r = 0;
   std::string m_state_desc;

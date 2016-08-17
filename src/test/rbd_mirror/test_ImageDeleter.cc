@@ -62,8 +62,9 @@ public:
 
     librbd::mirror_mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
-    m_deleter = new rbd::mirror::ImageDeleter(_rados,
-        m_threads->work_queue, m_threads->timer, &m_threads->timer_lock);
+    m_deleter = new rbd::mirror::ImageDeleter(m_threads->work_queue,
+                                              m_threads->timer,
+                                              &m_threads->timer_lock);
 
     EXPECT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, 1 << 20));
     ImageCtx *ictx = new ImageCtx(m_image_name, "", "", m_local_io_ctx,
@@ -211,7 +212,7 @@ int64_t TestImageDeleter::m_local_pool_id;
 
 
 TEST_F(TestImageDeleter, Delete_NonPrimary_Image) {
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -227,7 +228,7 @@ TEST_F(TestImageDeleter, Delete_NonPrimary_Image) {
 TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
   promote_image();
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -242,7 +243,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Diff_GlobalId) {
   // This test case represents a case that should never happen, unless
   // there is bug in the implementation
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, "diff global id");
 
   C_SaferCond ctx;
@@ -256,7 +257,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Diff_GlobalId) {
 TEST_F(TestImageDeleter, Delete_Image_With_Child) {
   create_snapshot();
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -271,7 +272,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Children) {
   create_snapshot("snap1");
   create_snapshot("snap2");
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -285,7 +286,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Children) {
 TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChild) {
   create_snapshot("snap1", true);
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -300,7 +301,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
   create_snapshot("snap1", true);
   create_snapshot("snap2", true);
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -314,7 +315,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
 TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
   std::string clone_id = create_clone();
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -324,7 +325,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
   ASSERT_EQ(1u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());
 
-  m_deleter->schedule_image_delete(m_local_pool_id, clone_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, clone_id,
       "clone1", GLOBAL_CLONE_IMAGE_ID);
 
   C_SaferCond ctx2;
@@ -347,7 +348,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
   EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
                                             mirror_image));
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -371,7 +372,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
   EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
                                             mirror_image));
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -387,7 +388,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
 TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
   remove_image();
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -405,7 +406,7 @@ TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
                                 false);
   EXPECT_EQ(0, ictx->state->open());
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -425,7 +426,7 @@ TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
 
   m_deleter->set_failed_timer_interval(2);
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -449,7 +450,7 @@ TEST_F(TestImageDeleter, Delete_Is_Idempotent) {
                                 false);
   EXPECT_EQ(0, ictx->state->open());
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
@@ -459,7 +460,7 @@ TEST_F(TestImageDeleter, Delete_Is_Idempotent) {
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(1u, m_deleter->get_failed_queue_items().size());
 
-  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+  m_deleter->schedule_image_delete(_rados, m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
