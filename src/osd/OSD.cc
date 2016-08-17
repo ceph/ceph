@@ -5957,9 +5957,7 @@ void OSD::ms_fast_preprocess(Message *m)
       MOSDMap *mm = static_cast<MOSDMap*>(m);
       Session *s = static_cast<Session*>(m->get_connection()->get_priv());
       if (s) {
-	s->received_map_lock.lock();
 	s->received_map_epoch = mm->get_last();
-	s->received_map_lock.unlock();
 	s->put();
       }
     }
@@ -6177,9 +6175,7 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
     Session *s = static_cast<Session*>(op->get_req()->
 				       get_connection()->get_priv());
     if (s) {
-      s->received_map_lock.lock();
       epoch_t received_epoch = s->received_map_epoch;
-      s->received_map_lock.unlock();
       if (received_epoch < msg_epoch) {
 	osdmap_subscribe(msg_epoch, false);
       }

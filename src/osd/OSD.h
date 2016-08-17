@@ -1421,8 +1421,7 @@ public:
 
     Spinlock sent_epoch_lock;
     epoch_t last_sent_epoch;
-    Spinlock received_map_lock;
-    epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
+    std::atomic<epoch_t> received_map_epoch; // largest epoch seen in MOSDMap from here
 
     explicit Session(CephContext *cct) :
       RefCountedObject(cct),
