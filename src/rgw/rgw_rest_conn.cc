@@ -282,30 +282,32 @@ int RGWRESTReadResource::aio_read()
   return 0;
 }
 
-RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
+                                         const string& _method,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
 					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
-  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+  : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource),
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
-    req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+    req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL)
 {
   init_common(extra_headers);
 }
 
-RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
+                                         const string& _method,
                                          const string& _resource,
 					 param_vec_t& params,
 					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
-  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(params),
-    cb(bl), mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+  : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource), params(params),
+    cb(bl), mgr(_mgr), req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL)
 {
   init_common(extra_headers);
 }
 
-void RGWRESTPostResource::init_common(param_vec_t *extra_headers)
+void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
 {
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
 
@@ -316,7 +318,7 @@ void RGWRESTPostResource::init_common(param_vec_t *extra_headers)
   req.set_params(&params);
 }
 
-int RGWRESTPostResource::send(bufferlist& outbl)
+int RGWRESTSendResource::send(bufferlist& outbl)
 {
   req.set_outbl(outbl);
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
@@ -330,7 +332,7 @@ int RGWRESTPostResource::send(bufferlist& outbl)
   return req.complete(etag, NULL, NULL, attrs);
 }
 
-int RGWRESTPostResource::aio_send(bufferlist& outbl)
+int RGWRESTSendResource::aio_send(bufferlist& outbl)
 {
   req.set_outbl(outbl);
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);

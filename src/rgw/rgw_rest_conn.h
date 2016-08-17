@@ -253,9 +253,10 @@ int RGWRESTReadResource::wait(T *dest)
   return 0;
 }
 
-class RGWRESTPostResource : public RefCountedObject {
+class RGWRESTSendResource : public RefCountedObject {
   CephContext *cct;
   RGWRESTConn *conn;
+  string method;
   string resource;
   param_vec_t params;
   map<string, string> headers;
@@ -268,13 +269,15 @@ class RGWRESTPostResource : public RefCountedObject {
   void init_common(param_vec_t *extra_headers);
 
 public:
-  RGWRESTPostResource(RGWRESTConn *_conn,
+  RGWRESTSendResource(RGWRESTConn *_conn,
+                      const string& _method,
 		      const string& _resource,
 		      const rgw_http_param_pair *pp,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
-  RGWRESTPostResource(RGWRESTConn *_conn,
+  RGWRESTSendResource(RGWRESTConn *_conn,
+                      const string& _method,
 		      const string& _resource,
 		      param_vec_t& params,
 		      param_vec_t *extra_headers,
@@ -320,7 +323,7 @@ public:
 };
 
 template <class T>
-int RGWRESTPostResource::decode_resource(T *dest)
+int RGWRESTSendResource::decode_resource(T *dest)
 {
   int ret = req.get_status();
   if (ret < 0) {
@@ -334,7 +337,7 @@ int RGWRESTPostResource::decode_resource(T *dest)
 }
 
 template <class T>
-int RGWRESTPostResource::wait(T *dest)
+int RGWRESTSendResource::wait(T *dest)
 {
   int ret = req.wait();
   if (ret < 0) {
@@ -347,5 +350,42 @@ int RGWRESTPostResource::wait(T *dest)
   }
   return 0;
 }
+
+class RGWRESTPostResource : public RGWRESTSendResource {
+public:
+  RGWRESTPostResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      const rgw_http_param_pair *pp,
+		      param_vec_t *extra_headers,
+		      RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "POST", _resource,
+                                                                  pp, extra_headers, _mgr) {}
+
+  RGWRESTPostResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      param_vec_t& params,
+		      param_vec_t *extra_headers,
+		      RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "POST", _resource,
+                                                                  params, extra_headers, _mgr) {}
+
+};
+
+class RGWRESTPutResource : public RGWRESTSendResource {
+public:
+  RGWRESTPutResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     const rgw_http_param_pair *pp,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "PUT", _resource,
+                                                                  pp, extra_headers, _mgr) {}
+
+  RGWRESTPutResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     param_vec_t& params,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "PUT", _resource,
+                                                                  params, extra_headers, _mgr) {}
+
+};
+
 
 #endif
