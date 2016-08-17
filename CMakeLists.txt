@@ -339,8 +339,8 @@ endif(WITH_DPDK)
 
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
 if(WITH_BLKIN)
-  find_package(blkin REQUIRED)
-  include_directories(${BLKIN_INCLUDE_DIR})
+  set(BLKIN_LIBRARIES blkin lttng-ust)
+  include_directories(src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
 #option for RGW

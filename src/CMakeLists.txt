@@ -286,6 +286,10 @@ endif()
 set(heap_profiler_files ${TCMALLOC_srcs})
 add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
+if (WITH_BLKIN)
+  add_subdirectory(blkin/blkin-lib)
+endif(WITH_BLKIN)
+
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
