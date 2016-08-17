@@ -379,8 +379,10 @@ namespace crimson {
       return (i - 1) / K;
     }
 
+    // index of left child when K==2, index of left-most child when K>2
     static inline index_t lhs(index_t i) { return K*i + 1; }
 
+    // index of right child when K==2, index of right-most child when K>2
     static inline index_t rhs(index_t i) { return K*i + K; }
 
     void sift_up(index_t i) {
@@ -397,8 +399,13 @@ namespace crimson {
       }
     } // sift_up
 
-    void sift_down(index_t i) {
-      while (i < count) {
+    // use this sift_down definition when K>2; it's more general and
+    // uses a loop; EnableBool insures template uses a template
+    // parameter
+    template<bool EnableBool=true>
+    typename std::enable_if<(K>2)&&EnableBool,void>::type sift_down(index_t i) {
+      if (i >= count) return;
+      while (true) {
 	index_t li = lhs(i);
 
 	if (li < count) {
@@ -426,6 +433,44 @@ namespace crimson {
 	  break;
 	}
       }
+    } // sift_down    
+
+    // use this sift_down definition when K==2; EnableBool insures
+    // template uses a template parameter
+    template<bool EnableBool=true>
+    typename std::enable_if<K==2&&EnableBool,void>::type sift_down(index_t i) {
+      if (i >= count) return;
+      while (true) {
+        const index_t li = lhs(i);
+	const index_t ri = 1 + li;
+ 
+        if (li < count) {
+	  if (comparator(*data[li], *data[i])) {
+	    if (ri < count && comparator(*data[ri], *data[li])) {
+	      std::swap(data[i], data[ri]);
+	      intru_data_of(data[i]) = i;
+	      intru_data_of(data[ri]) = ri;
+	      i = ri;
+	    } else {
+	      std::swap(data[i], data[li]);
+	      intru_data_of(data[i]) = i;
+	      intru_data_of(data[li]) = li;
+	      i = li;
+            }
+	  } else if (ri < count && comparator(*data[ri], *data[i])) {
+	    std::swap(data[i], data[ri]);
+            intru_data_of(data[i]) = i;
+	    intru_data_of(data[ri]) = ri;
+	    i = ri;
+          } else {
+	    // no child is smaller
+            break;
+          }
+        } else {
+	  // no children
+          break;
+        }
+      } // while
     } // sift_down
 
     void sift(index_t i) {
@@ -444,4 +489,17 @@ namespace crimson {
       }
     } // sift
   }; // class IndIntruHeap
+
+
+#if 0
+  template<typename I,
+	   typename T,
+	   IndIntruHeapData T::*heap_info,
+	   typename C>
+  class IndIntruHeap<I, T, heap_info, C, 2> {
+
+  protected:
+
+  }; // template specialization of IndIntruHeap
+#endif
 } // namespace crimson
