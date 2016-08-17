@@ -51,57 +51,15 @@ class Filer {
   Finisher   *finisher;
 
   // probes
-  struct Probe {
-    std::mutex lock;
-    typedef std::lock_guard<std::mutex> lock_guard;
-    typedef std::unique_lock<std::mutex> unique_lock;
-    inodeno_t ino;
-    file_layout_t layout;
-    snapid_t snapid;
-
-    uint64_t *psize;
-    ceph::real_time *pmtime;
-    utime_t *pumtime;
-
-    int flags;
-
-    bool fwd;
-
-    Context *onfinish;
-
-    vector<ObjectExtent> probing;
-    uint64_t probing_off, probing_len;
-
-    map<object_t, uint64_t> known_size;
-    ceph::real_time max_mtime;
-
-    set<object_t> ops;
-
-    int err;
-    bool found_size;
-
-    Probe(inodeno_t i, file_layout_t &l, snapid_t sn,
-	  uint64_t f, uint64_t *e, ceph::real_time *m, int fl, bool fw,
-	  Context *c) :
-      ino(i), layout(l), snapid(sn),
-      psize(e), pmtime(m), pumtime(nullptr), flags(fl), fwd(fw), onfinish(c),
-      probing_off(f), probing_len(0),
-      err(0), found_size(false) {}
-
-    Probe(inodeno_t i, file_layout_t &l, snapid_t sn,
-	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw,
-	  Context *c) :
-      ino(i), layout(l), snapid(sn),
-      psize(e), pmtime(nullptr), pumtime(m), flags(fl), fwd(fw),
-      onfinish(c), probing_off(f), probing_len(0),
-      err(0), found_size(false) {}
-  };
-
+  class Probe;
   class C_Probe;
 
-  void _probe(Probe *p, Probe::unique_lock& pl);
+  typedef std::lock_guard<std::mutex> lock_guard;
+  typedef std::unique_lock<std::mutex> unique_lock;
+
+  void _probe(Probe *p, unique_lock& pl);
   bool _probed(Probe *p, const object_t& oid, uint64_t size,
-	       ceph::real_time mtime, Probe::unique_lock& pl);
+	       ceph::real_time mtime, unique_lock& pl);
 
  public:
   Filer(const Filer& other);

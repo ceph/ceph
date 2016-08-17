@@ -34,6 +34,49 @@
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".filer "
 
+struct Filer::Probe {
+  std::mutex lock;
+  inodeno_t ino;
+  file_layout_t layout;
+  snapid_t snapid;
+
+  uint64_t *psize;
+  ceph::real_time *pmtime;
+  utime_t *pumtime;
+
+  int flags;
+
+  bool fwd;
+
+  Context *onfinish;
+
+  vector<ObjectExtent> probing;
+  uint64_t probing_off, probing_len;
+
+  map<object_t, uint64_t> known_size;
+  ceph::real_time max_mtime;
+
+  set<object_t> ops;
+
+  int err;
+  bool found_size;
+
+  Probe(inodeno_t i, file_layout_t &l, snapid_t sn,
+        uint64_t f, uint64_t *e, ceph::real_time *m, int fl, bool fw,
+        Context *c) :
+    ino(i), layout(l), snapid(sn),
+    psize(e), pmtime(m), pumtime(nullptr), flags(fl), fwd(fw), onfinish(c),
+    probing_off(f), probing_len(0),
+    err(0), found_size(false) {}
+
+  Probe(inodeno_t i, file_layout_t &l, snapid_t sn,
+        uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw,
+        Context *c) :
+    ino(i), layout(l), snapid(sn),
+    psize(e), pmtime(nullptr), pumtime(m), flags(fl), fwd(fw),
+    onfinish(c), probing_off(f), probing_len(0),
+    err(0), found_size(false) {}
+};
 class Filer::C_Probe : public Context {
 public:
   Filer *filer;
@@ -51,7 +94,7 @@ public:
 
     bool probe_complete;
     {
-      Probe::unique_lock pl(probe->lock);
+      unique_lock pl(probe->lock);
       if (r != 0) {
 	probe->err = r;
       }
@@ -129,7 +172,7 @@ int Filer::probe_impl(Probe* probe, file_layout_t *layout,
     probe->probing_off -= probe->probing_len;
   }
 
-  Probe::unique_lock pl(probe->lock);
+  unique_lock pl(probe->lock);
   _probe(probe, pl);
   assert(!pl.owns_lock());
 
@@ -141,7 +184,7 @@ int Filer::probe_impl(Probe* probe, file_layout_t *layout,
 /**
  * probe->lock must be initially locked, this function will release it
  */
-void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
+void Filer::_probe(Probe *probe, unique_lock& pl)
 {
   assert(pl.owns_lock() && pl.mutex() == &probe->lock);
 
@@ -180,7 +223,7 @@ void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
  * @return true if probe is complete and Probe object may be freed.
  */
 bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
-		    ceph::real_time mtime, Probe::unique_lock& pl)
+		    ceph::real_time mtime, unique_lock& pl)
 {
   assert(pl.owns_lock() && pl.mutex() == &probe->lock);
 
