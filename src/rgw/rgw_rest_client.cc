@@ -208,6 +208,11 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
 
 int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
+  /* don't sign if no key is provided */
+  if (key.key.empty()) {
+    return 0;
+  }
+
   map<string, string, ltstr_nocase>& m = env.get_map();
 
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
