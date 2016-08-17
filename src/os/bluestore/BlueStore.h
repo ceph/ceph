@@ -288,7 +288,9 @@ public:
   struct Blob : public boost::intrusive::set_base_hook<> {
     std::atomic_int nref;  ///< reference count
     int64_t id = 0;          ///< id
+  private:
     bluestore_blob_t blob;   ///< blob metadata
+  public:
     BufferSpace bc;          ///< buffer cache
 
     Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
@@ -312,6 +314,13 @@ public:
 
     friend ostream& operator<<(ostream& out, const Blob &b) {
       return out << b.id << ":" << b.blob;
+    }
+
+    const bluestore_blob_t& get_blob() const {
+      return blob;
+    }
+    bluestore_blob_t& dirty_blob() {
+      return blob;
     }
 
     /// discard buffers for unallocated regions
@@ -389,7 +398,7 @@ public:
 	if (p != m.blob_map.begin()) {
 	  out << ',';
 	}
-	out << p->id << '=' << p->blob;
+	out << p->id << '=' << p->get_blob();
       }
       return out << '}';
     }
