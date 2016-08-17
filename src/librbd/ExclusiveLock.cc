@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AcquireRequest.h"
@@ -26,10 +27,10 @@ namespace {
 
 const std::string WATCHER_LOCK_COOKIE_PREFIX = "auto";
 
-template <typename I>
-struct C_SendReleaseRequest : public Context {
-  ReleaseRequest<I>* request;
-  explicit C_SendReleaseRequest(ReleaseRequest<I>* request) : request(request) {
+template <typename R>
+struct C_SendRequest : public Context {
+  R* request;
+  explicit C_SendRequest(R* request) : request(request) {
   }
   virtual void finish(int r) override {
     request->send();
@@ -416,9 +417,11 @@ void ExclusiveLock<I>::send_acquire_lock() {
     util::create_context_callback<el, &el::handle_acquiring_lock>(this),
     util::create_context_callback<el, &el::handle_acquire_lock>(this));
 
-  m_lock.Unlock();
-  req->send();
-  m_lock.Lock();
+  // acquire the lock if the image is not busy performing other actions
+  m_image_ctx.state->prepare_lock(new FunctionContext([this, req](int r) {
+      m_image_ctx.op_work_queue->queue(
+        new C_SendRequest<AcquireRequest<I> >(req), 0);
+    }));
 }
 
 template <typename I>
@@ -447,6 +450,7 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
     ldout(cct, 5) << "successfully acquired exclusive lock" << dendl;
   }
 
+  m_image_ctx.state->handle_prepare_lock_complete();
   {
     m_lock.Lock();
     assert(m_state == STATE_ACQUIRING ||
@@ -585,8 +589,11 @@ void ExclusiveLock<I>::send_release_lock() {
     util::create_context_callback<el, &el::handle_releasing_lock>(this),
     util::create_context_callback<el, &el::handle_release_lock>(this));
 
-  // send in alternate thread context to avoid re-entrant locking
-  m_image_ctx.op_work_queue->queue(new C_SendReleaseRequest<I>(req), 0);
+  // release the lock if the image is not busy performing other actions
+  m_image_ctx.state->prepare_lock(new FunctionContext([this, req](int r) {
+      m_image_ctx.op_work_queue->queue(
+        new C_SendRequest<ReleaseRequest<I> >(req), 0);
+    }));
 }
 
 template <typename I>
@@ -603,6 +610,8 @@ void ExclusiveLock<I>::handle_releasing_lock(int r) {
 
 template <typename I>
 void ExclusiveLock<I>::handle_release_lock(int r) {
+  m_image_ctx.state->handle_prepare_lock_complete();
+
   bool lock_request_needed = false;
   {
     Mutex::Locker locker(m_lock);
