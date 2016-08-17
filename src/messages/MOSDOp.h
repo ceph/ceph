@@ -333,6 +333,8 @@ struct ceph_osd_request_head {
       ::encode(flags, payload);
       ::encode(reassert_version, payload);
       ::encode(reqid, payload);
+      encode_trace(payload, features);
+
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
       ::encode(oloc, payload);
@@ -349,8 +351,6 @@ struct ceph_osd_request_head {
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
-
-      encode_trace(payload, features);
     }
   }
 
@@ -359,12 +359,16 @@ struct ceph_osd_request_head {
     p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version >= 7) {
 	  ::decode(pgid, p);
 	  ::decode(osdmap_epoch, p);
 	  ::decode(flags, p);
 	  ::decode(reassert_version, p);
 	  ::decode(reqid, p);
+
+      if (header.version >= 8) {
+        decode_trace(p);
+      }
     } else if (header.version < 2) {
       // old decode
       ::decode(client_inc, p);
@@ -496,10 +500,6 @@ struct ceph_osd_request_head {
     ::decode(retry_attempt, p);
 
     ::decode(features, p);
-
-    if (header.version >= 8) {
-      decode_trace(p);
-    }
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
 
