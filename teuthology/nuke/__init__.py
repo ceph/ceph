@@ -22,7 +22,13 @@ from ..orchestra.remote import Remote
 from ..parallel import parallel
 from ..task.internal import check_lock, add_remotes, connect
 
-from . import actions
+from .actions import (
+    check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
+    reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
+    remove_kernel_mounts, remove_ceph_packages, synch_clocks,
+    remove_configuration_files, undo_multipath, reset_syslog_dir,
+    remove_testing_tree, remove_yum_timedhosts,
+)
 
 log = logging.getLogger(__name__)
 
@@ -302,7 +308,7 @@ def nuke_helper(ctx, should_unlock):
     if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
         try:
-            actions.check_console(host)
+            check_console(host)
         except Exception:
             log.exception('')
             log.info("Will attempt to connect via SSH")
@@ -313,49 +319,49 @@ def nuke_helper(ctx, should_unlock):
     connect(ctx, None)
 
     log.info("Clearing teuthology firewall rules...")
-    actions.clear_firewall(ctx)
+    clear_firewall(ctx)
     log.info("Cleared teuthology firewall rules.")
 
     log.info('Unmount ceph-fuse and killing daemons...')
-    actions.shutdown_daemons(ctx)
+    shutdown_daemons(ctx)
     log.info('All daemons killed.')
     # Try to remove packages before reboot
-    actions.remove_installed_packages(ctx)
+    remove_installed_packages(ctx)
 
     remotes = ctx.cluster.remotes.keys()
-    actions.reboot(ctx, remotes)
+    reboot(ctx, remotes)
     # shutdown daemons again incase of startup
     log.info('Stop daemons after restart...')
-    actions.shutdown_daemons(ctx)
+    shutdown_daemons(ctx)
     log.info('All daemons killed.')
     log.info('Unmount any osd data directories...')
-    actions.remove_osd_mounts(ctx)
+    remove_osd_mounts(ctx)
     log.info('Unmount any osd tmpfs dirs...')
-    actions.remove_osd_tmpfs(ctx)
+    remove_osd_tmpfs(ctx)
     log.info("Terminating Hadoop services...")
-    actions.kill_hadoop(ctx)
+    kill_hadoop(ctx)
     log.info("Remove kernel mounts...")
-    actions.remove_kernel_mounts(ctx)
+    remove_kernel_mounts(ctx)
 
     log.info("Force remove ceph packages")
-    actions.remove_ceph_packages(ctx)
+    remove_ceph_packages(ctx)
 
     log.info('Synchronizing clocks...')
-    actions.synch_clocks(remotes)
+    synch_clocks(remotes)
 
     log.info('Making sure firmware.git is not locked...')
     ctx.cluster.run(args=['sudo', 'rm', '-f',
                           '/lib/firmware/updates/.git/index.lock', ])
 
-    actions.remove_configuration_files(ctx)
+    remove_configuration_files(ctx)
     log.info('Removing any multipath config/pkgs...')
-    actions.undo_multipath(ctx)
+    undo_multipath(ctx)
     log.info('Resetting syslog output locations...')
-    actions.reset_syslog_dir(ctx)
+    reset_syslog_dir(ctx)
     log.info('Clearing filesystem of test data...')
-    actions.remove_testing_tree(ctx)
+    remove_testing_tree(ctx)
     log.info('Filesystem cleared.')
-    actions.remove_yum_timedhosts(ctx)
+    remove_yum_timedhosts(ctx)
     # Once again remove packages after reboot
-    actions.remove_installed_packages(ctx)
+    remove_installed_packages(ctx)
     log.info('Installed packages removed.')
