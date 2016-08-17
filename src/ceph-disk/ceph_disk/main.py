@@ -38,7 +38,6 @@ import time
 import shlex
 import pwd
 import grp
-import types
 import textwrap
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
@@ -1416,7 +1415,7 @@ def update_partition(dev, description):
     partprobe_ok = False
     error = 'unknown error'
     partprobe = _get_command_executable(['partprobe'])[0]
-    for i in (1, 2, 3, 4, 5):
+    for i in range(5):
         command_check_call(['udevadm', 'settle', '--timeout=600'])
         try:
             _check_output(['flock', '-s', dev, partprobe, dev])
@@ -3122,7 +3121,7 @@ def mount_activate(
                 fstype=fstype,
                 mount_options=mount_options,
             )
-        return (cluster, osd_id)
+        return cluster, osd_id
 
     except:
         LOG.error('Failed to activate')
@@ -3172,7 +3171,7 @@ def activate_dir(
                     raise Error('unable to create symlink %s -> %s'
                                 % (canonical, path))
 
-    return (cluster, osd_id)
+    return cluster, osd_id
 
 
 def find_cluster_by_uuid(_uuid):
@@ -3574,7 +3573,7 @@ def _remove_lockbox(uuid):
     command(['umount', canonical])
     for name in os.listdir(lockbox):
         path = os.path.join(lockbox, name)
-        if (os.path.islink(path) and os.readlink(path) == canonical):
+        if os.path.islink(path) and os.readlink(path) == canonical:
             os.unlink(path)
 
 
@@ -3604,7 +3603,7 @@ def destroy_lookup_device(args, predicate, description):
             else:
                 dmcrypt = False
             if predicate(partition):
-                return (dmcrypt, partition)
+                return dmcrypt, partition
     raise Error('found no device matching ', description)
 
 
@@ -3851,7 +3850,7 @@ def split_dev_base_partnum(dev):
         b = block_path(dev)
         partnum = open(os.path.join(b, 'partition')).read().strip()
         base = get_partition_base(dev)
-    return (base, partnum)
+    return base, partnum
 
 
 def get_partition_type(part):
@@ -4537,7 +4536,7 @@ def make_trigger_parser(subparsers):
     trigger_parser.add_argument(
         '--sync',
         action='store_true', default=None,
-        help=('do operation synchronously; do not trigger systemd'),
+        help='do operation synchronously; do not trigger systemd',
     )
     trigger_parser.set_defaults(
         func=main_trigger,
