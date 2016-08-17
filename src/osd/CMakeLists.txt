@@ -21,6 +21,7 @@ set(osd_srcs
   ScrubStore.cc
   osd_types.cc
   ECUtil.cc
+  ExtentCache.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osdc_osd_srcs})
 if(HAS_VTA)
