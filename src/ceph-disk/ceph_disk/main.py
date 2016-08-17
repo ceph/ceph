@@ -382,7 +382,7 @@ def _get_command_executable(arguments):
     Return the full path for an executable, raise if the executable is not
     found. If the executable has already a full path do not perform any checks.
     """
-    if arguments[0].startswith('/'):  # an absolute path
+    if os.path.isabs(arguments[0]):  # an absolute path
         return arguments
     executable = which(arguments[0])
     if not executable:
@@ -768,7 +768,7 @@ def is_mounted(dev):
                 continue
             mounts_dev = fields[0]
             path = fields[1]
-            if mounts_dev.startswith('/') and os.path.exists(mounts_dev):
+            if os.path.isabs(mounts_dev) and os.path.exists(mounts_dev):
                 mounts_dev = os.path.realpath(mounts_dev)
                 if mounts_dev == dev:
                     return _bytes2str(path)
@@ -3811,7 +3811,7 @@ def is_swap(dev):
             if len(fields) < 3:
                 continue
             swaps_dev = fields[0]
-            if swaps_dev.startswith('/') and os.path.exists(swaps_dev):
+            if os.path.isabs(swaps_dev) and os.path.exists(swaps_dev):
                 swaps_dev = os.path.realpath(swaps_dev)
                 if swaps_dev == dev:
                     return True
