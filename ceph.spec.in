@@ -59,6 +59,13 @@ Group:         System/Filesystems
 %endif
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+%if 0%{?suse_version}
+%if 0%{?is_opensuse}
+ExclusiveArch:  x86_64 aarch64 ppc64 ppc64le
+%else
+ExclusiveArch:  x86_64 aarch64
+%endif
+%endif
 #################################################################################
 # dependencies that apply across all distro families
 #################################################################################
