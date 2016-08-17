@@ -1586,8 +1586,9 @@ doread(unsigned offset, unsigned size)
 		((progressinterval && testcalls % progressinterval == 0)  ||
 		(debug &&
 		       (monitorstart == -1 ||
-			(offset + size > monitorstart &&
-			(monitorend == -1 || offset <= monitorend))))))
+			(static_cast<long>(offset + size) > monitorstart &&
+			 (monitorend == -1 ||
+			  static_cast<long>(offset) <= monitorend))))))
 		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
@@ -1686,8 +1687,9 @@ dowrite(unsigned offset, unsigned size)
 		((progressinterval && testcalls % progressinterval == 0) ||
 		       (debug &&
 		       (monitorstart == -1 ||
-			(offset + size > monitorstart &&
-			 (monitorend == -1 || (long)offset <= monitorend))))))
+			(static_cast<long>(offset + size) > monitorstart &&
+			 (monitorend == -1 ||
+			  static_cast<long>(offset) <= monitorend))))))
 		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
