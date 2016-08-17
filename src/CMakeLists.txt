@@ -25,6 +25,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
   set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -Wl,-export-dynamic -export-dynamic")
