@@ -64,7 +64,7 @@ public:
   }
 };
 
-int RGWLogSyncModule::create_instance(map<string, string>& config, RGWSyncModuleInstanceRef *instance) {
+int RGWLogSyncModule::create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) {
   string prefix;
   auto i = config.find("prefix");
   if (i != config.end()) {
