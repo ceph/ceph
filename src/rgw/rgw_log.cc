@@ -179,10 +179,6 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
-static inline RGWClientIOAccounter* ACCOUNTING_IO(struct req_state* s) {
-  return dynamic_cast<RGWClientIOAccounter*>(s->cio);
-}
-
 static void log_usage(struct req_state *s, const string& op_name)
 {
   if (s->system_request) /* don't log system user operations */
