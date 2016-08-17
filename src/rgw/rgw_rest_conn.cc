@@ -13,8 +13,10 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
     remote_id(_remote_id)
 {
-  key = store->get_zone_params().system_key;
-  self_zone_group = store->get_zonegroup().get_id();
+  if (store) {
+    key = store->get_zone_params().system_key;
+    self_zone_group = store->get_zonegroup().get_id();
+  }
 }
 
 int RGWRESTConn::get_url(string& endpoint)
