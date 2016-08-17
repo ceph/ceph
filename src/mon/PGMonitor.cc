@@ -1699,11 +1699,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     if (what.empty())
       what.insert("all");
     if (f) {
-      vector<string> dumpcontents;
-      if (cmd_getval(g_ceph_context, cmdmap, "dumpcontents", dumpcontents)) {
-	copy(dumpcontents.begin(), dumpcontents.end(),
-	     inserter(what, what.end()));
-      }
       if (what.count("all")) {
 	f->open_object_section("pg_map");
 	pg_map.dump(f.get());
