@@ -318,18 +318,6 @@ template <typename I>
 void ImageState<I>::refresh(Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
-  refresh(false, on_finish);
-}
-
-template <typename I>
-void ImageState<I>::acquire_lock_refresh(Context *on_finish) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << __func__ << dendl;
-  refresh(true, on_finish);
-}
-
-template <typename I>
-void ImageState<I>::refresh(bool acquiring_lock, Context *on_finish) {
 
   m_lock.Lock();
   if (is_closed()) {
@@ -340,7 +328,6 @@ void ImageState<I>::refresh(bool acquiring_lock, Context *on_finish) {
 
   Action action(ACTION_TYPE_REFRESH);
   action.refresh_seq = m_refresh_seq;
-  action.refresh_acquiring_lock = acquiring_lock;
   execute_action_unlock(action, on_finish);
 }
 
@@ -633,7 +620,7 @@ void ImageState<I>::send_refresh_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_refresh>(this));
   image::RefreshRequest<I> *req = image::RefreshRequest<I>::create(
-    *m_image_ctx, action_context.refresh_acquiring_lock, ctx);
+    *m_image_ctx, false, ctx);
 
   m_lock.Unlock();
   req->send();
