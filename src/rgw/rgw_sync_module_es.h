@@ -1,11 +1,11 @@
-#ifndef CEPH_RGW_SYNC_MODULE_LOG_H
-#define CEPH_RGW_SYNC_MODULE_LOG_H
+#ifndef CEPH_RGW_SYNC_MODULE_ES_H
+#define CEPH_RGW_SYNC_MODULE_ES_H
 
 #include "rgw_sync_module.h"
 
-class RGWLogSyncModule : public RGWSyncModule {
+class RGWElasticSyncModule : public RGWSyncModule {
 public:
-  RGWLogSyncModule() {}
+  RGWElasticSyncModule() {}
   bool supports_data_export() override {
     return false;
   }

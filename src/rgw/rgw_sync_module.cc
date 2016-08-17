@@ -6,6 +6,7 @@
 #include "rgw_boost_asio_yield.h"
 
 #include "rgw_sync_module_log.h"
+#include "rgw_sync_module_es.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -58,4 +59,7 @@ void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
 
   RGWSyncModuleRef log_module(new RGWLogSyncModule());
   modules_manager->register_module("log", log_module);
+
+  RGWSyncModuleRef es_module(new RGWElasticSyncModule());
+  modules_manager->register_module("elasticsearch", es_module);
 }
