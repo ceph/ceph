@@ -886,7 +886,7 @@ void CInode::start_scatter(ScatterLock *lock)
   }
 }
 
-void CInode::__frag_update_finish(CDir *dir, MutationRef& mut)
+void CInode::__frag_update_finish(CDir *dir, const MutationRef& mut)
 {
   mut->wait_committing();
   dout(10) << "__finish_frag_update on " << *dir << dendl;
@@ -905,7 +905,7 @@ class C_Inode_FragUpdate : public MDSInternalContextBase {
     in->__frag_update_finish(dir, mut);
   }
 public:
-  C_Inode_FragUpdate(CInode *i, CDir *d, MutationRef& m)
+  C_Inode_FragUpdate(CInode *i, CDir *d, const MutationRef& m)
     : in(i), dir(d), mut(m) {}
 };
 
@@ -972,7 +972,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir)
   }
 }
 
-void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
+void CInode::finish_scatter_gather_update(int type, const MutationRef& mut)
 {
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
 
@@ -1067,7 +1067,8 @@ void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
   }
 }
 
-void CInode::finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob)
+void CInode::finish_scatter_gather_update_accounted(int type, const MutationRef& mut,
+						    EMetaBlob *metablob)
 {
   dout(10) << "finish_scatter_gather_update_accounted " << type << " on " << *this << dendl;
   assert(is_auth());

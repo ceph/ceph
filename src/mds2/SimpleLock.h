@@ -160,6 +160,8 @@ protected:
   // lock state
   __s16 state;
 
+  //
+  static const MutationRef null_xlock_by;
 private:
   int num_stable_waiter;
   int num_rdlock;
@@ -202,6 +204,7 @@ private:
       _unstable = NULL;
     }
   }
+
 
 public:
 
@@ -427,8 +430,8 @@ public:
   }
 
   // xlock
-  void get_xlock(MutationRef who, client_t client) { 
-    assert(get_xlock_by() == MutationRef());
+  void get_xlock(const MutationRef& who, client_t client) {
+    assert(get_xlock_by() == null_xlock_by);
     assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a slave */);
     parent->get(CObject::PIN_LOCK);
@@ -467,8 +470,9 @@ public:
   bool is_xlocked_by_client(client_t c) const {
     return have_more() ? more()->xlock_by_client == c : false;
   }
-  MutationRef get_xlock_by() const {
-    return have_more() ? more()->xlock_by : MutationRef();
+  const MutationRef& get_xlock_by() const {
+
+    return have_more() ? more()->xlock_by : null_xlock_by;
   }
   
   // lease
@@ -546,17 +550,17 @@ public:
     */
   }
 
-  /**
-   * Write bare values (caller must be in an object section)
-   * to formatter, or nothing if is_sync_and_unlocked.
-   */
-  //void dump(Formatter *f) const;
-
   virtual void print(ostream& out) const {
     out << "(";
     _print(out);
     out << ")";
   }
+
+  /**
+   * Write bare values (caller must be in an object section)
+   * to formatter, or nothing if is_sync_and_unlocked.
+   */
+  void dump(Formatter *f) const;
 };
 
 inline ostream& operator<<(ostream& out, const SimpleLock& l) 

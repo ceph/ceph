@@ -236,15 +236,15 @@ protected:
 public:
   void queue_context(MDSInternalContextBase *c);
 
-  struct OpWQ: public ThreadPool::WorkQueueVal<MDRequestRef, entity_name_t> {
+  struct OpWQ: public ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t> {
     MDSRank *mds;
     Mutex qlock;
     std::map<entity_name_t, std::list<MDRequestRef> > op_for_processing;
     PrioritizedQueue<MDRequestRef, entity_name_t> pqueue;
     OpWQ(MDSRank *m, time_t ti, ThreadPool *tp);
 
-    void _enqueue_front(MDRequestRef);
-    void _enqueue(MDRequestRef);
+    void _enqueue_front(const MDRequestRef&);
+    void _enqueue(const MDRequestRef&);
     entity_name_t _dequeue();
 
     bool _empty() {
@@ -274,7 +274,7 @@ public:
     void _process(entity_inst_t, ThreadPool::TPHandle &handle);
   } msg_wq;
 
-  void retry_dispatch(MDRequestRef &mdr);
+  void retry_dispatch(const MDRequestRef &mdr);
 };
 
 class C_MDS_RetryMessage : public MDSInternalContext {
@@ -291,7 +291,7 @@ class C_MDS_RetryMessage : public MDSInternalContext {
 class C_MDS_RetryRequest : public MDSInternalContext {
   MDRequestRef mdr;
 public:
-  C_MDS_RetryRequest(MDSRank *mds, MDRequestRef& r)
+  C_MDS_RetryRequest(MDSRank *mds, const MDRequestRef& r)
     : MDSInternalContext(mds), mdr(r) {}
   virtual void finish(int r) {
     get_mds()->retry_dispatch(mdr);

@@ -109,8 +109,8 @@ public:
   void resync_accounted_rstat(fnode_t *pf);
   void add_dirty_rstat_inode(CInode *in);
   void remove_dirty_rstat_inode(CInode *in);
-  void assimilate_dirty_rstat_inodes(MutationRef& mut);
-  void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
+  void assimilate_dirty_rstat_inodes(const MutationRef& mut);
+  void assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlob *blob);
 };
 
 ostream& operator<<(ostream& out, const CDir& dir);

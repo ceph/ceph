@@ -282,12 +282,13 @@ public:
 
 protected:
   void finish_scatter_update(ScatterLock *lock, CDir *dir);
-  void __frag_update_finish(CDir *dir, MutationRef& mut);
+  void __frag_update_finish(CDir *dir, const MutationRef& mut);
   friend class C_Inode_FragUpdate;
 public:
   void start_scatter(ScatterLock *lock);
-  void finish_scatter_gather_update(int type, MutationRef& mut);
-  void finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob);
+  void finish_scatter_gather_update(int type, const MutationRef& mut);
+  void finish_scatter_gather_update_accounted(int type, const MutationRef& mut,
+		  			      EMetaBlob *metablob);
   void clear_dirty_scattered(int type);
 
   bool is_dirty_rstat() { return state_test(STATE_DIRTYRSTAT); }

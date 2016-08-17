@@ -927,6 +927,7 @@ set(ceph_mds2_srcs
   mds2/Mutation.cc
   mds2/Beacon.cc
   mds2/Capability.cc
+  mds2/SimpleLock.cc
   mds2/SessionMap.cc
   mds2/MDSDaemon.cc
   mds2/MDSRank.cc

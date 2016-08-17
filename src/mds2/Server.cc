@@ -173,7 +173,7 @@ void Server::handle_client_request(MClientRequest *req)
   return;
 }
 
-void Server::dispatch_client_request(MDRequestRef& mdr)
+void Server::dispatch_client_request(const MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
   dout(7) << "dispatch_client_request " << *req << dendl;
@@ -242,7 +242,7 @@ void Server::encode_null_lease(bufferlist& bl)
 }
 
 void Server::set_trace_dist(Session *session, MClientReply *reply,
-			    CInode *in, CDentry *dn, MDRequestRef& mdr)
+			    CInode *in, CDentry *dn, const MDRequestRef& mdr)
 {
   bufferlist bl;
   // dir + dentry?
@@ -273,7 +273,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
   reply->set_trace(bl);
 }
 
-void Server::respond_to_request(MDRequestRef& mdr, int r)
+void Server::respond_to_request(const MDRequestRef& mdr, int r)
 {
   if (mdr->client_request) {
     reply_client_request(mdr, new MClientReply(mdr->client_request, r));
@@ -285,7 +285,7 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
   mdcache->request_finish(mdr);
 }
 
-void Server::early_reply(MDRequestRef& mdr)
+void Server::early_reply(const MDRequestRef& mdr)
 {
   if (!g_conf->mds_early_reply)
     return;
@@ -293,7 +293,7 @@ void Server::early_reply(MDRequestRef& mdr)
   MClientRequest *req = mdr->client_request;
   Session *session = get_session(req); 
 
-  locker->set_xlocks_done(mdr.get(), req->get_op() == CEPH_MDS_OP_RENAME);
+  locker->set_xlocks_done(mdr, req->get_op() == CEPH_MDS_OP_RENAME);
 
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_unsafe();
@@ -319,7 +319,7 @@ void Server::early_reply(MDRequestRef& mdr)
   mdr->did_early_reply = true;
 }
 
-void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
+void Server::reply_client_request(const MDRequestRef& mdr, MClientReply *reply)
 {
   MClientRequest *req = mdr->client_request;
   Session *session = get_session(req); 
@@ -344,7 +344,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       }
 
       // drop non-rdlocks before replying, so that we can issue leases
-      locker->drop_non_rdlocks(mdr.get(), objs);
+      locker->drop_non_rdlocks(mdr, objs);
 
       set_trace_dist(session, reply, in, dn, mdr);
     }
@@ -356,7 +356,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   req->get_connection()->send_message(reply);
 }
 
-int Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
+int Server::rdlock_path_pin_ref(const MDRequestRef& mdr, int n,
 				set<SimpleLock*> &rdlocks,
 				bool is_lookup)
 {
@@ -382,7 +382,7 @@ int Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
   return 0;
 }
 
-int Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
+int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
 				     set<SimpleLock*>& rdlocks,
 				     set<SimpleLock*>& wrlocks,
 				     set<SimpleLock*>& xlocks,
@@ -464,7 +464,7 @@ int Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
   return 0;
 }
 
-void Server::journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
+void Server::journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
 			       LogEvent *le, MDSInternalContextBase *fin)
 {
   mdr->tracei = tracei;
@@ -484,12 +484,12 @@ void Server::journal_and_reply(MDRequestRef& mdr, int tracei, int tracedn,
   mdcache->submit_log_entry();
 
   if (mdr->did_early_reply)
-    locker->drop_rdlocks(mdr.get());
+    locker->drop_rdlocks(mdr);
 
   mdr->start_committing();
 }
 
-void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
+void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_pin_ref(mdr, 0, rdlocks, is_lookup);
@@ -525,12 +525,12 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 }
 
 
-void Server::__inode_update_finish(MDRequestRef& mdr, bool truncate_smaller)
+void Server::__inode_update_finish(const MDRequestRef& mdr, bool truncate_smaller)
 {
   mdr->wait_committing();
 
   CInodeRef& in = mdr->in[0]; 
-  mdcache->lock_objects_for_update(mdr.get(), in.get(), true);
+  mdcache->lock_objects_for_update(mdr, in.get(), true);
   mdr->early_apply();
 
   if (truncate_smaller /* && in->get_inode()->is_truncating() */) { // FIXME
@@ -545,7 +545,7 @@ class C_MDS_inode_update_finish : public ServerContext {
   MDRequestRef mdr;
   bool truncate_smaller;
 public:
-  C_MDS_inode_update_finish(Server *srv, MDRequestRef& r, bool ts) :
+  C_MDS_inode_update_finish(Server *srv, const MDRequestRef& r, bool ts) :
     ServerContext(srv), mdr(r), truncate_smaller(ts) { }
   void finish(int r) {
     assert(r == 0);
@@ -553,7 +553,7 @@ public:
   }
 };
 
-void Server::handle_client_setattr(MDRequestRef& mdr)
+void Server::handle_client_setattr(const MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
@@ -580,7 +580,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     return;
   }
 
-  mdcache->lock_objects_for_update(mdr.get(), in.get(), false);
+  mdcache->lock_objects_for_update(mdr, in.get(), false);
 
   mdr->add_projected_inode(in.get(), true);
   inode_t *pi = in->project_inode();
@@ -628,15 +628,15 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     }
   }
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), NULL, PREDIRTY_PRIMARY);
+  mdcache->predirty_journal_parents(mdr, NULL, in.get(), NULL, PREDIRTY_PRIMARY);
   // journal inode;
 
   CDentryRef null_dn; 
   journal_and_reply(mdr, 0, -1, NULL, new C_MDS_inode_update_finish(this, mdr, truncate_smaller));
 }
 
-CInodeRef Server::prepare_new_inode(MDRequestRef& mdr, CDentryRef& dn, inodeno_t useino, unsigned mode,
-				    file_layout_t *layout)
+CInodeRef Server::prepare_new_inode(const MDRequestRef& mdr, CDentryRef& dn,
+				    inodeno_t useino, unsigned mode, file_layout_t *layout)
 {
   CInodeRef in = new CInode(mdcache);
 
@@ -699,7 +699,7 @@ CInodeRef Server::prepare_new_inode(MDRequestRef& mdr, CDentryRef& dn, inodeno_t
   return in;
 }
 
-void Server::__mknod_finish(MDRequestRef& mdr)
+void Server::__mknod_finish(const MDRequestRef& mdr)
 {
   mdr->wait_committing();
 
@@ -732,7 +732,7 @@ void Server::__mknod_finish(MDRequestRef& mdr)
 class C_MDS_mknod_finish : public ServerContext {
   MDRequestRef mdr;
 public:
-  C_MDS_mknod_finish(Server *srv, MDRequestRef& r) :
+  C_MDS_mknod_finish(Server *srv, const MDRequestRef& r) :
     ServerContext(srv), mdr(r) { }
   void finish(int r) {
     assert(r == 0);
@@ -740,7 +740,7 @@ public:
   }
 };
 
-void Server::handle_client_mknod(MDRequestRef& mdr)
+void Server::handle_client_mknod(const MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
@@ -802,13 +802,13 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
   journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
 }
 
-void Server::handle_client_symlink(MDRequestRef& mdr)
+void Server::handle_client_symlink(const MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
@@ -846,13 +846,13 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
   journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
 };
 
-void Server::handle_client_mkdir(MDRequestRef& mdr)
+void Server::handle_client_mkdir(const MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
@@ -905,13 +905,13 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
   journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
 }
 
-void Server::handle_client_readdir(MDRequestRef& mdr)
+void Server::handle_client_readdir(const MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
@@ -1032,12 +1032,12 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   respond_to_request(mdr, 0);
 }
 
-CDentryRef Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
+CDentryRef Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 {
   return mdcache->get_or_create_stray_dentry(in);
 }
 
-void Server::__unlink_finish(MDRequestRef& mdr, version_t dnpv)
+void Server::__unlink_finish(const MDRequestRef& mdr, version_t dnpv)
 {
   mdr->wait_committing();
 
@@ -1098,7 +1098,7 @@ class C_MDS_unlink_finish : public ServerContext {
   MDRequestRef mdr;
   version_t dnpv;
 public:
-  C_MDS_unlink_finish(Server *srv, MDRequestRef& r, version_t pv) :
+  C_MDS_unlink_finish(Server *srv, const MDRequestRef& r, version_t pv) :
     ServerContext(srv), mdr(r), dnpv(pv) {}
   void finish(int r) {
     assert(r==0);
@@ -1106,7 +1106,7 @@ public:
   }
 };
 
-void Server::handle_client_unlink(MDRequestRef& mdr)
+void Server::handle_client_unlink(const MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   int r = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, true, true);
@@ -1189,18 +1189,18 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   dn->push_projected_linkage();
 
   if (dnl->is_primary()) {
-    mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-    mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, NULL, in.get(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, NULL, in.get(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
   } else {
-    mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), NULL, PREDIRTY_PRIMARY);
-    mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, NULL, in.get(), NULL, PREDIRTY_PRIMARY);
+    mdcache->predirty_journal_parents(mdr, NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, -1);
   }
 
   mdr->straydn = straydn;
   journal_and_reply(mdr, -1, 0, NULL, new C_MDS_unlink_finish(this, mdr, dnpv));
 }
 
-void Server::__link_finish(MDRequestRef& mdr, version_t dnpv)
+void Server::__link_finish(const MDRequestRef& mdr, version_t dnpv)
 { 
   mdr->wait_committing();
 
@@ -1223,7 +1223,7 @@ class C_MDS_link_finish : public ServerContext {
   MDRequestRef mdr;
   version_t dnpv;
   public:
-  C_MDS_link_finish(Server *srv, MDRequestRef& r, version_t pv)
+  C_MDS_link_finish(Server *srv, const MDRequestRef& r, version_t pv)
     : ServerContext(srv), mdr(r), dnpv(pv) {}
   void finish(int r) {
     assert(r==0);
@@ -1231,7 +1231,7 @@ class C_MDS_link_finish : public ServerContext {
   }
 };
 
-void Server::handle_client_link(MDRequestRef& mdr)
+void Server::handle_client_link(const MDRequestRef& mdr)
 {
   int r;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -1275,13 +1275,13 @@ void Server::handle_client_link(MDRequestRef& mdr)
   pi->ctime = mdr->get_op_stamp();
   pi->nlink++;
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, 1);
-  mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), 0, PREDIRTY_PRIMARY);
+  mdcache->predirty_journal_parents(mdr, NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, 1);
+  mdcache->predirty_journal_parents(mdr, NULL, in.get(), 0, PREDIRTY_PRIMARY);
 
   journal_and_reply(mdr, 1, 0, NULL, new C_MDS_link_finish(this, mdr, dnpv));
 }
 
-void Server::__rename_finish(MDRequestRef& mdr, version_t srcdn_pv, version_t destdn_pv)
+void Server::__rename_finish(const MDRequestRef& mdr, version_t srcdn_pv, version_t destdn_pv)
 {
   mdr->wait_committing();
 
@@ -1360,7 +1360,7 @@ class C_MDS_rename_finish : public ServerContext {
   version_t srcdn_pv;
   version_t destdn_pv;
   public:
-  C_MDS_rename_finish(Server *srv, MDRequestRef& r, version_t spv, version_t dpv)
+  C_MDS_rename_finish(Server *srv, const MDRequestRef& r, version_t spv, version_t dpv)
     : ServerContext(srv), mdr(r), srcdn_pv(spv), destdn_pv(dpv) {}
   void finish(int r) {
     assert(r==0);
@@ -1368,7 +1368,7 @@ class C_MDS_rename_finish : public ServerContext {
   }
 };
 
-void Server::handle_client_rename(MDRequestRef& mdr)
+void Server::handle_client_rename(const MDRequestRef& mdr)
 {
   int r;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -1526,29 +1526,29 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   }
 
   if (straydn) {
-    mdcache->predirty_journal_parents(mdr.get(), NULL, oldin.get(), straydn->get_dir(),
+    mdcache->predirty_journal_parents(mdr, NULL, oldin.get(), straydn->get_dir(),
 				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   int predirty_dir = linkmerge ? 0 : PREDIRTY_DIR;
   int predirty_primary;
   if (!dest_dnl->is_null()) {
     predirty_primary = dest_dnl->is_primary() ? PREDIRTY_PRIMARY : 0;
-    mdcache->predirty_journal_parents(mdr.get(), NULL, oldin.get(), destdn->get_dir(),
+    mdcache->predirty_journal_parents(mdr, NULL, oldin.get(), destdn->get_dir(),
 				      predirty_dir|predirty_primary , -1);
   }
 
   predirty_primary = (src_dnl->is_primary() && srcdn->get_dir() != destdn->get_dir()) ? PREDIRTY_PRIMARY : 0;
-  mdcache->predirty_journal_parents(mdr.get(), NULL, srci.get(), destdn->get_dir(),
+  mdcache->predirty_journal_parents(mdr, NULL, srci.get(), destdn->get_dir(),
 				    predirty_dir|predirty_primary, 1);
-  mdcache->predirty_journal_parents(mdr.get(), NULL, srci.get(), srcdn->get_dir(),
+  mdcache->predirty_journal_parents(mdr, NULL, srci.get(), srcdn->get_dir(),
 				    predirty_dir|predirty_primary, -1);
 
   if (!linkmerge) {
     if (dest_dnl->is_remote()) {
-      mdcache->predirty_journal_parents(mdr.get(), NULL, oldin.get(), NULL, PREDIRTY_PRIMARY);
+      mdcache->predirty_journal_parents(mdr, NULL, oldin.get(), NULL, PREDIRTY_PRIMARY);
     }
     if (src_dnl->is_remote()) {
-      mdcache->predirty_journal_parents(mdr.get(), NULL, srci.get(), NULL, PREDIRTY_PRIMARY);
+      mdcache->predirty_journal_parents(mdr, NULL, srci.get(), NULL, PREDIRTY_PRIMARY);
     }
   }
 
@@ -1556,7 +1556,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   journal_and_reply(mdr, 1, 0, NULL, new C_MDS_rename_finish(this, mdr, srcdn_pv, destdn_pv));
 }
 
-void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
+void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
 {
   MClientRequest *req = mdr->client_request;
 
@@ -1570,7 +1570,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
     mdr->lock_object(in.get());
     tracedn = 0;
   } else {
-    mdcache->lock_objects_for_update(mdr.get(), in.get(), false);
+    mdcache->lock_objects_for_update(mdr, in.get(), false);
   }
 
   locker->issue_new_caps(in.get(), cmode, mdr->session, req->is_replay());
@@ -1597,14 +1597,14 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
     pi->client_ranges = new_ranges;
   }
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, in.get(), NULL, PREDIRTY_PRIMARY);
+  mdcache->predirty_journal_parents(mdr, NULL, in.get(), NULL, PREDIRTY_PRIMARY);
   // journal inode;
 
 
   journal_and_reply(mdr, 0, tracedn, NULL, new C_MDS_inode_update_finish(this, mdr, old_size > 0));
 }
 
-void Server::handle_client_open(MDRequestRef& mdr)
+void Server::handle_client_open(const MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
 
@@ -1695,7 +1695,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   respond_to_request(mdr, 0);
 }
 
-void Server::handle_client_openc(MDRequestRef& mdr)
+void Server::handle_client_openc(const MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
   int cmode = ceph_flags_to_mode(req->head.args.open.flags);
@@ -1754,7 +1754,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr.get(), NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
 
   mdr->in[0] = newi;
   journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));

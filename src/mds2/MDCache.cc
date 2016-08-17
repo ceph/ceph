@@ -221,7 +221,7 @@ bool MDCache::trim_dentry(CDentry *dn)
   return true;
 }
 
-int MDCache::path_traverse(MDRequestRef& mdr, const filepath& path,
+int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 			   vector<CDentryRef> *pdnvec, CInodeRef *pin)
 {
   if (pdnvec)
@@ -323,7 +323,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
   return mdr;
 }
 
-void MDCache::dispatch_request(MDRequestRef& mdr)
+void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
   if (mdr->client_request) {
     server->dispatch_client_request(mdr);
@@ -332,18 +332,18 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
   }
 }
 
-void MDCache::request_finish(MDRequestRef& mdr)
+void MDCache::request_finish(const MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
 
   request_cleanup(mdr);
 }
 
-void MDCache::request_cleanup(MDRequestRef& mdr)
+void MDCache::request_cleanup(const MDRequestRef& mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
 
-  locker->drop_locks(mdr.get());
+  locker->drop_locks(mdr);
 
   mdr->cleanup();
 
@@ -362,7 +362,8 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 }
 
 
-void MDCache::lock_parents_for_linkunlink(MDRequestRef& mdr, CInode *in, CDentry *dn, bool apply)
+void MDCache::lock_parents_for_linkunlink(const MDRequestRef& mdr, CInode *in,
+					  CDentry *dn, bool apply)
 {
   for (;;) {
     CDentryRef parent_dn;
@@ -434,8 +435,8 @@ void MDCache::lock_parents_for_linkunlink(MDRequestRef& mdr, CInode *in, CDentry
   }
 }
 
-int MDCache::lock_parents_for_rename(MDRequestRef &mdr, CInode *srci, CInode *oldin,
-				      CDentry *srcdn, CDentry *destdn, bool apply)
+int MDCache::lock_parents_for_rename(const MDRequestRef& mdr, CInode *srci, CInode *oldin,
+				     CDentry *srcdn, CDentry *destdn, bool apply)
 {
   struct lock_object_lt {
     bool operator()(CInode* l, CInode* r) const {
@@ -526,7 +527,7 @@ int MDCache::lock_parents_for_rename(MDRequestRef &mdr, CInode *srci, CInode *ol
   }
 }
 
-void MDCache::lock_objects_for_update(MutationImpl *mut, CInode *in, bool apply)
+void MDCache::lock_objects_for_update(const MutationRef& mut, CInode *in, bool apply)
 {
   if (in->is_base()) {
     mut->lock_object(in);
@@ -569,7 +570,7 @@ void MDCache::project_rstat_frag_to_inode(const fnode_t *pf, inode_t *pi)
   pi->rstat.add(delta);
 }
 
-void MDCache::predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
+void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
 				       int flags, int linkunlink)
 {

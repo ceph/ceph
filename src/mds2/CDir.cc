@@ -302,7 +302,7 @@ void CDir::remove_dirty_rstat_inode(CInode *in)
   in->put(CInode::PIN_DIRTYRSTAT);
 }
 
-void CDir::assimilate_dirty_rstat_inodes(MutationRef& mut)
+void CDir::assimilate_dirty_rstat_inodes(const MutationRef& mut)
 { 
   inode->mutex_assert_locked_by_me();
   dout(10) << "assimilate_dirty_rstat_inodes" << dendl;
@@ -327,7 +327,7 @@ void CDir::assimilate_dirty_rstat_inodes(MutationRef& mut)
   dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
 }
 
-void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob)
+void CDir::assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlob *blob)
 {
   inode->mutex_assert_locked_by_me();
   if (!state_test(STATE_ASSIMRSTAT))

@@ -596,13 +596,13 @@ void MDSRank::queue_context(MDSInternalContextBase *c)
 }
 
 MDSRank::OpWQ::OpWQ(MDSRank *m, time_t ti, ThreadPool *tp)
-  : ThreadPool::WorkQueueVal<MDRequestRef, entity_name_t>("MDSRank::MsgWQ", ti, ti*10, tp),
+  : ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t>("MDSRank::MsgWQ", ti, ti*10, tp),
     mds(m), qlock("OpWQ::qlock"),
     pqueue(g_conf->osd_op_pq_max_tokens_per_priority,
            g_conf->osd_op_pq_min_cost)
 {}
 
-void MDSRank::OpWQ::_enqueue(MDRequestRef mdr)
+void MDSRank::OpWQ::_enqueue(const MDRequestRef& mdr)
 {
   if (mdr->retries > 0)
     pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_HIGH, mdr);
@@ -610,18 +610,22 @@ void MDSRank::OpWQ::_enqueue(MDRequestRef mdr)
     pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
 }
 
-void MDSRank::OpWQ::_enqueue_front(MDRequestRef mdr)
+void MDSRank::OpWQ::_enqueue_front(const MDRequestRef& mdr)
 {
+  assert(0);
+
+  MDRequestRef other;
   {
     Mutex::Locker l(qlock);
     auto it = op_for_processing.find(mdr->reqid.name);
     if (it != op_for_processing.end()) {
       it->second.push_front(mdr);
-      mdr = it->second.back();
+      other = it->second.back();
       it->second.pop_back();
     }
   }
-  pqueue.enqueue_strict_front(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
+  pqueue.enqueue_strict_front(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT,
+			      other ? other : mdr);
 }
 
 entity_name_t MDSRank::OpWQ::_dequeue()
@@ -742,7 +746,7 @@ void MDSRank::MsgWQ::_process(entity_inst_t inst, ThreadPool::TPHandle &handle)
   }
 }
 
-void MDSRank::retry_dispatch(MDRequestRef &mdr)
+void MDSRank::retry_dispatch(const MDRequestRef &mdr)
 {
   mdr->retries++;
   op_wq.queue(mdr);

@@ -36,18 +36,18 @@ public:
   void dispatch(Message *m);
   void tick();
 
-  int acquire_locks(MDRequestRef& mdr, set<SimpleLock*> &rdlocks,
+  int acquire_locks(const MDRequestRef& mdr, set<SimpleLock*> &rdlocks,
 		    set<SimpleLock*> &wrlocks, set<SimpleLock*> &xlocks);
-  void drop_locks(MutationImpl *mut);
-  void drop_non_rdlocks(MutationImpl *mut, set<CObject*>& objs);
-  void drop_rdlocks(MutationImpl *mut);
-  void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
+  void drop_locks(const MutationRef& mut);
+  void drop_non_rdlocks(const MutationRef& mut, set<CObject*>& objs);
+  void drop_rdlocks(const MutationRef& mut);
+  void set_xlocks_done(const MutationRef& mut, bool skip_dentry=false);
 
 protected:
 
   // -- locks --
-  void _drop_rdlocks(MutationImpl *mut, set<CInodeRef> *pneed_issue);
-  void _drop_non_rdlocks(MutationImpl *mut, set<CInodeRef> *pneed_issue, set<CObject*> *pobjs=NULL);
+  void _drop_rdlocks(const MutationRef& mut, set<CInodeRef> *pneed_issue);
+  void _drop_non_rdlocks(const MutationRef& mut, set<CInodeRef> *pneed_issue, set<CObject*> *pobjs=NULL);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, uint64_t *p_finish_mask=0);
   void eval(SimpleLock *lock, bool *need_issue);
@@ -61,21 +61,21 @@ protected:
   void try_eval(SimpleLock *lock, bool *pneed_issue); 
 
   bool rdlock_kick(SimpleLock *lock);
-  bool rdlock_start(SimpleLock *lock, MDRequestRef& mut);
-  void rdlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
+  bool rdlock_start(SimpleLock *lock, const MDRequestRef& mut);
+  void rdlock_finish(SimpleLock *lock, const MutationRef& mut, bool *pneed_issue);
 public:
-  void wrlock_force(SimpleLock *lock, MutationImpl *mut);
-  bool wrlock_start(SimpleLock *lock, MutationImpl *mut);
+  void wrlock_force(SimpleLock *lock, const MutationRef& mut);
+  bool wrlock_start(SimpleLock *lock, const MutationRef& mut);
 protected:
-  bool wrlock_start(SimpleLock *lock, MDRequestRef& mut);
-  void wrlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue, bool parent_locked=false);
+  bool wrlock_start(SimpleLock *lock, const MDRequestRef& mut);
+  void wrlock_finish(SimpleLock *lock, const MutationRef& mut, bool *pneed_issue, bool parent_locked=false);
 
-  bool xlock_start(SimpleLock *lock, MDRequestRef& mut);
+  bool xlock_start(SimpleLock *lock, const MDRequestRef& mut);
   void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
-  void xlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue, bool parent_locked=false);
-  void start_locking(SimpleLock *lock, bool xlock, MDRequestRef& mut);
-  void finish_locking(SimpleLock *lock, MutationImpl *mut);
-  void cancel_locking(MutationImpl *mut, set<CInodeRef> *pneed_issue);
+  void xlock_finish(SimpleLock *lock, const MutationRef& mut, bool *pneed_issue, bool parent_locked=false);
+  void start_locking(SimpleLock *lock, bool xlock, const MDRequestRef& mut);
+  void finish_locking(SimpleLock *lock, const MutationRef& mut);
+  void cancel_locking(const MutationRef& mut, set<CInodeRef> *pneed_issue);
 
 public:
   void simple_eval(SimpleLock *lock, bool *need_issue);
@@ -98,18 +98,18 @@ protected:
   void scatter_scatter(ScatterLock *lock, bool nowait=false);
   void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);
   void scatter_writebehind(ScatterLock *lock);
-  void do_scatter_writebehind(ScatterLock *lock, MutationRef& mut, bool async);
-  void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
+  void do_scatter_writebehind(ScatterLock *lock, const MutationRef& mut, bool async);
+  void scatter_writebehind_finish(ScatterLock *lock, const MutationRef& mut);
   friend class C_Locker_ScatterWritebehind;
   friend class C_Locker_ScatterWBFinish;
 
 public:
-  void local_wrlock_grab(LocalLock *lock, MutationImpl *mut);
+  void local_wrlock_grab(LocalLock *lock, const MutationRef& mut);
 protected:
-  bool local_wrlock_start(LocalLock *lock, MDRequestRef& mut);
-  void local_wrlock_finish(LocalLock *lock, MutationImpl *mut);
-  bool local_xlock_start(LocalLock *lock, MDRequestRef& mut);
-  void local_xlock_finish(LocalLock *lock, MutationImpl *mut);
+  bool local_wrlock_start(LocalLock *lock, const MDRequestRef& mut);
+  void local_wrlock_finish(LocalLock *lock, const MutationRef& mut);
+  bool local_xlock_start(LocalLock *lock, const MDRequestRef& mut);
+  void local_xlock_finish(LocalLock *lock, const MutationRef& mut);
 
   // file
 public:
@@ -125,7 +125,7 @@ public:
   void issue_caps_set(set<CInodeRef>& inset, bool parents_locked=false);
 
   void issue_truncate(CInode *in);
-  void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client,
+  void file_update_finish(CInode *in, const MutationRef& mut, bool share, client_t client,
 		  	  MClientCaps *ack);
   void calc_new_client_ranges(CInode *in, uint64_t size,
 			      map<client_t,client_writeable_range_t> *new_ranges,
@@ -139,12 +139,12 @@ public:
   void share_inode_max_size(CInode *in, client_t only_client=-1);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(MClientCaps *m);
-  void process_request_cap_release(MDRequestRef& mdr, client_t client,
+  void process_request_cap_release(const MDRequestRef& mdr, client_t client,
 				   const ceph_mds_request_release& item, const string &dname);
 
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   bool _do_cap_update(CInode *in, Capability *cap, MClientCaps *m, MClientCaps *ack,
-		      MutationRef &mut);
+		      MutationRef& mut);
   void handle_client_cap_release(MClientCapRelease *m);
   void _do_cap_release(Session *session, inodeno_t ino, uint64_t cap_id,
 		       ceph_seq_t mseq, ceph_seq_t seq);

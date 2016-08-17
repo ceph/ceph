@@ -58,7 +58,7 @@ public:
   bool trim_dentry(CDentry *dn);
   bool trim_inode(CDentry *dn, CInode *in);
 
-  int path_traverse(MDRequestRef& mdr,
+  int path_traverse(const MDRequestRef& mdr,
 		    const filepath& path, vector<CDentryRef> *pdnvec, CInodeRef *pin);
 
   CDentryRef get_or_create_stray_dentry(CInode *in);
@@ -70,22 +70,23 @@ protected:
 public:
   MDRequestRef request_start(MClientRequest *req);
   MDRequestRef request_get(metareqid_t reqid);
-  void dispatch_request(MDRequestRef& mdr);
-  void request_finish(MDRequestRef& mdr);
-  void request_cleanup(MDRequestRef& mdr);
+  void dispatch_request(const MDRequestRef& mdr);
+  void request_finish(const MDRequestRef& mdr);
+  void request_cleanup(const MDRequestRef& mdr);
 
 protected:
   Mutex rename_dir_mutex;
 public:
   void unlock_rename_dir_mutex() { rename_dir_mutex.Unlock(); }
-  void lock_parents_for_linkunlink(MDRequestRef &mdr, CInode *in, CDentry *dn, bool apply);
-  int lock_parents_for_rename(MDRequestRef& mdr, CInode *in, CInode *oldin,
+  void lock_parents_for_linkunlink(const MDRequestRef& mdr, CInode *in,
+		  		   CDentry *dn, bool apply);
+  int lock_parents_for_rename(const MDRequestRef& mdr, CInode *in, CInode *oldin,
 			      CDentry *srcdn, CDentry *destdn, bool apply);
-  void lock_objects_for_update(MutationImpl *mut, CInode *in, bool apply);
+  void lock_objects_for_update(const MutationRef& mut, CInode *in, bool apply);
 
   void project_rstat_inode_to_frag(CInode *in, CDir* dir, int linkunlink);
   void project_rstat_frag_to_inode(const fnode_t *pf, inode_t *pi);
-  void predirty_journal_parents(MutationImpl *mut, EMetaBlob *blob,
+  void predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
 				CInode *in, CDir *parent, int flags,
 				int linkunlink = 0);
 
