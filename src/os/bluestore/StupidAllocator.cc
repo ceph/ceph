@@ -3,7 +3,7 @@
 
 #include "StupidAllocator.h"
 #include "bluestore_types.h"
-#include "BlueStore.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
