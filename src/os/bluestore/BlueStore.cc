@@ -1182,7 +1182,7 @@ void BlueStore::BlobMap::encode(bufferlist& bl) const
   ::encode(n, bl);
   for (auto p = blob_map.begin(); n--; ++p) {
     ::encode(p->id, bl);
-    ::encode(p->blob, bl);
+    p->encode(bl);
   }
 }
 
@@ -1195,7 +1195,7 @@ void BlueStore::BlobMap::decode(bufferlist::iterator& p, Cache *c)
     int64_t id;
     ::decode(id, p);
     Blob *b = new Blob(id, c);
-    ::decode(b->blob, p);
+    b->decode(p);
     b->get();
     blob_map.insert(*b);
   }

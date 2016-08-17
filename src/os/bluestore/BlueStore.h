@@ -288,11 +288,14 @@ public:
   struct Blob : public boost::intrusive::set_base_hook<> {
     std::atomic_int nref;  ///< reference count
     int64_t id = 0;          ///< id
-  private:
-    bluestore_blob_t blob;   ///< blob metadata
-  public:
     BufferSpace bc;          ///< buffer cache
 
+  private:
+    bluestore_blob_t blob;        ///< decoded blob metadata
+    mutable bool dirty = true;    ///< true if blob != blob_bl
+    mutable bufferlist blob_bl;   ///< cached encoded blob
+
+  public:
     Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
     ~Blob() {
       assert(bc.empty());
@@ -320,6 +323,10 @@ public:
       return blob;
     }
     bluestore_blob_t& dirty_blob() {
+      if (!dirty) {
+	dirty = true;
+	blob_bl.clear();
+      }
       return blob;
     }
 
@@ -332,6 +339,22 @@ public:
     void put() {
       if (--nref == 0)
 	delete this;
+    }
+
+    void encode(bufferlist& bl) const {
+      if (dirty) {
+	::encode(blob, blob_bl);
+	dirty = false;
+      } else {
+	assert(blob_bl.length());
+      }
+      bl.append(blob_bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      bufferlist::iterator start = p;
+      ::decode(blob, p);
+      start.copy(p.get_off() - start.get_off(), blob_bl);
+      dirty = false;
     }
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
