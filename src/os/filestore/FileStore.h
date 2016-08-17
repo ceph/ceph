@@ -52,13 +52,13 @@ using namespace std;
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-#define BTRFS_SUPER_MAGIC 0x9123683E
+#define BTRFS_SUPER_MAGIC 0x9123683EL
 # endif
 # ifndef XFS_SUPER_MAGIC
-#define XFS_SUPER_MAGIC 0x58465342
+#define XFS_SUPER_MAGIC 0x58465342L
 # endif
 # ifndef ZFS_SUPER_MAGIC
-#define ZFS_SUPER_MAGIC 0x2fc12fc1
+#define ZFS_SUPER_MAGIC 0x2fc12fc1L
 # endif
 #endif
 
