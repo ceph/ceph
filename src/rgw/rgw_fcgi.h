@@ -11,7 +11,7 @@
 
 struct FCGX_Request;
 
-class RGWFCGX : public RGWStreamIOEngine
+class RGWFCGX : public RGWRestfulIOEngine
 {
   FCGX_Request *fcgx;
   RGWEnv env;

@@ -10,7 +10,7 @@
 
 struct mg_connection;
 
-class RGWCivetWeb : public RGWStreamIOEngine
+class RGWCivetWeb : public RGWRestfulIOEngine
 {
   RGWEnv env;
   mg_connection *conn;

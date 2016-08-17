@@ -173,7 +173,7 @@ public:
 extern int process_request(RGWRados* store,
                            RGWREST* rest,
                            RGWRequest* req,
-		           RGWStreamIO* client_io,
+		           RGWRestfulIO* client_io,
                            OpsLogSocket* olog);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,

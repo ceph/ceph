@@ -39,9 +39,8 @@ public:
 };
 
 
-class RGWStreamIOEngine : public RGWClientIO {
-  friend class RGWStreamIOLegacyWrapper;
-  template<typename T> friend class RGWDecoratedStreamIO;
+class RGWRestfulIOEngine : public RGWClientIO {
+  template<typename T> friend class RGWDecoratedRestfulIO;
 
 public:
   class Exception : public std::exception {
@@ -94,15 +93,15 @@ public:
 };
 
 
-/* Abstract decorator over any implementation of RGWStreamIOEngine. */
+/* Abstract decorator over any implementation of RGWRestfulIOEngine. */
 template <typename DecorateeT>
-class RGWDecoratedStreamIO : public RGWStreamIOEngine {
-  template<typename T> friend class RGWDecoratedStreamIO;
+class RGWDecoratedRestfulIO : public RGWRestfulIOEngine {
+  template<typename T> friend class RGWDecoratedRestfulIO;
 
   typedef typename std::remove_pointer<DecorateeT>::type DerefedDecorateeT;
 
-  static_assert(std::is_base_of<RGWStreamIOEngine, DerefedDecorateeT>::value,
-                "DecorateeT must be a subclass of RGWStreamIOEngine");
+  static_assert(std::is_base_of<RGWRestfulIOEngine, DerefedDecorateeT>::value,
+                "DecorateeT must be a subclass of RGWRestfulIOEngine");
 
   DecorateeT decoratee;
 
@@ -130,7 +129,7 @@ protected:
   }
 
 public:
-  RGWDecoratedStreamIO(DecorateeT&& decoratee)
+  RGWDecoratedRestfulIO(DecorateeT&& decoratee)
     : decoratee(std::move(decoratee)) {
   }
 
@@ -184,8 +183,8 @@ public:
 
 
 /* HTTP IO: compatibility layer */
-class RGWStreamIO : public RGWClientIOAccounter,
-                    public RGWDecoratedStreamIO<RGWStreamIOEngine*> {
+class RGWRestfulIO : public RGWClientIOAccounter,
+                     public RGWDecoratedRestfulIO<RGWRestfulIOEngine*> {
 protected:
   bool _account;
   size_t bytes_sent;
@@ -200,17 +199,17 @@ protected:
   RGWEnv env;
 
 public:
-  virtual ~RGWStreamIO() {}
+  virtual ~RGWRestfulIO() {}
 
-  RGWStreamIO(RGWStreamIOEngine* engine)
-    : RGWDecoratedStreamIO<RGWStreamIOEngine*>(std::move(engine)),
+  RGWRestfulIO(RGWRestfulIOEngine* engine)
+    : RGWDecoratedRestfulIO<RGWRestfulIOEngine*>(std::move(engine)),
       _account(false),
       bytes_sent(0),
       bytes_received(0),
       sha256_hash(nullptr) {
   }
 
-  using RGWDecoratedStreamIO<RGWStreamIOEngine*>::recv_body;
+  using RGWDecoratedRestfulIO<RGWRestfulIOEngine*>::recv_body;
   virtual int recv_body(char* buf, std::size_t max, bool calculate_hash);
   std::string grab_aws4_sha256_hash();
 
@@ -229,31 +228,19 @@ public:
   uint64_t get_bytes_received() const override {
     return bytes_received;
   }
-}; /* RGWStreamIO */
-
-
-/* A class for preserving interface compatibility with RGWStreamIO clients
- * while allowing front-end migration to the new API. We don't multi-inherit
- * from RGWDecoratedStreamIO<> to avoid using virtual inheritance in engine.
- * Should be removed after converting all clients. */
-class RGWStreamIOLegacyWrapper : public RGWStreamIO {
-public:
-  RGWStreamIOLegacyWrapper(RGWStreamIOEngine * const engine)
-    : RGWStreamIO(std::move(engine)) {
-  }
-};
+}; /* RGWRestfulIO */
 
 
 class RGWClientIOStreamBuf : public std::streambuf {
 protected:
-  RGWStreamIO &sio;
+  RGWRestfulIO &rio;
   std::size_t const window_size;
   std::size_t const putback_size;
   std::vector<char> buffer;
 
 public:
-  RGWClientIOStreamBuf(RGWStreamIO &s, std::size_t ws, std::size_t ps = 1)
-    : sio(s),
+  RGWClientIOStreamBuf(RGWRestfulIO &rio, std::size_t ws, std::size_t ps = 1)
+    : rio(rio),
       window_size(ws),
       putback_size(ps),
       buffer(ws + ps)
@@ -279,7 +266,7 @@ public:
       start = base;
     }
 
-    const int read_len = sio.recv_body(base, window_size, false);
+    const int read_len = rio.recv_body(base, window_size, false);
     if (read_len < 0 || 0 == read_len) {
       return traits_type::eof();
     }
@@ -296,7 +283,7 @@ class RGWClientIOStream : private RGWClientIOStreamBuf, public std::istream {
  * ctor is being called prior to construction of any member of this class. */
 
 public:
-  explicit RGWClientIOStream(RGWStreamIO &s)
+  explicit RGWClientIOStream(RGWRestfulIO &s)
     : RGWClientIOStreamBuf(s, 1, 2),
       istream(static_cast<RGWClientIOStreamBuf *>(this)) {
   }

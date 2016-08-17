@@ -1335,7 +1335,7 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
 {
   constexpr size_t MAX_LINE_SIZE = 2048;
 
-  RGWClientIOStreamBuf ciosb(static_cast<RGWStreamIO&>(*(s->cio)),
+  RGWClientIOStreamBuf ciosb(static_cast<RGWRestfulIO&>(*(s->cio)),
 			     std::size_t(s->cct->_conf->rgw_max_chunk_size));
   istream cioin(&ciosb);
 

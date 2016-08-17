@@ -33,8 +33,8 @@ extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen,
 /* type conversions to work around lack of req_state type
  * hierarchy matching (e.g.) REST backends (may be replaced w/dynamic
  * typed req_state) */
-static inline RGWStreamIO* STREAM_IO(struct req_state* s) {
-  return static_cast<RGWStreamIO*>(s->cio);
+static inline RGWRestfulIO* STREAM_IO(struct req_state* s) {
+  return static_cast<RGWRestfulIO*>(s->cio);
 }
 
 template <class T>
@@ -151,8 +151,6 @@ public:
     set_formatter(s->formatter);
   }
 };
-
-class RGWStreamIO;
 
 class RGWGetObj_ObjStore : public RGWGetObj
 {
@@ -481,16 +479,19 @@ public:
 };
 
 class RGWLibIO;
+class RGWRestfulIO;
 
 class RGWREST {
   RGWRESTMgr mgr;
 
-  static int preprocess(struct req_state *s, RGWClientIO *sio);
+  static int preprocess(struct req_state *s, RGWClientIO *rio);
 public:
   RGWREST() {}
-  RGWHandler_REST *get_handler(RGWRados *store, struct req_state *s,
-			      RGWStreamIO *sio,
-			      RGWRESTMgr **pmgr, int *init_error);
+  RGWHandler_REST *get_handler(RGWRados *store,
+                               struct req_state *s,
+                               RGWRestfulIO *rio,
+                               RGWRESTMgr **pmgr,
+                               int *init_error);
 #if 0
   RGWHandler *get_handler(RGWRados *store, struct req_state *s,
 			  RGWLibIO *io, RGWRESTMgr **pmgr,

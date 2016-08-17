@@ -281,7 +281,7 @@ static void dump_status(struct req_state *s, int status,
   s->formatter->set_status(status, status_name);
   try {
     STREAM_IO(s)->send_status(status, status_name);
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err="
                      << e.value() << dendl;
   }
@@ -376,7 +376,7 @@ void dump_header(struct req_state* const s,
 {
   try {
     STREAM_IO(s)->send_header(name, val);
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_header() returned err="
                      << e.value() << dendl;
   }
@@ -415,7 +415,7 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
 {
   try {
     STREAM_IO(s)->send_content_length(len);
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << e.value() << dendl;
   }
@@ -708,7 +708,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
 
   try {
     STREAM_IO(s)->complete_header();
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->complete_header() returned err="
 		     << e.value() << dendl;
   }
@@ -798,7 +798,7 @@ void dump_continue(struct req_state * const s)
 {
   try {
     STREAM_IO(s)->send_100_continue();
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->send_100_continue() returned err="
 		     << e.value() << dendl;
   }
@@ -834,7 +834,7 @@ int dump_body(struct req_state* const s,
 {
   try {
     return STREAM_IO(s)->send_body(buf, len);
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     return e.value();
   }
 }
@@ -855,7 +855,7 @@ int recv_body(struct req_state* const s,
 {
   try {
     return STREAM_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
-  } catch (RGWStreamIOEngine::Exception& e) {
+  } catch (RGWRestfulIOEngine::Exception& e) {
     return e.value();
   }
 }
@@ -2043,12 +2043,12 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
 }
 
 RGWHandler_REST* RGWREST::get_handler(RGWRados *store, struct req_state *s,
-				      RGWStreamIO *sio, RGWRESTMgr **pmgr,
+				      RGWRestfulIO *rio, RGWRESTMgr **pmgr,
 				      int *init_error)
 {
   RGWHandler_REST* handler;
 
-  *init_error = preprocess(s, sio);
+  *init_error = preprocess(s, rio);
   if (*init_error < 0)
     return NULL;
 
@@ -2066,7 +2066,7 @@ RGWHandler_REST* RGWREST::get_handler(RGWRados *store, struct req_state *s,
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
-  *init_error = handler->init(store, s, sio);
+  *init_error = handler->init(store, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);
     return NULL;
