@@ -182,52 +182,34 @@ public:
 };
 
 
-/* HTTP IO: compatibility layer */
-class RGWRestfulIO : public RGWClientIOAccounter,
-                     public RGWDecoratedRestfulIO<RGWRestfulIOEngine*> {
-protected:
-  bool _account;
-  size_t bytes_sent;
-  size_t bytes_received;
+/* We're doing this nasty thing only because of extensive usage of templates
+ * to implement the static decorator pattern. C++ templates de facto enforce
+ * mixing interfaces with implementation. Additionally, those classes derive
+ * from RGWRestfulIO defined here. I believe that including in the middle of
+ * file is still better than polluting it directly. */
+#include "rgw_client_io_decoimpl.h"
 
+
+/* RGWRestfulIO: high level interface to interact with RESTful clients. What
+ * differentiates it from RGWRestfulIOEngine is providing more specific APIs
+ * like RGWClientIOAccounter or the AWS Auth v4 stuff implemented by filters
+ * while hiding the pipelined architecture from clients.
+ *
+ * RGWClientIOAccounter came in as a part of RGWRestfulIOAccountingEngine. */
+class RGWRestfulIO : public RGWRestfulIOAccountingEngine<RGWRestfulIOEngine*> {
   SHA256 *sha256_hash;
-
-  bool account() const {
-    return _account;
-  }
-
-  RGWEnv env;
 
 public:
   virtual ~RGWRestfulIO() {}
 
   RGWRestfulIO(RGWRestfulIOEngine* engine)
-    : RGWDecoratedRestfulIO<RGWRestfulIOEngine*>(std::move(engine)),
-      _account(false),
-      bytes_sent(0),
-      bytes_received(0),
+    : RGWRestfulIOAccountingEngine<RGWRestfulIOEngine*>(std::move(engine)),
       sha256_hash(nullptr) {
   }
 
   using RGWDecoratedRestfulIO<RGWRestfulIOEngine*>::recv_body;
   virtual int recv_body(char* buf, std::size_t max, bool calculate_hash);
   std::string grab_aws4_sha256_hash();
-
-  RGWEnv& get_env() noexcept override {
-    return env;
-  }
-
-  void set_account(bool _accnt) override {
-    _account = _accnt;
-  }
-
-  uint64_t get_bytes_sent() const override {
-    return bytes_sent;
-  }
-
-  uint64_t get_bytes_received() const override {
-    return bytes_received;
-  }
 }; /* RGWRestfulIO */
 
 
