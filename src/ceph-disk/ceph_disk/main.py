@@ -1990,21 +1990,22 @@ class PrepareSpace(object):
             raise Error('unexpected type ', self.type)
 
     def prepare_file(self):
-        if not os.path.exists(getattr(self.args, self.name)):
+        space_filename = getattr(self.args, self.name)
+        if not os.path.exists(space_filename):
             LOG.debug('Creating %s file %s with size 0'
                       ' (ceph-osd will resize and allocate)',
                       self.name,
-                      getattr(self.args, self.name))
-            with open(getattr(self.args, self.name), 'wb') as space_file:
-                pass
+                      space_filename)
+            space_file = open(space_filename, 'wb')
+            space_file.close()
 
         LOG.debug('%s is file %s',
                   self.name.capitalize(),
-                  getattr(self.args, self.name))
+                  space_filename)
         LOG.warning('OSD will not be hot-swappable if %s is '
                     'not the same device as the osd data' %
                     self.name)
-        self.space_symlink = space_file
+        self.space_symlink = space_filename
 
     def prepare_device(self):
         reusing_partition = False
