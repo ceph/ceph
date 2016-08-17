@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockImageState.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/exclusive_lock/AcquireRequest.h"
 #include "librbd/exclusive_lock/ReacquireRequest.h"
@@ -129,9 +130,11 @@ public:
   void expect_acquire_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                            MockAcquireRequest &acquire_request, int r) {
     expect_get_watch_handle(mock_image_ctx);
+    expect_prepare_lock(mock_image_ctx);
     EXPECT_CALL(acquire_request, send())
                   .WillOnce(DoAll(FinishLockUnlock(&acquire_request),
                                   FinishRequest(&acquire_request, r, &mock_image_ctx)));
+    expect_handle_prepare_lock_complete(mock_image_ctx);
     if (r == 0) {
       expect_notify_acquired_lock(mock_image_ctx);
       expect_unblock_writes(mock_image_ctx);
@@ -141,9 +144,15 @@ public:
   void expect_release_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                            MockReleaseRequest &release_request, int r,
                            bool shutting_down = false) {
+    if (!shutting_down) {
+      expect_prepare_lock(mock_image_ctx);
+    }
     EXPECT_CALL(release_request, send())
                   .WillOnce(DoAll(FinishLockUnlock(&release_request),
                                   FinishRequest(&release_request, r, &mock_image_ctx)));
+    if (!shutting_down) {
+      expect_handle_prepare_lock_complete(mock_image_ctx);
+    }
     if (r == 0) {
       if (shutting_down) {
         expect_unblock_writes(mock_image_ctx);
@@ -186,6 +195,17 @@ public:
   void expect_flush_notifies(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
+  void expect_prepare_lock(MockExclusiveLockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.state, prepare_lock(_))
+      .WillOnce(Invoke([](Context *on_ready) {
+                  on_ready->complete(0);
+                }));
+  }
+
+  void expect_handle_prepare_lock_complete(MockExclusiveLockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.state, handle_prepare_lock_complete());
   }
 
   int when_init(MockExclusiveLockImageCtx &mock_image_ctx,
@@ -551,16 +571,20 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   MockAcquireRequest try_lock_acquire;
   C_SaferCond wait_for_send_ctx1;
   expect_get_watch_handle(mock_image_ctx);
+  expect_prepare_lock(mock_image_ctx);
   EXPECT_CALL(try_lock_acquire, send())
                 .WillOnce(Notify(&wait_for_send_ctx1));
+  expect_handle_prepare_lock_complete(mock_image_ctx);
 
   MockAcquireRequest request_acquire;
   expect_acquire_lock(mock_image_ctx, request_acquire, 0);
 
   MockReleaseRequest release;
   C_SaferCond wait_for_send_ctx2;
+  expect_prepare_lock(mock_image_ctx);
   EXPECT_CALL(release, send())
                 .WillOnce(Notify(&wait_for_send_ctx2));
+  expect_handle_prepare_lock_complete(mock_image_ctx);
   expect_notify_released_lock(mock_image_ctx);
   expect_is_lock_request_needed(mock_image_ctx, false);
 
