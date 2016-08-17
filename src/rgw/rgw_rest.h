@@ -30,13 +30,6 @@ extern void rgw_flush_formatter(struct req_state *s,
 extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen,
 				   int max_len);
 
-/* type conversions to work around lack of req_state type
- * hierarchy matching (e.g.) REST backends (may be replaced w/dynamic
- * typed req_state) */
-static inline RGWRestfulIO* STREAM_IO(struct req_state* s) {
-  return static_cast<RGWRestfulIO*>(s->cio);
-}
-
 template <class T>
 int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 			    int max_len, bool *empty)

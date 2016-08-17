@@ -280,7 +280,7 @@ static void dump_status(struct req_state *s, int status,
 {
   s->formatter->set_status(status, status_name);
   try {
-    STREAM_IO(s)->send_status(status, status_name);
+    RESTFUL_IO(s)->send_status(status, status_name);
   } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err="
                      << e.value() << dendl;
@@ -375,7 +375,7 @@ void dump_header(struct req_state* const s,
                  const boost::string_ref& val)
 {
   try {
-    STREAM_IO(s)->send_header(name, val);
+    RESTFUL_IO(s)->send_header(name, val);
   } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_header() returned err="
                      << e.value() << dendl;
@@ -414,7 +414,7 @@ void dump_header(struct req_state* const s,
 void dump_content_length(struct req_state* const s, const uint64_t len)
 {
   try {
-    STREAM_IO(s)->send_content_length(len);
+    RESTFUL_IO(s)->send_content_length(len);
   } catch (RGWRestfulIOEngine::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << e.value() << dendl;
@@ -425,9 +425,9 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
 static void dump_chunked_encoding(struct req_state* const s)
 {
   try {
-    STREAM_IO(s)->send_chunked_transfer_encoding();
+    RESTFUL_IO(s)->send_chunked_transfer_encoding();
   } catch (RGWRestfulIOEngine::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->send_chunked_transfer_encoding()"
+    ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->send_chunked_transfer_encoding()"
                      << " returned err=" << e.what() << dendl;
   }
 }
@@ -707,13 +707,13 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   }
 
   try {
-    STREAM_IO(s)->complete_header();
+    RESTFUL_IO(s)->complete_header();
   } catch (RGWRestfulIOEngine::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->complete_header() returned err="
+    ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->complete_header() returned err="
 		     << e.value() << dendl;
   }
 
-  STREAM_IO(s)->set_account(true);
+  ACCOUNTING_IO(s)->set_account(true);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -785,7 +785,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
        *   x-amz-error-detail-Key: foo
        */
       end_header(s, op, NULL, error_content.size(), false, true);
-      STREAM_IO(s)->send_body(error_content.c_str(), error_content.size());
+      RESTFUL_IO(s)->send_body(error_content.c_str(), error_content.size());
     } else {
       end_header(s, op);
     }
@@ -797,9 +797,9 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
 void dump_continue(struct req_state * const s)
 {
   try {
-    STREAM_IO(s)->send_100_continue();
+    RESTFUL_IO(s)->send_100_continue();
   } catch (RGWRestfulIOEngine::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: STREAM_IO(s)->send_100_continue() returned err="
+    ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->send_100_continue() returned err="
 		     << e.value() << dendl;
   }
 }
@@ -833,7 +833,7 @@ int dump_body(struct req_state* const s,
               const std::size_t len)
 {
   try {
-    return STREAM_IO(s)->send_body(buf, len);
+    return RESTFUL_IO(s)->send_body(buf, len);
   } catch (RGWRestfulIOEngine::Exception& e) {
     return e.value();
   }
@@ -854,7 +854,7 @@ int recv_body(struct req_state* const s,
               const std::size_t max)
 {
   try {
-    return STREAM_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
+    return RESTFUL_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
   } catch (RGWRestfulIOEngine::Exception& e) {
     return e.value();
   }
