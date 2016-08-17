@@ -10,8 +10,7 @@
 
 struct mg_connection;
 
-class RGWCivetWeb : public RGWStreamIOEngine,
-                    private RGWStreamIOFacade
+class RGWCivetWeb : public RGWStreamIOEngine
 {
   RGWEnv env;
   mg_connection *conn;
@@ -41,13 +40,6 @@ public:
   }
 
   RGWCivetWeb(mg_connection *_conn, int _port);
-  RGWCivetWeb(const RGWCivetWeb& rhs)
-    : RGWStreamIOFacade(this),
-      env(rhs.env),
-      conn(rhs.conn),
-      explicit_keepalive(rhs.explicit_keepalive),
-      explicit_conn_close(rhs.explicit_conn_close) {
-  }
 };
 
 #endif
