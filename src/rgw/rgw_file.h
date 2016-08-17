@@ -706,6 +706,7 @@ namespace rgw {
     RGWAccessKey key; // XXXX acc_key
 
     static atomic<uint32_t> fs_inst;
+    static uint32_t write_completion_interval_s;
     std::string fsid;
 
     using lock_guard = std::lock_guard<std::mutex>;

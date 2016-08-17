@@ -1324,6 +1324,9 @@ OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
 OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
 OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
 OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+OPTION(rgw_nfs_write_completion_interval_s, OPT_INT, 10) /* stateless (V3)
+							  * commit
+							  * delay */
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
