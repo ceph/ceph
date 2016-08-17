@@ -38,6 +38,8 @@ namespace rgw {
 
   atomic<uint32_t> RGWLibFS::fs_inst;
 
+  uint32_t RGWLibFS::write_completion_interval_s = 10;
+
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
 
@@ -815,7 +817,8 @@ namespace rgw {
 	  /* start write timer */
 	  f->write_req->timer_id =
 	    RGWLibFS::write_timer.add_event(
-	      std::chrono::seconds(10), WriteCompletion(*this));
+	      std::chrono::seconds(RGWLibFS::write_completion_interval_s),
+	      WriteCompletion(*this));
 	}
       }
     }
