@@ -38,7 +38,6 @@ public:
   int refresh();
   int refresh_if_required();
   void refresh(Context *on_finish);
-  void acquire_lock_refresh(Context *on_finish);
 
   void snap_set(const std::string &snap_name, Context *on_finish);
 
@@ -73,7 +72,6 @@ private:
   struct Action {
     ActionType action_type;
     uint64_t refresh_seq = 0;
-    bool refresh_acquiring_lock = false;
     std::string snap_name;
     Context *on_ready = nullptr;
 
@@ -85,8 +83,7 @@ private:
       }
       switch (action_type) {
       case ACTION_TYPE_REFRESH:
-        return (refresh_seq == action.refresh_seq &&
-                refresh_acquiring_lock == action.refresh_acquiring_lock);
+        return (refresh_seq == action.refresh_seq);
       case ACTION_TYPE_SET_SNAP:
         return snap_name == action.snap_name;
       case ACTION_TYPE_LOCK:
@@ -114,8 +111,6 @@ private:
 
   bool is_transition_state() const;
   bool is_closed() const;
-
-  void refresh(bool acquiring_lock, Context *on_finish);
 
   void append_context(const Action &action, Context *context);
   void execute_next_action_unlock();
