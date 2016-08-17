@@ -68,32 +68,34 @@ public:
 };
 
 template <class S, class T>
-class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
+class RGWSendRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
+  string method;
   string path;
   param_vec_t params;
   T *result;
   S input;
 
-  boost::intrusive_ptr<RGWRESTPostResource> http_op;
+  boost::intrusive_ptr<RGWRESTSendResource> http_op;
 
 public:
-  RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
-                        RGWHTTPManager *_http_manager, const string& _path,
+  RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager,
+                        const string& _method, const string& _path,
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-      path(_path), params(make_param_list(_params)), result(_result),
+      method(_method), path(_path), params(make_param_list(_params)), result(_result),
       input(_input)
   {}
 
-  ~RGWPostRESTResourceCR() {
+  ~RGWSendRESTResourceCR() {
     request_cleanup();
   }
 
   int send_request() {
-    auto op = boost::intrusive_ptr<RGWRESTPostResource>(
-        new RGWRESTPostResource(conn, path, params, NULL, http_manager));
+    auto op = boost::intrusive_ptr<RGWRESTSendResource>(
+        new RGWRESTSendResource(conn, method, path, params, NULL, http_manager));
 
     op->set_user_info((void *)stack);
 
@@ -141,6 +143,30 @@ public:
       http_op = NULL;
     }
   }
+};
+
+template <class S, class T>
+class RGWPostRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
+public:
+  RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager,
+                        const string& _path,
+                        rgw_http_param_pair *_params, S& _input, T *_result)
+    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                            "POST", _path,
+                            _params, _input, _result) {}
+};
+
+template <class S, class T>
+class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
+public:
+  RGWPutRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager,
+                        const string& _path,
+                        rgw_http_param_pair *_params, S& _input, T *_result)
+    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                            "PUT", _path,
+                            _params, _input, _result) {}
 };
 
 #endif
