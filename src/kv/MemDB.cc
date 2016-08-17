@@ -503,6 +503,7 @@ int MemDB::MDBWholeSpaceIteratorImpl::seek_to_first(const std::string &k)
   if (m_iter == m_btree_p->end()) {
     return -1;
   }
+  fill_current();
   return 0;
 }
 
@@ -520,6 +521,7 @@ int MemDB::MDBWholeSpaceIteratorImpl::seek_to_last(const std::string &k)
   if (m_iter == m_btree_p->end()) {
     return -1;
   }
+  fill_current();
   return 0;
 }
 
