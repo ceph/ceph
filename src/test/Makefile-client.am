@@ -476,6 +476,7 @@ unittest_rbd_mirror_SOURCES = \
 	test/rbd_mirror/test_mock_fixture.cc \
 	test/rbd_mirror/test_mock_ImageReplayer.cc \
 	test/rbd_mirror/test_mock_ImageSync.cc \
+	test/rbd_mirror/test_mock_ImageSyncThrottler.cc \
 	test/rbd_mirror/image_replayer/test_mock_BootstrapRequest.cc \
 	test/rbd_mirror/image_replayer/test_mock_CreateImageRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_ImageCopyRequest.cc \

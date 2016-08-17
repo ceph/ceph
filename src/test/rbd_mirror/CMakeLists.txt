@@ -14,6 +14,7 @@ add_executable(unittest_rbd_mirror EXCLUDE_FROM_ALL
   test_main.cc
   test_mock_fixture.cc
   test_mock_ImageSync.cc
+  test_mock_ImageSyncThrottler.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc
   image_sync/test_mock_ImageCopyRequest.cc

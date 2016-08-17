@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "Mirror.h"
 #include "Threads.h"
+#include "ImageSync.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -217,8 +218,11 @@ int Mirror::init()
   // TODO: make interval configurable
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
-  m_image_deleter.reset(new ImageDeleter(m_local, m_threads->timer,
+  m_image_deleter.reset(new ImageDeleter(m_local, m_threads->work_queue,
+                                         m_threads->timer,
                                          &m_threads->timer_lock));
+
+  m_image_sync_throttler.reset(new ImageSyncThrottler<>());
 
   return r;
 }
@@ -264,6 +268,13 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
   }
 
   m_image_deleter->print_status(f, ss);
+
+  if (f) {
+    f->close_section();
+    f->open_object_section("sync_throttler");
+  }
+
+  m_image_sync_throttler->print_status(f, ss);
 
   if (f) {
     f->close_section();
@@ -363,6 +374,7 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
       if (m_replayers.find(pool_peer) == m_replayers.end()) {
         dout(20) << "starting replayer for " << peer << dendl;
         unique_ptr<Replayer> replayer(new Replayer(m_threads, m_image_deleter,
+                                                   m_image_sync_throttler,
                                                    m_local, kv.first, peer,
                                                    m_args));
         // TODO: make async, and retry connecting within replayer

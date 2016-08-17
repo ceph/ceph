@@ -408,14 +408,28 @@ wait_for_replay_complete()
     local cluster=$2
     local pool=$3
     local image=$4
-    local s master_pos mirror_pos
+    local s master_pos mirror_pos last_mirror_pos
+    local master_tag master_entry mirror_tag mirror_entry
 
-    for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
-	sleep ${s}
-	flush "${local_cluster}" "${pool}" "${image}"
-	master_pos=$(get_master_position "${cluster}" "${pool}" "${image}")
-	mirror_pos=$(get_mirror_position "${cluster}" "${pool}" "${image}")
-	test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
+    while true; do
+        for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
+	    sleep ${s}
+	    flush "${local_cluster}" "${pool}" "${image}"
+	    master_pos=$(get_master_position "${cluster}" "${pool}" "${image}")
+	    mirror_pos=$(get_mirror_position "${cluster}" "${pool}" "${image}")
+	    test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
+            test "${mirror_pos}" != "${last_mirror_pos}" && break
+        done
+
+        test "${mirror_pos}" = "${last_mirror_pos}" && return 1
+        last_mirror_pos="${mirror_pos}"
+
+        # handle the case where the mirror is ahead of the master
+        master_tag=$(echo "${master_pos}" | grep -Eo "tag_tid=[0-9]*" | cut -d'=' -f 2)
+        mirror_tag=$(echo "${mirror_pos}" | grep -Eo "tag_tid=[0-9]*" | cut -d'=' -f 2)
+        master_entry=$(echo "${master_pos}" | grep -Eo "entry_tid=[0-9]*" | cut -d'=' -f 2)
+        mirror_entry=$(echo "${mirror_pos}" | grep -Eo "entry_tid=[0-9]*" | cut -d'=' -f 2)
+        test "${master_tag}" = "${mirror_tag}" -a ${master_entry} -le ${mirror_entry} && return 0
     done
     return 1
 }
@@ -658,6 +672,15 @@ wait_for_image_present()
 	test_image_present "${cluster}" "${pool}" "${image}" "${state}" && return 0
     done
     return 1
+}
+
+request_resync_image()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster=${cluster} -p ${pool} mirror image resync ${image}
 }
 
 #

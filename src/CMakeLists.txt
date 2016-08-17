@@ -1003,6 +1003,7 @@ if(${WITH_RBD})
     tools/rbd_mirror/ImageReplayer.cc
     tools/rbd_mirror/ImageDeleter.cc
     tools/rbd_mirror/ImageSync.cc
+    tools/rbd_mirror/ImageSyncThrottler.cc
     tools/rbd_mirror/Mirror.cc
     tools/rbd_mirror/PoolWatcher.cc
     tools/rbd_mirror/Replayer.cc
