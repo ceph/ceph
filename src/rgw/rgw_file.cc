@@ -871,6 +871,10 @@ namespace rgw {
 
     file* f = get<file>(&variant_type);
     if (f && (f->write_req)) {
+      lsubdout(fs->get_context(), rgw, 10)
+	<< __func__
+	<< " finishing write trans on " << object_name()
+	<< dendl;
       rc = rgwlib.get_fe()->finish_req(f->write_req);
       if (! rc) {
 	rc = f->write_req->get_ret();
