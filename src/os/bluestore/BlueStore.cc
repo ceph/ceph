@@ -4909,8 +4909,11 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
+    unsigned first_part = bl.length();
     (*p)->blob_map.encode(bl);
-    dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
+    dout(20) << "  onode " << (*p)->oid << " is " << bl.length()
+	     << " (" << first_part << " onode + "
+	     << (bl.length() - first_part) << " blob_map)" << dendl;
     t->set(PREFIX_OBJ, (*p)->key, bl);
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
