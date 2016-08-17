@@ -478,8 +478,8 @@ int MemDB::MDBWholeSpaceIteratorImpl:: prev()
     return -1;
   }
   free_last();
-  m_iter--;
-  if (m_iter != m_btree_p->end()) {
+  if (m_iter != m_btree_p->begin()) {
+    m_iter--;
     fill_current();
     return 0;
   } else {
