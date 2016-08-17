@@ -684,7 +684,7 @@ namespace rgw {
 	  } /* rgw_fh */
 	} /* event::type::READDIR */
       } /* ev */
-      std::this_thread::sleep_for(gc_interval);
+      std::this_thread::sleep_for(std::chrono::seconds(120));
     } while (! stop);
   } /* RGWLibFS::gc */
 
