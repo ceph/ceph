@@ -14,6 +14,51 @@ LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 
 ostream& operator<<(ostream& out, const CDentry& dn)
 {
+  bool locked = dn.mutex_is_locked_by_me();
+  bool need_unlock = false;
+  if (!locked && dn.mutex_trylock()) {
+    locked = true;
+    need_unlock = true;
+  }
+  bool dir_locked = dn.get_dir_inode()->mutex_is_locked_by_me();
+  bool need_unlock_dir = false;
+  if (!dir_locked && dn.get_dir_inode()->mutex_trylock()) {
+    dir_locked = true;
+    need_unlock_dir = true;
+  }
+
+  string path;
+  dn.make_string(path);
+  out << "[dentry " << path;
+  out << " state=" << hex << dn.get_state() << dec;
+
+  if (dir_locked) {
+    const CDentry::linkage_t *dnl = dn.get_linkage();
+    if (dnl->is_null()) out << " NULL";
+    if (dnl->is_remote()) out << " REMOTE(" << dnl->get_remote_ino() << ")";
+    out << " inode=" << dnl->get_inode();
+
+  } else {
+    out << " (dir unlocked)...";
+  }
+
+  if (locked) {
+    if (!dn.lock.is_sync_and_unlocked())
+      out << " " << dn.lock;
+    if (!dn.versionlock.is_sync_and_unlocked())
+      out << " " << dn.versionlock;
+  } else {
+    out << " (unlocked)...";
+  }
+
+  out << " ref=" << dn.get_num_ref();
+  out << " " << &dn;
+  out << "]";
+
+  if (need_unlock_dir)
+    dn.get_dir_inode()->mutex_unlock();
+  if (need_unlock)
+    dn.mutex_unlock();
   return out;
 }
 
@@ -24,16 +69,23 @@ CDentry::CDentry(CDir *d, const std::string &n) :
 {
 }
 
+void CDentry::first_get()
+{
+}
+void CDentry::last_put()
+{
+}
+
 CInode* CDentry::get_dir_inode() const
 {
   return get_dir()->get_inode();
 }
 
-void CDentry::first_get()
-{ 
-}
-void CDentry::last_put()
+void CDentry::make_string(std::string& s) const
 {
+  get_dir()->make_string(s);
+  s += "/";
+  s += get_name();
 }
 
 bool CDentry::is_lt(const CObject *r) const

@@ -27,6 +27,7 @@ public:
   CInode *get_dir_inode() const;
   const std::string& get_name() const { return name; }
   dentry_key_t get_key() const { return dentry_key_t(CEPH_NOSNAP, name.c_str()); }
+  void make_string(std::string& s) const;
 
   bool is_lt(const CObject *r) const;
 
@@ -65,6 +66,7 @@ public:
       return &linkage;
     return &projected_linkages.back();
   }
+
   void push_projected_linkage() {
     _project_linkage();
   }

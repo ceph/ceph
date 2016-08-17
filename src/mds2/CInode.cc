@@ -25,6 +25,95 @@ LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 
 ostream& operator<<(ostream& out, const CInode& in)
 {
+  bool locked = in.mutex_is_locked_by_me();
+  bool need_unlock = false;
+  if (!locked && in.mutex_trylock()) {
+    locked = true;
+    need_unlock = true;
+  }
+
+  out << "[inode " << in.ino();
+  out << " v" << in.get_version();
+  out << " state=" << hex << in.get_state() << dec;
+
+  if (locked) {
+    string path;
+    in.make_string(path);
+    out << " " << path;
+
+    const inode_t *oi = in.get_inode();
+    if (in.is_dir()) {
+      out << " " << oi->dirstat;
+    } else {
+      out << " s=" << oi->size;
+      if (oi->nlink != 1)
+	out << " nl=" << oi->nlink;
+    }
+
+    // rstat
+    out << " " << oi->rstat;
+    if (!(oi->rstat == oi->accounted_rstat))
+      out << "/" << oi->accounted_rstat;
+
+    // locks
+    if (!in.authlock.is_sync_and_unlocked())
+      out << " " << in.authlock;
+    if (!in.linklock.is_sync_and_unlocked())
+      out << " " << in.linklock;
+    if (in.is_dir()) {
+      if (!in.dirfragtreelock.is_sync_and_unlocked())
+	out << " " << in.dirfragtreelock;
+      if (!in.snaplock.is_sync_and_unlocked())
+	out << " " << in.snaplock;
+      if (!in.nestlock.is_sync_and_unlocked())
+	out << " " << in.nestlock;
+      if (!in.policylock.is_sync_and_unlocked())
+	out << " " << in.policylock;
+    } else  {
+      if (!in.flocklock.is_sync_and_unlocked())
+	out << " " << in.flocklock;
+    }
+    if (!in.filelock.is_sync_and_unlocked())
+      out << " " << in.filelock;
+    if (!in.xattrlock.is_sync_and_unlocked())
+      out << " " << in.xattrlock;
+    if (!in.versionlock.is_sync_and_unlocked())
+      out << " " << in.versionlock;
+
+    // hack: spit out crap on which clients have caps
+    if (oi->client_ranges.size())
+      out << " cr=" << oi->client_ranges;
+
+    if (!in.get_client_caps().empty()) {
+      out << " caps={";
+      for (auto it = in.get_client_caps().begin();
+	  it != in.get_client_caps().end();
+	  ++it) {
+	if (it != in.get_client_caps().begin()) out << ",";
+	out << it->first << "="
+	  << ccap_string(it->second->pending());
+	if (it->second->issued() != it->second->pending())
+	  out << "/" << ccap_string(it->second->issued());
+	out << "/" << ccap_string(it->second->wanted())
+	  << "@" << it->second->get_last_sent();
+      }
+      out << "}";
+      if (in.get_loner() >= 0 || in.get_wanted_loner() >= 0) {
+	out << ",l=" << in.get_loner();
+	if (in.get_loner() != in.get_wanted_loner())
+	  out << "(" << in.get_wanted_loner() << ")";
+      }
+    }
+  } else {
+    out << " (unlocked) ...";   
+  }
+
+  out << " ref=" << in.get_num_ref();
+  out << " " << &in;
+  out << "]";
+
+  if (need_unlock)
+    in.mutex_unlock();
   return out;
 }
 
@@ -58,6 +147,39 @@ void CInode::last_put()
   Mutex::Locker l(mutex);
   if (parent)
     parent->put(CDentry::PIN_INODEPIN);
+}
+
+void CInode::make_string(string& s) const
+{
+  mutex_assert_locked_by_me();
+  if (is_base()) {
+    if (is_mdsdir()) {
+      char buf[40];
+      uint64_t mds = (uint64_t)ino() - MDS_INO_MDSDIR_OFFSET;
+      snprintf(buf, sizeof(buf), "~mds%" PRId64 "/", mds);
+      s = buf;
+    } else {
+      s = "/";
+    }
+  } else {
+    CDentry *dn = get_parent_dn();
+    if (dn) {
+      dn->make_string(s);
+    } else {
+      char buf[40];
+      snprintf(buf, sizeof(buf), "#%" PRIx64, (uint64_t)ino());
+      s = buf;
+    }
+    if (is_dir())
+      s += "/";
+  }
+}
+
+void CInode::name_stray_dentry(string& dname) const
+{
+  char s[20];
+  snprintf(s, sizeof(s), "%llx", (unsigned long long)inode.ino.val);
+  dname = s;
 }
 
 void CInode::get_dirfrags(list<CDirRef>& ls)
@@ -540,13 +662,6 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
     m->head.xattr_version = i->xattr_version;
     cap->client_xattr_version = i->xattr_version;
   }
-}
-
-void CInode::name_stray_dentry(string& dname) const
-{
-  char s[20];
-  snprintf(s, sizeof(s), "%llx", (unsigned long long)inode.ino.val);
-  dname = s;
 }
 
 int CInode::get_caps_liked() const

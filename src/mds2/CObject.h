@@ -51,7 +51,7 @@ public:
     if (old == 1)
       last_put();
   }
-  int get_num_ref(int by=-1) {
+  int get_num_ref(int by=-1) const {
     return std::atomic_load(&ref);
   }
 
@@ -82,11 +82,11 @@ public:
   bool is_clean() const { return !is_dirty(); }
 
 protected:
-  Mutex mutex;
+  mutable Mutex mutex;
 public:
-  void mutex_lock() { mutex.Lock(); }
-  void mutex_unlock() { mutex.Unlock(); }
-  bool mutex_trylock() { return mutex.TryLock(); }
+  void mutex_lock() const { mutex.Lock(); }
+  void mutex_unlock() const { mutex.Unlock(); }
+  bool mutex_trylock() const { return mutex.TryLock(); }
   bool mutex_is_locked_by_me() const  { return mutex.is_locked_by_me(); }
   void mutex_assert_locked_by_me() const { assert(mutex.is_locked_by_me()); }
 

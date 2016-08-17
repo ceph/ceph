@@ -7,12 +7,52 @@
 #include "Locker.h"
 #include "Mutation.h"
 
+#include "include/stringify.h"
+
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
+  bool locked = dir.get_inode()->mutex_is_locked_by_me();
+  bool need_unlock = false;
+  if (!locked && dir.get_inode()->mutex_trylock()) {
+    locked = true;
+    need_unlock = true;
+  }
+
+  out << "[dir " << dir.dirfrag();
+  out << " v" << dir.get_version();
+  out << " pv" << dir.get_projected_version();
+  out << " state=" << hex << dir.get_state() << dec;
+
+  if (locked) {
+    string path;
+    dir.get_inode()->make_string(path);
+    out << " " << path;
+
+    const fnode_t *of = dir.get_fnode();    
+    // fragstat
+    out << " " << of->fragstat;
+    if (!(of->fragstat == of->accounted_fragstat))
+      out << "/" << of->accounted_fragstat;
+
+    // rstat
+    out << " " << of->rstat;
+    if (!(of->rstat == of->accounted_rstat))
+      out << "/" << of->accounted_rstat;
+  } else {
+    out << " (unlocked)...";
+  }
+
+  out << " ref=" << dir.get_num_ref();
+  out << " " << &dir;
+  out << "]";
+
+  if (need_unlock)
+    dir.get_inode()->mutex_unlock();
+
   return out;
 }
 
@@ -35,6 +75,11 @@ void CDir::last_put()
 dirfrag_t CDir::dirfrag() const
 {
   return dirfrag_t(get_inode()->ino(), get_frag());
+}
+
+void CDir::make_string(std::string& s) const
+{
+  s = "dir(" + stringify(dirfrag()) + ")";
 }
 
 bool CDir::is_lt(const CObject *r) const

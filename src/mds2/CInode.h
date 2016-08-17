@@ -84,6 +84,7 @@ public:
   bool is_file() const { return inode.is_file(); }
   bool is_symlink() const { return inode.is_symlink(); }
 
+  void make_string(std::string& s) const;
   void name_stray_dentry(string& dname) const;
 
   inode_t* __get_inode() {  return &inode; }

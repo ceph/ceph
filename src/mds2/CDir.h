@@ -39,6 +39,7 @@ public:
 
   frag_t get_frag() const { return frag_t(); }
   dirfrag_t dirfrag() const;
+  void make_string(std::string& s) const;
 
   bool is_lt(const CObject *r) const;
 
