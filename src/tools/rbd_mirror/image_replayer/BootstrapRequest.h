@@ -86,48 +86,54 @@ private:
    * <start>
    *    |
    *    v
-   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * GET_REMOTE_TAG_CLASS * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * GET_CLIENT * * * * * * * * * * * * * * * *
-   *    |                                     *
-   *    v (skip if not needed)                * (error)
-   * REGISTER_CLIENT  * * * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
-   *    |   .   ^                             *
-   *    |   .   |                             *
-   *    |   .   \-----------------------\     *
-   *    |   .                           |     *
-   *    |   . (image sync requested)    |     *
-   *    |   . . > REMOVE_LOCAL_IMAGE  * * * * *
-   *    |   .                   |       |     *
-   *    |   . (image doesn't    |       |     *
-   *    |   .  exist)           v       |     *
-   *    |   . . > CREATE_LOCAL_IMAGE  * * * * *
-   *    |             |                 |     *
-   *    |             \-----------------/     *
-   *    |                                     *
-   *    v (skip if not needed)                *
-   * UPDATE_CLIENT  * * * * * * * *           *
-   *    |                         *           *
-   *    v (skip if not needed)    *           *
-   * GET_REMOTE_TAGS  * * * * * * *           *
-   *    |                         *           *
-   *    v (skip if not needed)    v           *
-   * IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
-   *    |                         |           *
-   *    |     /-------------------/           *
-   *    |     |                               *
-   *    v     v                               *
-   * CLOSE_REMOTE_IMAGE < * * * * * * * * * * *
+   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * GET_CLIENT * * * * * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v (skip if not needed)                          * (error)
+   * REGISTER_CLIENT  * * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    | (remote image primary)                        *
+   *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
+   *    |         |   .   ^                             *
+   *    |         |   .   |                             *
+   *    |         |   .   \-----------------------\     *
+   *    |         |   .                           |     *
+   *    |         |   . (image sync requested)    |     *
+   *    |         |   . . > REMOVE_LOCAL_IMAGE  * * * * *
+   *    |         |   .                   |       |     *
+   *    |         |   . (image doesn't    |       |     *
+   *    |         |   .  exist)           v       |     *
+   *    |         |   . . > CREATE_LOCAL_IMAGE  * * * * *
+   *    |         |             |                 |     *
+   *    |         |             \-----------------/     *
+   *    |         |                                     *
+   *    |         v (skip if not needed)                *
+   *    |      UPDATE_CLIENT_IMAGE  * * * * *           *
+   *    |         |                         *           *
+   *    |         v (skip if not needed)    *           *
+   *    |      GET_REMOTE_TAGS  * * * * * * *           *
+   *    |         |                         *           *
+   *    |         v (skip if not needed)    v           *
+   *    |      IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
+   *    |         |                         |           *
+   *    |         \-----------------\ /-----/           *
+   *    |                            |                  *
+   *    |                            |                  *
+   *    | (skip if not needed)       |                  *
+   *    \----> UPDATE_CLIENT_STATE  *|* * * * * * * * * *
+   *                |                |                  *
+   *    /-----------/----------------/                  *
+   *    |                                               *
+   *    v                                               *
+   * CLOSE_REMOTE_IMAGE < * * * * * * * * * * * * * * * *
    *    |
    *    v
    * <finish>
@@ -179,6 +185,9 @@ private:
   void open_remote_image();
   void handle_open_remote_image(int r);
 
+  void update_client_state();
+  void handle_update_client_state(int r);
+
   void open_local_image();
   void handle_open_local_image(int r);
 
@@ -188,8 +197,8 @@ private:
   void create_local_image();
   void handle_create_local_image(int r);
 
-  void update_client();
-  void handle_update_client(int r);
+  void update_client_image();
+  void handle_update_client_image(int r);
 
   void get_remote_tags();
   void handle_get_remote_tags(int r);
