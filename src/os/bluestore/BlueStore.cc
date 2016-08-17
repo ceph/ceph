@@ -6142,7 +6142,7 @@ int BlueStore::_do_alloc_write(
     bufferlist *l = &wi.bl;
     uint64_t final_length = wi.blob_length;
     uint64_t csum_length = wi.blob_length;
-    unsigned csum_order;
+    unsigned csum_order = block_size_order;
     bufferlist compressed_bl;
     CompressorRef c;
     bool compressed = false;
