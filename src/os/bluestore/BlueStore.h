@@ -1140,7 +1140,8 @@ private:
   ThreadPool wal_tp;
   WALWQ wal_wq;
 
-  Finisher finisher;
+  int m_finisher_num;
+  vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
