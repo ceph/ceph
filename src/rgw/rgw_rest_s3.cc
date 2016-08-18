@@ -1754,7 +1754,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  << store->ctx()->_conf->rgw_ldap_uri
 	  << dendl;
 
-	RGWToken token{from_base64(s3_access_key)};
+	RGWToken token;
+	/* boost filters and/or string_ref may throw on invalid input */
+	try {
+	  token = rgw::from_base64(s3_access_key);
+	} catch(...) {
+	  token = std::string("");
+	}
 	if (! token.valid())
 	  return -EACCES;
 
