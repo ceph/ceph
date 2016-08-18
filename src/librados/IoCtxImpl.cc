@@ -780,14 +780,17 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   ZTracer::Trace trace;
-  if (trace_info)
+  if (trace_info) {
     trace.init("rados operate", &objecter->trace_endpoint, trace_info);
+    trace.event("rados operate init root span");
+  }
 
   Objecter::Op *op = objecter->prepare_mutate_op(
     oid, oloc, *o, snap_context, ut, flags, onack,
     oncommit, &c->objver, &trace);
   objecter->op_submit(op, &c->tid);
-
+  if (trace_info)
+    trace.event("rados operate op submitted");
   return 0;
 }
 
