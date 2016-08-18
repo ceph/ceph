@@ -1174,7 +1174,7 @@ class CephManager:
             '0')
 
     def wait_run_admin_socket(self, service_type,
-                              service_id, args=['version'], timeout=75):
+                              service_id, args=['version'], timeout=75, stdout=StringIO()):
         """
         If osd_admin_socket call suceeds, return.  Otherwise wait
         five seconds and try again.
@@ -1182,7 +1182,7 @@ class CephManager:
         tries = 0
         while True:
             proc = self.admin_socket(service_type, service_id,
-                                     args, check_status=False)
+                                     args, check_status=False, stdout=stdout)
             if proc.exitstatus is 0:
                 break
             else:
@@ -1945,7 +1945,7 @@ class CephManager:
             # unhappy.  see #5924.
             self.wait_run_admin_socket('osd', osd,
                                        args=['dump_ops_in_flight'],
-                                       timeout=timeout)
+                                       timeout=timeout, stdout=DEVNULL)
 
     def mark_down_osd(self, osd):
         """
