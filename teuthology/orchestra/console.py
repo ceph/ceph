@@ -1,5 +1,7 @@
 import logging
+import os
 import pexpect
+import subprocess
 import time
 
 from teuthology import lockstatus as ls
@@ -208,6 +210,28 @@ class PhysicalConsole():
         self._wait_for_login()
         log.info('Power off for {i} seconds completed'.format(
             s=self.shortname, i=interval))
+
+    def spawn_sol_log(self, dest_path):
+        """
+        Using the subprocess module, spawn an ipmitool process using 'sol
+        activate' and redirect its output to a file.
+
+        :returns: a subprocess.Popen object
+        """
+        ipmi_cmd = self._build_command('sol activate')
+        pexpect_templ = \
+            "import pexpect; " \
+            "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"
+        python_cmd = 'python -c "%s"' % pexpect_templ.format(
+            cmd=ipmi_cmd,
+            log=dest_path,
+        )
+        proc = subprocess.Popen(
+            python_cmd,
+            shell=True,
+            env=os.environ,
+        )
+        return proc
 
 
 class VirtualConsole():
