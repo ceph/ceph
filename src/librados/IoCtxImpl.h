@@ -157,9 +157,9 @@ struct librados::IoCtxImpl {
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
-		  int flags);
+		  int flags, const blkin_trace_info *trace_info = nullptr);
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
-		       AioCompletionImpl *c, int flags, bufferlist *pbl);
+		       AioCompletionImpl *c, int flags, bufferlist *pbl, const blkin_trace_info *trace_info = nullptr);
 
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;

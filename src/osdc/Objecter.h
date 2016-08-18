@@ -2184,9 +2184,10 @@ public:
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
-    osd_reqid_t reqid = osd_reqid_t()) {
+    osd_reqid_t reqid = osd_reqid_t(),
+    ZTracer::Trace *parent_trace = nullptr) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, oncommit, objver, nullptr, parent_trace);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2212,9 +2213,10 @@ public:
     snapid_t snapid, bufferlist *pbl, int flags,
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
-    uint64_t features = 0) {
+    uint64_t features = 0,
+    ZTracer::Trace *parent_trace = nullptr) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onack, objver, data_offset);
+		   CEPH_OSD_FLAG_READ, onack, objver, data_offset, parent_trace);
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
