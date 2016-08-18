@@ -710,7 +710,12 @@ public:
       store(store),
       apl_factory(apl_factory) {
       init(cct);
-      base64_token = rgw::from_base64(access_key_id);
+      /* boost filters and/or string_ref may throw on invalid input */
+      try {
+	base64_token = rgw::from_base64(access_key_id);
+      } catch(...) {
+	base64_token = std::string("");
+      }
   }
   const char* get_name() const noexcept override {
     return "RGWLDAPAuthEngine";
