@@ -6,25 +6,23 @@
  */
 
 
-/*
- * The prop_heap does not seem to be necessary. The only thing it
- * would help with is quickly finding the mininum proportion/prioity
- * when an idle client became active
- */
-// #define USE_PROP_HEAP
-// #define DO_NOT_DELAY_TAG_CALC
-
-/*
- * Branching factor of the internal heap,
- * default value is 2 for binary heap.
- * To change, re-compile with -DK_WAY_HEAP=VALUE flag
- */
-#ifndef K_WAY_HEAP
-#define K_WAY_HEAP  2
-#endif
-
 #pragma once
 
+/* COMPILATION OPTIONS
+ *
+ * By default we include an optimization over the originally published
+ * dmclock algorithm using not the values of rho and delta that were
+ * sent in with a request but instead the most recent rho and delta
+ * values from the requests's client. To restore the algorithm's
+ * original behavior, define DO_NOT_DELAY_TAG_CALC (i.e., compiler
+ * argument -DDO_NOT_DELAY_TAG_CALC).
+ *
+ * The prop_heap does not seem to be necessary. The only thing it
+ * would help with is quickly finding the mininum proportion/prioity
+ * when an idle client became active. To have the code maintain the
+ * proportional heap, define USE_PROP_HEAP (i.e., compiler argument
+ * -DUSE_PROP_HEAP).
+ */
 
 #include <assert.h>
 
