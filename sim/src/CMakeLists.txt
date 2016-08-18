@@ -5,7 +5,7 @@ include_directories(../../src) # dmclock code
 include_directories(../../support/src)
 include_directories(${BOOST_INCLUDE_DIR})
 
-set(local_flags "-Wall -pthread")
+set(local_flags "-Wall -pthread ${CMAKE_CXX_SIM_FLAGS}")
 
 set(ssched_sim_srcs test_ssched.cc test_ssched_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
