@@ -1519,6 +1519,21 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+         librados::ObjectWriteOperation *o,
+         snap_t snap_seq, std::vector<snap_t>& snaps,
+         const blkin_trace_info *trace_info)
+{
+  object_t obj(oid);
+  vector<snapid_t> snv;
+  snv.resize(snaps.size());
+  for (size_t i = 0; i < snaps.size(); ++i)
+    snv[i] = snaps[i];
+  SnapContext snapc(snap_seq, snv);
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
+          snapc, 0, trace_info);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 librados::ObjectReadOperation *o,
 				 bufferlist *pbl)
 {
@@ -1555,6 +1570,14 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				       translate_flags(flags), pbl);
 }
 
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+         librados::ObjectReadOperation *o,
+         int flags, bufferlist *pbl, const blkin_trace_info *trace_info)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
+               translate_flags(flags), pbl, trace_info);
+}
 
 void librados::IoCtx::snap_set_read(snap_t seq)
 {
