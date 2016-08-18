@@ -196,8 +196,9 @@ namespace crimson {
 			     const crimson::dmclock::RequestTag& tag);
 
 
-    // C is client identifier type, R is request type
-    template<typename C, typename R>
+    // C is client identifier type, R is request type, B is heap
+    // branching factor
+    template<typename C, typename R, uint B>
     class PriorityQueueBase {
       FRIEND_TEST(dmclock_server, client_idle_erase);
 
@@ -244,7 +245,7 @@ namespace crimson {
 
 
       class ClientRec {
-	friend PriorityQueueBase<C,R>;
+	friend PriorityQueueBase<C,R,B>;
 
 	C                     client;
 	RequestTag            prev_tag;
@@ -380,7 +381,7 @@ namespace crimson {
 	
 	friend std::ostream&
 	operator<<(std::ostream& out,
-		   const typename PriorityQueueBase<C,R>::ClientRec& e) {
+		   const typename PriorityQueueBase<C,R,B>::ClientRec& e) {
 	  out << "{ client:" << e.client << " top req: " <<
 	    (e.has_request() ? e.next_request() : "none") << " }";
 	  return out;
@@ -507,8 +508,9 @@ namespace crimson {
 
 
       uint get_heap_branching_factor() const {
-	return K_WAY_HEAP;
+	return B;
       }
+
 
     protected:
 
@@ -583,7 +585,7 @@ namespace crimson {
 		      ClientCompare<&RequestTag::reservation,
 				    ReadyOption::ignore,
 				    false>,
-		      K_WAY_HEAP> resv_heap;
+		      B> resv_heap;
 #if USE_PROP_HEAP
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
@@ -591,7 +593,7 @@ namespace crimson {
 		      ClientCompare<&RequestTag::proportion,
 				    ReadyOption::ignore,
 				    true>,
-		      K_WAY_HEAP> prop_heap;
+		      B> prop_heap;
 #endif
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
@@ -599,14 +601,14 @@ namespace crimson {
 		      ClientCompare<&RequestTag::limit,
 				    ReadyOption::lowers,
 				    false>,
-		      K_WAY_HEAP> limit_heap;
+		      B> limit_heap;
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,
 				    ReadyOption::raises,
 				    true>,
-		      K_WAY_HEAP> ready_heap;
+		      B> ready_heap;
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -776,7 +778,7 @@ namespace crimson {
       // data_mtx should be held when called; top of heap should have
       // a ready request
       template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
-      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3, K_WAY_HEAP>& heap,
+      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3, B>& heap,
 			       std::function<void(const C& client,
 						  RequestRef& request)> process) {
 	// gain access to data
@@ -831,7 +833,7 @@ namespace crimson {
 	  prop_heap.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
 #endif
-	std::cout << "{ K_WAY_HEAP:" << K_WAY_HEAP << "}" << std::endl;
+	std::cout << "{ HEAP_BRANCHING:" << B << "}" << std::endl;
       } // display_queues
 
 
@@ -1008,7 +1010,7 @@ namespace crimson {
       // data_mtx must be held by caller
       template<IndIntruHeapData ClientRec::*C1,typename C2>
       void delete_from_heap(ClientRecRef& client,
-			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2, K_WAY_HEAP>& heap) {
+			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2,B>& heap) {
 	auto i = heap.rfind(client);
 	heap.remove(i);
       }
@@ -1026,9 +1028,9 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R>
-    class PullPriorityQueue : public PriorityQueueBase<C,R> {
-      using super = PriorityQueueBase<C,R>;
+    template<typename C, typename R, uint B=2>
+    class PullPriorityQueue : public PriorityQueueBase<C,R,B> {
+      using super = PriorityQueueBase<C,R,B>;
 
     public:
 
@@ -1244,12 +1246,12 @@ namespace crimson {
 
 
     // PUSH version
-    template<typename C, typename R>
-    class PushPriorityQueue : public PriorityQueueBase<C,R> {
+    template<typename C, typename R, uint B=2>
+    class PushPriorityQueue : public PriorityQueueBase<C,R,B> {
 
     protected:
 
-      using super = PriorityQueueBase<C,R>;
+      using super = PriorityQueueBase<C,R,B>;
 
     public:
 
@@ -1397,8 +1399,11 @@ namespace crimson {
       // data_mtx should be held when called; furthermore, the heap
       // should not be empty and the top element of the heap should
       // not be already handled
-      template<typename C1, IndIntruHeapData super::ClientRec::*C2, typename C3>
-      C submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3,K_WAY_HEAP>& heap,
+      template<typename C1,
+	       IndIntruHeapData super::ClientRec::*C2,
+	       typename C3,
+	       uint B4>
+      C submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3,B4>& heap,
 			   PhaseType phase) {
 	C client_result;
 	super::pop_process_request(heap,
