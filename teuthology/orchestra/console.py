@@ -36,22 +36,23 @@ class PhysicalConsole():
         """
         if not self.ipmiuser or not self.ipmipass or not self.ipmidomain:
             log.error('Must set ipmi_user, ipmi_password, and ipmi_domain in .teuthology.yaml')  # noqa
-        log.debug('pexpect command: ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'.format(  # noqa
-                  cmd=cmd,
-                  s=self.shortname,
-                  dn=self.ipmidomain,
-                  ipmiuser=self.ipmiuser,
-                  ipmipass=self.ipmipass))
-
-        child = pexpect.spawn('ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'.format(  # noqa
-                              cmd=cmd,
-                              s=self.shortname,
-                              dn=self.ipmidomain,
-                              ipmiuser=self.ipmiuser,
-                              ipmipass=self.ipmipass))
+        full_command = self._build_command(cmd)
+        log.debug('pexpect command: %s', full_command)
+        child = pexpect.spawn(full_command)
         if self.logfile:
             child.logfile = self.logfile
         return child
+
+    def _build_command(self, subcommand):
+        template = \
+            'ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'
+        return template.format(
+            cmd=subcommand,
+            s=self.shortname,
+            dn=self.ipmidomain,
+            ipmiuser=self.ipmiuser,
+            ipmipass=self.ipmipass,
+        )
 
     def _exit_session(self, child, timeout=None):
         child.send('~.')
