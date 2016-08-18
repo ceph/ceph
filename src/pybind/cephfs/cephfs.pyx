@@ -108,6 +108,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
+    int ceph_unmount(ceph_mount_info *cmount)
     int ceph_fstat(ceph_mount_info *cmount, int fd, stat *stbuf)
     int ceph_stat(ceph_mount_info *cmount, const char *path, stat *stbuf)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
@@ -478,6 +479,14 @@ cdef class LibCephFS(object):
         if ret != 0:
             raise make_ex(ret, "error calling ceph_mount")
         self.state = "mounted"
+
+    def unmount(self):
+        self.require_state("mounted")
+        with nogil:
+            ret = ceph_unmount(self.cluster)
+        if ret != 0:
+            raise make_ex(ret, "error calling ceph_unmount")
+        self.state = "initialized"
 
     def statfs(self, path):
         self.require_state("mounted")
