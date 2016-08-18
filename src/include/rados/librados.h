@@ -332,6 +332,12 @@ typedef void *rados_write_op_t;
 typedef void *rados_read_op_t;
 
 /**
+ * @struct blkin_trace_info
+ * blkin trace information for Zipkin tracing
+ */
+struct blkin_trace_info;
+
+/**
  * Get the version of librados.
  *
  * The version number is major.minor.extra. Note that this is

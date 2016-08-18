@@ -1005,6 +1005,10 @@ namespace librados
 		    ObjectWriteOperation *op, snap_t seq,
 		    std::vector<snap_t>& snaps);
     int aio_operate(const std::string& oid, AioCompletion *c,
+        ObjectWriteOperation *op, snap_t seq,
+        std::vector<snap_t>& snaps,
+        const blkin_trace_info *trace_info);
+    int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
     int aio_operate(const std::string& oid, AioCompletion *c,
@@ -1015,6 +1019,9 @@ namespace librados
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, int flags,
 		    bufferlist *pbl);
+    int aio_operate(const std::string& oid, AioCompletion *c,
+        ObjectReadOperation *op, int flags,
+        bufferlist *pbl, const blkin_trace_info *trace_info);
 
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,
