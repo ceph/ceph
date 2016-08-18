@@ -2077,6 +2077,9 @@ int PGMonitor::_warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
                                             list<pair<health_status_t,string> >& summary,
                                             list<pair<health_status_t,string> > *detail) const
 {
+  if (h.h.empty())
+    return 0;
+
   unsigned sum = 0;
   for (unsigned i = h.h.size() - 1; i > 0; --i) {
     float ub = (float)(1 << i) / 1000.0;
