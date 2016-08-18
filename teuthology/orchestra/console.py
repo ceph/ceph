@@ -38,9 +38,10 @@ class PhysicalConsole():
             log.error('Must set ipmi_user, ipmi_password, and ipmi_domain in .teuthology.yaml')  # noqa
         full_command = self._build_command(cmd)
         log.debug('pexpect command: %s', full_command)
-        child = pexpect.spawn(full_command)
-        if self.logfile:
-            child.logfile = self.logfile
+        child = pexpect.spawn(
+            full_command,
+            logfile=self.logfile,
+        )
         return child
 
     def _build_command(self, subcommand):
