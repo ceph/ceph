@@ -342,8 +342,9 @@ struct bluestore_blob_t {
   }
 
   /// return chunk (i.e. min readable block) size for the blob
-  uint64_t get_chunk_size(bool csum_enabled, uint64_t dev_block_size) {
-    return csum_enabled && has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+  uint64_t get_chunk_size(bool csum_enabled, uint64_t dev_block_size) const {
+    return csum_enabled &&
+      has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
   }
   uint32_t get_csum_chunk_size() const {
     return 1 << csum_chunk_order;
