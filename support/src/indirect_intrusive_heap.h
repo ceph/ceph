@@ -490,16 +490,4 @@ namespace crimson {
     } // sift
   }; // class IndIntruHeap
 
-
-#if 0
-  template<typename I,
-	   typename T,
-	   IndIntruHeapData T::*heap_info,
-	   typename C>
-  class IndIntruHeap<I, T, heap_info, C, 2> {
-
-  protected:
-
-  }; // template specialization of IndIntruHeap
-#endif
 } // namespace crimson
