@@ -223,6 +223,8 @@ public:
   int complete_get_params();
   void send_response();
   int get_data(bufferlist& bl);
+
+  friend class RGWGetPolicyV2Extractor;
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
@@ -645,11 +647,13 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
   return 0;
 }
 
-class RGWS3V2AuthEngine : public RGWAuthEngine {
+class RGWS3V2AuthKeys {
 protected:
   std::string access_key_id;
   std::string signature;
   std::string expires;
+  std::string encoded_policy;
+  bufferlist bl_encoded_policy;
   bool qsr;
 
 public:
@@ -659,34 +663,80 @@ public:
     virtual void get_auth_keys(std::string& access_key_id,
                                 std::string& signature,
                                 std::string& expires,
-                                bool& qsr) const = 0;
+                                std::string& encoded_policy,
+                                bufferlist& bl_encoded_policy,
+                                bool& qsr) = 0;
   };
 
-  RGWS3V2AuthEngine(CephContext* const cct, const Extractor& extr)
-    : RGWAuthEngine(cct) {
-    extr.get_auth_keys(access_key_id, signature, expires, qsr);
+  RGWS3V2AuthKeys(Extractor& extr) {
+    extr.get_auth_keys(access_key_id,
+                        signature,
+                        expires,
+                        encoded_policy,
+                        bl_encoded_policy,
+                        qsr);
   }
 
-  bool is_applicable() const noexcept override {
-    return ! (access_key_id.empty() && signature.empty());
+  std::string get_access_key_id() const {
+    return access_key_id;
   }
+
+  std::string get_signature() const {
+    return signature;
+  }
+
+  std::string get_expires() const {
+    return expires;
+  }
+
+  std::string get_encoded_policy() const {
+    return encoded_policy;
+  }
+
+  bool get_is_qsr() const {
+    return qsr;
+  }
+
+  bufferlist get_bl_encoded_policy() const {
+    return bl_encoded_policy;
+  }
+
+  int validate_keys() const;
 };
 
-class RGWS3V2Extractor : public RGWS3V2AuthEngine::Extractor {
+class RGWGetPolicyV2Extractor : public RGWS3V2AuthKeys::Extractor {
+protected:
+  RGWPostObj_ObjStore_S3* const postobj_ptr;
+
+public:
+  RGWGetPolicyV2Extractor(RGWPostObj_ObjStore_S3* const postobj_ptr)
+    : postobj_ptr(postobj_ptr) {}
+
+  void get_auth_keys(std::string& access_key_id,
+                      std::string& signature,
+                      std::string& expires,
+                      std::string& encoded_policy,
+                      bufferlist& bl_encoded_policy,
+                      bool& qsr) override;
+};
+
+class RGWAuthorizeV2Extractor : public RGWS3V2AuthKeys::Extractor {
 protected:
   const req_state* const s;
 
 public:
-  RGWS3V2Extractor(const req_state * const s)
+  RGWAuthorizeV2Extractor(const req_state * const s)
     : s(s) {}
 
   void get_auth_keys(std::string& access_key_id,
                       std::string& signature,
                       std::string& expires,
-                      bool& qsr) const override;
+                      std::string& encoded_policy,
+                      bufferlist& bl_encoded_policy,
+                      bool& qsr) override;
 };
 
-class RGWLDAPAuthEngine: RGWS3V2AuthEngine
+class RGWLDAPAuthEngine: public RGWAuthEngine
 {
   static rgw::LDAPHelper* ldh;
   static std::mutex mtx;
@@ -696,6 +746,7 @@ class RGWLDAPAuthEngine: RGWS3V2AuthEngine
 
 protected:
   RGWRados* const store;
+  const RGWS3V2AuthKeys* const authkeys_ptr;
   const RGWRemoteAuthApplier::Factory * const apl_factory;
 
   RGWRemoteAuthApplier::acl_strategy_t get_acl_strategy() const;
@@ -704,13 +755,14 @@ protected:
 public:
   RGWLDAPAuthEngine(CephContext* const cct,
                     RGWRados* const store,
-                    Extractor &ex,
+                    RGWS3V2AuthKeys* const authkeys_ptr,
                     const RGWRemoteAuthApplier::Factory * const apl_factory)
-    : RGWS3V2AuthEngine(cct, ex),
+    : RGWAuthEngine(cct),
       store(store),
+      authkeys_ptr(authkeys_ptr),
       apl_factory(apl_factory) {
       init(cct);
-      base64_token = rgw::from_base64(access_key_id);
+      base64_token = rgw::from_base64(authkeys_ptr->get_access_key_id());
   }
   const char* get_name() const noexcept override {
     return "RGWLDAPAuthEngine";
@@ -719,23 +771,24 @@ public:
   RGWAuthApplier::aplptr_t authenticate() const override;
 };
 
-class RGWS3V2LocalAuthEngine: RGWS3V2AuthEngine
+class RGWS3V2LocalAuthEngine: public RGWAuthEngine
 {
 protected:
   req_state* const s;
   RGWRados* const store;
+  const RGWS3V2AuthKeys* const authkeys_ptr;
   const RGWLocalAuthApplier::Factory* const apl_factory;
 
 public:
   RGWS3V2LocalAuthEngine(req_state* const s,
                           RGWRados* const store,
-                          const Extractor& extr,
+                          RGWS3V2AuthKeys* const authkeys_ptr,
                           const RGWLocalAuthApplier::Factory * const apl_factory)
-    : RGWS3V2AuthEngine(s->cct, extr),
+    : RGWAuthEngine(s->cct),
       s(s),
       store(store),
-      apl_factory(apl_factory) {
-  }
+      authkeys_ptr(authkeys_ptr),
+      apl_factory(apl_factory) {}
 
   const char* get_name() const noexcept override {
     return "RGWS3V2LocalAuthEngine";
@@ -744,24 +797,35 @@ public:
   RGWAuthApplier::aplptr_t authenticate() const override;
 };
 
-class RGWGetPolicyV2Extractor:public RGWS3V2AuthEngine::Extractor {
-private:
-  std::string access_key_id;
-  std::string signature;
+class RGWS3KeystoneAuthEngine: public RGWAuthEngine
+{
+protected:
+  req_state* const s;
+  RGWRados* const store;
+  const RGWS3V2AuthKeys* const authkeys_ptr;
+  const RGWRemoteAuthApplier::Factory * const apl_factory;
+
+  RGWRemoteAuthApplier::acl_strategy_t get_acl_strategy() const;
+  RGWRemoteAuthApplier::AuthInfo get_creds_info(const KeystoneToken& token,
+                                      const std::vector<std::string>& admin_roles) const noexcept;
 
 public:
-  RGWGetPolicyV2Extractor(std::string access_key_id, std::string signature) {
-    access_key_id = std::move(access_key_id),
-    signature = std::move(signature);
+  RGWS3KeystoneAuthEngine(req_state * const s,
+                          RGWRados* const store,
+                          RGWS3V2AuthKeys* const authkeys_ptr,
+                          const RGWRemoteAuthApplier::Factory * const apl_factory)
+    : RGWAuthEngine(s->cct),
+      s(s),
+      store(store),
+      authkeys_ptr(authkeys_ptr),
+      apl_factory(apl_factory) {
   }
 
-  void get_auth_keys(std::string& access_key_id,
-                      std::string& signature,
-                      std::string& expires,
-                      bool& qsr) const override {
-    access_key_id = this->access_key_id;
-    signature = this->signature;
+  const char* get_name() const noexcept override {
+    return "RGWS3KeystoneAuthEngine";
   }
+  bool is_applicable() const noexcept override;
+  RGWAuthApplier::aplptr_t authenticate() const override;
 };
 
 class S3AuthFactory : public RGWRemoteAuthApplier::Factory,
