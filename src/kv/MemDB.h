@@ -48,10 +48,11 @@ class MemDB : public KeyValueDB
   void _encode(btree::btree_map<string, bufferptr>:: iterator iter, bufferlist &bl);
   void _save();
   int _load();
+  uint64_t iterator_seq_no;
 
 public:
   MemDB(CephContext *c, const string &path, void *p) :
-    m_cct(c), m_priv(p), m_db_path(path)
+    m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
   {
     //Nothing as of now
   }
@@ -132,12 +133,17 @@ public:
       std::pair<string, bufferlist> m_key_value;
       btree::btree_map<std::string, bufferptr> *m_btree_p;
       std::mutex *m_btree_lock_p;
+      uint64_t *global_seq_no;
+      uint64_t this_seq_no;
 
   public:
     MDBWholeSpaceIteratorImpl(btree::btree_map<std::string, bufferptr> *btree_p,
-                             std::mutex *btree_lock_p) {
+                             std::mutex *btree_lock_p, uint64_t *iterator_seq_no) {
         m_btree_p = btree_p;
         m_btree_lock_p = btree_lock_p;
+	std::lock_guard<std::mutex> l(*m_btree_lock_p);
+	global_seq_no = iterator_seq_no;
+	this_seq_no = *iterator_seq_no;
     }
 
     void fill_current();
@@ -147,12 +153,13 @@ public:
     int seek_to_first(const std::string &k);
     int seek_to_last(const std::string &k);
 
-    int seek_to_first() { return seek_to_first(NULL); };
-    int seek_to_last() { return seek_to_last(NULL); };
+    int seek_to_first() { return seek_to_first(std::string()); };
+    int seek_to_last() { return seek_to_last(std::string()); };
 
     int upper_bound(const std::string &prefix, const std::string &after);
     int lower_bound(const std::string &prefix, const std::string &to);
     bool valid();
+    bool iterator_validate();
 
     int next();
     int prev();
@@ -183,7 +190,7 @@ protected:
 
   WholeSpaceIterator _get_iterator() {
     return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-      new MDBWholeSpaceIteratorImpl(&m_btree, &m_lock));
+      new MDBWholeSpaceIteratorImpl(&m_btree, &m_lock, &iterator_seq_no));
   }
 
   WholeSpaceIterator _get_snapshot_iterator();
