@@ -20,7 +20,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
-// Because intusive_ptr clobbers our assert...
+// Because intrusive_ptr clobbers our assert...
 #include "include/assert.h"
 
 #include "include/types.h"
@@ -47,18 +47,11 @@
 #define MSG_MON_COMMAND_ACK        51
 #define MSG_LOG                    52
 #define MSG_LOGACK                 53
-//#define MSG_MON_OBSERVE            54
-//#define MSG_MON_OBSERVE_NOTIFY     55
-#define MSG_CLASS                  56
-#define MSG_CLASS_ACK              57
 
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
 
 #define MSG_MON_GLOBAL_ID          60
-
-// #define MSG_POOLOP                 49
-// #define MSG_POOLOPREPLY            48
 
 #define MSG_ROUTE                  47
 #define MSG_FORWARD                46
@@ -80,7 +73,6 @@
 
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
-#define MSG_OSD_PG_SUMMARY     82
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
