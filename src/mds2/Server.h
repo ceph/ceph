@@ -36,18 +36,15 @@ public:
   MDCache* const &mdcache;
   Locker* const &locker;
 
-protected:
-  Session *get_session(Message *m);
-public:
   Server(MDSRank *_mds);
 
   void dispatch(Message *m);
   void dispatch_client_request(const MDRequestRef& mdr);
+protected:
   void handle_client_reconnect(MClientReconnect *m);
   void handle_client_session(MClientSession *m);
   void handle_client_request(MClientRequest *m);
 
-protected:
   void encode_null_lease(bufferlist& bl);
   void encode_empty_dirstat(bufferlist& bl);
   void lock_objects_for_trace(CInode *in, CDentry *dn, const MDRequestRef& mdr);

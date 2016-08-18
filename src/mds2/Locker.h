@@ -139,7 +139,7 @@ public:
   void share_inode_max_size(CInode *in, client_t only_client=-1);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(MClientCaps *m);
-  void process_request_cap_release(const MDRequestRef& mdr, client_t client,
+  void process_request_cap_release(const MDRequestRef& mdr,
 				   const ceph_mds_request_release& item, const string &dname);
 
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
@@ -149,9 +149,10 @@ public:
   void _do_cap_release(Session *session, inodeno_t ino, uint64_t cap_id,
 		       ceph_seq_t mseq, ceph_seq_t seq);
   void remove_client_cap(CInode *in, Session *session);
+
   void handle_client_lease(MClientLease *m);
-  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl,
-			  utime_t now, Session *session);
+  void remove_client_lease(CDentry *dn, Session *session);
+  void issue_client_lease(CDentry *dn, bufferlist &bl, utime_t now, Session *session);
   void revoke_client_leases(SimpleLock *lock);
 };
 

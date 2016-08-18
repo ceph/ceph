@@ -230,15 +230,19 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
 
   const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
-  Capability *get_client_cap(client_t client) {
+  Capability *get_client_cap(client_t client) const {
     auto p = client_caps.find(client);
     if (p != client_caps.end())
       return p->second;
     return NULL;
   }
+  int get_client_cap_pending(client_t client) const {
+    Capability *cap = get_client_cap(client);
+    return cap ? cap->pending() : 0;
+  }
 
-  Capability *add_client_cap(client_t client, Session *session);
-  void remove_client_cap(client_t client, Session *session);
+  Capability *add_client_cap(Session *session);
+  void remove_client_cap(Session *session);
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,

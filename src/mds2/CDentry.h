@@ -6,6 +6,7 @@
 #include "LocalLock.h"
 
 class LogSegment;
+class DentryLease;
 
 class CDentry : public CObject {
 protected:
@@ -17,6 +18,7 @@ protected:
 public:
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
+  static const int PIN_CLIENTLEASE =  2;
 
   // -- states --
   static const int STATE_NEW =          (1<<0);
@@ -66,6 +68,7 @@ public:
       return &linkage;
     return &projected_linkages.back();
   }
+  const linkage_t* get_linkage(client_t client, const MutationRef& mut) const;
 
   void push_projected_linkage() {
     _project_linkage();
@@ -95,6 +98,19 @@ protected:
 public:
   SimpleLock lock;
   LocalLock versionlock;
+
+protected:
+  map<client_t,DentryLease*> client_leases;
+public:
+  const map<client_t,DentryLease*>& get_client_leases() const { return client_leases; }
+  DentryLease *get_client_lease(client_t c) {
+    auto p = client_leases.find(c);
+    if (p != client_leases.end())
+      return p->second;
+    return NULL;
+  }
+  DentryLease* add_client_lease(Session *session);
+  void remove_client_lease(Session *session);
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);

@@ -179,6 +179,7 @@ public:
   SessionMap& get_session_map() { return sessionmap; }
 
   Session *get_session(client_t client);
+  Session *get_session(Message *m);
 
   MDSMap *get_mds_map() { return mdsmap; }
 

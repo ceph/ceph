@@ -157,10 +157,10 @@ struct MDRequestImpl : public MutationImpl {
 
   bufferlist reply_extra_bl;
 
-
   bool hold_rename_dir_mutex;
   bool did_early_reply;
 
+  int getattr_mask;
   int retries;
 
   // ---------------------------------------------------
@@ -177,7 +177,7 @@ struct MDRequestImpl : public MutationImpl {
     straydn(NULL), tracei(-1), tracedn(-1),
     hold_rename_dir_mutex(false),
     did_early_reply(false),
-    retries(0) { }
+    getattr_mask(0), retries(0) { }
   ~MDRequestImpl();
   
   const filepath& get_filepath();

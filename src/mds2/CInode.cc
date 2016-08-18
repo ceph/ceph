@@ -471,7 +471,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // encode caps
   if (!cap) {
     // add a new cap
-    cap = add_client_cap(client, session);
+    cap = add_client_cap(session);
     if (is_auth()) {
       if (choose_ideal_loner() >= 0)
         try_set_loner();
@@ -1131,7 +1131,7 @@ void CInode::clear_dirty_scattered(int type)
   }
 }
 
-Capability *CInode::add_client_cap(client_t client, Session *session)
+Capability *CInode::add_client_cap(Session *session)
 {
   mutex_assert_locked_by_me();
 
@@ -1154,11 +1154,11 @@ Capability *CInode::add_client_cap(client_t client, Session *session)
 */
 
   Capability *cap = new Capability(this, session, mdcache->get_new_cap_id());
-  assert(client_caps.count(client) == 0);
-  client_caps[client] = cap;
+  assert(client_caps.count(session->get_client()) == 0);
+  client_caps[session->get_client()] = cap;
 
   session->lock();
-  session->caps.push_back(&cap->item_session_caps);
+  session->touch_cap(cap);
   if (session->is_stale())
     cap->mark_stale();
   session->unlock();
@@ -1170,12 +1170,13 @@ Capability *CInode::add_client_cap(client_t client, Session *session)
   return cap;
 }
 
-void CInode::remove_client_cap(client_t client, Session *session)
+void CInode::remove_client_cap(Session *session)
 {
   mutex_assert_locked_by_me();
-  assert(client_caps.count(client) == 1);
-  Capability *cap = client_caps[client];
-  assert(cap->get_session() == session);
+  client_t client = session->get_client();
+  auto p = client_caps.find(client);
+  assert(p != client_caps.end());
+  Capability *cap = p->second;;
 
   session->lock();
   cap->item_session_caps.remove_myself();
@@ -1189,7 +1190,7 @@ void CInode::remove_client_cap(client_t client, Session *session)
   if (client == loner_cap)
     loner_cap = -1;
 
-  client_caps.erase(client);
+  client_caps.erase(p);
   delete cap;
   if (client_caps.empty()) {
     put(PIN_CAPS);

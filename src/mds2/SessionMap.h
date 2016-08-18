@@ -31,6 +31,7 @@ using std::set;
 #include "mds/mdstypes.h"
 #include "mds/MDSAuthCaps.h"
 #include "Capability.h"
+#include "DentryLease.h"
 
 struct MDRequestImpl;
 class CInode;
@@ -204,7 +205,7 @@ private:
 
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
-  xlist<ClientLease*> leases;  // metadata leases to clients
+  xlist<DentryLease*> leases;  // metadata leases to clients
   utime_t last_cap_renew;
 
 public:
@@ -227,7 +228,7 @@ public:
   void touch_cap(Capability *cap) {
     caps.push_back(&cap->item_session_caps);
   }
-  void touch_lease(ClientLease *r) {
+  void touch_lease(DentryLease *r) {
     leases.push_back(&r->item_session_lease);
   }
 

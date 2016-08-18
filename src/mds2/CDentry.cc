@@ -4,6 +4,7 @@
 
 #include "MDSRank.h"
 #include "MDCache.h"
+#include "DentryLease.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -96,6 +97,15 @@ bool CDentry::is_lt(const CObject *r) const
        get_key() < o->get_key()))
     return true;
   return false;
+}
+
+const CDentry::linkage_t* CDentry::get_linkage(client_t client,
+					       const MutationRef& mut) const
+{
+  Mutex::Locker l(mutex);
+  if (lock.can_read_projected(client) || lock.get_xlock_by() == mut)
+    return get_projected_linkage();
+  return get_linkage();
 }
 
 CDentry::linkage_t* CDentry::_project_linkage()
@@ -220,7 +230,6 @@ void CDentry::mark_dirty(version_t pv, LogSegment *ls)
   dir->mark_dirty(pv, ls);
 }
 
-
 void CDentry::mark_clean()
 {
   dout(10) << " mark_clean " << *this << dendl;
@@ -244,6 +253,56 @@ void CDentry::clear_new()
 {
   dout(10) << " clear_new " << *this << dendl;
   state_set(STATE_NEW);
+}
+
+DentryLease *CDentry::add_client_lease(Session *session)
+{
+  mutex_assert_locked_by_me();
+  client_t client = session->get_client();
+  DentryLease *l;
+
+  bool is_new = false;
+  auto p = client_leases.find(client);
+  if (p != client_leases.end()) {
+    l = p->second;
+  } else {
+    dout(20) << "add_client_lease client." << client << " on " << lock << dendl;
+    if (client_leases.empty())
+      get(PIN_CLIENTLEASE);
+    l = new DentryLease(this, session);
+    lock.get_client_lease();
+    client_leases[client] = l;
+    is_new = true;
+  }
+  session->lock();
+  if (is_new)
+    l->seq = ++session->lease_seq;
+  session->touch_lease(l);
+  session->unlock();
+  return l;
+}
+
+void CDentry::remove_client_lease(Session *session)
+{
+  mutex_assert_locked_by_me();
+  client_t client = session->get_client();
+  dout(20) << "remove_client_lease client." << client << " on " << lock << dendl;
+
+  auto p = client_leases.find(client);
+  assert(p != client_leases.end());
+  DentryLease *l = p->second;
+
+  lock.put_client_lease();
+
+  session->lock();
+  l->item_session_lease.remove_myself();
+  session->unlock();
+
+  client_leases.erase(p);
+  delete l;
+
+  if (client_leases.empty())
+    put(PIN_CLIENTLEASE);
 }
 
 void intrusive_ptr_add_ref(CDentry *o)

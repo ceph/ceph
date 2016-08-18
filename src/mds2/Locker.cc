@@ -10,6 +10,7 @@
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
+#include "messages/MClientReply.h"
 
 #define dout_subsys ceph_subsys_mds
 
@@ -1252,8 +1253,6 @@ void Locker::simple_xlock(SimpleLock *lock)
   if (lock->get_cap_shift())
     in = static_cast<CInode *>(lock->get_parent());
 
-  if (lock->is_stable())
-
   switch (lock->get_state()) {
   case LOCK_LOCK: 
   case LOCK_XLOCKDONE: lock->set_state(LOCK_LOCK_XLOCK); break;
@@ -2022,14 +2021,13 @@ Capability* Locker::issue_new_caps(CInode *in, int mode, Session *session, bool 
 
   // my needs
   assert(session->info.inst.name.is_client());
-  int my_client = session->info.inst.name.num();
   int my_want = ceph_caps_for_mode(mode);
 
   // register a capability
-  Capability *cap = in->get_client_cap(my_client);
+  Capability *cap = in->get_client_cap(session->get_client());
   if (!cap) {
     // new cap
-    cap = in->add_client_cap(my_client, session);
+    cap = in->add_client_cap(session);
     cap->set_wanted(my_want);
     cap->mark_new();
     cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
@@ -2584,8 +2582,8 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
 void Locker::handle_client_caps(MClientCaps *m)
 {
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
-  client_t client = m->get_source().num();
+  Session *session = mds->get_session(m);
+  client_t client = session->get_client();
 
   snapid_t follows = m->get_snap_follows();
   dout(7) << "handle_client_caps on " << m->get_ino()
@@ -2871,12 +2869,12 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
                             MClientCaps *m, MClientCaps *ack,
 			    MutationRef& mut)
 {
+  client_t client = cap->get_client();
   int dirty = m->get_dirty();
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
            << " issued " << ccap_string(cap ? cap->issued() : 0)
            << " wanted " << ccap_string(cap ? cap->wanted() : 0)
            << " on " << *in << dendl;
-  client_t client = m->get_source().num();
   const inode_t *latest = in->get_projected_inode();
 
   // increase or zero max_size?
@@ -3054,9 +3052,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 }
 
 
-void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t client, const ceph_mds_request_release& item,
+void Locker::process_request_cap_release(const MDRequestRef& mdr, const ceph_mds_request_release& item,
                                          const string &dname)
 {
+  client_t client = mdr->get_client();
   inodeno_t ino = (uint64_t)item.ino;
   uint64_t cap_id = item.cap_id;
   int caps = item.caps;
@@ -3071,29 +3070,26 @@ void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t clien
 
   CObject::Locker l(in.get());
 
-  /*
   if (dname.length()) {
     frag_t fg = in->pick_dirfrag(dname);
-    CDir *dir = in->get_dirfrag(fg);
-    if (dir) {
-      CDentry *dn = dir->lookup(dname);
-      if (dn) {
-        ClientLease *l = dn->get_client_lease(client);
-        if (l) {
-          dout(10) << "process_cap_release removing lease on " << *dn << dendl;
-          dn->remove_client_lease(l, this);
-        } else {
-          dout(7) << "process_cap_release client." << client
-                  << " doesn't have lease on " << *dn << dendl;
-        }
+    CDirRef dir = in->get_dirfrag(fg);
+    CDentryRef dn = dir ? dir->lookup(dname) : NULL;
+    if (dn) {
+      dn->mutex_lock();
+      DentryLease *l = dn->get_client_lease(client);
+      if (l) {
+	dout(10) << "process_cap_release removing lease on " << *dn << dendl;
+	remove_client_lease(dn.get(), mdr->session);
       } else {
-        dout(7) << "process_cap_release client." << client << " released lease on dn "
-                << dir->dirfrag() << "/" << dname << " which dne" << dendl;
+	dout(7) << "process_cap_release client." << client
+		<< " doesn't have lease on " << *dn << dendl;
       }
+      dn->mutex_unlock();
+    } else {
+      dout(7) << "process_cap_release client." << client << " released lease on dn "
+	      << dir->dirfrag() << "/" << dname << " which dne" << dendl;
     }
   }
-  */
-
 
   Capability *cap = in->get_client_cap(client);
   if (!cap)
@@ -3137,7 +3133,7 @@ void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t clien
 /* This function DOES put the passed message before returning */
 void Locker::handle_client_cap_release(MClientCapRelease *m)
 {
-  client_t client = m->get_source().num();
+  Session *session = mds->get_session(m);
   dout(10) << "handle_client_cap_release " << *m << dendl;
 
   /*
@@ -3157,15 +3153,14 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
   }
   */
 
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
-
   for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     _do_cap_release(session, inodeno_t((uint64_t)p->ino) , p->cap_id, p->migrate_seq, p->seq);
   }
 
-  if (session) {
+  /*
+  if (session)
     session->notify_cap_release(m->caps.size());
-  }
+   */
 
   m->put();
 }
@@ -3173,13 +3168,12 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
 void Locker::_do_cap_release(Session *session, inodeno_t ino, uint64_t cap_id,
                              ceph_seq_t mseq, ceph_seq_t seq)
 {
+  client_t client = session->get_client();
   CInodeRef in = mdcache->get_inode(ino);
   if (!in) {
     dout(7) << "_do_cap_release missing ino " << ino << dendl;
     return;
   }
-
-  client_t client = session->get_client();
 
   CObject::Locker l(in.get());
 
@@ -3212,13 +3206,11 @@ void Locker::remove_client_cap(CInode *in, Session *session)
 { 
   in->mutex_assert_locked_by_me();
 
-  client_t client = session->get_client();
-
   // clean out any pending snapflush state
-  in->remove_client_cap(client, session); // FIXME: session
+  in->remove_client_cap(session); // FIXME: session
 
   // make sure we clear out the client byte range
-  if (in->get_projected_inode()->client_ranges.count(client) &&
+  if (in->get_projected_inode()->client_ranges.count(session->get_client()) &&
       !(in->get_inode()->nlink == 0 && !in->is_any_caps()))    // unless it's unlink + stray
     check_inode_max_size(in);
 
@@ -3228,23 +3220,22 @@ void Locker::remove_client_cap(CInode *in, Session *session)
 void Locker::handle_client_lease(MClientLease *m)
 {
   dout(10) << "handle_client_lease " << *m << dendl;
-
-#if 0
   assert(m->get_source().is_client());
-  client_t client = m->get_source().num();
+  Session *session = mds->get_session(m);
+  client_t client = session->get_client();
 
-  CInode *in = mdcache->get_inode(m->get_ino(), m->get_last());
+  CInodeRef in = mdcache->get_inode(m->get_ino(), m->get_last());
   if (!in) {
     dout(7) << "handle_client_lease don't have ino " << m->get_ino() << "." << m->get_last() << dendl;
     m->put();
     return;
   }
-  CDentry *dn = 0;
 
+  in->mutex_lock();
   frag_t fg = in->pick_dirfrag(m->dname);
-  CDir *dir = in->get_dirfrag(fg);
-  if (dir)
-    dn = dir->lookup(m->dname);
+  CDirRef dir = in->get_dirfrag(fg);
+  CDentryRef dn = dir ? dir->lookup(m->dname) : NULL;
+  in->mutex_unlock();
   if (!dn) {
     dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
     m->put();
@@ -3252,12 +3243,13 @@ void Locker::handle_client_lease(MClientLease *m)
   }
   dout(10) << " on " << *dn << dendl;
 
+  dn->mutex_lock();
   // replica and lock
-  ClientLease *l = dn->get_client_lease(client);
+  DentryLease *l = dn->get_client_lease(client);
   if (!l) { 
     dout(7) << "handle_client_lease didn't have lease for client." << client << " of " << *dn << dendl;
     m->put();
-    return;
+    goto out_unlock;
   }
 
   switch (m->get_action()) {
@@ -3268,7 +3260,7 @@ void Locker::handle_client_lease(MClientLease *m)
     } else {
       dout(7) << "handle_client_lease client." << client
               << " on " << *dn << dendl;
-      dn->remove_client_lease(l, this);
+      remove_client_lease(dn.get(), session);
     }
     m->put();
     break;
@@ -3276,18 +3268,21 @@ void Locker::handle_client_lease(MClientLease *m)
   case CEPH_MDS_LEASE_RENEW:
     {
       dout(7) << "handle_client_lease client." << client << " renew on " << *dn
-              << (!dn->lock.can_lease(client)?", revoking lease":"") << dendl;
+	      << (!dn->lock.can_lease(client)?", revoking lease":"") << dendl;
       if (dn->lock.can_lease(client)) {
-        int pool = 1;   // fixme.. do something smart!
-        m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-        m->h.seq = ++l->seq;
-        m->clear_payload();
+	float duration = 30; // FIXME;
+	l->ttl = ceph_clock_now(g_ceph_context);
+	l->ttl += duration;
 
-        utime_t now = ceph_clock_now(g_ceph_context);
-        now += mdcache->client_lease_durations[pool];
-        mdcache->touch_client_lease(l, pool, now);
+	session->lock();
+	session->touch_lease(l);
+	session->unlock();
 
-        mds->send_message_client_counted(m, m->get_connection());
+	m->h.duration_ms = (int)(1000 * duration);
+	m->h.seq = ++l->seq;
+	m->clear_payload();
+
+	mds->send_message_client_counted(m, m->get_connection());
       }
     }
     break;
@@ -3296,30 +3291,33 @@ void Locker::handle_client_lease(MClientLease *m)
     assert(0); // implement me
     break;
   }
-#endif
+out_unlock:
+  dn->mutex_unlock();
 }
 
-void Locker::issue_client_lease(CDentry *dn, client_t client,
-                               bufferlist &bl, utime_t now, Session *session)
+void Locker::issue_client_lease(CDentry *dn, bufferlist &bl, utime_t now, Session *session)
 {
-#if 0
-  CInode *diri = dn->get_dir()->get_inode();
+  dn->mutex_assert_locked_by_me();
+  client_t client = session->get_client();
+  CInode *diri = dn->get_dir_inode();
+  diri->mutex_assert_locked_by_me();
+
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
-      ((!diri->filelock.can_lease(client) &&
-        (diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) == 0)) &&
+      !diri->filelock.can_lease(client) &&
+      !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
       dn->lock.can_lease(client)) {
     int pool = 1;   // fixme.. do something smart!
     // issue a dentry lease
-    ClientLease *l = dn->add_client_lease(client, session);
-    session->touch_lease(l);
+    DentryLease *l = dn->add_client_lease(session);
 
-    now += mdcache->client_lease_durations[pool];
-    mdcache->touch_client_lease(l, pool, now);
+    float duration = 30; // FIXME;
+    l->ttl = now;
+    l->ttl += duration;
 
     LeaseStat e;
     e.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
     e.seq = ++l->seq;
-    e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
+    e.duration_ms = (int)(1000 * duration);
     ::encode(e, bl);
     dout(20) << "issue_client_lease seq " << e.seq << " dur " << e.duration_ms << "ms "
              << " on " << *dn << dendl;
@@ -3332,33 +3330,36 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     ::encode(e, bl);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
-#endif
 }
+
+void Locker::remove_client_lease(CDentry *dn, Session *session)
+{
+  dn->mutex_assert_locked_by_me();
+
+  dn->remove_client_lease(session);
+
+  if (!dn->lock.is_leased())
+    try_eval(dn, CEPH_LOCK_DN);
+}
+
 void Locker::revoke_client_leases(SimpleLock *lock)
 {
-#if 0
-  int n = 0;
+  assert(lock->get_type() == CEPH_LOCK_DN);
   CDentry *dn = static_cast<CDentry*>(lock->get_parent());
-  for (map<client_t, ClientLease*>::iterator p = dn->client_lease_map.begin();
-       p != dn->client_lease_map.end();
+  dn->mutex_assert_locked_by_me();
+
+  CInode *diri = dn->get_dir_inode();
+  int nr = 0;
+  for (auto p = dn->get_client_leases().begin();
+       p != dn->get_client_leases().end();
        ++p) {
-    ClientLease *l = p->second;
+    DentryLease *l = p->second;
 
-    n++;
-    assert(lock->get_type() == CEPH_LOCK_DN);
-
-    CDentry *dn = static_cast<CDentry*>(lock->get_parent());
     int mask = 1 | CEPH_LOCK_DN; // old and new bits
-
-    // i should also revoke the dir ICONTENT lease, if they have it!
-    CInode *diri = dn->get_dir()->get_inode();
-    mds->send_message_client_counted(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq,
-                                              mask,
-                                              diri->ino(),
-                                              diri->first, CEPH_NOSNAP,
-                                              dn->get_name()),
-                             l->client);
+    mds->send_message_client_counted(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq, mask,
+						      diri->ino(), 2, CEPH_NOSNAP, dn->get_name()),
+				     l->get_session());
+    nr++;
   }
-  assert(no == lock->get_num_client_lease());
-#endif
+  assert(nr == lock->get_num_client_lease());
 }

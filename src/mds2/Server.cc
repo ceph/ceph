@@ -48,24 +48,11 @@ void Server::dispatch(Message *m)
   }
 }
 
-Session *Server::get_session(Message *m)
-{
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
-  if (session) {
-    dout(20) << "get_session have " << session << " " << session->info.inst
-	     << " state " << session->get_state_name() << dendl;
-    session->put();  // not carry ref
-  } else {
-    dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
-  }
-  return session;
-}
-
 /* This function DOES put the passed message before returning*/
 void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
-  Session *session = get_session(m);
+  Session *session = mds->get_session(m);
   assert(session);
 
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
@@ -75,7 +62,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
 void Server::handle_client_session(MClientSession *m)
 {
-  Session *session = get_session(m);
+  Session *session = mds->get_session(m);
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
 
   switch (m->get_op()) {
@@ -101,6 +88,19 @@ void Server::handle_client_session(MClientSession *m)
 	locker->remove_client_cap(in.get(), session);
 	in->mutex_unlock();
 	in.reset();
+
+	session->lock();
+      }
+
+      while (!session->leases.empty()) {
+	DentryLease *l = session->leases.front();
+	CDentryRef dn = l->get_dentry();
+	session->unlock();
+
+	dn->mutex_lock();
+	dout(20) << " killing lease on " << *dn << dendl;
+	locker->remove_client_lease(dn.get(), session);
+	dn->mutex_unlock();
 
 	session->lock();
       }
@@ -132,7 +132,7 @@ void Server::handle_client_request(MClientRequest *req)
 
     Session *session = 0;
     if (req->get_source().is_client()) {
-      session = get_session(req);
+      session = mds->get_session(req);
       if (!session) {
 	dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
 	req->put();
@@ -160,11 +160,10 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay()) {
-    client_t client = req->get_source().num();
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	p != req->releases.end();
 	++p)
-      locker->process_request_cap_release(mdr, client, p->item, p->dname);
+      locker->process_request_cap_release(mdr, p->item, p->dname);
     req->releases.clear();
   }
 
@@ -244,6 +243,7 @@ void Server::encode_null_lease(bufferlist& bl)
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn, const MDRequestRef& mdr)
 {
+  utime_t now = ceph_clock_now(g_ceph_context);
   bufferlist bl;
   // dir + dentry?
   if (dn) {
@@ -252,19 +252,21 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     CInode *diri = dir->get_inode();
 
     diri->encode_inodestat(bl, session, 0);
-//    dout(20) << "set_trace_dist added diri " << *diri << dendl;
+    //    dout(20) << "set_trace_dist added diri " << *diri << dendl;
 
     encode_empty_dirstat(bl);
-//    dout(20) << "set_trace_dist added dir  " << *dir << dendl;
+    //    dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
+    dn->mutex_lock();
     ::encode(dn->get_name(), bl);
-     encode_null_lease(bl);
-//    dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
+    locker->issue_client_lease(dn, bl, now, session);
+    dn->mutex_unlock();
+    //    dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
   } else
     reply->head.is_dentry = 0;
 
   if (in) {
-    in->encode_inodestat(bl, session, 0);
+    in->encode_inodestat(bl, session, 0, mdr->getattr_mask);
 //    dout(20) << "set_trace_dist added in  " << *in << dendl;
     reply->head.is_target = 1;
   } else
@@ -291,7 +293,7 @@ void Server::early_reply(const MDRequestRef& mdr)
     return;
 
   MClientRequest *req = mdr->client_request;
-  Session *session = get_session(req); 
+  Session *session = mds->get_session(req); 
 
   locker->set_xlocks_done(mdr, req->get_op() == CEPH_MDS_OP_RENAME);
 
@@ -322,7 +324,7 @@ void Server::early_reply(const MDRequestRef& mdr)
 void Server::reply_client_request(const MDRequestRef& mdr, MClientReply *reply)
 {
   MClientRequest *req = mdr->client_request;
-  Session *session = get_session(req); 
+  Session *session = mds->get_session(req); 
 
   if (!mdr->did_early_reply) {
 
@@ -364,6 +366,8 @@ int Server::rdlock_path_pin_ref(const MDRequestRef& mdr, int n,
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
 
   int r = mdcache->path_traverse(mdr, refpath, &mdr->dn[n], &mdr->in[n]);
+  if (r > 0)
+    return -EAGAIN;
   if (r < 0) {
     /*
      * FIXME: 
@@ -404,6 +408,8 @@ int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
 
   CInodeRef diri;
   err = mdcache->path_traverse(mdr, dirpath, &mdr->dn[n], &diri);
+  if (err > 0)
+    return -EAGAIN;
   if (err < 0) {
     respond_to_request(mdr, err);
     return err;
@@ -422,7 +428,7 @@ int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
   assert(dir);
 
   CDentryRef dn = dir->lookup(dname);
-  const CDentry::linkage_t* dnl = dn ? dn->get_projected_linkage() : NULL;
+  const CDentry::linkage_t* dnl = dn ? dn->get_linkage(mdr->get_client(), mdr) : NULL;
   CInodeRef in;
   if (mustexist) {
     if (!dn || dnl->is_null()) {
@@ -496,13 +502,20 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
   if (r < 0)
     return;
 
-  /*
+  CInodeRef& in = mdr->in[0];
+  mdr->lock_object(in.get());
+
+  Capability *cap = in->get_client_cap(mdr->get_client());
+  int issued = cap ? cap->issued() : 0;
+
+  MClientRequest *req = mdr->client_request;
   int mask = req->head.args.getattr.mask;
-  if ((mask & CEPH_CAP_LINK_SHARED) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
-  if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
-  if ((mask & CEPH_CAP_FILE_SHARED) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
-  if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
-  */
+  if ((mask & CEPH_CAP_LINK_SHARED) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&in->linklock);
+  if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&in->authlock);
+  if ((mask & CEPH_CAP_FILE_SHARED) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&in->filelock);
+  if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&in->xattrlock);
+
+  mdr->unlock_object(in.get());
 
   r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
   if (r <= 0) {
@@ -517,10 +530,9 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
     mdr->tracedn = 0;
   }
 
-  CInodeRef& in = mdr->in[0];
   mdr->lock_object(in.get());
-
   mdr->tracei = 0;
+  mdr->getattr_mask = mask;
   respond_to_request(mdr, 0);
 }
 
@@ -963,7 +975,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     CDentry *dn = it->second;
     ++it;
 
-    const CDentry::linkage_t *dnl = dn->get_projected_linkage();
+    const CDentry::linkage_t *dnl = dn->get_linkage(mdr->get_client(), mdr);
     if (dnl->is_null())
       continue;
 

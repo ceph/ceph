@@ -321,7 +321,6 @@ void MDSRank::send_message(Message *m, Connection *c)
   c->send_message(m);
 }
 
-
 void MDSRank::send_message_mds(Message *m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
@@ -373,6 +372,19 @@ void MDSRank::send_message_client(Message *m, Session *session)
   } else {
     session->preopen_out_queue.push_back(m);
   }
+}
+
+Session *MDSRank::get_session(Message *m)
+{
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  if (session) {
+    dout(20) << "get_session have " << session << " " << session->info.inst
+	     << " state " << session->get_state_name() << dendl;
+    session->put();  // not carry ref
+  } else {
+    dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
+  }
+  return session;
 }
 
 void MDSRank::bcast_mds_map()

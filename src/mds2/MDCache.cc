@@ -252,7 +252,15 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
     if (dn) {
       const CDentry::linkage_t* dnl = dn->get_projected_linkage();
       if (dnl->is_null()) {
-	err = -ENOENT;
+	dn->mutex_lock();
+	if (!dn->lock.can_read(mdr->get_client()) &&
+	    dn->lock.is_xlocked() && dn->lock.get_xlock_by() != mdr) {
+	  dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mds, mdr));
+	  err = 1;
+	} else {
+	  err = -ENOENT;
+	}
+	dn->mutex_unlock();
       } else {
 	in = dnl->get_inode();
 	if (dnl->is_remote() && !in) {
@@ -278,11 +286,10 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
       } else {
 	pdnvec->clear();
       }
-      if (err)
-	break;
-
-      cur.swap(in);
     }
+    if (err)
+      break;
+    cur.swap(in);
   }
   if (!err && pin)
     pin->swap(cur);
