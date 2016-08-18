@@ -2716,12 +2716,6 @@ int OSD::shutdown()
 	 << cpp_strerror(r) << dendl;
   }
 
-  dout(10) << "syncing store" << dendl;
-  enable_disable_fuse(true);
-  store->umount();
-  delete store;
-  store = 0;
-  dout(10) << "Store synced" << dendl;
 
   {
     Mutex::Locker l(pg_stat_queue_lock);
@@ -2756,6 +2750,13 @@ int OSD::shutdown()
   service.dump_live_pgids();
 #endif
   cct->_conf->remove_observer(this);
+
+  dout(10) << "syncing store" << dendl;
+  enable_disable_fuse(true);
+  store->umount();
+  delete store;
+  store = 0;
+  dout(10) << "Store synced" << dendl;
 
   monc->shutdown();
   osd_lock.Unlock();
