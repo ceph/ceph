@@ -29,6 +29,7 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
         fail(r, failmsg)
     return r
 
+
 def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
                  data=None):
 
@@ -292,7 +293,6 @@ if __name__ == '__main__':
     assert(isinstance(r.myjson['output'], list))
     r = expect('osd/ls', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/osds/osd') is not None)
-
 
     expect('osd/pause', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)

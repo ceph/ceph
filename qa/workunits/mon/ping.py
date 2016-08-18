@@ -18,8 +18,8 @@ class UnexpectedReturn(Exception):
         if isinstance(cmd, list):
             self.cmd = ' '.join(cmd)
         else:
-                    'cmd needs to be either a list or a str'
             assert isinstance(cmd, string) or isinstance(cmd, unicode), \
+                'cmd needs to be either a list or a str'
             self.cmd = cmd
         self.cmd = str(self.cmd)
         self.ret = int(ret)
@@ -28,7 +28,8 @@ class UnexpectedReturn(Exception):
 
     def __str__(self):
         return repr('{c}: expected return {e}, got {r} ({o})'.format(
-                c=self.cmd, e=self.expected, r=self.ret, o=self.msg))
+            c=self.cmd, e=self.expected, r=self.ret, o=self.msg))
+
 
 def call(cmd):
     if isinstance(cmd, list):
@@ -40,12 +41,12 @@ def call(cmd):
 
     print('call: {0}'.format(args))
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (procout,procerr) = proc.communicate(None)
+    procout, procerr = proc.communicate(None)
 
-    return (proc.returncode, procout, procerr)
+    return proc.returncode, procout, procerr
+
 
 def expect(cmd, expected_ret):
-
     try:
         (r, out, err) = call(cmd)
     except ValueError as e:
@@ -67,8 +68,8 @@ def get_quorum_status(timeout=300):
     j = json.loads(out)
     return j
 
-def main():
 
+def main():
     quorum_status = get_quorum_status()
     mon_names = [mon['name'] for mon in quorum_status['monmap']['mons']]
 
@@ -79,8 +80,8 @@ def main():
         reply = json.loads(out)
 
         assert reply['mon_status']['name'] == m, \
-                'reply obtained from mon.{0}, expected mon.{1}'.format(
-                        reply['mon_status']['name'], m)
+            'reply obtained from mon.{0}, expected mon.{1}'.format(
+                reply['mon_status']['name'], m)
 
     print('test out-of-quorum reply')
     for m in mon_names:
@@ -89,20 +90,20 @@ def main():
 
         quorum_status = get_quorum_status()
         assert m not in quorum_status['quorum_names'], \
-                'mon.{0} was not supposed to be in quorum ({1})'.format(
-                        m, quorum_status['quorum_names'])
+            'mon.{0} was not supposed to be in quorum ({1})'.format(
+                m, quorum_status['quorum_names'])
 
         out = expect('ceph ping mon.{0}'.format(m), 0)
         reply = json.loads(out)
         mon_status = reply['mon_status']
 
         assert mon_status['name'] == m, \
-                'reply obtained from mon.{0}, expected mon.{1}'.format(
-                        mon_status['name'], m)
+            'reply obtained from mon.{0}, expected mon.{1}'.format(
+                mon_status['name'], m)
 
         assert mon_status['state'] == 'electing', \
-                'mon.{0} is in state {1}, expected electing'.format(
-                        m,mon_status['state'])
+            'mon.{0} is in state {1}, expected electing'.format(
+                m, mon_status['state'])
 
         expect('ceph daemon mon.{0} quorum enter'.format(m), 0)
 
