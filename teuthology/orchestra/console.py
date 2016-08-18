@@ -30,7 +30,7 @@ class PhysicalConsole():
         self.ipmipass = ipmipass
         self.ipmidomain = ipmidomain
 
-    def _exec(self, cmd):
+    def _pexpect_spawn(self, cmd):
         """
         Run the cmd specified using ipmitool.
         """
@@ -60,7 +60,7 @@ class PhysicalConsole():
         r = child.expect(
             ['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
         if r != 0:
-            self._exec('sol deactivate')
+            self._pexpect_spawn('sol deactivate')
 
     def _wait_for_login(self, timeout=None, attempts=2):
         """
@@ -72,7 +72,7 @@ class PhysicalConsole():
         for i in range(0, attempts):
             start = time.time()
             while time.time() - start < t:
-                child = self._exec('sol activate')
+                child = self._pexpect_spawn('sol activate')
                 child.send('\n')
                 log.debug('expect: {s} login'.format(s=self.shortname))
                 r = child.expect(
@@ -97,7 +97,7 @@ class PhysicalConsole():
         total = t
         ta = time.time()
         while total < timeout:
-            c = self._exec('power status')
+            c = self._pexpect_spawn('power status')
             r = c.expect(['Chassis Power is {s}'.format(
                 s=state), pexpect.EOF, pexpect.TIMEOUT], timeout=t)
             tb = time.time()
@@ -132,7 +132,7 @@ class PhysicalConsole():
         Power cycle and wait for login.
         """
         log.info('Power cycling {s}'.format(s=self.shortname))
-        child = self._exec('power cycle')
+        child = self._pexpect_spawn('power cycle')
         child.expect('Chassis Power Control: Cycle', timeout=self.timeout)
         self._wait_for_login(timeout=300)
         log.info('Power cycle for {s} completed'.format(s=self.shortname))
@@ -145,7 +145,7 @@ class PhysicalConsole():
         log.info('Performing hard reset of {s}'.format(s=self.shortname))
         start = time.time()
         while time.time() - start < self.timeout:
-            child = self._exec('power reset')
+            child = self._pexpect_spawn('power reset')
             r = child.expect(['Chassis Power Control: Reset', pexpect.EOF],
                              timeout=self.timeout)
             if r == 0:
@@ -160,7 +160,7 @@ class PhysicalConsole():
         log.info('Power on {s}'.format(s=self.shortname))
         start = time.time()
         while time.time() - start < self.timeout:
-            child = self._exec('power on')
+            child = self._pexpect_spawn('power on')
             r = child.expect(['Chassis Power Control: Up/On', pexpect.EOF],
                              timeout=self.timeout)
             if r == 0:
@@ -176,7 +176,7 @@ class PhysicalConsole():
         log.info('Power off {s}'.format(s=self.shortname))
         start = time.time()
         while time.time() - start < self.timeout:
-            child = self._exec('power off')
+            child = self._pexpect_spawn('power off')
             r = child.expect(['Chassis Power Control: Down/Off', pexpect.EOF],
                              timeout=self.timeout)
             if r == 0:
@@ -193,12 +193,12 @@ class PhysicalConsole():
         """
         log.info('Power off {s} for {i} seconds'.format(
             s=self.shortname, i=interval))
-        child = self._exec('power off')
+        child = self._pexpect_spawn('power off')
         child.expect('Chassis Power Control: Down/Off', timeout=self.timeout)
 
         time.sleep(interval)
 
-        child = self._exec('power on')
+        child = self._pexpect_spawn('power on')
         child.expect('Chassis Power Control: Up/On', timeout=self.timeout)
         self._wait_for_login()
         log.info('Power off for {i} seconds completed'.format(
