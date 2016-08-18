@@ -1,18 +1,25 @@
 #!/usr/bin/python
 
 import json
-import subprocess
 import shlex
-import errno
+import subprocess
 import sys
+
+if sys.version_info[0] == 2:
+    string = basestring
+    unicode = unicode
+elif sys.version_info[0] == 3:
+    string = str
+    unicode = str
+
 
 class UnexpectedReturn(Exception):
     def __init__(self, cmd, ret, expected, msg):
         if isinstance(cmd, list):
             self.cmd = ' '.join(cmd)
         else:
-            assert isinstance(cmd, str) or isinstance(cmd, unicode), \
                     'cmd needs to be either a list or a str'
+            assert isinstance(cmd, string) or isinstance(cmd, unicode), \
             self.cmd = cmd
         self.cmd = str(self.cmd)
         self.ret = int(ret)
@@ -26,12 +33,12 @@ class UnexpectedReturn(Exception):
 def call(cmd):
     if isinstance(cmd, list):
         args = cmd
-    elif isinstance(cmd, basestring):
+    elif isinstance(cmd, string) or isinstance(cmd, unicode):
         args = shlex.split(cmd)
     else:
         assert False, 'cmd is not a string/unicode nor a list!'
 
-    print 'call: {0}'.format(args)
+    print('call: {0}'.format(args))
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     (procout,procerr) = proc.communicate(None)
 
@@ -43,12 +50,13 @@ def expect(cmd, expected_ret):
         (r, out, err) = call(cmd)
     except ValueError as e:
         assert False, \
-            'unable to run {c}: {err}'.format(c=repr(cmd), err=e.message)
+            'unable to run {c}: {err}'.format(c=repr(cmd), err=str(e))
 
     if r != expected_ret:
         raise UnexpectedReturn(repr(cmd), r, expected_ret, err)
 
-    return out
+    return out.decode() if isinstance(out, bytes) else out
+
 
 def get_quorum_status(timeout=300):
     cmd = 'ceph quorum_status'
@@ -64,9 +72,9 @@ def main():
     quorum_status = get_quorum_status()
     mon_names = [mon['name'] for mon in quorum_status['monmap']['mons']]
 
-    print 'ping all monitors'
+    print('ping all monitors')
     for m in mon_names:
-        print 'ping mon.{0}'.format(m)
+        print('ping mon.{0}'.format(m))
         out = expect('ceph ping mon.{0}'.format(m), 0)
         reply = json.loads(out)
 
@@ -74,9 +82,9 @@ def main():
                 'reply obtained from mon.{0}, expected mon.{1}'.format(
                         reply['mon_status']['name'], m)
 
-    print 'test out-of-quorum reply'
+    print('test out-of-quorum reply')
     for m in mon_names:
-        print 'testing mon.{0}'.format(m)
+        print('testing mon.{0}'.format(m))
         expect('ceph daemon mon.{0} quorum exit'.format(m), 0)
 
         quorum_status = get_quorum_status()
@@ -98,7 +106,8 @@ def main():
 
         expect('ceph daemon mon.{0} quorum enter'.format(m), 0)
 
-    print 'OK'
+    print('OK')
+
 
 if __name__ == '__main__':
     main()
