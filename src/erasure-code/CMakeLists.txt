@@ -6,6 +6,24 @@ set(erasure_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/erasure-code)
 include_directories(jerasure/jerasure/include)
 include_directories(jerasure/gf-complete/include)
 include_directories(jerasure)
+
+
+if(TRUE)
+  list(APPEND jerasure_flavors generic)
+endif()
+
+if(ARM_NEON OR ARM_NEON2)
+  list(APPEND jerasure_flavors neon)
+endif()
+
+if(INTEL_SSE)
+  list(APPEND jerasure_flavors sse3)
+endif()
+
+if(INTEL_SSE4_1)
+  list(APPEND jerasure_flavors sse4)
+endif()
+
 add_subdirectory(jerasure)
 add_subdirectory(lrc)
 add_subdirectory(shec)
