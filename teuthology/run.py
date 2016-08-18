@@ -191,6 +191,7 @@ def get_initial_tasks(lock, config, machine_type):
         init_tasks.extend([
             {'internal.check_lock': None},
             {'internal.add_remotes': None},
+            {'console_log': None},
             {'internal.connect': None},
             {'internal.push_inventory': None},
             {'internal.serialize_remote_roles': None},
