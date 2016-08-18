@@ -219,8 +219,13 @@ namespace librbd {
 
     librados::AioCompletion *rados_completion =
       util::create_rados_ack_callback(req);
-    int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
+    int r;
+    if (trace_info)
+      r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
 					 flags, NULL, trace_info);
+    else
+      r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
+           flags, NULL);
     rados_completion->release();
     assert(r >= 0);
   }
