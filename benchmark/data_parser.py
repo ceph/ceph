@@ -136,10 +136,10 @@ def create_header(num_cols):
   header = fields[0]
   #write add_req_{1, ...}
   for i in range(num_cols):
-    header = '%s %s_%i'%(header, fields[1], i+1)
+    header = '%s %s_%i'%(header, fields[1], i+2)
   #write complete_req_{1, ...}
   for i in range(num_cols):
-    header = '%s %s_%i'%(header, fields[2], i+1)
+    header = '%s %s_%i'%(header, fields[2], i+2)
   # new-line
   header = '%s\n'%(header)
   return header

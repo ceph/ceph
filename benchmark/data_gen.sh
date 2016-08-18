@@ -23,10 +23,10 @@ if [ "$3" != "" ]; then
   repeat="$3"
 fi
 
-echo "k-way: $k_way, num_repeat:$repeat"
+echo "k-way:$k_way, num_repeat:$repeat"
 
 # create simulators in different directories 
-k=1
+k=2
 while [ $k -le $k_way ]
 do
   mkdir "build_$k"
@@ -43,7 +43,7 @@ done
 echo '' > $output_file
 for config in "$config_dir"/*.conf
 do
-  k=1
+  k=2
   while [ $k -le $k_way ]
   do
     cd "build_$k"

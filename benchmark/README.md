@@ -1,5 +1,9 @@
 # dmclock benchmarking
 
+**IMPORTANT**: now that K_WAY_HEAP is no longer allowed to have the
+value 1, the shell and Python scripts that generate the PDFs no longer
+work exactly correctly. Some effort to debug is necessary.
+
 This directory contains scripts to evaluate effects of different
 branching-factors (k=1 to k=11) in the IndirectIntrusiveHeap
 data-structure. IndirectIntrusiveHeap is now a k-way heap, so finding

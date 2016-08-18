@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # default value
-k_way=2 #11
-repeat=3 #5
+k_way=3 #11
+repeat=2 #5
 
 output_file="" 
 if [ "$1" != "" ]; then
