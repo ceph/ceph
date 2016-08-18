@@ -78,10 +78,10 @@ def run_cmd(cmd, expects=0):
         try:
             (out, err) = proc.communicate()
             if out is not None:
-                stdout += str(out).split('\n')
+                stdout += out.decode().split('\n')
                 cmdlog.debug('stdout: {s}'.format(s=out))
             if err is not None:
-                stdout += str(err).split('\n')
+                stdout += err.decode().split('\n')
                 cmdlog.debug('stderr: {s}'.format(s=err))
         except ValueError:
             ret = proc.wait()
@@ -118,7 +118,7 @@ def destroy_tmp_file(fpath):
 
 def write_data_file(data, rnd):
     file_path = gen_tmp_file_path(rnd)
-    data_file = open(file_path, 'wr+')
+    data_file = open(file_path, 'a+')
     data_file.truncate()
     data_file.write(data)
     data_file.close()
@@ -126,7 +126,9 @@ def write_data_file(data, rnd):
 #end write_data_file
 
 def choose_random_op(rnd):
-    op = rnd.choice(OPS.keys())
+    op = rnd.choice(
+        list(OPS.keys())
+    )
     sop = rnd.choice(OPS[op])
     return (op, sop)
 
@@ -206,7 +208,7 @@ def main():
                 expected = 0 # the store just overrides the value if the key exists
             #end if sop == 'existing'
             elif sop == 'new':
-                for x in xrange(0, 10):
+                for x in range(0, 10):
                     key = gen_key(rnd)
                     if key not in CONFIG_EXISTING:
                         break
@@ -263,8 +265,8 @@ def main():
                     'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
             if sop == 'enoent':
-                for x in xrange(0, 10):
-                    key = base64.b64encode(os.urandom(20))
+                for x in range(0, 10):
+                    key = base64.b64encode(os.urandom(20)).decode()
                     if key not in CONFIG_EXISTING:
                         break
                     key = None
@@ -301,8 +303,8 @@ def main():
                     'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
             if sop == 'enoent':
-                for x in xrange(0, 10):
-                    key = base64.b64encode(os.urandom(20))
+                for x in range(0, 10):
+                    key = base64.b64encode(os.urandom(20)).decode()
                     if key not in CONFIG_EXISTING:
                         break
                     key = None
@@ -335,8 +337,8 @@ def main():
                     'key \'{k_}\' not in CONFIG_EXISTING'.format(k_=key)
 
             if sop == 'enoent':
-                for x in xrange(0, 10):
-                    key = base64.b64encode(os.urandom(20))
+                for x in range(0, 10):
+                    key = base64.b64encode(os.urandom(20)).decode()
                     if key not in CONFIG_EXISTING:
                         break
                     key = None
