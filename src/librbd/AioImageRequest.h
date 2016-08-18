@@ -57,11 +57,15 @@ protected:
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
-  const blkin_trace_info *m_trace_info;
+  ZTracer::Endpoint trace_endpoint;
+  ZTracer::Trace trace;
 
   AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
     const blkin_trace_info *trace_info = nullptr)
-    : m_image_ctx(image_ctx), m_aio_comp(aio_comp), m_trace_info(trace_info) {}
+    : m_image_ctx(image_ctx), m_aio_comp(aio_comp), trace_endpoint("AioImageRequest") {
+      if (trace_info)
+        trace.init("aioimgreq", &trace_endpoint, trace_info);
+    }
 
   virtual void send_request() = 0;
   virtual aio_type_t get_aio_type() const = 0;
@@ -145,7 +149,7 @@ protected:
                                     AioObjectRequests *aio_object_requests);
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish, const blkin_trace_info *trace_info = nullptr) = 0;
+      Context *on_finish, ZTracer::Trace *trace = nullptr) = 0;
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous) = 0;
@@ -186,7 +190,7 @@ protected:
                                     AioObjectRequests *aio_object_requests);
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish, const blkin_trace_info *trace_info = nullptr);
+      Context *on_finish, ZTracer::Trace *trace = nullptr);
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);
@@ -222,7 +226,7 @@ protected:
 
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish, const blkin_trace_info *trace_info = nullptr);
+      Context *on_finish, ZTracer::Trace *trace = nullptr);
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);

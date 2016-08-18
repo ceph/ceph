@@ -54,9 +54,9 @@ AioObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                   const ceph::bufferlist &data,
                                   const ::SnapContext &snapc,
                                   Context *completion, int op_flags,
-                                  const blkin_trace_info *trace_info) {
+                                  ZTracer::Trace *trace) {
   return new AioObjectWrite(util::get_image_ctx(ictx), oid, object_no,
-                            object_off, data, snapc, completion, op_flags, trace_info);
+                            object_off, data, snapc, completion, op_flags, trace);
 }
 
 template <typename I>
@@ -75,10 +75,10 @@ AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                                       uint64_t objectno, uint64_t off,
                                       uint64_t len, librados::snap_t snap_id,
                                      Context *completion, bool hide_enoent,
-                                     const blkin_trace_info *trace_info)
+                                     ZTracer::Trace *trace)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-    m_hide_enoent(hide_enoent), m_trace_info(trace_info) {
+    m_hide_enoent(hide_enoent), m_trace(trace) {
   Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                           0, m_ictx->layout.object_size, m_parent_extents);
 
@@ -146,9 +146,9 @@ AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
                                 vector<pair<uint64_t,uint64_t> >& be,
                                 librados::snap_t snap_id, bool sparse,
                                Context *completion, int op_flags,
-                               const blkin_trace_info *trace_info)
+                               ZTracer::Trace *trace)
   : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
-                        snap_id, completion, false, trace_info),
+                        snap_id, completion, false, trace),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_parent_completion(NULL),
     m_state(LIBRBD_AIO_READ_FLAT) {
@@ -358,9 +358,9 @@ AbstractAioObjectWrite::AbstractAioObjectWrite(ImageCtx *ictx,
                                                const ::SnapContext &snapc,
                                                Context *completion,
                                                  bool hide_enoent,
-                                                 const blkin_trace_info *trace_info)
+                                                 ZTracer::Trace *trace)
   : AioObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                      completion, hide_enoent, trace_info),
+                      completion, hide_enoent, trace),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
@@ -571,9 +571,9 @@ void AbstractAioObjectWrite::send_write_op(bool write_guard)
   librados::AioCompletion *rados_completion =
     util::create_rados_safe_callback(this);
   int r;
-  if (m_trace_info)
+  if (m_trace && m_trace->valid())
     r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-					 m_snap_seq, m_snaps, m_trace_info);
+					 m_snap_seq, m_snaps, m_trace->get_info());
   else
     r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
            m_snap_seq, m_snaps);

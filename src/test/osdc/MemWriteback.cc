@@ -92,7 +92,7 @@ void MemWriteback::read(const object_t& oid, uint64_t object_no,
 			 uint64_t off, uint64_t len, snapid_t snapid,
 			 bufferlist *pbl, uint64_t trunc_size,
 			 __u32 trunc_seq, int op_flags, Context *onfinish,
-       const blkin_trace_info *trace_info)
+       ZTracer::Trace *trace)
 {
   assert(snapid == CEPH_NOSNAP);
   C_DelayRead *wrapper = new C_DelayRead(this, m_cct, onfinish, m_lock, oid,
@@ -107,7 +107,7 @@ ceph_tid_t MemWriteback::write(const object_t& oid,
 				const bufferlist &bl, ceph::real_time mtime,
 				uint64_t trunc_size, __u32 trunc_seq,
 				ceph_tid_t journal_tid, Context *oncommit,
-        const blkin_trace_info *trace_info)
+        ZTracer::Trace *trace)
 {
   assert(snapc.seq == 0);
   C_DelayWrite *wrapper = new C_DelayWrite(this, m_cct, oncommit, m_lock, oid,

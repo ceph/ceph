@@ -126,12 +126,12 @@ class ObjectCacher {
     SnapContext snapc;
     ceph_tid_t journal_tid;
     int error; // holds return value for failed reads
-    const blkin_trace_info *b_trace_info;
+    ZTracer::Trace *b_trace;
 
     map<loff_t, list<Context*> > waitfor_read;
 
     // cons
-    explicit BufferHead(Object *o, const blkin_trace_info *trace_info = nullptr) :
+    explicit BufferHead(Object *o, ZTracer::Trace *trace = nullptr) :
       state(STATE_MISSING),
       ref(0),
       dontneed(false),
@@ -141,7 +141,7 @@ class ObjectCacher {
       last_read_tid(0),
       journal_tid(0),
       error(0),
-      b_trace_info(trace_info) {
+      b_trace(trace) {
       ex.start = ex.length = 0;
     }
 
@@ -349,9 +349,9 @@ class ObjectCacher {
                  map<loff_t, BufferHead*>& missing,
                  map<loff_t, BufferHead*>& rx,
                  map<loff_t, BufferHead*>& errors,
-                 const blkin_trace_info *trace_info = nullptr);
+                 ZTracer::Trace *trace = nullptr);
                  BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid,
-                 const blkin_trace_info *trace_info = nullptr);
+                 ZTracer::Trace *trace = nullptr);
     
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
@@ -549,7 +549,7 @@ class ObjectCacher {
   Cond read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call, const blkin_trace_info *trace_info = nullptr);
+	     bool external_call, ZTracer::Trace *trace = nullptr);
   void retry_waiting_reads();
 
  public:
@@ -629,18 +629,18 @@ class ObjectCacher {
     OSDRead *rd;
     ObjectSet *oset;
     Context *onfinish;
-    const blkin_trace_info *trace_info;
+    ZTracer::Trace *trace;
   public:
     C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c,
-      const blkin_trace_info *trace_info = nullptr)
-      : oc(_oc), rd(r), oset(os), onfinish(c), trace_info(trace_info) {}
+      ZTracer::Trace *trace = nullptr)
+      : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace) {}
     void finish(int r) {
       if (r < 0) {
 	if (onfinish)
 	  onfinish->complete(r);
 	return;
       }
-      int ret = oc->_readx(rd, oset, onfinish, false, trace_info);
+      int ret = oc->_readx(rd, oset, onfinish, false, trace);
       if (ret != 0 && onfinish) {
 	onfinish->complete(ret);
       }
@@ -656,9 +656,9 @@ class ObjectCacher {
    * the return value is total bytes read
    */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-    const blkin_trace_info *trace_info = nullptr);
+    ZTracer::Trace *trace = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
-    const blkin_trace_info *trace_info = nullptr);
+    ZTracer::Trace *trace = nullptr);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 		 snapid_t snapid);
 

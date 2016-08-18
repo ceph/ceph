@@ -666,7 +666,7 @@ struct C_InvalidateCache : public Context {
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
 				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish,
-				     int fadvise_flags, const blkin_trace_info *trace_info) {
+				     int fadvise_flags, ZTracer::Trace *trace) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, fadvise_flags);
     snap_lock.put_read();
@@ -675,7 +675,7 @@ struct C_InvalidateCache : public Context {
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
     cache_lock.Lock();
-    int r = object_cacher->readx(rd, object_set, onfinish, trace_info);
+    int r = object_cacher->readx(rd, object_set, onfinish, trace);
     cache_lock.Unlock();
     if (r != 0)
       onfinish->complete(r);
@@ -683,7 +683,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish,
-				int fadvise_flags, uint64_t journal_tid, const blkin_trace_info *trace_info) {
+				int fadvise_flags, uint64_t journal_tid, ZTracer::Trace *trace) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(
       snapc, bl, ceph::real_time::min(), fadvise_flags, journal_tid);
@@ -696,7 +696,7 @@ struct C_InvalidateCache : public Context {
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, onfinish, trace_info);
+      object_cacher->writex(wr, object_set, onfinish, trace);
     }
   }
 
