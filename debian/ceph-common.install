@@ -31,8 +31,8 @@ usr/share/man/man8/rbd.8
 usr/share/man/man8/rbdmap.8
 usr/share/man/man8/rbd-replay*.8
 usr/share/ceph/known_hosts_drop.ceph.com
-usr/share/ceph/id_dsa_drop.ceph.com
-usr/share/ceph/id_dsa_drop.ceph.com.pub
+usr/share/ceph/id_rsa_drop.ceph.com
+usr/share/ceph/id_rsa_drop.ceph.com.pub
 etc/ceph/rbdmap
 etc/init.d/rbdmap
 lib/udev/rules.d/50-rbd.rules
