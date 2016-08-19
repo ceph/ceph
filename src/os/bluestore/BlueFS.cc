@@ -1483,9 +1483,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off = 0;
   }
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
-    if (bdev[i] && h->iocv[i]->has_aios()) {
+    if (bdev[i]) {
       assert(h->iocv[i]);
-      bdev[i]->aio_submit(h->iocv[i]);
+      if (h->iocv[i]->has_aios())
+        bdev[i]->aio_submit(h->iocv[i]);
     }
   }
   dout(20) << __func__ << " h " << h << " pos now 0x"
