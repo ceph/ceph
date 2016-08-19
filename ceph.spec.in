@@ -726,7 +726,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 
 # hack to reduce disk space usage in OBS
 %if 0%{?is_opensuse}
-rm -rf .
+rm -rf .* * 2>/dev/null | :
 %endif
 
 %clean
