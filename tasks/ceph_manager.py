@@ -22,6 +22,10 @@ from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 
+try:
+    from subprocess import DEVNULL # py3k
+except ImportError:
+    DEVNULL = open(os.devnull, 'r+')
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 
@@ -727,11 +731,11 @@ class Thrasher:
             for osd in self.live_osds:
                 # Ignore errors because live_osds is in flux
                 self.ceph_manager.osd_admin_socket(osd, command=['dump_ops_in_flight'],
-                                     check_status=False, timeout=30)
+                                     check_status=False, timeout=30, stdout=DEVNULL)
                 self.ceph_manager.osd_admin_socket(osd, command=['dump_blocked_ops'],
-                                     check_status=False, timeout=30)
+                                     check_status=False, timeout=30, stdout=DEVNULL)
                 self.ceph_manager.osd_admin_socket(osd, command=['dump_historic_ops'],
-                                     check_status=False, timeout=30)
+                                     check_status=False, timeout=30, stdout=DEVNULL)
             gevent.sleep(0)
 
     @log_exc
@@ -844,14 +848,14 @@ class ObjectStoreTool:
         lines.append(cmd)
         return "\n".join(lines)
 
-    def run(self, options, args, stdin=None):
+    def run(self, options, args, stdin=None, stdout=StringIO()):
         self.manager.kill_osd(self.osd)
         cmd = self.build_cmd(options, args, stdin)
         self.manager.log(cmd)
         try:
             proc = self.remote.run(args=['bash', '-e', '-x', '-c', cmd],
                                    check_status=False,
-                                   stdout=StringIO(),
+                                   stdout=stdout,
                                    stderr=StringIO())
             proc.wait()
             if proc.exitstatus != 0:
@@ -1051,8 +1055,8 @@ class CephManager:
             check_status=False
         ).exitstatus
 
-    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0):
-        return self.admin_socket('osd', osd_id, command, check_status, timeout)
+    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0, stdout=StringIO()):
+        return self.admin_socket('osd', osd_id, command, check_status, timeout, stdout)
 
     def find_remote(self, service_type, service_id):
         """
@@ -1068,7 +1072,7 @@ class CephManager:
                           service_type, service_id)
 
     def admin_socket(self, service_type, service_id,
-                     command, check_status=True, timeout=0):
+                     command, check_status=True, timeout=0, stdout=StringIO()):
         """
         Remotely start up ceph specifying the admin socket
         :param command: a list of words to use as the command
@@ -1095,7 +1099,7 @@ class CephManager:
         args.extend(command)
         return remote.run(
             args=args,
-            stdout=StringIO(),
+            stdout=stdout,
             wait=True,
             check_status=check_status
             )
@@ -1170,7 +1174,7 @@ class CephManager:
             '0')
 
     def wait_run_admin_socket(self, service_type,
-                              service_id, args=['version'], timeout=75):
+                              service_id, args=['version'], timeout=75, stdout=StringIO()):
         """
         If osd_admin_socket call suceeds, return.  Otherwise wait
         five seconds and try again.
@@ -1178,7 +1182,7 @@ class CephManager:
         tries = 0
         while True:
             proc = self.admin_socket(service_type, service_id,
-                                     args, check_status=False)
+                                     args, check_status=False, stdout=stdout)
             if proc.exitstatus is 0:
                 break
             else:
@@ -1941,7 +1945,7 @@ class CephManager:
             # unhappy.  see #5924.
             self.wait_run_admin_socket('osd', osd,
                                        args=['dump_ops_in_flight'],
-                                       timeout=timeout)
+                                       timeout=timeout, stdout=DEVNULL)
 
     def mark_down_osd(self, osd):
         """
