@@ -35,14 +35,22 @@ struct es_obj_metadata {
 
   void dump(Formatter *f) const {
     map<string, string> out_attrs;
+    map<string, string> custom_meta;
     RGWAccessControlPolicy policy;
     set<string> permissions;
+
     for (auto i : attrs) {
       const string& attr_name = i.first;
       string name;
       bufferlist& val = i.second;
 
       if (attr_name.compare(0, sizeof(RGW_ATTR_PREFIX) - 1, RGW_ATTR_PREFIX) != 0) {
+        continue;
+      }
+
+      if (attr_name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
+        name = attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1);
+        custom_meta[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
         continue;
       }
 
@@ -90,6 +98,13 @@ struct es_obj_metadata {
     ::encode_json("mtime", mtime_str, f);
     for (auto i : out_attrs) {
       ::encode_json(i.first.c_str(), i.second, f);
+    }
+    if (!custom_meta.empty()) {
+      f->open_object_section("custom");
+      for (auto i : custom_meta) {
+        ::encode_json(i.first.c_str(), i.second, f);
+      }
+      f->close_section();
     }
     f->close_section();
   }
