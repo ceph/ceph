@@ -21,17 +21,20 @@ static string es_get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_ke
 }
 
 struct es_obj_metadata {
+  CephContext *cct;
   RGWBucketInfo bucket_info;
   rgw_obj_key key;
   uint64_t size;
   map<string, bufferlist> attrs;
 
-  es_obj_metadata(const RGWBucketInfo& _bucket_info, const rgw_obj_key& _key,
-                  uint64_t _size, map<string, bufferlist>& _attrs) : bucket_info(_bucket_info), key(_key),
+  es_obj_metadata(CephContext *_cct, const RGWBucketInfo& _bucket_info, const rgw_obj_key& _key,
+                  uint64_t _size, map<string, bufferlist>& _attrs) : cct(_cct), bucket_info(_bucket_info), key(_key),
                                                                      size(_size), attrs(std::move(_attrs)) {}
 
   void dump(Formatter *f) const {
     map<string, string> out_attrs;
+    RGWAccessControlPolicy policy;
+    set<string> permissions;
     for (auto i : attrs) {
       const string& attr_name = i.first;
       string name;
@@ -44,6 +47,26 @@ struct es_obj_metadata {
       name = attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1);
 
       if (name == "acl") {
+        try {
+          auto i = val.begin();
+          ::decode(policy, i);
+        } catch (buffer::error& err) {
+          ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
+        }
+
+        const RGWAccessControlList& acl = policy.get_acl();
+
+        permissions.insert(policy.get_owner().get_id().to_str());
+        for (auto acliter : acl.get_grant_map()) {
+          const ACLGrant& grant = acliter.second;
+          if (grant.get_type().get_type() == ACL_TYPE_CANON_USER &&
+              ((uint32_t)grant.get_permission().get_permissions() & RGW_PERM_READ) != 0) {
+            rgw_user user;
+            if (grant.get_id(user)) {
+              permissions.insert(user.to_str());
+            }
+          }
+        }
       } else {
         if (name != "pg_ver" &&
             name != "source_zone" &&
@@ -52,10 +75,12 @@ struct es_obj_metadata {
         }
       }
     }
+    ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("name", key.name, f);
     ::encode_json("instance", key.instance, f);
+    ::encode_json("owner", policy.get_owner(), f);
+    ::encode_json("permissions", permissions, f);
     f->open_object_section("meta");
-    ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("size", size, f);
     for (auto i : out_attrs) {
       ::encode_json(i.first.c_str(), i.second, f);
@@ -78,7 +103,7 @@ public:
                               << " attrs=" << attrs << dendl;
       yield {
         string path = es_get_obj_path(bucket_info, key);
-        es_obj_metadata doc(bucket_info, key, size, attrs);
+        es_obj_metadata doc(sync_env->cct, bucket_info, key, size, attrs);
 
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf.conn,
                                                             sync_env->http_manager,
