@@ -1373,6 +1373,46 @@ void md_config_t::diff(
   }
 }
 
+void md_config_t::diff_setting(const md_config_t *other, 
+            map<string, pair<string, string>> *diff, 
+            const string& ceph_setting, bool show_unchanged)
+{
+  Mutex::Locker l(lock);
+
+  char local_buf[4096];
+  char other_buf[4096];
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = &config_optionsp[i];
+    std::string ceph_setting_name(opt->name);
+    if (ceph_setting != opt->name) {
+      continue;
+    }
+    memset(local_buf, 0, sizeof(local_buf));
+    memset(other_buf, 0, sizeof(other_buf));
+
+    char *other_val = other_buf;
+    int err = other->get_val(opt->name, &other_val, sizeof(other_buf));
+    if (err < 0) {
+      continue;
+    } 
+
+    char *local_val = local_buf;
+    err = _get_val(opt->name, &local_val, sizeof(local_buf));
+    if (err != 0) {
+      continue;
+    } 
+    if (strcmp(local_val, other_val)) {
+      diff->insert(make_pair(ceph_setting, make_pair(local_val, other_val)));
+    }   
+    else {
+      if (show_unchanged) {
+        diff->insert(make_pair(ceph_setting, make_pair(local_val, other_val)));
+      }
+    } 
+    break;  
+  } 
+} 
+
 void md_config_t::complain_about_parse_errors(CephContext *cct)
 {
   ::complain_about_parse_errors(cct, &parse_errors);
