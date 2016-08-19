@@ -743,8 +743,8 @@ install(PROGRAMS
   RENAME ceph)
 
 install(FILES
-  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com
-  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com.pub
+  ${CMAKE_SOURCE_DIR}/share/id_rsa_drop.ceph.com
+  ${CMAKE_SOURCE_DIR}/share/id_rsa_drop.ceph.com.pub
   ${CMAKE_SOURCE_DIR}/share/known_hosts_drop.ceph.com
   DESTINATION ${CMAKE_INSTALL_DATADIR}/ceph)
 
