@@ -74,11 +74,14 @@ private:
 };
 
 struct DeleteJournalPolicy : public librbd::journal::Policy {
-  virtual void allocate_tag_on_lock(Context *on_finish) {
-    on_finish->complete(0);
+  virtual bool append_disabled() const {
+    return true;
+  }
+  virtual bool journal_disabled() const {
+    return false;
   }
 
-  virtual void cancel_external_replay(Context *on_finish) {
+  virtual void allocate_tag_on_lock(Context *on_finish) {
     on_finish->complete(0);
   }
 };

@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
+#include "test/librbd/mock/MockJournalPolicy.h"
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
@@ -244,6 +245,18 @@ public:
   void expect_is_exclusive_lock_owner(MockExclusiveLock &mock_exclusive_lock,
                                       bool is_owner) {
     EXPECT_CALL(mock_exclusive_lock, is_lock_owner()).WillOnce(Return(is_owner));
+  }
+
+  void expect_get_journal_policy(MockImageCtx &mock_image_ctx,
+                                 MockJournalPolicy &mock_journal_policy) {
+    EXPECT_CALL(mock_image_ctx, get_journal_policy())
+                  .WillOnce(Return(&mock_journal_policy));
+  }
+
+  void expect_journal_disabled(MockJournalPolicy &mock_journal_policy,
+                               bool disabled) {
+    EXPECT_CALL(mock_journal_policy, journal_disabled())
+      .WillOnce(Return(disabled));
   }
 
   void expect_open_journal(MockRefreshImageCtx &mock_image_ctx,
@@ -561,6 +574,49 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLockWhileAcquiringLock) {
 
   ASSERT_EQ(-ERESTART, ctx.wait());
 }
+
+TEST_F(TestMockImageRefreshRequest, JournalDisabledByPolicy) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_FAST_DIFF , false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_OBJECT_MAP , false));
+  }
+
+  MockRefreshImageCtx mock_image_ctx(*ictx);
+  MockRefreshParentRequest mock_refresh_parent_request;
+
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
+  MockJournal mock_journal;
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_test_features(mock_image_ctx);
+  expect_is_exclusive_lock_owner(mock_exclusive_lock, true);
+
+  InSequence seq;
+  expect_get_mutable_metadata(mock_image_ctx, 0);
+  expect_get_flags(mock_image_ctx, 0);
+  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+
+  MockJournalPolicy mock_journal_policy;
+  expect_get_journal_policy(mock_image_ctx, mock_journal_policy);
+  expect_journal_disabled(mock_journal_policy, true);
+
+  C_SaferCond ctx;
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, &ctx);
+  req->send();
+
+  ASSERT_EQ(0, ctx.wait());
+}
+
 TEST_F(TestMockImageRefreshRequest, EnableJournalWithExclusiveLock) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
@@ -588,6 +644,10 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithExclusiveLock) {
   expect_get_mutable_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+
+  MockJournalPolicy mock_journal_policy;
+  expect_get_journal_policy(mock_image_ctx, mock_journal_policy);
+  expect_journal_disabled(mock_journal_policy, false);
   expect_open_journal(mock_image_ctx, mock_journal, 0);
 
   C_SaferCond ctx;
