@@ -934,6 +934,7 @@ OPTION(bluefs_log_compact_min_ratio, OPT_FLOAT, 5.0)      // before we consider
 OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
+OPTION(bluefs_buffered_io, OPT_BOOL, false)
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
@@ -942,7 +943,6 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
-OPTION(bluestore_bluefs_buffered_io, OPT_BOOL, true)
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
