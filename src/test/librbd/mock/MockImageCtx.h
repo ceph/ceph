@@ -148,6 +148,7 @@ struct MockImageCtx {
                               uint8_t protection_status, uint64_t flags));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
+  MOCK_METHOD0(user_flushed, void());
   MOCK_METHOD1(flush, void(Context *));
   MOCK_METHOD1(flush_async_operations, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));

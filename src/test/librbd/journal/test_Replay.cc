@@ -687,6 +687,12 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 
+  {
+    // user flush requests are ignored when journaling + cache are enabled
+    RWLock::RLocker owner_lock(ictx->owner_lock);
+    ictx->flush();
+  }
+
   // check the commit position updated
   get_journal_commit_position(ictx, &current_tag, &current_entry);
   ASSERT_EQ(initial_tag + 1, current_tag);
