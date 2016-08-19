@@ -43,17 +43,15 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
   MirrorJournalPolicy(ContextWQ *work_queue) : work_queue(work_queue) {
   }
 
+  virtual bool append_disabled() const {
+    // avoid recording any events to the local journal
+    return true;
+  }
+
   virtual void allocate_tag_on_lock(Context *on_finish) {
     // rbd-mirror will manually create tags by copying them from the peer
     work_queue->queue(on_finish, 0);
   }
-
-  virtual void cancel_external_replay(Context *on_finish) {
-    // TODO: journal is being closed due to a comms error.  This means
-    // the journal is being closed and the exclusive lock is being released.
-    // ImageReplayer needs to restart.
-  }
-
 };
 
 } // anonymous namespace

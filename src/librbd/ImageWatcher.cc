@@ -7,7 +7,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
-#include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
@@ -15,13 +14,9 @@
 #include "librbd/image_watcher/Notifier.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
 #include "include/encoding.h"
-#include "include/stringify.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
-#include <sstream>
 #include <boost/bind.hpp>
-#include <boost/function.hpp>
-#include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

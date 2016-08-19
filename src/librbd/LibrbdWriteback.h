@@ -5,13 +5,12 @@
 
 #include <queue>
 
-#include "include/Context.h"
-#include "include/types.h"
-#include "include/rados/librados.hpp"
+#include "common/snap_types.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 
 class Mutex;
+class Context;
 
 namespace librbd {
 
