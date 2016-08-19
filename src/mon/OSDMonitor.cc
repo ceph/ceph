@@ -141,7 +141,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   version_t version = get_last_committed();
   if (version == osdmap.epoch)
     return;
-  assert(version >= osdmap.epoch);
+  assert(version > osdmap.epoch);
 
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
@@ -1105,7 +1105,7 @@ void OSDMonitor::maybe_prime_pg_temp()
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
     for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
       n -= prime_pg_temp(next, pg_map, *p);
-      if (--n <= 0) {
+      if (n <= 0) {
 	n = chunk;
 	if (ceph_clock_now(NULL) > stop) {
 	  dout(10) << __func__ << " consumed more than "
@@ -5000,7 +5000,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "hit_set_count" || var == "hit_set_fpp" ||
        var == "target_max_objects" || var == "target_max_bytes" ||
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
-       var == "cache_target_dirty_high_ratio" ||
+       var == "cache_target_dirty_high_ratio" || var == "use_gmt_hitset" ||
        var == "cache_min_flush_age" || var == "cache_min_evict_age" ||
        var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n" ||
        var == "min_read_recency_for_promote" || var == "min_write_recency_for_promote")) {
