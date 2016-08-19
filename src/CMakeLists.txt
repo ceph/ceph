@@ -1046,7 +1046,7 @@ if(${WITH_RBD})
     tools/rbd/OptionPrinter.cc
     tools/rbd/Shell.cc
     tools/rbd/Utils.cc
-    tools/rbd/action/BenchWrite.cc
+    tools/rbd/action/Bench.cc
     tools/rbd/action/Children.cc
     tools/rbd/action/Clone.cc
     tools/rbd/action/Copy.cc
