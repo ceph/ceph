@@ -479,6 +479,7 @@ unittest_rbd_mirror_SOURCES = \
 	test/rbd_mirror/test_mock_ImageSyncThrottler.cc \
 	test/rbd_mirror/image_replayer/test_mock_BootstrapRequest.cc \
 	test/rbd_mirror/image_replayer/test_mock_CreateImageRequest.cc \
+	test/rbd_mirror/image_replayer/test_mock_EventPreprocessor.cc \
 	test/rbd_mirror/image_sync/test_mock_ImageCopyRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_ObjectCopyRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_SnapshotCopyRequest.cc \
@@ -529,22 +530,6 @@ ceph_test_rbd_mirror_random_write_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 ceph_test_rbd_mirror_random_write_LDADD = \
 	$(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_random_write
-
-ceph_test_rbd_mirror_image_replay_SOURCES = \
-	test/rbd_mirror/image_replay.cc
-ceph_test_rbd_mirror_image_replay_LDADD = \
-	librbd_mirror_internal.la \
-	librbd_internal.la \
-	librbd_api.la \
-	$(LIBRBD_TYPES) \
-	libjournal.la \
-	$(LIBRADOS) $(LIBOSDC) \
-	librados_internal.la \
-	libcls_rbd_client.la \
-	libcls_lock_client.la \
-	libcls_journal_client.la \
-	$(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_image_replay
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc

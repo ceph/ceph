@@ -157,16 +157,21 @@ void SnapEventBase::dump(Formatter *f) const {
 void SnapRenameEvent::encode(bufferlist& bl) const {
   SnapEventBase::encode(bl);
   ::encode(snap_id, bl);
+  ::encode(src_snap_name, bl);
 }
 
 void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
   SnapEventBase::decode(version, it);
   ::decode(snap_id, it);
+  if (version >= 2) {
+    ::decode(src_snap_name, it);
+  }
 }
 
 void SnapRenameEvent::dump(Formatter *f) const {
   SnapEventBase::dump(f);
   f->dump_unsigned("src_snap_id", snap_id);
+  f->dump_string("src_snap_name", src_snap_name);
   f->dump_string("dest_snap_name", snap_name);
 }
 
@@ -224,7 +229,7 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
 }
@@ -312,7 +317,7 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
 
   o.push_back(new EventEntry(SnapRenameEvent()));
-  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "snap")));
+  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap")));
 
   o.push_back(new EventEntry(SnapProtectEvent()));
   o.push_back(new EventEntry(SnapProtectEvent(567, "snap")));

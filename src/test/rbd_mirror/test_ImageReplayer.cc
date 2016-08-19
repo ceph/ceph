@@ -78,6 +78,7 @@ public:
   {
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
 
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_local_cluster->pool_create(m_local_pool_name.c_str()));
@@ -106,8 +107,7 @@ public:
     m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
 
-    m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_local_cluster,
-                                                        m_threads->work_queue,
+    m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_threads->work_queue,
                                                         m_threads->timer,
                                                         &m_threads->timer_lock));
     m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
@@ -138,11 +138,10 @@ public:
       m_remote_pool_id, m_remote_image_id, "global image id");
   }
 
-  void start(rbd::mirror::ImageReplayer<>::BootstrapParams *bootstap_params =
-	     nullptr)
+  void start()
   {
     C_SaferCond cond;
-    m_replayer->start(&cond, bootstap_params);
+    m_replayer->start(&cond);
     ASSERT_EQ(0, cond.wait());
 
     ASSERT_EQ(0U, m_watch_handle);
@@ -169,9 +168,7 @@ public:
   {
     create_replayer<>();
 
-    rbd::mirror::ImageReplayer<>::BootstrapParams
-      bootstap_params(m_image_name);
-    start(&bootstap_params);
+    start();
     wait_for_replay_complete();
     stop();
   }
@@ -372,10 +369,8 @@ TEST_F(TestImageReplayer, BootstrapErrorLocalImageExists)
 			      false, 0, &order, 0, 0));
 
   create_replayer<>();
-  rbd::mirror::ImageReplayer<>::BootstrapParams
-    bootstap_params(m_image_name);
   C_SaferCond cond;
-  m_replayer->start(&cond, &bootstap_params);
+  m_replayer->start(&cond);
   ASSERT_EQ(-EEXIST, cond.wait());
 }
 
@@ -390,20 +385,16 @@ TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
   close_image(ictx);
 
   create_replayer<>();
-  rbd::mirror::ImageReplayer<>::BootstrapParams
-    bootstap_params(m_image_name);
   C_SaferCond cond;
-  m_replayer->start(&cond, &bootstap_params);
+  m_replayer->start(&cond);
   ASSERT_EQ(-ENOENT, cond.wait());
 }
 
 TEST_F(TestImageReplayer, StartInterrupted)
 {
   create_replayer<>();
-  rbd::mirror::ImageReplayer<>::BootstrapParams
-    bootstap_params(m_image_name);
   C_SaferCond start_cond, stop_cond;
-  m_replayer->start(&start_cond, &bootstap_params);
+  m_replayer->start(&start_cond);
   m_replayer->stop(&stop_cond);
   int r = start_cond.wait();
   printf("start returned %d\n", r);
@@ -434,10 +425,8 @@ TEST_F(TestImageReplayer, ErrorNoJournal)
   ASSERT_EQ(0, librbd::update_features(ictx, RBD_FEATURE_JOURNALING, false));
   close_image(ictx);
 
-  rbd::mirror::ImageReplayer<>::BootstrapParams
-    bootstap_params(m_image_name);
   C_SaferCond cond;
-  m_replayer->start(&cond, &bootstap_params);
+  m_replayer->start(&cond);
   ASSERT_EQ(-ENOENT, cond.wait());
 }
 

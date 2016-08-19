@@ -39,6 +39,21 @@ SnapshotRenameRequest<I>::SnapshotRenameRequest(I &image_ctx,
 }
 
 template <typename I>
+journal::Event SnapshotRenameRequest<I>::create_event(uint64_t op_tid) const {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.snap_lock.is_locked());
+
+  std::string src_snap_name;
+  auto snap_info_it = image_ctx.snap_info.find(m_snap_id);
+  if (snap_info_it != image_ctx.snap_info.end()) {
+    src_snap_name = snap_info_it->second.name;
+  }
+
+  return journal::SnapRenameEvent(op_tid, m_snap_id, src_snap_name,
+                                  m_snap_name);
+}
+
+template <typename I>
 void SnapshotRenameRequest<I>::send_op() {
   send_rename_snap();
 }

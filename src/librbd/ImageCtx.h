@@ -185,6 +185,7 @@ namespace librbd {
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
     std::string journal_pool;
+    uint32_t journal_max_payload_bytes;
 
     LibrbdAdminSocketHook *asok_hook;
 

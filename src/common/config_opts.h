@@ -1210,10 +1210,14 @@ OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pendi
 OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
+OPTION(rbd_journal_max_payload_bytes, OPT_U32, 16384) // maximum journal payload size before splitting
 
 /**
  * RBD Mirror options
  */
+OPTION(rbd_mirror_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
+OPTION(rbd_mirror_journal_poll_age, OPT_DOUBLE, 5) // maximum age (in seconds) between successive journal polls
+OPTION(rbd_mirror_journal_max_fetch_bytes, OPT_U32, 32768) // maximum bytes to read from each journal data object per fetch
 OPTION(rbd_mirror_sync_point_update_age, OPT_DOUBLE, 30) // number of seconds between each update of the image sync point object number
 OPTION(rbd_mirror_concurrent_image_syncs, OPT_U32, 5) // maximum number of image syncs in parallel
 

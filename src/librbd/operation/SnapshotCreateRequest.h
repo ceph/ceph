@@ -106,7 +106,6 @@ private:
   void send_release_snap_id();
   Context *handle_release_snap_id(int *result);
 
-  void finalize(int r);
   void update_snap_context();
 
   void save_result(int *result) {
