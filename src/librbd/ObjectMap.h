@@ -37,6 +37,7 @@ public:
   void close(Context *on_finish);
 
   bool object_may_exist(uint64_t object_no) const;
+  bool update_required(uint64_t object_no, uint8_t new_state);
 
   void aio_save(Context *on_finish);
   void aio_resize(uint64_t new_size, uint8_t default_object_state,

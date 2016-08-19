@@ -57,6 +57,14 @@ struct ConstructVisitor : public boost::static_visitor<Action::ptr> {
     return Action::ptr(new AioWriteAction(action));
   }
 
+  inline Action::ptr operator()(const action::DiscardAction &action) const {
+    return Action::ptr(new DiscardAction(action));
+  }
+
+  inline Action::ptr operator()(const action::AioDiscardAction &action) const {
+    return Action::ptr(new AioDiscardAction(action));
+  }
+
   inline Action::ptr operator()(const action::OpenImageAction &action) const {
     return Action::ptr(new OpenImageAction(action));
   }
@@ -118,7 +126,6 @@ void ReadAction::perform(ActionCtx &worker) {
   worker.remove_pending(io);
 }
 
-
 void AioWriteAction::perform(ActionCtx &worker) {
   static const std::string fake_data(create_fake_data());
   dout(ACTION_LEVEL) << "Performing " << *this << dendl;
@@ -147,6 +154,31 @@ void WriteAction::perform(ActionCtx &worker) {
   io->bufferlist().append_zero(m_action.length);
   if (!worker.readonly()) {
     ssize_t r = image->write(m_action.offset, m_action.length, io->bufferlist());
+    assertf(r >= 0, "id = %d, r = %d", id(), r);
+  }
+  worker.remove_pending(io);
+}
+
+void AioDiscardAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  librbd::Image *image = worker.get_image(m_action.imagectx_id);
+  PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
+  worker.add_pending(io);
+  if (worker.readonly()) {
+    worker.remove_pending(io);
+  } else {
+    int r = image->aio_discard(m_action.offset, m_action.length, &io->completion());
+    assertf(r >= 0, "id = %d, r = %d", id(), r);
+  }
+}
+
+void DiscardAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  librbd::Image *image = worker.get_image(m_action.imagectx_id);
+  PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
+  worker.add_pending(io);
+  if (!worker.readonly()) {
+    ssize_t r = image->discard(m_action.offset, m_action.length);
     assertf(r >= 0, "id = %d, r = %d", id(), r);
   }
   worker.remove_pending(io);

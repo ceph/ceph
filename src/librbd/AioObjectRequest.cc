@@ -403,22 +403,21 @@ namespace librbd {
       } else {
         // should have been flushed prior to releasing lock
         assert(m_ictx->exclusive_lock->is_lock_owner());
-
         m_object_exist = m_ictx->object_map->object_may_exist(m_object_no);
 
-        ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
-          		       << m_object_off << "~" << m_object_len << dendl;
-        m_state = LIBRBD_AIO_WRITE_PRE;
-
         uint8_t new_state;
-        boost::optional<uint8_t> current_state;
         pre_object_map_update(&new_state);
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if ((*m_ictx->object_map)[m_object_no] != new_state) {
+        if (m_ictx->object_map->update_required(m_object_no, new_state)) {
+          ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
+                                 << m_object_off << "~" << m_object_len
+                                 << dendl;
+          m_state = LIBRBD_AIO_WRITE_PRE;
+
           Context *ctx = util::create_context_callback<AioObjectRequest>(this);
           bool updated = m_ictx->object_map->aio_update(m_object_no, new_state,
-                                                        current_state, ctx);
+                                                        {}, ctx);
           assert(updated);
         } else {
           write = true;
@@ -443,16 +442,14 @@ namespace librbd {
     // should have been flushed prior to releasing lock
     assert(m_ictx->exclusive_lock->is_lock_owner());
 
+    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+    if (!m_ictx->object_map->update_required(m_object_no, OBJECT_NONEXISTENT)) {
+      return true;
+    }
+
     ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
 			   << m_object_off << "~" << m_object_len << dendl;
     m_state = LIBRBD_AIO_WRITE_POST;
-
-    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-    uint8_t current_state = (*m_ictx->object_map)[m_object_no];
-    if (current_state != OBJECT_PENDING ||
-        current_state == OBJECT_NONEXISTENT) {
-      return true;
-    }
 
     Context *ctx = util::create_context_callback<AioObjectRequest>(this);
     bool updated = m_ictx->object_map->aio_update(m_object_no,
