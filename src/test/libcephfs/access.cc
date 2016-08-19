@@ -368,8 +368,14 @@ int main(int argc, char **argv)
 
   srand(getpid());
 
-  rados_create(&cluster, NULL);
-  rados_conf_read_file(cluster, NULL);
+  r = rados_create(&cluster, NULL);
+  if (r < 0)
+    exit(1);
+  
+  r = rados_conf_read_file(cluster, NULL);
+  if (r < 0)
+    exit(1);
+
   rados_conf_parse_env(cluster, NULL);
   r = rados_connect(cluster);
   if (r < 0)
