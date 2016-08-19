@@ -179,10 +179,11 @@ public:
    */
   struct Sequencer {
     string name;
+    spg_t shard_hint;
     Sequencer_implRef p;
 
     explicit Sequencer(string n)
-      : name(n), p(NULL) {}
+      : name(n), shard_hint(spg_t()), p(NULL) {}
     ~Sequencer() {
     }
 

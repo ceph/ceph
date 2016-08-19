@@ -249,6 +249,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
 #endif
+  osr->shard_hint = p;
 }
 
 PG::~PG()
