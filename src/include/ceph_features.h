@@ -84,6 +84,7 @@
 // duplicated since it was introduced at the same time as CEPH_FEATURE_CRUSH_TUNABLES5
 #define CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING (1ULL<<58) /* New, v7 encoding */
 #define CEPH_FEATURE_FS_FILE_LAYOUT_V2       (1ULL<<58) /* file_layout_t */
+#define CEPH_FEATURE_BLKIN_TRACING (1ULL<<59) // don't overlap
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -110,6 +111,13 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 		return f;
 	}
 }
+
+// conditionally include blkin in CEPH_FEATURES_ALL/SUPPORTED_DEFAULT
+#ifdef WITH_BLKIN
+#define CEPH_FEATURES_BLKIN CEPH_FEATURE_BLKIN_TRACING
+#else
+#define CEPH_FEATURES_BLKIN 0
+#endif
 
 /*
  * Features supported.  Should be everything above.
@@ -174,6 +182,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
          CEPH_FEATURE_OSD_PROXY_WRITE_FEATURES |         \
 	 CEPH_FEATURE_OSD_HITSET_GMT |			 \
 	 CEPH_FEATURE_HAMMER_0_94_4 |		 \
+	 CEPH_FEATURES_BLKIN | \
 	 CEPH_FEATURE_MON_STATEFUL_SUB |	 \
 	 CEPH_FEATURE_MON_ROUTE_OSDMAP |	 \
 	 CEPH_FEATURE_CRUSH_TUNABLES5 |	    \

@@ -196,7 +196,8 @@ namespace librbd {
 			     const object_locator_t& oloc,
 			     uint64_t off, uint64_t len, snapid_t snapid,
 			     bufferlist *pbl, uint64_t trunc_size,
-			     __u32 trunc_seq, int op_flags, Context *onfinish)
+			     __u32 trunc_seq, int op_flags, Context *onfinish,
+           ZTracer::Trace *trace)
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_ictx->owner_lock,
@@ -218,8 +219,13 @@ namespace librbd {
 
     librados::AioCompletion *rados_completion =
       util::create_rados_ack_callback(req);
-    int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
-					 flags, NULL);
+    int r;
+    if (trace)
+      r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
+					 flags, NULL, trace->get_info());
+    else
+      r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
+           flags, NULL);
     rados_completion->release();
     assert(r >= 0);
   }
@@ -255,7 +261,7 @@ namespace librbd {
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
-				    Context *oncommit)
+				    Context *oncommit, ZTracer::Trace *trace)
   {
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
@@ -274,7 +280,7 @@ namespace librbd {
 					      journal_tid));
     } else {
       AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
-					       off, bl, snapc, req_comp, 0);
+					       off, bl, snapc, req_comp, 0, trace);
       req->send();
     }
     return ++m_tid;

@@ -1472,8 +1472,8 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
-				 librados::ObjectWriteOperation *o,
-				 snap_t snap_seq, std::vector<snap_t>& snaps)
+         librados::ObjectWriteOperation *o,
+         snap_t snap_seq, std::vector<snap_t>& snaps)
 {
   object_t obj(oid);
   vector<snapid_t> snv;
@@ -1482,7 +1482,21 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-				  snapc, 0);
+          snapc, 0);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectWriteOperation *o,
+				 snap_t snap_seq, std::vector<snap_t>& snaps, const blkin_trace_info *trace_info)
+{
+  object_t obj(oid);
+  vector<snapid_t> snv;
+  snv.resize(snaps.size());
+  for (size_t i = 0; i < snaps.size(); ++i)
+    snv[i] = snaps[i];
+  SnapContext snapc(snap_seq, snv);
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
+				  snapc, 0, trace_info);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1514,12 +1528,21 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
-				 librados::ObjectReadOperation *o,
-				 int flags, bufferlist *pbl)
+         librados::ObjectReadOperation *o,
+         int flags, bufferlist *pbl)
 {
   object_t obj(oid);
   return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
-				       translate_flags(flags), pbl);
+               translate_flags(flags), pbl);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectReadOperation *o,
+				 int flags, bufferlist *pbl, const blkin_trace_info *trace_info)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
+				       translate_flags(flags), pbl, trace_info);
 }
 
 
@@ -4359,6 +4382,20 @@ extern "C" int rados_aio_read(rados_ioctx_t io, const char *o,
   return retval;
 }
 
+extern "C" int rados_aio_read_traced(rados_ioctx_t io, const char *o,
+             rados_completion_t completion,
+             char *buf, size_t len, uint64_t off,
+             struct blkin_trace_info *info)
+{
+  tracepoint(librados, rados_aio_read_enter, io, o, completion, len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->aio_read(oid, (librados::AioCompletionImpl*)completion,
+                             buf, len, off, ctx->snap_seq, info);
+  tracepoint(librados, rados_aio_read_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
 				rados_completion_t completion,
 				const char *buf, size_t len, uint64_t off)
@@ -4372,6 +4409,24 @@ extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
   bl.append(buf, len);
   int retval = ctx->aio_write(oid, (librados::AioCompletionImpl*)completion,
 			bl, len, off);
+  tracepoint(librados, rados_aio_write_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_write_traced(rados_ioctx_t io, const char *o,
+                                      rados_completion_t completion,
+                                      const char *buf, size_t len, uint64_t off,
+                                      struct blkin_trace_info *info)
+{
+  tracepoint(librados, rados_aio_write_enter, io, o, completion, buf, len, off);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, len);
+  int retval = ctx->aio_write(oid, (librados::AioCompletionImpl*)completion,
+                              bl, len, off, info);
   tracepoint(librados, rados_aio_write_exit, retval);
   return retval;
 }

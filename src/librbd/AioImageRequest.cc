@@ -152,24 +152,26 @@ template <typename I>
 void AioImageRequest<I>::aio_read(
     I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-    char *buf, bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags);
+    char *buf, bufferlist *pbl, int op_flags,
+    const blkin_trace_info *trace_info) {
+  AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags, trace_info);
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                   uint64_t off, size_t len, char *buf,
-                                  bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags);
+                                  bufferlist *pbl, int op_flags,
+                                  const blkin_trace_info *trace_info) {
+  AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags, trace_info);
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                    uint64_t off, size_t len, const char *buf,
-                                   int op_flags) {
-  AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags);
+                                   int op_flags, const blkin_trace_info *trace_info) {
+  AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags, trace_info);
   req.send();
 }
 
@@ -216,7 +218,7 @@ void AioImageRead<I>::send_request() {
 
   if (image_ctx.object_cacher && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), m_image_extents);
+    readahead(get_image_ctx(&image_ctx), m_image_extents, &this->trace);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -272,14 +274,14 @@ void AioImageRead<I>::send_request() {
       AioObjectRead<I> *req = AioObjectRead<I>::create(
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
         extent.length, extent.buffer_extents, snap_id, true, req_comp,
-        m_op_flags);
+        m_op_flags, &this->trace);
       req_comp->set_req(req);
 
       if (image_ctx.object_cacher) {
         C_CacheRead<I> *cache_comp = new C_CacheRead<I>(image_ctx, req);
         image_ctx.aio_read_from_cache(extent.oid, extent.objectno,
                                       &req->data(), extent.length,
-                                      extent.offset, cache_comp, m_op_flags);
+                                      extent.offset, cache_comp, m_op_flags, &this->trace);
       } else {
         req->send();
       }
@@ -376,7 +378,7 @@ void AbstractAioImageWrite<I>::send_object_requests(
                    << " from " << p->buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     AioObjectRequestHandle *request = create_object_request(*p, snapc,
-                                                            req_comp);
+                                                            req_comp, &this->trace);
 
     // if journaling, stash the request for later; otherwise send
     if (request != NULL) {
@@ -424,12 +426,11 @@ void AioImageWrite<I>::send_cache_requests(const ObjectExtents &object_extents,
 
     bufferlist bl;
     assemble_extent(object_extent, &bl);
-
     AioCompletion *aio_comp = this->m_aio_comp;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
                              object_extent.offset, req_comp, m_op_flags,
-                               journal_tid);
+                               journal_tid, &this->trace);
   }
 }
 
@@ -449,7 +450,7 @@ void AioImageWrite<I>::send_object_requests(
 template <typename I>
 AioObjectRequestHandle *AioImageWrite<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
-    Context *on_finish) {
+    Context *on_finish, ZTracer::Trace *trace) {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.object_cacher == NULL);
 
@@ -457,7 +458,8 @@ AioObjectRequestHandle *AioImageWrite<I>::create_object_request(
   assemble_extent(object_extent, &bl);
   AioObjectRequest<I> *req = AioObjectRequest<I>::create_write(
     &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, bl, snapc, on_finish, m_op_flags);
+    object_extent.offset, bl, snapc, on_finish, m_op_flags,
+    trace);
   return req;
 }
 
@@ -532,7 +534,7 @@ void AioImageDiscard<I>::send_cache_requests(const ObjectExtents &object_extents
 template <typename I>
 AioObjectRequestHandle *AioImageDiscard<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
-    Context *on_finish) {
+    Context *on_finish, ZTracer::Trace *trace) {
   I &image_ctx = this->m_image_ctx;
 
   AioObjectRequest<I> *req;

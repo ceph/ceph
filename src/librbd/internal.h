@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 #include <vector>
-
+#include "common/zipkin_trace.h"
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
@@ -187,7 +187,8 @@ namespace librbd {
 		   int (*cb)(uint64_t, size_t, int, void *),
 		   void *arg);
   void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents);
+                 const vector<pair<uint64_t,uint64_t> >& image_extents,
+                 ZTracer::Trace *trace = nullptr);
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

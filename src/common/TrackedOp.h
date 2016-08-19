@@ -18,6 +18,7 @@
 #include <include/utime.h>
 #include "common/Mutex.h"
 #include "common/histogram.h"
+#include "common/zipkin_trace.h"
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include "include/memory.h"
@@ -182,6 +183,11 @@ protected:
   virtual void _unregistered() {};
 
 public:
+  ZTracer::Trace osd_trace;
+  ZTracer::Trace pg_trace;
+  ZTracer::Trace store_trace;
+  ZTracer::Trace journal_trace;
+
   virtual ~TrackedOp() {}
 
   const utime_t& get_initiated() const {

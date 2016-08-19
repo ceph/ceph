@@ -25,6 +25,11 @@ LIBRADOS_DEPS += \
 	$(LIBOSDC) $(LIBCOMMON_DEPS)
 
 librados_la_LIBADD = $(LIBRADOS_DEPS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
+
+if WITH_BLKIN
+librados_la_LIBADD += $(BLKIN_LIBS)
+endif
+
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
 if LINUX
 librados_la_CXXFLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
