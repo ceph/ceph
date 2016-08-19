@@ -24,16 +24,19 @@ perl -pi -e 's|pid file.*|pid file = /var/run/ceph/\$cluster-\$name.pid|' /etc/c
 
 PATH=$(dirname $0):$(dirname $0)/..:$PATH
 
-if ! which py.test > /dev/null; then
-    echo "py.test not installed"
+: ${PYTHON:=python}
+PY_VERSION=$($PYTHON --version 2>&1)
+
+if ! ${PYTHON} -m pytest --version > /dev/null 2>&1; then
+    echo "py.test not installed for ${PY_VERSION}"
     exit 1
 fi
 
-sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH py.test -s -v $(dirname $0)/ceph-disk-test.py
+sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH ${PYTHON} -m pytest -s -v $(dirname $0)/ceph-disk-test.py
 result=$?
 
 # own whatever was created as a side effect of the py.test run
-# so that it can successfully be removed later on by a non privileged 
+# so that it can successfully be removed later on by a non privileged
 # process
 sudo chown -R $(id -u) $(dirname $0)
 exit $result
