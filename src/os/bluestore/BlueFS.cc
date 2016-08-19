@@ -473,7 +473,7 @@ int BlueFS::_replay(bool noop)
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
 
   FileReader *log_reader = new FileReader(
-    log_file, g_conf->bluefs_alloc_size,
+    log_file, g_conf->bluefs_max_prefetch,
     false,  // !random
     true);  // ignore eof
   while (true) {
