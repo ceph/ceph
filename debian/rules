@@ -131,7 +131,9 @@ override_dh_strip:
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
 override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=python-rados --exclude=python-cephfs --exclude=python-rbd
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor \
+	  --exclude=python-rados --exclude=python-cephfs --exclude=python-rbd    \
+	  --exclude=python3-rados --exclude=python3-cephfs --exclude=python3-rbd \
 
 override_dh_python2:
 	for binding in rados cephfs rbd; do                                \
