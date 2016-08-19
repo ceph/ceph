@@ -19,7 +19,7 @@ ifeq ($(DEB_HOST_ARCH), armel)
 endif
 
 %:
-	dh $@ --buildsystem=cmake --with javahelper,python2,systemd --parallel
+	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
 
 override_dh_auto_configure:
 	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
@@ -140,6 +140,12 @@ override_dh_python2:
 	dh_python2 -p ceph-common
 	dh_python2 -p ceph-base
 	dh_python2 -p ceph-osd
+
+override_dh_python3:
+	for binding in rados cephfs rbd; do                                \
+	  dh_python3 -p python-$$binding; \
+	done
+	dh_python3 -p python3-ceph-argparse
 
 # do not run tests
 override_dh_auto_test:
