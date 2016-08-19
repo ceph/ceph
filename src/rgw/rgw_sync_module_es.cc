@@ -24,12 +24,14 @@ struct es_obj_metadata {
   CephContext *cct;
   RGWBucketInfo bucket_info;
   rgw_obj_key key;
+  ceph::real_time mtime;
   uint64_t size;
   map<string, bufferlist> attrs;
 
-  es_obj_metadata(CephContext *_cct, const RGWBucketInfo& _bucket_info, const rgw_obj_key& _key,
-                  uint64_t _size, map<string, bufferlist>& _attrs) : cct(_cct), bucket_info(_bucket_info), key(_key),
-                                                                     size(_size), attrs(std::move(_attrs)) {}
+  es_obj_metadata(CephContext *_cct, const RGWBucketInfo& _bucket_info,
+                  const rgw_obj_key& _key, ceph::real_time& _mtime, uint64_t _size,
+                  map<string, bufferlist>& _attrs) : cct(_cct), bucket_info(_bucket_info), key(_key),
+                                                     mtime(_mtime), size(_size), attrs(std::move(_attrs)) {}
 
   void dump(Formatter *f) const {
     map<string, string> out_attrs;
@@ -82,6 +84,10 @@ struct es_obj_metadata {
     ::encode_json("permissions", permissions, f);
     f->open_object_section("meta");
     ::encode_json("size", size, f);
+
+    string mtime_str;
+    rgw_to_iso8601(mtime, &mtime_str);
+    ::encode_json("mtime", mtime_str, f);
     for (auto i : out_attrs) {
       ::encode_json(i.first.c_str(), i.second, f);
     }
@@ -103,7 +109,7 @@ public:
                               << " attrs=" << attrs << dendl;
       yield {
         string path = es_get_obj_path(bucket_info, key);
-        es_obj_metadata doc(sync_env->cct, bucket_info, key, size, attrs);
+        es_obj_metadata doc(sync_env->cct, bucket_info, key, mtime, size, attrs);
 
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf.conn,
                                                             sync_env->http_manager,
