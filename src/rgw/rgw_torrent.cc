@@ -253,7 +253,7 @@ void seed::do_encode()
   dencode.bencode(PIECE_LENGTH, info.piece_length, bl);
 
   char info_sha[100] = { 0 };
-  sprintf(info_sha, "%ld", sha_len);
+  sprintf(info_sha, "%" PRIu64, sha_len);
   string sha_len_str = info_sha;
   dencode.bencode_key(PIECES, bl);
   bl.append(sha_len_str.c_str(), sha_len_str.length());
