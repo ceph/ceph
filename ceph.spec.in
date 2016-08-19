@@ -724,6 +724,11 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 
+# hack to reduce disk space usage in OBS
+%if 0%{?is_opensuse}
+rm -rf .
+%endif
+
 %clean
 rm -rf %{buildroot}
 
