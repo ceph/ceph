@@ -31,11 +31,35 @@ struct es_obj_metadata {
                                                                      size(_size), attrs(std::move(_attrs)) {}
 
   void dump(Formatter *f) const {
-    f->open_object_section("meta");
-    ::encode_json("bucket", bucket_info.bucket.name, f);
+    map<string, string> out_attrs;
+    for (auto i : attrs) {
+      const string& attr_name = i.first;
+      string name;
+      bufferlist& val = i.second;
+
+      if (attr_name.compare(0, sizeof(RGW_ATTR_PREFIX) - 1, RGW_ATTR_PREFIX) != 0) {
+        continue;
+      }
+
+      name = attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1);
+
+      if (name == "acl") {
+      } else {
+        if (name != "pg_ver" &&
+            name != "source_zone" &&
+            name != "idtag") {
+          out_attrs[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+        }
+      }
+    }
     ::encode_json("name", key.name, f);
     ::encode_json("instance", key.instance, f);
+    f->open_object_section("meta");
+    ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("size", size, f);
+    for (auto i : out_attrs) {
+      ::encode_json(i.first.c_str(), i.second, f);
+    }
     f->close_section();
   }
 
