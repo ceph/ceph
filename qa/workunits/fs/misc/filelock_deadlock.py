@@ -21,7 +21,7 @@ def lock_two(f1, f2):
     exitcode = 0;
     try:
         fcntl.fcntl(f2, fcntl.F_SETLKW, lockdata)
-    except IOError, e:
+    except IOError as e:
         if e.errno == errno.EDEADLK:
             exitcode = 1
         elif e.errno == errno.EINTR:
@@ -63,6 +63,7 @@ def main():
     if deadlk_count != 1:
         raise RuntimeError("unexpect count of EDEADLK")
 
-    print 'ok'
+    print('ok')
+
 
 main()
