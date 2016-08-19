@@ -151,6 +151,7 @@ done
 
 # no UserKnownHostsFile so that we don't try to record the IP hash key
 # GlobalKnownHostsFile so that we are verifying that this is the real drop.ceph.com
+# IdentitiesOnly=yes forces sftp to ignore any keys offered by ssh-agent
 
 cp "$ssh_key" "$t4"
 cp "${ssh_key}.pub" "$t4.pub"
@@ -160,6 +161,7 @@ sftp -o "IdentityFile=$t4" \
     -oCheckHostIP=no \
     -oGlobalKnownHostsFile=$known_hosts \
     -oBatchMode=no \
+    -oIdentitiesOnly=yes \
     -b $t1 -- $remote
 
 echo "$0: copy the upload id below to share with a dev:
