@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "FuseStore.h"
+#include "os/ObjectStore.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 
