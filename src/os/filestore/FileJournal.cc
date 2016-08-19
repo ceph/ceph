@@ -1667,6 +1667,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 	  << " len " << e.length()
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
+  assert(e.length() < header.max_size);
 
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
