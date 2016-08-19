@@ -239,6 +239,12 @@ public:
   void diff(const md_config_t *other,
             map<string,pair<string,string> > *diff, set<string> *unknown);
 
+  /// obtain a diff between config values and another md_config_t
+  /// values for a specific setting. 
+  void diff_setting(const md_config_t*, 
+                std::map<std::string, std::pair<std::string, std::string>>*, 
+                const std::string&, bool show_unchanged = false);
+
   /// print/log warnings/errors from parsing the config
   void complain_about_parse_errors(CephContext *cct);
 

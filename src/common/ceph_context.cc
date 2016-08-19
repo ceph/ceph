@@ -417,7 +417,7 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
       f->dump_string("error", "syntax error: 'perf reset <var>'");
     } else {
      if(!_perf_counters_collection->reset(var))
-        f->dump_stream("error") << "Not find: " << var;
+       f->dump_stream("error") << "Not find: " << var;
      else
        f->dump_string("success", command + ' ' + var);
     }
@@ -438,8 +438,8 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
           !(cmd_getval(this, cmdmap, "val", val))) {
         f->dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
-	// val may be multiple words
-	string valstr = str_join(val, " ");
+      	// val may be multiple words
+      	string valstr = str_join(val, " ");
         int r = _conf->set_val(var.c_str(), valstr.c_str());
         if (r < 0) {
           f->dump_stream("error") << "error setting '" << var << "' to '" << valstr << "': " << cpp_strerror(r);
@@ -452,17 +452,17 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
     } else if (command == "config get") {
       std::string var;
       if (!cmd_getval(this, cmdmap, "var", var)) {
-	f->dump_string("error", "syntax error: 'config get <var>'");
+       f->dump_string("error", "syntax error: 'config get <var>'");
       } else {
-	char buf[4096];
-	memset(buf, 0, sizeof(buf));
-	char *tmp = buf;
-	int r = _conf->get_val(var.c_str(), &tmp, sizeof(buf));
-	if (r < 0) {
-	    f->dump_stream("error") << "error getting '" << var << "': " << cpp_strerror(r);
-	} else {
-	    f->dump_string(var.c_str(), buf);
-	}
+      	char buf[4096];
+      	memset(buf, 0, sizeof(buf));
+      	char *tmp = buf;
+      	int r = _conf->get_val(var.c_str(), &tmp, sizeof(buf));
+      	if (r < 0) {
+      	  f->dump_stream("error") << "error getting '" << var << "': " << cpp_strerror(r);
+      	} else {
+      	  f->dump_string(var.c_str(), buf);
+      	}
       }
     } else if (command == "config diff") {
       md_config_t def_conf;
@@ -496,7 +496,38 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
         f->dump_string("option", *p);
       }
       f->close_section(); // unknown
-    } else if (command == "log flush") {
+    }
+    else if (command == "config diff get") {
+      std::string ceph_setting;
+      if (!cmd_getval(this, cmdmap, "var", ceph_setting)) {
+        f->dump_string("error", "syntax error: 'config diff get <var>'");
+      } 
+      else {
+        md_config_t def_conf;
+        def_conf.set_val("cluster", _conf->cluster);
+        def_conf.name = _conf->name;
+        def_conf.set_val("host", _conf->host);
+        def_conf.apply_changes(NULL);
+
+        map<string, pair<string, string>> diff;
+        def_conf.diff_setting(_conf, &diff, ceph_setting, true);
+        f->open_object_section("diff");
+        f->open_object_section("current");
+
+        for (const auto& p : diff) {
+          f->dump_string(p.first.c_str(), p.second.second);
+        } 
+        f->close_section();   //-- current
+
+        f->open_object_section("defaults");
+        for (const auto& p : diff) {
+          f->dump_string(p.first.c_str(), p.second.first);
+        } 
+        f->close_section();   //-- defaults
+        f->close_section();   //-- diff
+      } //-- else if (!cmd_getval(this, cmdmap, "var", ceph_setting))
+    } //-- else if (command == "config diff get")
+    else if (command == "log flush") {
       _log->flush();
     }
     else if (command == "log dump") {
@@ -515,7 +546,6 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << ss.str()
 		         << "result is " << out->length() << " bytes" << dendl;
 }
-
 
 CephContext::CephContext(uint32_t module_type_, int init_flags_)
   : nref(1),
@@ -582,6 +612,9 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   _admin_socket->register_command("config diff",
       "config diff", _admin_hook,
       "dump diff of current config and default config");
+  _admin_socket->register_command("config diff get",
+      "config diff get name=var,type=CephString", _admin_hook,
+      "dump diff get <field>: dump diff of current and default config setting <field>");
   _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
@@ -620,6 +653,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("config set");
   _admin_socket->unregister_command("config get");
   _admin_socket->unregister_command("config diff");
+  _admin_socket->unregister_command("config diff get");
   _admin_socket->unregister_command("log flush");
   _admin_socket->unregister_command("log dump");
   _admin_socket->unregister_command("log reopen");
