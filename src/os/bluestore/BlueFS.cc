@@ -1379,8 +1379,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 		      offset + length - allocated,
 		      &h->file->fnode.extents);
     if (r < 0) {
-      derr << __func__ << " allocated: " << allocated << \
-               " offset: " << offset << " length: " << length << dendl;
+      derr << __func__ << " allocated: 0x" << std::hex << allocated
+           << " offset: 0x" << offset << " length: 0x" << length << std::dec
+           << dendl;
       return r;
     }
     must_dirty = true;
