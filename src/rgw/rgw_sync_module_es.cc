@@ -5,6 +5,7 @@
 #include "rgw_boost_asio_yield.h"
 #include "rgw_sync_module_es.h"
 #include "rgw_rest_conn.h"
+#include "rgw_cr_rest.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -13,17 +14,57 @@ struct ElasticConfig {
   RGWRESTConn *conn{nullptr};
 };
 
+static string es_get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key)
+{
+  string path = "/rgw/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
+  return path;
+}
+
+struct es_obj_metadata {
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+  uint64_t size;
+  map<string, bufferlist> attrs;
+
+  es_obj_metadata(const RGWBucketInfo& _bucket_info, const rgw_obj_key& _key,
+                  uint64_t _size, map<string, bufferlist>& _attrs) : bucket_info(_bucket_info), key(_key),
+                                                                     size(_size), attrs(std::move(_attrs)) {}
+
+  void dump(Formatter *f) const {
+    f->open_object_section("meta");
+    ::encode_json("bucket", bucket_info.bucket.name, f);
+    ::encode_json("name", key.name, f);
+    ::encode_json("instance", key.instance, f);
+    ::encode_json("size", size, f);
+    f->close_section();
+  }
+
+};
+
 class RGWElasticHandleRemoteObjCBCR : public RGWStatRemoteObjCBCR {
   const ElasticConfig& conf;
 public:
   RGWElasticHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                           RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                          const ElasticConfig& _conf) : RGWStatRemoteObjCBCR(sync_env, bucket_info, key), conf(_conf) {}
+                          const ElasticConfig& _conf) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key), conf(_conf) {}
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": stat of remote obj: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
                               << " attrs=" << attrs << dendl;
+      yield {
+        string path = es_get_obj_path(bucket_info, key);
+        es_obj_metadata doc(bucket_info, key, size, attrs);
+
+        call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf.conn,
+                                                            sync_env->http_manager,
+                                                            path, nullptr /* params */,
+                                                            doc, nullptr /* result */));
+
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
       return set_cr_done();
     }
     return 0;
