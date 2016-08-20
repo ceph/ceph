@@ -112,3 +112,30 @@ TEST(mon_features, set_funcs) {
   ASSERT_EQ(foo.intersection(FEATURE_ALL), foo);
   ASSERT_EQ(bar.intersection(FEATURE_ALL), bar);
 }
+
+TEST(mon_features, set_unset) {
+
+  mon_feature_t FEATURE_A((1ULL << 1));
+  mon_feature_t FEATURE_B((1ULL << 2));
+  mon_feature_t FEATURE_C((1ULL << 3));
+
+  mon_feature_t foo;
+  ASSERT_EQ(ceph::features::mon::FEATURE_NONE, foo);
+
+  foo.set_feature(FEATURE_A);
+  ASSERT_EQ(FEATURE_A, foo);
+  ASSERT_TRUE(foo.contains_all(FEATURE_A));
+
+  foo.set_feature(FEATURE_B|FEATURE_C);
+  ASSERT_EQ((FEATURE_A|FEATURE_B|FEATURE_C), foo);
+  ASSERT_TRUE(foo.contains_all((FEATURE_A|FEATURE_B|FEATURE_C)));
+
+  foo.unset_feature(FEATURE_A);
+  ASSERT_EQ((FEATURE_B|FEATURE_C), foo);
+  ASSERT_FALSE(foo.contains_any(FEATURE_A));
+  ASSERT_TRUE(foo.contains_all((FEATURE_B|FEATURE_C)));
+
+  foo.unset_feature(FEATURE_B|FEATURE_C);
+  ASSERT_EQ(ceph::features::mon::FEATURE_NONE, foo);
+  ASSERT_FALSE(foo.contains_any(FEATURE_A|FEATURE_B|FEATURE_C));
+}
