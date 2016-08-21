@@ -344,9 +344,13 @@ bool OSDMonitor::thrash()
   thrash_map--;
   int o;
 
+  int osd_num = osdmap.get_num_osds();
+  if (osd_num == 0)
+    return false;
+
   // mark a random osd up_thru..
   if (rand() % 4 == 0 || thrash_last_up_osd < 0)
-    o = rand() % osdmap.get_num_osds();
+    o = rand() % osd_num;
   else
     o = thrash_last_up_osd;
   if (osdmap.is_up(o)) {
@@ -355,7 +359,7 @@ bool OSDMonitor::thrash()
   }
 
   // mark a random osd up/down
-  o = rand() % osdmap.get_num_osds();
+  o = rand() % osd_num;
   if (osdmap.is_up(o)) {
     dout(5) << "thrash_map osd." << o << " down" << dendl;
     pending_inc.new_state[o] = CEPH_OSD_UP;
@@ -370,14 +374,14 @@ bool OSDMonitor::thrash()
   }
 
   // mark a random osd in
-  o = rand() % osdmap.get_num_osds();
+  o = rand() % osd_num;
   if (osdmap.exists(o)) {
     dout(5) << "thrash_map osd." << o << " in" << dendl;
     pending_inc.new_weight[o] = CEPH_OSD_IN;
   }
 
   // mark a random osd out
-  o = rand() % osdmap.get_num_osds();
+  o = rand() % osd_num;
   if (osdmap.exists(o)) {
     dout(5) << "thrash_map osd." << o << " out" << dendl;
     pending_inc.new_weight[o] = CEPH_OSD_OUT;
@@ -385,17 +389,21 @@ bool OSDMonitor::thrash()
 
   // generate some pg_temp entries.
   // let's assume the ceph::unordered_map iterates in a random-ish order.
-  int n = rand() % mon->pgmon()->pg_map.pg_stat.size();
+  int pg_num = mon->pgmon()->pg_map.pg_stat.size();
+  if (pg_num == 0)
+    return true;
+  int n = rand() % pg_num;
   ceph::unordered_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
   ceph::unordered_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
   while (n--)
     ++p;
-  for (int i=0; i<50; i++) {
+
+  for (int i = std::min(pg_num, 50); i > 0; i--) {
     unsigned size = osdmap.get_pg_size(p->first);
     vector<int> v;
     bool have_real_osd = false;
     for (int j=0; j < (int)size; j++) {
-      o = rand() % osdmap.get_num_osds();
+      o = rand() % osd_num;
       if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end()) {
 	have_real_osd = true;
 	v.push_back(o);
@@ -577,10 +585,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
     oss << "oload " << oload << "\n";
     oss << "max_change " << max_changef << "\n";
     oss << "max_change_osds " << max_osds << "\n";
-    char buf[128];
-    snprintf(buf, sizeof(buf), "average %04f\noverload %04f\n",
-	     average_util, overload_util);
-    oss << buf;
+    oss.precision(4);
+    oss << std::fixed << average_util << "\n";
+    oss << overload_util << "\n";
   }
   bool changed = false;
   int num_changed = 0;
@@ -656,11 +663,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
 	f->close_section();
       } else {
-	char buf[128];
-	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
-		 (float)weight / (float)0x10000,
-		 (float)new_weight / (float)0x10000);
-	oss << buf;
+        oss << "osd." << p->first << " weight "
+            << (float)weight / (float)0x10000 << " -> "
+            << (float)new_weight / (float)0x10000;
       }
       if (++num_changed >= max_osds)
 	break;
@@ -677,11 +682,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	  pending_inc.new_weight[p->first] = new_weight;
 	  changed = true;
 	}
-	char buf[128];
-	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
-		 (float)weight / (float)0x10000,
-		 (float)new_weight / (float)0x10000);
-	oss << buf;
+        oss << "osd." << p->first << " weight "
+            << (float)weight / (float)0x10000 << " -> "
+            << (float)new_weight / (float)0x10000;
 	if (++num_changed >= max_osds)
 	  break;
       }
@@ -1480,8 +1483,8 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
     int r = get_version(e, reply->incremental_maps[e]);
     assert(r >= 0);
   }
-  reply->oldest_map = get_first_committed();
-  reply->newest_map = osdmap.get_epoch();
+  reply->oldest_map = first;
+  reply->newest_map = last;
   mon->send_reply(op, reply);
   return true;
 }
@@ -2651,8 +2654,6 @@ void OSDMonitor::send_incremental(epoch_t first,
     if (req) {
       // send some maps.  it may not be all of them, but it will get them
       // started.
-      m->oldest_map = get_first_committed();
-      m->newest_map = osdmap.get_epoch();
       mon->send_reply(req, m);
     } else {
       session->con->send_message(m);
@@ -2867,8 +2868,6 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
 
   for (int i=0; i < max_osd; ++i) {
     dout(30) << "handle_osd_timeouts: checking up on osd " << i << dendl;
-    if (!osdmap.exists(i))
-      continue;
     if (!osdmap.is_up(i))
       continue;
     const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
