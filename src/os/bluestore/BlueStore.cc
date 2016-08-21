@@ -3388,15 +3388,20 @@ void BlueStore::_sync()
 
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
-  uint64_t bluefs_len = 0;
-  for (interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      p != bluefs_extents.end(); p++)
-    bluefs_len += p.get_len();
-
   buf->reset();
   buf->total = bdev->get_size();
-  assert(alloc->get_free() >= bluefs_len);
-  buf->available = (alloc->get_free() - bluefs_len);
+  buf->available = alloc->get_free();
+
+  if (bluefs) {
+    // part of our shared device is "free" accordingly to BlueFS
+    buf->available += bluefs->get_free(bluefs_shared_bdev);
+
+    // include dedicated db, too, if that isn't the shared device.
+    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
+      buf->available += bluefs->get_free(BlueFS::BDEV_DB);
+      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
+    }
+  }
 
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
