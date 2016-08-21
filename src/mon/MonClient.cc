@@ -773,7 +773,9 @@ void MonClient::_renew_subs()
     m->what = sub_new;
     _send_mon_message(m);
 
-    sub_sent.insert(sub_new.begin(), sub_new.end());
+    // update sub_sent with sub_new
+    sub_new.insert(sub_sent.begin(), sub_sent.end());
+    std::swap(sub_new, sub_sent);
     sub_new.clear();
   }
 }
