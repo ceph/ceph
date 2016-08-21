@@ -6705,10 +6705,16 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   ObjectStore::Transaction t;
+  uint64_t txn_size = 0;
 
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = MAX(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
+    if (txn_size >= t.get_num_bytes()) {
+      derr << __func__ << " transaction size overflowed" << dendl;
+      assert(txn_size < t.get_num_bytes());
+    }
+    txn_size = t.get_num_bytes();
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
     if (p != m->maps.end()) {
