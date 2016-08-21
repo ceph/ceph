@@ -183,6 +183,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 
 uint64_t BlueFS::get_fs_usage()
 {
+  std::lock_guard<std::mutex> l(lock);
   uint64_t total_bytes = 0;
   for (auto& p : file_map) {
     total_bytes += p.second->fnode.get_allocated();
@@ -472,7 +473,7 @@ int BlueFS::_replay(bool noop)
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
 
   FileReader *log_reader = new FileReader(
-    log_file, g_conf->bluefs_alloc_size,
+    log_file, g_conf->bluefs_max_prefetch,
     false,  // !random
     true);  // ignore eof
   while (true) {
@@ -1378,8 +1379,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 		      offset + length - allocated,
 		      &h->file->fnode.extents);
     if (r < 0) {
-      derr << __func__ << " allocated: " << allocated << \
-               " offset: " << offset << " length: " << length << dendl;
+      derr << __func__ << " allocated: 0x" << std::hex << allocated
+           << " offset: 0x" << offset << " length: 0x" << length << std::dec
+           << dendl;
       return r;
     }
     must_dirty = true;
@@ -1481,9 +1483,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off = 0;
   }
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
-    if (bdev[i] && h->iocv[i]->has_aios()) {
+    if (bdev[i]) {
       assert(h->iocv[i]);
-      bdev[i]->aio_submit(h->iocv[i]);
+      if (h->iocv[i]->has_aios())
+        bdev[i]->aio_submit(h->iocv[i]);
     }
   }
   dout(20) << __func__ << " h " << h << " pos now 0x"
