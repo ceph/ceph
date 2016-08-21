@@ -6,8 +6,6 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Journal.h"
-#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -78,8 +76,8 @@ bool Request<I>::append_op_event() {
 
   assert(image_ctx.owner_lock.is_locked());
   RWLock::RLocker snap_locker(image_ctx.snap_lock);
-  if (image_ctx.journal != NULL &&
-      !image_ctx.journal->is_journal_replaying()) {
+  if (image_ctx.journal != nullptr &&
+      image_ctx.journal->is_journal_appending()) {
     append_op_event(util::create_context_callback<
       Request<I>, &Request<I>::handle_op_event_safe>(this));
     return true;
@@ -100,8 +98,8 @@ bool Request<I>::commit_op_event(int r) {
   assert(!m_committed_op_event);
   m_committed_op_event = true;
 
-  if (image_ctx.journal != NULL &&
-      !image_ctx.journal->is_journal_replaying()) {
+  if (image_ctx.journal != nullptr &&
+      image_ctx.journal->is_journal_appending()) {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 

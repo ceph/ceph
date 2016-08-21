@@ -8,7 +8,6 @@
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
-#include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
@@ -17,21 +16,22 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <algorithm>
-#include <iosfwd>
 #include <list>
 #include <string>
 #include <unordered_map>
 
-class Context;
 class ContextWQ;
 class SafeTimer;
 namespace journal {
 class Journaler;
 }
+namespace librados {
+  class IoCtx;
+}
 
 namespace librbd {
 
-class AioObjectRequest;
+struct AioObjectRequestHandle;
 class ImageCtx;
 
 namespace journal { template <typename> class Replay; }
@@ -87,7 +87,7 @@ public:
   static const std::string LOCAL_MIRROR_UUID;
   static const std::string ORPHAN_MIRROR_UUID;
 
-  typedef std::list<AioObjectRequest *> AioObjectRequests;
+  typedef std::list<AioObjectRequestHandle *> AioObjectRequests;
 
   Journal(ImageCtxT &image_ctx);
   ~Journal();
@@ -111,6 +111,7 @@ public:
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
+  bool is_journal_appending() const;
 
   void wait_for_journal_ready(Context *on_ready);
 
