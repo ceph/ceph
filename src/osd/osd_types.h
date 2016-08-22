@@ -95,9 +95,6 @@ struct pg_shard_t {
   pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
   explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
   pg_shard_t(int osd, shard_id_t shard) : osd(osd), shard(shard) {}
-  static pg_shard_t undefined_shard() {
-    return pg_shard_t(-1, shard_id_t::NO_SHARD);
-  }
   bool is_undefined() const {
     return osd == -1;
   }
@@ -1353,7 +1350,6 @@ public:
   void set_flag(uint64_t f) { flags |= f; }
   void unset_flag(uint64_t f) { flags &= ~f; }
 
-  /// This method will later return true for ec pools as well
   bool ec_pool() const {
     return type == TYPE_ERASURE;
   }
