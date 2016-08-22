@@ -488,6 +488,10 @@ endif(${HAVE_ARMV8_CRC})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
+if(${WITH_LIBZBC})
+  add_subdirectory(libzbc)
+endif(${WITH_LIBZBC})
+
 target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
 
 if(${WITH_LTTNG})
@@ -810,6 +814,15 @@ if(${HAVE_LIBFUSE})
   list(APPEND libos_srcs
     os/FuseStore.cc)
 endif(${HAVE_LIBFUSE})
+
+if(${WITH_LIBZBC})
+	list(APPEND libos_srcs
+		os/bluestore/SMRZone.cc
+		os/bluestore/SMRFreelistManager.cc
+		os/bluestore/SMRAllocator.cc)
+
+endif(${WITH_LIBZBC})
+
 if(WITH_SPDK)
   list(APPEND libos_srcs
     os/bluestore/NVMEDevice.cc)
@@ -868,6 +881,11 @@ endif(WITH_SPDK)
 if(WITH_LTTNG)
   add_dependencies(os os-tp)
 endif()
+if(${WITH_LIBZBC})
+	message("libzbc include path is ${LIBZBC_INCLUDE_PATH}")
+	include_directories(${LIBZBC_INCLUDE_PATH})
+	target_link_libraries(os zbc)
+endif(${WITH_LIBZBC})
 target_link_libraries(os kv)
 if(HAVE_LIBAIO)
   add_executable(ceph-bluefs-tool
@@ -1121,6 +1139,9 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
+if(${WITH_LIBZBC})
+	target_link_libraries(cephfs zbc)
+endif(${WITH_LIBZBC})
 if(ENABLE_SHARED)
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
