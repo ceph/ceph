@@ -3,6 +3,7 @@ import pexpect
 import time
 
 from teuthology import lockstatus as ls
+from teuthology.config import config
 
 from ..exceptions import ConsoleError
 
@@ -26,16 +27,19 @@ class PhysicalConsole():
         self.shortname = remote.getShortName(name)
         self.timeout = timeout
         self.logfile = None
-        self.ipmiuser = ipmiuser
-        self.ipmipass = ipmipass
-        self.ipmidomain = ipmidomain
+        self.ipmiuser = ipmiuser or config.ipmi_user
+        self.ipmipass = ipmipass or config.ipmi_password
+        self.ipmidomain = ipmidomain or config.ipmi_domain
 
     def _pexpect_spawn(self, cmd):
         """
         Run the cmd specified using ipmitool.
         """
         if not self.ipmiuser or not self.ipmipass or not self.ipmidomain:
-            log.error('Must set ipmi_user, ipmi_password, and ipmi_domain in .teuthology.yaml')  # noqa
+            log.error(
+                "Must set ipmi_user, ipmi_password, and ipmi_domain in " \
+                ".teuthology.yaml"
+            )
         full_command = self._build_command(cmd)
         log.debug('pexpect command: %s', full_command)
         child = pexpect.spawn(
@@ -210,7 +214,7 @@ class VirtualConsole():
     """
     Virtual Console (set from getRemoteConsole)
     """
-    def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None):
+    def __init__(self, name):
         if libvirt is None:
             raise RuntimeError("libvirt not found")
 
