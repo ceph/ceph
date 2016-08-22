@@ -18,6 +18,13 @@ if [ -z "$id"  ]; then
 fi
 
 data="/var/lib/ceph/osd/${cluster:-ceph}-$id"
+
+# assert data directory exists - see http://tracker.ceph.com/issues/17091
+if [ ! -d "$data" ]; then
+    echo "OSD data directory $data does not exist; bailing out." 1>&2
+    exit 1
+fi
+
 journal="$data/journal"
 
 if [ -L "$journal" -a ! -e "$journal" ]; then
