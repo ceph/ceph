@@ -1371,7 +1371,7 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
                                      object_stat_sum_t &sum, uint64_t avail,
-                                     float raw_used_rate, bool verbose, const pg_pool_t *pool) const
+                                     float raw_used_rate, bool verbose, const pg_pool_t *pool)
 {
   float curr_object_copies_rate = 0.0;
   if (sum.num_object_copies > 0)
@@ -1394,10 +1394,13 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     }
   } else {
     tbl << stringify(si_t(sum.num_bytes));
-    int64_t kb_used = SHIFT_ROUND_UP(sum.num_bytes, 10);
     float used = 0.0;
-    if (pg_map.osd_sum.kb > 0)
-      used = (float)kb_used * raw_used_rate * curr_object_copies_rate / pg_map.osd_sum.kb;
+    if (avail) {
+      used = sum.num_bytes * curr_object_copies_rate;
+      used /= used + avail;
+    } else if (sum.num_bytes) {
+      used = 1.0;
+    }
     tbl << percentify(used*100);
     tbl << si_t(avail);
     tbl << sum.num_objects;
