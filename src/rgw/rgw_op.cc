@@ -2472,14 +2472,21 @@ void RGWPutObj::execute()
   }
 
   do {
-    bufferlist data;
-    len = get_data(data);
+    bufferlist data_in;
+    len = get_data(data_in);
     if (len < 0) {
       op_ret = len;
       goto done;
     }
     if (!len)
       break;
+
+    bufferlist &data = data_in;
+    if (s->aws4_auth_streaming_mode) {
+      /* use unwrapped data */
+      data = s->aws4_auth->bl;
+      len = data.length();
+    }
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
@@ -2532,7 +2539,9 @@ void RGWPutObj::execute()
     ofs += len;
   } while (len > 0);
 
-  if (!chunked_upload && ofs != s->content_length) {
+  if (!chunked_upload &&
+      ofs != s->content_length &&
+      !s->aws4_auth_streaming_mode) {
     op_ret = -ERR_REQUEST_TIMEOUT;
     goto done;
   }
@@ -2578,6 +2587,7 @@ void RGWPutObj::execute()
   hash.Final(m);
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+
   etag = calc_md5;
 
   if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {

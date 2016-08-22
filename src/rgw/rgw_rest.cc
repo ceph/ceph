@@ -1005,6 +1005,49 @@ int RGWPutObj_ObjStore::get_params()
   return 0;
 }
 
+int RGWPutObj_ObjStore::get_padding_last_aws4_chunk_encoded(bufferlist &bl, uint64_t chunk_size) {
+
+  const int chunk_str_min_len = 1 + 17 + 64 + 2; /* len('0') = 1 */
+
+  char *chunk_str = bl.c_str();
+  int budget = bl.length();
+
+  unsigned int chunk_data_size;
+  unsigned int chunk_offset = 0;
+
+  while (1) {
+
+    /* check available metadata */
+    if (budget < chunk_str_min_len) {
+      return -ERR_SIGNATURE_NO_MATCH;
+    }
+
+    chunk_offset = 0;
+
+    /* grab chunk size */
+    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
+      chunk_offset++;
+    string str = string(chunk_str, chunk_offset);
+    stringstream ss;
+    ss << std::hex << str;
+    ss >> chunk_data_size;
+
+    /* next chunk */
+    chunk_offset += 17 + 64 + 2 + chunk_data_size;
+
+    /* last chunk? */
+    budget -= chunk_offset;
+    if (budget < 0) {
+      budget *= -1;
+      break;
+    }
+
+    chunk_str += chunk_offset;
+  }
+
+  return budget;
+}
+
 int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 {
   size_t cl;
@@ -1030,6 +1073,30 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
     len = read_len;
     bl.append(bp, 0, len);
+
+    /* read last aws4 chunk padding */
+    if (s->aws4_auth_streaming_mode && len == (int)chunk_size) {
+      int ret_auth = get_padding_last_aws4_chunk_encoded(bl, chunk_size);
+      if (ret_auth < 0) {
+        return ret_auth;
+      }
+      int len_padding = ret_auth;
+      if (len_padding) {
+        int read_len;
+        bufferptr bp_extra(len_padding);
+        int r = STREAM_IO(s)->read(bp_extra.c_str(), len_padding, &read_len,
+                                   s->aws4_auth_needs_complete);
+        if (r < 0) {
+          return r;
+        }
+        if (read_len != len_padding) {
+          return -ERR_SIGNATURE_NO_MATCH;
+        }
+        bl.append(bp_extra.c_str(), len_padding);
+        bl.rebuild();
+      }
+    }
+
   }
 
   if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
