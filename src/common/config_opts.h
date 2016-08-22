@@ -1346,6 +1346,7 @@ OPTION(rgw_enable_usage_log, OPT_BOOL, false) // enable logging bandwidth usage
 OPTION(rgw_ops_log_rados, OPT_BOOL, true) // whether ops log should go to rados
 OPTION(rgw_ops_log_socket_path, OPT_STR, "") // path to unix domain socket where ops log can go
 OPTION(rgw_ops_log_data_backlog, OPT_INT, 5 << 20) // max data backlog for ops log
+OPTION(rgw_fcgi_socket_backlog, OPT_INT, 1024) // socket  backlog for fcgi
 OPTION(rgw_usage_log_flush_threshold, OPT_INT, 1024) // threshold to flush pending log data
 OPTION(rgw_usage_log_tick_interval, OPT_INT, 30) // flush pending log data every X seconds
 OPTION(rgw_intent_log_object_name, OPT_STR, "%Y-%m-%d-%i-%n")  // man date to see codes (a subset are supported)
