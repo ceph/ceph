@@ -3734,7 +3734,7 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     // split?
     if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
 		      osdmap->get_pg_num(pgid.pool()),
-		      0)) {
+		      0) && e > h.same_interval_since) {
       h.same_interval_since = e;
     }
     // up set change?
@@ -4302,20 +4302,10 @@ void OSD::tick()
   }
 
   if (is_active()) {
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
-
     check_replay_queue();
-
-    service.promote_throttle_recalibrate();
   }
 
   do_waiters();
-
-  check_ops_in_flight();
-
-  service.kick_recovery_queue();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
 }
@@ -4395,9 +4385,15 @@ void OSD::tick_without_osd_lock()
     map_lock.put_read();
   }
 
-  if (!scrub_random_backoff()) {
-    sched_scrub();
+  if (is_active()) {
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
+    service.promote_throttle_recalibrate();
   }
+
+  check_ops_in_flight();
+  service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
