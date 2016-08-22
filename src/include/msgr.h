@@ -24,8 +24,6 @@
  * constant.
  */
 #define CEPH_BANNER "ceph v027"
-#define CEPH_BANNER_MAX_LEN 30
-
 
 /*
  * Rollover-safe type and comparator for 32-bit sequence numbers.
