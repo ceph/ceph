@@ -1,13 +1,13 @@
 #!/bin/bash -e
 
 # If these files exist, assume we are a source install.
-if [[ -f ../share/known_hosts_drop.ceph.com && -f ../share/id_dsa_drop.ceph.com ]]
+if [[ -f ../share/known_hosts_drop.ceph.com && -f ../share/id_rsa_drop.ceph.com ]]
     then # running from source install
        known_hosts=../share/known_hosts_drop.ceph.com
-       ssh_key=../share/id_dsa_drop.ceph.com
+       ssh_key=../share/id_rsa_drop.ceph.com
     else # running from a pkg install
        known_hosts=@datadir@/known_hosts_drop.ceph.com
-       ssh_key=@datadir@/id_dsa_drop.ceph.com
+       ssh_key=@datadir@/id_rsa_drop.ceph.com
 fi
 
 function usage() {
@@ -39,7 +39,7 @@ Options:
   -k|--known_hosts <path>    known_hosts file
                                [Default: /usr/share/ceph/known_hosts_drop.ceph.com]
   -i <path>         Ssh identity file
-                      [Default: /usr/share/ceph/id_dsa_drop.ceph.com]
+                      [Default: /usr/share/ceph/id_rsa_drop.ceph.com]
   -h|--help         Show this usage information
 "
 }
@@ -150,7 +150,8 @@ EOF
 done
 
 # no UserKnownHostsFile so that we don't try to record the IP hash key
-# GLobalKnownHostsFile so that we are verifying that this is the real drop.ceph.com
+# GlobalKnownHostsFile so that we are verifying that this is the real drop.ceph.com
+# IdentitiesOnly=yes forces sftp to ignore any keys offered by ssh-agent
 
 cp "$ssh_key" "$t4"
 cp "${ssh_key}.pub" "$t4.pub"
@@ -160,6 +161,7 @@ sftp -o "IdentityFile=$t4" \
     -oCheckHostIP=no \
     -oGlobalKnownHostsFile=$known_hosts \
     -oBatchMode=no \
+    -oIdentitiesOnly=yes \
     -b $t1 -- $remote
 
 echo "$0: copy the upload id below to share with a dev:
