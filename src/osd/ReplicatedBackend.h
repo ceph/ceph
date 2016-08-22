@@ -371,7 +371,6 @@ private:
     hobject_t discard_temp_oid,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
-    InProgressOp *op,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
     const pg_info_t &pinfo);
