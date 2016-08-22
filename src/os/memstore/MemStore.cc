@@ -1478,6 +1478,41 @@ int MemStore::BufferlistObject::truncate(uint64_t size)
 
 // PageSetObject
 
+struct MemStore::PageSetObject : public Object {
+  PageSet data;
+  uint64_t data_len;
+#if defined(__GLIBCXX__)
+  // use a thread-local vector for the pages returned by PageSet, so we
+  // can avoid allocations in read/write()
+  static thread_local PageSet::page_vector tls_pages;
+#endif
+
+  explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
+
+  size_t get_size() const override { return data_len; }
+
+  int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
+  int write(uint64_t offset, const bufferlist &bl) override;
+  int clone(Object *src, uint64_t srcoff, uint64_t len,
+            uint64_t dstoff) override;
+  int truncate(uint64_t offset) override;
+
+  void encode(bufferlist& bl) const override {
+    ENCODE_START(1, 1, bl);
+    ::encode(data_len, bl);
+    data.encode(bl);
+    encode_base(bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) override {
+    DECODE_START(1, p);
+    ::decode(data_len, p);
+    data.decode(p);
+    decode_base(p);
+    DECODE_FINISH(p);
+  }
+};
+
 #if defined(__GLIBCXX__)
 // use a thread-local vector for the pages returned by PageSet, so we
 // can avoid allocations in read/write()
@@ -1631,4 +1666,11 @@ int MemStore::PageSetObject::truncate(uint64_t size)
   std::fill(data + (size - page_offset), data + page_size, 0);
   tls_pages.clear(); // drop page ref
   return 0;
+}
+
+
+MemStore::ObjectRef MemStore::Collection::create_object() const {
+  if (use_page_set)
+    return new PageSetObject(cct->_conf->memstore_page_size);
+  return new BufferlistObject();
 }
