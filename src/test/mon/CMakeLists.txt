@@ -46,3 +46,8 @@ add_executable(unittest_mon_pgmap
 add_ceph_unittest(unittest_mon_pgmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_pgmap)
 target_link_libraries(unittest_mon_pgmap mon global)
 
+add_executable(unittest_mon_pgmonitor
+  PGMonitor.cc
+  )
+add_ceph_unittest(unittest_mon_pgmonitor ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_pgmonitor)
+target_link_libraries(unittest_mon_pgmonitor mon global)
