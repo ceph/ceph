@@ -18,6 +18,8 @@
 #include <set>
 #include <map>
 
+#include <boost/optional.hpp>
+
 #include "common/armor.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -535,7 +537,7 @@ protected:
   obj_version ep_objv;
   bool has_cors;
   RGWCORSConfiguration cors_config;
-  string swift_ver_location;
+  boost::optional<std::string> swift_ver_location;
   map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
@@ -781,7 +783,7 @@ protected:
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
   string placement_rule;
-  string swift_ver_location;
+  boost::optional<std::string> swift_ver_location;
 
 public:
   RGWPutMetadataBucket()
