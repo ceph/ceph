@@ -586,8 +586,8 @@ int OSDMonitor::reweight_by_utilization(int oload,
     oss << "max_change " << max_changef << "\n";
     oss << "max_change_osds " << max_osds << "\n";
     oss.precision(4);
-    oss << std::fixed << average_util << "\n";
-    oss << overload_util << "\n";
+    oss << "average_utilization " << std::fixed << average_util << "\n";
+    oss << "overload_utilization " << overload_util << "\n";
   }
   bool changed = false;
   int num_changed = 0;
