@@ -1481,7 +1481,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
   case OP_POST:
   case OP_COPY:
     /* is it a 'multi-object delete' request? */
-    if (s->info.request_params == "delete") {
+    if (s->info.args.exists("delete")) {
       only_bucket = true;
       break;
     }
