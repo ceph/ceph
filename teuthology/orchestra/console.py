@@ -32,16 +32,23 @@ class PhysicalConsole():
         self.ipmiuser = ipmiuser or config.ipmi_user
         self.ipmipass = ipmipass or config.ipmi_password
         self.ipmidomain = ipmidomain or config.ipmi_domain
+        self.has_credentials = all(map(
+            lambda x: x is not None,
+            [self.ipmiuser, self.ipmipass, self.ipmidomain]
+        ))
+
+    def _check_credentials(self):
+        if not self.has_credentials:
+            log.error(
+                "Must set ipmi_user, ipmi_password, and ipmi_domain in " \
+                ".teuthology.yaml"
+            )
 
     def _pexpect_spawn(self, cmd):
         """
         Run the cmd specified using ipmitool.
         """
-        if not self.ipmiuser or not self.ipmipass or not self.ipmidomain:
-            log.error(
-                "Must set ipmi_user, ipmi_password, and ipmi_domain in " \
-                ".teuthology.yaml"
-            )
+        self._check_credentials()
         full_command = self._build_command(cmd)
         log.debug('pexpect command: %s', full_command)
         child = pexpect.spawn(
@@ -218,6 +225,7 @@ class PhysicalConsole():
 
         :returns: a subprocess.Popen object
         """
+        self._check_credentials()
         ipmi_cmd = self._build_command('sol activate')
         pexpect_templ = \
             "import pexpect; " \
