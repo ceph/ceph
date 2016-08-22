@@ -1027,13 +1027,26 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   for (const auto& entry : slo_info.entries) {
     const string& path = entry.path;
-    const size_t pos = path.find('/', 1); /* skip first / */
-    if (pos == string::npos) {
+
+    /* If the path starts with slashes, strip them all. */
+    const size_t pos_init = path.find_first_not_of('/');
+    /* According to the documentation of std::string::find following check
+     * is not necessary as we should get the std::string::npos propagation
+     * here. This might be true with the accuracy to implementation's bugs.
+     * See following question on SO:
+     * http://stackoverflow.com/questions/1011790/why-does-stdstring-findtext-stdstringnpos-not-return-npos
+     */
+    if (pos_init == string::npos) {
       return -EINVAL;
     }
 
-    string bucket_name = path.substr(1, pos - 1);
-    string obj_name = path.substr(pos + 1);
+    const size_t pos_sep = path.find('/', pos_init);
+    if (pos_sep == string::npos) {
+      return -EINVAL;
+    }
+
+    string bucket_name = path.substr(pos_init, pos_sep - pos_init);
+    string obj_name = path.substr(pos_sep + 1);
 
     rgw_bucket bucket;
     RGWAccessControlPolicy *bucket_policy;
