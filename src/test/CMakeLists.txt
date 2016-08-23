@@ -513,14 +513,10 @@ add_dependencies(tests
   ceph_erasure_code
   ceph-disk
   cython_modules)
-if(WITH_RBD)
-  list(APPEND tests unittest_librbd rbd)
-endif(WITH_RBD)
-if(WITH_RADOSGW)
-  list(APPEND tests radosgw-admin)
-endif(WITH_RADOSGW)
+  add_dependencies(tests unittest_librbd rbd)
+  add_dependencies(tests radosgw-admin)
 if(NOT FREEBSD)
-  list(APPEND tests ceph-detect-init)
+  add_dependencies(tests ceph-detect-init)
 endif(NOT FREEBSD)
 
 add_ceph_test(test-ceph-helpers.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-helpers.sh)
