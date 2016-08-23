@@ -1,3 +1,4 @@
+if(WITH_TESTS)
 add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
 target_link_libraries(ceph_rgw_jsonparser
@@ -14,6 +15,7 @@ install(TARGETS
   ceph_rgw_jsonparser
   ceph_rgw_multiparser
   DESTINATION bin)
+endif(WITH_TESTS)
 
 
 set(rgw_a_srcs
