@@ -20,7 +20,7 @@
 
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -28,7 +28,7 @@ class MClientCaps : public Message {
 
   uint64_t size, max_size, truncate_size;
   uint32_t truncate_seq;
-  utime_t mtime, atime, ctime;
+  utime_t mtime, atime, ctime, btime;
   file_layout_t layout;
   uint32_t time_warp_seq;
 
@@ -62,6 +62,7 @@ class MClientCaps : public Message {
   __u32 get_truncate_seq() { return truncate_seq; }
   uint64_t get_truncate_size() { return truncate_size; }
   utime_t get_ctime() { return ctime; }
+  utime_t get_btime() { return btime; }
   utime_t get_mtime() { return mtime; }
   utime_t get_atime() { return atime; }
   __u32 get_time_warp_seq() { return time_warp_seq; }
@@ -255,6 +256,9 @@ public:
     if (header.version >= 8) {
       ::decode(layout.pool_ns, p);
     }
+    if (header.version >= 9) {
+      ::decode(btime, p);
+    }
   }
   void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
@@ -311,6 +315,7 @@ public:
     ::encode(caller_gid, payload);
 
     ::encode(layout.pool_ns, payload);
+    ::encode(btime, payload);
   }
 };
 

@@ -3039,6 +3039,12 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
 	      << " for " << *in << dendl;
       pi->mode = m->head.mode;
     }
+    if (m->get_btime() != pi->btime) {
+      dout(7) << "  btime " << oct << pi->btime
+	      << " -> " << m->get_btime() << dec
+	      << " for " << *in << dendl;
+      pi->btime = m->get_btime();
+    }
   }
 
 }
