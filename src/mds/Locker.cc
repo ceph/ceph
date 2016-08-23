@@ -2983,6 +2983,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
     utime_t atime = m->get_atime();
     utime_t mtime = m->get_mtime();
     uint64_t size = m->get_size();
+    uint64_t change_attr = m->get_change_attr();
     version_t inline_version = m->inline_version;
     
     if (((dirty & CEPH_CAP_FILE_WR) && mtime > pi->mtime) ||
@@ -2990,6 +2991,10 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
       dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
+    }
+    if (((dirty & CEPH_CAP_FILE_WR) && change_attr > pi->change_attr) ||
+	((dirty & CEPH_CAP_FILE_EXCL) && change_attr != pi->change_attr)) {
+      pi->change_attr = change_attr;
     }
     if (in->inode.is_file() &&   // ONLY if regular file
 	size > pi->size) {

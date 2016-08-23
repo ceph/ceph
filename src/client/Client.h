@@ -707,11 +707,10 @@ protected:
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
-  void update_inode_file_bits(Inode *in,
-			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
-			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
-			      version_t inline_version, bufferlist& inline_data,
-			      int issued);
+  void update_inode_file_bits(Inode *in, uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
+			      uint64_t change_attr, uint64_t time_warp_seq, utime_t ctime,
+			      utime_t mtime, utime_t atime, version_t inline_version,
+			      bufferlist& inline_data, int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			      Inode *in, utime_t from, MetaSession *session,
