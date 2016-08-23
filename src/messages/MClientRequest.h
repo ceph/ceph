@@ -36,6 +36,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "include/ceph_features.h"
 
 #include <sys/types.h>
 #include <utime.h>
@@ -46,12 +47,13 @@
 // metadata ops.
 
 class MClientRequest : public Message {
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
 public:
   struct ceph_mds_request_head head;
   utime_t stamp;
+  ceph_timespec btime;
 
   struct Release {
     mutable ceph_mds_request_release item;
@@ -160,7 +162,17 @@ public:
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
+
+    if (header.version >= 4) {
+      struct ceph_mds_request_head_new	new_mds_head;
+
+      ::decode(new_mds_head, p);
+      memcpy(&head, &(new_mds_head.oldest_client_tid), sizeof(head));
+      btime = new_mds_head.args.setattr.btime;
+    } else {
+      ::decode(head, p);
+    }
+
     ::decode(path, p);
     ::decode(path2, p);
     ::decode_nohead(head.num_releases, releases, p);
@@ -169,8 +181,20 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    head.num_releases = releases.size();
-    ::encode(head, payload);
+    if (features & CEPH_FEATURE_FS_BTIME) {
+      struct ceph_mds_request_head_new	new_mds_head;
+
+      new_mds_head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
+      memcpy(&(new_mds_head.oldest_client_tid), &head, sizeof(head));
+      if (head.op == CEPH_MDS_OP_SETATTR)
+	new_mds_head.args.setattr.btime = btime;
+      new_mds_head.num_releases = releases.size();
+      ::encode(new_mds_head, payload);
+    } else {
+      head.num_releases = releases.size();
+      ::encode(head, payload);
+    }
+
     ::encode(path, payload);
     ::encode(path2, payload);
     ::encode_nohead(releases, payload);
