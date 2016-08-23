@@ -773,9 +773,13 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
-  int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
-  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _do_setattr(Inode *in, struct ceph_statx *stx, int mask, int uid, int gid, InodeRef *inp);
+  void stat_to_statx(struct stat *st, struct ceph_statx *stx);
+  int __setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _setattrx(InodeRef &in, struct ceph_statx *stx, int mask);
   int _setattr(InodeRef &in, struct stat *attr, int mask);
+  int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid = -1,
+		 int gid = -1, InodeRef *inp = 0);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
@@ -845,7 +849,7 @@ private:
 
   int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1);
-  int may_setattr(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1);
+  int may_setattr(Inode *in, struct ceph_statx *stx, int mask, int uid=-1, int gid=-1);
   int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
   int may_lookup(Inode *dir, int uid=-1, int gid=-1);
   int may_create(Inode *dir, int uid=-1, int gid=-1);
@@ -999,6 +1003,7 @@ public:
   int lstatlite(const char *path, struct statlite *buf);
 
   int setattr(const char *relpath, struct stat *attr, int mask);
+  int setattrx(const char *relpath, struct ceph_statx *stx, int mask, int flags=0);
   int fsetattr(int fd, struct stat *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int fchmod(int fd, mode_t mode);
@@ -1096,6 +1101,8 @@ public:
   int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
   int ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 		  unsigned int flags, int uid = -1, int gid = -1);
+  int ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid = -1,
+		 int gid = -1);
   int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1,
 		 int gid = -1);
   int ll_getxattr(Inode *in, const char *name, void *value, size_t size,
