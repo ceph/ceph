@@ -58,7 +58,7 @@ namespace ceph {
 
     template <class TC>
     class timer {
-      typedef set_member_hook<link_mode<normal_link> > sh;
+      using sh = set_member_hook<link_mode<normal_link> >;
 
       struct event {
 	typename TC::time_point t;
@@ -89,17 +89,17 @@ namespace ceph {
 	}
       };
 
-      typedef set<event,
-		  member_hook<event, sh, &event::schedule_link>,
-		  constant_time_size<false>,
-		  compare<SchedCompare> > schedule_type;
+      using schedule_type = set<event,
+				member_hook<event, sh, &event::schedule_link>,
+				constant_time_size<false>,
+				compare<SchedCompare> >;
 
       schedule_type schedule;
 
-      typedef set<event,
-		  member_hook<event, sh, &event::event_link>,
-		  constant_time_size<false>,
-		  compare<EventCompare> > event_set_type;
+      using event_set_type = set<event,
+				 member_hook<event, sh, &event::event_link>,
+				 constant_time_size<false>,
+				 compare<EventCompare> >;
 
       event_set_type events;
 
