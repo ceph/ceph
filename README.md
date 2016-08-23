@@ -111,19 +111,17 @@ Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
 
 
-Building packages
------------------
+Building a source tarball
+=========================
 
-You can build packages for Debian or Debian-derived (e.g., Ubuntu)
-systems with
+To build a complete source tarball with everything needed to build from
+source and/or build a (deb or rpm) package, run
 
-	sudo apt-get install dpkg-dev
-	dpkg-checkbuilddeps        # make sure we have all dependencies
-	dpkg-buildpackage
+	./make-dist
 
-For RPM-based systems (Red Hat, SUSE, etc.),
-
-	rpmbuild
+This will create a tarball like ceph-$version.tar.bz2 from git.
+(Ensure that any changes you want to include in your working directory
+are committed to git.)
 
 
 Running a test cluster
