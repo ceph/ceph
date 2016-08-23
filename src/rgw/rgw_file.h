@@ -512,6 +512,12 @@ namespace rgw {
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
 
     int commit(uint64_t offset, uint64_t length, uint32_t flags) {
+      /* NFS3 and NFSv4 COMMIT implementation
+       * the current atomic update strategy doesn't actually permit
+       * clients to read-stable until either CLOSE (NFSv4+) or the
+       * expiration of the active write timer (NFS3).  In the
+       * interim, the client may send an arbitrary number of COMMIT
+       * operations which must return a success result */
       return 0;
     }
 
