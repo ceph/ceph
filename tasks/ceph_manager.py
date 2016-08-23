@@ -850,7 +850,9 @@ class ObjectStoreTool:
         lines.append(cmd)
         return "\n".join(lines)
 
-    def run(self, options, args, stdin=None, stdout=StringIO()):
+    def run(self, options, args, stdin=None, stdout=None):
+        if stdout is None:
+            stdout = StringIO()
         self.manager.kill_osd(self.osd)
         cmd = self.build_cmd(options, args, stdin)
         self.manager.log(cmd)
@@ -1057,7 +1059,9 @@ class CephManager:
             check_status=False
         ).exitstatus
 
-    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0, stdout=StringIO()):
+    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0, stdout=None):
+        if stdout is None:
+            stdout = StringIO()
         return self.admin_socket('osd', osd_id, command, check_status, timeout, stdout)
 
     def find_remote(self, service_type, service_id):
@@ -1074,12 +1078,14 @@ class CephManager:
                           service_type, service_id)
 
     def admin_socket(self, service_type, service_id,
-                     command, check_status=True, timeout=0, stdout=StringIO()):
+                     command, check_status=True, timeout=0, stdout=None):
         """
         Remotely start up ceph specifying the admin socket
         :param command: a list of words to use as the command
                         to the admin socket
         """
+        if stdout is None:
+            stdout = StringIO()
         testdir = teuthology.get_testdir(self.ctx)
         remote = self.find_remote(service_type, service_id)
         args = [
@@ -1176,11 +1182,13 @@ class CephManager:
             '0')
 
     def wait_run_admin_socket(self, service_type,
-                              service_id, args=['version'], timeout=75, stdout=StringIO()):
+                              service_id, args=['version'], timeout=75, stdout=None):
         """
         If osd_admin_socket call suceeds, return.  Otherwise wait
         five seconds and try again.
         """
+        if stdout is None:
+            stdout = StringIO()
         tries = 0
         while True:
             proc = self.admin_socket(service_type, service_id,
