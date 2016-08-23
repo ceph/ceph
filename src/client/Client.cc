@@ -94,6 +94,8 @@
 #include "include/assert.h"
 #include "include/stat.h"
 
+#include "include/cephfs/ceph_statx.h"
+
 #if HAVE_GETGROUPLIST
 #include <grp.h>
 #include <pwd.h>
@@ -6648,6 +6650,56 @@ int Client::stat(const char *relpath, struct stat *stbuf,
   return r;
 }
 
+unsigned Client::statx_to_mask(unsigned int flags, unsigned int want)
+{
+  unsigned mask = 0;
+
+  /* if NO_ATTR_SYNC is set, then we don't need any -- just use what's in cache */
+  if (flags & AT_NO_ATTR_SYNC)
+    goto out;
+
+  /* Always set PIN to distinguish from AT_NO_ATTR_SYNC case */
+  mask |= CEPH_CAP_PIN;
+  if (want & (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_RDEV|CEPH_STATX_BTIME))
+    mask |= CEPH_CAP_AUTH_SHARED;
+  if (want & CEPH_STATX_NLINK)
+    mask |= CEPH_CAP_LINK_SHARED;
+  if (want & (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_VERSION))
+    mask |= CEPH_CAP_FILE_SHARED;
+
+out:
+  return mask;
+}
+
+int Client::statx(const char *relpath, struct ceph_statx *stx,
+		  unsigned int want, unsigned int flags)
+{
+  ldout(cct, 3) << "statx enter (relpath " << relpath << " want " << want << ")" << dendl;
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "statx" << std::endl;
+  tout(cct) << relpath << std::endl;
+  filepath path(relpath);
+  InodeRef in;
+
+  unsigned mask = statx_to_mask(flags, want);
+
+  int r = path_walk(path, &in, flags & AT_SYMLINK_NOFOLLOW, mask);
+  if (r < 0)
+    return r;
+
+  if (mask && !in->caps_issued_mask(mask)) {
+    r = _getattr(in, mask);
+    if (r < 0) {
+      ldout(cct, 3) << "statx exit on error!" << dendl;
+      return r;
+    }
+  }
+
+  fill_statx(in, mask, stx);
+  ldout(cct, 3) << "statx exit (relpath " << relpath << " mask " << stx->stx_mask << ")" << dendl;
+  return r;
+}
+
 int Client::lstat(const char *relpath, struct stat *stbuf,
 			  frag_info_t *dirstat, int mask)
 {
@@ -6716,6 +6768,74 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     *rstat = in->rstat;
 
   return in->caps_issued();
+}
+
+void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
+{
+  ldout(cct, 10) << "fill_statx on " << in->ino << " snap/dev" << in->snapid
+	   << " mode 0" << oct << in->mode << dec
+	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
+  memset(stx, 0, sizeof(struct ceph_statx));
+
+  /*
+   * If mask is 0, then the caller set AT_NO_ATTR_SYNC. Reset the mask
+   * so that all bits are set.
+   */
+  if (!mask)
+    mask = ~0;
+
+  /* These are always considered to be available */
+  stx->stx_dev_major = in->snapid >> 32;
+  stx->stx_dev_minor = (uint32_t)in->snapid;
+  stx->stx_blksize = MAX(in->layout.stripe_unit, 4096);
+
+  if (use_faked_inos())
+   stx->stx_ino = in->faked_ino;
+  else
+    stx->stx_ino = in->ino;
+  stx->stx_rdev_minor = MINOR(in->rdev);
+  stx->stx_rdev_major = MAJOR(in->rdev);
+  stx->stx_mask |= (CEPH_STATX_INO|CEPH_STATX_RDEV);
+
+  if (mask & CEPH_CAP_AUTH_SHARED) {
+    stx->stx_uid = in->uid;
+    stx->stx_gid = in->gid;
+    stx->stx_mode = in->mode;
+    stx->stx_btime = in->btime.sec();
+    stx->stx_btime_ns = in->btime.nsec();
+    stx->stx_mask |= (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_BTIME);
+  }
+
+  if (mask & CEPH_CAP_LINK_SHARED) {
+    stx->stx_nlink = in->nlink;
+    stx->stx_mask |= CEPH_STATX_NLINK;
+  }
+
+  if (mask & CEPH_CAP_FILE_SHARED) {
+    if (in->ctime > in->mtime) {
+      stx->stx_ctime = in->ctime.sec();
+      stx->stx_ctime_ns = in->ctime.nsec();
+    } else {
+      stx->stx_ctime = in->mtime.sec();
+      stx->stx_ctime_ns = in->mtime.nsec();
+    }
+    stx->stx_atime = in->atime.sec();
+    stx->stx_atime_ns = in->atime.nsec();
+    stx->stx_mtime = in->mtime.sec();
+    stx->stx_mtime_ns = in->mtime.nsec();
+
+    if (in->is_dir()) {
+      if (cct->_conf->client_dirsize_rbytes)
+	stx->stx_size = in->rstat.rbytes;
+      else
+	stx->stx_size = in->dirstat.size();
+      stx->stx_blocks = 1;
+    } else {
+      stx->stx_size = in->size;
+      stx->stx_blocks = (in->size + 511) >> 9;
+    }
+    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS);
+  }
 }
 
 void Client::touch_dn(Dentry *dn)
@@ -9702,6 +9822,23 @@ int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
   if (res == 0)
     fill_stat(in, attr);
   ldout(cct, 3) << "ll_getattr " << _get_vino(in) << " = " << res << dendl;
+  return res;
+}
+
+int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
+			unsigned int flags, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+
+  int res = 0;
+  unsigned mask = statx_to_mask(flags, want);
+
+  if (mask && !in->caps_issued_mask(mask))
+    res = _ll_getattr(in, uid, gid);
+
+  if (res == 0)
+    fill_statx(in, mask, stx);
+  ldout(cct, 3) << "ll_getattrx " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
 
