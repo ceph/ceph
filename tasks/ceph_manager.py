@@ -142,6 +142,8 @@ class Thrasher:
         except Exception:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
+        manager.raw_cluster_cmd('--', 'tell', 'mon.*', 'injectargs',
+                                '--mon-reweight-min-bytes-per-osd 10')
         self.thread = gevent.spawn(self.do_thrash)
         if self.sighup_delay:
             self.sighup_thread = gevent.spawn(self.do_sighup)
