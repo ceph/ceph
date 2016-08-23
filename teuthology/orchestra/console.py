@@ -68,6 +68,16 @@ class PhysicalConsole():
         )
         return child
 
+    def _console_command(self):
+        if self.has_conserver:
+            return 'console -M {master} -p {port} {host}'.format(
+                master=self.conserver_master,
+                port=self.conserver_port,
+                host=self.shortname,
+            )
+        else:
+            return self._build_command('sol activate')
+
     def _build_command(self, subcommand):
         template = \
             'ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'
