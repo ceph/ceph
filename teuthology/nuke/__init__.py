@@ -27,7 +27,7 @@ from .actions import (
     reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
     remove_kernel_mounts, remove_ceph_packages, synch_clocks,
     remove_configuration_files, undo_multipath, reset_syslog_dir,
-    remove_testing_tree, remove_yum_timedhosts,
+    remove_testing_tree, remove_yum_timedhosts, kill_valgrind,
 )
 
 log = logging.getLogger(__name__)
@@ -325,6 +325,7 @@ def nuke_helper(ctx, should_unlock):
     log.info('Unmount ceph-fuse and killing daemons...')
     shutdown_daemons(ctx)
     log.info('All daemons killed.')
+    kill_valgrind(ctx)
     # Try to remove packages before reboot
     remove_installed_packages(ctx)
 
