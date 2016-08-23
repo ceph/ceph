@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8.12)
 
 set(CMAKE_CXX_FLAGS "-std=c++11 -Wno-write-strings ${CMAKE_CXX_FLAGS}")
 
