@@ -19,6 +19,8 @@
 #include "common/LogClient.h"
 #include "common/Timer.h"
 
+#include "messages/MCommand.h"
+
 #include "Beacon.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
@@ -492,15 +494,14 @@ public:
 
   bool handle_command(
     const cmdmap_t &cmdmap,
-    bufferlist const &inbl,
+    MCommand *m,
     int *r,
     std::stringstream *ds,
-    std::stringstream *ss);
+    std::stringstream *ss,
+    bool *need_reply);
 
-  void dump_sessions(
-      const SessionFilter &filter, Formatter *f) const;
-  std::vector<entity_name_t> evict_sessions(
-      const SessionFilter &filter);
+  void dump_sessions(const SessionFilter &filter, Formatter *f) const;
+  void evict_sessions(const SessionFilter &filter, MCommand *m);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(Message *m);
