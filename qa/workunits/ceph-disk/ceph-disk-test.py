@@ -234,7 +234,9 @@ class TestCephDisk(object):
         # bluestore
         #
         c.conf['global']['enable experimental unrecoverable data corrupting features'] = '*'
-        c.conf['global']['bluestore fsck on mount'] = 'true'
+        # set to true when http://tracker.ceph.com/issues/17078 is fixed
+        c.conf['global']['bluestore fsck on mount'] = 'false'
+        c.conf['global']['debug bluestore'] = 30
         c.save_conf()
 
     def setup(self):
