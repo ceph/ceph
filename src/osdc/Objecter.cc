@@ -3481,7 +3481,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  assert(list_context->current_pg <= pg_num);
+  assert(list_context->current_pg < pg_num);
 
   ObjectOperation op;
   op.pg_nls(list_context->max_entries, list_context->filter,
@@ -3637,7 +3637,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  assert(list_context->current_pg <= pg_num);
+  assert(list_context->current_pg < pg_num);
 
   ObjectOperation op;
   op.pg_ls(list_context->max_entries, list_context->filter,
