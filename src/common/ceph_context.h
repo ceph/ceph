@@ -76,6 +76,9 @@ public:
   /* init ceph::crypto */
   void init_crypto();
 
+  /* shutdown ceph::crypto */
+  void shutdown_crypto();
+
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 

@@ -583,8 +583,7 @@ CephContext::~CephContext()
 
   delete _crypto_none;
   delete _crypto_aes;
-  if (_crypto_inited)
-    ceph::crypto::shutdown();
+  shutdown_crypto();
 }
 
 void CephContext::put() {
@@ -601,6 +600,14 @@ void CephContext::init_crypto()
 {
   ceph::crypto::init(this);
   _crypto_inited = true;
+}
+
+void CephContext::shutdown_crypto()
+{
+  if (_crypto_inited) {
+    ceph::crypto::shutdown();
+    _crypto_inited = false;
+  }
 }
 
 void CephContext::start_service_thread()

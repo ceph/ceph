@@ -340,6 +340,8 @@ int global_init_prefork(CephContext *cct)
   }
 
   cct->notify_pre_fork();
+  // shutdown crypto
+  cct->shutdown_crypto();
   // stop service thread
   cct->join_service_thread();
   // stop log thread
@@ -371,6 +373,8 @@ void global_init_daemonize(CephContext *cct)
 
 void global_init_postfork_start(CephContext *cct)
 {
+  // reinit crypto
+  cct->init_crypto();
   // restart log thread
   cct->_log->start();
   // restart service thread
