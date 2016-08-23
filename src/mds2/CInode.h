@@ -175,8 +175,9 @@ public:
       ref = p->second;
     return ref;
   }
-  void get_dirfrags(list<CDirRef>& ls );
   CDirRef get_or_open_dirfrag(frag_t fg);
+  void close_dirfrag(frag_t fg);
+  void get_dirfrags(list<CDir*>& ls);
 
   int encode_inodestat(bufferlist& bl, Session *session,
 		       unsigned max_bytes=0, int getattr_wants=0);
@@ -299,7 +300,20 @@ public:
   void mark_dirty_rstat();
   void clear_dirty_rstat();
 
+public:
   elist<CInode*>::item dirty_rstat_item;
+  elist<CInode*>::item item_dirty;
+  elist<CInode*>::item item_dirty_dirfrag_dir;
+  elist<CInode*>::item item_dirty_dirfrag_nest;
+
+public: // crap
+  static snapid_t first, last;
+  static snapid_t oldest_snap;
+  static compact_map<snapid_t, old_inode_t> old_inodes;
+  static fragtree_t dirfragtree;
+
+  uint64_t last_journaled;
+
 };
 
 ostream& operator<<(ostream& out, const CInode& in);

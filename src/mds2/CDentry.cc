@@ -4,11 +4,15 @@
 
 #include "MDSRank.h"
 #include "MDCache.h"
+#include "SessionMap.h"
 #include "DentryLease.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.dentry(" << dir->dirfrag() << " " << name << ") "
+
+snapid_t CDentry::first(2);
+snapid_t CDentry::last(CEPH_NOSNAP);
 
 LockType CDentry::lock_type(CEPH_LOCK_DN);
 LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
@@ -274,11 +278,11 @@ DentryLease *CDentry::add_client_lease(Session *session)
     client_leases[client] = l;
     is_new = true;
   }
-  session->lock();
+  session->mutex_lock();
   if (is_new)
     l->seq = ++session->lease_seq;
   session->touch_lease(l);
-  session->unlock();
+  session->mutex_unlock();
   return l;
 }
 
@@ -294,9 +298,9 @@ void CDentry::remove_client_lease(Session *session)
 
   lock.put_client_lease();
 
-  session->lock();
+  session->mutex_lock();
   l->item_session_lease.remove_myself();
-  session->unlock();
+  session->mutex_unlock();
 
   client_leases.erase(p);
   delete l;

@@ -30,3 +30,13 @@ void MDSInternalContextBase::complete(int r) {
 MDSRank *MDSInternalContext::get_mds() {
   return mds;
 }
+
+void MDSIOContextBase::complete(int r) {
+  MDSRank *mds = get_mds();
+  assert(mds != NULL);
+  MDSContext::complete(r);
+}
+
+MDSRank *MDSIOContext::get_mds() {
+  return mds;
+}

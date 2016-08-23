@@ -432,7 +432,7 @@ public:
   // Asynchronous operations
   // =======================
   void erase(Context *completion);
-  void create(file_layout_t *layout, stream_format_t const sf);
+  void create(file_layout_t const *layout, stream_format_t const sf);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
   void reread_head_and_probe(Context *onfinish);

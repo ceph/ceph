@@ -137,6 +137,8 @@ public:
 			    utime_t new_mtime=utime_t());
   void schedule_check_max_size(CInode *in, uint64_t new_max_size, bool wait_lock);
   void share_inode_max_size(CInode *in, client_t only_client=-1);
+
+  bool _should_flush_log(CInode *in, int wanted);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(MClientCaps *m);
   void process_request_cap_release(const MDRequestRef& mdr,
@@ -144,7 +146,7 @@ public:
 
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   bool _do_cap_update(CInode *in, Capability *cap, MClientCaps *m, MClientCaps *ack,
-		      MutationRef& mut);
+		      MutationRef& mut, bool *flushed);
   void handle_client_cap_release(MClientCapRelease *m);
   void _do_cap_release(Session *session, inodeno_t ino, uint64_t cap_id,
 		       ceph_seq_t mseq, ceph_seq_t seq);

@@ -80,6 +80,7 @@ protected:
   map_t items;
 
 public:
+  bool empty() const { return items.empty(); }
   map_t::const_iterator begin() const { return items.begin(); }
   map_t::const_iterator end() const { return items.end(); }
 
@@ -111,6 +112,9 @@ public:
   void remove_dirty_rstat_inode(CInode *in);
   void assimilate_dirty_rstat_inodes(const MutationRef& mut);
   void assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlob *blob);
+
+public:
+   elist<CDir*>::item item_dirty, item_new;
 };
 
 ostream& operator<<(ostream& out, const CDir& dir);

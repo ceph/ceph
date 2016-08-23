@@ -97,7 +97,7 @@ struct MutationImpl {
   void unlock_object(CObject *o);
   void unlock_all_objects();
   void add_locked_object(CObject *o);
-  void clear_locked_objects();
+  void remove_locked_object(CObject *o);
   bool is_object_locked(CObject *o) {
     return locked_objects.count(o);
   }
@@ -156,6 +156,9 @@ struct MDRequestImpl : public MutationImpl {
   int tracedn;
 
   bufferlist reply_extra_bl;
+
+  inodeno_t alloc_ino, used_prealloc_ino;
+  interval_set<inodeno_t> prealloc_inos;
 
   bool hold_rename_dir_mutex;
   bool did_early_reply;

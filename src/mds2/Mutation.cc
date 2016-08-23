@@ -141,9 +141,11 @@ void MutationImpl::add_locked_object(CObject *o)
   assert(!is_object_locked(o));
   locked_objects.insert(o);
 }
-void MutationImpl::clear_locked_objects()
+void MutationImpl::remove_locked_object(CObject *o)
 {
-  locked_objects.clear();
+  auto p = locked_objects.find(o);
+  assert(p != locked_objects.end());
+  locked_objects.erase(p);
 }
 
 void MutationImpl::lock_object(CObject *o)
@@ -217,6 +219,5 @@ const filepath& MDRequestImpl::get_filepath2()
 // MDRequestImpl
 MDRequestImpl::~MDRequestImpl()
 {
-  dout(10) << "free " << this << dendl;
   client_request->put();
 }

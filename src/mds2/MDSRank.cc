@@ -21,7 +21,12 @@
 #include "MDSMap.h"
 #include "Mutation.h"
 
+#include "MDLog.h"
+#include "SessionMap.h"
+#include "InoTable.h"
 #include "mon/MonClient.h"
+#include "osdc/Objecter.h"
+#include "osdc/Journaler.h"
 #include "common/HeartbeatMap.h"
 
 #include "messages/MMDSMap.h"
@@ -53,7 +58,9 @@ MDSRank::MDSRank(
     whoami(whoami_), incarnation(0),
     mds_lock(mds_lock_), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
+    objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
     server(NULL), locker(NULL), mdcache(NULL),
+    mdlog(NULL), sessionmap(NULL), inotable(NULL),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
     stopping(false),
@@ -62,7 +69,6 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
-    sessionmap(this),
     op_tp(msgr->cct, "MDSRank::op_tp", "tp_op",  g_conf->osd_op_threads, "mds_op_threads"),
     msg_tp(msgr->cct, "MDSRank::msg_tp", "tp_msg",  g_conf->osd_op_threads, "mds_msg_threads"),
     op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
@@ -70,9 +76,15 @@ MDSRank::MDSRank(
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
+  objecter->unset_honor_osdmap_full();
+
   mdcache = new MDCache(this);
   server = new Server(this);
   locker = new Locker(this);
+
+  mdlog = new MDLog(this);
+  sessionmap = new SessionMap(this);
+  inotable = new InoTable(this);
 
   finisher = new Finisher(msgr->cct);
 }
@@ -86,6 +98,9 @@ MDSRank::~MDSRank()
   if (mdsmap) { delete mdsmap; mdsmap = NULL; }
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (server) { delete server; server = NULL; }
+  if (mdlog) { delete mdlog; mdlog = NULL; }
+  if (sessionmap) { delete sessionmap; sessionmap = NULL; }
+  if (inotable) { delete inotable; inotable = NULL; }
 
   delete finisher;
   finisher = NULL;
@@ -95,11 +110,25 @@ MDSRank::~MDSRank()
 
   delete respawn_hook;
   respawn_hook = NULL;
+
+  delete objecter;
+  objecter = nullptr;
+}
+
+void MDSRank::create_logger()
+{
+  mdlog->create_logger();
 }
 
 void MDSRankDispatcher::init()
 {
+  objecter->init();
+  messenger->add_dispatcher_head(objecter);
+
+  objecter->start();
+
   update_log_config();
+  create_logger();
 
   // Expose the OSDMap (already populated during MDSRank::init) to anyone
   // who is interested in it.
@@ -118,6 +147,8 @@ void MDSRankDispatcher::tick()
     dout(5) << "tick bailing out since we seem laggy" << dendl;
     return;
   }
+
+  mdlog->flush();
 
   // Expose ourselves to Beacon to update health indicators
   beacon.notify_health(this);
@@ -141,9 +172,14 @@ void MDSRankDispatcher::shutdown()
 
   timer.shutdown();
 
+  mdlog->shutdown();
+
   mdcache->shutdown();
 
   monc->shutdown();
+  
+  if (objecter->initialized.read())
+    objecter->shutdown();
 
   // release mds_lock for messenger threads (e.g.
   // MDSDaemon::ms_handle_reset called from Messenger).
@@ -410,32 +446,72 @@ void MDSRank::request_state(MDSMap::DaemonState s)
   beacon.send();
 }
 
+class C_MDS_BootStart : public MDSInternalContext {
+  MDSRank::BootStep nextstep;
+public:
+  C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n)
+    : MDSInternalContext(m), nextstep(n) {}
+  void finish(int r) {
+    mds->boot_start(nextstep, r);
+  }
+};
+
 void MDSRank::boot_start(BootStep step, int r)
 {
   dout(3) << "boot_start" << dendl;
 
-  // init mdache
+  assert(r >= 0);
 
-  starting_done();
+  switch(step) {
+    case MDS_BOOT_INITIAL:
+      mdcache->create_empty_hierarchy();
+      mdcache->create_mydir_hierarchy();
+
+      sessionmap->set_rank(whoami);
+      sessionmap->wipe();
+
+      inotable->set_rank(whoami);
+      inotable->reset();
+
+      mdlog->open(new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
+      break;
+    case MDS_BOOT_PREPARE_LOG:
+      if (is_any_replay()) {
+	mdlog->replay(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+      } else {
+	mdlog->append();
+	starting_done();
+      }
+      break;
+    case MDS_BOOT_REPLAY_DONE:
+      assert(is_any_replay());
+      replay_done();
+      break;
+  }
 }
 
 void MDSRank::starting_done()
 {
   dout(3) << "starting_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
+  mdlog->start_new_segment();
 }
 
 void MDSRank::replay_start()
 {
   dout(1) << "replay_start" << dendl;
-  mdcache->create_empty_hierarchy();
-  mdcache->create_mydir_hierarchy();
-  replay_done();
+
+  boot_start();
 }
 
 void MDSRank::replay_done()
 {
   dout(1) << "replay_done" << dendl;
+
+  dout(1) << "making mds journal writeable" << dendl;
+  mdlog->get_journaler()->set_writeable();
+  mdlog->get_journaler()->trim_tail();
+
   request_state(MDSMap::STATE_RECONNECT);
 }
 
@@ -498,7 +574,19 @@ void MDSRank::creating_done()
 void MDSRank::boot_create()
 {
   dout(3) << "boot_create" << dendl;
+
   mdcache->create_empty_hierarchy();
+  mdcache->create_mydir_hierarchy();
+
+  sessionmap->set_rank(whoami);
+  sessionmap->wipe();
+
+  inotable->set_rank(whoami);
+  inotable->reset();
+
+  mdlog->create(new C_MDSInternalNoop);
+  mdlog->start_new_segment();
+
   creating_done();
 }
 
@@ -552,6 +640,10 @@ void MDSRankDispatcher::handle_mds_map(
       messenger->set_myname(entity_name_t::MDS(whoami));
     }
   }
+
+  // tell objecter my incarnation
+  if (objecter->get_client_incarnation() != incarnation)
+    objecter->set_client_incarnation(incarnation);
 
   // did it change?
   if (oldstate != state) {
@@ -799,6 +891,10 @@ void MDSRankDispatcher::update_log_config()
 
 void MDSRankDispatcher::handle_osd_map()
 {
+  // By default the objecter only requests OSDMap updates on use,
+  // we would like to always receive the latest maps in order to
+  // apply policy based on the FULL flag.
+  objecter->maybe_request_map();
 }
 
 bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)

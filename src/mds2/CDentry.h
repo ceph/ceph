@@ -83,6 +83,10 @@ public:
   void link_inode_work(inodeno_t ino, uint8_t d_type);
   void unlink_inode_work();
 
+  version_t get_version() const { return version; }
+  version_t get_projected_version() const { return projected_version; }
+  void set_version(version_t v) { projected_version = version = v; }
+
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
   void mark_dirty(version_t projected_dirv, LogSegment *ls);
@@ -111,6 +115,12 @@ public:
   }
   DentryLease* add_client_lease(Session *session);
   void remove_client_lease(Session *session);
+
+public:
+  elist<CDentry*>::item item_dirty;
+
+public: // crap
+  static snapid_t first, last;
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);

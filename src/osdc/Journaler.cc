@@ -54,7 +54,7 @@ void Journaler::set_writeable()
   readonly = false;
 }
 
-void Journaler::create(file_layout_t *l, stream_format_t const sf)
+void Journaler::create(file_layout_t const *l, stream_format_t const sf)
 {
   lock_guard lk(lock);
 

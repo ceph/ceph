@@ -8,6 +8,10 @@
 #include "Locker.h"
 #include "Mutation.h"
 
+#include "MDLog.h"
+#include "SessionMap.h"
+#include "events/ESubtreeMap.h"
+
 #include "include/filepath.h"
 #include "messages/MClientRequest.h"
 
@@ -17,16 +21,17 @@ MDCache::MDCache(MDSRank *_mds) :
   mds(_mds), server(_mds->server), locker(_mds->locker),
   inode_map_lock("MDCache::inode_map_lock"),
   request_map_lock("MDCache::request_map_lock"),
-  rename_dir_mutex("MDCache::rename_dir_mutex"),
-  journal_mutex("MDCache::journal_mutex"),
-  last_ino(0x10000)
+  rename_dir_mutex("MDCache::rename_dir_mutex")
 {
   default_file_layout = file_layout_t::get_default();
   default_file_layout.pool_id = mds->mdsmap->get_first_data_pool();
+  default_log_layout = file_layout_t::get_default();
+  default_log_layout.pool_id = mds->mdsmap->get_metadata_pool();
 }
 
 void MDCache::add_inode(CInode *in)
 {
+  assert(in->ino() != inodeno_t());
   inode_map_lock.Lock();
   assert(inode_map.count(in->vino()) == 0);
   inode_map[in->vino()] = in;
@@ -55,6 +60,39 @@ void MDCache::remove_inode(CInode *in)
   inode_map.erase(it);
   inode_map_lock.Unlock();
   delete in;
+}
+
+void MDCache::remove_inode_recursive(CInode *in)
+{
+  in->mutex_assert_locked_by_me();
+  dout(10) << "remove_inode_recursive " << *in << dendl;
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+
+  while (!ls.empty()) {
+    CDirRef subdir = ls.front();
+    ls.pop_front();
+
+    dout(10) << " removing dirfrag " << *subdir << dendl;
+    while (!subdir->empty()) {
+      CDentry *dn = subdir->begin()->second;
+      const CDentry::linkage_t *dnl = dn->get_linkage();
+      if (dnl->is_primary()) {
+	CInode* other_in = dnl->get_inode();
+	other_in->mutex_lock();
+	subdir->unlink_inode(dn);
+	remove_inode_recursive(other_in);
+      } else if (dnl->is_remote()) {
+	subdir->unlink_inode(dn);
+      }
+      subdir->remove_dentry(dn);
+    }
+    in->close_dirfrag(subdir->get_frag());
+  }
+
+  in->state_set(CInode::STATE_FREEING);
+  in->mutex_lock();
+  remove_inode(in);
 }
 
 CInodeRef MDCache::get_inode(const vinodeno_t &vino)
@@ -306,7 +344,6 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   params.client_req = req;
 
   MDRequestRef mdr(new MDRequestImpl(params));
-  dout(10) << "alloc mdr " << mdr.get() << dendl;
   mdr->set_op_stamp(req->get_stamp());
 
 
@@ -355,9 +392,9 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
   mdr->cleanup();
 
   if (mdr->session) {
-    mdr->session->lock();
+    mdr->session->mutex_lock();
     mdr->item_session_request.remove_myself();
-    mdr->session->unlock();
+    mdr->session->mutex_unlock();
     mdr->session = NULL;
   }
 
@@ -367,7 +404,6 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
   request_map.erase(p);
   request_map_lock.Unlock();
 }
-
 
 void MDCache::lock_parents_for_linkunlink(const MDRequestRef& mdr, CInode *in,
 					  CDentry *dn, bool apply)
@@ -603,6 +639,7 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
     return;
   }	
 
+  list<CInode*> lsi;
   bool first = true;
   CInode *cur = in;
   while (parent) {
@@ -682,6 +719,8 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
     if (!mut->wrlocks.count(&pin->versionlock))
       locker->local_wrlock_grab(&pin->versionlock, mut);
 
+    lsi.push_front(pin);
+
     mut->add_projected_inode(pin, false);
     inode_t *pi = pin->project_inode();
     pi->version = pin->pre_dirty();
@@ -709,6 +748,22 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
     parent_dn = true;
     update_parent_mtime = false;
   }
+
+  for (auto in : lsi) {
+    journal_dirty_inode(mut, blob, in);
+  }
+}
+
+void MDCache::journal_dirty_inode(const MutationRef& mut, EMetaBlob *metablob, CInode *in)
+{
+  assert(mut->is_object_locked(in));
+  if (in->is_base()) {
+    metablob->add_root(true, in, in->get_projected_inode());
+  } else {
+    CDentry *dn = in->get_projected_parent_dn();
+    assert(mut->is_object_locked(dn->get_dir_inode()));
+    metablob->add_primary_dentry(dn, in, true);
+  }
 }
 
 CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
@@ -731,4 +786,11 @@ CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
 
   strayi->mutex_unlock();
   return straydn;
+}
+
+ESubtreeMap *MDCache::create_subtree_map()
+{
+  ESubtreeMap *le = new ESubtreeMap();
+  mds->mdlog->_start_entry(le);
+  return le;
 }

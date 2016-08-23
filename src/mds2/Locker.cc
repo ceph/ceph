@@ -6,11 +6,16 @@
 #include "MDCache.h"
 #include "Locker.h"
 #include "Mutation.h"
+#include "MDLog.h"
+#include "SessionMap.h"
 
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientReply.h"
+
+#include "events/EUpdate.h"
+#include "events/EOpen.h"
 
 #define dout_subsys ceph_subsys_mds
 
@@ -1176,8 +1181,6 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   if (lock->get_cap_shift())
     in = static_cast<CInode *>(lock->get_parent());
 
-  int old_state = lock->get_state();
-
   switch (lock->get_state()) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
   case LOCK_XSYN:
@@ -1369,6 +1372,7 @@ void Locker::do_scatter_writebehind(ScatterLock *lock, const MutationRef& mut, b
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
   
+  CDentry *parent_dn = NULL;
   if (async) {
     mdcache->lock_objects_for_update(mut, in, false);
     if (!lock->is_flushing()) {
@@ -1377,14 +1381,18 @@ void Locker::do_scatter_writebehind(ScatterLock *lock, const MutationRef& mut, b
       mut->cleanup();
       return;
     }
-  } else if (!in->is_base()) {
-    CDentry *parent_dn = in->get_projected_parent_dn();
-    if (!parent_dn->get_dir_inode()->mutex_trylock()) {
-      // async
-      mds->queue_context(new C_Locker_ScatterWritebehind(this, lock, mut));
-      return;
+    parent_dn = in->get_projected_parent_dn();
+  } else {
+    if (!in->is_base()) {
+      parent_dn = in->get_projected_parent_dn();
+      if (!parent_dn->get_dir_inode()->mutex_trylock()) {
+	// async
+	mds->queue_context(new C_Locker_ScatterWritebehind(this, lock, mut));
+	return;
+      }
+      mut->add_locked_object(parent_dn->get_dir_inode());
     }
-    mut->add_locked_object(parent_dn->get_dir_inode());
+    mut->add_locked_object(in);
   }
 
   inode_t *pi = in->project_inode();
@@ -1394,20 +1402,22 @@ void Locker::do_scatter_writebehind(ScatterLock *lock, const MutationRef& mut, b
 
   mut->add_projected_inode(in, true);
 
-  //  EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
-  //  mds->mdlog->start_entry(le);
+  EUpdate *le = new EUpdate(NULL, "scatter_writebehind");
 
-  mdcache->predirty_journal_parents(mut, NULL, in, 0, PREDIRTY_PRIMARY);
-  //  mdcache->journal_dirty_inode(mut, &le->metablob, in);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, NULL, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mut, &le->metablob, in);
 
-  in->finish_scatter_gather_update_accounted(lock->get_type(), mut, NULL);
+  in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
 
-  //  mds->mdlog->submit_entry(le, new C_Locker_ScatterWB(this, lock, mut));
-  mdcache->start_log_entry();
-  // use finisher to simulate log flush
-  mds->queue_context(new C_Locker_ScatterWBFinish(this, lock, mut));
-  mdcache->submit_log_entry();
+  mds->mdlog->start_entry(le);
+  mut->ls = mds->mdlog->get_current_segment();
+  mds->mdlog->submit_entry(le, new C_Locker_ScatterWBFinish(this, lock, mut), true);
   
+  if (!async) {
+    mut->remove_locked_object(in);
+    if (parent_dn)
+      mut->unlock_object(parent_dn->get_dir_inode());
+  }
   mut->unlock_all_objects();
 
   mut->start_committing();
@@ -2414,12 +2424,10 @@ bool Locker::check_inode_max_size(CInode *in, bool parent_locked, bool force_wrl
 
   assert(!in->is_base());
   CDentry *parent_dn = in->get_projected_parent_dn();
-  if (!parent_locked) {
-    if (!parent_locked && !parent_dn->get_dir_inode()->mutex_trylock()) {
-      schedule_check_max_size(in, new_max_size, false);
-      dout(10) << "check_inode_max_size can't lock parent dn, do async update " << *in << dendl;
-      return false;  
-    }
+  if (!parent_locked && !parent_dn->get_dir_inode()->mutex_trylock()) {
+    schedule_check_max_size(in, new_max_size, false);
+    dout(10) << "check_inode_max_size can't lock parent dn, do async update " << *in << dendl;
+    return false;  
   }
 
   MutationRef mut(new MutationImpl);
@@ -2427,8 +2435,7 @@ bool Locker::check_inode_max_size(CInode *in, bool parent_locked, bool force_wrl
 
   mut->pin(in);
   mut->add_locked_object(in);
-  if (parent_dn)
-    mut->add_locked_object(parent_dn->get_dir_inode());
+  mut->add_locked_object(parent_dn->get_dir_inode());
 
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
 
@@ -2452,39 +2459,32 @@ bool Locker::check_inode_max_size(CInode *in, bool parent_locked, bool force_wrl
   // use EOpen if the file is still open; otherwise, use EUpdate.
   // this is just an optimization to push open files forward into
   // newer log segments.
-  /*
-     LogEvent *le;
-     EMetaBlob *metablob;
-     if (in->is_any_caps_wanted() && in->last == CEPH_NOSNAP) {
-     EOpen *eo = new EOpen(mds->mdlog);
-     eo->add_ino(in->ino());
-     metablob = &eo->metablob;
-     le = eo;
-     mut->ls->open_files.push_back(&in->item_open_file);
-     } else {
-     EUpdate *eu = new EUpdate(mds->mdlog, "check_inode_max_size");
-     metablob = &eu->metablob;
-     le = eu;
-     }
-     */
-  if (update_size) {  // FIXME if/when we do max_size nested accounting
-    mdcache->predirty_journal_parents(mut, NULL, in, NULL, PREDIRTY_PRIMARY);
-    // no cow, here!
-    //CDentry *parent = in->get_projected_parent_dn();
-    //metablob->add_primary_dentry(parent, in, true);
+  LogEvent *le;
+  if (in->is_any_caps_wanted() && in->last == CEPH_NOSNAP) {
+    EOpen *eo = new EOpen(NULL);
+    eo->add_ino(in->ino());
+    le = eo;
+    //mut->ls->open_files.push_back(&in->item_open_file);
   } else {
-    //  metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
-    //  mdcache->journal_dirty_inode(mut, metablob, in);
+    EUpdate *eu = new EUpdate(NULL, "check_inode_max_size");
+    le = eu;
+  }
+  if (update_size) {  // FIXME if/when we do max_size nested accounting
+    mdcache->predirty_journal_parents(mut, le->get_metablob(), in, NULL, PREDIRTY_PRIMARY);
+    le->get_metablob()->add_primary_dentry(parent_dn, in, true);
+  } else {
+    mdcache->journal_dirty_inode(mut, le->get_metablob(), in);
   }
 
-  mdcache->start_log_entry();
+  mds->mdlog->start_entry(le);
+  mut->ls = mds->mdlog->get_current_segment();
   // use finisher to simulate log flush
-  mds->queue_context(new C_Locker_FileUpdateFinish(this, in, mut, true));
-  mdcache->submit_log_entry();
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdateFinish(this, in, mut, true), max_increased);
 
-  mut->clear_locked_objects();
-  if (parent_dn && !parent_locked)
-    parent_dn->get_dir_inode()->mutex_unlock();
+  mut->remove_locked_object(in);
+  if (parent_locked)
+    mut->remove_locked_object(parent_dn->get_dir_inode());
+  mut->unlock_all_objects();
 
   mut->start_committing();
   return true;
@@ -2524,6 +2524,22 @@ void Locker::share_inode_max_size(CInode *in, client_t only_client)
     if (only_client != -1)
       break;
   }
+}
+
+bool Locker::_should_flush_log(CInode *in, int wanted)
+{
+  /* flush log if caps are wanted by client but corresponding lock is unstable and locked by
+   *    * pending mutations. */
+  if (((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
+       in->filelock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL)) &&
+       in->authlock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL)) &&
+       in->linklock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) &&
+       in->xattrlock.is_unstable_and_locked()))
+    return true;
+  return false;
 }
 
 void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
@@ -2734,15 +2750,22 @@ void Locker::handle_client_caps(MClientCaps *m)
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
     }
 
+    bool need_flush = false;
     // filter wanted based on what we could ever give out (given auth/replica status)
     int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
     if (new_wanted != cap->wanted()) {
+      if (new_wanted & ~cap->pending()) {
+        // exapnding caps.  make sure we aren't waiting for a log flush
+        need_flush = _should_flush_log(in, new_wanted & ~cap->pending());
+      }
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
 
-    if (_do_cap_update(in, cap, m, ack, mut)) {
+    if (_do_cap_update(in, cap, m, ack, mut, &need_flush)) {
       // updated
       eval(in, CEPH_CAP_LOCKS);
+      if (!need_flush && (cap->wanted() & ~cap->pending()))
+        need_flush = _should_flush_log(in, cap->wanted() & ~cap->pending());
     } else {
       // no update, ack now.
       if (ack)
@@ -2758,6 +2781,9 @@ void Locker::handle_client_caps(MClientCaps *m)
         share_inode_max_size(in, cap->get_client());
       }
     }
+
+    if (need_flush)
+      mds->mdlog->flush();
   }
 
 out:
@@ -2867,7 +2893,7 @@ static uint64_t calc_bounding(uint64_t t)
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
                             MClientCaps *m, MClientCaps *ack,
-			    MutationRef& mut)
+			    MutationRef& mut, bool *need_flush)
 {
   client_t client = cap->get_client();
   int dirty = m->get_dirty();
@@ -2997,6 +3023,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   // do the update.
   assert(mut);
 
+  EUpdate *le = new EUpdate(NULL, "cap_update");
+
   // xattrs update?
   bool update_xattr = false;
   xattr_map_t *px = NULL;
@@ -3041,12 +3069,22 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   mut->pin(in);
 
-  mdcache->predirty_journal_parents(mut, NULL, in, 0, PREDIRTY_PRIMARY);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mut, &le->metablob, in);
 
-  mdcache->start_log_entry();
-  // use finisher to simulate log flush
-  mds->queue_context(new C_Locker_FileUpdateFinish(this, in, mut, change_max, client, ack));
-  mdcache->submit_log_entry();
+  // "oldest flush tid" > 0 means client uses unique TID for each flush
+  if (ack && ack->get_oldest_flush_tid() > 0)
+    le->metablob.add_client_flush(metareqid_t(m->get_source(), ack->get_client_tid()),
+                                  ack->get_oldest_flush_tid());
+
+  mds->mdlog->start_entry(le);
+  mut->ls = mds->mdlog->get_current_segment();
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdateFinish(this, in, mut, change_max, client, ack));
+
+  if (!*need_flush &&
+      ((change_max && new_max > 0) || // max INCREASE
+       _should_flush_log(in, dirty)))
+    *need_flush = true;
 
   return true;
 }
@@ -3274,9 +3312,9 @@ void Locker::handle_client_lease(MClientLease *m)
 	l->ttl = ceph_clock_now(g_ceph_context);
 	l->ttl += duration;
 
-	session->lock();
+	session->mutex_lock();
 	session->touch_lease(l);
-	session->unlock();
+	session->mutex_unlock();
 
 	m->h.duration_ms = (int)(1000 * duration);
 	m->h.seq = ++l->seq;

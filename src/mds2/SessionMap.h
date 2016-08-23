@@ -24,7 +24,6 @@ using std::set;
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
-#include "include/Spinlock.h"
 #include "common/Mutex.h"
 #include "msg/Message.h"
 
@@ -43,10 +42,10 @@ class Message;
 
 class Session : public RefCountedObject {
 private:
-  Spinlock s_lock;
+  Mutex mutex;
 public:
-  void lock() { s_lock.lock(); }
-  void unlock() { s_lock.unlock(); }
+  void mutex_lock() { mutex.Lock(); }
+  void mutex_unlock() { mutex.Unlock(); }
   // -- state etc --
 public:
   /*
@@ -178,6 +177,7 @@ public:
   client_t get_client() const {
     return info.get_client();
   }
+  const entity_name_t& get_source() const { return info.get_source(); }
 
   int get_state() { return state; }
   const char *get_state_name() const { return get_state_name(state); }
@@ -315,6 +315,7 @@ public:
 
 
   Session() : 
+    mutex("Session::mutex"),
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     recalled_at(), recall_count(0), recall_release_count(0),
     auth_caps(g_ceph_context),

@@ -42,6 +42,12 @@ public:
   void dispatch_client_request(const MDRequestRef& mdr);
 protected:
   void handle_client_reconnect(MClientReconnect *m);
+
+  friend class C_MDS_session_finish;
+  void __session_logged(Session *session, uint64_t state_seq, bool open,
+		  	version_t pv, interval_set<inodeno_t>& inos,version_t piv);
+  void journal_close_session(Session *session, int state, Context *on_safe);
+
   void handle_client_session(MClientSession *m);
   void handle_client_request(MClientRequest *m);
 
@@ -55,10 +61,14 @@ protected:
   void early_reply(const MDRequestRef& mdr);
 
   void journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
-		  	 LogEvent *le, MDSInternalContextBase *fin);
+		  	 LogEvent *le, MDSInternalContextBase *fin, bool flush=false);
 
   CInodeRef prepare_new_inode(const MDRequestRef& mdr, CDentryRef& dn, inodeno_t useino,
 			      unsigned mode, file_layout_t *layout=NULL);
+  void project_alloc_inos(const MDRequestRef& mdr, CInode *in, inodeno_t useino);
+  void journal_allocated_inos(const MDRequestRef& mdr, LogEvent *le);
+  void apply_allocated_inos(const MDRequestRef& mdr);
+
   CDentryRef prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
 
   int rdlock_path_pin_ref(const MDRequestRef& mdr, int n,

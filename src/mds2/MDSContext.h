@@ -34,11 +34,6 @@ protected:
   virtual MDSRank *get_mds() = 0;
 };
 
-
-/**
- * A context which must be called with the big MDS lock held.  Subclass
- * this with a get_mds implementation.
- */
 class MDSInternalContextBase : public MDSContext
 {
 public:
@@ -58,5 +53,30 @@ public:
   explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
     assert(mds != NULL);
   }
+};
+
+class MDSIOContextBase : public MDSContext
+{
+  void complete(int r);
+};
+
+class MDSIOContext : public MDSIOContextBase
+{
+protected:
+  MDSRank *mds;
+  virtual MDSRank* get_mds();
+
+public:
+  explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
+    assert(mds != NULL);
+  }
+};
+
+class C_MDSInternalNoop : public MDSInternalContextBase
+{
+  virtual MDSRank* get_mds() {assert(0);}
+public:
+  void finish(int r) {}
+  void complete(int r) {}
 };
 #endif  // MDS_CONTEXT_H

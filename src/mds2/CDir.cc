@@ -7,6 +7,8 @@
 #include "Locker.h"
 #include "Mutation.h"
 
+#include "events/EMetaBlob.h"
+
 #include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -343,7 +345,7 @@ void CDir::assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlo
 
     in->mutex_lock();
     in->clear_dirty_rstat();
-    //blob->add_primary_dentry(in->get_projected_parent_dn(), in, true);
+    blob->add_primary_dentry(in->get_projected_parent_dn(), in, true);
     in->mutex_unlock();
   }
 

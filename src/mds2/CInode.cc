@@ -5,12 +5,24 @@
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"
+#include "MDLog.h"
+#include "SessionMap.h"
 
 #include "messages/MClientCaps.h"
+
+#include "events/EUpdate.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.inode(" << vino() << ") "
+
+// crap
+snapid_t CInode::first(2);
+snapid_t CInode::last(CEPH_NOSNAP);
+snapid_t CInode::oldest_snap(CEPH_NOSNAP);
+fragtree_t CInode::dirfragtree;
+compact_map<snapid_t, old_inode_t> CInode::old_inodes;
+
 
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
@@ -182,8 +194,9 @@ void CInode::name_stray_dentry(string& dname) const
   dname = s;
 }
 
-void CInode::get_dirfrags(list<CDirRef>& ls)
+void CInode::get_dirfrags(list<CDir*>& ls)
 {
+  mutex_assert_locked_by_me();
   for (auto p = dirfrags.begin(); p != dirfrags.end(); ++p)
     ls.push_back(p->second);
 }
@@ -199,6 +212,17 @@ CDirRef CInode::get_or_open_dirfrag(frag_t fg)
     ref = dir;
   }
   return ref;
+}
+
+void CInode::close_dirfrag(frag_t fg)
+{
+  mutex_assert_locked_by_me();
+  auto p = dirfrags.find(fg);
+  assert(p != dirfrags.end());
+  CDir *dir = p->second;
+  assert(dir->get_num_ref() == 0);
+  delete dir;
+  dirfrags.erase(p);
 }
 
 inode_t *CInode::project_inode(std::map<string, bufferptr> **ppx)
@@ -959,10 +983,13 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir)
       mut->add_projected_fnode(dir, false);
       mut->pin(dir);
 
-      mdcache->start_log_entry();
-      // use finisher to simulate log flush
-      mdcache->mds->queue_context(new C_Inode_FragUpdate(this, dir, mut));
-      mdcache->submit_log_entry();
+      EUpdate *le = new EUpdate(NULL, ename);
+      le->metablob.add_dir(dir, true);
+
+      MDLog *mdlog = mdcache->mds->mdlog;
+      mdlog->start_entry(le);
+      mut->ls = mdlog->get_current_segment();
+      mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
 
       mut->start_committing();
     } else {
@@ -1083,7 +1110,7 @@ void CInode::finish_scatter_gather_update_accounted(int type, const MutationRef&
 
     dout(10) << " journaling updated frag accounted_ on " << *dir << dendl;
     assert(dir->is_projected());
-    //metablob->add_dir(dir, true);
+    metablob->add_dir(dir, true);
 
     if (type == CEPH_LOCK_INEST)
       dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
@@ -1157,11 +1184,11 @@ Capability *CInode::add_client_cap(Session *session)
   assert(client_caps.count(session->get_client()) == 0);
   client_caps[session->get_client()] = cap;
 
-  session->lock();
+  session->mutex_lock();
   session->touch_cap(cap);
   if (session->is_stale())
     cap->mark_stale();
-  session->unlock();
+  session->mutex_unlock();
 
   cap->client_follows = 1;
 
@@ -1178,9 +1205,9 @@ void CInode::remove_client_cap(Session *session)
   assert(p != client_caps.end());
   Capability *cap = p->second;;
 
-  session->lock();
+  session->mutex_lock();
   cap->item_session_caps.remove_myself();
-  session->unlock();
+  session->mutex_unlock();
 /*
   cap->item_revoking_caps.remove_myself();
   cap->item_client_revoking_caps.remove_myself();

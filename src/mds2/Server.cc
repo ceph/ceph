@@ -8,10 +8,18 @@
 #include "Locker.h"
 #include "Mutation.h"
 
+#include "MDLog.h"
+#include "SessionMap.h"
+#include "InoTable.h"
+#include "LogEvent.h"
+
 #include "messages/MClientSession.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientReconnect.h"
+
+#include "events/EUpdate.h"
+#include "events/ESession.h"
 
 #define dout_subsys ceph_subsys_mds
 
@@ -60,69 +68,262 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   return;
 }
 
+class C_MDS_session_finish : public ServerContext {
+  Session *session;
+  uint64_t state_seq;
+  bool open;
+  version_t cmapv;
+  interval_set<inodeno_t> inos;
+  version_t inotablev;
+  Context *fin;
+public:
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+    ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
+		       interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
+    ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+  void finish(int r) {
+    assert(r == 0);
+    server->__session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    if (fin) {
+      fin->complete(r);
+    }
+  }
+};
+
+void Server::__session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
+			      interval_set<inodeno_t>& inos, version_t piv)
+{
+  dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
+    << " " << pv << dendl;
+
+  mds->sessionmap->mutex_lock();
+
+  mds->sessionmap->mark_dirty(session);
+
+  if (piv) {
+    mds->inotable->mutex_lock();
+    mds->inotable->apply_release_ids(inos);
+    assert(mds->inotable->get_version() == piv);
+    mds->inotable->mutex_unlock();
+  }
+
+  // apply
+  if (session->get_state_seq() != state_seq) {
+    dout(10) << " journaled state_seq " << state_seq << " != current " << session->get_state_seq()
+      << ", noop" << dendl;
+    // close must have been canceled (by an import?), or any number of other things..
+    mds->sessionmap->mutex_unlock();
+  } else if (open) {
+    assert(session->is_opening());
+    mds->sessionmap->set_state(session, Session::STATE_OPEN);
+    mds->sessionmap->touch_session(session);
+    assert(session->connection != NULL);
+    session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
+    if (mdcache->is_readonly())
+      session->connection->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
+    mds->sessionmap->mutex_unlock();
+  } else if (session->is_closing() ||
+	     session->is_killing()) {
+    session->get();
+    if (session->is_closing()) {
+      // mark con disposable.  if there is a fault, we will get a
+      // reset and clean it up.  if the client hasn't received the
+      // CLOSE message yet, they will reconnect and get an
+      // ms_handle_remote_reset() and realize they had in fact closed.
+      // do this *before* sending the message to avoid a possible
+      // race.
+      if (session->connection != NULL) {
+	// Conditional because terminate_sessions will indiscrimately
+	// put sessions in CLOSING whether they ever had a conn or not.
+	session->connection->mark_disposable();
+      }
+
+      // reset session
+      mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
+      mds->sessionmap->set_state(session, Session::STATE_CLOSED);
+      session->clear();
+      mds->sessionmap->remove_session(session);
+    } else if (session->is_killing()) {
+      // destroy session, close connection
+      if (session->connection != NULL) {
+	session->connection->mark_down();
+      }
+      mds->sessionmap->remove_session(session);
+    } else {
+      assert(0);
+    }
+    mds->sessionmap->mutex_unlock();
+
+    // kill any lingering capabilities, leases, requests
+    session->mutex_lock();
+    while (!session->caps.empty()) {
+      Capability *cap = session->caps.front();
+      CInodeRef in = cap->get_inode();
+      session->mutex_unlock();
+
+      in->mutex_lock();
+      dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
+      locker->remove_client_cap(in.get(), session);
+      in->mutex_unlock();
+      in.reset();
+
+      session->mutex_lock();
+    }
+
+    while (!session->leases.empty()) {
+      DentryLease *l = session->leases.front();
+      CDentryRef dn = l->get_dentry();
+      session->mutex_unlock();
+
+      dn->mutex_lock();
+      dout(20) << " killing lease on " << *dn << dendl;
+      locker->remove_client_lease(dn.get(), session);
+      dn->mutex_unlock();
+
+      session->mutex_lock();
+    }
+
+    assert(session->requests.empty());
+    session->mutex_unlock();
+
+    /*
+    if (client_reconnect_gather.count(session->info.get_client())) {
+      dout(20) << " removing client from reconnect set" << dendl;
+      client_reconnect_gather.erase(session->info.get_client());
+
+      if (client_reconnect_gather.empty()) {
+	dout(7) << " client " << session->info.inst << " was last reconnect, finishing" << dendl;
+	reconnect_gather_finish();
+      }
+    }
+    */
+    session->put();
+  } else {
+    mds->sessionmap->mutex_unlock();
+    assert(0);
+  }
+}
+
+void Server::journal_close_session(Session *session, int state, Context *on_safe)
+{
+  uint64_t sseq = mds->sessionmap->set_state(session, state);
+  version_t pv = mds->sessionmap->mark_projected(session);
+  version_t piv = 0;
+
+  // release alloc and pending-alloc inos for this session
+  // and wipe out session state, in case the session close aborts for some reason
+  interval_set<inodeno_t> both;
+  both.swap(session->info.prealloc_inos);
+  both.insert(session->pending_prealloc_inos);
+  session->pending_prealloc_inos.clear();
+  if (both.size()) {
+    mds->inotable->mutex_lock();
+    mds->inotable->project_release_ids(both);
+    piv = mds->inotable->get_projected_version();
+    mds->inotable->mutex_unlock();
+  } else
+    piv = 0;
+
+  mds->mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
+		  		 new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe),
+				 true);
+
+#if 0
+  // clean up requests, too
+  elist<MDRequestImpl*>::iterator p =
+    session->requests.begin(member_offset(MDRequestImpl,
+	  item_session_request));
+  while (!p.end()) {
+    MDRequestRef mdr = mdcache->request_get((*p)->reqid);
+    ++p;
+    mdcache->request_kill(mdr);
+  }
+
+  finish_flush_session(session, session->get_push_seq());
+#endif
+}
+
 void Server::handle_client_session(MClientSession *m)
 {
   Session *session = mds->get_session(m);
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
 
+  bool need_unlock = false;
   switch (m->get_op()) {
-    case CEPH_SESSION_REQUEST_OPEN:
-      mds->get_session_map().mutex_lock();
+  case CEPH_SESSION_REQUEST_OPEN:
+    {
+      mds->sessionmap->mutex_lock();
+      need_unlock = true;
+      if (session->is_opening() ||
+          session->is_open() ||
+          session->is_stale() ||
+          session->is_killing()) {
+        dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
+        goto out_unlock;
+      }
+
       if (session->is_closed())
-	mds->get_session_map().add_session(session);
-      mds->get_session_map().set_state(session, Session::STATE_OPEN);
-      mds->get_session_map().mutex_unlock();
-      session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
-      break;
-    case CEPH_SESSION_REQUEST_CLOSE:
-      session->connection->send_message(new MClientSession(CEPH_SESSION_CLOSE));
+        mds->sessionmap->add_session(session);
 
-      session->lock();
-      while (!session->caps.empty()) {
-	Capability *cap = session->caps.front();
-	CInodeRef in = cap->get_inode();
-	session->unlock();
+      version_t pv = mds->sessionmap->mark_projected(session);
+      uint64_t sseq = mds->sessionmap->set_state(session, Session::STATE_OPENING);
+      mds->sessionmap->touch_session(session);
+      mds->mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
+				     new C_MDS_session_finish(this, session, sseq, true, pv),
+				     true);
+    }
+    break;
+  case CEPH_SESSION_REQUEST_CLOSE:
+    {
+      mds->sessionmap->mutex_lock();
+      need_unlock = true;
 
-	in->mutex_lock();
-	dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-	locker->remove_client_cap(in.get(), session);
-	in->mutex_unlock();
-	in.reset();
-
-	session->lock();
+      if (session->is_closed() ||
+          session->is_closing() ||
+          session->is_killing()) {
+        dout(10) << "already closed|closing|killing, dropping this req" << dendl;
+        goto out_unlock;	  
       }
-
-      while (!session->leases.empty()) {
-	DentryLease *l = session->leases.front();
-	CDentryRef dn = l->get_dentry();
-	session->unlock();
-
-	dn->mutex_lock();
-	dout(20) << " killing lease on " << *dn << dendl;
-	locker->remove_client_lease(dn.get(), session);
-	dn->mutex_unlock();
-
-	session->lock();
+      if (session->is_importing()) {
+        dout(10) << "ignoring close req on importing session" << dendl;
+        goto out_unlock;
       }
-
-      assert(session->requests.empty());
-      session->unlock();
-
-      mds->get_session_map().mutex_lock();
-      mds->get_session_map().set_state(session, Session::STATE_CLOSED);
-      session->clear();
-      mds->get_session_map().remove_session(session);
-      mds->get_session_map().mutex_unlock();
-      break;
-    case CEPH_SESSION_REQUEST_RENEWCAPS:
-      m->get_connection()->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()));
-      break;
-    case CEPH_SESSION_FLUSHMSG_ACK:
-      break;
-    default:
-      derr << "server unknown session op " << m->get_op() << dendl;
-      assert(0 == "server unknown session op");
+      assert(session->is_open() ||
+          session->is_stale() ||
+          session->is_opening());
+      if (m->get_seq() < session->get_push_seq()) {
+        dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq()
+          << ", dropping" << dendl;
+        goto out_unlock;	  
+      }
+      // We are getting a seq that is higher than expected.
+      // Handle the same as any other seqn error.
+      //
+      if (m->get_seq() != session->get_push_seq()) {
+        dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq()
+          << ", BUGGY!" << dendl;
+        mds->clog->warn() << "incorrect push seq " << m->get_seq() << " != "
+          << session->get_push_seq() << ", dropping"
+          << " from client : " << session->get_human_name();
+        goto out_unlock;	  
+      }
+      journal_close_session(session, Session::STATE_CLOSING, NULL);
+    }
+    break;
+  case CEPH_SESSION_REQUEST_RENEWCAPS:
+    m->get_connection()->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()));
+    break;
+  case CEPH_SESSION_FLUSHMSG_ACK:
+    break;
+  default:
+    derr << "server unknown session op " << m->get_op() << dendl;
+    assert(0 == "server unknown session op");
   }
+
+out_unlock:
+  if (need_unlock)
+    mds->sessionmap->mutex_unlock();
   m->put();
 }
 
@@ -130,32 +331,32 @@ void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
 
-    Session *session = 0;
-    if (req->get_source().is_client()) {
-      session = mds->get_session(req);
-      if (!session) {
-	dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-	req->put();
-	return;
-      }
-
-      if (session->is_closed() ||
-	  session->is_closing() ||
-	  session->is_killing()) {
-	dout(5) << "session closed|closing|killing, dropping" << dendl;
-	req->put();
-	return;
-      }
+  Session *session = 0;
+  if (req->get_source().is_client()) {
+    session = mds->get_session(req);
+    if (!session) {
+      dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
+      req->put();
+      return;
     }
+
+    if (session->is_closed() ||
+	session->is_closing() ||
+	session->is_killing()) {
+      dout(5) << "session closed|closing|killing, dropping" << dendl;
+      req->put();
+      return;
+    }
+  }
 
   MDRequestRef mdr = mdcache->request_start(req);
   if (!mdr)
     return;
 
   if (session) {
-    session->lock();
+    session->mutex_lock();
     session->requests.push_back(&mdr->item_session_request);
-    session->unlock();
+    session->mutex_unlock();
     mdr->session = session;
   }
 
@@ -291,6 +492,11 @@ void Server::early_reply(const MDRequestRef& mdr)
 {
   if (!g_conf->mds_early_reply)
     return;
+
+  if (mdr->alloc_ino) {
+    dout(10) << "early_reply - allocated ino, not allowed" << dendl;
+    return;
+  }
 
   MClientRequest *req = mdr->client_request;
   Session *session = mds->get_session(req); 
@@ -471,28 +677,202 @@ int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
 }
 
 void Server::journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
-			       LogEvent *le, MDSInternalContextBase *fin)
+			       LogEvent *le, MDSInternalContextBase *fin, bool flush)
 {
+  // start journal
+  mds->mdlog->start_entry(le);
+  mdr->ls = mds->mdlog->get_current_segment();
+
+  // drop inodetable/sessionmap lock ASAP
+  journal_allocated_inos(mdr, le);
+
+  mds->mdlog->submit_entry(le, fin, flush);
+
   mdr->tracei = tracei;
   mdr->tracedn = tracedn;
 
   early_reply(mdr);
 
-  // start journal
-  mdcache->start_log_entry();
-  // submit log
-
-  // use finisher to simulate log flush
-  mds->queue_context(fin);
- 
   mdr->unlock_all_objects();
-
-  mdcache->submit_log_entry();
 
   if (mdr->did_early_reply)
     locker->drop_rdlocks(mdr);
+  else
+    mds->mdlog->flush();
 
   mdr->start_committing();
+}
+
+CInodeRef Server::prepare_new_inode(const MDRequestRef& mdr, CDentryRef& dn,
+				    inodeno_t useino, unsigned mode, file_layout_t *layout)
+{
+  CInodeRef in = new CInode(mdcache);
+
+  inode_t *pi = in->__get_inode();
+  if (useino)
+    pi->ino = useino;
+
+  pi->version = 1;
+  pi->xattr_version = 1;
+  pi->nlink = 1;
+  pi->mode = mode;
+
+  memset(&pi->dir_layout, 0, sizeof(pi->dir_layout));
+  if (pi->is_dir()) {
+    pi->dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+  } else if (layout) {
+    pi->layout = *layout;
+  } else {
+    pi->layout = mdcache->get_default_file_layout();
+  }
+
+  pi->truncate_size = -1ull;  // not truncated, yet!
+  pi->truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
+
+  CInode *diri = dn->get_dir_inode();
+
+  dout(10) << oct << " dir mode 0" << diri->get_inode()->mode << " new mode 0" << mode << dec << dendl;
+
+  MClientRequest *req = mdr->client_request;
+  pi->uid = req->get_caller_uid();
+
+  if (diri->get_inode()->mode & S_ISGID) {
+    dout(10) << " dir is sticky" << dendl;
+    pi->gid = diri->get_inode()->gid;
+    if (S_ISDIR(mode)) {
+      dout(10) << " new dir also sticky" << dendl;
+      pi->mode |= S_ISGID;
+    }
+  } else {
+    pi->gid = req->get_caller_gid();
+  }
+
+  pi->ctime = pi->mtime = pi->atime = mdr->get_op_stamp();
+
+  if (req->get_data().length()) {
+    bufferlist::iterator p = req->get_data().begin();
+    // xattrs on new inode?
+    map<string,bufferptr> xattrs;
+    try {
+      ::decode(xattrs, p);
+    } catch (buffer::error& e) {
+    }
+    for (map<string,bufferptr>::iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
+      dout(10) << "prepare_new_inode setting xattr " << p->first << dendl;
+    }
+    in->__get_xattrs()->swap(xattrs);
+  }
+
+  in->mutex_lock();
+  return in;
+}
+
+void Server::project_alloc_inos(const MDRequestRef& mdr, CInode *in, inodeno_t useino)
+{
+  // assign ino
+  inodeno_t ino;
+  mds->sessionmap->mutex_lock(); // FIXME: lock session instead
+
+  if (mdr->session->info.prealloc_inos.size()) {
+    mdr->used_prealloc_ino = ino = mdr->session->take_ino(useino);  // prealloc -> used
+    mds->sessionmap->mark_projected(mdr->session);
+
+    dout(10) << "project_alloc_inos used_prealloc " << mdr->used_prealloc_ino
+	     << " (" << mdr->session->info.prealloc_inos
+	     << ", " << mdr->session->info.prealloc_inos.size() << " left)" << dendl;
+
+    if (useino && useino != ino) {
+      dout(0) << "WARNING: client specified " << useino << " and i allocated " << ino << dendl;
+      mds->clog->error() << mdr->session->get_source() << " specified ino " << useino
+			 << " but mds." << mds->get_nodeid() << " allocated " << ino << "\n";
+      assert(0); // just for now.
+    }
+  } else {
+    mds->inotable->mutex_lock();
+    mdr->alloc_ino = ino = mds->inotable->project_alloc_id();
+    dout(10) << "project_alloc_inos alloc " << mdr->alloc_ino << dendl;
+  }
+
+  int got = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+  if (got > g_conf->mds_client_prealloc_inos / 2) {
+    if (!mdr->alloc_ino)
+      mds->inotable->mutex_lock();
+    mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
+    assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
+    mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
+    mds->sessionmap->mark_projected(mdr->session);
+    dout(10) << "project_alloc_inos prealloc " << mdr->prealloc_inos << dendl;
+  }
+
+  if (useino)
+    assert(in->ino() == useino);
+  else
+    in->__get_inode()->ino = ino;
+
+  mdcache->add_inode(in);  // add
+}
+
+void Server::journal_allocated_inos(const MDRequestRef& mdr, LogEvent *le)
+{
+  if (!mdr->alloc_ino  && !mdr->used_prealloc_ino)
+    return;
+
+  version_t inotable_pv = 0;
+  if (mdr->alloc_ino || !mdr->prealloc_inos.empty())
+    inotable_pv = mds->inotable->get_projected_version();
+
+  dout(20) << "journal_allocated_inos sessionmapv "
+	   << mds->sessionmap->get_projected()
+	   << " inotablev " << inotable_pv << dendl;
+
+
+  le->get_metablob()->set_ino_alloc(mdr->alloc_ino,
+				    mdr->used_prealloc_ino,
+				    mdr->prealloc_inos,
+				    mdr->session->get_source(),
+				    mds->sessionmap->get_projected(),
+				    inotable_pv);
+
+  if (inotable_pv)
+    mds->inotable->mutex_unlock();
+  mds->sessionmap->mutex_unlock();
+}
+
+void Server::apply_allocated_inos(const MDRequestRef& mdr)
+{
+  if (!mdr->alloc_ino  && !mdr->used_prealloc_ino)
+    return;
+
+  Session *session = mdr->session;
+  dout(10) << "apply_allocated_inos " << mdr->alloc_ino
+	   << " / " << mdr->prealloc_inos
+	   << " / " << mdr->used_prealloc_ino << dendl;
+
+  mds->sessionmap->mutex_lock();
+  if (mdr->alloc_ino || !mdr->prealloc_inos.empty())
+    mds->inotable->mutex_lock();
+
+  if (mdr->alloc_ino) {
+    mds->inotable->apply_alloc_id(mdr->alloc_ino);
+  }
+  if (mdr->prealloc_inos.size()) {
+    assert(session);
+    if (true /*!mdr->killed*/) {
+      session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+      session->info.prealloc_inos.insert(mdr->prealloc_inos);
+    }
+    mds->sessionmap->mark_dirty(session);
+    mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
+  }
+  if (mdr->used_prealloc_ino) {
+    assert(session);
+    session->info.used_inos.erase(mdr->used_prealloc_ino);
+    mds->sessionmap->mark_dirty(session);
+  }
+
+  if (mdr->alloc_ino || !mdr->prealloc_inos.empty())
+    mds->inotable->mutex_unlock();
+  mds->sessionmap->mutex_unlock();
 }
 
 void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
@@ -592,6 +972,9 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     return;
   }
 
+  EUpdate *le = new EUpdate(NULL, "setattr");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdcache->lock_objects_for_update(mdr, in.get(), false);
 
   mdr->add_projected_inode(in.get(), true);
@@ -620,8 +1003,10 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
       pi->truncate(old_size, req->head.args.setattr.size);
       truncate_smaller = true;
       // FIXME: 
+      // le->metablob.add_truncate_start(in->ino());
       pi->truncate_from = 0;
       pi->truncate_pending--;
+
     } else {
       pi->size = req->head.args.setattr.size;
       pi->rstat.rbytes = pi->size;
@@ -640,80 +1025,19 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     }
   }
 
-  mdcache->predirty_journal_parents(mdr, NULL, in.get(), NULL, PREDIRTY_PRIMARY);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), NULL, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
   // journal inode;
 
   CDentryRef null_dn; 
-  journal_and_reply(mdr, 0, -1, NULL, new C_MDS_inode_update_finish(this, mdr, truncate_smaller));
-}
-
-CInodeRef Server::prepare_new_inode(const MDRequestRef& mdr, CDentryRef& dn,
-				    inodeno_t useino, unsigned mode, file_layout_t *layout)
-{
-  CInodeRef in = new CInode(mdcache);
-
-  inode_t *pi = in->__get_inode();
-  pi->ino = mdcache->alloc_ino();
-
-  pi->version = 1;
-  pi->xattr_version = 1;
-  pi->nlink = 1;
-  pi->mode = mode;
-
-  memset(&pi->dir_layout, 0, sizeof(pi->dir_layout));
-  if (pi->is_dir()) {
-    pi->dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
-  } else if (layout) {
-    pi->layout = *layout;
-  } else {
-    pi->layout = mdcache->get_default_file_layout();
-  }
-
-  pi->truncate_size = -1ull;  // not truncated, yet!
-  pi->truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
-
-  CInode *diri = dn->get_dir_inode();
-
-  dout(10) << oct << " dir mode 0" << diri->get_inode()->mode << " new mode 0" << mode << dec << dendl;
-
-  MClientRequest *req = mdr->client_request;
-  pi->uid = req->get_caller_uid();
-
-  if (diri->get_inode()->mode & S_ISGID) {
-    dout(10) << " dir is sticky" << dendl;
-    pi->gid = diri->get_inode()->gid;
-    if (S_ISDIR(mode)) {
-      dout(10) << " new dir also sticky" << dendl;
-      pi->mode |= S_ISGID;
-    }
-  } else {
-    pi->gid = req->get_caller_gid();
-  }
-
-  pi->ctime = pi->mtime = pi->atime = mdr->get_op_stamp();
-
-  if (req->get_data().length()) {
-    bufferlist::iterator p = req->get_data().begin();
-    // xattrs on new inode?
-    map<string,bufferptr> xattrs;
-    try {
-      ::decode(xattrs, p);
-    } catch (buffer::error& e) {
-    }
-    for (map<string,bufferptr>::iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
-      dout(10) << "prepare_new_inode setting xattr " << p->first << dendl;
-    }
-    in->__get_xattrs()->swap(xattrs);
-  }
-
-  in->mutex_lock();
-  mdcache->add_inode(in.get());  // add
-  return in;
+  journal_and_reply(mdr, 0, -1, le, new C_MDS_inode_update_finish(this, mdr, truncate_smaller));
 }
 
 void Server::__mknod_finish(const MDRequestRef& mdr)
 {
   mdr->wait_committing();
+
+  apply_allocated_inos(mdr);
 
   CInodeRef& in = mdr->in[0];
   CDentryRef& dn = mdr->dn[0].back();
@@ -770,10 +1094,13 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
     return;
   }
 
+  MClientRequest *req = mdr->client_request;
+  EUpdate *le = new EUpdate(NULL, "mknod");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdr->lock_object(diri);
   assert(dn->get_projected_linkage()->is_null());
 
-  MClientRequest *req = mdr->client_request;
   unsigned mode = req->head.args.mknod.mode;
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
@@ -814,10 +1141,14 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  
+  project_alloc_inos(mdr, newi.get(), inodeno_t(req->head.ino));
+
+  le->metablob.add_primary_dentry(dn.get(), newi.get(), true, true, true);
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
+  journal_and_reply(mdr, 0, 0, le, new C_MDS_mknod_finish(this, mdr));
 }
 
 void Server::handle_client_symlink(const MDRequestRef& mdr)
@@ -838,10 +1169,13 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
     return;
   }
 
+  MClientRequest *req = mdr->client_request;
+  EUpdate *le = new EUpdate(NULL, "symlink");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdr->lock_object(diri);
   assert(dn->get_projected_linkage()->is_null());
 
-  MClientRequest *req = mdr->client_request;
   unsigned mode = S_IFLNK | 0777; 
 
   CInodeRef newi = prepare_new_inode(mdr, dn, inodeno_t(req->head.ino), mode);
@@ -858,10 +1192,14 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+
+  project_alloc_inos(mdr, newi.get(), inodeno_t(req->head.ino));
+
+  le->metablob.add_primary_dentry(dn.get(), newi.get(), true, true);
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
+  journal_and_reply(mdr, 0, 0, le, new C_MDS_mknod_finish(this, mdr));
 };
 
 void Server::handle_client_mkdir(const MDRequestRef& mdr)
@@ -882,10 +1220,13 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
     return;
   }
 
+  MClientRequest *req = mdr->client_request;
+  EUpdate *le = new EUpdate(NULL, "mkdir");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdr->lock_object(diri);
   assert(dn->get_projected_linkage()->is_null());
 
-  MClientRequest *req = mdr->client_request;
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
   mode |= S_IFDIR;
@@ -917,10 +1258,15 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+
+  project_alloc_inos(mdr, newi.get(), inodeno_t(req->head.ino));
+
+  le->metablob.add_primary_dentry(dn.get(), newi.get(), true, true);
+  le->metablob.add_new_dir(newdir.get());
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
+  journal_and_reply(mdr, 0, 0, le, new C_MDS_mknod_finish(this, mdr));
 }
 
 void Server::handle_client_readdir(const MDRequestRef& mdr)
@@ -1087,10 +1433,10 @@ bool Server::directory_is_nonempty(CInodeRef& diri)
   frag_info_t dirstat;
   version_t dirstat_version = diri->get_projected_inode()->dirstat.version;
 
-  list<CDirRef> ls;
+  list<CDir*> ls;
   diri->get_dirfrags(ls);
   for (auto p = ls.begin(); p != ls.end(); ++p) {
-    CDirRef& dir = *p;
+    CDir* dir = *p;
     const fnode_t *pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
       dout(10) << "directory_is_nonempty has " << pf->fragstat.size()
@@ -1167,6 +1513,9 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
     return;
   }
 
+  EUpdate *le = new EUpdate(NULL, "unlink");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdcache->lock_parents_for_linkunlink(mdr, in.get(), dn.get(), false);
 
   const CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -1201,15 +1550,18 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
   dn->push_projected_linkage();
 
   if (dnl->is_primary()) {
-    mdcache->predirty_journal_parents(mdr, NULL, in.get(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-    mdcache->predirty_journal_parents(mdr, NULL, in.get(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    le->metablob.add_primary_dentry(straydn.get(), in.get(), true, true);
   } else {
-    mdcache->predirty_journal_parents(mdr, NULL, in.get(), NULL, PREDIRTY_PRIMARY);
-    mdcache->predirty_journal_parents(mdr, NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), NULL, PREDIRTY_PRIMARY);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), dn->get_dir(), PREDIRTY_DIR, -1);
+    mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
   }
+  le->metablob.add_null_dentry(dn.get(), true);
 
   mdr->straydn = straydn;
-  journal_and_reply(mdr, -1, 0, NULL, new C_MDS_unlink_finish(this, mdr, dnpv));
+  journal_and_reply(mdr, -1, 0, le, new C_MDS_unlink_finish(this, mdr, dnpv));
 }
 
 void Server::__link_finish(const MDRequestRef& mdr, version_t dnpv)
@@ -1272,6 +1624,10 @@ void Server::handle_client_link(const MDRequestRef& mdr)
     return;
   }
 
+  MClientRequest *req = mdr->client_request;
+  EUpdate *le = new EUpdate(NULL, "link");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdcache->lock_parents_for_linkunlink(mdr, in.get(), dn.get(), false);
   assert(dn->get_projected_linkage()->is_null());
 
@@ -1287,10 +1643,12 @@ void Server::handle_client_link(const MDRequestRef& mdr)
   pi->ctime = mdr->get_op_stamp();
   pi->nlink++;
 
-  mdcache->predirty_journal_parents(mdr, NULL, in.get(), dn->get_dir(), PREDIRTY_DIR, 1);
-  mdcache->predirty_journal_parents(mdr, NULL, in.get(), 0, PREDIRTY_PRIMARY);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), dn->get_dir(), PREDIRTY_DIR, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
+  le->metablob.add_remote_dentry(dn.get(), true, in->ino(), in->d_type());  // new remote
 
-  journal_and_reply(mdr, 1, 0, NULL, new C_MDS_link_finish(this, mdr, dnpv));
+  journal_and_reply(mdr, 1, 0, le, new C_MDS_link_finish(this, mdr, dnpv));
 }
 
 void Server::__rename_finish(const MDRequestRef& mdr, version_t srcdn_pv, version_t destdn_pv)
@@ -1449,6 +1807,10 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     return;
   }
 
+  MClientRequest *req = mdr->client_request;
+  EUpdate *le = new EUpdate(NULL, "rename");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   const CDentry::linkage_t *src_dnl = srcdn->get_projected_linkage();
   const CDentry::linkage_t *dest_dnl = destdn->get_projected_linkage();
   
@@ -1538,34 +1900,49 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
   }
 
   if (straydn) {
-    mdcache->predirty_journal_parents(mdr, NULL, oldin.get(), straydn->get_dir(),
+    mdcache->predirty_journal_parents(mdr, &le->metablob, oldin.get(), straydn->get_dir(),
 				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   }
   int predirty_dir = linkmerge ? 0 : PREDIRTY_DIR;
   int predirty_primary;
   if (!dest_dnl->is_null()) {
     predirty_primary = dest_dnl->is_primary() ? PREDIRTY_PRIMARY : 0;
-    mdcache->predirty_journal_parents(mdr, NULL, oldin.get(), destdn->get_dir(),
+    mdcache->predirty_journal_parents(mdr, &le->metablob, oldin.get(), destdn->get_dir(),
 				      predirty_dir|predirty_primary , -1);
   }
 
   predirty_primary = (src_dnl->is_primary() && srcdn->get_dir() != destdn->get_dir()) ? PREDIRTY_PRIMARY : 0;
-  mdcache->predirty_journal_parents(mdr, NULL, srci.get(), destdn->get_dir(),
+  mdcache->predirty_journal_parents(mdr, &le->metablob, srci.get(), destdn->get_dir(),
 				    predirty_dir|predirty_primary, 1);
-  mdcache->predirty_journal_parents(mdr, NULL, srci.get(), srcdn->get_dir(),
+  mdcache->predirty_journal_parents(mdr, &le->metablob, srci.get(), srcdn->get_dir(),
 				    predirty_dir|predirty_primary, -1);
 
   if (!linkmerge) {
     if (dest_dnl->is_remote()) {
-      mdcache->predirty_journal_parents(mdr, NULL, oldin.get(), NULL, PREDIRTY_PRIMARY);
+      mdcache->predirty_journal_parents(mdr, &le->metablob, oldin.get(), NULL, PREDIRTY_PRIMARY);
     }
     if (src_dnl->is_remote()) {
-      mdcache->predirty_journal_parents(mdr, NULL, srci.get(), NULL, PREDIRTY_PRIMARY);
+      mdcache->predirty_journal_parents(mdr, &le->metablob, srci.get(), NULL, PREDIRTY_PRIMARY);
     }
   }
 
+  if (straydn)
+    le->metablob.add_primary_dentry(straydn.get(), oldin.get(), true);
+
+  if (src_dnl->is_remote()) {
+    if (!linkmerge) {
+      le->metablob.add_remote_dentry(destdn.get(), true, src_dnl->get_remote_ino(), src_dnl->get_remote_d_type());
+    } else {
+      le->metablob.add_primary_dentry(destdn.get(), srci.get(), true, true);
+    }
+  } else {
+    le->metablob.add_primary_dentry(destdn.get(), srci.get(), true, true);
+  }
+
+  le->metablob.add_null_dentry(srcdn.get(), true);
+
   mdr->straydn = straydn;
-  journal_and_reply(mdr, 1, 0, NULL, new C_MDS_rename_finish(this, mdr, srcdn_pv, destdn_pv));
+  journal_and_reply(mdr, 1, 0, le, new C_MDS_rename_finish(this, mdr, srcdn_pv, destdn_pv));
 }
 
 void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
@@ -1573,6 +1950,9 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
   MClientRequest *req = mdr->client_request;
 
   CInodeRef& in = mdr->in[0];
+
+  EUpdate *le = new EUpdate(NULL, "open_truncate");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
 
   int tracedn = -1;
   if (req->get_dentry_wanted()) {
@@ -1609,11 +1989,15 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
     pi->client_ranges = new_ranges;
   }
 
-  mdcache->predirty_journal_parents(mdr, NULL, in.get(), NULL, PREDIRTY_PRIMARY);
+
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), NULL, PREDIRTY_PRIMARY);
   // journal inode;
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
+  le->metablob.add_opened_ino(in->ino());
 
-
-  journal_and_reply(mdr, 0, tracedn, NULL, new C_MDS_inode_update_finish(this, mdr, old_size > 0));
+  journal_and_reply(mdr, 0, tracedn, le,
+		    new C_MDS_inode_update_finish(this, mdr, old_size > 0),
+		    true);
 }
 
 void Server::handle_client_open(const MDRequestRef& mdr)
@@ -1688,9 +2072,8 @@ void Server::handle_client_open(const MDRequestRef& mdr)
   if (in->is_file() || in->is_dir()) {
     // register new cap
     Capability *cap = mds->locker->issue_new_caps(in.get(), cmode, mdr->session, req->is_replay());
-    if (cap)
-      dout(12) << "open issued caps " << ccap_string(cap->pending())
-	       << " for " << req->get_source() << " on " << *in << dendl;
+    dout(12) << "open issued caps " << ccap_string(cap->pending())
+	     << " for " << req->get_source() << " on " << *in << dendl;
   }
 
   // increase max_size?
@@ -1740,6 +2123,9 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
     return;
   }
 
+  EUpdate *le = new EUpdate(NULL, "openc");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   mdr->lock_object(diri);
   assert(dn->get_projected_linkage()->is_null());
 
@@ -1766,8 +2152,13 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
 
   dn->push_projected_linkage(newi.get());
 
-  mdcache->predirty_journal_parents(mdr, NULL, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, newi.get(), dn->get_dir(), PREDIRTY_PRIMARY, 1);
+
+  project_alloc_inos(mdr, newi.get(), inodeno_t(req->head.ino));
+
+  le->metablob.add_opened_ino(newi->ino());
+  le->metablob.add_primary_dentry(dn.get(), newi.get(), true, true, true);
 
   mdr->in[0] = newi;
-  journal_and_reply(mdr, 0, 0, NULL, new C_MDS_mknod_finish(this, mdr));
+  journal_and_reply(mdr, 0, 0, le, new C_MDS_mknod_finish(this, mdr));
 }

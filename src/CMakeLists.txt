@@ -916,6 +916,7 @@ add_subdirectory(script)
 set(ceph_mds2_srcs
   mds/mdstypes.cc
   mds/locks.c
+  mds/JournalPointer.cc
   mds2/ceph_mds2.cc
   mds2/MDSAuthCaps.cc
   mds2/CInode.cc
@@ -931,6 +932,13 @@ set(ceph_mds2_srcs
   mds2/SessionMap.cc
   mds2/MDSDaemon.cc
   mds2/MDSRank.cc
-  mds2/MDSContext.cc)
+  mds2/MDSContext.cc
+  mds2/MDSTable.cc
+  mds2/InoTable.cc
+  mds2/MDLog.cc
+  mds2/journal.cc
+  mds2/LogEvent.cc
+  osdc/Filer.cc
+  osdc/Journaler.cc)
 add_executable(ceph-mds2 ${ceph_mds2_srcs} $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(ceph-mds2 ${ALLOC_LIBS} global)

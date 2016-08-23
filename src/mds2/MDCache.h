@@ -10,7 +10,9 @@ class MDSRank;
 class Server;
 class Locker;
 class filepath;
+class LogSegment;
 class EMetaBlob;
+class ESubtreeMap;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -37,10 +39,14 @@ protected:
   CInodeRef strays[NUM_STRAY]; 
 
   file_layout_t default_file_layout;
+  file_layout_t default_log_layout;
 
 public:
   const file_layout_t& get_default_file_layout() const {
     return default_file_layout;
+  }
+  const file_layout_t& get_default_log_layout() const {
+    return default_log_layout;
   }
 
   CInodeRef create_system_inode(inodeno_t ino, int mode);
@@ -48,7 +54,7 @@ public:
   void create_mydir_hierarchy();
   void add_inode(CInode *in);
   void remove_inode(CInode *in);
-
+  void remove_inode_recursive(CInode *in);
 
   CInodeRef get_inode(const vinodeno_t &vino);
   CInodeRef get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
@@ -61,6 +67,7 @@ public:
   int path_traverse(const MDRequestRef& mdr,
 		    const filepath& path, vector<CDentryRef> *pdnvec, CInodeRef *pin);
 
+  void advance_stray() {}
   CDentryRef get_or_create_stray_dentry(CInode *in);
 
 protected:
@@ -89,6 +96,7 @@ public:
   void predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
 				CInode *in, CDir *parent, int flags,
 				int linkunlink = 0);
+  void journal_dirty_inode(const MutationRef& mut, EMetaBlob *metablob, CInode *in);
 
   void dispatch(Message *m) { assert(0); } // does not support cache message yet
   void shutdown() {}
@@ -100,13 +108,12 @@ public:
 
 
   MDCache(MDSRank *_mds);
-private: // crap
-  Mutex journal_mutex;
-  ceph::atomic64_t last_ino;
 public:
 
-  void start_log_entry() { journal_mutex.Lock(); }
-  void submit_log_entry() { journal_mutex.Unlock(); }
-  inodeno_t alloc_ino() { return last_ino.inc(); }
+  ESubtreeMap *create_subtree_map();
+
+  bool is_readonly() const { return false; }
+  bool trim(int max=-1, int count=-1) { return false; };
+  void standby_trim_segment(LogSegment *ls) {}
 };
 #endif

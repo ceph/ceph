@@ -31,6 +31,7 @@
 
 #include "MDSMap.h"
 #include "MDSDaemon.h"
+#include "SessionMap.h"
 
 #include "common/HeartbeatMap.h"
 #include "common/perf_counters.h"
@@ -947,9 +948,9 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       // If we do hold a rank, see if this is an existing client establishing
       // a new connection, rather than a new client
       
-      mds_rank->get_session_map().mutex_lock();
-      s = mds_rank->get_session_map().get_session(n);
-      mds_rank->get_session_map().mutex_unlock();
+      mds_rank->sessionmap->mutex_lock();
+      s = mds_rank->sessionmap->get_session(n);
+      mds_rank->sessionmap->mutex_unlock();
     }
 
     // Wire up a Session* to this connection

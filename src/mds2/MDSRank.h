@@ -23,7 +23,6 @@
 
 #include "Beacon.h"
 #include "MDSMap.h"
-#include "SessionMap.h"
 #include "MDSContext.h"
 
 #include "common/WorkQueue.h"
@@ -40,6 +39,11 @@ class Messenger;
 class MonClient;
 class Finisher;
 class MMDSMap;
+class Objecter;
+class SessionMap;
+class Session;
+class InoTable;
+class MDLog;
 
 struct MDRequestImpl;
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
@@ -79,10 +83,16 @@ public:
 
   MDSMap *&mdsmap;
 
+  Objecter     *objecter;
+
   // sub systems
   Server       *server;
   Locker       *locker;
   MDCache      *mdcache;
+
+  MDLog        *mdlog;
+  SessionMap   *sessionmap;
+  InoTable     *inotable;
 
   // The last different state I held before current
   MDSMap::DaemonState last_state;
@@ -106,7 +116,9 @@ public:
   bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
   bool is_stopped() const { return mdsmap->is_stopped(whoami); }
 
-  void handle_write_error(int err);
+  void handle_write_error(int err) { assert(0); };
+  void damaged() { assert(0); }
+  void damaged_unlocked() { assert(0); }
 
 protected:
   // Flag to indicate we entered shutdown: anyone seeing this to be true
@@ -131,6 +143,7 @@ protected:
    */
   epoch_t      last_client_mdsmap_bcast;
 
+  void create_logger();
 public:
   MDSRank(
       mds_rank_t whoami_,
@@ -173,12 +186,7 @@ public:
 
   void bcast_mds_map();  // to mounted clients
 
-protected:
-  SessionMap   sessionmap;
 public:
-  SessionMap& get_session_map() { return sessionmap; }
-
-  Session *get_session(client_t client);
   Session *get_session(Message *m);
 
   MDSMap *get_mds_map() { return mdsmap; }
@@ -204,8 +212,9 @@ protected:
     // Replay is complete
     MDS_BOOT_REPLAY_DONE
   } BootStep;
-  void boot_create();             // i am new mds.
+  friend class C_MDS_BootStart;
   void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
+  void boot_create();             // i am new mds.
 
   void starting_done();
   void creating_done();
@@ -229,12 +238,12 @@ protected:
   // <<<
 
 protected:
-  Finisher *finisher;
 
   ThreadPool op_tp;
   ThreadPool msg_tp;
 
 public:
+  Finisher *finisher;
   void queue_context(MDSInternalContextBase *c);
 
   struct OpWQ: public ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t> {
