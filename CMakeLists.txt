@@ -414,3 +414,4 @@ if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()
 
+option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
