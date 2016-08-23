@@ -222,8 +222,6 @@ void MDSRankDispatcher::shutdown()
   // threads block on IOs that require finisher to complete.
   mdlog->shutdown();
 
-  finisher->stop(); // no flushing
-
   // shut down cache
   mdcache->shutdown();
 
@@ -236,8 +234,16 @@ void MDSRankDispatcher::shutdown()
 
   progress_thread.shutdown();
 
+  // release mds_lock for finisher/messenger threads (e.g.
+  // MDSDaemon::ms_handle_reset called from Messenger).
+  mds_lock.Unlock();
+
+  finisher->stop(); // no flushing
+
   // shut down messenger
   messenger->shutdown();
+
+  mds_lock.Lock();
 
   // Workaround unclean shutdown: HeartbeatMap will assert if
   // worker is not removed (as we do in ~MDS), but ~MDS is not
