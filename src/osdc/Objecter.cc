@@ -5108,8 +5108,15 @@ namespace {
 			       int *rval)
       : interval(interval), snapsets(snapsets), rval(rval) {}
     void finish(int r) override {
-      if (r < 0 && r != -EAGAIN)
+      if (r < 0 && r != -EAGAIN) {
+        if (rval)
+          *rval = r;
 	return;
+      }
+
+      if (rval)
+        *rval = 0;
+
       try {
 	decode();
       } catch (buffer::error&) {
