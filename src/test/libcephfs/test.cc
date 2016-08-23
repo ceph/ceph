@@ -1595,3 +1595,40 @@ TEST(LibCephFS, ChangeAttr) {
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, DirChangeAttr) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char dirname[32], filename[32];
+  sprintf(dirname, "/dirchange%x", getpid());
+  sprintf(filename, "%s/foo", dirname);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dirname, 0755), 0);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+
+  uint64_t old_change_attr = stx.stx_version;
+
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+  ceph_close(cmount, fd);
+
+  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+
+  old_change_attr = stx.stx_version;
+
+  ASSERT_EQ(ceph_unlink(cmount, filename), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+
+  ceph_shutdown(cmount);
+}
