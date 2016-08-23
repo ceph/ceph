@@ -340,6 +340,8 @@ int global_init_prefork(CephContext *cct)
   }
 
   cct->notify_pre_fork();
+  // stop service thread
+  cct->join_service_thread();
   // stop log thread
   cct->_log->flush();
   cct->_log->stop();
@@ -371,6 +373,8 @@ void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
   cct->_log->start();
+  // restart service thread
+  cct->start_service_thread();
   cct->notify_post_fork();
 
   /* This is the old trick where we make file descriptors 0, 1, and possibly 2

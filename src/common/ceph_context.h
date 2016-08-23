@@ -79,6 +79,9 @@ public:
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 
+  /* Stop and join the Ceph Context's service thread */
+  void join_service_thread();
+
   /* Reopen the log files */
   void reopen_logs();
 
@@ -222,9 +225,6 @@ private:
 
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
-
-  /* Stop and join the Ceph Context's service thread */
-  void join_service_thread();
 
   uint32_t _module_type;
 

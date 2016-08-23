@@ -650,6 +650,10 @@ void CephContext::join_service_thread()
   thread->exit_thread();
   thread->join();
   delete thread;
+
+  // shut down admin socket
+  if (_conf->admin_socket.length())
+    _admin_socket->shutdown();
 }
 
 uint32_t CephContext::get_module_type() const
