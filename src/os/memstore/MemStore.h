@@ -95,32 +95,6 @@ public:
   };
   typedef Object::Ref ObjectRef;
 
-  struct BufferlistObject : public Object {
-    Spinlock mutex;
-    bufferlist data;
-
-    size_t get_size() const override { return data.length(); }
-
-    int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
-    int write(uint64_t offset, const bufferlist &bl) override;
-    int clone(Object *src, uint64_t srcoff, uint64_t len,
-              uint64_t dstoff) override;
-    int truncate(uint64_t offset) override;
-
-    void encode(bufferlist& bl) const override {
-      ENCODE_START(1, 1, bl);
-      ::encode(data, bl);
-      encode_base(bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator& p) override {
-      DECODE_START(1, p);
-      ::decode(data, p);
-      decode_base(p);
-      DECODE_FINISH(p);
-    }
-  };
-
   struct PageSetObject;
   struct Collection : public CollectionImpl {
     coll_t cid;
