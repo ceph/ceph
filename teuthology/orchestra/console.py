@@ -32,10 +32,9 @@ class PhysicalConsole():
         self.ipmiuser = ipmiuser or config.ipmi_user
         self.ipmipass = ipmipass or config.ipmi_password
         self.ipmidomain = ipmidomain or config.ipmi_domain
-        self.has_ipmi_credentials = all(map(
-            lambda x: x is not None,
+        self.has_ipmi_credentials = all(
             [self.ipmiuser, self.ipmipass, self.ipmidomain]
-        ))
+        )
 
     def _check_credentials(self):
         if not self.has_ipmi_credentials:
