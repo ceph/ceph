@@ -739,7 +739,7 @@ public:
 
   // -- misc -- 
   bool is_projected_ancestor_of(CInode *other);
-  void make_path_string(std::string& s, bool force=false, CDentry *use_parent=NULL) const;
+  void make_path_string(std::string& s, CDentry *use_parent=NULL) const;
   void make_path_string_projected(std::string& s) const;
   void make_path(filepath& s) const;
   void name_stray_dentry(std::string& dname);
