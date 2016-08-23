@@ -136,6 +136,7 @@
 #define MSG_MDS_FINDINOREPLY       0x20e
 #define MSG_MDS_OPENINO            0x20f
 #define MSG_MDS_OPENINOREPLY       0x210
+#define MSG_MDS_SCRUBPATH          0x211
 
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301

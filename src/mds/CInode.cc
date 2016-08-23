@@ -3932,6 +3932,9 @@ next:
           p != frags.end();
           ++p) {
         CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
+	if (in->scrub_infop && !dir->is_auth()) {
+	  return immediate(DIRFRAGS, 0);
+	}
 	dir->scrub_info();
 	if (!dir->scrub_infop->header && in->scrub_infop)
 	  dir->scrub_infop->header = in->scrub_infop->header;

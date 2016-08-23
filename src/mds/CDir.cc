@@ -2934,7 +2934,7 @@ void CDir::scrub_info_create() const
 void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
 {
   dout(20) << __func__ << dendl;
-  assert(is_complete());
+  assert(!is_auth() || is_complete());
 
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
@@ -2951,21 +2951,23 @@ void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
   scrub_infop->others_scrubbing.clear();
   scrub_infop->others_scrubbed.clear();
 
-  for (map_t::iterator i = items.begin();
-      i != items.end();
-      ++i) {
-    // TODO: handle snapshot scrubbing
-    if (i->first.snapid != CEPH_NOSNAP)
-      continue;
+  if (is_auth()) {
+    for (map_t::iterator i = items.begin();
+	 i != items.end();
+	 ++i) {
+      // TODO: handle snapshot scrubbing
+      if (i->first.snapid != CEPH_NOSNAP)
+	continue;
 
-    CDentry::linkage_t *dnl = i->second->get_projected_linkage();
-    if (dnl->is_primary()) {
-      if (dnl->get_inode()->is_dir())
-	scrub_infop->directories_to_scrub.insert(i->first);
-      else
-	scrub_infop->others_to_scrub.insert(i->first);
-    } else if (dnl->is_remote()) {
-      // TODO: check remote linkage
+      CDentry::linkage_t *dnl = i->second->get_projected_linkage();
+      if (dnl->is_primary()) {
+	if (dnl->get_inode()->is_dir())
+	  scrub_infop->directories_to_scrub.insert(i->first);
+	else
+	  scrub_infop->others_to_scrub.insert(i->first);
+      } else if (dnl->is_remote()) {
+	// TODO: check remote linkage
+      }
     }
   }
   scrub_infop->directory_scrubbing = true;

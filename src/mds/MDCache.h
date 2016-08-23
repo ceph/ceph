@@ -33,6 +33,7 @@
 #include "MDSMap.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MMDSScrubPath.h"
 #include "messages/MMDSSlaveRequest.h"
 
 class PerfCounters;
@@ -1170,6 +1171,8 @@ public:
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
+
+  void handle_scrub_path(MMDSScrubPath *m);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {
