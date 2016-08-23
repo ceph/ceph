@@ -1449,9 +1449,35 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
 
   return 0;
 }
+namespace {
+struct BufferlistObject : public MemStore::Object {
+  Spinlock mutex;
+  bufferlist data;
 
+  size_t get_size() const override { return data.length(); }
+
+  int read(uint64_t offset, uint64_t len, bufferlist &bl) override;
+  int write(uint64_t offset, const bufferlist &bl) override;
+  int clone(Object *src, uint64_t srcoff, uint64_t len,
+            uint64_t dstoff) override;
+  int truncate(uint64_t offset) override;
+
+  void encode(bufferlist& bl) const override {
+    ENCODE_START(1, 1, bl);
+    ::encode(data, bl);
+    encode_base(bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) override {
+    DECODE_START(1, p);
+    ::decode(data, p);
+    decode_base(p);
+    DECODE_FINISH(p);
+  }
+};
+}
 // BufferlistObject
-int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
+int BufferlistObject::read(uint64_t offset, uint64_t len,
                                      bufferlist &bl)
 {
   std::lock_guard<Spinlock> lock(mutex);
@@ -1459,7 +1485,7 @@ int MemStore::BufferlistObject::read(uint64_t offset, uint64_t len,
   return bl.length();
 }
 
-int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
+int BufferlistObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
 
@@ -1487,7 +1513,7 @@ int MemStore::BufferlistObject::write(uint64_t offset, const bufferlist &src)
   return 0;
 }
 
-int MemStore::BufferlistObject::clone(Object *src, uint64_t srcoff,
+int BufferlistObject::clone(Object *src, uint64_t srcoff,
                                       uint64_t len, uint64_t dstoff)
 {
   auto srcbl = dynamic_cast<BufferlistObject*>(src);
@@ -1506,7 +1532,7 @@ int MemStore::BufferlistObject::clone(Object *src, uint64_t srcoff,
   return write(dstoff, bl);
 }
 
-int MemStore::BufferlistObject::truncate(uint64_t size)
+int BufferlistObject::truncate(uint64_t size)
 {
   std::lock_guard<Spinlock> lock(mutex);
   if (get_size() > size) {
