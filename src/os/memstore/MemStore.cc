@@ -597,6 +597,51 @@ int MemStore::omap_check_keys(
   return 0;
 }
 
+class MemStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+  CollectionRef c;
+  ObjectRef o;
+  map<string,bufferlist>::iterator it;
+public:
+  OmapIteratorImpl(CollectionRef c, ObjectRef o)
+    : c(c), o(o), it(o->omap.begin()) {}
+
+  int seek_to_first() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    it = o->omap.begin();
+    return 0;
+  }
+  int upper_bound(const string &after) {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    it = o->omap.upper_bound(after);
+    return 0;
+  }
+  int lower_bound(const string &to) {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    it = o->omap.lower_bound(to);
+    return 0;
+  }
+  bool valid() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    return it != o->omap.end();
+  }
+  int next(bool validate=true) {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    ++it;
+    return 0;
+  }
+  string key() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    return it->first;
+  }
+  bufferlist value() {
+    std::lock_guard<std::mutex>(o->omap_mutex);
+    return it->second;
+  }
+  int status() {
+    return 0;
+  }
+};
+
 ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(const coll_t& cid,
 							 const ghobject_t& oid)
 {
