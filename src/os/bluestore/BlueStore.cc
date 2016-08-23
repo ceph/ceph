@@ -2933,8 +2933,8 @@ void apply(uint64_t off,
           std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
   while (off < end) {
-  uint64_t pos = off / granularity;
-  f( pos, bitset);
+    uint64_t pos = off / granularity;
+    f(pos, bitset);
     off += granularity;
   }
 }
