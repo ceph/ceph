@@ -35,6 +35,18 @@ class PhysicalConsole():
         self.has_ipmi_credentials = all(
             [self.ipmiuser, self.ipmipass, self.ipmidomain]
         )
+        self.conserver_master = config.conserver_master
+        self.conserver_port = config.conserver_port
+        conserver_client_found = subprocess.Popen(
+            'which console',
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT).wait() == 0
+        self.has_conserver = all([
+            self.conserver_master,
+            self.conserver_port,
+            conserver_client_found,
+        ])
 
     def _check_credentials(self):
         if not self.has_ipmi_credentials:
