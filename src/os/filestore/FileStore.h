@@ -489,7 +489,8 @@ public:
   void _set_replay_guard(int fd,
 			 const SequencerPosition& spos,
 			 const ghobject_t *oid=0,
-			 bool in_progress=false);
+			 bool in_progress=false,
+			 bool sync_omap=true);
   void _set_replay_guard(const coll_t& cid,
                          const SequencerPosition& spos,
                          bool in_progress);

@@ -2331,7 +2331,8 @@ void FileStore::_set_replay_guard(const coll_t& cid,
 void FileStore::_set_replay_guard(int fd,
 				  const SequencerPosition& spos,
 				  const ghobject_t *hoid,
-				  bool in_progress)
+				  bool in_progress,
+				  bool sync_omap)
 {
   if (backend->can_checkpoint())
     return;
@@ -2346,7 +2347,8 @@ void FileStore::_set_replay_guard(int fd,
   // sync object_map too.  even if this object has a header or keys,
   // it have had them in the past and then removed them, so always
   // sync.
-  object_map->sync(hoid, &spos);
+  if (sync_omap)
+    object_map->sync(hoid, &spos);
 
   _inject_failure();
 
@@ -5153,7 +5155,7 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
       return 0;
     }
     if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
-      _set_replay_guard(**fd, spos, &o, true);
+      _set_replay_guard(**fd, spos, &o, true, false);
     }
 
     r = lfn_link(oldcid, c, oldoid, o);
@@ -5168,6 +5170,8 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
       r = object_map->clone(oldoid, o, &spos);
       if (r == -ENOENT)
 	r = 0;
+      if (r == 0)
+        object_map->sync(&o, &spos);
     }
 
     _inject_failure();
