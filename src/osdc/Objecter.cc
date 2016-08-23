@@ -4880,7 +4880,7 @@ void Objecter::set_epoch_barrier(epoch_t epoch)
   ldout(cct, 7) << __func__ << ": barrier " << epoch << " (was "
 		<< epoch_barrier << ") current epoch " << osdmap->get_epoch()
 		<< dendl;
-  if (epoch >= epoch_barrier) {
+  if (epoch > epoch_barrier) {
     epoch_barrier = epoch;
     _maybe_request_map();
   }
