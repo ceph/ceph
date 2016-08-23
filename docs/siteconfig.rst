@@ -220,3 +220,7 @@ Here is a sample configuration with many of the options set and documented::
 
     # The host running a [PCP](http://pcp.io/) manager
     pcp_host: http://pcp.front.sepia.ceph.com:44323/
+
+    # Settings for http://www.conserver.com/
+    conserver_master: conserver.front.sepia.ceph.com
+    conserver_port: 3109

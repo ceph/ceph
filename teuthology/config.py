@@ -137,6 +137,8 @@ class TeuthologyConfig(YamlConfig):
         'ceph_git_base_url': 'https://github.com/ceph/',
         'ceph_git_url': None,
         'ceph_qa_suite_git_url': None,
+        'conserver_master': 'conserver.front.sepia.ceph.com',
+        'conserver_port': 3109,
         'gitbuilder_host': 'gitbuilder.ceph.com',
         'githelper_base_url': 'http://git.ceph.com:8080',
         'check_package_signatures': True,
