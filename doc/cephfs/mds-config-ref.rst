@@ -10,6 +10,12 @@
 :Type: Boolean
 :Default: ``true`` 
 
+``mon allow multimds``
+
+:Description: Set to ``true`` to enable multiple active MDS servers. ``max mds`` is ignored unless this option is true.
+
+:Type:  Boolean
+:Default: ``false``
 
 ``max mds``
 
