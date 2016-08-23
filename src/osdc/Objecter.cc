@@ -4728,7 +4728,14 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
       return RECALC_OP_TARGET_POOL_DNE;
     }
     vector<int> acting;
-    osdmap->pg_to_acting_osds(c->target_pg, &acting, &c->osd);
+    int acting_primary;
+    osdmap->pg_to_acting_osds(c->target_pg, &acting, &acting_primary);
+    if (acting_primary == -1) {
+      c->map_check_error = -ENXIO;
+      c->map_check_error_str = "osd down";
+      return RECALC_OP_TARGET_OSD_DOWN;
+    }
+    c->osd = acting_primary;
   }
 
   OSDSession *s;
