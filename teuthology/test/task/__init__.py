@@ -146,6 +146,7 @@ class TestTask(object):
             setup=DEFAULT,
             begin=DEFAULT,
             end=DEFAULT,
+            teardown=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task.setup.assert_called_once_with()
@@ -156,6 +157,7 @@ class TestTask(object):
             setup=DEFAULT,
             begin=DEFAULT,
             end=DEFAULT,
+            teardown=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task.begin.assert_called_once_with()

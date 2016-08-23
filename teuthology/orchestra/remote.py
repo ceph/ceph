@@ -15,8 +15,6 @@ import pwd
 import tempfile
 import netaddr
 
-from teuthology.config import config
-
 from . import console
 
 log = logging.getLogger(__name__)
@@ -447,11 +445,7 @@ def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
     """
     Return either VirtualConsole or PhysicalConsole depending on name.
     """
-    ipmiuser = ipmiuser or config.ipmi_user
-    ipmipass = ipmipass or config.ipmi_password
-    ipmidomain = ipmidomain or config.ipmi_domain
     if misc.is_vm(name):
-        return console.VirtualConsole(
-            name, ipmiuser, ipmipass, ipmidomain, logfile)
+        return console.VirtualConsole(name)
     return console.PhysicalConsole(
         name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)
