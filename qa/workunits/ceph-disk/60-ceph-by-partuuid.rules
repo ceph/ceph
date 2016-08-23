@@ -1,0 +1,29 @@
+#
+# Make sure /dev/disk/by-partuuid is populated
+#
+
+# forward scsi device event to corresponding block device
+ACTION=="change", SUBSYSTEM=="scsi", ENV{DEVTYPE}=="scsi_device", TEST=="block", ATTR{block/*/uevent}="change"
+
+ACTION=="remove", GOTO="persistent_storage_end_two"
+
+SUBSYSTEM!="block", GOTO="persistent_storage_end_two"
+
+# skip rules for inappropriate block devices
+KERNEL=="fd*|mtd*|nbd*|gnbd*|btibm*|md*", GOTO="persistent_storage_end_two"
+
+# ignore partitions that span the entire disk
+TEST=="whole_disk", GOTO="persistent_storage_end_two"
+
+# for partitions import parent information
+ENV{DEVTYPE}=="partition", IMPORT{parent}="ID_*"
+
+# skip unpartitioned removable media devices from drivers which do not send "change" events
+ENV{DEVTYPE}=="disk", KERNEL!="sd*|sr*", ATTR{removable}=="1", GOTO="persistent_storage_end_two"
+
+# probe filesystem metadata of disks
+KERNEL!="sr*", IMPORT{program}="/sbin/blkid -o udev -p $tempnode"
+
+ENV{ID_PART_ENTRY_SCHEME}=="gpt", ENV{ID_PART_ENTRY_UUID}=="?*", SYMLINK+="disk/by-partuuid/$env{ID_PART_ENTRY_UUID}"
+
+LABEL="persistent_storage_end_two"
