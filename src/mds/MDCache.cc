@@ -2153,6 +2153,8 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
+	pf->fragstat.change_attr++;
+	dout(10) << "predirty_journal_parents bumping change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
 	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
 	  pf->rstat.rctime = pf->fragstat.mtime;
@@ -2277,11 +2279,13 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     if (do_parent_mtime || linkunlink) {
       dout(20) << "predirty_journal_parents add_delta " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
-      bool touched_mtime = false;
-      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      bool touched_mtime = false, touched_chattr = false;
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime, touched_chattr);
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      if (touched_chattr)
+	pi->change_attr = pi->dirstat.change_attr;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
@@ -11997,6 +12001,8 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   if (!good_fragstat) {
     if (pf->fragstat.mtime > frag_info.mtime)
       frag_info.mtime = pf->fragstat.mtime;
+    if (pf->fragstat.change_attr > frag_info.change_attr)
+      frag_info.change_attr = pf->fragstat.change_attr;
     pf->fragstat = frag_info;
     mds->locker->mark_updated_scatterlock(&diri->filelock);
     mdr->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);

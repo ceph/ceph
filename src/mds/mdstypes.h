@@ -169,10 +169,11 @@ struct scatter_info_t {
 struct frag_info_t : public scatter_info_t {
   // this frag
   utime_t mtime;
+  uint64_t change_attr;
   int64_t nfiles;        // files
   int64_t nsubdirs;      // subdirs
 
-  frag_info_t() : nfiles(0), nsubdirs(0) {}
+  frag_info_t() : change_attr(0), nfiles(0), nsubdirs(0) {}
 
   int64_t size() const { return nfiles + nsubdirs; }
 
@@ -181,10 +182,14 @@ struct frag_info_t : public scatter_info_t {
   }
 
   // *this += cur - acc;
-  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
+  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime, bool& touched_chattr) {
     if (cur.mtime > mtime) {
       mtime = cur.mtime;
       touched_mtime = true;
+    }
+    if (cur.change_attr > change_attr) {
+      change_attr = cur.change_attr;
+      touched_chattr = true;
     }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
@@ -193,6 +198,8 @@ struct frag_info_t : public scatter_info_t {
   void add(const frag_info_t& other) {
     if (other.mtime > mtime)
       mtime = other.mtime;
+    if (other.change_attr > change_attr)
+      change_attr = other.change_attr;
     nfiles += other.nfiles;
     nsubdirs += other.nsubdirs;
   }

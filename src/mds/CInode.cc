@@ -1988,7 +1988,7 @@ void CInode::finish_scatter_gather_update(int type)
       assert(is_auth());
       inode_t *pi = get_projected_inode();
 
-      bool touched_mtime = false;
+      bool touched_mtime = false, touched_chattr = false;
       dout(20) << "  orig dirstat " << pi->dirstat << dendl;
       pi->dirstat.version++;
       for (compact_map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -2013,7 +2013,7 @@ void CInode::finish_scatter_gather_update(int type)
 	if (pf->accounted_fragstat.version == pi->dirstat.version - 1) {
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime, touched_chattr);
 	} else {
 	  dout(20) << fg << " skipping STALE accounted_fragstat " << pf->accounted_fragstat << dendl;
 	}
@@ -2041,6 +2041,8 @@ void CInode::finish_scatter_gather_update(int type)
       }
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      if (touched_chattr)
+	pi->change_attr = pi->dirstat.change_attr;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
       if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
@@ -2063,6 +2065,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  version_t v = pi->dirstat.version;
 	  if (pi->dirstat.mtime > dirstat.mtime)
 	    dirstat.mtime = pi->dirstat.mtime;
+	  if (pi->dirstat.change_attr > dirstat.change_attr)
+	    dirstat.change_attr = pi->dirstat.change_attr;
 	  pi->dirstat = dirstat;
 	  pi->dirstat.version = v;
 	}
