@@ -366,6 +366,8 @@ option(HAVE_LIBZFS "LibZFS is enabled" OFF)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
+option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+
 if(LINUX)
   add_definitions(-D__linux__)
 endif(LINUX)
@@ -414,4 +416,3 @@ if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()
 
-option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
