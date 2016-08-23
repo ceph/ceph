@@ -9024,6 +9024,31 @@ int Client::fstat(int fd, struct stat *stbuf, int mask)
   return r;
 }
 
+int Client::fstatx(int fd, struct ceph_statx *stx, unsigned int want, unsigned int flags)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fstatx flags " << hex << flags << " want " << want << dec << std::endl;
+  tout(cct) << fd << std::endl;
+
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+
+  unsigned mask = statx_to_mask(flags, want);
+
+  int r = 0;
+  if (mask && !f->inode->caps_issued_mask(mask)) {
+    r = _getattr(f->inode, mask);
+    if (r < 0) {
+      ldout(cct, 3) << "fstatx exit on error!" << dendl;
+      return r;
+    }
+  }
+
+  fill_statx(f->inode, mask, stx);
+  ldout(cct, 3) << "fstatx(" << fd << ", " << stx << ") = " << r << dendl;
+  return r;
+}
 
 // not written yet, but i want to link!
 
