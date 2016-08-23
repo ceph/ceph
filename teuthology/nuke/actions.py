@@ -76,6 +76,13 @@ def kill_hadoop(ctx):
             run.Raw("|"), 'xargs', 'kill', '-9',
             ], check_status=False, timeout=60)
 
+def kill_valgrind(ctx):
+    # http://tracker.ceph.com/issues/17084
+    ctx.cluster.run(
+        args=['sudo', 'pkill', '-f', '-9', 'valgrind.bin',],
+        check_status=False,
+        timeout=20,
+    )
 
 def remove_kernel_mounts(ctx):
     """
