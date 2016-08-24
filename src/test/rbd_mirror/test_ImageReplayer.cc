@@ -23,9 +23,11 @@
 #include "journal/Journaler.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequestWQ.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
+#include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
 #include "tools/rbd_mirror/types.h"
@@ -115,12 +117,7 @@ public:
 
   ~TestImageReplayer()
   {
-    if (m_watch_handle != 0) {
-      m_remote_ioctx.unwatch2(m_watch_handle);
-      delete m_watch_ctx;
-      m_watch_ctx = nullptr;
-      m_watch_handle = 0;
-    }
+    unwatch();
 
     delete m_replayer;
     delete m_threads;
@@ -150,14 +147,18 @@ public:
     ASSERT_EQ(0, m_remote_ioctx.watch2(oid, &m_watch_handle, m_watch_ctx));
   }
 
-  void stop()
-  {
+  void unwatch() {
     if (m_watch_handle != 0) {
       m_remote_ioctx.unwatch2(m_watch_handle);
       delete m_watch_ctx;
       m_watch_ctx = nullptr;
       m_watch_handle = 0;
     }
+  }
+
+  void stop()
+  {
+    unwatch();
 
     C_SaferCond cond;
     m_replayer->stop(&cond);
@@ -283,6 +284,16 @@ public:
     }
 
     ASSERT_EQ(master_position, mirror_position);
+  }
+
+  void wait_for_stopped() {
+    for (int i = 0; i < 100; i++) {
+      if (m_replayer->is_stopped()) {
+        break;
+      }
+      wait_for_watcher_notify(1);
+    }
+    ASSERT_TRUE(m_replayer->is_stopped());
   }
 
   void write_test_data(librbd::ImageCtx *ictx, const char *test_data, off_t off,
@@ -713,3 +724,101 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
 
   stop();
 }
+
+TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
+  bootstrap();
+
+  // inject a snapshot that cannot be unprotected
+  librbd::ImageCtx *ictx;
+  open_image(m_local_ioctx, m_image_name, false, &ictx);
+  ictx->features &= ~RBD_FEATURE_JOURNALING;
+  ASSERT_EQ(0, ictx->operations->snap_create("foo"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("foo"));
+  ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
+                                             {ictx->md_ctx.get_id(),
+                                              ictx->id, ictx->snap_ids["foo"]},
+                                             "dummy child id"));
+  close_image(ictx);
+
+  // race failed op shut down with new ops
+  open_remote_image(&ictx);
+  for (uint64_t i = 0; i < 10; ++i) {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    C_SaferCond request_lock;
+    ictx->exclusive_lock->request_lock(&request_lock);
+    ASSERT_EQ(0, request_lock.wait());
+
+    C_SaferCond append_ctx;
+    ictx->journal->append_op_event(
+      i,
+      librbd::journal::EventEntry{
+        librbd::journal::SnapUnprotectEvent{i, "foo"}},
+      &append_ctx);
+    ASSERT_EQ(0, append_ctx.wait());
+
+    C_SaferCond commit_ctx;
+    ictx->journal->commit_op_event(i, 0, &commit_ctx);
+    ASSERT_EQ(0, commit_ctx.wait());
+
+    C_SaferCond release_ctx;
+    ictx->exclusive_lock->release_lock(&release_ctx);
+    ASSERT_EQ(0, release_ctx.wait());
+  }
+
+  for (uint64_t i = 0; i < 5; ++i) {
+    start();
+    wait_for_stopped();
+    unwatch();
+  }
+}
+
+TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
+  bootstrap();
+
+  // inject a snapshot that cannot be unprotected
+  librbd::ImageCtx *ictx;
+  open_image(m_local_ioctx, m_image_name, false, &ictx);
+  ictx->features &= ~RBD_FEATURE_JOURNALING;
+  ASSERT_EQ(0, ictx->operations->snap_create("foo"));
+  ASSERT_EQ(0, ictx->operations->snap_protect("foo"));
+  ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
+                                             {ictx->md_ctx.get_id(),
+                                              ictx->id, ictx->snap_ids["foo"]},
+                                             "dummy child id"));
+  close_image(ictx);
+
+  // race failed op shut down with new tag flush
+  open_remote_image(&ictx);
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    C_SaferCond request_lock;
+    ictx->exclusive_lock->request_lock(&request_lock);
+    ASSERT_EQ(0, request_lock.wait());
+
+    C_SaferCond append_ctx;
+    ictx->journal->append_op_event(
+      1U,
+      librbd::journal::EventEntry{
+        librbd::journal::SnapUnprotectEvent{1U, "foo"}},
+      &append_ctx);
+    ASSERT_EQ(0, append_ctx.wait());
+
+    C_SaferCond commit_ctx;
+    ictx->journal->commit_op_event(1U, 0, &commit_ctx);
+    ASSERT_EQ(0, commit_ctx.wait());
+
+    C_SaferCond release_ctx;
+    ictx->exclusive_lock->release_lock(&release_ctx);
+    ASSERT_EQ(0, release_ctx.wait());
+  }
+
+  write_test_data(ictx, m_test_data, 0, TEST_IO_SIZE);
+
+  for (uint64_t i = 0; i < 5; ++i) {
+    start();
+    wait_for_stopped();
+    unwatch();
+  }
+  close_image(ictx);
+}
+
