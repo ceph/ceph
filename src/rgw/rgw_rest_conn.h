@@ -387,5 +387,24 @@ public:
 
 };
 
+class RGWRESTDeleteResource : public RGWRESTSendResource {
+public:
+  RGWRESTDeleteResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     const rgw_http_param_pair *pp,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "DELETE", _resource,
+                                                                  pp, extra_headers, _mgr) {}
+
+  RGWRESTDeleteResource(RGWRESTConn *_conn,
+		     const string& _resource,
+		     param_vec_t& params,
+		     param_vec_t *extra_headers,
+		     RGWHTTPManager *_mgr) : RGWRESTSendResource(_conn, "DELETE", _resource,
+                                                                  params, extra_headers, _mgr) {}
+
+};
+
+
 
 #endif

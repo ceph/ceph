@@ -108,7 +108,7 @@ public:
 
     int ret = op->aio_send(bl);
     if (ret < 0) {
-      lsubdout(cct, rgw, 0) << "ERROR: failed to send post request" << dendl;
+      lsubdout(cct, rgw, 0) << "ERROR: failed to send request" << dendl;
       op->put();
       return ret;
     }
@@ -167,6 +167,70 @@ public:
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
                             "PUT", _path,
                             _params, _input, _result) {}
+};
+
+class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
+  RGWRESTConn *conn;
+  RGWHTTPManager *http_manager;
+  string path;
+  param_vec_t params;
+
+  boost::intrusive_ptr<RGWRESTDeleteResource> http_op;
+
+public:
+  RGWDeleteRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager,
+                        const string& _path,
+                        rgw_http_param_pair *_params)
+    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+      path(_path), params(make_param_list(_params))
+  {}
+
+  ~RGWDeleteRESTResourceCR() {
+    request_cleanup();
+  }
+
+  int send_request() {
+    auto op = boost::intrusive_ptr<RGWRESTDeleteResource>(
+        new RGWRESTDeleteResource(conn, path, params, nullptr, http_manager));
+
+    op->set_user_info((void *)stack);
+
+    bufferlist bl;
+
+    int ret = op->aio_send(bl);
+    if (ret < 0) {
+      lsubdout(cct, rgw, 0) << "ERROR: failed to send DELETE request" << dendl;
+      op->put();
+      return ret;
+    }
+    std::swap(http_op, op); // store reference in http_op on success
+    return 0;
+  }
+
+  int request_complete() {
+    int ret;
+    bufferlist bl;
+    ret = http_op->wait_bl(&bl);
+    auto op = std::move(http_op); // release ref on return
+    if (ret < 0) {
+      error_stream << "http operation failed: " << op->to_str()
+          << " status=" << op->get_http_status() << std::endl;
+      lsubdout(cct, rgw, 5) << "failed to wait for op, ret=" << ret
+          << ": " << op->to_str() << dendl;
+      op->put();
+      return ret;
+    }
+    op->put();
+    return 0;
+  }
+
+  void request_cleanup() {
+    if (http_op) {
+      http_op->put();
+      http_op = NULL;
+    }
+  }
 };
 
 #endif
