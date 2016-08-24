@@ -158,6 +158,39 @@ public:
   }
 };
 
+class RGWElasticRemoveRemoteObjCBCR : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+  ceph::real_time mtime;
+  const ElasticConfig& conf;
+public:
+  RGWElasticRemoveRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
+                          RGWBucketInfo& _bucket_info, rgw_obj_key& _key, const ceph::real_time& _mtime,
+                          const ElasticConfig& _conf) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                                                        bucket_info(_bucket_info), key(_key),
+                                                        mtime(_mtime), conf(_conf) {}
+  int operate() override {
+    reenter(this) {
+      ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
+                              << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
+      yield {
+        string path = es_get_obj_path(bucket_info, key);
+
+        call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn,
+                                         sync_env->http_manager,
+                                         path, nullptr /* params */));
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+      return set_cr_done();
+    }
+    return 0;
+  }
+
+};
+
 class RGWElasticDataSyncModule : public RGWDataSyncModule {
   ElasticConfig conf;
 public:
@@ -174,8 +207,9 @@ public:
     return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf);
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch) override {
+    /* versioned and versioned epoch params are useless in the elasticsearch backend case */
     ldout(sync_env->cct, 0) << conf.id << ": rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
-    return NULL;
+    return new RGWElasticRemoveRemoteObjCBCR(sync_env, bucket_info, key, mtime, conf);
   }
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch) override {
