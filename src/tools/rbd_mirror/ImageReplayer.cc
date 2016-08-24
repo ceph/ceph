@@ -325,14 +325,11 @@ void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
 template <typename I>
 void ImageReplayer<I>::start(Context *on_finish, bool manual)
 {
-  assert(m_on_start_finish == nullptr);
-  assert(m_on_stop_finish == nullptr);
   dout(20) << "on_finish=" << on_finish << dendl;
 
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-
     if (!is_stopped_()) {
       derr << "already running" << dendl;
       r = -EINVAL;
@@ -344,8 +341,13 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
       m_state = STATE_STARTING;
       m_last_r = 0;
       m_state_desc.clear();
-      m_on_start_finish = on_finish;
       m_manual_stop = false;
+
+      if (on_finish != nullptr) {
+        assert(m_on_start_finish == nullptr);
+        m_on_start_finish = on_finish;
+      }
+      assert(m_on_stop_finish == nullptr);
     }
   }
 
@@ -596,7 +598,6 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
 {
   dout(20) << "r=" << r << dendl;
   Context *ctx = new FunctionContext([this, r, desc](int _r) {
-      Context *on_start_finish(nullptr);
       {
         Mutex::Locker locker(m_lock);
         m_state = STATE_STOPPING;
@@ -605,13 +606,12 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
         } else {
           dout(20) << "start canceled" << dendl;
         }
-        std::swap(m_on_start_finish, on_start_finish);
       }
 
       set_state_description(r, desc);
       update_mirror_image_status(false, boost::none);
       reschedule_update_status_task(-1);
-      shut_down(r, on_start_finish);
+      shut_down(r);
     });
   m_threads->work_queue->queue(ctx, 0);
 }
@@ -701,7 +701,7 @@ void ImageReplayer<I>::on_stop_journal_replay()
   set_state_description(0, "");
   update_mirror_image_status(false, boost::none);
   reschedule_update_status_task(-1);
-  shut_down(0, nullptr);
+  shut_down(0);
 }
 
 template <typename I>
@@ -1300,7 +1300,7 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
 }
 
 template <typename I>
-void ImageReplayer<I>::shut_down(int r, Context *on_start) {
+void ImageReplayer<I>::shut_down(int r) {
   dout(20) << "r=" << r << dendl;
   {
     Mutex::Locker locker(m_lock);
@@ -1309,21 +1309,22 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
     // if status updates are in-flight, wait for them to complete
     // before proceeding
     if (m_in_flight_status_updates > 0) {
-      dout(20) << "waiting for in-flight status update" << dendl;
-      assert(m_on_update_status_finish == nullptr);
-      m_on_update_status_finish = new FunctionContext(
-        [this, r, on_start](int _r) {
-          shut_down(r, on_start);
-        });
+      if (m_on_update_status_finish == nullptr) {
+        dout(20) << "waiting for in-flight status update" << dendl;
+        m_on_update_status_finish = new FunctionContext(
+          [this, r](int _r) {
+            shut_down(r);
+          });
+      }
       return;
     }
   }
 
   // chain the shut down sequence (reverse order)
   Context *ctx = new FunctionContext(
-    [this, r, on_start](int _r) {
+    [this, r](int _r) {
       update_mirror_image_status(true, STATE_STOPPED);
-      handle_shut_down(r, on_start);
+      handle_shut_down(r);
     });
   if (m_local_image_ctx) {
     ctx = new FunctionContext([this, ctx](int r) {
@@ -1381,7 +1382,7 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
 }
 
 template <typename I>
-void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
+void ImageReplayer<I>::handle_shut_down(int r) {
   reschedule_update_status_task(-1);
 
   {
@@ -1390,12 +1391,13 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
     // if status updates are in-flight, wait for them to complete
     // before proceeding
     if (m_in_flight_status_updates > 0) {
-      dout(20) << "waiting for in-flight status update" << dendl;
-      assert(m_on_update_status_finish == nullptr);
-      m_on_update_status_finish = new FunctionContext(
-        [this, r, on_start](int _r) {
-          handle_shut_down(r, on_start);
-        });
+      if (m_on_update_status_finish == nullptr) {
+        dout(20) << "waiting for in-flight status update" << dendl;
+        m_on_update_status_finish = new FunctionContext(
+          [this, r](int _r) {
+            handle_shut_down(r);
+          });
+      }
       return;
     }
 
@@ -1416,9 +1418,11 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
   delete m_replay_status_formatter;
   m_replay_status_formatter = nullptr;
 
+  Context *on_start = nullptr;
   Context *on_stop = nullptr;
   {
     Mutex::Locker locker(m_lock);
+    std::swap(on_start, m_on_start_finish);
     std::swap(on_stop, m_on_stop_finish);
     m_stop_requested = false;
     assert(m_state == STATE_STOPPING);
