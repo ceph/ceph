@@ -16,13 +16,6 @@ BUILT_SOURCES += init-ceph
 
 shell_scripts += init-ceph
 
-mount_ceph_SOURCES = mount/mount.ceph.c
-mount_ceph_LDADD = $(LIBSECRET) $(LIBCOMMON)
-if LINUX
-su_sbin_PROGRAMS += mount.ceph
-endif # LINUX
-su_sbin_SCRIPTS += mount.fuse.ceph
-
 
 if WITH_MON
 

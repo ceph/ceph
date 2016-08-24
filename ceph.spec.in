@@ -18,7 +18,12 @@
 %bcond_without cephfs_java
 %bcond_with tests
 %bcond_with xio
+%ifnarch s390 s390x
 %bcond_without tcmalloc
+%else
+# no gperftools/tcmalloc on s390(x)
+%bcond_with tcmalloc
+%endif
 %bcond_without libs_compat
 %bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
@@ -88,9 +93,13 @@ BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
 BuildRequires:	gcc-c++
 BuildRequires:	gdbm
+%if 0%{with tcmalloc}
+BuildRequires:	gperftools-devel
+%endif
 BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
+BuildRequires:	libatomic_ops-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
@@ -125,13 +134,9 @@ BuildRequires:	systemd
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-%if 0%{with tcmalloc}
-BuildRequires:	gperftools-devel
-%endif
 BuildRequires:  btrfsprogs
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
-BuildRequires:	libatomic-ops-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
@@ -143,8 +148,6 @@ BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
-BuildRequires:	libatomic_ops-devel
-BuildRequires:	gperftools-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
@@ -667,7 +670,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %endif
 		$CEPH_EXTRA_CONFIGURE_ARGS \
 		%{?_with_ocf} \
-		%{?_with_tcmalloc} \
+%if %{without tcmalloc}
+		--without-tcmalloc \
+%endif
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %if %{with lowmem_builder}
@@ -707,17 +712,17 @@ install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/cep
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.fetch_config
 
-# firewall templates
+# firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-mon %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
+mkdir -p %{buildroot}/sbin
+ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}%{_udevrulesdir}/95-ceph-osd.rules
-mv %{buildroot}/sbin/mount.ceph %{buildroot}/usr/sbin/mount.ceph
-mv %{buildroot}/sbin/mount.fuse.ceph %{buildroot}/usr/sbin/mount.fuse.ceph
 
 #set up placeholder directories
 mkdir -p %{buildroot}%{_sysconfdir}/ceph
@@ -757,7 +762,6 @@ rm -rf %{buildroot}
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-%{_sbindir}/mount.ceph
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -792,7 +796,6 @@ rm -rf %{buildroot}
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/cephfs.8*
-%{_mandir}/man8/mount.ceph.8*
 #set up placeholder directories
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
@@ -848,6 +851,10 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
+%{_sbindir}/mount.ceph
+%if 0%{?suse_version}
+/sbin/mount.ceph
+%endif
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
@@ -861,6 +868,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph.8*
+%{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/rbdmap.8*
