@@ -28,8 +28,10 @@ class ConsoleLog(Task):
             if not hasattr(remote.console, 'spawn_sol_log'):
                 log.debug("%s does not support IPMI; excluding",
                           remote.shortname)
-            elif not remote.console.has_ipmi_credentials:
-                log.debug("IPMI credentials not found for %s; excluding",
+            elif not (remote.console.has_ipmi_credentials or
+                      remote.console.has_conserver):
+                log.debug("Cannot find IPMI credentials or conserver settings "
+                          "for %s; excluding",
                           remote.shortname)
             else:
                 new_cluster.add(remote, roles)
