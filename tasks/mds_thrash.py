@@ -136,13 +136,16 @@ class MDSThrasher(Greenlet):
                          remotes.iterkeys())
             self.log('kill_mds on mds.{m} doing powercycle of {s}'.
                      format(m=mds, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
+            self._assert_ipmi(remote)
             remote.console.power_off()
         else:
             self.ctx.daemons.get_daemon('mds', mds).stop()
+
+    @staticmethod
+    def _assert_ipmi(remote):
+        assert remote.console.has_ipmi_credentials, (
+            "powercycling requested but RemoteConsole is not "
+            "initialized.  Check ipmi config.")
 
     def kill_mds_by_rank(self, rank):
         """
@@ -161,10 +164,7 @@ class MDSThrasher(Greenlet):
                          remotes.iterkeys())
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.
                      format(m=mds, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
+            self._assert_ipmi(remote)
             remote.console.power_on()
             self.manager.make_admin_daemon_dir(self.ctx, remote)
         args = []

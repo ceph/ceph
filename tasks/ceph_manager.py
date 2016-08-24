@@ -1781,13 +1781,16 @@ class CephManager:
             remote = self.find_remote('osd', osd)
             self.log('kill_osd on osd.{o} '
                      'doing powercycle of {s}'.format(o=osd, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
+            self._assert_ipmi(remote)
             remote.console.power_off()
         else:
             self.ctx.daemons.get_daemon('osd', osd, self.cluster).stop()
+
+    @staticmethod
+    def _assert_ipmi(remote):
+        assert remote.console.has_ipmi_credentials, (
+            "powercycling requested but RemoteConsole is not "
+            "initialized.  Check ipmi config.")
 
     def blackhole_kill_osd(self, osd):
         """
@@ -1807,10 +1810,7 @@ class CephManager:
             remote = self.find_remote('osd', osd)
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.
                      format(o=osd, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
+            self._assert_ipmi(remote)
             remote.console.power_on()
             if not remote.console.check_status(300):
                 raise Exception('Failed to revive osd.{o} via ipmi'.
@@ -1867,11 +1867,7 @@ class CephManager:
             remote = self.find_remote('mon', mon)
             self.log('kill_mon on mon.{m} doing powercycle of {s}'.
                      format(m=mon, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
-
+            self._assert_ipmi(remote)
             remote.console.power_off()
         else:
             self.ctx.daemons.get_daemon('mon', mon, self.cluster).stop()
@@ -1885,11 +1881,7 @@ class CephManager:
             remote = self.find_remote('mon', mon)
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.
                      format(m=mon, s=remote.name))
-            assert remote.console is not None, ("powercycling requested "
-                                                "but RemoteConsole is not "
-                                                "initialized.  "
-                                                "Check ipmi config.")
-
+            self._assert_ipmi(remote)
             remote.console.power_on()
             self.make_admin_daemon_dir(remote)
         self.ctx.daemons.get_daemon('mon', mon, self.cluster).restart()
