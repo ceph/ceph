@@ -242,13 +242,7 @@ void MDSRankDispatcher::shutdown()
   mds_lock.Unlock();
 
   finisher->stop(); // no flushing
-
-  // shut down messenger
-  // release mds_lock first because messenger thread might call 
-  // MDSDaemon::ms_handle_reset which will try to hold mds_lock
-  mds_lock.Unlock();
   messenger->shutdown();
-  mds_lock.Lock();
 
   mds_lock.Lock();
 
