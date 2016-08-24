@@ -1,3 +1,5 @@
+from mock import patch
+
 from teuthology.config import config as teuth_config
 
 from .. import console
@@ -68,3 +70,36 @@ class TestPhysicalConsole(TestConsole):
             c='power cycle',
         )
 
+    def test_get_console_conserver(self):
+        with patch(
+            'teuthology.orchestra.console.subprocess.Popen',
+            autospec=True,
+        ) as m_popen:
+            m_popen.return_value.wait.return_value = 0
+            cons = self.klass(self.hostname)
+        assert cons.has_conserver is True
+        with patch(
+            'teuthology.orchestra.console.pexpect.spawn',
+            autospec=True,
+        ) as m_spawn:
+            cons._get_console()
+            assert m_spawn.call_count == 1
+            assert teuth_config.conserver_master in \
+                m_spawn.call_args_list[0][0][0]
+
+    def test_get_console_ipmitool(self):
+        with patch(
+            'teuthology.orchestra.console.subprocess.Popen',
+            autospec=True,
+        ) as m_popen:
+            m_popen.return_value.wait.return_value = 0
+            cons = self.klass(self.hostname)
+        assert cons.has_conserver is True
+        with patch(
+            'teuthology.orchestra.console.pexpect.spawn',
+            autospec=True,
+        ) as m_spawn:
+            cons.has_conserver = False
+            cons._get_console()
+            assert m_spawn.call_count == 1
+            assert 'ipmitool' in m_spawn.call_args_list[0][0][0]

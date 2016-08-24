@@ -65,6 +65,11 @@ class PhysicalConsole():
             logfile=self.logfile,
         )
 
+    def _get_console(self):
+        cmd = self._console_command()
+        child = self._pexpect_spawn(cmd)
+        return child
+
     def _console_command(self):
         if self.has_conserver:
             return 'console -M {master} -p {port} {host}'.format(
@@ -112,7 +117,7 @@ class PhysicalConsole():
         for i in range(0, attempts):
             start = time.time()
             while time.time() - start < t:
-                child = self._pexpect_spawn_ipmi('sol activate')
+                child = self._get_console()
                 child.send('\n')
                 log.debug('expect: {s} login'.format(s=self.shortname))
                 r = child.expect(
@@ -251,12 +256,12 @@ class PhysicalConsole():
 
         :returns: a subprocess.Popen object
         """
-        ipmi_cmd = self._ipmi_command('sol activate')
+        console_cmd = self._console_command()
         pexpect_templ = \
             "import pexpect; " \
             "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"
         python_cmd = 'python -c "%s"' % pexpect_templ.format(
-            cmd=ipmi_cmd,
+            cmd=console_cmd,
             log=dest_path,
         )
         proc = subprocess.Popen(
