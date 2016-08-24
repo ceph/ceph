@@ -228,6 +228,7 @@ the monitors. However, if you decide to change the monitor's IP address, you
 must follow a specific procedure. See `Changing a Monitor's IP Address`_ for
 details.
 
+Monitors can also be found by clients using DNS SRV records. See `Monitor lookup through DNS`_ for details.
 
 Cluster ID
 ----------
@@ -854,6 +855,7 @@ Miscellaneous
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
 .. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
+.. _Monitor lookup through DNS: ../mon-lookup-dns
 .. _ACID: http://en.wikipedia.org/wiki/ACID
 .. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons
 .. _Add/Remove a Monitor (ceph-deploy): ../../deployment/ceph-deploy-mon
