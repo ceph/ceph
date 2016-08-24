@@ -48,18 +48,10 @@ class PhysicalConsole():
             conserver_client_found,
         ])
 
-    def _check_credentials(self):
-        if not self.has_ipmi_credentials:
-            log.error(
-                "Must set ipmi_user, ipmi_password, and ipmi_domain in " \
-                ".teuthology.yaml"
-            )
-
     def _pexpect_spawn_ipmi(self, ipmi_cmd):
         """
         Run the cmd specified using ipmitool.
         """
-        self._check_credentials()
         full_command = self._ipmi_command(ipmi_cmd)
         return self._pexpect_spawn(full_command)
 
@@ -84,6 +76,7 @@ class PhysicalConsole():
             return self._ipmi_command('sol activate')
 
     def _ipmi_command(self, subcommand):
+        self._check_ipmi_credentials()
         template = \
             'ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'
         return template.format(
@@ -93,6 +86,13 @@ class PhysicalConsole():
             ipmiuser=self.ipmiuser,
             ipmipass=self.ipmipass,
         )
+
+    def _check_ipmi_credentials(self):
+        if not self.has_ipmi_credentials:
+            log.error(
+                "Must set ipmi_user, ipmi_password, and ipmi_domain in "
+                ".teuthology.yaml"
+            )
 
     def _exit_session(self, child, timeout=None):
         child.send('~.')
@@ -251,7 +251,6 @@ class PhysicalConsole():
 
         :returns: a subprocess.Popen object
         """
-        self._check_credentials()
         ipmi_cmd = self._ipmi_command('sol activate')
         pexpect_templ = \
             "import pexpect; " \
