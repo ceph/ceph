@@ -2750,6 +2750,17 @@ int BlueStore::mkfs()
   _close_fsid();
  out_path_fd:
   _close_path();
+
+  if (r == 0 &&
+      g_conf->bluestore_fsck_on_mkfs) {
+    int rc = fsck();
+    if (rc < 0)
+      return rc;
+    if (rc > 0) {
+      derr << __func__ << " fsck found " << rc << " errors" << dendl;
+      r = -EIO;
+    }
+  }
   return r;
 }
 
