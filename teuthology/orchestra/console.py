@@ -60,7 +60,7 @@ class PhysicalConsole():
         Run the cmd specified using ipmitool.
         """
         self._check_credentials()
-        full_command = self._build_command(cmd)
+        full_command = self._ipmi_command(cmd)
         log.debug('pexpect command: %s', full_command)
         child = pexpect.spawn(
             full_command,
@@ -76,9 +76,9 @@ class PhysicalConsole():
                 host=self.shortname,
             )
         else:
-            return self._build_command('sol activate')
+            return self._ipmi_command('sol activate')
 
-    def _build_command(self, subcommand):
+    def _ipmi_command(self, subcommand):
         template = \
             'ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'
         return template.format(
@@ -247,7 +247,7 @@ class PhysicalConsole():
         :returns: a subprocess.Popen object
         """
         self._check_credentials()
-        ipmi_cmd = self._build_command('sol activate')
+        ipmi_cmd = self._ipmi_command('sol activate')
         pexpect_templ = \
             "import pexpect; " \
             "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"

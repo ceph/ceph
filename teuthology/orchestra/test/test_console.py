@@ -52,14 +52,14 @@ class TestPhysicalConsole(TestConsole):
             c='sol activate',
         )
 
-    def test_build_command_ipmi(self):
+    def test_ipmi_command_ipmi(self):
         cons = self.klass(
             self.hostname,
             teuth_config.ipmi_user,
             teuth_config.ipmi_password,
             teuth_config.ipmi_domain,
         )
-        pc_cmd = cons._build_command('power cycle')
+        pc_cmd = cons._ipmi_command('power cycle')
         assert pc_cmd == self.ipmi_cmd_templ.format(
             h=self.hostname,
             d=teuth_config.ipmi_domain,
