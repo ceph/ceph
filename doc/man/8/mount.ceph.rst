@@ -56,7 +56,7 @@ Options
 :command:`osdtimeout`
   int (seconds), Default: 60
 
-:command:`osdkeepalivetimeout`
+:command:`osdkeepalive`
   int, Default: 5
 
 :command:`mount_timeout`
