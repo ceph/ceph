@@ -1186,6 +1186,11 @@ int RGWPeriod::update()
       ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << " zone realm id " << zg.realm_id << ", not on our realm " << realm_id << dendl;
       continue;
     }
+
+    if (zg.master_zone.empty()) {
+      ldout(cct, 0) << "ERROR: zonegroup " << zg.get_name() << " should have a master zone " << dendl;
+      return -EINVAL;
+    }  
     
     if (zg.is_master_zonegroup()) {
       master_zonegroup = zg.get_id();
