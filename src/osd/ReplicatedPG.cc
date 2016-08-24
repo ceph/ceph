@@ -12939,7 +12939,6 @@ void ReplicatedPG::scrub_snapshot_metadata(
 		<< " can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
 	  head_error.set_ss_attr_corrupted();
-	  head_error.set_ss_attr_missing(); // Not available too
         }
       }
 
