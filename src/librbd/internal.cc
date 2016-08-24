@@ -35,6 +35,7 @@
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/image/CreateRequest.h"
+#include "librbd/image/RemoveRequest.h"
 #include "librbd/managed_lock/Types.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -163,46 +164,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return r;
   }
   return 0;
-}
-
-void filter_out_mirror_watchers(ImageCtx *ictx,
-                                std::list<obj_watch_t> *watchers) {
-  if (watchers->empty()) {
-    return;
-  }
-
-  if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
-    return;
-  }
-
-  cls::rbd::MirrorImage mirror_image;
-  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
-  if (r < 0) {
-    if (r != -ENOENT) {
-      lderr(ictx->cct) << "failed to retrieve mirroring state: "
-                       << cpp_strerror(r) << dendl;
-    }
-    return;
-  }
-
-  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-    return;
-  }
-
-  std::list<obj_watch_t> mirror_watchers;
-  r = ictx->md_ctx.list_watchers(RBD_MIRRORING, &mirror_watchers);
-  if (r < 0) {
-    if (r != -ENOENT) {
-      lderr(ictx->cct) << "error listing mirroring watchers: "
-                       << cpp_strerror(r) << dendl;
-    }
-    return;
-  }
-  for (auto &watcher : mirror_watchers) {
-    watchers->remove_if([watcher] (obj_watch_t &w) {
-        return (strncmp(w.addr, watcher.addr, sizeof(w.addr)) == 0);
-      });
-  }
 }
 
 } // anonymous namespace
@@ -1660,218 +1621,18 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     ldout(cct, 20) << "remove " << &io_ctx << " "
                    << (image_id.empty() ? image_name : image_id) << dendl;
 
-    std::string name(image_name);
-    std::string id(image_id);
-    bool old_format = false;
-    bool unknown_format = true;
-    ImageCtx *ictx = new ImageCtx(
-      (id.empty() ? name : std::string()), id, nullptr, io_ctx, false);
-    int r = ictx->state->open(true);
-    if (r < 0) {
-      ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
-      delete ictx;
-      if (r != -ENOENT) {
-	return r;
-      }
-    } else {
-      string header_oid = ictx->header_oid;
-      old_format = ictx->old_format;
-      unknown_format = false;
-      name = ictx->name;
-      id = ictx->id;
+    C_SaferCond cond;
+    ContextWQ op_work_queue("librbd::op_work_queue",
+                            cct->_conf->rbd_op_thread_timeout,
+                            ImageCtx::get_thread_pool_instance(cct));
+    librbd::image::RemoveRequest<> *req = librbd::image::RemoveRequest<>::create(
+      io_ctx, image_name, image_id, force, prog_ctx, &op_work_queue, &cond);
+    req->send();
 
-      ictx->owner_lock.get_read();
-      if (ictx->exclusive_lock != nullptr) {
-        if (force) {
-          // releasing read lock to avoid a deadlock when upgrading to
-          // write lock in the shut_down process
-          ictx->owner_lock.put_read();
-          if (ictx->exclusive_lock != nullptr) {
-            C_SaferCond ctx;
-            ictx->exclusive_lock->shut_down(&ctx);
-            r = ctx.wait();
-            if (r < 0) {
-              lderr(cct) << "error shutting down exclusive lock: "
-                         << cpp_strerror(r) << dendl;
-              ictx->state->close();
-              return r;
-            }
-            assert (ictx->exclusive_lock == nullptr);
-            ictx->owner_lock.get_read();
-          }
-        } else {
-          r = ictx->operations->prepare_image_update();
-          if (r < 0 || !ictx->exclusive_lock->is_lock_owner()) {
-	    lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
-	    ictx->owner_lock.put_read();
-	    ictx->state->close();
-            return -EBUSY;
-          }
-        }
-      }
+    int r = cond.wait();
+    op_work_queue.drain();
 
-      if (ictx->snaps.size()) {
-	lderr(cct) << "image has snapshots - not removing" << dendl;
-	ictx->owner_lock.put_read();
-	ictx->state->close();
-	return -ENOTEMPTY;
-      }
-
-      std::list<obj_watch_t> watchers;
-      r = io_ctx.list_watchers(header_oid, &watchers);
-      if (r < 0) {
-        lderr(cct) << "error listing watchers" << dendl;
-	ictx->owner_lock.put_read();
-        ictx->state->close();
-        return r;
-      }
-
-      // If an image is being bootstrapped by rbd-mirror, it implies
-      // that the rbd-mirror daemon currently has the image open.
-      // Permit removal if this is the case.
-      filter_out_mirror_watchers(ictx, &watchers);
-
-      if (watchers.size() > 1) {
-        lderr(cct) << "image has watchers - not removing" << dendl;
-	ictx->owner_lock.put_read();
-        ictx->state->close();
-        return -EBUSY;
-      }
-
-      cls::rbd::GroupSpec s;
-      r = cls_client::image_get_group(&io_ctx, header_oid, &s);
-      if (r < 0 && r != -EOPNOTSUPP) {
-        lderr(cct) << "error querying consistency group" << dendl;
-        ictx->owner_lock.put_read();
-        ictx->state->close();
-        return r;
-      } else if (s.is_valid()) {
-	lderr(cct) << "image is in a consistency group - not removing" << dendl;
-	ictx->owner_lock.put_read();
-	ictx->state->close();
-	return -EMLINK;
-      }
-
-      trim_image(ictx, 0, prog_ctx);
-
-      ictx->parent_lock.get_read();
-      // struct assignment
-      parent_info parent_info = ictx->parent_md;
-      ictx->parent_lock.put_read();
-
-      r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
-				   parent_info.spec, id);
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error removing child from children list" << dendl;
-	ictx->owner_lock.put_read();
-        ictx->state->close();
-	return r;
-      }
-
-      if (!old_format) {
-        r = mirror_image_disable_internal(ictx, force, !force);
-        if (r < 0 && r != -EOPNOTSUPP) {
-          lderr(cct) << "error disabling image mirroring: " << cpp_strerror(r)
-                     << dendl;
-          ictx->owner_lock.put_read();
-          ictx->state->close();
-          return r;
-        }
-      }
-
-      ictx->owner_lock.put_read();
-      ictx->state->close();
-
-      ldout(cct, 2) << "removing header..." << dendl;
-      r = io_ctx.remove(header_oid);
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
-	return r;
-      }
-    }
-
-    if (old_format || unknown_format) {
-      ldout(cct, 2) << "removing rbd image from v1 directory..." << dendl;
-      r = tmap_rm(io_ctx, name);
-      old_format = (r == 0);
-      if (r < 0 && !unknown_format) {
-        if (r != -ENOENT) {
-          lderr(cct) << "error removing image from v1 directory: "
-                     << cpp_strerror(-r) << dendl;
-        }
-	return r;
-      }
-    }
-    if (!old_format) {
-      if (id.empty()) {
-        ldout(cct, 5) << "attempting to determine image id" << dendl;
-        r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, name, &id);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "error getting id of image" << dendl;
-          return r;
-        }
-      } else if (name.empty()) {
-        ldout(cct, 5) << "attempting to determine image name" << dendl;
-        r = cls_client::dir_get_name(&io_ctx, RBD_DIRECTORY, id, &name);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "error getting name of image" << dendl;
-          return r;
-        }
-      }
-
-      if (!id.empty()) {
-	ldout(cct, 2) << "removing header..." << dendl;
-	r = io_ctx.remove(util::header_name(id));
-	if (r < 0 && r != -ENOENT) {
-	  lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
-	  return r;
-	}
-
-        ldout(cct, 10) << "removing journal..." << dendl;
-        r = Journal<>::remove(io_ctx, id);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "error removing image journal" << dendl;
-          return r;
-        }
-
-        ldout(cct, 10) << "removing object map..." << dendl;
-        r = ObjectMap<>::remove(io_ctx, id);
-        if (r < 0 && r != -ENOENT) {
-          lderr(cct) << "error removing image object map" << dendl;
-          return r;
-        }
-
-        ldout(cct, 10) << "removing image from rbd_mirroring object..."
-                       << dendl;
-        r = cls_client::mirror_image_remove(&io_ctx, id);
-        if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
-          lderr(cct) << "failed to remove image from mirroring directory: "
-                     << cpp_strerror(r) << dendl;
-          return r;
-        }
-      }
-
-      ldout(cct, 2) << "removing id object..." << dendl;
-      r = io_ctx.remove(util::id_obj_name(name));
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error removing id object: " << cpp_strerror(r)
-                   << dendl;
-	return r;
-      }
-
-      ldout(cct, 2) << "removing rbd image from v2 directory..." << dendl;
-      r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, name, id);
-      if (r < 0) {
-        if (r != -ENOENT) {
-          lderr(cct) << "error removing image from v2 directory: "
-                     << cpp_strerror(-r) << dendl;
-        }
-        return r;
-      }
-    }
-
-    ldout(cct, 2) << "done." << dendl;
-    return 0;
+    return r;
   }
 
   int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)
