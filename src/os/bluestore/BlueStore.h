@@ -291,9 +291,10 @@ public:
     BufferSpace bc;          ///< buffer cache
 
   private:
-    bluestore_blob_t blob;        ///< decoded blob metadata
-    mutable bool dirty = true;    ///< true if blob != blob_bl
-    mutable bufferlist blob_bl;   ///< cached encoded blob
+    mutable bluestore_blob_t blob;  ///< decoded blob metadata
+    mutable bool undecoded = false; ///< true if blob_bl is newer than blob
+    mutable bool dirty = true;      ///< true if blob is newer than blob_bl
+    mutable bufferlist blob_bl;     ///< cached encoded blob
 
   public:
     Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
@@ -316,18 +317,37 @@ public:
     }
 
     friend ostream& operator<<(ostream& out, const Blob &b) {
-      return out << b.id << ":" << b.blob;
+      return out << b.id << ":" << b.get_blob();
     }
 
     const bluestore_blob_t& get_blob() const {
+      if (undecoded) {
+	bufferlist::iterator p = blob_bl.begin();
+	::decode(blob, p);
+	undecoded = false;
+      }
       return blob;
     }
     bluestore_blob_t& dirty_blob() {
+      if (undecoded) {
+	bufferlist::iterator p = blob_bl.begin();
+	::decode(blob, p);
+	undecoded = false;
+      }
       if (!dirty) {
 	dirty = true;
 	blob_bl.clear();
       }
       return blob;
+    }
+    size_t get_encoded_length() const {
+      return blob_bl.length();
+    }
+    bool is_dirty() const {
+      return dirty;
+    }
+    bool is_undecoded() const {
+      return undecoded;
     }
 
     /// discard buffers for unallocated regions
@@ -348,12 +368,11 @@ public:
       } else {
 	assert(blob_bl.length());
       }
-      bl.append(blob_bl);
+      ::encode(blob_bl, bl);
     }
     void decode(bufferlist::iterator& p) {
-      bufferlist::iterator start = p;
-      ::decode(blob, p);
-      start.copy(p.get_off() - start.get_off(), blob_bl);
+      ::decode(blob_bl, p);
+      undecoded = true;
       dirty = false;
     }
   };
