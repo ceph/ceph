@@ -1145,6 +1145,7 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 
 void BlueStore::Blob::discard_unallocated()
 {
+  get_blob();
   size_t pos = 0;
   if (blob.is_compressed()) {
     bool discard = false;
@@ -5857,8 +5858,10 @@ void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
 {
   for (auto& b : bm.blob_map) {
     dout(log_level) << __func__ << "  " << b
-		    << " blob_bl " << b.blob_bl.length()
-		    << (b.blob_bl.length() ? "" : " (dirty)") << dendl;
+		    << " blob_bl " << b.get_encoded_length()
+		    << (b.is_dirty() ? " (dirty)" : "")
+		    << (b.is_undecoded() ? " (was undecoded)" : "")
+		    << dendl;
     if (b.get_blob().has_csum()) {
       vector<uint64_t> v;
       unsigned n = b.get_blob().get_csum_count();
