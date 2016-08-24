@@ -53,9 +53,7 @@ set(unittest_librbd_srcs
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
 set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -88,9 +86,7 @@ add_executable(ceph_test_librbd
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:librados_api_obj>
   $<TARGET_OBJECTS:librados_objs>
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd
   rbd_test
   rbd_api
@@ -113,9 +109,7 @@ add_executable(ceph_test_librbd_api
   test_support.cc
   test_librbd.cc
   test_main.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd_api
   librbd
   librados
