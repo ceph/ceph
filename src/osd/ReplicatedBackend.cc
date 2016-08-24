@@ -1824,7 +1824,11 @@ bool ReplicatedBackend::handle_pull_response(
 		   pop.omap_entries,
 		   t);
 
+  pi.stat.num_keys_recovered += pop.omap_entries.size();
+  pi.stat.num_bytes_recovered += data.length();
+
   if (complete) {
+    pi.stat.num_objects_recovered++;
     to_continue->push_back(hoid);
     get_parent()->on_local_recover(
       hoid, pi.recovery_info, pi.obc, t);
