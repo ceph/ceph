@@ -82,8 +82,7 @@ add_executable(ceph_test_rbd_mirror_random_write
 set_target_properties(ceph_test_rbd_mirror_random_write PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rbd_mirror_random_write
-  librbd librados global keyutils
-  )
+  librbd librados global)
 
 install(TARGETS
   ceph_test_rbd_mirror
