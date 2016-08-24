@@ -776,9 +776,7 @@ target_link_libraries(unittest_libcephfs_config cephfs)
 
 # unittest_rbd_replay
 add_executable(unittest_rbd_replay
-  test_rbd_replay.cc
-  $<TARGET_OBJECTS:parse_secret_objs>
-)
+  test_rbd_replay.cc)
 add_ceph_unittest(unittest_rbd_replay ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_replay)
 target_link_libraries(unittest_rbd_replay
   librbd

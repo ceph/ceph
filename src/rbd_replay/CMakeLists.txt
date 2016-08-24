@@ -25,12 +25,8 @@ add_library(rbd_replay_ios STATIC ${librbd_replay_ios_srcs})
 target_link_libraries(rbd_replay_ios librbd librados global)
 
 if(${WITH_BABELTRACE})
-  set(rbd_replay_prep_srcs
-      rbd-replay-prep.cc)
   add_executable(rbd-replay-prep
-    ${rbd_replay_prep_srcs}
-    $<TARGET_OBJECTS:parse_secret_objs>
-    )
+    rbd-replay-prep.cc)
   target_link_libraries(rbd-replay-prep
     rbd_replay
     rbd_replay_ios
