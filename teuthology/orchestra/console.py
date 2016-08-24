@@ -100,12 +100,22 @@ class PhysicalConsole():
             )
 
     def _exit_session(self, child, timeout=None):
-        child.send('~.')
         t = timeout or self.timeout
-        r = child.expect(
-            ['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
-        if r != 0:
-            self._pexpect_spawn_ipmi('sol deactivate')
+        if self.has_conserver:
+            child.sendcontrol('e')
+            child.send('c.')
+            r = child.expect(
+                ['[disconnect]', pexpect.TIMEOUT, pexpect.EOF],
+                timeout=t)
+            if r != 0:
+                child.kill(15)
+        else:
+            child.send('~.')
+            r = child.expect(
+                ['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF],
+                timeout=t)
+            if r != 0:
+                self._pexpect_spawn_ipmi('sol deactivate')
 
     def _wait_for_login(self, timeout=None, attempts=2):
         """
