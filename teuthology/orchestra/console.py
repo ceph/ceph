@@ -65,16 +65,17 @@ class PhysicalConsole():
             logfile=self.logfile,
         )
 
-    def _get_console(self):
-        cmd = self._console_command()
+    def _get_console(self, readonly=True):
+        cmd = self._console_command(readonly=readonly)
         child = self._pexpect_spawn(cmd)
         return child
 
-    def _console_command(self):
+    def _console_command(self, readonly=True):
         if self.has_conserver:
-            return 'console -M {master} -p {port} {host}'.format(
+            return 'console -M {master} -p {port} {ro}{host}'.format(
                 master=self.conserver_master,
                 port=self.conserver_port,
+                ro='-s ' if readonly else '',
                 host=self.shortname,
             )
         else:
@@ -127,7 +128,7 @@ class PhysicalConsole():
         for i in range(0, attempts):
             start = time.time()
             while time.time() - start < t:
-                child = self._get_console()
+                child = self._get_console(readonly=False)
                 child.send('\n')
                 log.debug('expect: {s} login'.format(s=self.shortname))
                 r = child.expect(

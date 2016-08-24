@@ -12,7 +12,7 @@ class TestConsole(object):
 class TestPhysicalConsole(TestConsole):
     klass = console.PhysicalConsole
     ipmi_cmd_templ = 'ipmitool -H {h}.{d} -I lanplus -U {u} -P {p} {c}'
-    conserver_cmd_templ = 'console -M {m} -p {p} {h}'
+    conserver_cmd_templ = 'console -M {m} -p {p} {ro}{h}'
 
     def setup(self):
         self.hostname = 'host'
@@ -34,6 +34,14 @@ class TestPhysicalConsole(TestConsole):
         assert console_cmd == self.conserver_cmd_templ.format(
             m=teuth_config.conserver_master,
             p=teuth_config.conserver_port,
+            ro='-s ',
+            h=self.hostname,
+        )
+        console_cmd = cons._console_command(readonly=False)
+        assert console_cmd == self.conserver_cmd_templ.format(
+            m=teuth_config.conserver_master,
+            p=teuth_config.conserver_port,
+            ro='',
             h=self.hostname,
         )
 
