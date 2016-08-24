@@ -30,9 +30,7 @@ if (${WITH_RBD})
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
     udev
     ${BLKID_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    keyutils
-    )
+    ${CMAKE_DL_LIBS})
 endif (${WITH_RBD})
 
 # ceph_smalliobenchfs

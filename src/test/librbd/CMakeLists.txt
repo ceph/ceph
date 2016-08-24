@@ -77,9 +77,7 @@ target_link_libraries(unittest_librbd
   osdc
   global
   ${UNITTEST_LIBS}
-  radostest
-  keyutils
-  )
+  radostest)
 
 add_executable(ceph_test_librbd
   test_main.cc
@@ -99,9 +97,7 @@ target_link_libraries(ceph_test_librbd
   osdc
   global
   ${UNITTEST_LIBS}
-  radostest
-  keyutils
-  )
+  radostest)
 set_target_properties(ceph_test_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
@@ -115,9 +111,7 @@ target_link_libraries(ceph_test_librbd_api
   librados
   common
   radostest
-  ${UNITTEST_LIBS}
-  keyutils
-  )
+  ${UNITTEST_LIBS})
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 

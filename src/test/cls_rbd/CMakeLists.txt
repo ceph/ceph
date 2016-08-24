@@ -16,9 +16,7 @@ target_link_libraries(ceph_test_cls_rbd
   ${EXTRALIBS}
   radostest
   blkid
-  udev
-  keyutils
-  )
+  udev)
 install(TARGETS
   ceph_test_cls_rbd
   DESTINATION ${CMAKE_INSTALL_BINDIR})
