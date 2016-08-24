@@ -46,9 +46,9 @@ def task(ctx, config):
     scrub_interval: (-1) the approximate length of time to loop before
        waiting until a scrub is performed while cleaning. (In reality
        this is used to probabilistically choose when to wait, and it
-       only applies to the cases where cleaning is being performed). 
+       only applies to the cases where cleaning is being performed).
        -1 is used to indicate that no scrubbing will be done.
-  
+
     chance_down: (0.4) the probability that the thrasher will mark an
        OSD down rather than marking it out. (The thrasher will not
        consider that OSD out of the cluster, since presently an OSD
@@ -131,40 +131,16 @@ def task(ctx, config):
         ctx.cluster.run(args=['sync'])
 
         if 'ipmi_user' in ctx.teuthology_config:
-            for t, key in ctx.config['targets'].iteritems():
-                host = t.split('@')[-1]
-                shortname = host.split('.')[0]
-                from teuthology.orchestra import remote as oremote
-                console = oremote.getRemoteConsole(
-                    name=host,
-                    ipmiuser=ctx.teuthology_config['ipmi_user'],
-                    ipmipass=ctx.teuthology_config['ipmi_password'],
-                    ipmidomain=ctx.teuthology_config['ipmi_domain'])
-                cname = '{host}.{domain}'.format(
-                    host=shortname,
-                    domain=ctx.teuthology_config['ipmi_domain'])
-                log.debug('checking console status of %s' % cname)
-                if not console.check_status():
-                    log.info(
-                        'Failed to get console status for '
-                        '%s, disabling console...'
-                        % cname)
-                    console=None
-                else:
-                    # find the remote for this console and add it
-                    remotes = [
-                        r for r in ctx.cluster.remotes.keys() if r.name == t]
-                    if len(remotes) != 1:
-                        raise Exception(
-                            'Too many (or too few) remotes '
-                            'found for target {t}'.format(t=t))
-                    remotes[0].console = console
-                    log.debug('console ready on %s' % cname)
+            for remote in ctx.cluster.remotes.keys():
+                log.debug('checking console status of %s' % remote.shortname)
+                if not remote.console.check_status():
+                    log.warn('Failed to get console status for %s',
+                             remote.shortname)
 
             # check that all osd remotes have a valid console
             osds = ctx.cluster.only(teuthology.is_type('osd', cluster))
-            for remote, _ in osds.remotes.iteritems():
-                if not remote.console:
+            for remote in osds.remotes.keys():
+                if not remote.console.has_ipmi_credentials:
                     raise Exception(
                         'IPMI console required for powercycling, '
                         'but not available on osd role: {r}'.format(
