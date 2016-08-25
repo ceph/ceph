@@ -369,6 +369,11 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
 
 void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
+  Mutex::Locker l(mdr->dispatch_mutex);
+  if (mdr->killed) {
+    dout(10) << "request " << *mdr << " was killed" << dendl;
+    return;
+  }
   if (mdr->client_request) {
     server->dispatch_client_request(mdr);
   } else {
@@ -403,6 +408,19 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
   assert(p != request_map.end());
   request_map.erase(p);
   request_map_lock.Unlock();
+}
+
+void MDCache::request_kill(const MDRequestRef& mdr)
+{
+  mdr->dispatch_mutex.Lock();
+  mdr->killed = true;
+  if (mdr->is_committing()) {
+    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
+  } else {
+    dout(10) << "request_kill " << *mdr << dendl;
+    request_cleanup(mdr);
+  }
+  mdr->dispatch_mutex.Unlock();
 }
 
 void MDCache::lock_parents_for_linkunlink(const MDRequestRef& mdr, CInode *in,

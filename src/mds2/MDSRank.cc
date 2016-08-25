@@ -155,6 +155,8 @@ void MDSRankDispatcher::tick()
 
   if (is_clientreplay() || is_active() || is_stopping()) {
     mds_lock.Unlock();
+    // FIXME: use seperate timer to do this
+    server->find_idle_sessions();
     locker->tick();
     mds_lock.Lock();
   }

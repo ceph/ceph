@@ -2228,6 +2228,92 @@ void Locker::issue_truncate(CInode *in)
     check_inode_max_size(in);
 }
 
+void Locker::revoke_stale_caps(Session *session, uint64_t sseq)
+{
+  session->mutex_assert_locked_by_me();
+  dout(10) << "revoke_stale_caps for " << session->info.inst.name << dendl;
+  client_t client = session->get_client();
+
+  vector<CInodeRef> revoke_set;
+  for (auto p = session->caps.begin(); !p.end(); ++p) {
+    if (session->get_state_seq() != sseq)
+      break;
+    revoke_set.push_back((*p)->get_inode());
+  }
+  session->mutex_unlock();
+
+  if (session->get_state_seq() != sseq)
+    return;
+
+  for (CInodeRef& in : revoke_set) {
+    CObject::Locker l(in.get());
+
+    if (session->get_state_seq() != sseq)
+      break;
+
+    Capability *cap = in->get_client_cap(client);
+    int issued = 0;
+    if (cap && !cap->is_stale()) {
+      cap->mark_stale();
+      issued = cap->issued();
+    }
+
+    if (issued & ~CEPH_CAP_PIN) {
+      dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;
+      cap->revoke();
+
+      /* FIXME
+      if (in->inode.client_ranges.count(client))
+	in->state_set(CInode::STATE_NEEDSRECOVER);
+	*/
+
+      if (!in->filelock.is_stable()) eval_gather(&in->filelock);
+      if (!in->linklock.is_stable()) eval_gather(&in->linklock);
+      if (!in->authlock.is_stable()) eval_gather(&in->authlock);
+      if (!in->xattrlock.is_stable()) eval_gather(&in->xattrlock);
+
+      try_eval(in.get(), CEPH_CAP_LOCKS);
+    } else {
+      dout(10) << " nothing issued on " << *in << dendl;
+    }
+  }
+  session->mutex_lock();
+}
+
+void Locker::resume_stale_caps(Session *session, uint64_t sseq)
+{
+  session->mutex_assert_locked_by_me();
+  dout(10) << "resume_stale_caps for " << session->info.inst.name << dendl;
+  client_t client = session->get_client();
+
+  vector<CInodeRef> issue_set;
+  for (auto p = session->caps.begin(); !p.end(); ++p) {
+    if (session->get_state_seq() != sseq)
+      break;
+    issue_set.push_back((*p)->get_inode());
+  }
+  session->mutex_unlock();
+
+  if (session->get_state_seq() != sseq)
+    return;
+
+  for (CInodeRef& in : issue_set) {
+    CObject::Locker l(in.get());
+
+    if (session->get_state_seq() != sseq)
+      break;
+
+    Capability *cap = in->get_client_cap(client);
+    if (cap && cap->is_stale()) {
+      dout(10) << " clearing stale flag on " << *in << dendl;
+      cap->clear_stale();
+      if (!eval(in.get(), CEPH_CAP_LOCKS))
+	issue_caps(in.get(), client);
+    }
+  }
+  session->mutex_lock();
+}
+
 class C_Locker_FileUpdateFinish : public LockerContext {
   CInode *in;
   MutationRef mut;
@@ -2594,7 +2680,6 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
   }
 #endif
 }
-                                
 
 void Locker::handle_client_caps(MClientCaps *m)
 {
@@ -3400,4 +3485,27 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     nr++;
   }
   assert(nr == lock->get_num_client_lease());
+}
+
+void Locker::remove_stale_leases(Session *session, ceph_seq_t lseq)
+{
+  session->mutex_assert_locked_by_me();
+  dout(10) << "remove_stale_leases for " << session->info.inst.name << dendl;
+  client_t client = session->get_client();
+  vector<CDentryRef> dn_set;
+  for(auto p = session->leases.begin(); !p.end(); ++p) {
+    if (ceph_seq_cmp((*p)->seq, lseq) <= 0)
+      dn_set.push_back((*p)->get_dentry());
+  }
+  session->mutex_unlock();
+
+  for (CDentryRef &dn : dn_set) {
+    dn->mutex_lock();
+    DentryLease *l = dn->get_client_lease(client);
+    if (l && ceph_seq_cmp(l->seq, lseq) <= 0)
+      remove_client_lease(dn.get(), session);
+    dn->mutex_unlock();
+  }
+
+  session->mutex_lock();
 }

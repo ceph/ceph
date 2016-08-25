@@ -40,6 +40,8 @@ public:
 
   void dispatch(Message *m);
   void dispatch_client_request(const MDRequestRef& mdr);
+
+  void find_idle_sessions();
 protected:
   void handle_client_reconnect(MClientReconnect *m);
 
@@ -47,8 +49,9 @@ protected:
   void __session_logged(Session *session, uint64_t state_seq, bool open,
 		  	version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   void journal_close_session(Session *session, int state, Context *on_safe);
-
   void handle_client_session(MClientSession *m);
+  void kill_session(Session *session, Context *on_safe);
+
   void handle_client_request(MClientRequest *m);
 
   void encode_null_lease(bufferlist& bl);

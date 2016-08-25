@@ -80,6 +80,7 @@ public:
   void dispatch_request(const MDRequestRef& mdr);
   void request_finish(const MDRequestRef& mdr);
   void request_cleanup(const MDRequestRef& mdr);
+  void request_kill(const MDRequestRef& mdr);
 
 protected:
   Mutex rename_dir_mutex;

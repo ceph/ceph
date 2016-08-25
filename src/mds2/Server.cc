@@ -125,7 +125,11 @@ void Server::__session_logged(Session *session, uint64_t state_seq, bool open, v
     mds->sessionmap->mutex_unlock();
   } else if (session->is_closing() ||
 	     session->is_killing()) {
-    session->get();
+
+    assert(session->requests.empty());
+    assert(session->caps.empty());
+    assert(session->leases.empty());
+
     if (session->is_closing()) {
       // mark con disposable.  if there is a fault, we will get a
       // reset and clean it up.  if the client hasn't received the
@@ -154,39 +158,6 @@ void Server::__session_logged(Session *session, uint64_t state_seq, bool open, v
       assert(0);
     }
     mds->sessionmap->mutex_unlock();
-
-    // kill any lingering capabilities, leases, requests
-    session->mutex_lock();
-    while (!session->caps.empty()) {
-      Capability *cap = session->caps.front();
-      CInodeRef in = cap->get_inode();
-      session->mutex_unlock();
-
-      in->mutex_lock();
-      dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      locker->remove_client_cap(in.get(), session);
-      in->mutex_unlock();
-      in.reset();
-
-      session->mutex_lock();
-    }
-
-    while (!session->leases.empty()) {
-      DentryLease *l = session->leases.front();
-      CDentryRef dn = l->get_dentry();
-      session->mutex_unlock();
-
-      dn->mutex_lock();
-      dout(20) << " killing lease on " << *dn << dendl;
-      locker->remove_client_lease(dn.get(), session);
-      dn->mutex_unlock();
-
-      session->mutex_lock();
-    }
-
-    assert(session->requests.empty());
-    session->mutex_unlock();
-
     /*
     if (client_reconnect_gather.count(session->info.get_client())) {
       dout(20) << " removing client from reconnect set" << dendl;
@@ -198,7 +169,6 @@ void Server::__session_logged(Session *session, uint64_t state_seq, bool open, v
       }
     }
     */
-    session->put();
   } else {
     mds->sessionmap->mutex_unlock();
     assert(0);
@@ -207,7 +177,62 @@ void Server::__session_logged(Session *session, uint64_t state_seq, bool open, v
 
 void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
+  session->mutex_assert_locked_by_me();
+
+  mds->sessionmap->mutex_lock();
   uint64_t sseq = mds->sessionmap->set_state(session, state);
+  mds->sessionmap->mutex_unlock();
+
+  // clean up requests, too
+  if (!session->requests.empty()) {
+    auto p = session->requests.begin(member_offset(MDRequestImpl, item_session_request));
+    vector<metareqid_t> reqids;
+    while (!p.end()) {
+      reqids.push_back((*p)->reqid);
+      ++p;
+    }
+    session->mutex_unlock();
+
+    for (auto& reqid : reqids) {
+      MDRequestRef mdr = mdcache->request_get(reqid);
+      if (mdr)
+	mdcache->request_kill(mdr);
+    }
+
+    session->mutex_lock();
+  }
+
+  while (!session->caps.empty()) {
+    Capability *cap = session->caps.front();
+    CInodeRef in = cap->get_inode();
+    session->mutex_unlock();
+
+    in->mutex_lock();
+    dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
+    locker->remove_client_cap(in.get(), session);
+    in->mutex_unlock();
+    in.reset();
+
+    session->mutex_lock();
+  }
+
+  while (!session->leases.empty()) {
+    DentryLease *l = session->leases.front();
+    CDentryRef dn = l->get_dentry();
+    session->mutex_unlock();
+
+    dn->mutex_lock();
+    dout(20) << " killing lease on " << *dn << dendl;
+    locker->remove_client_lease(dn.get(), session);
+    dn->mutex_unlock();
+    dn.reset();
+
+    session->mutex_lock();
+  }
+
+  assert(session->get_state_seq() == sseq);
+
+  mds->sessionmap->mutex_lock();
   version_t pv = mds->sessionmap->mark_projected(session);
   version_t piv = 0;
 
@@ -226,22 +251,11 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
     piv = 0;
 
   mds->mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
-		  		 new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe),
+				 new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe),
 				 true);
+  mds->sessionmap->mutex_unlock();
 
-#if 0
-  // clean up requests, too
-  elist<MDRequestImpl*>::iterator p =
-    session->requests.begin(member_offset(MDRequestImpl,
-	  item_session_request));
-  while (!p.end()) {
-    MDRequestRef mdr = mdcache->request_get((*p)->reqid);
-    ++p;
-    mdcache->request_kill(mdr);
-  }
-
-  finish_flush_session(session, session->get_push_seq());
-#endif
+//  finish_flush_session(session, session->get_push_seq());
 }
 
 void Server::handle_client_session(MClientSession *m)
@@ -249,12 +263,10 @@ void Server::handle_client_session(MClientSession *m)
   Session *session = mds->get_session(m);
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
 
-  bool need_unlock = false;
+  session->mutex_lock();
   switch (m->get_op()) {
   case CEPH_SESSION_REQUEST_OPEN:
     {
-      mds->sessionmap->mutex_lock();
-      need_unlock = true;
       if (session->is_opening() ||
           session->is_open() ||
           session->is_stale() ||
@@ -263,6 +275,11 @@ void Server::handle_client_session(MClientSession *m)
         goto out_unlock;
       }
 
+      if (session->is_closing()) {
+	// FIXME: wait until close done;
+      }
+
+      mds->sessionmap->mutex_lock();
       if (session->is_closed())
         mds->sessionmap->add_session(session);
 
@@ -272,29 +289,27 @@ void Server::handle_client_session(MClientSession *m)
       mds->mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
 				     new C_MDS_session_finish(this, session, sseq, true, pv),
 				     true);
+      mds->sessionmap->mutex_unlock();
     }
     break;
   case CEPH_SESSION_REQUEST_CLOSE:
     {
-      mds->sessionmap->mutex_lock();
-      need_unlock = true;
-
       if (session->is_closed() ||
           session->is_closing() ||
           session->is_killing()) {
         dout(10) << "already closed|closing|killing, dropping this req" << dendl;
         goto out_unlock;	  
       }
+      /*
       if (session->is_importing()) {
         dout(10) << "ignoring close req on importing session" << dendl;
         goto out_unlock;
       }
-      assert(session->is_open() ||
-          session->is_stale() ||
-          session->is_opening());
+      */
+      assert(session->is_open() || session->is_stale() || session->is_opening());
       if (m->get_seq() < session->get_push_seq()) {
         dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq()
-          << ", dropping" << dendl;
+		 << ", dropping" << dendl;
         goto out_unlock;	  
       }
       // We are getting a seq that is higher than expected.
@@ -302,16 +317,32 @@ void Server::handle_client_session(MClientSession *m)
       //
       if (m->get_seq() != session->get_push_seq()) {
         dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq()
-          << ", BUGGY!" << dendl;
+		<< ", BUGGY!" << dendl;
         mds->clog->warn() << "incorrect push seq " << m->get_seq() << " != "
-          << session->get_push_seq() << ", dropping"
-          << " from client : " << session->get_human_name();
+			  << session->get_push_seq() << ", dropping"
+			  << " from client : " << session->get_human_name();
         goto out_unlock;	  
       }
       journal_close_session(session, Session::STATE_CLOSING, NULL);
     }
     break;
   case CEPH_SESSION_REQUEST_RENEWCAPS:
+    if (session->is_open() ||
+	session->is_stale()) {
+      mds->sessionmap->mutex_lock();
+      uint64_t sseq = 0;
+      if (session->is_stale()) {
+	sseq = mds->sessionmap->set_state(session, Session::STATE_OPEN);
+      }
+      mds->sessionmap->touch_session(session);
+      m->get_connection()->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()));
+      mds->sessionmap->mutex_unlock();
+
+      if (sseq > 0)
+	mds->locker->resume_stale_caps(session, sseq);
+    } else {
+      dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
+    }
     m->get_connection()->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()));
     break;
   case CEPH_SESSION_FLUSHMSG_ACK:
@@ -320,11 +351,146 @@ void Server::handle_client_session(MClientSession *m)
     derr << "server unknown session op " << m->get_op() << dendl;
     assert(0 == "server unknown session op");
   }
-
 out_unlock:
-  if (need_unlock)
-    mds->sessionmap->mutex_unlock();
+  session->mutex_unlock();
   m->put();
+}
+
+void Server::kill_session(Session *session, Context *on_safe)
+{
+  session->mutex_assert_locked_by_me();
+  if ((session->is_opening() ||
+       session->is_open() ||
+       session->is_stale()) &&
+      !session->is_importing()) {
+    dout(10) << "kill_session " << session << dendl;
+    journal_close_session(session, Session::STATE_KILLING, on_safe);
+  } else {
+    dout(10) << "kill_session importing or already closing/killing " << session << dendl;
+    assert(session->is_closing() ||
+	   session->is_closed() ||
+	   session->is_killing() ||
+	   session->is_importing());
+    if (on_safe) {
+      on_safe->complete(0);
+    }
+  }
+}
+
+void Server::find_idle_sessions()
+{
+  dout(10) << "find_idle_sessions.  laggy until " << mds->get_laggy_until() << dendl;
+
+  // timeout/stale
+  //  (caps go stale, lease die)
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t cutoff = now;
+  cutoff -= g_conf->mds_session_timeout;
+
+  mds->sessionmap->mutex_lock();
+  while (1) {
+    Session *session = mds->sessionmap->get_oldest_session(Session::STATE_OPEN);
+    if (!session)
+      break;
+
+    session->get();
+    if (!session->mutex_trylock()) {
+      mds->sessionmap->mutex_unlock();
+      session->mutex_lock();
+      mds->sessionmap->mutex_lock();
+
+      if (!session->is_open()) {
+	session->mutex_unlock();
+	session->put();
+	continue;
+      }
+    }
+
+    dout(20) << "laggiest active session is " << session->info.inst << dendl;
+    if (session->last_cap_renew >= cutoff) {
+      dout(20) << "laggiest active session is " << session->info.inst << " and sufficiently new ("
+	       << session->last_cap_renew << ")" << dendl;
+      session->mutex_unlock();
+      session->put();
+      break;
+    }
+
+    dout(10) << "new stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
+    uint64_t sseq = mds->sessionmap->set_state(session, Session::STATE_STALE);
+    mds->send_message_client(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()), session);
+
+    mds->sessionmap->mutex_unlock();
+
+    ceph_seq_t lseq = session->lease_seq;
+
+    mds->locker->revoke_stale_caps(session, sseq);
+    mds->locker->remove_stale_leases(session, lseq);
+
+    // finish_flush_session(session, session->get_push_seq());
+    session->mutex_unlock();
+    session->put();
+    mds->sessionmap->mutex_lock();
+  }
+  mds->sessionmap->mutex_unlock();
+
+  // autoclose
+  cutoff = now;
+  cutoff -= g_conf->mds_session_autoclose;
+
+  // don't kick clients if we've been laggy
+  if (mds->get_laggy_until() > cutoff) {
+    dout(10) << " laggy_until " << mds->get_laggy_until() << " > cutoff " << cutoff
+	     << ", not kicking any clients to be safe" << dendl;
+    return;
+  }
+
+  mds->sessionmap->mutex_lock();
+  while (1) {
+    Session *session = mds->sessionmap->get_oldest_session(Session::STATE_STALE);
+    if (!session)
+      break;
+
+    session->get();
+    if (!session->mutex_trylock()) {
+      mds->sessionmap->mutex_unlock();
+      session->mutex_lock();
+      mds->sessionmap->mutex_lock();
+
+      if (!session->is_stale()) {
+	session->mutex_unlock();
+	session->put();
+	continue;
+      }
+    }
+
+    /*
+    if (session->is_importing()) {
+      dout(10) << "stopping at importing session " << session->info.inst << dendl;
+      break;
+    }
+    */
+    assert(session->is_stale());
+    if (session->last_cap_renew >= cutoff) {
+      dout(20) << "oldest stale session is " << session->info.inst << " and sufficiently new ("
+	       << session->last_cap_renew << ")" << dendl;
+      session->mutex_unlock();
+      session->put();
+      break;
+    }
+    mds->sessionmap->mutex_unlock();
+
+    utime_t age = now;
+    age -= session->last_cap_renew;
+    mds->clog->info() << "closing stale session " << session->info.inst
+		      << " after " << age << "\n";
+    dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
+    kill_session(session, NULL);
+
+    session->mutex_unlock();
+    session->put();
+    mds->sessionmap->mutex_lock();
+  }
+  mds->sessionmap->mutex_unlock();
 }
 
 void Server::handle_client_request(MClientRequest *req)
@@ -340,25 +506,29 @@ void Server::handle_client_request(MClientRequest *req)
       return;
     }
 
+    session->mutex_lock();
     if (session->is_closed() ||
 	session->is_closing() ||
 	session->is_killing()) {
       dout(5) << "session closed|closing|killing, dropping" << dendl;
+      session->mutex_unlock();
       req->put();
       return;
     }
   }
 
   MDRequestRef mdr = mdcache->request_start(req);
-  if (!mdr)
-    return;
 
   if (session) {
-    session->mutex_lock();
-    session->requests.push_back(&mdr->item_session_request);
+    if (mdr) {
+      session->requests.push_back(&mdr->item_session_request);
+      mdr->session = session;
+    }
     session->mutex_unlock();
-    mdr->session = session;
   }
+
+  if (!mdr)
+    return;
 
   if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay()) {
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
@@ -389,7 +559,7 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
       handle_client_setattr(mdr);
       break;
     case CEPH_MDS_OP_CREATE:
-      if (mdr->has_completed)
+      if (mdr->completed)
 	handle_client_open(mdr);  // already created.. just open
       else
 	handle_client_openc(mdr);
@@ -478,7 +648,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
 void Server::respond_to_request(const MDRequestRef& mdr, int r)
 {
-  if (mdr->client_request) {
+  if (mdr->killed) {
+    //
+  } else if (mdr->client_request) {
     reply_client_request(mdr, new MClientReply(mdr->client_request, r));
   } else {
     assert(0); 
@@ -840,15 +1012,18 @@ void Server::journal_allocated_inos(const MDRequestRef& mdr, LogEvent *le)
 
 void Server::apply_allocated_inos(const MDRequestRef& mdr)
 {
-  if (!mdr->alloc_ino  && !mdr->used_prealloc_ino)
+  if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
     return;
 
   Session *session = mdr->session;
+  assert(session);
   dout(10) << "apply_allocated_inos " << mdr->alloc_ino
 	   << " / " << mdr->prealloc_inos
 	   << " / " << mdr->used_prealloc_ino << dendl;
 
   mds->sessionmap->mutex_lock();
+  assert(!session->is_closed());
+
   if (mdr->alloc_ino || !mdr->prealloc_inos.empty())
     mds->inotable->mutex_lock();
 
@@ -856,8 +1031,7 @@ void Server::apply_allocated_inos(const MDRequestRef& mdr)
     mds->inotable->apply_alloc_id(mdr->alloc_ino);
   }
   if (mdr->prealloc_inos.size()) {
-    assert(session);
-    if (true /*!mdr->killed*/) {
+    if (!mdr->killed) {
       session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
       session->info.prealloc_inos.insert(mdr->prealloc_inos);
     }
@@ -865,7 +1039,6 @@ void Server::apply_allocated_inos(const MDRequestRef& mdr)
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
-    assert(session);
     session->info.used_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap->mark_dirty(session);
   }
@@ -916,10 +1089,10 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
   respond_to_request(mdr, 0);
 }
 
-
 void Server::__inode_update_finish(const MDRequestRef& mdr, bool truncate_smaller)
 {
   mdr->wait_committing();
+  Mutex::Locker l(mdr->dispatch_mutex);
 
   CInodeRef& in = mdr->in[0]; 
   mdcache->lock_objects_for_update(mdr, in.get(), true);
@@ -1036,6 +1209,7 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
 void Server::__mknod_finish(const MDRequestRef& mdr)
 {
   mdr->wait_committing();
+  Mutex::Locker l(mdr->dispatch_mutex);
 
   apply_allocated_inos(mdr);
 
@@ -1398,6 +1572,7 @@ CDentryRef Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 void Server::__unlink_finish(const MDRequestRef& mdr, version_t dnpv)
 {
   mdr->wait_committing();
+  Mutex::Locker l(mdr->dispatch_mutex);
 
   CInodeRef& in = mdr->in[0];
   CDentryRef& dn = mdr->dn[0].back();
@@ -1567,6 +1742,7 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
 void Server::__link_finish(const MDRequestRef& mdr, version_t dnpv)
 { 
   mdr->wait_committing();
+  Mutex::Locker l(mdr->dispatch_mutex);
 
   CInodeRef& in = mdr->in[1];
   CDentryRef& dn = mdr->dn[0].back();
@@ -1654,6 +1830,7 @@ void Server::handle_client_link(const MDRequestRef& mdr)
 void Server::__rename_finish(const MDRequestRef& mdr, version_t srcdn_pv, version_t destdn_pv)
 {
   mdr->wait_committing();
+  Mutex::Locker l(mdr->dispatch_mutex);
 
   CDentryRef& srcdn = mdr->dn[1].back();
   CInodeRef& srci = mdr->in[1];
@@ -2042,7 +2219,7 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     return;
   }
 
-  if ((flags & O_TRUNC) && !mdr->has_completed)  {
+  if ((flags & O_TRUNC) && !mdr->completed)  {
     xlocks.insert(&in->filelock);
   }
 
@@ -2055,7 +2232,7 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     return;
   }
 
-  if ((flags & O_TRUNC) && !mdr->has_completed)  {
+  if ((flags & O_TRUNC) && !mdr->completed)  {
     do_open_truncate(mdr, cmode);
     return;
   }

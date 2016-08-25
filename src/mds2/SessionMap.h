@@ -24,6 +24,7 @@ using std::set;
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
+#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "msg/Message.h"
 
@@ -46,6 +47,8 @@ private:
 public:
   void mutex_lock() { mutex.Lock(); }
   void mutex_unlock() { mutex.Unlock(); }
+  bool mutex_trylock() { return mutex.TryLock(); }
+  void mutex_assert_locked_by_me() { assert(mutex.is_locked_by_me()); }
   // -- state etc --
 public:
   /*
@@ -84,7 +87,7 @@ public:
 
 private:
   int state;
-  uint64_t state_seq;
+  ceph::atomic64_t state_seq;
   int importing_count;
   friend class SessionMap;
 
@@ -120,7 +123,7 @@ public:
   {
     if (state != new_state) {
       state = new_state;
-      state_seq++;
+      state_seq.inc();
     }
   }
   void decode(bufferlist::iterator &p);
@@ -181,7 +184,7 @@ public:
 
   int get_state() { return state; }
   const char *get_state_name() const { return get_state_name(state); }
-  uint64_t get_state_seq() { return state_seq; }
+  uint64_t get_state_seq() { return state_seq.read(); }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }
   bool is_open() const { return state == STATE_OPEN; }
