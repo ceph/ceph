@@ -2074,6 +2074,11 @@ int BlueFS::unlink(const string& dirname, const string& filename)
     return -ENOENT;
   }
   FileRef file = q->second;
+  if (file->locked) {
+    dout(20) << __func__ << " file " << dirname << "/" << filename
+             << " is locked" << dendl;
+    return -EBUSY;
+  }
   dir->file_map.erase(filename);
   log_t.op_dir_unlink(dirname, filename);
   _drop_link(file);
