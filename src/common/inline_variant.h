@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:4; indent-tabs-mode:t -*-
+// vim: ts=8 sw=4 smarttab
 /*
  * Copied from:
  * https://github.com/exclipy/inline_variant_visitor/blob/master/inline_variant.hpp
@@ -22,11 +22,13 @@
 #include <boost/mpl/equal_to.hpp>
 #include <boost/mpl/front.hpp>
 #include <boost/mpl/pop_front.hpp>
-#include <boost/mpl/set.hpp>
+#include <boost/mpl/map.hpp>
+#include <boost/mpl/void.hpp>
 #include <boost/mpl/size.hpp>
 #include <boost/mpl/transform.hpp>
 #include <boost/mpl/unpack_args.hpp>
 #include <boost/mpl/vector.hpp>
+#include <boost/mpl/range_c.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/type_traits/remove_reference.hpp>
@@ -59,24 +61,12 @@ struct function_arg_extractor
     };
 };
 
-// A private helper fusion metafunction to construct a fusion map of functions
-struct pair_maker
+struct make_pair
 {
-    template<typename Sig>
-    struct result;
-
-    template <typename Function>
-    struct result<pair_maker(Function)>
-    {
-        typedef typename function_arg_extractor::apply<Function>::type arg_type;
-        typedef boost::fusion::pair<arg_type, Function> type;
+    template <typename AType, typename Ind>
+    struct apply {
+	typedef boost::mpl::pair<AType, Ind> type;
     };
-
-    template <typename Function>
-    typename result<pair_maker(Function)>::type operator()(Function a) const
-    {
-        return boost::fusion::make_pair< typename result<pair_maker(Function)>::arg_type >(a);
-    }
 };
 
 // A metafunction class that asserts the second argument is in Allowed, and returns void
@@ -87,11 +77,28 @@ struct check_in
     struct apply
     {
     private:
-        BOOST_STATIC_ASSERT_MSG((boost::mpl::contains<Allowed, Type2>::value),
+        BOOST_STATIC_ASSERT_MSG((boost::mpl::contains<Allowed, typename boost::mpl::first<Type2>::type>::value),
                 "make_visitor called with spurious handler functions");
     public:
         typedef void type;
     };
+};
+
+template <typename Seq>
+struct as_map
+{
+private:
+    struct insert_helper {
+	template <typename M, typename P>
+	struct apply
+	{
+	    typedef typename boost::mpl::insert<
+		M,
+		P>::type type;
+	};
+    };
+public:
+    typedef typename boost::mpl::fold<Seq, boost::mpl::map0<>, insert_helper>::type type;
 };
 
 // A functor template suitable for passing into apply_visitor.  The constructor accepts the list of handler functions,
@@ -105,31 +112,27 @@ private:
     // Compute the function_map type
     typedef boost::mpl::vector<Functions...> function_types;
     typedef typename boost::mpl::transform<function_types, function_arg_extractor>::type arg_types;
-    // Check that the argument types are unique
-    typedef typename boost::mpl::fold<
+    typedef typename boost::mpl::transform<
         arg_types,
-        boost::mpl::set0<>,
-        boost::mpl::insert<boost::mpl::_1, boost::mpl::_2>
-    >::type arg_types_set;
-    BOOST_STATIC_ASSERT_MSG((boost::mpl::size<arg_types_set>::value == boost::mpl::size<arg_types>::value),
+	boost::mpl::range_c<int, 0, boost::mpl::size<arg_types>::value>,
+	make_pair
+	>::type pair_list;
+    typedef typename as_map<pair_list>::type fmap;
+
+    // Check that the argument types are unique
+    BOOST_STATIC_ASSERT_MSG((boost::mpl::size<fmap>::value == boost::mpl::size<arg_types>::value),
             "make_visitor called with non-unique argument types for handler functions");
 
     // Check that there aren't any argument types not in the variant types
-    typedef typename boost::mpl::fold<arg_types, void, check_in<typename Variant::types> >::type dummy;
+    typedef typename boost::mpl::fold<fmap, void, check_in<typename Variant::types> >::type dummy;
 
-    typedef typename boost::mpl::transform<
-        arg_types,
-        function_types,
-        boost::fusion::result_of::make_pair<boost::mpl::_1, boost::mpl::_2>
-    >::type pair_list;
-    typedef typename boost::fusion::result_of::as_map<pair_list>::type function_map;
+    boost::fusion::vector<Functions...> fvec;
 
-    // Maps from argument type to the runtime function object that can deal with it
-    function_map fmap;
 
     template <typename T>
     Result apply_helper(const T& object, boost::mpl::true_) const {
-        return boost::fusion::at_key<T>(fmap)(object);
+	typedef typename boost::mpl::at<fmap, T>::type Ind;
+        return boost::fusion::at<Ind>(fvec)(object);
     }
 
     template <typename T>
@@ -142,18 +145,18 @@ private:
 public:
     generic_visitor(BOOST_RV_REF(type) other)
     :
-        fmap(boost::move(other.fmap))
+        fvec(boost::move(other.fvec))
     {
     }
-    generic_visitor(Functions... functions)
+    generic_visitor(Functions&&... functions)
     :
-        fmap(boost::fusion::as_map(boost::fusion::transform(boost::fusion::make_vector(functions...), pair_maker())))
+        fvec(std::forward<Functions>(functions)...)
     {
     }
 
     template <typename T>
     Result operator()(const T& object) const {
-        typedef typename boost::fusion::result_of::has_key<function_map, T>::type correct_key;
+        typedef typename boost::mpl::has_key<fmap, T>::type correct_key;
         BOOST_STATIC_ASSERT_MSG(correct_key::value,
             "make_visitor called without specifying handlers for all required types");
         return apply_helper(object, correct_key());
@@ -183,17 +186,6 @@ struct check_same
     };
 };
 
-// A metafunction template helper
-template <typename Result, typename Variant>
-struct expand_generic_visitor
-{
-    template <typename... Functions>
-    struct apply
-    {
-        typedef generic_visitor<Result, Variant, Functions...> type;
-    };
-};
-
 // A metafunction for getting the required generic_visitor type for the set of Functions
 template <typename Variant, typename... Functions>
 struct get_generic_visitor
@@ -209,10 +201,7 @@ private:
 public:
     // Set result_type to the return type of the first function
     typedef typename boost::mpl::front<return_types>::type result_type;
-
-    typedef typename boost::mpl::unpack_args<
-        expand_generic_visitor<result_type, Variant>
-    >::template apply<bare_function_types>::type type;
+    typedef generic_visitor<result_type, Variant, Functions...> type;
 
 private:
     // Assert that every return type is the same as the first one
@@ -229,12 +218,11 @@ auto make_visitor(BOOST_RV_REF(Functions)... functions)
 
 }
 
-template <typename Variant, typename Function1, typename... Functions>
-auto match(Variant const& variant, Function1 function1, BOOST_RV_REF(Functions)... functions)
-    -> typename detail::get_generic_visitor<Variant, Function1, Functions...>::result_type
+template <typename Variant, typename... Functions>
+auto match(Variant const& variant, BOOST_RV_REF(Functions)... functions)
+    -> typename detail::get_generic_visitor<Variant, Functions...>::result_type
 {
     return boost::apply_visitor(detail::make_visitor<Variant>(
-        boost::forward<Function1>(function1),
         boost::forward<Functions>(functions)...), variant);
 }
 
