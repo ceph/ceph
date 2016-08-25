@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 
 #include "rocksdb/db.h"
 #include "rocksdb/table.h"
@@ -26,6 +27,7 @@ using std::string;
 #include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
+#include "../osd/osd_types.h"
 
 #include "common/debug.h"
 
@@ -772,4 +774,17 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::_get_snapshot_iterator()
 RocksDBStore::RocksDBSnapshotIteratorImpl::~RocksDBSnapshotIteratorImpl()
 {
   db->ReleaseSnapshot(snapshot);
+}
+
+int RocksDBStore::get_statfs(struct store_statfs_t *buf)
+{
+  struct statfs buf0;
+  buf->reset();
+  if (::statfs(path.c_str(), &buf0) < 0) {
+    int r = -errno;
+    return r;
+  }
+  buf->total = buf0.f_blocks * buf0.f_bsize;
+  buf->available = buf0.f_bavail * buf0.f_bsize;
+  return 0;
 }
