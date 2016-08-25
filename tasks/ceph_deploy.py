@@ -186,18 +186,34 @@ def build_ceph_cluster(ctx, config):
             cbranch = config.get('branch')
             for var, val in cbranch.iteritems():
                 ceph_branch = '--{var}={val}'.format(var=var, val=val)
+        
+        ceph_sha = ctx.config['sha1']
+        devcommit = '--dev-commit={sha}'.format(sha=ceph_sha)
+        if ceph_branch:
+            option = ceph_branch
+        else:
+            option = devcommit
         all_nodes = get_all_nodes(ctx, config)
         mds_nodes = get_nodes_using_role(ctx, 'mds')
         mds_nodes = " ".join(mds_nodes)
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
         new_mon = './ceph-deploy new'+" "+mon_nodes
-        install_nodes = './ceph-deploy install ' + (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        install_nodes = './ceph-deploy install ' + option + " " + all_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
         deploy_mds = './ceph-deploy mds create'+" "+mds_nodes
         no_of_osds = 0
+        estatus_install = execute_ceph_deploy(install_nodes)
+        if estatus_install != 0:
+            raise RuntimeError("ceph-deploy: Failed to install ceph")
+        # install ceph-test package too
+        install_nodes2 = './ceph-deploy install --tests ' + option + \
+                         " " + all_nodes
+        estatus_install = execute_ceph_deploy(install_nodes2)
+        if estatus_install != 0:
+            raise RuntimeError("ceph-deploy: Failed to install ceph-test")
 
         if mon_nodes is None:
             raise RuntimeError("no monitor nodes in the config file")
@@ -221,10 +237,6 @@ def build_ceph_cluster(ctx, config):
                     lines = '{key} = {value}\n'.format(key=key, value=value)
                     teuthology.append_lines_to_file(ceph_admin, conf_path, lines,
                                                     sudo=True)
-
-        estatus_install = execute_ceph_deploy(install_nodes)
-        if estatus_install != 0:
-            raise RuntimeError("ceph-deploy: Failed to install ceph")
 
         mon_create_nodes = './ceph-deploy mon create-initial'
         # If the following fails, it is OK, it might just be that the monitors
