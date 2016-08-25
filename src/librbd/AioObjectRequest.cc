@@ -148,9 +148,7 @@ AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
   : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
                         snap_id, completion, false),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
-    m_op_flags(op_flags), m_parent_completion(NULL),
-    m_state(LIBRBD_AIO_READ_FLAT) {
-
+    m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
 }
 
@@ -219,14 +217,6 @@ bool AioObjectRead<I>::should_complete(int r)
           read_from_parent(parent_extents);
           finished = false;
         }
-      }
-
-      if (m_tried_parent) {
-        // release reference to the parent read completion.  this request
-        // might be completed after unblock is invoked.
-        AioCompletion *parent_completion = m_parent_completion;
-        parent_completion->unblock();
-        parent_completion->put();
       }
     }
     break;
@@ -328,21 +318,15 @@ template <typename I>
 void AioObjectRead<I>::read_from_parent(const Extents& parent_extents)
 {
   ImageCtx *image_ctx = this->m_ictx;
-  assert(!m_parent_completion);
-  m_parent_completion = AioCompletion::create_and_start<AioObjectRequest<I> >(
-    this, image_ctx, AIO_TYPE_READ);
-
-  // prevent the parent image from being deleted while this
-  // request is still in-progress
-  m_parent_completion->get();
-  m_parent_completion->block();
+  AioCompletion *parent_completion = AioCompletion::create_and_start<
+    AioObjectRequest<I> >(this, image_ctx, AIO_TYPE_READ);
 
   ldout(image_ctx->cct, 20) << "read_from_parent this = " << this
-                            << " parent completion " << m_parent_completion
+                            << " parent completion " << parent_completion
                             << " extents " << parent_extents
                             << dendl;
   RWLock::RLocker owner_locker(image_ctx->parent->owner_lock);
-  AioImageRequest<>::aio_read(image_ctx->parent, m_parent_completion,
+  AioImageRequest<>::aio_read(image_ctx->parent, parent_completion,
                               parent_extents, NULL, &m_read_data, 0);
 }
 
