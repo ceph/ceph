@@ -271,13 +271,15 @@ class PhysicalConsole():
         pexpect_templ = \
             "import pexpect; " \
             "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"
-        python_cmd = 'python -c "%s"' % pexpect_templ.format(
-            cmd=console_cmd,
-            log=dest_path,
-        )
+        python_cmd = [
+            '/usr/bin/env', 'python', '-c',
+            pexpect_templ.format(
+                cmd=console_cmd,
+                log=dest_path,
+            ),
+        ]
         proc = subprocess.Popen(
             python_cmd,
-            shell=True,
             env=os.environ,
         )
         return proc
