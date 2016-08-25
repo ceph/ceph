@@ -36,6 +36,7 @@ endif()
 list(FIND jerasure_flavors neon found)
 if(found GREATER -1)
   add_library(jerasure_neon OBJECT
+    ${jerasure_srcs}
     gf-complete/src/neon/gf_w4_neon.c
     gf-complete/src/neon/gf_w8_neon.c
     gf-complete/src/neon/gf_w16_neon.c
