@@ -717,7 +717,9 @@ public:
   void handle_mon_metadata(MonOpRequestRef op);
   int get_mon_metadata(int mon, Formatter *f, ostream& err);
   int print_nodes(Formatter *f, ostream& err);
-  map<int, Metadata> metadata;
+
+  // Accumulate metadata across calls to update_mon_metadata
+  map<int, Metadata> pending_metadata;
 
   /**
    *
@@ -917,7 +919,7 @@ public:
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
 
-  void update_mon_metadata(int from, const Metadata& m);
+  void update_mon_metadata(int from, Metadata&& m);
   int load_metadata(map<int, Metadata>& m);
 
   // features

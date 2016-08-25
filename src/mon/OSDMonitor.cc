@@ -3304,14 +3304,22 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
         goto reply;
       f->close_section();
     } else {
+      r = 0;
       f->open_array_section("osd_metadata");
       for (int i=0; i<osdmap.get_max_osd(); ++i) {
         if (osdmap.exists(i)) {
           f->open_object_section("osd");
           f->dump_unsigned("id", i);
           r = dump_osd_metadata(i, f.get(), NULL);
-          if (r < 0)
+          if (r == -EINVAL || r == -ENOENT) {
+            // Drop error, continue to get other daemons' metadata
+            dout(4) << "No metadata for osd." << i << dendl;
+            r = 0;
+            continue;
+          } else if (r < 0) {
+            // Unexpected error
             goto reply;
+          }
           f->close_section();
         }
       }
