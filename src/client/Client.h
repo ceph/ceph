@@ -724,6 +724,7 @@ private:
   int _readdir_get_frag(dir_result_t *dirp);
   int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
   void _closedir(dir_result_t *dirp);
+  int _dirfd(dir_result_t *dirp);
 
   // other helpers
   void _fragmap_remove_non_leaves(Inode *in);
@@ -944,6 +945,7 @@ public:
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct stat *st, int *stmask);
 
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
+  int dirfd(dir_result_t *dirp);
 
   /**
    * Returns the length of the buffer that got filled in, or -errno.

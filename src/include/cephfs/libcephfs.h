@@ -31,9 +31,9 @@
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MAJOR 11
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 2
+#define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -451,6 +451,16 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
  */
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
 		       struct stat *st, int *stmask);
+
+/**
+ * Returns the integer file descriptor associated with the named directory stream.
+ *
+ * @param cmount the ceph mount handle to use for performing the dirfd.
+ * @param dirp the directory stream pointer from an opendir holding the state of the
+ *        next entry to return.
+ * @returns a non-negative file descriptor number on success or a negative error code on      failure.
+ */
+int ceph_dirfd(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);
 
 /**
  * Gets multiple directory entries.
