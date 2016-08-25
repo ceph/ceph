@@ -351,10 +351,7 @@ void AioImageRequestWQ::process(AioImageRequest<> *req) {
   ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
                  << "req=" << req << dendl;
 
-  {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    req->send();
-  }
+  req->send();
 
   finish_queued_op(req);
   if (req->is_write_op()) {
@@ -388,7 +385,6 @@ void AioImageRequestWQ::finish_in_progress_write() {
   }
 
   if (writes_blocked) {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     m_image_ctx.flush(new C_BlockedWrites(this));
   }
 }
@@ -409,19 +405,20 @@ int AioImageRequestWQ::start_in_flight_op(AioCompletion *c) {
 }
 
 void AioImageRequestWQ::finish_in_flight_op() {
+  Context *on_shutdown;
   {
     RWLock::RLocker locker(m_lock);
     if (m_in_flight_ops.dec() > 0 || !m_shutdown) {
       return;
     }
+    on_shutdown = m_on_shutdown;
   }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << __func__ << ": completing shut down" << dendl;
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  assert(m_on_shutdown != nullptr);
-  m_image_ctx.flush(m_on_shutdown);
+  assert(on_shutdown != nullptr);
+  m_image_ctx.flush(on_shutdown);
 }
 
 bool AioImageRequestWQ::is_lock_required() const {

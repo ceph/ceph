@@ -39,7 +39,6 @@ public:
   }
 
   virtual int send() {
-    assert(m_image_ctx.owner_lock.is_locked());
     uint64_t snap_id = m_snap_ids[m_snap_id_idx];
     if (snap_id == CEPH_NOSNAP) {
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
@@ -189,7 +188,6 @@ void CopyupRequest::send()
                          << ", oid " << m_oid
                          << ", extents " << m_image_extents
                          << dendl;
-  RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
   AioImageRequest<>::aio_read(m_ictx->parent, comp, m_image_extents, NULL,
                               &m_copyup_data, 0);
 }
@@ -260,7 +258,6 @@ void CopyupRequest::remove_from_list()
 
 bool CopyupRequest::send_object_map() {
   {
-    RWLock::RLocker owner_locker(m_ictx->owner_lock);
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     if (m_ictx->object_map != nullptr) {
       bool copy_on_read = m_pending_requests.empty();
