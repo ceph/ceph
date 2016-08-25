@@ -234,21 +234,6 @@ TEST(StrictSICast, Error) {
     (void)strict_si_cast<int>("1T", &err);
     ASSERT_NE(err, "");
   }
-  {
-    std::string err;
-    (void)strict_si_cast<int64_t>("2E", &err);
-    ASSERT_EQ(err, "");
-  }
-  {
-    std::string err;
-    (void)strict_si_cast<int64_t>("-2E", &err);
-    ASSERT_EQ(err, "");
-  }
-  {
-    std::string err;
-    (void)strict_si_cast<int64_t>("1T", &err);
-    ASSERT_EQ(err, "");
-  }
 }
 
 /*
