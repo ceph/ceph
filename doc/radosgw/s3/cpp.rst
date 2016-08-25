@@ -105,7 +105,7 @@ for each bucket.
 		&listServiceCallback
 	};
 	bool header_printed = false;
-	S3_list_service(S3ProtocolHTTP, access_key, secret_key, host, 0, &listServiceHandler, &header_printed);
+	S3_list_service(S3ProtocolHTTP, access_key, secret_key, host, 0, NULL, &listServiceHandler, &header_printed);
 
 
 Creating a Bucket
@@ -115,7 +115,7 @@ This creates a new bucket.
 
 .. code-block:: cpp
 
-	S3_create_bucket(S3ProtocolHTTP, access_key, secret_key, host, sample_bucket, S3CannedAclPrivate, NULL, NULL, &responseHandler, NULL);
+	S3_create_bucket(S3ProtocolHTTP, access_key, secret_key, NULL, host, sample_bucket, S3CannedAclPrivate, NULL, NULL, &responseHandler, NULL);
 
 
 Listing a Bucket's Content
