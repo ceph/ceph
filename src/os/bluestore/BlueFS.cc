@@ -2007,10 +2007,10 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
   } else {
     file = q->second.get();
-  }
-  if (file->locked) {
-    dout(10) << __func__ << " already locked" << dendl;
-    return -EBUSY;
+    if (file->locked) {
+      dout(10) << __func__ << " already locked" << dendl;
+      return -EBUSY;
+    }
   }
   file->locked = true;
   *plock = new FileLock(file);
