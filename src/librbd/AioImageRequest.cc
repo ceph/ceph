@@ -189,7 +189,6 @@ void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
 template <typename I>
 void AioImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
   assert(m_aio_comp->is_initialized(get_aio_type()));
   assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
 

@@ -50,15 +50,12 @@ namespace librbd {
    */
   class C_ReadRequest : public Context {
   public:
-    C_ReadRequest(CephContext *cct, Context *c, RWLock *owner_lock,
-                  Mutex *cache_lock)
-      : m_cct(cct), m_ctx(c), m_owner_lock(owner_lock),
-        m_cache_lock(cache_lock) {
+    C_ReadRequest(CephContext *cct, Context *c, Mutex *cache_lock)
+      : m_cct(cct), m_ctx(c), m_cache_lock(cache_lock) {
     }
     virtual void finish(int r) {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
-        RWLock::RLocker owner_locker(*m_owner_lock);
         Mutex::Locker cache_locker(*m_cache_lock);
 	m_ctx->complete(r);
       }
@@ -67,7 +64,6 @@ namespace librbd {
   private:
     CephContext *m_cct;
     Context *m_ctx;
-    RWLock *m_owner_lock;
     Mutex *m_cache_lock;
   };
 
@@ -157,7 +153,6 @@ namespace librbd {
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "journal committed: sending write request" << dendl;
 
-      RWLock::RLocker owner_locker(image_ctx->owner_lock);
       assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
@@ -199,8 +194,7 @@ namespace librbd {
 			     __u32 trunc_seq, int op_flags, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
-    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_ictx->owner_lock,
-                                     &m_lock);
+    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
 
     {
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
@@ -257,7 +251,6 @@ namespace librbd {
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
 				    Context *oncommit)
   {
-    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     write_result_d *result = new write_result_d(oid.name, oncommit);
@@ -292,7 +285,6 @@ namespace librbd {
                            << "journal_tid=" << original_journal_tid << ", "
                            << "new_journal_tid=" << new_journal_tid << dendl;
 
-    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     // all IO operations are flushed prior to closing the journal
@@ -315,14 +307,6 @@ namespace librbd {
 					        it->second, 0);
       }
     }
-  }
-
-  void LibrbdWriteback::get_client_lock() {
-    m_ictx->owner_lock.get_read();
-  }
-
-  void LibrbdWriteback::put_client_lock() {
-    m_ictx->owner_lock.put_read();
   }
 
   void LibrbdWriteback::complete_writes(const std::string& oid)

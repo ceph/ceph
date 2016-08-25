@@ -128,7 +128,6 @@ bool AioObjectRequest<I>::compute_parent_extents() {
 }
 
 static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
-  assert(ictx->owner_lock.is_locked());
   assert(ictx->snap_lock.is_locked());
   return (ictx->clone_copy_on_read &&
           !ictx->read_only && snap_id == CEPH_NOSNAP &&
@@ -184,7 +183,6 @@ bool AioObjectRead<I>::should_complete(int r)
     // This is the step to read from parent
     if (!m_tried_parent && r == -ENOENT) {
       {
-        RWLock::RLocker owner_locker(image_ctx->owner_lock);
         RWLock::RLocker snap_locker(image_ctx->snap_lock);
         RWLock::RLocker parent_locker(image_ctx->parent_lock);
         if (image_ctx->parent == NULL) {
@@ -291,7 +289,6 @@ void AioObjectRead<I>::send_copyup()
 {
   ImageCtx *image_ctx = this->m_ictx;
   {
-    RWLock::RLocker owner_locker(image_ctx->owner_lock);
     RWLock::RLocker snap_locker(image_ctx->snap_lock);
     RWLock::RLocker parent_locker(image_ctx->parent_lock);
     if (!this->compute_parent_extents() ||
@@ -325,7 +322,6 @@ void AioObjectRead<I>::read_from_parent(const Extents& parent_extents)
                             << " parent completion " << parent_completion
                             << " extents " << parent_extents
                             << dendl;
-  RWLock::RLocker owner_locker(image_ctx->parent->owner_lock);
   AioImageRequest<>::aio_read(image_ctx->parent, parent_completion,
                               parent_extents, NULL, &m_read_data, 0);
 }
@@ -428,7 +424,6 @@ bool AbstractAioObjectWrite::should_complete(int r)
 }
 
 void AbstractAioObjectWrite::send() {
-  assert(m_ictx->owner_lock.is_locked());
   ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this <<" "
                          << m_oid << " " << m_object_off << "~"
                          << m_object_len << dendl;
@@ -436,8 +431,6 @@ void AbstractAioObjectWrite::send() {
 }
 
 void AbstractAioObjectWrite::send_pre() {
-  assert(m_ictx->owner_lock.is_locked());
-
   bool write = false;
   {
     RWLock::RLocker snap_lock(m_ictx->snap_lock);
@@ -477,7 +470,6 @@ void AbstractAioObjectWrite::send_pre() {
 }
 
 bool AbstractAioObjectWrite::send_post() {
-  RWLock::RLocker owner_locker(m_ictx->owner_lock);
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr || !post_object_map_update()) {
     return true;
