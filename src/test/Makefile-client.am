@@ -390,8 +390,10 @@ unittest_librbd_SOURCES = \
 	test/librbd/test_mock_Journal.cc \
 	test/librbd/test_mock_ObjectWatcher.cc \
 	test/librbd/exclusive_lock/test_mock_AcquireRequest.cc \
+	test/librbd/exclusive_lock/test_mock_ReacquireRequest.cc \
 	test/librbd/exclusive_lock/test_mock_ReleaseRequest.cc \
 	test/librbd/image/test_mock_RefreshRequest.cc \
+	test/librbd/image_watcher/test_mock_RewatchRequest.cc \
 	test/librbd/journal/test_mock_Replay.cc \
 	test/librbd/object_map/test_mock_InvalidateRequest.cc \
 	test/librbd/object_map/test_mock_LockRequest.cc \
