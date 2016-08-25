@@ -771,6 +771,43 @@ Client
 :Default: ``100ul << 20``
 
 
+Pool settings
+=============
+Since version v0.94 there is support for pool flags which allow or disallow changes to be made to pools.
+
+Monitors can also disallow removal of pools if configured that way.
+
+``mon allow pool delete``
+
+:Description: If the monitors should allow pools to be removed. Regardless of what the pool flags say.
+:Type: Boolean
+:Default: ``false``
+
+``osd pool default flag hashpspool``
+
+:Description: Set the hashpspool flag on new pools
+:Type: Boolean
+:Default: ``true``
+
+``osd pool default flag nodelete``
+
+:Description: Set the nodelete flag on new pools. Prevents allow pool removal with this flag in any way.
+:Type: Boolean
+:Default: ``false``
+
+``osd pool default flag nopgchange``
+
+:Description: Set the nopgchange flag on new pools. Does not allow the number of PGs to be changed for a pool.
+:Type: Boolean
+:Default: ``false``
+
+``osd pool default flag nosizechange``
+
+:Description: Set the nosizechange flag on new pools. Does not allow the size to be changed of pool.
+:Type: Boolean
+:Default: ``false``
+
+For more information about the pool flags see `Pool values`_.
 
 Miscellaneous
 =============
@@ -865,3 +902,4 @@ Miscellaneous
 .. _Changing a Monitor's IP Address: ../../operations/add-or-rm-mons#changing-a-monitor-s-ip-address
 .. _Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
+.. _Pool values: ../../operations/pools/#set-pool-values
