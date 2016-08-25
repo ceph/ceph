@@ -140,7 +140,6 @@ private:
   bool m_sparse;
   int m_op_flags;
   ceph::bufferlist m_read_data;
-  AioCompletion *m_parent_completion;
   ExtentMap m_ext_map;
 
   /**
