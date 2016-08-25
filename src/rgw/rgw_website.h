@@ -212,7 +212,7 @@ struct RGWBucketWebsiteConf
   void get_effective_key(const std::string& key,
                          std::string *effective_key) const;
 
-  const std::string& get_swift_index_doc() const {
+  const std::string& get_index_doc() const {
     return index_doc_suffix;
   }
 

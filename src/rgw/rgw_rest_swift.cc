@@ -1704,9 +1704,9 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_index_op()
   /* Retarget to get obj on requested index file. */
   if (! s->object.empty()) {
     s->object = s->object.name +
-                s->bucket_info.website_conf.get_swift_index_doc();
+                s->bucket_info.website_conf.get_index_doc();
   } else {
-    s->object = s->bucket_info.website_conf.get_swift_index_doc();
+    s->object = s->bucket_info.website_conf.get_index_doc();
   }
 
   auto getop = new RGWGetObj_ObjStore_SWIFT;
@@ -1842,7 +1842,7 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
    * has X-Web-Mode HTTP header specified to true. */
   if (can_be_website_req()) {
     const auto& ws_conf = s->bucket_info.website_conf;
-    const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
+    const auto& index = s->bucket_info.website_conf.get_index_doc();
 
     if (s->info.request_uri.back() != '/') {
       op_override = get_ws_redirect_op();
@@ -1876,7 +1876,7 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
    * has X-Web-Mode HTTP header specified to true. */
   if (can_be_website_req() && is_web_dir()) {
     const auto& ws_conf = s->bucket_info.website_conf;
-    const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
+    const auto& index = s->bucket_info.website_conf.get_index_doc();
 
     if (s->info.request_uri.back() != '/') {
       op_override = get_ws_redirect_op();
