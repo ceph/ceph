@@ -93,6 +93,14 @@ struct CommandOp
   std::string  *outs;
 };
 
+/* Device bit shift handling */
+#define MINORBITS	20
+#define MINORMASK	((1U << MINORBITS) - 1)
+
+#define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
+#define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
+#define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+
 /* error code for ceph_fuse */
 #define CEPH_FUSE_NO_MDS_UP    -(1<<2) /* no mds up deteced in ceph_fuse */
 
@@ -519,11 +527,17 @@ protected:
   // path traversal for high-level interface
   InodeRef cwd;
   int path_walk(const filepath& fp, InodeRef *end, bool followsym=true,
-		int uid=-1, int gid=-1);
+		int mask=0, int uid=-1, int gid=-1);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
   }
+
+  void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
+  void fill_statx(InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
+    return fill_statx(in.get(), mask, stx);
+  }
+
   void touch_dn(Dentry *dn);
 
   // trim cache.
@@ -693,11 +707,10 @@ protected:
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
-  void update_inode_file_bits(Inode *in,
-			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
-			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
-			      version_t inline_version, bufferlist& inline_data,
-			      int issued);
+  void update_inode_file_bits(Inode *in, uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
+			      uint64_t change_attr, uint64_t time_warp_seq, utime_t ctime,
+			      utime_t mtime, utime_t atime, version_t inline_version,
+			      bufferlist& inline_data, int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
 			      Inode *in, utime_t from, MetaSession *session,
@@ -760,9 +773,13 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
-  int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
-  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _do_setattr(Inode *in, struct ceph_statx *stx, int mask, int uid, int gid, InodeRef *inp);
+  void stat_to_statx(struct stat *st, struct ceph_statx *stx);
+  int __setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _setattrx(InodeRef &in, struct ceph_statx *stx, int mask);
   int _setattr(InodeRef &in, struct stat *attr, int mask);
+  int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid = -1,
+		 int gid = -1, InodeRef *inp = 0);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
@@ -832,7 +849,7 @@ private:
 
   int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1);
-  int may_setattr(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1);
+  int may_setattr(Inode *in, struct ceph_statx *stx, int mask, int uid=-1, int gid=-1);
   int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
   int may_lookup(Inode *dir, int uid=-1, int gid=-1);
   int may_create(Inode *dir, int uid=-1, int gid=-1);
@@ -908,6 +925,8 @@ private:
 
   mds_rank_t _get_random_up_mds() const;
 
+  int _ll_getattr(Inode *in, int uid, int gid);
+
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
@@ -977,11 +996,14 @@ public:
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
+  unsigned statx_to_mask(unsigned int flags, unsigned int want);
   int stat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int statx(const char *path, struct ceph_statx *stx, unsigned int want, unsigned int flags);
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
   int setattr(const char *relpath, struct stat *attr, int mask);
+  int setattrx(const char *relpath, struct ceph_statx *stx, int mask, int flags=0);
   int fsetattr(int fd, struct stat *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int fchmod(int fd, mode_t mode);
@@ -1012,6 +1034,7 @@ public:
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int fstatx(int fd, struct ceph_statx *stx, unsigned int want, unsigned int flags);
   int fallocate(int fd, int mode, loff_t offset, loff_t length);
 
   // full path xattr ops
@@ -1077,6 +1100,10 @@ public:
   bool ll_forget(Inode *in, int count);
   bool ll_put(Inode *in);
   int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
+  int ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
+		  unsigned int flags, int uid = -1, int gid = -1);
+  int ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid = -1,
+		 int gid = -1);
   int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1,
 		 int gid = -1);
   int ll_getxattr(Inode *in, const char *name, void *value, size_t size,

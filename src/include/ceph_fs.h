@@ -376,6 +376,7 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_ATIME	(1 << 4)
 #define CEPH_SETATTR_SIZE	(1 << 5)
 #define CEPH_SETATTR_CTIME	(1 << 6)
+#define CEPH_SETATTR_BTIME	(1 << 9)
 #endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
@@ -467,6 +468,77 @@ struct ceph_mds_request_head {
 	__le64 ino;                    /* use this ino for openc, mkdir, mknod,
 					  etc. (if replaying) */
 	union ceph_mds_request_args args;
+} __attribute__ ((packed));
+
+union ceph_mds_request_args_new {
+	struct {
+		__le32 mask;                 /* CEPH_CAP_* */
+	} __attribute__ ((packed)) getattr;
+	struct {
+		__le32 mode;
+		__le32 uid;
+		__le32 gid;
+		struct ceph_timespec mtime;
+		struct ceph_timespec atime;
+		__le64 size, old_size;       /* old_size needed by truncate */
+		__le32 mask;                 /* CEPH_SETATTR_* */
+		struct ceph_timespec btime;
+	} __attribute__ ((packed)) setattr;
+	struct {
+		__le32 frag;                 /* which dir fragment */
+		__le32 max_entries;          /* how many dentries to grab */
+		__le32 max_bytes;
+		__le16 flags;
+	} __attribute__ ((packed)) readdir;
+	struct {
+		__le32 mode;
+		__le32 rdev;
+	} __attribute__ ((packed)) mknod;
+	struct {
+		__le32 mode;
+	} __attribute__ ((packed)) mkdir;
+	struct {
+		__le32 flags;
+		__le32 mode;
+		__le32 stripe_unit;          /* layout for newly created file */
+		__le32 stripe_count;         /* ... */
+		__le32 object_size;
+		__le32 pool;                 /* if >= 0 and CREATEPOOLID feature */
+		__le32 mask;                 /* CEPH_CAP_* */
+		__le64 old_size;             /* if O_TRUNC */
+	} __attribute__ ((packed)) open;
+	struct {
+		__le32 flags;
+		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
+	} __attribute__ ((packed)) setxattr;
+	struct {
+		struct ceph_file_layout layout;
+	} __attribute__ ((packed)) setlayout;
+	struct {
+		__u8 rule; /* currently fcntl or flock */
+		__u8 type; /* shared, exclusive, remove*/
+		__le64 owner; /* who requests/holds the lock */
+		__le64 pid; /* process id requesting the lock */
+		__le64 start; /* initial location to lock */
+		__le64 length; /* num bytes to lock from start */
+		__u8 wait; /* will caller wait for lock to become available? */
+	} __attribute__ ((packed)) filelock_change;
+} __attribute__ ((packed));
+
+#define CEPH_MDS_REQUEST_HEAD_VERSION	1
+
+struct ceph_mds_request_head_new {
+	__le16 version;
+	__le64 oldest_client_tid;
+	__le32 mdsmap_epoch;           /* on client */
+	__le32 flags;                  /* CEPH_MDS_FLAG_* */
+	__u8 num_retry, num_fwd;       /* count retry, fwd attempts */
+	__le16 num_releases;           /* # include cap/lease release records */
+	__le32 op;                     /* mds op code */
+	__le32 caller_uid, caller_gid;
+	__le64 ino;                    /* use this ino for openc, mkdir, mknod,
+					  etc. (if replaying) */
+	union ceph_mds_request_args_new args;
 } __attribute__ ((packed));
 
 /* cap/lease release record */
