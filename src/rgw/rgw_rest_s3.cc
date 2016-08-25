@@ -3661,7 +3661,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     }
     string token_value = string(t);
     if (using_qs && (token == "host")) {
-      if (!port.empty() && port != "80") {
+      if (!port.empty() && port != "80" && port != "0") {
         token_value = token_value + ":" + port;
       } else if (!secure_port.empty() && secure_port != "443") {
         token_value = token_value + ":" + secure_port;
