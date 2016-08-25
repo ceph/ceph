@@ -547,9 +547,20 @@ endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
 
+if(${WITH_LIBZBC})
+	message("Adding LIBZBC support")
+  add_subdirectory(libzbc)
+endif(${WITH_LIBZBC})
+
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
 endif(${WITH_LTTNG})
+
+if(${WITH_LIBZBC})
+  set(LIBZBC_INCLUDE_PATH,libzbc/include)
+  include_directories(${LIBZBC_INCLUDE_PATH})
+  target_link_libraries(zbc)
+endif(${WITH_LIBZBC})
 
 add_subdirectory(global)
 
@@ -798,6 +809,10 @@ if(WITH_LIBCEPHFS)
     $<TARGET_OBJECTS:common_mountcephfs_objs>)
   target_link_libraries(mount.ceph keyutils)
 
+	if(${WITH_LIBZBC})
+		target_link_libraries(cephfs zbc)
+	endif(${WITH_LIBZBC})
+
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
@@ -811,7 +826,10 @@ if(WITH_LIBCEPHFS)
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
   endif(HAVE_LIBFUSE)
+
 endif(WITH_LIBCEPHFS)
+
+
 
 add_subdirectory(journal)
 
