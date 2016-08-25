@@ -24,7 +24,6 @@
 # no gperftools/tcmalloc on s390(x)
 %bcond_with tcmalloc
 %endif
-%bcond_without libs_compat
 %bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
@@ -624,27 +623,6 @@ populated file-systems.
 
 %endif
 
-%if 0%{with libs_compat}
-
-%package libs-compat
-Summary:	Meta package to include ceph libraries
-Group:		System Environment/Libraries
-License:	LGPL-2.0
-Obsoletes:	ceph-libs
-Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-Provides:	ceph-libs
-
-%description libs-compat
-This is a meta package, that pulls in librados2, librbd1 and libcephfs1. It
-is included for backwards compatibility with distributions that depend on the
-former ceph-libs package, which is now split up into these three subpackages.
-Packages still depending on ceph-libs should be fixed to depend on librados2,
-librbd1 or libcephfs1 instead.
-
-%endif
-
 %package -n python-ceph-compat
 Summary:	Compatibility package for Cephs python libraries
 Group:		System Environment/Libraries
@@ -881,7 +859,6 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %systemd_postun ceph.target
 %endif
 
-#################################################################################
 %files common
 %defattr(-,root,root,-)
 %{_bindir}/ceph
@@ -975,7 +952,6 @@ if [ "$1" -eq "0" ] ; then
     rm -rf %{_sysconfdir}/ceph
 fi
 
-#################################################################################
 %files mds
 %{_bindir}/ceph-mds
 %{_mandir}/man8/ceph-mds.8*
@@ -1025,7 +1001,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files mon
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-rest-api
@@ -1078,20 +1053,17 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 %{_sbindir}/mount.fuse.ceph
 
-#################################################################################
 %files -n rbd-fuse
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
 
-#################################################################################
 %files -n rbd-mirror
 %defattr(-,root,root,-)
 %{_bindir}/rbd-mirror
@@ -1141,13 +1113,11 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files -n rbd-nbd
 %defattr(-,root,root,-)
 %{_bindir}/rbd-nbd
 %{_mandir}/man8/rbd-nbd.8*
 
-#################################################################################
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
@@ -1203,7 +1173,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %files osd
 %{_bindir}/ceph-clsinfo
 %{_bindir}/ceph-bluefs-tool
@@ -1268,7 +1237,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
 fi
 
-#################################################################################
 %if %{with ocf}
 
 %files resource-agents
@@ -1281,7 +1249,6 @@ fi
 
 %endif
 
-#################################################################################
 %files -n librados2
 %defattr(-,root,root,-)
 %{_libdir}/librados.so.*
@@ -1289,13 +1256,10 @@ fi
 %{_libdir}/librados_tp.so.*
 %endif
 
-%post -n librados2
-/sbin/ldconfig
+%post -n librados2 -p /sbin/ldconfig
 
-%postun -n librados2
-/sbin/ldconfig
+%postun -n librados2 -p /sbin/ldconfig
 
-#################################################################################
 %files -n librados-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/rados
@@ -1315,30 +1279,24 @@ fi
 %{_bindir}/librados-config
 %{_mandir}/man8/librados-config.8*
 
-#################################################################################
 %files -n python-rados
 %defattr(-,root,root,-)
 %{python_sitearch}/rados.so
 %{python_sitearch}/rados-*.egg-info
 
-#################################################################################
 %files -n python%{python3_pkgversion}-rados
 %defattr(-,root,root,-)
 %{python3_sitearch}/rados.cpython*.so
 %{python3_sitearch}/rados-*.egg-info
 
-#################################################################################
 %files -n libradosstriper1
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
 
-%post -n libradosstriper1
-/sbin/ldconfig
+%post -n libradosstriper1 -p /sbin/ldconfig
 
-%postun -n libradosstriper1
-/sbin/ldconfig
+%postun -n libradosstriper1 -p /sbin/ldconfig
 
-#################################################################################
 %files -n libradosstriper-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/radosstriper
@@ -1346,7 +1304,6 @@ fi
 %{_includedir}/radosstriper/libradosstriper.hpp
 %{_libdir}/libradosstriper.so
 
-#################################################################################
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
@@ -1359,10 +1316,8 @@ fi
 mkdir -p /usr/lib64/qemu/
 ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
-%postun -n librbd1
-/sbin/ldconfig
+%postun -n librbd1 -p /sbin/ldconfig
 
-#################################################################################
 %files -n librbd-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/rbd
@@ -1374,18 +1329,14 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_libdir}/librbd_tp.so
 %endif
 
-#################################################################################
 %files -n librgw2
 %defattr(-,root,root,-)
 %{_libdir}/librgw.so.*
 
-%post -n librgw2
-/sbin/ldconfig
+%post -n librgw2 -p /sbin/ldconfig
 
-%postun -n librgw2
-/sbin/ldconfig
+%postun -n librgw2 -p /sbin/ldconfig
 
-#################################################################################
 %files -n librgw-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/rados
@@ -1393,44 +1344,36 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
 
-#################################################################################
 %files -n python-rbd
 %defattr(-,root,root,-)
 %{python_sitearch}/rbd.so
 %{python_sitearch}/rbd-*.egg-info
 
-#################################################################################
 %files -n python%{python3_pkgversion}-rbd
 %defattr(-,root,root,-)
 %{python3_sitearch}/rbd.cpython*.so
 %{python3_sitearch}/rbd-*.egg-info
 
-#################################################################################
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
 
-%post -n libcephfs1
-/sbin/ldconfig
+%post -n libcephfs1 -p /sbin/ldconfig
 
-%postun -n libcephfs1
-/sbin/ldconfig
+%postun -n libcephfs1 -p /sbin/ldconfig
 
-#################################################################################
 %files -n libcephfs-devel
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
 %{_libdir}/libcephfs.so
 
-#################################################################################
 %files -n python-cephfs
 %defattr(-,root,root,-)
 %{python_sitearch}/cephfs.so
 %{python_sitearch}/cephfs-*.egg-info
 %{python_sitelib}/ceph_volume_client.py*
 
-#################################################################################
 %files -n python%{python3_pkgversion}-cephfs
 %defattr(-,root,root,-)
 %{python3_sitearch}/cephfs.cpython*.so
@@ -1440,7 +1383,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python3_sitelib}/__pycache__/ceph_volume_client.cpython*.py*
 %endif
 
-#################################################################################
 %files -n python%{python3_pkgversion}-ceph-argparse
 %defattr(-,root,root,-)
 %{python3_sitelib}/ceph_argparse.py
@@ -1450,7 +1392,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
 %endif
 
-#################################################################################
 %files -n ceph-test
 %defattr(-,root,root,-)
 %{_bindir}/ceph_bench_log
@@ -1486,31 +1427,25 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
 
-#################################################################################
 %if 0%{with cephfs_java}
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
 
-%post -n libcephfs_jni1
-/sbin/ldconfig
+%post -n libcephfs_jni1 -p /sbin/ldconfig
 
-%postun -n libcephfs_jni1
-/sbin/ldconfig
+%postun -n libcephfs_jni1 -p /sbin/ldconfig
 
-#################################################################################
 %files -n libcephfs_jni-devel
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so
 
-#################################################################################
 %files -n cephfs-java
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
 %endif
 
-#################################################################################
 %if 0%{with selinux}
 %files selinux
 %defattr(-,root,root,-)
@@ -1598,14 +1533,6 @@ exit 0
 
 %endif # with selinux
 
-#################################################################################
-%if 0%{with libs_compat}
-%files libs-compat
-# We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
-# build this meta package.
-%endif
-
-#################################################################################
 %files -n python-ceph-compat
 # We need an empty %%files list for python-ceph-compat, to tell rpmbuild to
 # actually build this meta package.
