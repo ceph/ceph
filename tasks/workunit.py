@@ -306,7 +306,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     else:
         scratch_tmp = os.path.join(mnt, subdir)
     srcdir = '{tdir}/workunit.{role}'.format(tdir=testdir, role=role)
-    clonedir = '{tdir}/clone'.format(tdir=testdir)
+    clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
 
     git_url = teuth_config.get_ceph_git_url()
     if 'github.com/ceph/ceph' in git_url:
