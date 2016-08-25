@@ -3315,6 +3315,15 @@ int RGWRados::convert_regionmap()
   current_period.set_user_quota(zonegroupmap.user_quota);
   current_period.set_bucket_quota(zonegroupmap.bucket_quota);
 
+  // remove the region_map so we don't try to convert again
+  rgw_obj obj(pool, oid);
+  ret = delete_system_obj(obj);
+  if (ret < 0) {
+    ldout(cct, 0) << "Error could not remove " << obj
+        << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
   return 0;
 }
 
