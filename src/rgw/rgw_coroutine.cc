@@ -9,6 +9,16 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+class RGWCompletionManager::WaitContext : public Context {
+  RGWCompletionManager *manager;
+  void *opaque;
+public:
+  WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
+  void finish(int r) {
+    manager->_wakeup(opaque);
+  }
+};
+
 RGWCompletionManager::RGWCompletionManager(CephContext *_cct) : cct(_cct), lock("RGWCompletionManager::lock"),
                                             timer(cct, lock)
 {
