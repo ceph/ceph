@@ -1019,10 +1019,14 @@ struct RGWZone {
  */
   uint32_t bucket_index_max_shards;
 
-  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0) {}
+  bool sync_from_all;
+  set<string> sync_from; /* list of zones to sync from */
+
+  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0),
+              sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
@@ -1031,11 +1035,13 @@ struct RGWZone {
     ::encode(id, bl);
     ::encode(read_only, bl);
     ::encode(tier_type, bl);
+    ::encode(sync_from_all, bl);
+    ::encode(sync_from, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     ::decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -1055,6 +1061,10 @@ struct RGWZone {
     if (struct_v >= 5) {
       ::decode(tier_type, bl);
     }
+    if (struct_v >= 6) {
+      ::decode(sync_from_all, bl);
+      ::decode(sync_from, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1062,6 +1072,10 @@ struct RGWZone {
   static void generate_test_instances(list<RGWZone*>& o);
 
   bool is_read_only() { return read_only; }
+
+  bool syncs_from(const string& zone_id) {
+    return (sync_from_all || sync_from.find(zone_id) != sync_from.end());
+  }
 };
 WRITE_CLASS_ENCODER(RGWZone)
 
@@ -1964,6 +1978,8 @@ public:
 
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
+  map<string, RGWRESTConn *> zone_data_sync_from_map;
+  map<string, RGWRESTConn *> zone_data_notify_to_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
   map<string, string> zone_id_by_name;
@@ -2021,6 +2037,8 @@ public:
   uint32_t get_zone_short_id() const {
     return zone_short_id;
   }
+
+  bool zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone);
 
   const RGWQuotaInfo& get_bucket_quota() {
     return current_period.get_config().bucket_quota;

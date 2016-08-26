@@ -288,6 +288,18 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
     zone.tier_type = *ptier_type;
   }
 
+  if (psync_from_all) {
+    zone.sync_from_all = *psync_from_all;
+  }
+
+  for (auto add : sync_from) {
+    zone.sync_from.insert(add);
+  }
+
+  for (auto rm : sync_from_rm) {
+    zone.sync_from.erase(rm);
+  }
+
   post_process_params();
 
   return update();
@@ -2950,7 +2962,7 @@ int RGWDataNotifier::process()
     ldout(cct, 20) << __func__ << "(): notifying datalog change, shard_id=" << iter->first << ": " << iter->second << dendl;
   }
 
-  notify_mgr.notify_all(store->zone_conn_map, shards);
+  notify_mgr.notify_all(store->zone_data_notify_to_map, shards);
 
   return 0;
 }
@@ -3706,6 +3718,13 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
   return 0;
 }
 
+
+bool RGWRados::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
+{
+  return target_zone.syncs_from(source_zone.id) &&
+         sync_modules_manager->supports_data_export(source_zone.tier_type);
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -3816,22 +3835,41 @@ int RGWRados::init_complete()
     }
   }
 
-  map<string, RGWZone>::iterator ziter;
-  for (ziter = get_zonegroup().zones.begin(); ziter != get_zonegroup().zones.end(); ++ziter) {
-    const string& id = ziter->first;
-    RGWZone& z = ziter->second;
+  /* first build all zones index */
+  for (auto ziter : get_zonegroup().zones) {
+    const string& id = ziter.first;
+    RGWZone& z = ziter.second;
     zone_id_by_name[z.name] = id;
     zone_by_id[id] = z;
-    if (id != zone_id()) {
-      if (!z.endpoints.empty()) {
-        ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-        RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
-        zone_conn_map[id] = conn;
-      } else {
-        ldout(cct, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
+  }
+  
+  if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
+    ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
+  }
+  zone_public_config = zone_by_id[zone_id()];
+  for (auto ziter : get_zonegroup().zones) {
+    const string& id = ziter.first;
+    RGWZone& z = ziter.second;
+    if (id == zone_id()) {
+      continue;
+    }
+    if (z.endpoints.empty()) {
+      ldout(cct, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
+      continue;
+    }
+    ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
+    RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
+    zone_conn_map[id] = conn;
+    if (zone_syncs_from(zone_public_config, z) ||
+        zone_syncs_from(z, zone_public_config)) {
+      if (zone_syncs_from(zone_public_config, z)) {
+        zone_data_sync_from_map[id] = conn;
+      }
+      if (zone_syncs_from(z, zone_public_config)) {
+        zone_data_notify_to_map[id] = conn;
       }
     } else {
-      zone_public_config = z;
+      ldout(cct, 20) << "NOTICE: not syncing to/from zone " << z.name << " id " << z.id << dendl;
     }
   }
 
@@ -3903,16 +3941,16 @@ int RGWRados::init_complete()
     meta_sync_processor_thread->start();
 
     Mutex::Locker dl(data_sync_thread_lock);
-    for (map<string, RGWRESTConn *>::iterator iter = zone_conn_map.begin(); iter != zone_conn_map.end(); ++iter) {
-      ldout(cct, 5) << "starting data sync thread for zone " << iter->first << dendl;
-      RGWDataSyncProcessorThread *thread = new RGWDataSyncProcessorThread(this, async_rados, iter->first);
+    for (auto iter : zone_data_sync_from_map) {
+      ldout(cct, 5) << "starting data sync thread for zone " << iter.first << dendl;
+      RGWDataSyncProcessorThread *thread = new RGWDataSyncProcessorThread(this, async_rados, iter.first);
       ret = thread->init();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
       }
       thread->start();
-      data_sync_processor_threads[iter->first] = thread;
+      data_sync_processor_threads[iter.first] = thread;
     }
     auto interval = cct->_conf->rgw_sync_log_trim_interval;
     if (interval > 0) {
@@ -3948,7 +3986,7 @@ int RGWRados::init_complete()
   binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
   binfo_cache->init(this);
 
-  bool need_tombstone_cache = !zone_conn_map.empty();
+  bool need_tombstone_cache = !zone_data_notify_to_map.empty(); /* have zones syncing from us */
 
   if (need_tombstone_cache) {
     obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
