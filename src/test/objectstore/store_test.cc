@@ -1123,6 +1123,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
   g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_min_alloc_size", "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ObjectStore::Sequencer osr("test");
