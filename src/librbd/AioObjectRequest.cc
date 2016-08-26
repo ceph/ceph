@@ -212,7 +212,7 @@ bool AioObjectRead<I>::should_complete(int r)
             m_state = LIBRBD_AIO_READ_COPYUP;
           }
 
-          read_from_parent(parent_extents);
+          read_from_parent(std::move(parent_extents));
           finished = false;
         }
       }
@@ -303,16 +303,18 @@ void AioObjectRead<I>::send_copyup()
     image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
-    CopyupRequest *new_req = new CopyupRequest(image_ctx, this->m_oid,
-                                               this->m_object_no,
-                                               this->m_parent_extents);
+    CopyupRequest *new_req = new CopyupRequest(
+      image_ctx, this->m_oid, this->m_object_no,
+      std::move(this->m_parent_extents));
+    this->m_parent_extents.clear();
+
     image_ctx->copyup_list[this->m_object_no] = new_req;
     new_req->send();
   }
 }
 
 template <typename I>
-void AioObjectRead<I>::read_from_parent(const Extents& parent_extents)
+void AioObjectRead<I>::read_from_parent(Extents&& parent_extents)
 {
   ImageCtx *image_ctx = this->m_ictx;
   AioCompletion *parent_completion = AioCompletion::create_and_start<
@@ -323,7 +325,8 @@ void AioObjectRead<I>::read_from_parent(const Extents& parent_extents)
                             << " extents " << parent_extents
                             << dendl;
   AioImageRequest<>::aio_read(image_ctx->parent, parent_completion,
-                              parent_extents, NULL, &m_read_data, 0);
+                              std::move(parent_extents), nullptr, &m_read_data,
+                              0);
 }
 
 /** write **/
@@ -520,7 +523,8 @@ void AbstractAioObjectWrite::send_copyup()
   if (it == m_ictx->copyup_list.end()) {
     CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
                                                m_object_no,
-                                               m_parent_extents);
+                                               std::move(m_parent_extents));
+    m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
     new_req->append_request(this);

@@ -150,17 +150,9 @@ private:
 
 template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
-                                  const Extents &extents, char *buf,
+                                  Extents &&image_extents, char *buf,
                                   bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags);
-  req.send();
-}
-
-template <typename I>
-void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c, uint64_t off,
-                                 size_t len, char *buf, bufferlist *pbl,
-                                 int op_flags) {
-  AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags);
+  AioImageRead<I> req(*ictx, c, std::move(image_extents), buf, pbl, op_flags);
   req.send();
 }
 
@@ -172,9 +164,11 @@ void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c, uint64_t off,
 }
 
 template <typename I>
-void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c, uint64_t off,
-                                   bufferlist &&bl, int op_flags) {
-  AioImageWrite<I> req(*ictx, c, off, std::move(bl), op_flags);
+void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
+                                   Extents &&image_extents, bufferlist &&bl,
+                                   int op_flags) {
+  AioImageWrite<I> req(*ictx, c, std::move(image_extents), std::move(bl),
+                       op_flags);
   req.send();
 }
 
@@ -218,9 +212,10 @@ void AioImageRead<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
+  auto &image_extents = this->m_image_extents;
   if (image_ctx.object_cacher && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), m_image_extents);
+    readahead(get_image_ctx(&image_ctx), image_extents);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -234,11 +229,9 @@ void AioImageRead<I>::send_request() {
     snap_id = image_ctx.snap_id;
 
     // map
-    for (vector<pair<uint64_t,uint64_t> >::const_iterator p =
-           m_image_extents.begin();
-         p != m_image_extents.end(); ++p) {
-      uint64_t len = p->second;
-      int r = clip_io(get_image_ctx(&image_ctx), p->first, &len);
+    for (auto &extent : image_extents) {
+      uint64_t len = extent.second;
+      int r = clip_io(get_image_ctx(&image_ctx), extent.first, &len);
       if (r < 0) {
         aio_comp->fail(r);
         return;
@@ -248,7 +241,7 @@ void AioImageRead<I>::send_request() {
       }
 
       Striper::file_to_extents(cct, image_ctx.format_string,
-                               &image_ctx.layout, p->first, len, 0,
+                               &image_ctx.layout, extent.first, len, 0,
                                object_extents, buffer_ofs);
       buffer_ofs += len;
     }
@@ -306,7 +299,7 @@ void AbstractAioImageWrite<I>::send_request() {
   bool journaling = false;
 
   AioCompletion *aio_comp = this->m_aio_comp;
-  uint64_t clip_len = m_len;
+  uint64_t clip_len = 0;
   ObjectExtents object_extents;
   ::SnapContext snapc;
   {
@@ -318,21 +311,25 @@ void AbstractAioImageWrite<I>::send_request() {
       return;
     }
 
-    int r = clip_io(get_image_ctx(&image_ctx), m_off, &clip_len);
-    if (r < 0) {
-      aio_comp->fail(r);
-      return;
+    for (auto &extent : this->m_image_extents) {
+      uint64_t len = extent.second;
+      int r = clip_io(get_image_ctx(&image_ctx), extent.first, &len);
+      if (r < 0) {
+        aio_comp->fail(r);
+        return;
+      }
+      if (len == 0) {
+        continue;
+      }
+
+      // map to object extents
+      Striper::file_to_extents(cct, image_ctx.format_string,
+                               &image_ctx.layout, extent.first, len, 0,
+                               object_extents);
+      clip_len += len;
     }
 
     snapc = image_ctx.snapc;
-
-    // map to object extents
-    if (clip_len > 0) {
-      Striper::file_to_extents(cct, image_ctx.format_string,
-                               &image_ctx.layout, m_off, clip_len, 0,
-                               object_extents);
-    }
-
     journaling = (image_ctx.journal != nullptr &&
                   image_ctx.journal->is_journal_appending());
   }
@@ -408,9 +405,19 @@ template <typename I>
 uint64_t AioImageWrite<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
-  uint64_t tid = image_ctx.journal->append_write_event(this->m_off, this->m_len,
-                                                       m_bl, requests,
-                                                       synchronous);
+
+  uint64_t tid;
+  uint64_t buffer_offset = 0;
+  assert(!this->m_image_extents.empty());
+  for (auto &extent : this->m_image_extents) {
+    bufferlist sub_bl;
+    sub_bl.substr_of(m_bl, buffer_offset, extent.second);
+    buffer_offset += extent.second;
+
+    tid = image_ctx.journal->append_write_event(extent.first, extent.second,
+                                                sub_bl, requests, synchronous);
+  }
+
   if (image_ctx.object_cacher == NULL) {
     AioCompletion *aio_comp = this->m_aio_comp;
     aio_comp->associate_journal_event(tid);
@@ -476,11 +483,15 @@ uint64_t AioImageDiscard<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
-  journal::EventEntry event_entry(journal::AioDiscardEvent(this->m_off,
-                                                           this->m_len));
-  uint64_t tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                                    requests, this->m_off,
-                                                    this->m_len, synchronous);
+  uint64_t tid;
+  assert(!this->m_image_extents.empty());
+  for (auto &extent : this->m_image_extents) {
+    journal::EventEntry event_entry(journal::AioDiscardEvent(extent.first,
+                                                             extent.second));
+    tid = image_ctx.journal->append_io_event(std::move(event_entry),
+                                             requests, extent.first,
+                                             extent.second, synchronous);
+  }
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->associate_journal_event(tid);

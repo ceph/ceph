@@ -27,14 +27,12 @@ public:
   virtual ~AioImageRequest() {}
 
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
-                       const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-                       char *buf, bufferlist *pbl, int op_flags);
-  static void aio_read(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                       size_t len, char *buf, bufferlist *pbl, int op_flags);
+                       Extents &&image_extents, char *buf, bufferlist *pbl,
+                       int op_flags);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                         size_t len, const char *buf, int op_flags);
-  static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                        bufferlist &&bl, int op_flags);
+  static void aio_write(ImageCtxT *ictx, AioCompletion *c,
+                        Extents &&image_extents, bufferlist &&bl, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                           uint64_t len);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
@@ -55,9 +53,13 @@ protected:
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
+  Extents m_image_extents;
 
-  AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp)
-    : m_image_ctx(image_ctx), m_aio_comp(aio_comp) {}
+  AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
+                  Extents &&image_extents)
+    : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
+      m_image_extents(image_extents) {
+  }
 
   virtual void send_request() = 0;
   virtual aio_type_t get_aio_type() const = 0;
@@ -69,19 +71,11 @@ class AioImageRead : public AioImageRequest<ImageCtxT> {
 public:
   using typename AioImageRequest<ImageCtxT>::Extents;
 
-  AioImageRead(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-               size_t len, char *buf, bufferlist *pbl, int op_flags)
-    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp), m_buf(buf), m_pbl(pbl),
-      m_op_flags(op_flags) {
-    m_image_extents.push_back(std::make_pair(off, len));
-  }
-
   AioImageRead(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-               const Extents &image_extents, char *buf, bufferlist *pbl,
+               Extents &&image_extents, char *buf, bufferlist *pbl,
                int op_flags)
-    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp),
-      m_image_extents(image_extents), m_buf(buf), m_pbl(pbl),
-      m_op_flags(op_flags) {
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, std::move(image_extents)),
+      m_buf(buf), m_pbl(pbl), m_op_flags(op_flags) {
   }
 
 protected:
@@ -93,7 +87,6 @@ protected:
     return "aio_read";
   }
 private:
-  Extents m_image_extents;
   char *m_buf;
   bufferlist *m_pbl;
   int m_op_flags;
@@ -112,15 +105,13 @@ public:
 
 protected:
   using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
+  using typename AioImageRequest<ImageCtxT>::Extents;
 
   typedef std::vector<ObjectExtent> ObjectExtents;
 
-  const uint64_t m_off;
-  const size_t m_len;
-
   AbstractAioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-                        uint64_t off, size_t len)
-    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp), m_off(off), m_len(len),
+                        Extents &&image_extents)
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, std::move(image_extents)),
       m_synchronous(false) {
   }
 
@@ -152,15 +143,18 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class AioImageWrite : public AbstractAioImageWrite<ImageCtxT> {
 public:
+  using typename AioImageRequest<ImageCtxT>::Extents;
+
   AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                 size_t len, const char *buf, int op_flags)
-    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, len),
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, {{off, len}}),
       m_op_flags(op_flags) {
     m_bl.append(buf, len);
   }
-  AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                bufferlist &&bl, int op_flags)
-    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, bl.length()),
+  AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
+                Extents &&image_extents, bufferlist &&bl, int op_flags)
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp,
+                                       std::move(image_extents)),
       m_bl(std::move(bl)), m_op_flags(op_flags) {
   }
 
@@ -200,7 +194,7 @@ class AioImageDiscard : public AbstractAioImageWrite<ImageCtxT> {
 public:
   AioImageDiscard(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                   uint64_t len)
-    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, len) {
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, {{off, len}}) {
   }
 
 protected:
@@ -232,7 +226,7 @@ template <typename ImageCtxT = ImageCtx>
 class AioImageFlush : public AioImageRequest<ImageCtxT> {
 public:
   AioImageFlush(ImageCtxT &image_ctx, AioCompletion *aio_comp)
-    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp) {
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp, {}) {
   }
 
   virtual bool is_write_op() const {

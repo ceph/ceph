@@ -78,8 +78,7 @@ private:
 
 
 CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno,
-      		       vector<pair<uint64_t,uint64_t> >& image_extents)
+                             uint64_t objectno, Extents &&image_extents)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
     m_image_extents(image_extents), m_state(STATE_READ_FROM_PARENT)
 {
@@ -188,8 +187,8 @@ void CopyupRequest::send()
                          << ", oid " << m_oid
                          << ", extents " << m_image_extents
                          << dendl;
-  AioImageRequest<>::aio_read(m_ictx->parent, comp, m_image_extents, NULL,
-                              &m_copyup_data, 0);
+  AioImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
+                              nullptr, &m_copyup_data, 0);
 }
 
 void CopyupRequest::complete(int r)
@@ -205,7 +204,6 @@ bool CopyupRequest::should_complete(int r)
   CephContext *cct = m_ictx->cct;
   ldout(cct, 20) << __func__ << " " << this
                  << ": oid " << m_oid
-                 << ", extents " << m_image_extents
                  << ", r " << r << dendl;
 
   uint64_t pending_copyups;

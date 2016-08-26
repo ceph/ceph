@@ -120,10 +120,11 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       lock_required) {
-    queue(new AioImageRead<>(m_image_ctx, c, off, len, buf, pbl, op_flags));
+    queue(new AioImageRead<>(m_image_ctx, c, {{off, len}}, buf, pbl, op_flags));
   } else {
     c->start_op();
-    AioImageRequest<>::aio_read(&m_image_ctx, c, off, len, buf, pbl, op_flags);
+    AioImageRequest<>::aio_read(&m_image_ctx, c, {{off, len}}, buf, pbl,
+                                op_flags);
     finish_in_flight_op();
   }
 }
