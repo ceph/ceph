@@ -64,32 +64,40 @@ function build_package() {
     # included in the distribution.
     #
     git clean -qdxff
-    #
-    # creating the distribution tarbal requires some configure
-    # options (otherwise parts of the source tree will be left out).
-    #
-    ./autogen.sh
-    # Building with LTTNG on Ubuntu Precise is not possible.
-    # It fails the LTTNG-is-sane check (it misses headers)
-    # And the Debian rules files leave it out anyway
-    case $codename in
-	precise) lttng_opt="--without-lttng" ;;
-	*) lttng_opt="--with-lttng" ;;
-    esac
-    ./configure $(flavor2configure $flavor) \
-        --with-rocksdb --with-ocf \
-        --with-nss --with-debug --enable-cephfs-java \
-        $lttng_opt --with-babeltrace
-    #
-    # use distdir= to set the name of the top level directory of the
-    # tarbal to match the desired version
-    #
-    make distdir=ceph-$vers dist
+
+    fileext="gz"
+    # autotools only works in jewel and below
+    if [[ ! -e "make-dist" ]] ; then
+        #
+        # creating the distribution tarbal requires some configure
+        # options (otherwise parts of the source tree will be left out).
+        #
+        ./autogen.sh
+        # Building with LTTNG on Ubuntu Precise is not possible.
+        # It fails the LTTNG-is-sane check (it misses headers)
+        # And the Debian rules files leave it out anyway
+        case $codename in
+	    precise) lttng_opt="--without-lttng" ;;
+	    *) lttng_opt="--with-lttng" ;;
+        esac
+        ./configure $(flavor2configure $flavor) \
+            --with-rocksdb --with-ocf \
+            --with-nss --with-debug --enable-cephfs-java \
+            $lttng_opt --with-babeltrace
+        #
+        # use distdir= to set the name of the top level directory of the
+        # tarbal to match the desired version
+        #
+        make distdir=ceph-$vers dist
+    else
+      ./make-dist
+      fileext="bz2"
+    fi
     #
     # rename the tarbal to match debian conventions and extract it
     #
-    mv ceph-$vers.tar.gz $releasedir/ceph_$vers.orig.tar.gz
-    tar -C $releasedir -zxf $releasedir/ceph_$vers.orig.tar.gz
+    mv ceph-$vers.tar.$fileext $releasedir/ceph_$vers.orig.tar.$fileext
+    tar -C $releasedir -xf $releasedir/ceph_$vers.orig.tar.$fileext
     #
     # copy the debian directory over
     #

@@ -91,13 +91,28 @@ function build_package() {
     else
         sudo yum install -y bzip2
     fi
-    ./autogen.sh
-    ./configure $(flavor2configure $flavor) --with-debug --with-radosgw --with-fuse --with-libatomic-ops --with-gtk2 --with-nss
-    #
-    # use distdir= to set the name of the top level directory of the
-    # tarbal to match the desired version
-    #
-    make dist-bzip2
+    # autotools only works in jewel and below
+    if [[ ! -e "make-dist" ]] ; then
+        ./autogen.sh
+        ./configure $(flavor2configure $flavor) --with-debug --with-radosgw --with-fuse --with-libatomic-ops --with-gtk2 --with-nss
+
+        #
+        # use distdir= to set the name of the top level directory of the
+        # tarbal to match the desired version
+        #
+        make dist-bzip2
+    else
+        ##
+        # make-dist script suffixes the tarball with full version info,
+        # these transformations change version info to only include
+        # version number as is required by the ceph.spec file
+        #
+        cat make-dist \
+          | sed -e '0,/^outfile=/s//ver=`echo $version | cut -d - -f 1-1`\n&/' \
+          | sed -e 's/^\(outfile="ceph-$ver\)sion"/\1"/g' \
+                -e 's/\(--prefix ceph-$ver\)sion/\1/g' \
+          | sh
+    fi
     # Set up build area
     setup_rpmmacros
     if [ "$suse" = true ] ; then
