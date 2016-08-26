@@ -34,6 +34,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_multi_copy.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -647,6 +648,7 @@ class RGWPutObj : public RGWOp {
   friend class RGWPutObjProcessor;
 
 protected:
+  RGWPutMultipartCopy multipartcp;
   seed torrent;
   off_t ofs;
   const char *supplied_md5_b64;
