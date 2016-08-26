@@ -2,7 +2,10 @@ import logging
 import ast
 import re
 import requests
+import urllib
+import urlparse
 
+from collections import OrderedDict
 from cStringIO import StringIO
 
 from .config import config
@@ -749,3 +752,68 @@ class GitbuilderProject(object):
             log.info("Found sha1: {0}".format(sha1))
 
         return sha1
+
+
+class ShamanProject(GitbuilderProject):
+    def __init__(self, project, job_config, ctx=None, remote=None):
+        super(ShamanProject, self).__init__(project, job_config, ctx, remote)
+        self.query_url = 'https://%s/api/' % config.shaman_host
+
+    def _get_base_url(self):
+        self.assert_result()
+        return self._result.json()[0]['url']
+
+    @property
+    def _result(self):
+        if getattr(self, '_result_obj', None) is None:
+            self._result_obj = self._search()
+        return self._result_obj
+
+    def _search(self):
+        flavor = self.flavor
+        if flavor == 'basic':
+            flavor = 'default'
+        req_obj = OrderedDict()
+        req_obj['status'] = 'ready'
+        req_obj['project'] = self.project
+        req_obj['flavor'] = flavor
+        req_obj['distros'] = '%s/%s' % (self.distro, self.arch)
+        if getattr(self, 'branch', None):
+            req_obj['ref'] = self.branch
+        if self.sha1:
+            req_obj['sha1'] = self.sha1
+        req_str = urllib.urlencode(req_obj)
+        uri = urlparse.urljoin(
+            self.query_url,
+            'search',
+        ) + '?%s' % req_str
+        log.debug("Querying %s", uri)
+        resp = requests.get(
+            uri,
+            headers={'content-type': 'application/json'},
+        )
+        resp.raise_for_status()
+        return resp
+
+    def assert_result(self):
+        if len(self._result.json()) == 0:
+            raise VersionNotFoundError(self._result.url)
+
+    @classmethod
+    def _get_distro(cls, distro=None, version=None, codename=None):
+        if distro in ('centos', 'rhel'):
+            distro = 'centos'
+            version = cls._parse_version(version)
+        return "%s/%s" % (distro, version)
+
+    def _get_package_sha1(self):
+        # This doesn't raise because GitbuilderProject._get_package_sha1()
+        # doesn't either.
+        if not len(self._result.json()):
+            log.error("sha1 not found: %s", self._result.url)
+        else:
+            return self._result.json()[0]['sha1']
+
+    def _get_package_version(self):
+        self.assert_result()
+        return self._result.json()[0]['extra']['package_manager_version']

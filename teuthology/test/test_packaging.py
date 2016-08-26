@@ -558,3 +558,127 @@ class TestGitbuilderProject(TestBuilderProject):
         ('ubuntu', '12.04', None, 'precise'),
         ('ubuntu', '14.04', None, 'trusty'),
     ]
+
+
+class TestShamanProject(TestBuilderProject):
+    klass = packaging.ShamanProject
+
+    def setup(self):
+        self.p_config = patch('teuthology.packaging.config')
+        self.m_config = self.p_config.start()
+        self.m_config.use_shaman = True
+        self.m_config.shaman_host = 'shaman.ceph.com'
+        self.p_get_config_value = \
+            patch('teuthology.packaging._get_config_value_for_remote')
+        self.m_get_config_value = self.p_get_config_value.start()
+        self.m_get_config_value.return_value = None
+        self.p_get = patch('requests.get')
+        self.m_get = self.p_get.start()
+
+    def teardown(self):
+        self.p_config.stop()
+        self.p_get_config_value.stop()
+        self.p_get.stop()
+
+    def test_init_from_remote_base_url(self):
+        # Here, we really just need to make sure ShamanProject._search()
+        # queries the right URL. So let's make _get_base_url() just pass that
+        # URL through and test that value.
+        def m_get_base_url(obj):
+            obj._search()
+            return self.m_get.call_args_list[0][0][0]
+        with patch(
+            'teuthology.packaging.ShamanProject._get_base_url',
+            new=m_get_base_url,
+        ):
+            super(TestShamanProject, self)\
+                .test_init_from_remote_base_url(
+                    "https://shaman.ceph.com/api/search?status=ready"
+                    "&project=ceph&flavor=default"
+                    "&distros=ubuntu%2F14.04%2Fx86_64"
+                )
+
+    def test_init_from_remote_base_url_debian(self):
+        # Here, we really just need to make sure ShamanProject._search()
+        # queries the right URL. So let's make _get_base_url() just pass that
+        # URL through and test that value.
+        def m_get_base_url(obj):
+            obj._search()
+            return self.m_get.call_args_list[0][0][0]
+        with patch(
+            'teuthology.packaging.ShamanProject._get_base_url',
+            new=m_get_base_url,
+        ):
+            super(TestShamanProject, self)\
+                .test_init_from_remote_base_url_debian(
+                    "https://shaman.ceph.com/api/search?status=ready"
+                    "&project=ceph&flavor=default"
+                    "&distros=debian%2F7.1%2Fx86_64"
+                )
+
+    def test_init_from_config_base_url(self):
+        # Here, we really just need to make sure ShamanProject._search()
+        # queries the right URL. So let's make _get_base_url() just pass that
+        # URL through and test that value.
+        def m_get_base_url(obj):
+            obj._search()
+            return self.m_get.call_args_list[0][0][0]
+        with patch(
+            'teuthology.packaging.ShamanProject._get_base_url',
+            new=m_get_base_url,
+        ):
+            super(TestShamanProject, self).test_init_from_config_base_url(
+                "https://shaman.ceph.com/api/search?status=ready&project=ceph" \
+                "&flavor=default&distros=ubuntu%2F14.04%2Fx86_64&sha1=sha1"
+            )
+
+    def test_get_package_version_found(self):
+        resp = Mock()
+        resp.ok = True
+        resp.json.return_value = [
+            dict(
+                sha1='the_sha1',
+                extra=dict(package_manager_version='0.90.0'),
+            )
+        ]
+        self.m_get.return_value = resp
+        super(TestShamanProject, self)\
+            .test_get_package_version_found()
+
+    def test_get_package_sha1_fetched_found(self):
+        resp = Mock()
+        resp.ok = True
+        resp.json.return_value = [dict(sha1='the_sha1')]
+        self.m_get.return_value = resp
+        super(TestShamanProject, self)\
+            .test_get_package_sha1_fetched_found()
+
+    def test_get_package_sha1_fetched_not_found(self):
+        resp = Mock()
+        resp.json.return_value = []
+        self.m_get.return_value = resp
+        super(TestShamanProject, self)\
+            .test_get_package_sha1_fetched_not_found()
+
+    DISTRO_MATRIX = [
+        ('rhel', '7.0', None, 'centos/7'),
+        ('centos', '6.5', None, 'centos/6'),
+        ('centos', '7.0', None, 'centos/7'),
+        ('centos', '7.1', None, 'centos/7'),
+        ('fedora', '20', None, 'fedora/20'),
+        ('ubuntu', '14.04', 'trusty', 'ubuntu/14.04'),
+        ('ubuntu', '14.04', None, 'ubuntu/14.04'),
+        ('debian', '7.0', None, 'debian/7.0'),
+        ('debian', '7', None, 'debian/7'),
+        ('debian', '7.1', None, 'debian/7.1'),
+        ('ubuntu', '12.04', None, 'ubuntu/12.04'),
+        ('ubuntu', '14.04', None, 'ubuntu/14.04'),
+    ]
+
+    DISTRO_MATRIX_NOVER = [
+        ('rhel', None, None, 'centos/7'),
+        ('centos', None, None, 'centos/7'),
+        ('fedora', None, None, 'fedora/20'),
+        ('ubuntu', None, None, 'ubuntu/14.04'),
+        ('debian', None, None, 'debian/7.0'),
+    ]
