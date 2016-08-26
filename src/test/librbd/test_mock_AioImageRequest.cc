@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
+#include "test/librbd/mock/cache/MockImageCache.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioObjectRequest.h"
 
