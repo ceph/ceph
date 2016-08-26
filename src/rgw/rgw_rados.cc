@@ -302,6 +302,18 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
     zone.sync_from.erase(rm);
   }
 
+  if (psync_from_all) {
+    zone.sync_from_all = *psync_from_all;
+  }
+
+  for (auto add : sync_from) {
+    zone.sync_from.insert(add);
+  }
+
+  for (auto rm : sync_from_rm) {
+    zone.sync_from.erase(rm);
+  }
+
   post_process_params();
 
   return update();
