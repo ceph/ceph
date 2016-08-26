@@ -13,10 +13,9 @@ add_library(rbd_replay STATIC ${librbd_replay_srcs})
 target_link_libraries(rbd_replay LINK_PRIVATE librbd librados global)
 
 add_executable(rbd-replay
-  rbd-replay.cc
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
-target_link_libraries(rbd-replay librbd librados global rbd_replay rbd_replay_types common keyutils)
+  rbd-replay.cc)
+target_link_libraries(rbd-replay
+  librbd librados global rbd_replay rbd_replay_types common)
 install(TARGETS rbd-replay DESTINATION bin)
 
 set(librbd_replay_ios_srcs
@@ -25,12 +24,8 @@ add_library(rbd_replay_ios STATIC ${librbd_replay_ios_srcs})
 target_link_libraries(rbd_replay_ios librbd librados global)
 
 if(${WITH_BABELTRACE})
-  set(rbd_replay_prep_srcs
-      rbd-replay-prep.cc)
   add_executable(rbd-replay-prep
-    ${rbd_replay_prep_srcs}
-    $<TARGET_OBJECTS:parse_secret_objs>
-    )
+    rbd-replay-prep.cc)
   target_link_libraries(rbd-replay-prep
     rbd_replay
     rbd_replay_ios
@@ -38,7 +33,6 @@ if(${WITH_BABELTRACE})
     librbd
     librados
     common
-    keyutils
     global
     babeltrace
     babeltrace-ctf
