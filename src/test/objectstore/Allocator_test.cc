@@ -37,7 +37,7 @@ TEST_P(AllocTest, test_alloc_init)
 {
   int64_t blocks = BmapEntry::size();
   init_alloc(blocks, 1);
-  ASSERT_EQ(alloc->get_free(), 0);
+  ASSERT_EQ(0U, alloc->get_free());
   alloc->shutdown(); 
   blocks = BitMapZone::get_total_blocks() * 2 + 16;
   init_alloc(blocks, 1);
@@ -73,7 +73,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     EXPECT_EQ(alloc->alloc_extents(4 * (uint64_t)block_size, (uint64_t) block_size, 
                                    0, (int64_t) 0, &extents, &count), 0);
     EXPECT_EQ(extents[0].length, 4 * block_size);
-    EXPECT_EQ(extents[1].length, 0);
+    EXPECT_EQ(0U, extents[1].length);
     EXPECT_EQ(count, 1);
   }
 
