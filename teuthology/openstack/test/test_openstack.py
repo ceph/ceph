@@ -293,7 +293,7 @@ class TestOpenStack(object):
         assert 'OS_TOKEN' not in os.environ
         assert 'OS_TOKEN_EXPIRES' not in os.environ
         assert True == o.cache_token()
-        m_sh.assert_called_with('openstack token issue -c id -f value')
+        m_sh.assert_called_with('openstack -q token issue -c id -f value')
         assert 'v2token' == os.environ['OS_AUTH_TYPE']
         assert token == os.environ['OS_TOKEN']
         assert token == OpenStack.token
@@ -341,7 +341,7 @@ class TestOpenStack(object):
         token_expires = int(time.time()) - 2000
         os.environ['OS_TOKEN_EXPIRES'] = str(token_expires)
         assert True == o.cache_token()
-        m_sh.assert_called_with('openstack token issue -c id -f value')
+        m_sh.assert_called_with('openstack -q token issue -c id -f value')
         assert 'v2token' == os.environ['OS_AUTH_TYPE']
         assert token == os.environ['OS_TOKEN']
         assert token == OpenStack.token
