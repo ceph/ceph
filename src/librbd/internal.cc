@@ -43,7 +43,6 @@
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
-#include "librbd/operation/TrimRequest.h"
 #include "include/util.h"
 
 #include "journal/Journaler.h"
@@ -247,26 +246,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t num;
     iss >> std::hex >> num;
     return num;
-  }
-
-  void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
-  {
-    assert(ictx->owner_lock.is_locked());
-    assert(ictx->exclusive_lock == nullptr ||
-	   ictx->exclusive_lock->is_lock_owner());
-
-    C_SaferCond ctx;
-    ictx->snap_lock.get_read();
-    operation::TrimRequest<> *req = operation::TrimRequest<>::create(
-      *ictx, &ctx, ictx->size, newsize, prog_ctx);
-    ictx->snap_lock.put_read();
-    req->send();
-
-    int r = ctx.wait();
-    if (r < 0) {
-      lderr(ictx->cct) << "warning: failed to remove some object(s): "
-		       << cpp_strerror(r) << dendl;
-    }
   }
 
   int read_header_bl(IoCtx& io_ctx, const string& header_oid,
