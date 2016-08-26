@@ -168,7 +168,7 @@ private:
 
   void send_copyup();
 
-  void read_from_parent(const Extents& image_extents);
+  void read_from_parent(Extents&& image_extents);
 };
 
 class AbstractAioObjectWrite : public AioObjectRequest<> {
