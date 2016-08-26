@@ -167,9 +167,9 @@
                                unset zone tier config keys
      --tier_type=<type>        zone tier type
      --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers
-     --sync-from=[zone-id][,...]
+     --sync-from=[zone-name][,...]
                                set list of zones to sync from
-     --sync-from-rm=[zone-id][,...]
+     --sync-from-rm=[zone-name][,...]
                                remove zones from list of zones to sync from
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
