@@ -3335,6 +3335,13 @@ def main_activate(args):
         else:
             raise Error('%s is not a directory or block device' % args.path)
 
+        # exit with 0 if the journal device is not up, yet
+        # journal device will do the activation
+        osd_journal = '{path}/journal'.format(path=osd_data)
+        if os.path.islink(osd_journal) and not os.access(osd_journal, os.F_OK):
+            LOG.info("activate: Journal not present, not starting, yet")
+            return
+
         if (not args.no_start_daemon and args.mark_init == 'none'):
             command_check_call(
                 [
@@ -3342,7 +3349,7 @@ def main_activate(args):
                     '--cluster={cluster}'.format(cluster=cluster),
                     '--id={osd_id}'.format(osd_id=osd_id),
                     '--osd-data={path}'.format(path=osd_data),
-                    '--osd-journal={path}/journal'.format(path=osd_data),
+                    '--osd-journal={journal}'.format(journal=osd_journal),
                 ],
             )
 
@@ -3735,6 +3742,12 @@ def main_activate_space(name, args):
 
         if is_suppressed(path):
             LOG.info('suppressed activate request on %s', path)
+            return
+
+        # warn and exit with 0 if the data device is not up, yet
+        # data device will do the activation
+        if not os.access(path, os.F_OK):
+            LOG.info("activate: OSD device not present, not starting, yet")
             return
 
         (cluster, osd_id) = mount_activate(
