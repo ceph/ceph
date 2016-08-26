@@ -9,7 +9,7 @@ This point release fixes several important bugs in RBD mirroring, RGW multi-site
 
 We recommend that all v10.2.x users upgrade.
 
-For more detailed information, see :download:`the complete changelog <changelog/v10.2.1.txt>`.
+For more detailed information, see :download:`the complete changelog <changelog/v10.2.2.txt>`.
 
 Notable Changes
 ---------------
