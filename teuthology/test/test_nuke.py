@@ -33,17 +33,12 @@ class TestNuke(object):
             '"display_name": "' + name + '"}'
         )
 
-        def sh(cmd):
-            if 'volume show' in cmd:
-                return volume_show
+        with patch('teuthology.nuke.openstack_delete_volume') as m_os_del_vol:
+            with patch.object(nuke.OpenStack, 'run') as m_os_run:
+                m_os_run.return_value = volume_show
+                nuke.stale_openstack_volumes(ctx, volume_list)
+                m_os_del_vol.assert_not_called()
 
-        with patch.multiple(
-                nuke,
-                sh=sh,
-                openstack_delete_volume=DEFAULT,
-                ) as m:
-            nuke.stale_openstack_volumes(ctx, volume_list)
-            m['openstack_delete_volume'].assert_not_called()
 
         #
         # A volume created long ago is destroyed
@@ -55,31 +50,20 @@ class TestNuke(object):
             '"display_name": "' + name + '"}'
         )
 
-        def sh(cmd):
-            if 'volume show' in cmd:
-                return volume_show
-
-        with patch.multiple(
-                nuke,
-                sh=sh,
-                openstack_delete_volume=DEFAULT,
-                ) as m:
-            nuke.stale_openstack_volumes(ctx, volume_list)
-            m['openstack_delete_volume'].assert_called_with(id)
+        with patch('teuthology.nuke.openstack_delete_volume') as m_os_del_vol:
+            with patch.object(nuke.OpenStack, 'run') as m_os_run:
+                m_os_run.return_value = volume_show
+                nuke.stale_openstack_volumes(ctx, volume_list)
+                m_os_del_vol.assert_called_with(id)
 
         #
         # A volume that no longer exists is ignored
         #
-        def sh(cmd):
-            raise subprocess.CalledProcessError('ERROR', 'FAIL')
-
-        with patch.multiple(
-                nuke,
-                sh=sh,
-                openstack_delete_volume=DEFAULT,
-                ) as m:
-            nuke.stale_openstack_volumes(ctx, volume_list)
-            m['openstack_delete_volume'].assert_not_called()
+        with patch('teuthology.nuke.openstack_delete_volume') as m_os_del_vol:
+            with patch.object(nuke.OpenStack, 'run') as m_os_run:
+                m_os_run.side_effect = subprocess.CalledProcessError('ERROR', 'FAIL')
+                nuke.stale_openstack_volumes(ctx, volume_list)
+                m_os_del_vol.assert_not_called()
 
     def test_stale_openstack_nodes(self):
         ctx = Mock()
