@@ -13,6 +13,7 @@
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image_watcher/Notifier.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
+#include "librbd/image_watcher/RewatchRequest.h"
 #include "include/encoding.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -118,31 +119,43 @@ void ImageWatcher<I>::handle_register_watch(int r) {
 
 template <typename I>
 void ImageWatcher<I>::unregister_watch(Context *on_finish) {
-  ldout(m_image_ctx.cct, 10) << this << " unregistering image watcher" << dendl;
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " unregistering image watcher" << dendl;
 
   cancel_async_requests();
 
-  C_Gather *g = new C_Gather(m_image_ctx.cct, create_async_context_callback(
-          m_image_ctx, on_finish));
-  m_task_finisher->cancel_all(g->new_sub());
-
+  C_Gather *gather_ctx = nullptr;
   {
-    RWLock::WLocker l(m_watch_lock);
+    RWLock::WLocker watch_locker(m_watch_lock);
+    if (m_watch_state == WATCH_STATE_REWATCHING) {
+      ldout(cct, 10) << this << " delaying unregister until rewatch completed"
+                     << dendl;
+
+      assert(m_unregister_watch_ctx == nullptr);
+      m_unregister_watch_ctx = new FunctionContext([this, on_finish](int r) {
+          unregister_watch(on_finish);
+        });
+      return;
+    }
+
+    gather_ctx = new C_Gather(m_image_ctx.cct, create_async_context_callback(
+      m_image_ctx, on_finish));
     if (m_watch_state == WATCH_STATE_REGISTERED) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
 
       librados::AioCompletion *aio_comp = create_rados_safe_callback(
-        new C_UnwatchAndFlush(m_image_ctx.md_ctx, g->new_sub()));
+        new C_UnwatchAndFlush(m_image_ctx.md_ctx, gather_ctx->new_sub()));
       int r = m_image_ctx.md_ctx.aio_unwatch(m_watch_handle, aio_comp);
       assert(r == 0);
       aio_comp->release();
-      g->activate();
-      return;
     } else if (m_watch_state == WATCH_STATE_ERROR) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
     }
   }
-  g->activate();
+
+  assert(gather_ctx != nullptr);
+  m_task_finisher->cancel_all(gather_ctx->new_sub());
+  gather_ctx->activate();
 }
 
 template <typename I>
@@ -998,7 +1011,7 @@ void ImageWatcher<I>::handle_error(uint64_t handle, int err) {
     m_watch_state = WATCH_STATE_ERROR;
 
     FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher<I>::reregister_watch, this));
+      boost::bind(&ImageWatcher<I>::rewatch, this));
     m_task_finisher->queue(TASK_CODE_REREGISTER_WATCH, ctx);
   }
 }
@@ -1010,62 +1023,49 @@ void ImageWatcher<I>::acknowledge_notify(uint64_t notify_id, uint64_t handle,
 }
 
 template <typename I>
-void ImageWatcher<I>::reregister_watch() {
+void ImageWatcher<I>::rewatch() {
   ldout(m_image_ctx.cct, 10) << this << " re-registering image watch" << dendl;
 
-  bool releasing_lock = false;
-  C_SaferCond release_lock_ctx;
+  RWLock::WLocker l(m_watch_lock);
+  if (m_watch_state != WATCH_STATE_ERROR) {
+    return;
+  }
+  m_watch_state = WATCH_STATE_REWATCHING;
+
+  Context *ctx = create_context_callback<
+    ImageWatcher<I>, &ImageWatcher<I>::handle_rewatch>(this);
+  RewatchRequest<I> *req = RewatchRequest<I>::create(m_image_ctx, m_watch_lock,
+                                                     &m_watch_ctx,
+                                                     &m_watch_handle, ctx);
+  req->send();
+}
+
+template <typename I>
+void ImageWatcher<I>::handle_rewatch(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  WatchState next_watch_state = WATCH_STATE_REGISTERED;
+  if (r < 0) {
+    next_watch_state = WATCH_STATE_ERROR;
+  }
+
+  Context *unregister_watch_ctx = nullptr;
   {
-    RWLock::WLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.exclusive_lock != nullptr) {
-      releasing_lock = true;
-      m_image_ctx.exclusive_lock->release_lock(&release_lock_ctx);
-    }
+    RWLock::WLocker watch_locker(m_watch_lock);
+    assert(m_watch_state == WATCH_STATE_REWATCHING);
+    m_watch_state = next_watch_state;
+
+    std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
+
+    // image might have been updated while we didn't have active watch
+    handle_payload(HeaderUpdatePayload(), nullptr);
   }
 
-  int r;
-  if (releasing_lock) {
-    r = release_lock_ctx.wait();
-    if (r == -EBLACKLISTED) {
-      lderr(m_image_ctx.cct) << this << " client blacklisted" << dendl;
-      return;
-    }
-
-    assert(r == 0);
+  // wake up pending unregister request
+  if (unregister_watch_ctx != nullptr) {
+    unregister_watch_ctx->complete(0);
   }
-
-  {
-    RWLock::WLocker l(m_watch_lock);
-    if (m_watch_state != WATCH_STATE_ERROR) {
-      return;
-    }
-
-    r = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
-                                  &m_watch_handle, &m_watch_ctx);
-    if (r < 0) {
-      lderr(m_image_ctx.cct) << this << " failed to re-register image watch: "
-                             << cpp_strerror(r) << dendl;
-      if (r != -ESHUTDOWN) {
-        FunctionContext *ctx = new FunctionContext(boost::bind(
-          &ImageWatcher<I>::reregister_watch, this));
-        m_task_finisher->add_event_after(TASK_CODE_REREGISTER_WATCH,
-                                         RETRY_DELAY_SECONDS, ctx);
-      }
-      return;
-    }
-
-    m_watch_state = WATCH_STATE_REGISTERED;
-  }
-
-  // if the exclusive lock state machine was paused waiting for the
-  // watch to be re-registered, wake it up
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    m_image_ctx.exclusive_lock->handle_watch_registered();
-  }
-
-  handle_payload(HeaderUpdatePayload(), NULL);
 }
 
 template <typename I>

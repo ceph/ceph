@@ -939,14 +939,17 @@ struct cls_rgw_lc_obj_head
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(start_date, bl);
+    uint64_t t = start_date;
+    ::encode(t, bl);
     ::encode(marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(start_date, bl);
+    uint64_t t;
+    ::decode(t, bl);
+    start_date = static_cast<time_t>(t);
     ::decode(marker, bl);
     DECODE_FINISH(bl);
   }

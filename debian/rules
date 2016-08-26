@@ -19,7 +19,7 @@ ifeq ($(DEB_HOST_ARCH), armel)
 endif
 
 %:
-	dh $@ --buildsystem=cmake --with javahelper,python2,systemd --parallel
+	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
 
 override_dh_auto_configure:
 	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
@@ -39,7 +39,6 @@ override_dh_auto_install:
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 	install -D -m 644 udev/60-ceph-by-parttypeuuid.rules $(DESTDIR)/lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
-	install -D -m 755 src/init-rbdmap $(DESTDIR)/etc/init.d/rbdmap
 
 # doc/changelog is a directory, which confuses dh_installchangelogs
 override_dh_installchangelogs:
@@ -85,6 +84,7 @@ override_dh_installinit:
 	install -m0644 systemd/ceph-create-keys@.service debian/ceph-base/lib/systemd/system
 	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
+	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-base/lib/systemd/system/ceph-create-keys@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
@@ -131,7 +131,9 @@ override_dh_strip:
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
 override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor --exclude=python-rados --exclude=python-cephfs --exclude=python-rbd
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor \
+	  --exclude=python-rados --exclude=python-cephfs --exclude=python-rbd    \
+	  --exclude=python3-rados --exclude=python3-cephfs --exclude=python3-rbd \
 
 override_dh_python2:
 	for binding in rados cephfs rbd; do                                \
@@ -140,6 +142,12 @@ override_dh_python2:
 	dh_python2 -p ceph-common
 	dh_python2 -p ceph-base
 	dh_python2 -p ceph-osd
+
+override_dh_python3:
+	for binding in rados cephfs rbd; do                                \
+	  dh_python3 -p python-$$binding; \
+	done
+	dh_python3 -p python3-ceph-argparse
 
 # do not run tests
 override_dh_auto_test:

@@ -506,7 +506,7 @@ void OSDService::init()
 
 void OSDService::final_init()
 {
-  objecter->start();
+  objecter->start(osdmap.get());
 }
 
 void OSDService::activate_map()
@@ -3154,12 +3154,12 @@ PG *OSD::_create_lock_pg(
   return pg;
 }
 
-PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
+PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 {
   Session *session = static_cast<Session*>(
     op->get_req()->get_connection()->get_priv());
   if (!session)
-    return NULL;
+    return PGRef();
   // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
   // the session_dispatch_lock must already be held.
   assert(session->session_dispatch_lock.is_locked());
@@ -3180,7 +3180,7 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
     register_session_waiting_on_pg(session, pgid);
   }
   session->put();
-  return out;
+  return PGRef(out);
 }
 
 PG *OSD::_lookup_lock_pg(spg_t pgid)
@@ -3734,7 +3734,7 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     // split?
     if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
 		      osdmap->get_pg_num(pgid.pool()),
-		      0)) {
+		      0) && e > h.same_interval_since) {
       h.same_interval_since = e;
     }
     // up set change?
@@ -4302,20 +4302,10 @@ void OSD::tick()
   }
 
   if (is_active()) {
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
-
     check_replay_queue();
-
-    service.promote_throttle_recalibrate();
   }
 
   do_waiters();
-
-  check_ops_in_flight();
-
-  service.kick_recovery_queue();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
 }
@@ -4395,9 +4385,15 @@ void OSD::tick_without_osd_lock()
     map_lock.put_read();
   }
 
-  if (!scrub_random_backoff()) {
-    sched_scrub();
+  if (is_active()) {
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
+    service.promote_throttle_recalibrate();
   }
+
+  check_ops_in_flight();
+  service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
@@ -6705,10 +6701,16 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   ObjectStore::Transaction t;
+  uint64_t txn_size = 0;
 
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = MAX(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
+    if (txn_size >= t.get_num_bytes()) {
+      derr << __func__ << " transaction size overflowed" << dendl;
+      assert(txn_size < t.get_num_bytes());
+    }
+    txn_size = t.get_num_bytes();
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
     if (p != m->maps.end()) {
@@ -8557,7 +8559,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  PG *pg = get_pg_or_queue_for_pg(pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg) {
     op->send_map_update = share_map.should_send;
     op->sent_epoch = m->get_map_epoch();
@@ -8645,7 +8647,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     peer_session->put();
   }
 
-  PG *pg = get_pg_or_queue_for_pg(m->pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op);
   if (pg) {
     op->send_map_update = should_share_map;
     op->sent_epoch = m->map_epoch;
@@ -8670,7 +8672,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
   return false;
 }
 
-void OSD::enqueue_op(PG *pg, OpRequestRef& op)
+void OSD::enqueue_op(PGRef pg, OpRequestRef& op)
 {
   utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
   dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()

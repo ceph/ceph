@@ -18,8 +18,8 @@ EXTRA_DIST += \
 	udev/60-ceph-by-parttypeuuid.rules \
 	udev/95-ceph-osd.rules \
 	share/known_hosts_drop.ceph.com \
-	share/id_dsa_drop.ceph.com \
-	share/id_dsa_drop.ceph.com.pub
+	share/id_rsa_drop.ceph.com \
+	share/id_rsa_drop.ceph.com.pub
 
 NPROC = nproc
 if FREEBSD
@@ -30,8 +30,8 @@ endif
 install-data-local::
 	-mkdir -p $(DESTDIR)$(datadir)/ceph
 	-install -m 600 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
-	-install -m 600 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
-	-install -m 600 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
+	-install -m 600 share/id_rsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_rsa_drop.ceph.com
+	-install -m 600 share/id_rsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_rsa_drop.ceph.com.pub
 
 all-local::
 if WITH_DEBUG

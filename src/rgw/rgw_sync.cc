@@ -1681,6 +1681,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   using StackRef = boost::intrusive_ptr<RGWCoroutinesStack>;
   using RefPair = std::pair<ControlCRRef, StackRef>;
   map<int, RefPair> shard_crs;
+  int ret{0};
 
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
@@ -1690,7 +1691,6 @@ public:
       cursor(cursor), sync_status(_sync_status) {}
 
   int operate() {
-    int ret = 0;
     reenter(this) {
       // loop through one period at a time
       for (;;) {
@@ -1743,7 +1743,10 @@ public:
           }
         }
         // wait for each shard to complete
-        collect(&ret, NULL);
+        while (ret == 0 && num_spawned() > 0) {
+          yield wait_for_child();
+          collect(&ret, nullptr);
+        }
         drain_all();
         {
           // drop shard cr refs under lock

@@ -363,8 +363,10 @@ endif(HAVE_SSE)
 if(HAVE_NEON)
   set(PERF_LOCAL_FLAGS ${ARM_NEON_FLAGS})
 endif(HAVE_NEON)
-set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
-  ${PERF_LOCAL_FLAGS})
+if(PERF_LOCAL_FLAGS)
+  set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
+    ${PERF_LOCAL_FLAGS})
+endif()
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
 
 # ceph_xattr_bench

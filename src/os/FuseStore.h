@@ -4,8 +4,12 @@
 #ifndef CEPH_OS_FUSESTORE_H
 #define CEPH_OS_FUSESTORE_H
 
+#include <string>
 #include "common/Thread.h"
-#include "os/ObjectStore.h"
+
+using std::string;
+
+class ObjectStore;
 
 class FuseStore {
 public:

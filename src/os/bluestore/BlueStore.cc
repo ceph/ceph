@@ -276,7 +276,9 @@ static int get_key_bnode(const string& key, shard_id_t *shard,
   p = _key_decode_shard(p, shard);
   p = _key_decode_u64(p, (uint64_t*)pool);
   *pool -= 0x8000000000000000ull;
-  p = _key_decode_u32(p, hash);
+  uint32_t hash_reverse_bits;
+  p = _key_decode_u32(p, &hash_reverse_bits);
+  *hash = hobject_t::_reverse_bits(hash_reverse_bits);
   return 0;
 }
 
@@ -1400,7 +1402,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     cct->_conf->bluestore_wal_thread_timeout,
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
-    finisher(cct),
+    m_finisher_num(1),
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
@@ -1410,10 +1412,26 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
   set_cache_shards(1);
+
+  if (cct->_conf->bluestore_shard_finishers) {
+    m_finisher_num = cct->_conf->osd_op_num_shards;
+  }
+
+  for (int i = 0; i < m_finisher_num; ++i) {
+    ostringstream oss;
+    oss << "finisher-" << i;
+    Finisher *f = new Finisher(cct, oss.str(), "finisher");
+    finishers.push_back(f);
+  }
 }
 
 BlueStore::~BlueStore()
 {
+  for (auto f : finishers) {
+    delete f;
+    f = NULL;
+  }
+
   g_ceph_context->_conf->remove_observer(this);
   _shutdown_logger();
   assert(!mounted);
@@ -2824,7 +2842,9 @@ int BlueStore::mount()
       goto out_coll;
   }
 
-  finisher.start();
+  for (auto f : finishers) {
+    f->start();
+  }
   wal_tp.start();
   kv_sync_thread.create("bstore_kv_sync");
 
@@ -2842,8 +2862,10 @@ int BlueStore::mount()
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
-  finisher.wait_for_empty();
-  finisher.stop();
+  for (auto f : finishers) {
+    f->wait_for_empty();
+    f->stop();
+  }
  out_coll:
   coll_map.clear();
  out_alloc:
@@ -2876,10 +2898,12 @@ int BlueStore::umount()
   wal_wq.drain();
   dout(20) << __func__ << " stopping wal_tp" << dendl;
   wal_tp.stop();
-  dout(20) << __func__ << " draining finisher" << dendl;
-  finisher.wait_for_empty();
-  dout(20) << __func__ << " stopping finisher" << dendl;
-  finisher.stop();
+  for (auto f : finishers) {
+    dout(20) << __func__ << " draining finisher" << dendl;
+    f->wait_for_empty();
+    dout(20) << __func__ << " stopping finisher" << dendl;
+    f->stop();
+  }
   dout(20) << __func__ << " closing" << dendl;
 
   mounted = false;
@@ -3388,15 +3412,20 @@ void BlueStore::_sync()
 
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
-  uint64_t bluefs_len = 0;
-  for (interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      p != bluefs_extents.end(); p++)
-    bluefs_len += p.get_len();
-
   buf->reset();
   buf->total = bdev->get_size();
-  assert(alloc->get_free() >= bluefs_len);
-  buf->available = (alloc->get_free() - bluefs_len);
+  buf->available = alloc->get_free();
+
+  if (bluefs) {
+    // part of our shared device is "free" accordingly to BlueFS
+    buf->available += bluefs->get_free(bluefs_shared_bdev);
+
+    // include dedicated db, too, if that isn't the shared device.
+    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
+      buf->available += bluefs->get_free(BlueFS::BDEV_DB);
+      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
+    }
+  }
 
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
@@ -4909,8 +4938,11 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
+    unsigned first_part = bl.length();
     (*p)->blob_map.encode(bl);
-    dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
+    dout(20) << "  onode " << (*p)->oid << " is " << bl.length()
+	     << " (" << first_part << " onode + "
+	     << (bl.length() - first_part) << " blob_map)" << dendl;
     t->set(PREFIX_OBJ, (*p)->key, bl);
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
@@ -4944,16 +4976,18 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     txc->onreadable_sync->complete(0);
     txc->onreadable_sync = NULL;
   }
+  unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
   if (txc->onreadable) {
-    finisher.queue(txc->onreadable);
+    finishers[n]->queue(txc->onreadable);
     txc->onreadable = NULL;
   }
   if (txc->oncommit) {
-    finisher.queue(txc->oncommit);
+    finishers[n]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
   while (!txc->oncommits.empty()) {
-    finisher.queue(txc->oncommits.front());
+    auto f = txc->oncommits.front();
+    finishers[n]->queue(f);
     txc->oncommits.pop_front();
   }
 

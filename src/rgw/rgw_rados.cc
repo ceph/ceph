@@ -1207,6 +1207,11 @@ int RGWPeriod::update()
       ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << " zone realm id " << zg.realm_id << ", not on our realm " << realm_id << dendl;
       continue;
     }
+
+    if (zg.master_zone.empty()) {
+      ldout(cct, 0) << "ERROR: zonegroup " << zg.get_name() << " should have a master zone " << dendl;
+      return -EINVAL;
+    }  
     
     if (zg.is_master_zonegroup()) {
       master_zonegroup = zg.get_id();
@@ -3309,6 +3314,15 @@ int RGWRados::convert_regionmap()
 
   current_period.set_user_quota(zonegroupmap.user_quota);
   current_period.set_bucket_quota(zonegroupmap.bucket_quota);
+
+  // remove the region_map so we don't try to convert again
+  rgw_obj obj(pool, oid);
+  ret = delete_system_obj(obj);
+  if (ret < 0) {
+    ldout(cct, 0) << "Error could not remove " << obj
+        << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
 
   return 0;
 }

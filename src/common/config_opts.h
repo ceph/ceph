@@ -763,7 +763,7 @@ OPTION(osd_scrub_end_hour, OPT_INT, 24)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
 OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
-OPTION(osd_scrub_interval_randomize_ratio, OPT_FLOAT, 0.5) // randomize the scheduled scrub in the span of [min,min*(1+randomize_radio))
+OPTION(osd_scrub_interval_randomize_ratio, OPT_FLOAT, 0.5) // randomize the scheduled scrub in the span of [min,min*(1+randomize_ratio))
 OPTION(osd_scrub_chunk_min, OPT_INT, 5)
 OPTION(osd_scrub_chunk_max, OPT_INT, 25)
 OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
@@ -934,6 +934,7 @@ OPTION(bluefs_log_compact_min_ratio, OPT_FLOAT, 5.0)      // before we consider
 OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
+OPTION(bluefs_buffered_io, OPT_BOOL, false)
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
@@ -942,7 +943,6 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
-OPTION(bluestore_bluefs_buffered_io, OPT_BOOL, true)
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -1011,6 +1011,7 @@ OPTION(bluestore_debug_freelist, OPT_BOOL, false)
 OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
 OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
+OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
