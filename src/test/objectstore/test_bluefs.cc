@@ -44,7 +44,7 @@ void rm_temp_bdev(string f)
 }
 
 TEST(BlueFS, mkfs) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   uuid_d fsid;
   BlueFS fs;
@@ -55,7 +55,7 @@ TEST(BlueFS, mkfs) {
 }
 
 TEST(BlueFS, mkfs_mount) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   BlueFS fs;
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
@@ -70,7 +70,7 @@ TEST(BlueFS, mkfs_mount) {
 }
 
 TEST(BlueFS, write_read) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   BlueFS fs;
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
@@ -106,7 +106,7 @@ TEST(BlueFS, write_read) {
 }
 
 TEST(BlueFS, small_appends) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   BlueFS fs;
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
@@ -256,7 +256,7 @@ void join_all(std::vector<std::thread>& v)
 #define NUM_MULTIPLE_FILE_WRITERS 2
 
 TEST(BlueFS, test_flush_1) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -291,7 +291,7 @@ TEST(BlueFS, test_flush_1) {
 }
 
 TEST(BlueFS, test_flush_2) {
-  uint64_t size = 1048476 * 256;
+  uint64_t size = 1048576 * 256;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -319,7 +319,7 @@ TEST(BlueFS, test_flush_2) {
 }
 
 TEST(BlueFS, test_flush_3) {
-  uint64_t size = 1048476 * 256;
+  uint64_t size = 1048576 * 256;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -357,7 +357,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
   g_ceph_context->_conf->set_val(
     "bluefs_compact_log_sync",
     "true");
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
 
   BlueFS fs;
@@ -410,7 +410,7 @@ TEST(BlueFS, test_simple_compaction_async) {
   g_ceph_context->_conf->set_val(
     "bluefs_compact_log_sync",
     "false");
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
 
   BlueFS fs;
@@ -460,7 +460,7 @@ TEST(BlueFS, test_simple_compaction_async) {
 }
 
 TEST(BlueFS, test_compaction_sync) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -498,7 +498,7 @@ TEST(BlueFS, test_compaction_sync) {
 }
 
 TEST(BlueFS, test_compaction_async) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",
@@ -536,7 +536,7 @@ TEST(BlueFS, test_compaction_async) {
 }
 
 TEST(BlueFS, test_replay) {
-  uint64_t size = 1048476 * 128;
+  uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   g_ceph_context->_conf->set_val(
     "bluefs_alloc_size",

@@ -813,6 +813,9 @@ int NVMEDevice::open(string p)
   //nvme is non-rotational device.
   rotational = false;
 
+  // round size down to an even block
+  size &= ~(block_size - 1);
+
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
           << "B)" << dendl;

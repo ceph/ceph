@@ -140,6 +140,9 @@ int KernelDevice::open(string p)
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
 
+  // round size down to an even block
+  size &= ~(block_size - 1);
+
   r = _aio_start();
   assert(r == 0);
 

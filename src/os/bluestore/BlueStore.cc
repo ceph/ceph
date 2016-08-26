@@ -2750,6 +2750,17 @@ int BlueStore::mkfs()
   _close_fsid();
  out_path_fd:
   _close_path();
+
+  if (r == 0 &&
+      g_conf->bluestore_fsck_on_mkfs) {
+    int rc = fsck();
+    if (rc < 0)
+      return rc;
+    if (rc > 0) {
+      derr << __func__ << " fsck found " << rc << " errors" << dendl;
+      r = -EIO;
+    }
+  }
   return r;
 }
 
@@ -2933,8 +2944,8 @@ void apply(uint64_t off,
           std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
   while (off < end) {
-  uint64_t pos = off / granularity;
-  f( pos, bitset);
+    uint64_t pos = off / granularity;
+    f(pos, bitset);
     off += granularity;
   }
 }
