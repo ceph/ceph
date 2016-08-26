@@ -8,6 +8,7 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/ImageCache.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
 #include "common/WorkQueue.h"
@@ -241,7 +242,7 @@ void AioImageRequest<I>::send() {
     return;
   }
 
-  if (m_bypass_image_cache || true) { // TODO
+  if (m_bypass_image_cache || m_image_ctx.image_cache == nullptr) {
     send_request();
   } else {
     send_image_cache_request();
@@ -349,7 +350,16 @@ void AioImageRead<I>::send_request() {
 
 template <typename I>
 void AioImageRead<I>::send_image_cache_request() {
-  // TODO
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  C_ImageCacheRead<I> *req_comp = new C_ImageCacheRead<I>(
+    aio_comp, this->m_image_extents);
+  image_ctx.image_cache->aio_read(std::move(this->m_image_extents),
+                                  &req_comp->get_data(), m_op_flags,
+                                  req_comp);
 }
 
 template <typename I>
@@ -483,7 +493,14 @@ uint64_t AioImageWrite<I>::append_journal_event(
 
 template <typename I>
 void AioImageWrite<I>::send_image_cache_request() {
-  // TODO
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+  image_ctx.image_cache->aio_write(std::move(this->m_image_extents),
+                                   std::move(m_bl), m_op_flags, req_comp);
 }
 
 template <typename I>
@@ -588,7 +605,15 @@ uint32_t AioImageDiscard<I>::get_object_cache_request_count(bool journaling) con
 
 template <typename I>
 void AioImageDiscard<I>::send_image_cache_request() {
-  // TODO
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(this->m_image_extents.size());
+  for (auto &extent : this->m_image_extents) {
+    C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+    image_ctx.image_cache->aio_discard(extent.first, extent.second, req_comp);
+  }
 }
 
 template <typename I>
@@ -684,7 +709,13 @@ void AioImageFlush<I>::send_request() {
 
 template <typename I>
 void AioImageFlush<I>::send_image_cache_request() {
-  // TODO
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+  image_ctx.image_cache->aio_flush(req_comp);
 }
 
 } // namespace librbd
