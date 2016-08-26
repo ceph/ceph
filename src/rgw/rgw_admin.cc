@@ -4140,6 +4140,8 @@ int main(int argc, const char **argv)
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
 
+        bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
