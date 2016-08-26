@@ -348,7 +348,7 @@ class CephFSTestCase(unittest.TestCase):
         else:
             raise AssertionError("MDS daemon '{0}' did not crash as expected".format(daemon_id))
 
-    def assert_cluster_log(self, expected_pattern, invert_match=False):
+    def assert_cluster_log(self, expected_pattern, invert_match=False, timeout=10):
         """
         Context manager.  Assert that during execution, or up to 5 seconds later,
         the Ceph cluster log emits a message matching the expected pattern.
@@ -378,7 +378,7 @@ class CephFSTestCase(unittest.TestCase):
                         log.debug("No log hits yet, waiting...")
                         # Default monc tick interval is 10s, so wait that long and
                         # then some grace
-                        time.sleep(15)
+                        time.sleep(5 + timeout)
 
                 self.watcher_process.stdin.close()
                 try:
