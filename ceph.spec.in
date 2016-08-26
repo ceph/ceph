@@ -763,6 +763,11 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 
+%if 0%{?suse_version}
+# create __pycache__ directories and their contents
+%py3_compile %{buildroot}%{python3_sitelib}
+%endif
+
 %clean
 rm -rf %{buildroot}
 
