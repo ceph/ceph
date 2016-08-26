@@ -3514,10 +3514,18 @@ int RGWRados::init_zg_from_period(bool *initialized)
   for (iter = current_period.get_map().zonegroups.begin();
        iter != current_period.get_map().zonegroups.end(); ++iter){
     const RGWZoneGroup& zg = iter->second;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints));
+    // use endpoints from the zonegroup's master zone
+    auto master = zg.zones.find(zg.master_zone);
+    if (master == zg.zones.end()) {
+      ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for "
+          "master_zone=" << zg.master_zone << dendl;
+      return -EINVAL;
+    }
+    const auto& endpoints = master->second.endpoints;
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints));
     if (!current_period.get_master_zonegroup().empty() &&
         zg.get_id() == current_period.get_master_zonegroup()) {
-      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints);
+      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints);
     }
   }
 
@@ -3550,7 +3558,15 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
   }
   ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
   if (zonegroup.is_master) {
-    rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints);
+    // use endpoints from the zonegroup's master zone
+    auto master = zonegroup.zones.find(zonegroup.master_zone);
+    if (master == zonegroup.zones.end()) {
+      ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
+          "master_zone=" << zonegroup.master_zone << dendl;
+      return -EINVAL;
+    }
+    const auto& endpoints = master->second.endpoints;
+    rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), endpoints);
   }
 
   return 0;
