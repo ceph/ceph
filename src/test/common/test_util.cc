@@ -32,6 +32,7 @@ TEST(util, unit_to_bytesize)
   ASSERT_EQ(65536ll, unit_to_bytesize(" 64K", &cerr));
 }
 
+#if defined(__linux__)
 TEST(util, collect_sys_info)
 {
   map<string, string> sys_info;
@@ -45,3 +46,4 @@ TEST(util, collect_sys_info)
 
   cct->put();
 }
+#endif
