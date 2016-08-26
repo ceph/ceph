@@ -119,9 +119,9 @@ private:
 };
 
 template <typename ImageCtxT>
-class C_CacheRead : public Context {
+class C_ObjectCacheRead : public Context {
 public:
-  explicit C_CacheRead(ImageCtxT &ictx, AioObjectRead<ImageCtxT> *req)
+  explicit C_ObjectCacheRead(ImageCtxT &ictx, AioObjectRead<ImageCtxT> *req)
     : m_image_ctx(ictx), m_req(req), m_enqueued(false) {}
 
   virtual void complete(int r) {
@@ -292,7 +292,8 @@ void AioImageRead<I>::send_request() {
       req_comp->set_req(req);
 
       if (image_ctx.object_cacher) {
-        C_CacheRead<I> *cache_comp = new C_CacheRead<I>(image_ctx, req);
+        C_ObjectCacheRead<I> *cache_comp = new C_ObjectCacheRead<I>(image_ctx,
+                                                                    req);
         image_ctx.aio_read_from_cache(extent.oid, extent.objectno,
                                       &req->data(), extent.length,
                                       extent.offset, cache_comp, m_op_flags);
@@ -356,7 +357,7 @@ void AbstractAioImageWrite<I>::send_request() {
   if (!object_extents.empty()) {
     uint64_t journal_tid = 0;
     aio_comp->set_request_count(
-      object_extents.size() + get_cache_request_count(journaling));
+      object_extents.size() + get_object_cache_request_count(journaling));
 
     AioObjectRequests requests;
     send_object_requests(object_extents, snapc,
@@ -369,7 +370,7 @@ void AbstractAioImageWrite<I>::send_request() {
     }
 
     if (image_ctx.object_cacher != NULL) {
-      send_cache_requests(object_extents, journal_tid);
+      send_object_cache_requests(object_extents, journal_tid);
     }
   } else {
     // no IO to perform -- fire completion
@@ -448,8 +449,8 @@ void AioImageWrite<I>::send_image_cache_request() {
 }
 
 template <typename I>
-void AioImageWrite<I>::send_cache_requests(const ObjectExtents &object_extents,
-                                        uint64_t journal_tid) {
+void AioImageWrite<I>::send_object_cache_requests(const ObjectExtents &object_extents,
+                                                  uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
   for (auto p = object_extents.begin(); p != object_extents.end(); ++p) {
     const ObjectExtent &object_extent = *p;
@@ -541,7 +542,7 @@ void AioImageDiscard<I>::prune_object_extents(ObjectExtents &object_extents) {
 }
 
 template <typename I>
-uint32_t AioImageDiscard<I>::get_cache_request_count(bool journaling) const {
+uint32_t AioImageDiscard<I>::get_object_cache_request_count(bool journaling) const {
   // extra completion request is required for tracking journal commit
   I &image_ctx = this->m_image_ctx;
   return (image_ctx.object_cacher != nullptr && journaling ? 1 : 0);
@@ -553,8 +554,8 @@ void AioImageDiscard<I>::send_image_cache_request() {
 }
 
 template <typename I>
-void AioImageDiscard<I>::send_cache_requests(const ObjectExtents &object_extents,
-                                          uint64_t journal_tid) {
+void AioImageDiscard<I>::send_object_cache_requests(const ObjectExtents &object_extents,
+                                                    uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
   if (journal_tid == 0) {
     Mutex::Locker cache_locker(image_ctx.cache_lock);

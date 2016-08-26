@@ -129,11 +129,11 @@ protected:
 
   virtual void prune_object_extents(ObjectExtents &object_extents) {
   }
-  virtual uint32_t get_cache_request_count(bool journaling) const {
+  virtual uint32_t get_object_cache_request_count(bool journaling) const {
     return 0;
   }
-  virtual void send_cache_requests(const ObjectExtents &object_extents,
-                                   uint64_t journal_tid) = 0;
+  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
+                                          uint64_t journal_tid) = 0;
 
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
@@ -183,8 +183,8 @@ protected:
 
   virtual void send_image_cache_request() override;
 
-  virtual void send_cache_requests(const ObjectExtents &object_extents,
-                                   uint64_t journal_tid);
+  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
+                                          uint64_t journal_tid);
 
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
@@ -224,9 +224,9 @@ protected:
 
   virtual void send_image_cache_request() override;
 
-  virtual uint32_t get_cache_request_count(bool journaling) const override;
-  virtual void send_cache_requests(const ObjectExtents &object_extents,
-                                   uint64_t journal_tid);
+  virtual uint32_t get_object_cache_request_count(bool journaling) const override;
+  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
+                                          uint64_t journal_tid);
 
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
