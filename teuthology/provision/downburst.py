@@ -186,6 +186,7 @@ class Downburst(object):
             user_info['packages'] = list()
         user_info['packages'].extend([
             'git',
+            'wget',
         ])
         # On CentOS/RHEL/Fedora, write the correct mac address and
         # install redhab-lsb-core for `lsb_release`
