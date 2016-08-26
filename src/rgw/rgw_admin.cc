@@ -3041,6 +3041,20 @@ int main(int argc, char **argv)
           need_update = true;
         }
 
+        if (!realm_id.empty()) {
+          zonegroup.realm_id = realm_id;
+          need_update = true;
+        } else if (!realm_name.empty()) {
+          // get realm id from name
+          RGWRealm realm{g_ceph_context, store};
+          ret = realm.read_id(realm_name, zonegroup.realm_id);
+          if (ret < 0) {
+            cerr << "failed to find realm by name " << realm_name << std::endl;
+            return -ret;
+          }
+          need_update = true;
+        }
+
         if (need_update) {
           zonegroup.post_process_params();
 	  ret = zonegroup.update();
@@ -3511,6 +3525,20 @@ int main(int argc, char **argv)
 
         if (!secret_key.empty()) {
           zone.system_key.key = secret_key;
+          need_zone_update = true;
+        }
+
+        if (!realm_id.empty()) {
+          zone.realm_id = realm_id;
+          need_zone_update = true;
+        } else if (!realm_name.empty()) {
+          // get realm id from name
+          RGWRealm realm{g_ceph_context, store};
+          ret = realm.read_id(realm_name, zone.realm_id);
+          if (ret < 0) {
+            cerr << "failed to find realm by name " << realm_name << std::endl;
+            return -ret;
+          }
           need_zone_update = true;
         }
 

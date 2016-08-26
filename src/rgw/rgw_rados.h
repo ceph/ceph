@@ -1336,6 +1336,8 @@ public:
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);
 
+  using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
