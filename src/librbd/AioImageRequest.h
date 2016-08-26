@@ -48,12 +48,17 @@ public:
   void send();
   void fail(int r);
 
+  void set_bypass_image_cache() {
+    m_bypass_image_cache = true;
+  }
+
 protected:
   typedef std::list<AioObjectRequestHandle *> AioObjectRequests;
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
   Extents m_image_extents;
+  bool m_bypass_image_cache = false;
 
   AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                   Extents &&image_extents)
@@ -62,6 +67,8 @@ protected:
   }
 
   virtual void send_request() = 0;
+  virtual void send_image_cache_request() = 0;
+
   virtual aio_type_t get_aio_type() const = 0;
   virtual const char *get_request_type() const = 0;
 };
@@ -79,7 +86,9 @@ public:
   }
 
 protected:
-  virtual void send_request();
+  virtual void send_request() override;
+  virtual void send_image_cache_request() override;
+
   virtual aio_type_t get_aio_type() const {
     return AIO_TYPE_READ;
   }
@@ -171,6 +180,8 @@ protected:
 
   void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 
+  virtual void send_image_cache_request() override;
+
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
 
@@ -209,6 +220,9 @@ protected:
   }
 
   virtual void prune_object_extents(ObjectExtents &object_extents) override;
+
+  virtual void send_image_cache_request() override;
+
   virtual uint32_t get_cache_request_count(bool journaling) const override;
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
@@ -237,6 +251,8 @@ protected:
   using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
 
   virtual void send_request();
+  virtual void send_image_cache_request() override;
+
   virtual aio_type_t get_aio_type() const {
     return AIO_TYPE_FLUSH;
   }

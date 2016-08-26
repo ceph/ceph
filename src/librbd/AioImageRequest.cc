@@ -197,7 +197,11 @@ void AioImageRequest<I>::send() {
                  << "completion=" << aio_comp <<  dendl;
 
   aio_comp->get();
-  send_request();
+  if (m_bypass_image_cache || true) { // TODO
+    send_request();
+  } else {
+    send_image_cache_request();
+  }
 }
 
 template <typename I>
@@ -287,6 +291,11 @@ void AioImageRead<I>::send_request() {
 
   image_ctx.perfcounter->inc(l_librbd_rd);
   image_ctx.perfcounter->inc(l_librbd_rd_bytes, buffer_ofs);
+}
+
+template <typename I>
+void AioImageRead<I>::send_image_cache_request() {
+  // TODO
 }
 
 template <typename I>
@@ -426,6 +435,11 @@ uint64_t AioImageWrite<I>::append_journal_event(
 }
 
 template <typename I>
+void AioImageWrite<I>::send_image_cache_request() {
+  // TODO
+}
+
+template <typename I>
 void AioImageWrite<I>::send_cache_requests(const ObjectExtents &object_extents,
                                         uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
@@ -526,6 +540,11 @@ uint32_t AioImageDiscard<I>::get_cache_request_count(bool journaling) const {
 }
 
 template <typename I>
+void AioImageDiscard<I>::send_image_cache_request() {
+  // TODO
+}
+
+template <typename I>
 void AioImageDiscard<I>::send_cache_requests(const ObjectExtents &object_extents,
                                           uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
@@ -614,6 +633,11 @@ void AioImageFlush<I>::send_request() {
   aio_comp->put();
 
   image_ctx.perfcounter->inc(l_librbd_aio_flush);
+}
+
+template <typename I>
+void AioImageFlush<I>::send_image_cache_request() {
+  // TODO
 }
 
 } // namespace librbd
