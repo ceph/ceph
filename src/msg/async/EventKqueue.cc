@@ -48,14 +48,15 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
 {
   ldout(cct, 20) << __func__ << " add event fd=" << fd << " cur_mask=" << cur_mask
                  << "add_mask" << add_mask << dendl;
-  struct kevent ke;
-  int filter = 0;
-  filter |= (add_mask & EVENT_READABLE) ? EVFILT_READ : 0;
-  filter |= (add_mask & EVENT_WRITABLE) ? EVFILT_WRITE : 0;
+  struct kevent ke[2];
+  int num = 0;
+  if (add_mask & EVENT_READABLE)
+    EV_SET(&ke[num++], fd, EVFILT_READ, EV_ADD|EV_CLEAR, 0, 0, NULL);
+  if (add_mask & EVENT_WRITABLE)
+    EV_SET(&ke[num++], fd, EVFILT_WRITE, EV_ADD|EV_CLEAR, 0, 0, NULL);
 
-  if (filter) {
-    EV_SET(&ke, fd, filter, EV_ADD, 0, 0, NULL);
-    if (kevent(kqfd, &ke, 1, NULL, 0, NULL) == -1) {
+  if (num) {
+    if (kevent(kqfd, ke, num, NULL, 0, NULL) == -1) {
       lderr(cct) << __func__ << " unable to add event: "
                              << cpp_strerror(errno) << dendl;
       return -errno;
@@ -69,16 +70,18 @@ int KqueueDriver::del_event(int fd, int cur_mask, int delmask)
 {
   ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask
                  << " delmask=" << delmask << dendl;
-  struct kevent ke;
-  int filter = 0;
-  filter |= (delmask & EVENT_READABLE) ? EVFILT_READ : 0;
-  filter |= (delmask & EVENT_WRITABLE) ? EVFILT_WRITE : 0;
+  struct kevent ke[2];
+  int num = 0;
+  int mask = cur_mask & delmask;
+  if (mask & EVENT_READABLE)
+    EV_SET(&ke[num++], fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+  if (mask & EVENT_WRITABLE)
+    EV_SET(&ke[num++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
 
-  if (filter) {
+  if (num) {
     int r = 0;
-    EV_SET(&ke, fd, filter, EV_DELETE, 0, 0, NULL);
-    if ((r = kevent(kqfd, &ke, 1, NULL, 0, NULL)) < 0) {
-      lderr(cct) << __func__ << " kevent: delete fd=" << fd << " mask=" << filter
+    if ((r = kevent(kqfd, ke, num, NULL, 0, NULL)) < 0) {
+      lderr(cct) << __func__ << " kevent: delete fd=" << fd << " mask=" << mask
                  << " failed." << cpp_strerror(errno) << dendl;
       return -errno;
     }
@@ -115,6 +118,7 @@ int KqueueDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeva
 
       if (e->filter == EVFILT_READ) mask |= EVENT_READABLE;
       if (e->filter == EVFILT_WRITE) mask |= EVENT_WRITABLE;
+      if (e->flags & EV_ERROR) mask |= EVENT_READABLE|EVENT_WRITABLE;
       fired_events[j].fd = (int)e->ident;
       fired_events[j].mask = mask;
 
