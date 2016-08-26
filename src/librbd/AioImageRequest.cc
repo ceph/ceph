@@ -119,6 +119,44 @@ private:
 };
 
 template <typename ImageCtxT>
+class C_ImageCacheRead : public C_AioRequest {
+public:
+  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+
+  C_ImageCacheRead(AioCompletion *completion, const Extents &image_extents)
+    : C_AioRequest(completion), m_image_extents(image_extents) {
+  }
+
+  inline bufferlist &get_data() {
+    return m_bl;
+  }
+
+protected:
+  virtual void finish(int r) {
+    CephContext *cct = m_completion->ictx->cct;
+    ldout(cct, 10) << "C_ImageCacheRead::finish() " << this << ": r=" << r
+                   << dendl;
+    if (r >= 0) {
+      size_t length = 0;
+      for (auto &image_extent : m_image_extents) {
+        length += image_extent.second;
+      }
+      assert(length == m_bl.length());
+
+      m_completion->lock.Lock();
+      m_completion->destriper.add_partial_result(cct, m_bl, m_image_extents);
+      m_completion->lock.Unlock();
+      r = length;
+    }
+    C_AioRequest::finish(r);
+  }
+
+private:
+  bufferlist m_bl;
+  Extents m_image_extents;
+};
+
+template <typename ImageCtxT>
 class C_ObjectCacheRead : public Context {
 public:
   explicit C_ObjectCacheRead(ImageCtxT &ictx, AioObjectRead<ImageCtxT> *req)
