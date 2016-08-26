@@ -1230,7 +1230,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
-  int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints, const string *ptier_type);
+  int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
+               const list<string>& endpoints, const string *ptier_type,
+               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   const string& get_pool_name(CephContext *cct);
