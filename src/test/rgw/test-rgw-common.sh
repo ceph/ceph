@@ -85,7 +85,7 @@ function init_first_zone {
   realm=$2
   zg=$3
   zone=$4
-  port=$5
+  endpoints=$5
 
   access_key=$6
   secret=$7
@@ -94,13 +94,11 @@ function init_first_zone {
   x $(rgw_admin $id) realm create --rgw-realm=$realm
 
 # create zonegroup, zone
-  x $(rgw_admin $id) zonegroup create --rgw-zonegroup=$zg --endpoints=http://localhost:$port --master --default
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=http://localhost:$port --default
+  x $(rgw_admin $id) zonegroup create --rgw-zonegroup=$zg --master --default
+  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints --default
   x $(rgw_admin $id) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
 
   x $(rgw_admin $id) period update --commit
-
-  x $(rgw $id $port) --rgw-zone=$zone
 }
 
 function init_zone_in_existing_zg {
@@ -111,17 +109,15 @@ function init_zone_in_existing_zg {
   zg=$3
   zone=$4
   zone1_port=$5
-  port=$6
+  endpoints=$6
 
   access_key=$7
   secret=$8
 
   x $(rgw_admin $id) realm pull --url=http://localhost:$zone1_port --access-key=${access_key} --secret=${secret} --default
   x $(rgw_admin $id) zonegroup default --rgw-zonegroup=$zg
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=http://localhost:$port
+  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
   x $(rgw_admin $id) period update --commit
-
-  x $(rgw $id $port) --rgw-zone=$zone
 }
 
 function call_rgw_admin {

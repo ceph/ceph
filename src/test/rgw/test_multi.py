@@ -114,10 +114,11 @@ class RGWRealmCredentials:
         self.secret = secret
 
 class RGWCluster:
-    def __init__(self, cluster_num, port):
+    def __init__(self, cluster_num, port, num_gateways):
         self.cluster_num = cluster_num
         self.cluster_id = 'c' + str(cluster_num)
         self.port = port
+        self.num_gateways = num_gateways
         self.needs_reset = True
 
     def start(self):
@@ -128,7 +129,8 @@ class RGWCluster:
         mstop(self.cluster_id)
 
     def start_rgw(self):
-        mrgw(self.cluster_id, self.port, '--debug-rgw=20 --debug-ms=1')
+        for i in range(self.num_gateways):
+            mrgw(self.cluster_id, self.port + i, '--debug-rgw=20 --debug-ms=1')
 
     def stop_rgw(self):
         mstop(self.cluster_id, 'radosgw')
@@ -168,16 +170,18 @@ class RGWRealm:
 
     def init_zone(self, cluster, zg, zone_name, first_zone_port):
         is_master = (first_zone_port == cluster.port)
+        endpoints = ",".join(map(lambda x: "http://localhost:" + str(cluster.port + x), range(cluster.num_gateways)))
         if is_master:
             bash(tpath('test-rgw-call.sh', 'init_first_zone', cluster.cluster_num,
-                       self.realm, zg, zone_name, cluster.port,
+                       self.realm, zg, zone_name, endpoints,
                        self.credentials.access_key, self.credentials.secret))
         else:
             bash(tpath('test-rgw-call.sh', 'init_zone_in_existing_zg', cluster.cluster_num,
-                       self.realm, zg, zone_name, first_zone_port, cluster.port,
+                       self.realm, zg, zone_name, first_zone_port, endpoints,
                        self.credentials.access_key, self.credentials.secret))
 
         self.add_zone(cluster, zg, zone_name, is_master)
+        cluster.start_rgw()
 
     def add_zone(self, cluster, zg, zone_name, is_master):
         zone = RGWZone(self.realm, cluster, zg, zone_name)
@@ -495,14 +499,14 @@ def gen_bucket_name():
     return run_prefix + '-' + str(num_buckets)
 
 class RGWMulti:
-    def __init__(self, num_clusters):
+    def __init__(self, num_clusters, gateways_per_cluster):
         self.num_clusters = num_clusters
 
         self.base_port = 8000
 
         self.clusters = {}
         for i in range(num_clusters):
-            self.clusters[i] = RGWCluster(i + 1, self.base_port + i)
+            self.clusters[i] = RGWCluster(i + 1, self.base_port + i * gateways_per_cluster, gateways_per_cluster)
 
     def setup(self, bootstrap, tenant):
         global realm
@@ -824,6 +828,7 @@ def test_zonegroup_remove():
 def init(parse_args):
     cfg = configparser.RawConfigParser({
                                          'num_zones': 3,
+                                         'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
                                          'tenant': None,
@@ -846,6 +851,7 @@ def init(parse_args):
 
     section = 'DEFAULT'
     parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
+    parser.add_argument('--gateways-per-zone', type=int, default=cfg.getint(section, 'gateways_per_zone'))
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
     parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
     parser.add_argument('--tenant', type=str, default=cfg.get(section, 'tenant'))
@@ -862,7 +868,7 @@ def init(parse_args):
 
     global rgw_multi
 
-    rgw_multi = RGWMulti(int(args.num_zones))
+    rgw_multi = RGWMulti(int(args.num_zones), int(args.gateways_per_zone))
 
     rgw_multi.setup(not args.no_bootstrap, args.tenant)
 
