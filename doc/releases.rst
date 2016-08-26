@@ -158,6 +158,7 @@ Timeline
 .. _9.0.1: ../release-notes#v9-0-1
 .. _9.0.0: ../release-notes#v9-0-0
 
+.. _0.94.8: ../release-notes#v0-94-8-hammer
 .. _0.94.7: ../release-notes#v0-94-7-hammer
 .. _0.94.6: ../release-notes#v0-94-6-hammer
 .. _0.94.5: ../release-notes#v0-94-5-hammer
