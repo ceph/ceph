@@ -21,9 +21,7 @@ if (${WITH_RBD})
   )
   add_executable(ceph_smalliobenchrbd
     ${smalliobenchrbd_srcs}
-    $<TARGET_OBJECTS:common_texttable_obj>
-    $<TARGET_OBJECTS:parse_secret_objs>
-    )
+    $<TARGET_OBJECTS:common_texttable_obj>)
   target_link_libraries(ceph_smalliobenchrbd
     librbd
     librados
@@ -32,9 +30,7 @@ if (${WITH_RBD})
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
     udev
     ${BLKID_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    keyutils
-    )
+    ${CMAKE_DL_LIBS})
 endif (${WITH_RBD})
 
 # ceph_smalliobenchfs
