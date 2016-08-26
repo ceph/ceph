@@ -1787,9 +1787,22 @@ static void get_md_sync_status(list<string>& status)
 
 static void get_data_sync_status(const string& source_zone, list<string>& status, int tab)
 {
-  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
-
   stringstream ss;
+
+  auto ziter = store->zone_by_id.find(source_zone);
+  if (ziter == store->zone_by_id.end()) {
+    push_ss(ss, status, tab) << string("zone not found");
+    flush_ss(ss, status);
+    return;
+  }
+  RGWZone& sz = ziter->second;
+
+  if (!store->zone_syncs_from(store->get_zone(), sz)) {
+    push_ss(ss, status, tab) << string("not syncing from zone");
+    flush_ss(ss, status);
+    return;
+  }
+  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
 
   int ret = sync.init();
   if (ret < 0) {
