@@ -1959,9 +1959,9 @@ static void sync_status(Formatter *formatter)
     string zone_name;
     string source_str = "source: ";
     string s = source_str + source_id;
-    auto siter = store->zone_name_by_id.find(source_id);
-    if (siter != store->zone_name_by_id.end()) {
-      s += string(" (") + siter->second + ")";
+    auto siter = store->zone_by_id.find(source_id);
+    if (siter != store->zone_by_id.end()) {
+      s += string(" (") + siter->second.name + ")";
     }
     data_status.push_back(s);
     get_data_sync_status(source_id, data_status, source_str.size());

@@ -992,10 +992,14 @@ struct RGWZone {
  */
   uint32_t bucket_index_max_shards;
 
-  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0) {}
+  bool sync_from_all;
+  set<string> sync_from; /* list of zones to sync from */
+
+  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0),
+              sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
@@ -1003,11 +1007,13 @@ struct RGWZone {
     ::encode(bucket_index_max_shards, bl);
     ::encode(id, bl);
     ::encode(read_only, bl);
+    ::encode(sync_from_all, bl);
+    ::encode(sync_from, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     ::decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -1024,6 +1030,10 @@ struct RGWZone {
       ::decode(id, bl);
       ::decode(read_only, bl);
     }
+    if (struct_v >= 5) {
+      ::decode(sync_from_all, bl);
+      ::decode(sync_from, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1031,6 +1041,10 @@ struct RGWZone {
   static void generate_test_instances(list<RGWZone*>& o);
 
   bool is_read_only() { return read_only; }
+
+  bool syncs_from(const string& zone_id) {
+    return (sync_from_all || sync_from.find(zone_id) != sync_from.end());
+  }
 };
 WRITE_CLASS_ENCODER(RGWZone)
 
@@ -1185,7 +1199,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
-  int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints);
+  int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints,
+               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   const string& get_pool_name(CephContext *cct);
@@ -1925,10 +1940,12 @@ public:
 
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
+  map<string, RGWRESTConn *> zone_data_sync_from_map;
+  map<string, RGWRESTConn *> zone_data_notify_to_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
   map<string, string> zone_id_by_name;
-  map<string, string> zone_name_by_id;
+  map<string, RGWZone> zone_by_id;
 
   RGWRESTConn *get_zone_conn_by_id(const string& id) {
     auto citer = zone_conn_map.find(id);
@@ -1978,6 +1995,8 @@ public:
   uint32_t get_zone_short_id() const {
     return zone_short_id;
   }
+
+  bool zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone);
 
   const RGWQuotaInfo& get_bucket_quota() {
     return current_period.get_config().bucket_quota;
