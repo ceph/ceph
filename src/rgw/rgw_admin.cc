@@ -216,9 +216,9 @@ void _usage()
   cout << "                             unset zone tier config keys\n";
   cout << "   --tier_type=<type>        zone tier type\n";
   cout << "   --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers\n";
-  cout << "   --sync-from=[zone-id][,...]\n";
+  cout << "   --sync-from=[zone-name][,...]\n";
   cout << "                             set list of zones to sync from\n";
-  cout << "   --sync-from-rm=[zone-id][,...]\n";
+  cout << "   --sync-from-rm=[zone-name][,...]\n";
   cout << "                             remove zones from list of zones to sync from\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
   cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
