@@ -93,7 +93,7 @@ public:
     const eversion_t &at_version,
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
-    const eversion_t &trim_rollback_to,
+    const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     Context *on_local_applied_sync,
@@ -344,7 +344,7 @@ public:
     hobject_t hoid;
     eversion_t version;
     eversion_t trim_to;
-    eversion_t trim_rollback_to;
+    eversion_t roll_forward_to;
     vector<pg_log_entry_t> log_entries;
     map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> obc_map;
     boost::optional<pg_hit_set_history_t> updated_hit_set_history;

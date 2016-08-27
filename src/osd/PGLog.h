@@ -569,12 +569,12 @@ public:
     pg_info_t &info);
 
   void trim_rollback_info(
-    eversion_t trim_rollback_to,
+    eversion_t roll_forward_to,
     LogEntryHandler *h) {
-    if (trim_rollback_to > log.can_rollback_to)
-      log.can_rollback_to = trim_rollback_to;
+    if (roll_forward_to > log.can_rollback_to)
+      log.can_rollback_to = roll_forward_to;
     log.advance_rollback_info_trimmed_to(
-      trim_rollback_to,
+      roll_forward_to,
       h);
   }
 

@@ -523,7 +523,7 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
-  const eversion_t &trim_rollback_to,
+  const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &_log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
@@ -570,7 +570,7 @@ void ReplicatedBackend::submit_transaction(
     tid,
     reqid,
     trim_to,
-    trim_rollback_to,
+    roll_forward_to,
     added.size() ? *(added.begin()) : hobject_t(),
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
@@ -585,7 +585,7 @@ void ReplicatedBackend::submit_transaction(
     log_entries,
     hset_history,
     trim_to,
-    trim_rollback_to,
+    roll_forward_to,
     true,
     op_t);
   
@@ -968,7 +968,7 @@ Message * ReplicatedBackend::generate_subop(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t pg_trim_rollback_to,
+  eversion_t pg_roll_forward_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
@@ -1008,7 +1008,7 @@ Message * ReplicatedBackend::generate_subop(
     wr->pg_stats = get_info().stats;
 
   wr->pg_trim_to = pg_trim_to;
-  wr->pg_trim_rollback_to = pg_trim_rollback_to;
+  wr->pg_roll_forward_to = pg_roll_forward_to;
 
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
@@ -1022,7 +1022,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t pg_trim_rollback_to,
+  eversion_t pg_roll_forward_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
@@ -1054,7 +1054,7 @@ void ReplicatedBackend::issue_op(
       tid,
       reqid,
       pg_trim_to,
-      pg_trim_rollback_to,
+      pg_roll_forward_to,
       new_temp_oid,
       discard_temp_oid,
       log_entries,
@@ -1139,7 +1139,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     log,
     m->updated_hit_set_history,
     m->pg_trim_to,
-    m->pg_trim_rollback_to,
+    m->pg_roll_forward_to,
     update_snaps,
     rm->localt);
 

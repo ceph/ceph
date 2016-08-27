@@ -29,7 +29,7 @@ struct ECSubWrite {
   ObjectStore::Transaction t;
   eversion_t at_version;
   eversion_t trim_to;
-  eversion_t trim_rollback_to;
+  eversion_t roll_forward_to;
   vector<pg_log_entry_t> log_entries;
   set<hobject_t, hobject_t::BitwiseComparator> temp_added;
   set<hobject_t, hobject_t::BitwiseComparator> temp_removed;
@@ -44,7 +44,7 @@ struct ECSubWrite {
     const ObjectStore::Transaction &t,
     eversion_t at_version,
     eversion_t trim_to,
-    eversion_t trim_rollback_to,
+    eversion_t roll_forward_to,
     vector<pg_log_entry_t> log_entries,
     boost::optional<pg_hit_set_history_t> updated_hit_set_history,
     const set<hobject_t, hobject_t::BitwiseComparator> &temp_added,
@@ -52,7 +52,7 @@ struct ECSubWrite {
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
       at_version(at_version),
-      trim_to(trim_to), trim_rollback_to(trim_rollback_to),
+      trim_to(trim_to), roll_forward_to(roll_forward_to),
       log_entries(log_entries),
       temp_added(temp_added),
       temp_removed(temp_removed),
@@ -66,7 +66,7 @@ struct ECSubWrite {
     t.swap(other.t);
     at_version = other.at_version;
     trim_to = other.trim_to;
-    trim_rollback_to = other.trim_rollback_to;
+    roll_forward_to = other.roll_forward_to;
     log_entries.swap(other.log_entries);
     temp_added.swap(other.temp_added);
     temp_removed.swap(other.temp_removed);

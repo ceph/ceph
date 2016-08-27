@@ -55,7 +55,7 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
-  eversion_t pg_trim_rollback_to;   // primary->replica: trim rollback
+  eversion_t pg_roll_forward_to;   // primary->replica: trim rollback
                                     // info to here
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
@@ -93,7 +93,7 @@ public:
 
     ::decode(from, p);
     ::decode(updated_hit_set_history, p);
-    ::decode(pg_trim_rollback_to, p);
+    ::decode(pg_roll_forward_to, p);
     final_decode_needed = false;
   }
 
@@ -112,7 +112,7 @@ public:
     ::encode(discard_temp_oid, payload);
     ::encode(from, payload);
     ::encode(updated_hit_set_history, payload);
-    ::encode(pg_trim_rollback_to, payload);
+    ::encode(pg_roll_forward_to, payload);
   }
 
   MOSDRepOp()

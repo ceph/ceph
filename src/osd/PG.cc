@@ -3031,7 +3031,7 @@ void PG::add_log_entry(const pg_log_entry_t& e)
 void PG::append_log(
   const vector<pg_log_entry_t>& logv,
   eversion_t trim_to,
-  eversion_t trim_rollback_to,
+  eversion_t roll_forward_to,
   ObjectStore::Transaction &t,
   bool transaction_applied)
 {
@@ -3062,20 +3062,20 @@ void PG::append_log(
 	this,
 	get_osdmap()->get_epoch(),
 	info.last_update));
-  } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
+  } else if (roll_forward_to > pg_log.get_rollback_trimmed_to()) {
     pg_log.trim_rollback_info(
-      trim_rollback_to,
+      roll_forward_to,
       &handler);
     t.register_on_applied(
       new C_UpdateLastRollbackInfoTrimmedToApplied(
 	this,
 	get_osdmap()->get_epoch(),
-	trim_rollback_to));
+	roll_forward_to));
   }
 
   pg_log.trim(&handler, trim_to, info);
 
-  dout(10) << __func__ << ": trimming to " << trim_rollback_to
+  dout(10) << __func__ << ": trimming to " << roll_forward_to
 	   << " entries " << handler.to_trim << dendl;
   handler.apply(this, &t);
 

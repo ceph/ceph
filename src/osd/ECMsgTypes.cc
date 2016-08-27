@@ -29,7 +29,7 @@ void ECSubWrite::encode(bufferlist &bl) const
   ::encode(temp_added, bl);
   ::encode(temp_removed, bl);
   ::encode(updated_hit_set_history, bl);
-  ::encode(trim_rollback_to, bl);
+  ::encode(roll_forward_to, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -51,9 +51,9 @@ void ECSubWrite::decode(bufferlist::iterator &bl)
     ::decode(updated_hit_set_history, bl);
   }
   if (struct_v >= 3) {
-    ::decode(trim_rollback_to, bl);
+    ::decode(roll_forward_to, bl);
   } else {
-    trim_rollback_to = trim_to;
+    roll_forward_to = trim_to;
   }
   DECODE_FINISH(bl);
 }
@@ -65,7 +65,7 @@ std::ostream &operator<<(
       << ", reqid=" << rhs.reqid
       << ", at_version=" << rhs.at_version
       << ", trim_to=" << rhs.trim_to
-      << ", trim_rollback_to=" << rhs.trim_rollback_to;
+      << ", roll_forward_to=" << rhs.roll_forward_to;
   if (rhs.updated_hit_set_history)
     lhs << ", has_updated_hit_set_history";
   return lhs <<  ")";
@@ -77,7 +77,7 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_stream("reqid") << reqid;
   f->dump_stream("at_version") << at_version;
   f->dump_stream("trim_to") << trim_to;
-  f->dump_stream("trim_rollback_to") << trim_rollback_to;
+  f->dump_stream("roll_forward_to") << roll_forward_to;
   f->dump_bool("has_updated_hit_set_history",
       static_cast<bool>(updated_hit_set_history));
 }
@@ -98,7 +98,7 @@ void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)
   o.back()->reqid = osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678);
   o.back()->at_version = eversion_t(10, 300);
   o.back()->trim_to = eversion_t(5, 42);
-  o.back()->trim_rollback_to = eversion_t(8, 250);
+  o.back()->roll_forward_to = eversion_t(8, 250);
 }
 
 void ECSubWriteReply::encode(bufferlist &bl) const
