@@ -312,7 +312,6 @@ protected:
 
 
   // -- requests --
-protected:
   ceph::unordered_map<metareqid_t, MDRequestRef> active_requests;
 
 public:
