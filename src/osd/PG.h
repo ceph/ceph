@@ -987,6 +987,9 @@ public:
     void rollback(const pg_log_entry_t &entry) {
       to_rollback.push_back(entry);
     }
+    void rollforward(const pg_log_entry_t &entry) {
+      to_trim.push_back(entry);
+    }
     void trim(const pg_log_entry_t &entry) {
       to_trim.push_back(entry);
     }

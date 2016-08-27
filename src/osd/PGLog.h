@@ -48,6 +48,8 @@ struct PGLog : DoutPrefixProvider {
   struct LogEntryHandler {
     virtual void rollback(
       const pg_log_entry_t &entry) = 0;
+    virtual void rollforward(
+      const pg_log_entry_t &entry) = 0;
     virtual void remove(
       const hobject_t &hoid) = 0;
     virtual void try_stash(
@@ -96,7 +98,36 @@ struct PGLog : DoutPrefixProvider {
      */
     list<pg_log_entry_t>::reverse_iterator rollback_info_trimmed_to_riter;
   public:
-    void advance_rollback_info_trimmed_to(eversion_t to, LogEntryHandler *h);
+    template <typename F>
+    void advance_can_rollback_to(eversion_t to, F &&f) {
+      assert(to <= can_rollback_to);
+
+      if (to > rollback_info_trimmed_to)
+	rollback_info_trimmed_to = to;
+
+      while (rollback_info_trimmed_to_riter != log.rbegin()) {
+	--rollback_info_trimmed_to_riter;
+	if (rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to) {
+	  ++rollback_info_trimmed_to_riter;
+	  break;
+	}
+	f(*rollback_info_trimmed_to_riter);
+      }
+    }
+    void trim_rollback_info_to(eversion_t to, LogEntryHandler *h) {
+      advance_can_rollback_to(
+	to,
+	[&](pg_log_entry_t &entry) {
+	  h->trim(entry);
+	});
+    }
+    void roll_forward_to(eversion_t to, LogEntryHandler *h) {
+      advance_can_rollback_to(
+	to,
+	[&](pg_log_entry_t &entry) {
+	  h->rollforward(entry);
+	});
+    }
 
     /****/
     IndexedLog() :
@@ -568,12 +599,12 @@ public:
     eversion_t trim_to,
     pg_info_t &info);
 
-  void trim_rollback_info(
+  void roll_forward_to(
     eversion_t roll_forward_to,
     LogEntryHandler *h) {
     if (roll_forward_to > log.can_rollback_to)
       log.can_rollback_to = roll_forward_to;
-    log.advance_rollback_info_trimmed_to(
+    log.roll_forward_to(
       roll_forward_to,
       h);
   }
@@ -582,9 +613,8 @@ public:
     return log.rollback_info_trimmed_to;
   }
 
-  void clear_can_rollback_to(LogEntryHandler *h) {
-    log.can_rollback_to = log.head;
-    log.advance_rollback_info_trimmed_to(
+  void roll_forward(LogEntryHandler *h) {
+    roll_forward_to(
       log.head,
       h);
   }
@@ -593,7 +623,7 @@ public:
 
   void reset_backfill_claim_log(const pg_log_t &o, LogEntryHandler *h) {
     log.can_rollback_to = log.head;
-    log.advance_rollback_info_trimmed_to(log.head, h);
+    log.trim_rollback_info_to(log.head, h);
     log.claim_log_and_clear_rollback_info(o);
     missing.clear();
     mark_dirty_to(eversion_t::max());
@@ -1104,6 +1134,9 @@ public:
     log.head = info.last_update;
     log.reset_rollback_info_trimmed_to_riter();
 
+    // TODO SAM DNM: rollforward log entries will be problematic since the on-disk
+    // version won't match the in-log version until the entry is applied
+    // Make sure the is_rollforward check below is actually right!
     if (has_divergent_priors || debug_verify_stored_missing) {
       // build missing
       if (debug_verify_stored_missing || info.last_complete < info.last_update) {
@@ -1113,6 +1146,7 @@ public:
 
 	set<hobject_t, hobject_t::BitwiseComparator> did;
 	set<hobject_t, hobject_t::BitwiseComparator> checked;
+	set<hobject_t, hobject_t::BitwiseComparator> skipped;
 	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	     i != log.log.rend();
 	     ++i) {
@@ -1123,6 +1157,9 @@ public:
 	    continue;
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
+
+	  if (i->version > log.can_rollback_to && i->is_rollforward())
+	    checked.insert(i->soid);
 
 	  if (i->is_delete()) continue;
 

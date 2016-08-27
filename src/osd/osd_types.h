@@ -2827,6 +2827,8 @@ struct pg_log_entry_t {
       (op == MODIFY || op == DELETE || op == ERROR);
   }
 
+  bool is_rollforward() const { /* TODO SAM DNM */ return false; }
+
   string get_key_name() const;
   void encode_with_checksum(bufferlist& bl) const;
   void decode_with_checksum(bufferlist::iterator& p);
