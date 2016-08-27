@@ -51,7 +51,20 @@ if(WITH_SPDK)
     bluestore/NVMEDevice.cc)
 endif()
 
+if(WITH_LIBZBC)
+  include_directories(${LIBZBC_INCLUDE_PATH})
+  add_definitions(-DSMR_SUPPORT)
+  list(APPEND libos_srcs
+    bluestore/SMRAllocator.cc
+    bluestore/SMRFreelistManager.cc)
+endif()
+
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
+
+if(WITH_LIBZBC)
+  target_include_directories(os PRIVATE ${LIBZBC_INCLUDE_PATH})
+  target_link_libraries(os zbc)
+endif()
 
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})

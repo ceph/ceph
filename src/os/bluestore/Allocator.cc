@@ -6,6 +6,10 @@
 #include "BitMapAllocator.h"
 #include "common/debug.h"
 
+#ifdef SMR_SUPPORT
+#include "SMRAllocator.h"
+#endif
+
 #define dout_subsys ceph_subsys_bluestore
 
 Allocator *Allocator::create(string type,
@@ -15,7 +19,14 @@ Allocator *Allocator::create(string type,
     return new StupidAllocator;
   } else if (type == "bitmap") {
     return new BitMapAllocator(size, block_size);
-  }
+  } 
+#ifdef SMR_ALLOCATOR
+  else if (type == "smr") {
+    return new SMRAllocator(size);
+  } 
+#endif
+  else {
   derr << "Allocator::" << __func__ << " unknown alloc type " << type << dendl;
   return NULL;
+  }
 }

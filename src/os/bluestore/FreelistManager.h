@@ -18,7 +18,8 @@ public:
   static FreelistManager *create(
     string type,
     KeyValueDB *db,
-    string prefix);
+    string prefix,
+    std::string bdev = std::string());
 
   static void setup_merge_operators(KeyValueDB *db);
 
