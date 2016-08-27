@@ -1,0 +1,3308 @@
+commit ea6c958c38df1216bf95c927f143d8b13c4a9e70 (tag: refs/tags/v0.80.10)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Thu Jun 18 09:48:56 2015 -0700
+
+    0.80.10
+
+commit 9b7f09e280b4610b9f85ac34ec014018f0e2e1d3
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 17 09:35:28 2015 -0700
+
+    qa/workunits/rados/test-upgarde-v9.0.1: fix exclude syntax
+    
+    It's -, then a list of all exclusions separated by :.  There are just 2.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 78d894a634d727a9367f809a1f57234e5e6935be)
+
+commit 4e28fbc52db7d808aeaede884f342beafb7fc581
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jun 16 21:05:29 2015 -0700
+
+    qa/workunits/rados/test-upgrade-v9.0.1: skip one more evict test
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3e8d60a80ce31860eac76a1f6489a35e1795a0c0)
+
+commit 34ba3719997fed6d0b8148f21e59b446bdf42962
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Jun 15 15:12:43 2015 -0700
+
+    qa: add compatibility filtered rados api tests for upgrades
+    
+    Post-9.0.1, the evict op returns success when an object doesn't exist
+    in the cache tier. Skip the tests that are incompatible across
+    versions.
+    
+    Fixes: #11548
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 348a3d3c9880e7d022e71a2faafe51c8f771406e)
+
+commit d1f478200342f422ee6e563bf7aad54ba38b3ed3
+Merge: d0f9c5f 7f1abd9
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 10 15:03:48 2015 -0700
+
+    Merge pull request #4924 from ceph/wip-11955-firefly
+    
+    11955: ceph.spec.in: package mkcephfs on EL6
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 7f1abd9053088ded6613aeca4e7c9489c44910e4
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Wed Jun 10 15:43:41 2015 -0600
+
+    ceph.spec.in: package mkcephfs on EL6
+    
+    Commit efbca0465c2946e113771966df08cf7cf37b1196 added mkcephfs to the
+    RPM %files listing, but this /usr/sbin path is only correct for CentOS
+    7. In CentOS 6, the utility is present at /sbin/mkcephfs instead. This
+    causes rpmbuild to fail to build the tip of the firefly branch on EL6.
+    
+    Adjust the RPM %files list so we properly package mkcephfs on both EL7
+    and EL6.
+    
+    http://tracker.ceph.com/issues/11955 Refs: #11955
+    
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+
+commit d0f9c5f47024f53b4eccea2e0fde9b7844746362
+Merge: efbca04 9930138
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Jun 4 19:07:03 2015 +0200
+
+    Merge pull request #4851 from ceph/wip-10873-firefly
+    
+    rgw: generate the "Date" HTTP header for civetweb.
+
+commit 99301384be96997203682679c0430ca0a53be5d3 (refs/remotes/gh/wip-10873-firefly)
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Wed Feb 18 15:48:43 2015 +0100
+
+    rgw: generate the "Date" HTTP header for civetweb.
+    
+    Fixes: #10873
+    Backport: hammer
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit ea384f83b601f60e135c3d3f960fdb75a919dd84)
+
+commit efbca0465c2946e113771966df08cf7cf37b1196
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 3 13:03:50 2015 -0400
+
+    ceph.spec: add mkcephfs to ceph.rpm
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit e785f1a2bb4cd77b0aaaccd78060183157ad842e
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Dec 2 13:58:10 2014 -0700
+
+    packaging: package ceph-disk(8)
+    
+    The ceph-disk man page was added in
+    a450cab2b8148cb8a9b043d629feccf89e5aabac, but this was not added to the
+    RPM or DEB packaging. Add it here.
+    
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+    (cherry picked from commit b743a951114b00bbb6e14fb88f1928b504bc0f8b)
+
+commit 819cf6ddb986b37c5d1229c4ea330010e88bb615
+Merge: e93711a 665a857
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Jun 2 19:53:03 2015 +0300
+
+    Merge pull request #4780 from oritwas/wip-10295-firefly
+    
+    rgw: civetweb should use unique request id
+    
+    Reviewd-by: Yehuda Sadeh <yehuda@rehat.com>
+
+commit e93711a40d680230b03fe722a4da49a6f9a9b667
+Merge: 071c943 50e8579
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Jun 2 19:02:07 2015 +0300
+
+    Merge pull request #4829 from oritwas/wip-negative_content_length-firefly
+    
+    rgw: don't allow negative / invalid content length
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 50e85797507a3ba13193f368cff461c08e44a9b3
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Aug 1 16:15:36 2014 -0700
+
+    rgw: don't allow negative / invalid content length
+    
+    Certain frontends (e.g., civetweb) don't filter such requests.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 0e74b7a1d56733358e2f1d3df4386125a94c2966)
+
+commit 071c94385ee71b86c5ed8363d56cf299da1aa7b3
+Merge: 68211f6 c632ef1
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed May 27 15:36:15 2015 -0700
+
+    Merge pull request #4766 from SUSE/wip-11673-firefly
+    
+    Debian: ceph-test and rest-bench debug packages should require their respective binary packages
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 665a85701177230365e43a351d7722cb2adbde93
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Apr 23 17:36:47 2015 +0200
+
+    rgw: civetweb should use unique request id
+    
+    max_req_id was moved to RGWRados and changed to atomic64_t.
+    
+    The same request id resulted in gc giving the same idtag to all objects
+    resulting in a leakage of rados objects. It only kept the last deleted object in
+    it's queue, the previous objects were never freed.
+    
+    Fixes: 10295
+    Backport: Hammer, Firefly
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit c262259)
+    
+    Conflicts:
+    	src/rgw/rgw_main.cc
+    	src/rgw/rgw_rados.h
+
+commit c632ef13e05654d0e5ddc79fc7e9553cad8cbed0
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Mon May 18 10:50:58 2015 -0600
+
+    debian: set rest-bench-dbg ceph-test-dbg dependencies
+    
+    Debian's debug packages ought to depend on their respective binary
+    packages. This was the case for many of our ceph packages, but it was
+    not the case for ceph-test-dbg or rest-bench-dbg.
+    
+    Add the dependencies on the relevant binary packages, pinned to
+    "= ${binary:Version}" per convention.
+    
+    http://tracker.ceph.com/issues/11673 Fixes: #11673
+    
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+    (cherry picked from commit f898ec1e4e3472b0202280f09653a769fc62c8d3)
+
+commit 68211f695941ee128eb9a7fd0d80b615c0ded6cf
+Merge: 7d11b19 cd8f183
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon May 18 14:25:59 2015 +0200
+
+    Merge pull request #4697 from ceph/wip-11622-firefly
+    
+    Wip 11622 firefly
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit cd8f1830eb5d7ff75b17d7f0915ee4b3b834b149 (refs/remotes/gh/wip-11622-firefly)
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed May 13 17:05:22 2015 -0700
+
+    rgw: merge manifests correctly when there's prefix override
+    
+    Fixes: #11622
+    Backport: hammer, firefly
+    
+    Prefix override happens in a manifest when a rados object does not
+    conform to the generic prefix set on the manifest. When merging
+    manifests (specifically being used in multipart objects upload), we need
+    to check if the rule that we try to merge has a prefix that is the same
+    as the previous rule. Beforehand we checked if both had the same
+    override_prefix setting, but that might not apply as both manifests
+    might have different prefixes.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 389ae6739ddc6239a4dd7c5f7f9bfc9b645b8577)
+
+commit eef3d2f1c400573db90936fd417769183950b6ee
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue May 12 16:40:10 2015 -0700
+
+    rgw: restore buffer of multipart upload after EEXIST
+    
+    Fixes #11604
+    Backport: hammer, firefly
+    
+    When we need to restart a write of part data, we need to revert to
+    buffer to before the write, otherwise we're going to skip some data.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 580ccaec12daae64c38a1616d0be907bdd70a888)
+
+commit 7d11b19003503a9db1572d01f7a170e35b29017d
+Merge: 114f2e9 9b33965
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri May 15 10:27:42 2015 -0700
+
+    Merge pull request #4414 from xinxinsh/wip-11125-firefly
+    
+    rgw: keystone token cache does not work correctly
+
+commit 114f2e9bb5665760a5be9816785508f1c97662d5
+Merge: ac7d28a f33effc
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri May 15 17:03:04 2015 +0200
+
+    Merge pull request #4415 from xinxinsh/wip-11244-firefly
+    
+    cancel_pull: requeue waiters
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit ac7d28a6977084da0b70a3f2d0a54c8fa55b16fa
+Merge: f273792 1f6b1bb
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri May 15 17:02:27 2015 +0200
+
+    Merge pull request #4416 from xinxinsh/wip-10976-firefly
+    
+    fix PG::all_unfound_are_queried_or_lost for non-existent osds
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit f273792c675aca95694cd36794d8a854731bf308
+Merge: 8a6632b 019b28b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri May 15 17:02:05 2015 +0200
+
+    Merge pull request #4556 from xinxinsh/wip-11429-firefly
+    
+    OSD::load_pgs: we need to handle the case where an upgrade from earlier versions which ignored non-existent pgs resurrects a pg with a prehistoric osdmap
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 8a6632b4e5ffad305f92c89656b161a521529e45
+Merge: 156c385 a71f309
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu May 14 09:50:28 2015 -0700
+
+    Merge pull request #4638 from SUSE/wip-11453-firefly
+    
+    run RGW as root
+    
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 019b28b6397dbc3111faa6a8eb57349a48f408d8
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Apr 20 23:45:57 2015 -0700
+
+    OSD: handle the case where we resurrected an old, deleted pg
+    
+    Prior to giant, we would skip pgs in load_pgs which were not present in
+    the current osdmap.  Those pgs would eventually refer to very old
+    osdmaps, which we no longer have causing the assertion failure in 11429
+    once the osd is finally upgraded to a version which does not skip the
+    pgs.  Instead, if we do not have the map for the pg epoch, complain to
+    the osd log and skip the pg.
+    
+    Fixes: 11429
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit fbfd50de5b9b40d71d2e768418a8eca28b1afaca)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+            resolved by add a new comment line
+
+commit 156c385ef726e56d219c3383a4015c50aec2758a
+Merge: fcd0ea3 8cc4bc1
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue May 12 13:57:36 2015 +0200
+
+    Merge pull request #4379 from ceph/wip-11416
+    
+    rgw: use correct objv_tracker for bucket instance
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit a71f3091a4ea810c02517642fb4ab9ce5516b452
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Wed Apr 22 16:36:42 2015 -0600
+
+    init-radosgw: run RGW as root
+    
+    The ceph-radosgw service fails to start if the httpd package is not
+    installed. This is because the init.d file attempts to start the RGW
+    process with the "apache" UID. If a user is running civetweb, there is
+    no reason for the httpd or apache2 package to be present on the system.
+    
+    Switch the init scripts to use "root" as is done on Ubuntu.
+    
+    http://tracker.ceph.com/issues/11453 Refs: #11453
+    
+    Reported-by: Vickey Singh <vickey.singh22693@gmail.com>
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+    (cherry picked from commit 47339c5ac352d305e68a58f3d744c3ce0fd3a2ac)
+
+commit fcd0ea3383582e7a1dc8091e7a48e1d4bbaa76ee
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Fri May 8 11:29:44 2015 -0700
+
+    workunits: remove defunct cephfs set_layout test
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit df053b86a89edf8f390400dad8c5e654e14df327
+Merge: aef0272 62645d3
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed May 6 13:07:11 2015 -0700
+
+    Merge pull request #4571 from ceph/wip-11256-firefly
+    
+    Wip 11256 firefly
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit aef0272d72afaef849b5d4acbf55626033369ee8
+Author: Noah Watkins <noahwatkins@gmail.com>
+Date:   Fri Mar 27 19:34:12 2015 -0700
+
+    java: libcephfs_jni.so is in /usr/lib64 on rhel
+    
+    Signed-off-by: Noah Watkins <noahwatkins@gmail.com>
+    (cherry picked from commit aed3434dc7c5161c72c7d5655faa3bc693fc9777)
+
+commit a551a23d36e3f30ff5b0679a98ee760166ae47ae
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Mar 2 21:04:25 2015 +0800
+
+    qa/workunits/fs/misc: fix filelock_interrupt.py
+    
+    Handle the case that kernel does not support fcntl.F_OFD_SETLK.
+    Also fix the code that checks if fnctl fails with errno == EINTR.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 4ececa3dc4a21b98f61a592da9e2be60a0d71625)
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 07031b151b4ac6677b1f663ac200d09088deff64
+Merge: 83f8d43 3fb97e2
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Apr 30 00:32:21 2015 +0200
+
+    Merge pull request #4385 from xinxinsh/wip-11199-firefly
+    
+    osd: ENOENT on clone
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 83f8d434a5c245711922ea43a962160177aa5a40
+Merge: f1425e0 29bc9e5
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Apr 30 00:31:48 2015 +0200
+
+    Merge pull request #4384 from xinxinsh/wip-11197-firefly
+    
+    pg stuck stale after create with activation delay
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit f1425e093e00343a5ae4b9ff56911bf654a5c152
+Merge: e980e00 69d9339
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Apr 30 00:31:32 2015 +0200
+
+    Merge pull request #4382 from xinxinsh/wip-10718-firefly
+    
+    osd/PGLog.h: 279: FAILED assert(log.log.size() == log_keys_debug.size())
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit e980e0036909afc392f9bdf5532ce500af602c2f
+Merge: b36229b 110c354
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Apr 30 00:23:04 2015 +0200
+
+    Merge pull request #4185 from ldachary/wip-11156-firefly
+    
+    FAILED assert(soid < scrubber.start || soid >= scrubber.end)
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit b36229b5aeec669cd1494f47120ae207a393846f
+Merge: da75978 20c2175
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Apr 28 08:11:18 2015 -0700
+
+    Merge pull request #4475 from ceph/wip-9538.firefly
+    
+    mon: OSDMonitor: fallback to json-pretty in case of invalid formatter
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 20c2175352c9d4e4d0e709d294fe6fe0695761cc
+Author: Loic Dachary <loic-201408@dachary.org>
+Date:   Fri Sep 19 15:28:36 2014 +0200
+
+    mon: osd find / metadata --format plain fallback
+    
+    ceph --format plain osd find 1 (and metadata) are not implemented and
+    must fallback to the default (json-pretty).
+    
+    http://tracker.ceph.com/issues/9538 Fixes: #9538
+    
+    Signed-off-by: Loic Dachary <loic-201408@dachary.org>
+    (cherry picked from commit 13780d755115387591888f94ea6c58ac0db3ecc4)
+
+commit da759784ebda11275106c3b280f1d32b64ade00a
+Merge: 1a10a7e e1d5773
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Apr 27 10:30:49 2015 -0700
+
+    Merge pull request #4453 from ceph/wip-11454
+    
+    PG::actingset should be used when checking the number of acting OSDs for...
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 1a10a7eac190249a41b5200f0cc5e3863e76c31d
+Merge: a860e2b b9da6f1
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Apr 27 10:14:00 2015 +0200
+
+    Merge pull request #4245 from ceph/wip-11113-firefly
+    
+    librbd: snap_remove should ignore -ENOENT errors
+    
+    Reviewed-by: Shu, Xinxin <xinxin.shu@intel.com>
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit a860e2b3c02ef4f1402b54b08a6bacd4b02cc07f
+Merge: dd15e54 364563a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Apr 27 10:12:40 2015 +0200
+
+    Merge pull request #4206 from ceph/wip-5488-firefly
+    
+    librbd: acquire cache_lock before refreshing parent
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit dd15e54b2fae134126e9795a8a973e391c628eb7
+Merge: 51ff2b6 5404fbf
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Apr 27 10:09:23 2015 +0200
+
+    Merge pull request #3963 from dachary/wip-10153-firefly
+    
+    Rados.shutdown() dies with Illegal instruction (core dumped)
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 51ff2b60dc576fb444bcfea8f6cd3e12043ed5b8
+Merge: 12143ff c0cfd6e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Apr 27 10:08:15 2015 +0200
+
+    Merge pull request #4383 from xinxinsh/wip-11144-firefly
+    
+    erasure-code-profile set races with erasure-code-profile rm
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 1f6b1bb51d0b40899155313165ac5e3a21dde11a
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Tue Mar 3 08:45:58 2015 +0200
+
+    osd: fix PG::all_unfound_are_queried_or_lost for non-existent osds
+    
+    A common mistake upon osd loss is to remove the osd from the crush map
+    before marking the osd lost. This tends to make it so that the user
+    can no longer mark the osd lost to satisfy all_unfound_are_queried_or_lost.
+    
+    The simple solution is for all_unfound_are_queried_or_lost to ignore
+    the osd if it does not exist.
+    
+    Fixes: #10976
+    Backports: firefly,giant
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit 5bb51320138ff714806d24312149f6275d546608)
+
+commit e1d57730ddfc92b17562080b10bc22fceb86539a
+Author: Guang Yang <yguang@yahoo-inc.com>
+Date:   Mon Sep 29 08:21:10 2014 +0000
+
+    PG::actingset should be used when checking the number of acting OSDs for a given PG.
+    Signed-off-by: Guang Yang <yguang@yahoo-inc.com>
+    
+    (cherry picked from commit 19be358322be48fafa17b28054619a8b5e7d403b)
+    
+    Conflicts:
+    	src/osd/PG.cc	PG::get_backfill_priority() doesn't exist in firefly
+    			Variation in code related to no "undersized" state in firefly
+    
+    Fixes: #11454
+
+commit f33effccc0592fddfcd9c5c2f5c3385462aa9b84
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Mar 26 10:26:48 2015 -0700
+
+    ReplicatedPG::cancel_pull: requeue waiters as well
+    
+    If we are in recovery_wait, we might not recover that object as part of
+    recover_primary for some time.  Worse, if we are waiting on a backfill
+    which is blocked waiting on a copy_from on the missing object in
+    question, it can become a dead lock.
+    
+    Fixes: 11244
+    Backport: firefly
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 0b2e272430dd7433e6763be99b8a4cb127d9be19)
+
+commit 9b3396516c00ef931bab2d4aa6288ad974ec579d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Mar 3 11:03:35 2015 -0800
+
+    rgw: update keystone cache with token info
+    
+    Fixes: #11125
+    Backport: hammer, firefly
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 6616294aa140ceb83cc61c6ab6f9947636f5e67d)
+
+commit 8cc4bc162c8c1c240e62840d968b967f5f47b682 (refs/remotes/gh/wip-11416)
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Dec 17 17:12:43 2014 -0800
+
+    rgw: use correct objv_tracker for bucket instance
+    
+    When trying to create a bucket that already existed, use the
+    objv_tracker of the newly created instance, and not of the original
+    bucket.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit fe158ecc25feefcea8aea4133118e4a84900a8ec)
+
+commit c0cfd6e56ca9d17241da159295bcee7cf44c9ba3
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Mar 18 14:17:00 2015 +0100
+
+    osd: erasure-code-profile incremental rm before set
+    
+    It is possible for an incremental change to have both a rm and a set for
+    a given erasure code profile. It only happens when a rm is followed by a
+    set. When a set is followed by a rm, the rm will remove the pending set
+    in the incremental change.
+    
+    The logic is the same for pool create and pool delete.
+    
+    We must apply the incremental erasure-code-profile removal before the
+    creation otherwise rm and set in the same proposal will ignore the set.
+    
+    This fix is minimal. A better change would be that erasure-code-profile
+    set checks if there is a pending removal and wait_for_finished_proposal
+    before creating.
+    
+    http://tracker.ceph.com/issues/11144 Fixes: #11144
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 0d52aca0d0c302983d03b0f5213ffed187e4ed63)
+    
+    Conflicts:
+    	src/osd/OSDMap.cc
+            resolved by replacing i++ with ++i
+
+commit 3fb97e25b194e92112077385b10381801e02ddb9
+Author: Samuel Just <sjust@redhat.com>
+Date:   Tue Mar 24 15:14:34 2015 -0700
+
+    ReplicatedPG: trim backfill intervals based on peer's last_backfill_started
+    
+    Otherwise, we fail to trim the peer's last_backfill_started and get bug 11199.
+    
+    1) osd 4 backfills up to 31bccdb2/mira01213209-286/head (henceforth: foo)
+    
+    2) Interval change happens
+    
+    3) osd 0 now finds itself backfilling to 4 (lb=foo) and osd.5
+    (lb=b6670ba2/mira01213209-160/snapdir//1, henceforth: bar)
+    
+    4) recover_backfill causes both 4 and 5 to scan forward, so 4 has an interval
+    starting at foo, 5 has an interval starting at bar.
+    
+    5) Once those have come back, recover_backfill attempts to trim off the
+    last_backfill_started, but 4's interval starts after that, so foo remains in
+    osd 4's interval (this is the bug)
+    
+    7) We serve a copyfrom on foo (sent to 4 as well).
+    
+    8) We eventually get to foo in the backfilling. Normally, they would have the
+    same version, but of course we don't update osd.4's interval from the log since
+    it should not have received writes in that interval. Thus, we end up trying to
+    recover foo on osd.4 anyway.
+    
+    9) But, an interval change happens between removing foo from osd.4 and
+    completing the recovery, leaving osd.4 without foo, but with lb >= foo
+    
+    Fixes: #11199
+    Backport: firefly
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1388d6bd949a18e8ac0aecb0eb79ffb93d316879)
+
+commit 29bc9e56a978d4e18a507e71858baa21037964c4
+Author: Samuel Just <sjust@redhat.com>
+Date:   Tue Mar 24 10:48:02 2015 -0700
+
+    PG: set/clear CREATING in Primary state entry/exit
+    
+    Previously, we did not actually set it when we got a pg creation message from
+    the mon.  It would actually get set on the first start_peering_interval after
+    that point.  If we don't get that far, but do send a stat update to the mon, we
+    can end up with 11197.  Instead, let's just set it and clear it upon entry into
+    and exit from the Primary state.
+    
+    Fixes: 11197
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit ddf0292250dfb1040d3cad96fa2cf886fd65933c)
+
+commit 12143ff9b25fdd96f8d1a9cecb1329c7f354d414
+Merge: 53eff01 bf1d8e8
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Apr 6 10:24:06 2015 -0700
+
+    Merge pull request #4275 from jeanchlopez/wip-11160-firefly
+    
+    rgw: shouldn't need to disable rgw_socket_path if frontend is configured
+
+commit bf1d8e888439df75feadde76bafe7d07d0e8481a
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Mar 18 20:49:13 2015 -0700
+
+    rgw: don't use rgw_socket_path if frontend is configured
+    
+    Fixes: #11160
+    Backport: hammer, firefly
+    
+    Previously if we wanted to use the tcp fcgi socket, we needed to clear
+    rgw_socket_path.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 53eff01f1e7ecd3783bb05c47588a134d4fededc
+Merge: 899738e 80afc5e
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Apr 1 16:30:23 2015 -0700
+
+    Merge pull request #4247 from ceph/wip-11303
+    
+    Fix do_autogen.sh so that -L is allowed
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 80afc5eca293e5e2f168f219931a2f554040cdd8
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Apr 1 19:10:33 2015 -0400
+
+    Fix do_autogen.sh so that -L is allowed
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+
+commit b9da6f1025683d240baa73a9fcccbf2780035231
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Mar 16 18:40:49 2015 -0400
+
+    librbd: snap_remove should ignore -ENOENT errors
+    
+    If the attempt to deregister the snapshot from the parent
+    image fails with -ENOENT, ignore the error as it is safe
+    to assume that the child is not associated with the parent.
+    
+    Fixes: #11113
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit cf8094942ccdba831e03e5a79451cfa5d78a135f)
+
+commit b250b3cfae69f4e8354027fae26fd85a792da0df
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Mar 16 18:35:07 2015 -0400
+
+    librbd: get_parent_info should protect against invalid parent
+    
+    get_parent_info should return -ENOENT if the image does not
+    have an associated parent image.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 21afd0ef8e1fb81c5ace5fd403513c542e2413e3)
+
+commit 69d9339fb352342a87e1148e9b5161246b27776a
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Feb 2 09:07:27 2015 -0800
+
+    PGLog: improve PGLog::check() debugging
+    
+    Related: 10718
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit c656bcec2441c90b084ca50a17c37625d69942a1)
+
+commit 73cbb6f34a5a556dbbd4db2e6f81391d83447efd
+Author: Samuel Just <sjust@redhat.com>
+Date:   Tue Mar 17 10:07:03 2015 -0700
+
+    PGLog::merge_log: in tail extend case, log.log might be empty
+    
+    Even if the tail != last_update, the log might be empty due to split
+    moving all entries into other logs.
+    
+    Fixes: 10718
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit f5a2aef3db29b99634250fd388a0c2d9b9a23d38)
+
+commit 62645d30b0ceee075a56bc692fd65cee85b09aa5 (refs/remotes/gh/wip-11256-firefly)
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Mar 30 17:34:57 2015 -0700
+
+    cls_rgw: use multimap to keep pending operations in bucket index
+    
+    Fixes: #11256
+    Multiple concurrent requests might be sent using the same tag, need the
+    entry map to be able to hold multiple entries.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 7538319dd7aa80a3318c108d345dee8044cf20a8
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Mar 27 16:32:48 2015 -0700
+
+    rgw: generate new tag for object when setting object attrs
+    
+    Fixes: #11256
+    Backport: firefly, hammer
+    
+    Beforehand we were reusing the object's tag, which is problematic as
+    this tag is used for bucket index updates, and we might be clobbering a
+    racing update (like object removal).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 364563aac979fdf5ccbb6c588051d097a26bc594
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Mar 16 11:04:22 2015 -0400
+
+    librbd: acquire cache_lock before refreshing parent
+    
+    cache_lock needs to be acquired before snap_lock to avoid
+    the potential for deadlock.
+    
+    Fixes: #5488
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 110c35498942ea0feec395b6e7992f802dd740ce
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Mar 20 15:28:15 2015 -0700
+
+    ReplicatedPG::promote_object: check scrubber and block if necessary
+    
+    Otherwise, we might attempt to promote into an in-progress scrub
+    interval causing 11156.  I would have added a return value to
+    promote_object(), but could not find an existing user which
+    cared to distinguish the cases, even with a null op passed.
+    All existing users are in maybe_handle_cache.  The ones which
+    pass a null op are for promoting the object in parallel
+    with a proxy -- a case where not actually performing the promote
+    does not really matter.
+    
+    Fixes: #11156
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 65bb4df599541cd2e0f195b905f24f529e255c00)
+
+commit 899738e10e82b50dcf7dfffe5cc83937179bf323
+Merge: 15acfe7 9437cb1
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 23 20:38:43 2015 +0100
+
+    Merge pull request #4126 from dzafman/wip-11176-firefly
+    
+    ceph-objectstore-tool: Output only unsupported features when incomatible
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 15acfe7f226ca7bc2c942d5fbcd3a40bd41e5930
+Merge: 6c95cd2 cddbff9
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat Mar 21 11:38:28 2015 +0100
+
+    Merge pull request #4079 from dachary/wip-11157-firefly
+    
+    doc,tests: force checkout of submodules
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 6c95cd24f6f4a1a933f8799754831e7a5c0a725d
+Merge: ea79a3b 43053fc
+Author: Yuri Weinstein <yuri.weinstein@gmail.com>
+Date:   Fri Mar 20 21:06:17 2015 -0700
+
+    Merge pull request #4129 from dzafman/wip-11139-firefly
+    
+    ceph-objectstore-tool: Use exit status 11 for incompatible import attemp...
+
+commit 43053fcd8969c406969fef67613aa37ad1cc86bf
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 20 17:48:01 2015 -0700
+
+    ceph-objectstore-tool: Use exit status 11 for incompatible import attempt
+    
+    This is used so upgrade testing doesn't generate false failure.
+    Fixes: #11139
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 175aff8afe8215547ab57f8d8017ce8fdc0ff543)
+
+commit 9437cb1b284ec9366b51d660396c2c8a9366b31f
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 20 16:57:40 2015 -0700
+
+    ceph-objectstore-tool: Output only unsupported features when incomatible
+    
+    Fixes: #11176
+    Backport: firefly, giant
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5b23f5b5892b36fb7d06efc0d77e64a24ef6e8c9)
+
+commit ea79a3b122917ddf5dc1972bb9dc5b20f78e2f18
+Merge: c1c20d8 07fc9f6
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Mar 20 08:44:39 2015 +0100
+
+    Merge pull request #3970 from ceph/firefly-11053
+    
+    mds: fix assertion caused by system clock backwards
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit c1c20d89d511499d678fdba0667581e88b9b5d95
+Merge: 2fbb9a6 63b39db
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Mar 20 08:42:58 2015 +0100
+
+    Merge pull request #4021 from ceph/wip-7737-firefly
+    
+    osd: fix negative degraded objects during backfilling
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 2fbb9a63a82ac5136b033799aec303fc151b25e5
+Merge: 3160e8d 2c7eda6
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Mar 20 08:38:26 2015 +0100
+
+    Merge pull request #3952 from dachary/wip-9986-firefly
+    
+    objecter: fix map skipping
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 3160e8d6918a04d1fec9fdccbc30bf007c7940c6
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Mar 18 20:55:24 2015 -0700
+
+    init-radosgw*: don't require rgw_socket_path to be defined
+    
+    Fixes: #11159
+    Backport: hammer, firefly
+    
+    Scripts required rgw_socket_path to exist in order to start radosgw.
+    This is not needed.
+    
+    Reported-by: Dan Mick <dmick@redhat.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 6823bcdcd0ce72cd223e809291f46d82da76115c)
+
+commit cddbff9a3653d6257d13e0ac411cd6e4cd71feef
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Mar 19 00:32:39 2015 +0100
+
+    doc,tests: force checkout of submodules
+    
+    When updating submodules, always checkout even if the HEAD is the
+    desired commit hash (update --force) to avoid the following:
+    
+        * a directory gmock exists in hammer
+        * a submodule gmock replaces the directory gmock in master
+        * checkout master + submodule update : gmock/.git is created
+        * checkout hammer : the gmock directory still contains the .git from
+          master because it did not exist at the time and checkout won't
+          remove untracked directories
+        * checkout master + submodule update : git rev-parse HEAD is
+          at the desired commit although the content of the gmock directory
+          is from hammer
+    
+    http://tracker.ceph.com/issues/11157 Fixes: #11157
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+
+commit 63b39dbd529936e60d0fd08dffd35f82b3d1729c (refs/remotes/gh/wip-7737-firefly)
+Author: Guang Yang <yguang@yahoo-inc.com>
+Date:   Thu Feb 26 08:13:12 2015 +0000
+
+    osd: fix negative degraded objects during backfilling
+    
+    When there is deleting requests during backfilling, the reported number of degraded
+    objects could be negative, as the primary's num_objects is the latest (locally) but
+    the number for replicas might not reflect the deletings. A simple fix is to ignore
+    the negative subtracted value.
+    
+    Signed-off-by: Guang Yang <yguang@yahoo-inc.com>
+    (cherry picked from commit 14d7e36d3c978844da73d0e1c8a3a1ec863bac15)
+    
+    Conflicts:
+    	src/osd/PG.cc
+
+commit 493d285508914769cba3639b601ae6c20303af0d
+Merge: 9839726 8a25a51
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 23:20:36 2015 +0100
+
+    Merge pull request #3966 from theanalyst/wip-10698-backport
+    
+    rgw: fail s3 POST auth if keystone not configured
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 9839726f009a3189013a23e8226d2f7618f1d56b
+Merge: dab85cb 651dc55
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 23:19:22 2015 +0100
+
+    Merge pull request #3934 from dachary/wip-10665-firefly
+    
+    rgw: Swift API. Dump container's custom metadata.
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit dab85cb7fcc5770fe4d6f075cf583a33ea335aa3
+Merge: 0e55046 d0fd417
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 23:18:59 2015 +0100
+
+    Merge pull request #3929 from dachary/wip-10475-firefly
+    
+    rgw: Swift API. Support for X-Remove-Container-Meta-{key} header.
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 0e550461666d6e3d32981f99c8327931a6bd6d62
+Merge: 1ca6dd9 963439f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 23:18:24 2015 +0100
+
+    Merge pull request #3938 from dachary/wip-10770-firefly
+    
+    rgw: send appropriate op to cancel bucket index pending operation
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 1ca6dd9676014a81983bd397e3154bf53243c7f2
+Merge: 66327d6 34d19e1
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 23:17:56 2015 +0100
+
+    Merge pull request #3961 from dachary/wip-10106-firefly
+    
+    rgw: flush xml header on get acl request
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 66327d69a9bfa875d58b063c180a11b2769a093e
+Merge: de45d9e 9074eb7
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 23:16:53 2015 +0100
+
+    Merge pull request #3958 from dachary/wip-10062-firefly
+    
+    rgw: check for timestamp for s3 keystone auth
+    
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@redhat.com>
+    Reviewed-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+    Reviewed-by: Valery Tschopp <valery.tschopp@switch.ch>
+
+commit de45d9e2606d8fb6ea5533521163669e748e7d01
+Merge: 308f758 8ef14fc
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 17:00:27 2015 +0100
+
+    Merge pull request #3942 from dachary/wip-10844-firefly
+    
+    mon: MonCap: take EntityName instead when expanding profiles
+    
+    Reviewed-by: Joao Eduardo Luis <joao@redhat.com>
+
+commit 308f758f49d28c012f3ba765519144e5ea5794e6
+Merge: c59a081 ca42905
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:53:48 2015 +0100
+
+    Merge pull request #3936 from dachary/wip-10724-firefly
+    
+     backport ceph-disk man page to Firefly
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit c59a08135c35072fa05104e26b500553e800cdd1
+Merge: 331acae 8ec8f11
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:50:39 2015 +0100
+
+    Merge pull request #3940 from dachary/wip-8753-firefly
+    
+    ReplicatedPG::on_change: clean up callbacks_for_degraded_object
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 331acae4d6b34bb047c914945a2d9c0d9c7b9562
+Merge: fc364a7 4e32ff2
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:49:56 2015 +0100
+
+    Merge pull request #3827 from dachary/wip-10259-firefly
+    
+    osd_types: op_queue_age_hist and fs_perf_stat should be in osd_stat_t::o...
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit fc364a76f85eb5016ea460e5fd9c1603df374bcf
+Merge: 31d99d2 b0d0d44
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:48:02 2015 +0100
+
+    Merge pull request #3962 from dachary/wip-10150-firefly
+    
+    ReplicatedPG::scan_range: an object can disappear between the list and t...
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 31d99d2de714eb4a8eeb4a431cbc0d40ca749f15
+Merge: 45f0870 5865411
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:45:32 2015 +0100
+
+    Merge pull request #3948 from dachary/wip-9891-firefly
+    
+    DBObjectMap: lock header_lock on sync()
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 45f087032e27c63dc459318717b05fe5f9888664
+Merge: 3050262 6207333
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:43:48 2015 +0100
+
+    Merge pull request #3949 from dachary/wip-9915-firefly
+    
+    osd: cache tiering: fix the atime logic of the eviction
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 3050262d7dcb8ac20b9f86544461bb59f4b87cf5
+Merge: c0abc4d 0f31388
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:40:12 2015 +0100
+
+    Merge pull request #3944 from dachary/wip-9193-firefly
+    
+    messages/MWatchNotify: include an error code in the message
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit c0abc4d769afd00773a9f466ffd3feced9cdb17d
+Merge: f9acd3a f856739
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:39:41 2015 +0100
+
+    Merge pull request #3943 from dachary/wip-8011-firefly
+    
+    ReplicatedPG: fail a non-blocking flush if the object is being scrubbed
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit f9acd3ad7397ac1e745beeeaf21b55ecd95484a1
+Merge: f95d327 ca96b59
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:39:16 2015 +0100
+
+    Merge pull request #3941 from dachary/wip-10817-firefly
+    
+    WorkQueue: make wait timeout on empty queue configurable
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit f95d327cbc0750cfb77114c66082ddd5fc458b94
+Merge: 32de8ab 3782b8b
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:38:42 2015 +0100
+
+    Merge pull request #3937 from dachary/wip-10762-firefly
+    
+    mon: ignore osd failures from before up_from
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 32de8ab146f242f7b73aca211f059bc39d38f85c
+Merge: 24a8c10 6fd3dfa
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:38:22 2015 +0100
+
+    Merge pull request #3933 from dachary/wip-10617-firefly
+    
+    osd: do not ignore deleted pgs on startup
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 24a8c10a5a215c60b525f4170e45565390e02231
+Merge: f4e76c3 368a5a8
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:38:01 2015 +0100
+
+    Merge pull request #3932 from dachary/wip-10546-firefly
+    
+    mon: Monitor: fix timecheck rounds period
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit f4e76c3db90bf383c02cdb8cca19a37cd187095b
+Merge: fa518ff 66b13f2
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:37:36 2015 +0100
+
+    Merge pull request #3931 from dachary/wip-10512-firefly
+    
+    osd: requeue blocked op before flush it was blocked on
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit fa518ffc5961785f01f0f91980c38a7e02686901
+Merge: ac9980e a22aa8f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:37:05 2015 +0100
+
+    Merge pull request #3930 from dachary/wip-10497-firefly
+    
+    librados: Translate operation flags from C APIs
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit ac9980e074adf587b8b16af0bd08b3fc3233804d
+Merge: ccebb5f d3de8a5
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:31:40 2015 +0100
+
+    Merge pull request #3955 from dachary/wip-10059-firefly
+    
+    PG: always clear_primary_state
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit ccebb5f90bea0fd3bac1bd7ab93e5e07700f1301
+Merge: a30379d f4bab86
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:31:16 2015 +0100
+
+    Merge pull request #3954 from dachary/wip-10014-firefly
+    
+    ObjectStore: Don't use largest_data_off to calc data_align.
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit a30379d9af89cffa4b3083ae14a94e3758c2b01c
+Merge: e575ca8 eb03e79
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:25:59 2015 +0100
+
+    Merge pull request #3947 from dachary/wip-9555-firefly
+    
+    osd: check that source OSD is valid for MOSDRepScrub
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit e575ca84419f8be5c7fae7e2ffac549956a74f82
+Merge: cd675bb c60da2f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:25:30 2015 +0100
+
+    Merge pull request #3964 from dachary/wip-10157-firefly
+    
+    PGLog: include rollback_info_trimmed_to in (read|write)_log
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit cd675bba5fdfb85689880ca7ecbd284181984a63
+Merge: 2b8e476 1a0f770
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:24:55 2015 +0100
+
+    Merge pull request #3960 from dachary/wip-6003-firefly
+    
+    FileJournal: fix journalq population in do_read_entry()
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 2b8e4762edb7c35950f7e0d69bba2b5e1d83133a
+Merge: d434ead a746f7e
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:24:03 2015 +0100
+
+    Merge pull request #3950 from dachary/wip-9985-firefly
+    
+    Get the currently atime of the object in cache pool for eviction
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Xinze Chi <xmdxcxz@gmail.com>
+
+commit d434eadadd1df6e4df18a6914015736bc09722d1
+Merge: e79e5f8 5f1245e
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 16:20:12 2015 +0100
+
+    Merge pull request #3935 from dachary/wip-10723-firefly
+    
+    Fix memory leak in python rados bindings
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit e79e5f8fbbfba6984cf21784e20d1c46cb60a397
+Merge: a9a36de 91b2aca
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 15:02:37 2015 +0100
+
+    Merge pull request #3866 from ceph/wip-cot-firefly
+    
+    Backport ceph-objectstore-tool changes to firefly
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit a9a36deb89ac5719787e905469fe0b1bde5d58ca
+Merge: 83c571e 7e85722
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 15:00:56 2015 +0100
+
+    Merge pull request #3996 from dzafman/wip-10676
+    
+    Fix ceph command manpage to match ceph -h
+    
+    Reviewed-by: Xinxin Shu <xinxin.shu5040@gmail.com>
+
+commit 83c571e3067b4cad3e4567522c797d09a82d87db
+Merge: baa74b8 d5c3a14
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Mon Mar 16 14:55:37 2015 +0100
+
+    Merge pull request #3927 from dachary/wip-10351-firefly
+    
+    mount.ceph: avoid spurious error message
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit 7e85722fd4c89715fc2ed79697c82d65d7ebf287
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 13 16:50:13 2015 -0700
+
+    doc: Minor fixes to ceph command manpage
+    
+    Fixes: #10676
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+
+commit 9ac488c1eb0e30511079ba05aaf11c79615b3940
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Mar 12 11:39:52 2015 -0700
+
+    doc: Fix ceph command manpage to match ceph -h (firefly)
+    
+    Improve synopsis section
+    Fixes: #10676
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+
+commit 5f1245e131e33a98572408c8223deed2c7cf7b75
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Feb 9 20:50:23 2015 -0800
+
+    rados.py: keep reference to python callbacks
+    
+    If we don't keep a reference to these, the librados aio calls will
+    segfault since the python-level callbacks will have been garbage
+    collected. Passing them to aio_create_completion() does not take a
+    reference to them. Keep a reference in the python Completion object
+    associated with the request, since they need the same lifetime.
+    
+    This fixes a regression from 60b019f69aa0e39d276c669698c92fc890599f50.
+    
+    Fixes: #10775
+    Backport: dumpling, firefly, giant
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 36d37aadbbbece28d70e827511f1a473d851463d)
+
+commit cf366fc3b21ff6f98530dbadb75a430c25672d56
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Thu Dec 18 17:11:22 2014 +0530
+
+    doc: Changes format style in ceph to improve readability as html.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 8b796173063ac9af8c21364521fc5ee23d901196)
+
+commit 07fc9f66a69aa31d2cf8bf7a277d3e14ad6209be
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Mar 12 11:01:46 2015 +0800
+
+    mds: fix assertion caused by system clock backwards
+    
+    Fixes: #11053
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+
+commit 8a25a51e42cdaed2c66dc25a6c6d0245441123a3
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Jan 30 07:03:30 2015 -0800
+
+    rgw: fail s3 POST auth if keystone not configured
+    
+    Fixes: #10698
+    This fixes issue introduced in 8b3dfc9472022ea45ad24e02e0aa21dfdad798f8,
+    where if user does not exist, we try keystone authentication. However,
+    if keystone is not configured we justt fall through without failing.
+    This would have failed later on due to bucket permissions, unless bucket
+    had a public write permissions.
+    
+    Backports: Firefly
+    Reported-by: Valery Tschopp <valery.tschopp@switch.ch>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    
+    Conflicts:
+    	src/rgw/rgw_rest_s3.cc
+
+commit eb03e792040bd22c1ae8b7dd73d94fbfd6208eec
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Dec 13 08:06:31 2014 -0800
+
+    osd: check that source OSD is valid for MOSDRepScrub
+    
+    Make sure the message we got from the peer OSD is valid.  Specifically,
+    this avoids a race like this:
+    
+    - A marks down B
+    - B sends MOSDRepScrub
+    - A accepts connection from B as new
+    - A replies to scrub
+    - B crashes because msgr seq 1 < expected seq 1000+
+    
+    See #8880 for the most recent fix for requests.
+    
+    Fixes: #9555
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 847e5e102522d651aa9687a54aaafcebf3afc596)
+    
+    Conflicts:
+        src/osd/OSD.cc: require functions first argument is now a reference
+
+commit ae18707b3caa115dc510aff38b77f8afe8555c61
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Dec 13 07:56:39 2014 -0800
+
+    osd: pass Message* to most require_* helpers
+    
+    These do nothing but op->get_req(); pass the Message* explicitly so that
+    non-OpRequest callers can use them.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 707a111d53efb09b3471dd3788b86d2bfee4e96f)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+    	src/osd/OSD.h
+            significantly changes had to be made but in a simple way and
+    	stays within the scope of the original commit
+
+commit c60da2f3c34e7325c748d2d6e55140a0a30013fd
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Nov 20 15:15:08 2014 -0800
+
+    PGLog: include rollback_info_trimmed_to in (read|write)_log
+    
+    Fixes: #10157
+    Backport: firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1fe8b846641486cc294fe7e1d2450132c38d2dba)
+    
+    Conflicts:
+    	src/osd/PGLog.cc
+            in the context coll_t::META_COLL was replaced with META_COLL
+
+commit 1a0f770eea18af6b276a31157f201a93166eb038
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Feb 6 09:52:29 2015 -0800
+
+    FileJournal: fix journalq population in do_read_entry()
+    
+    Fixes: 6003
+    Backport: dumpling, firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit bae1f3eaa09c4747b8bfc6fb5dc673aa6989b695)
+    
+    Conflicts:
+    	src/os/FileJournal.cc
+            because reinterpret_cast was added near two hunks after firefly
+
+commit a746f7e5985198024067cb6e123569c09169b356
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Oct 31 19:33:59 2014 -0700
+
+    osd/ReplicatedPG: fix compile error
+    
+    From 1fef4c3d541cba360738437420ebfa2447d5802e.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4a9ad7dc2da6f4fa6a64235776a3f1d2799aef60)
+
+commit 5404fbfdd9b18cdb3fe5bed67146c769ec3acfa0
+Author: Federico Simoncelli <fsimonce@redhat.com>
+Date:   Sat Nov 15 14:14:04 2014 +0000
+
+    common: do not unlock rwlock on destruction
+    
+    According to pthread_rwlock_unlock(3p):
+    
+     Results are undefined if the read-write lock rwlock is not held
+     by the calling thread.
+    
+    and:
+    
+     https://sourceware.org/bugzilla/show_bug.cgi?id=17561
+    
+     Calling pthread_rwlock_unlock on an rwlock which is not locked
+     is undefined.
+    
+    calling pthread_rwlock_unlock on RWLock destruction could cause
+    an unknown behavior for two reasons:
+    
+    - the lock is acquired by another thread (undefined)
+    - the lock is not acquired (undefined)
+    
+    Moreover since glibc-2.20 calling pthread_rwlock_unlock on a
+    rwlock that is not locked results in a SIGILL that kills the
+    application.
+    
+    This patch removes the pthread_rwlock_unlock call on destruction
+    and replaces it with an assertion to check that the RWLock is
+    not in use.
+    
+    Any code that relied on the implicit release is now going to
+    break the assertion, e.g.:
+    
+     {
+       RWLock l;
+       l.get(for_write);
+     } // implicit release, wrong.
+    
+    Signed-off-by: Federico Simoncelli <fsimonce@redhat.com>
+    (cherry picked from commit cf2104d4d991361c53f6e2fea93b69de10cd654b)
+
+commit a73a4cb3889a6da21c3cfa4ddfa16d1a7059d20c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Sat May 3 08:32:19 2014 -0700
+
+    common/RWLock: track read/write locks via atomics for assertion checks
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 92615ea95a31d9fd22c3d11c860e0f502dc52c26)
+
+commit b0d0d44018de6289b64b6334edd4959ca4a0cc48
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Dec 11 13:05:54 2014 -0800
+
+    ReplicatedPG::scan_range: an object can disappear between the list and the attr get
+    
+    The first item in the range is often last_backfill, upon which writes
+    can be occuring.  It's trimmed off on the primary side anyway.
+    
+    Fixes: 10150
+    Backport: dumpling, firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit dce6f288ad541fe7f0ef8374301cd712dd3bfa39)
+
+commit 34d19e1501b242fd8fc7cc95656592b5982f29a6
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Jan 30 18:42:40 2015 -0800
+
+    rgw: flush xml header on get acl request
+    
+    Fixes: #10106
+    Backport: firefly, giant
+    
+    dump_start() updates the formatter with the appropriate prefix, however,
+    we never flushed the formatter.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit eb45f861343162e018968b8c56693a8c6f5b2cab)
+
+commit 9074eb7c46589aa1e5d10a2b9a8534f22dff2154
+Author: Abhishek Lekshmanan <abhishek.lekshmanan@gmail.com>
+Date:   Mon Nov 17 17:37:00 2014 +0530
+
+    rgw: check for timestamp for s3 keystone auth
+    
+    This commit ensures that we check for timestamp of s3 request is within
+    acceptable grace time of radosgw
+    Addresses some failures in #10062
+    Fixes: #10062
+    Signed-off-by: Abhishek Lekshmanan <abhishek.lekshmanan@gmail.com>
+    
+    (cherry picked from commit 4b35ae067fef9f97b886afe112d662c61c564365)
+
+commit d3de8a5722a68d69023cf60c9076c2fb19058bf9
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed Nov 19 08:20:16 2014 -0800
+
+    PG: always clear_primary_state on new interval, but only clear pg temp if not primary
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit f692bfe076b8ddb679c6d1a6ea78cc47f0876326)
+
+commit 8b07236cd799b4752cbe620b737343a02a703a17
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Nov 14 15:44:20 2014 -0800
+
+    PG: always clear_primary_state when leaving Primary
+    
+    Otherwise, entries from the log collection process might leak into the next
+    epoch, where we might end up choosing a different authoritative log.  In this
+    case, it resulted in us not rolling back to log entries on one of the replicas
+    prior to trying to recover from an affected object due to the peer_missing not
+    being cleared.
+    
+    Fixes: #10059
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit c87bde64dfccb5d6ee2877cc74c66fc064b1bcd7)
+
+commit f4bab86fe3b218d66c14d06883c297836d9ca19d
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Mon Oct 27 11:22:13 2014 +0800
+
+    ObjectStore: Don't use largest_data_off to calc data_align.
+    
+    If largest_data_off % CEPH_PAGE_SIZE != 0, the get_data_aligment return
+    a erro value. This make the FileJouranl::align_bl to memcopy much data.
+    
+    Tested-by: Sage Weil <sage@redhat.com>
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit a1aa70f2f21339feabfe9c1b3c9c9f97fbd53c9d)
+
+commit 2c7eda690ae2f71c8e8e189b8f7330196c1f385f
+Author: Ding Dinghua <dingdinghua85@gmail.com>
+Date:   Thu Oct 30 14:58:42 2014 +0800
+
+    osdc/Objecter: Fix a bug of dead looping in Objecter::handle_osd_map
+    
+    If current map epoch is less than oldest epoch, current map epoch
+    should step up to oldest epoch.
+    
+    Fixes: #9986
+    Signed-off-by: Ding Dinghua <dingdinghua85@gmail.com>
+    (cherry picked from commit e0166a23c2cf655bfb4cf873be021a14d9b9be27)
+    
+    Conflicts:
+    	src/osdc/Objecter.cc
+            the debug line that follows was re-indented
+
+commit 11f8017cbdf94d4a8083412b96c251ee39286541
+Author: Ding Dinghua <dingdinghua85@gmail.com>
+Date:   Thu Oct 30 14:58:05 2014 +0800
+
+    osdc/Objecter: e shouldn't be zero in Objecter::handle_osd_map
+    
+    Signed-off-by: Ding Dinghua <dingdinghua85@gmail.com>
+    (cherry picked from commit 31c584c8ba022cd44fe2872d221f3026618cefab)
+    
+    Conflicts:
+    	src/osdc/Objecter.cc
+            the debug line that follows was re-indented
+
+commit 7831582026441abbd6066dd951db4b63ffb45402
+Author: Xinze Chi <xmdxcxz@gmail.com>
+Date:   Wed Oct 29 07:11:11 2014 +0000
+
+    Get the currently atime of the object in cache pool for eviction
+    
+    Because if there are mutiple atime in agent_state for the same object, we should use the recently one.
+    
+    Signed-off-by: Xinze Chi <xmdxcxz@gmail.com>
+    (cherry picked from commit 1fef4c3d541cba360738437420ebfa2447d5802e)
+
+commit 620733386bd0694960cecac8f32bd1538382d5bb
+Author: Zhiqiang Wang <zhiqiang.wang@intel.com>
+Date:   Tue Oct 28 09:37:11 2014 +0800
+
+    osd: cache tiering: fix the atime logic of the eviction
+    
+    Reported-by: Xinze Chi <xmdxcxz@gmail.com>
+    Signed-off-by: Zhiqiang Wang <zhiqiang.wang@intel.com>
+    (cherry picked from commit 622c5ac41707069ef8db92cb67c9185acf125d40)
+
+commit 5865411360f722ec511f2df6656d4ba975bef8eb
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Feb 20 13:43:46 2015 -0800
+
+    DBObjectMap: lock header_lock on sync()
+    
+    Otherwise, we can race with another thread updating state.seq
+    resulting in the old, smaller value getting persisted.  If there
+    is a crash at that time, we will reuse a sequence number, resulting
+    in an inconsistent node tree and bug #9891.
+    
+    Fixes: 9891
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 2b63dd25fc1c73fa42e52e9ea4ab5a45dd9422a0)
+    
+    Conflicts:
+    	src/os/DBObjectMap.cc
+            because we have state.v = 1; instead of state.v = 2;
+
+commit baa74b88a4f4b6073b99b7a9774692b37405b59e
+Merge: be6559a 420ea03
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Mar 11 09:09:23 2015 +0100
+
+    Merge pull request #3828 from dachary/wip-10425-firefly
+    
+    librados: fix resources leakage in RadosClient::connect()
+    
+    Reviewed-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+
+commit be6559a423badde3b573b0c9055056999baae104
+Merge: f91d355 6e58732
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Mar 11 09:06:27 2015 +0100
+
+    Merge pull request #3826 from dachary/wip-10257-firefly
+    
+    mon: PGMonitor: several stats output error fixes
+    
+    Reviewed-by: Joao Eduardo Luis <joao@redhat.com>
+
+commit f91d355306620cc543113ed21fddf84f4c170d6e
+Merge: f5525a1 1e58bb4
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Mar 11 09:05:13 2015 +0100
+
+    Merge pull request #3824 from dachary/wip-10353-firefly
+    
+    crush: set_choose_tries = 100 for erasure code rulesets
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit f5525a1f41c9154b48f3ad0ccd899b5203c897bd
+Merge: b7e3614 27dbbb3
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Mar 11 09:04:33 2015 +0100
+
+    Merge pull request #3823 from dachary/wip-10787-firefly
+    
+    mon/OSDMonitor: do not trust small values in osd epoch cache
+    
+    Reviewed-by: Joao Eduardo Luis <joao@redhat.com>
+
+commit b7e3614ff38379aeea66ba00c64bc88ffa080963
+Merge: b5a67f0 7ed92f7
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Mar 11 09:02:16 2015 +0100
+
+    Merge pull request #3915 from dachary/wip-10080-firefly
+    
+    SimpleMessenger: allow RESETSESSION whenever we forget an endpoint
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 8ef14fcca715a33be8c611a37628c90d7fafca43
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Wed Feb 11 23:36:01 2015 +0000
+
+    mon: MonCap: take EntityName instead when expanding profiles
+    
+    entity_name_t is tightly coupled to the messenger, while EntityName is
+    tied to auth.  When expanding profiles we want to tie the profile
+    expansion to the entity that was authenticated.  Otherwise we may incur
+    in weird behavior such as having caps validation failing because a given
+    client messenger inst does not match the auth entity it used.
+    
+    e.g., running
+    
+    ceph --name osd.0 config-key exists foo daemon-private/osd.X/foo
+    
+    has entity_name_t 'client.12345' and EntityName 'osd.0'.  Using
+    entity_name_t during profile expansion would not allow the client access
+    to daemon-private/osd.X/foo (client.12345 != osd.X).
+    
+    Fixes: #10844
+    Backport: firefly,giant
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 87544f68b88fb3dd17c519de3119a9ad9ab21dfb)
+
+commit 370f37f452aff3b48f9ae8a33b7ef26b572b41c8
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Nov 14 21:03:54 2014 +0000
+
+    mon: Monitor: stash auth entity name in session
+    
+    Backport: giant
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit ca8e1efc0be9bffcfbdce5593526d257aa498062)
+
+commit 0f31388eb2bb68c09ab270f871b421a9c368af97
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Aug 10 17:51:08 2014 -0700
+
+    messages/MWatchNotify: include an error code in the message
+    
+    Document the fields, while we are here.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 7c7bf5fee7be397ef141b947f532a2a0b3567b42)
+
+commit f856739824bc271405a6fa35bdefc2bdc42c2f02
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Nov 20 14:27:39 2014 -0800
+
+    ReplicatedPG: fail a non-blocking flush if the object is being scrubbed
+    
+    Fixes: #8011
+    Backport: firefly, giant
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 9b26de3f3653d38dcdfc5b97874089f19d2a59d7)
+
+commit ca96b59db529ffbba0c834795800b6e90a7e4fce
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Feb 9 17:11:38 2015 -0800
+
+    WorkQueue: make wait timeout on empty queue configurable
+    
+    Fixes: 10817
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 5aa6f910843e98a05bfcabe6f29d612cf335edbf)
+
+commit 8ec8f1175a129624dffb511782664d74966d3c42
+Author: Samuel Just <sjust@redhat.com>
+Date:   Mon Feb 9 10:37:15 2015 -0800
+
+    ReplicatedPG::on_change: clean up callbacks_for_degraded_object
+    
+    Backport: dumpling, firefly, giant
+    Fixes: 8753
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit a5ecaa189d47a69466a6cd55fa4180e5c3092dc2)
+
+commit 963439f1038000c3f28c728350a2e9d351341e0b
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Feb 5 09:33:26 2015 -0800
+
+    rgw: send appropriate op to cancel bucket index pending operation
+    
+    Fixes: #10770
+    Backport: firefly, giant
+    
+    Reported-by: baijiaruo <baijiaruo@126.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit dfee96e3aebcaeef18c721ab73f0460eba69f1c7)
+    
+    Conflicts:
+    	src/rgw/rgw_rados.cc
+
+commit 3782b8b3652c0eb3fb8f65193ecfe09e92925170
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Feb 5 03:07:50 2015 -0800
+
+    mon: ignore osd failures from before up_from
+    
+    If the failure was generated for an instance of the OSD prior to when
+    it came up, ignore it.
+    
+    This probably causes a fair bit of unnecessary flapping in the wild...
+    
+    Backport: giant, firefly
+    Fixes: #10762
+    Reported-by: Dan van der Ster <dan@vanderster.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 400ac237d35d0d1d53f240fea87e8483c0e2a7f5)
+
+commit ca42905a6fca8b2b404500a6f74951ae20c8a488
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Wed Nov 26 22:21:32 2014 +0530
+
+    doc: Adds the updated man page for ceph-disk utility.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 016080d2c39919d73956e5e138ba5f079327aa44)
+
+commit 6602ab4581f27e066484b4c419d8206fcc20e045
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Wed Nov 26 22:19:01 2014 +0530
+
+    doc: Updates the man page for ceph-disk utility with some changes.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 8a48847cd46d4807ca1dbd13d3a561a693cdc877)
+
+commit 459807021dd3bf86ce31d30a3b576e783da67e3f
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Tue Nov 25 21:23:08 2014 +0530
+
+    doc: Adds man page for ceph-disk utility.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 9a118d56d4a5b0a0456e9f092f5ae9293f7bf3f3)
+
+commit 430d821b7592148ad9b2656bb3031a0484763f33
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Tue Nov 25 21:16:16 2014 +0530
+
+    doc: Removes ceph-deploy usage instances from ceph-disk man page.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 242dd1c0bbb728475a94f47740790b8a196d9804)
+
+commit 21c3256c851065521e34a179dc05d48fcc0a6e0f
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Tue Nov 25 02:06:39 2014 +0530
+
+    doc: Updates man page for ceph-disk utility.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 7dcc85042b0c0a26e495f7574ce144d1083d15f8)
+
+commit 1a6490e38d7f5fd3ff640a810c3b911699cd4884
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Mon Nov 24 22:05:11 2014 +0530
+
+    doc: Adds man page for ceph-disk utility.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit a450cab2b8148cb8a9b043d629feccf89e5aabac)
+
+commit 3bab47054dc77b9a00d3f47fa73f458ede7d4ab4
+Author: Billy Olsen <billy.olsen@gmail.com>
+Date:   Mon Feb 2 16:24:59 2015 -0700
+
+    Fix memory leak in python rados bindings
+    
+    A circular reference was inadvertently created when using the
+    CFUNCTYPE binding for callbacks for the asynchronous i/o callbacks.
+    This commit refactors the usage of the callbacks such that the
+    Ioctx object does not have a class reference to the callbacks.
+    
+    Fixes: #10723
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Billy Olsen <billy.olsen@gmail.com>
+    Reviewed-by: Dan Mick <dmick@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 60b019f69aa0e39d276c669698c92fc890599f50)
+
+commit d0fd417e872a73033903fb36144fe7a39e90fc9a
+Author: Dmytro Iurchenko <diurchenko@mirantis.com>
+Date:   Tue Feb 3 17:54:38 2015 +0200
+
+    rgw: Swift API. Support for X-Remove-Container-Meta-{key} header.
+    
+    Fixes: #10475
+    Backport: hammer, firefly
+    Reported-by: Josh Durgin <jdurgin@redhat.com>
+    Signed-off-by: Dmytro Iurchenko <diurchenko@mirantis.com>
+    (cherry picked from commit f67bfa24fd6f69c2fcc0987eba8b6b426dd78320)
+    
+    Conflicts:
+    	src/rgw/rgw_rest.h
+            trivial merge: prototype of an unrelated function changed
+            s/is_object_op/!(s->object == NULL)/
+
+commit 651dc556047aa4ee9e95fe9fc7bcd11488973872
+Author: Dmytro Iurchenko <diurchenko@mirantis.com>
+Date:   Mon Feb 2 11:27:00 2015 +0200
+
+    rgw: Swift API. Dump container's custom metadata.
+    
+    Fixes: #10665
+    Backport: hammer, firefly
+    Reported-by: Ahmad Faheem <ahmad.faheem@ril.com>
+    Signed-off-by: Dmytro Iurchenko <diurchenko@mirantis.com>
+    (cherry picked from commit 2f8d31e9b1c4b09506bd1b0dad635c6e820783b2)
+    
+    Conflicts:
+    	src/rgw/rgw_rest_swift.cc
+            The first hunk conflicts because X-Storage-Policy was added
+    	after firefly. The second hunk conflicts because the type of the
+    	s->object data member changed after firefly but it is irrelevant
+    	because the patch does not need to access s->object anymore.
+
+commit 6fd3dfa7224f0af3101fd1614506e8cb2fc7f6a0
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jan 23 10:47:44 2015 -0800
+
+    osd: do not ignore deleted pgs on startup
+    
+    These need to get instantiated so that we can complete the removal process.
+    
+    Fixes: #10617
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 879fd0c192f5d3c6afd36c2df359806ea95827b8)
+
+commit 368a5a8a8739e98ffdb8ac1210d111092e31be9e
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Jan 30 11:37:28 2015 +0000
+
+    mon: Monitor: fix timecheck rounds period
+    
+    Fixes: #10546
+    Backports: dumpling?,firefly,giant
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 2e749599ac6e1060cf553b521761a93fafbf65bb)
+
+commit 66b13f2beff702c3b0bcb0aaa8da4e12d594eddf
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Jan 11 17:28:04 2015 -0800
+
+    osd: requeue blocked op before flush it was blocked on
+    
+    If we have request A (say, cache-flush) that blocks things, and then
+    request B that gets blocked on it, and we have an interval change, then we
+    need to requeue B first, then A, so that the resulting queue will keep
+    A before B and preserve the order.
+    
+    This was observed on this firefly run:
+    
+      ubuntu@teuthology:/a/sage-2015-01-09_21:43:43-rados-firefly-distro-basic-multi/694675
+    
+    Backport: giant, firefly
+    Fixes: #10512
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 11bdfb4131ecac16d4a364d651c6cf5d1d28c702)
+
+commit a22aa8f3228e0baf2ba08d9e79ee4924cd341a07
+Author: Matt Richards <mattjrichards@gmail.com>
+Date:   Thu Jan 8 13:16:17 2015 -0800
+
+    librados: Translate operation flags from C APIs
+    
+    The operation flags in the public C API are a distinct enum
+    and need to be translated to Ceph OSD flags, like as happens in
+    the C++ API. It seems like the C enum and the C++ enum consciously
+    use the same values, so I reused the C++ translation function.
+    
+    Signed-off-by: Matthew Richards <mattjrichards@gmail.com>
+    (cherry picked from commit 49d114f1fff90e5c0f206725a5eb82c0ba329376)
+    
+    Conflicts:
+    	src/librados/librados.cc
+            comes from lttng tracepoints introduced after firefly
+
+commit d5c3a14390f6bb2af45a1a4ad842777302dd0553
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Jan 3 15:29:29 2015 +0800
+
+    mount.ceph: avoid spurious error message
+    
+    /etc/mtab in most modern distributions is a symbol link to
+    /proc/self/mounts.
+    
+    Fixes: #10351
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit bdd0e3c4bda97fe18487a58dd173a7dff752e1a2)
+
+commit 7ed92f7dc5f0f327b77b6f3835e3f821fc810708
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Tue Dec 2 15:17:57 2014 -0800
+
+    SimpleMessenger: allow RESETSESSION whenever we forget an endpoint
+    
+    In the past (e229f8451d37913225c49481b2ce2896ca6788a2) we decided to disable
+    reset of lossless Pipes, because lossless peers resetting caused trouble and
+    they can't forget about each other. But they actually can: if mark_down()
+    is called.
+    
+    I can't figure out how else we could forget about a remote endpoint, so I think
+    it's okay if we tell them we reset in order to clean up state. That's desirable
+    so that we don't get into strange situations with out-of-whack counters.
+    
+    Fixes: #10080
+    Backport: giant, firefly, dumpling
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 8cd1fdd7a778eb84cb4d7161f73bc621cc394261)
+
+commit 91b2acaadee1b62c1fcac73147908ec4477840f3
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Oct 9 11:20:13 2014 -0700
+
+    osd: Get pgid ancestor from last_map when building past intervals
+    
+    Fixed OSD::build_past_intervals_parallel() and PG::generate_past_intervals()
+    
+    Fixes: #10430
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0c5b66da7a9ba516340d06d9e806beb9d1040d0e)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit c09b6d9d64fdcdc3842c4f89acf10080125a4adc
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Dec 23 12:04:26 2014 -0800
+
+    osd: Pass oldest_map when generating past intervals
+    
+    From load_pgs() the superblock hasn't been published yet
+    so we need to retrieve the value of oldest_map depending on the context.
+    
+    Fixes: #10427
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 7fb721c1ceb39b38ca2e653299bcf51e109411d7)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit 9235d781bf860c1ecef5af600431f1619b56fbc1
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Dec 17 16:59:09 2014 -0800
+
+    osd: build_push_op() handle short reads so recipient doesn't crash
+    
+    Fixes: #8121
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b9a04846d18e1c6621d7f2794ec1fae02875bed2)
+
+commit 7ce0cb8e33a281d5f675273d7bcbc570a32e5497
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu Feb 5 16:33:08 2015 +0800
+
+    ceph_objectstore_tool: fix check_output on python2.6
+    
+    * backported the subprocess.check_output from python2.7
+    
+    Fixes: #10756
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 15350a088d84bc6fc664f0d3f5d09b35f58b2144)
+    
+    Conflicts:
+    	src/test/ceph_objectstore_tool.py
+
+commit d5d34ddd1eac688d9422ca02c859d61be8e3e56e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jan 6 15:49:50 2015 -0800
+
+    ceph_objectstore_tool: For import get object_info_t available for each object
+    
+    Add object_info_t to object_begin so we have at object create time
+    This will be useful for importing from multiple erasure coded exports
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 05d916ed12f361da48ef73953bcc0cef465fcc2a)
+
+commit f70590b211ba28f350921b2f0c92712ed779858e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 12 15:16:03 2014 -0800
+
+    ceph_objectstore_tool: Handle import of pg which OSD has split
+    
+    Fail import if import data doesn't include OSDMap and can't find it locally
+    See if local map can be read for import's epoch
+    Jump to current epoch like a split would if local map not present
+    
+    Fixes: #9781
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit afda6e4f3b98cc1773fd014583dfb5e1f214a939)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit aedd324f8fbb031d5126ae158f03066c7342f4b0
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 12 15:38:33 2014 -0800
+
+    ceph_objectstore_tool: On import following a split skip objects no longer in pg
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 68b27e25a3729566c3a22c0b71f70f7f3aca29a3)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit c3de607c2ce16a26af7a78a4e557f321ffbcb44d
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 5 15:12:21 2014 -0800
+
+    ceph_objectstore_tool: Verify that object pool and pgid pool match
+    
+    Also, earlier check for invalid --pgid with import op
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit da3be80497a1b1878ee5d2015f8840d202a83aa2)
+
+commit 5ec38e54f40431a5303cafe202c5097cc400fdb6
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Nov 19 11:47:36 2014 -0800
+
+    ceph_objectstore_tool: Check for splits and fail import if there were splits
+    
+    Add osdmap into metadata_section
+    On export put metadata_section before file data
+    
+    Fixes: #9780
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 19fdeea8b67091ed044ebce25799d3237b4d734a)
+
+commit aa472fa4df19d826a5af72e286365fa5ce4c71fb
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Dec 15 10:03:53 2014 -0800
+
+    ceph_objectstore_tool: Add special exit code for test infrastructure
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b1f12f09c0211b608178f5ca2e292ab1765ce620)
+
+commit 22b7c2faee8cfad1b40cef019984f4a2d112b268
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Nov 19 11:41:39 2014 -0800
+
+    ceph_objectstore_tool: Check that pool exists before allowing import
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit f24f646d870703b7b79563cdbc20920248be6142)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit f65db436f6eb83d7c59fdddced4d35dd9eeeb078
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Oct 15 15:21:11 2014 -0700
+
+    ceph_objectstore_tool: Check cluster_fsid before allowing an import
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 196c8112dc9a6e8780b05d6c579cd7fbd5b07589)
+
+commit 360f68ec69b36b172d15c6206698340a5c00aafa
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Oct 16 12:27:56 2014 -0700
+
+    ceph_objectstore_tool: Allow the metadata_section to be anywhere in the export
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 62dd912f1192b28700a15b02507a8c9efd710cb5)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit c3fcbe636ae1a936b9180628cff939b2b5dddf7c
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 12 15:01:24 2014 -0800
+
+    ceph_objectstore_tool: import-rados shouldn't import internal namespace objects
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit f727d2eaf50b0351feb9f12dcd65d50fb6eff7e9)
+
+commit 2d69076943b9724ce1d5c9f03f2f7594a77b92d2
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 12 14:58:54 2014 -0800
+
+    ceph_objectstore_tool: Get g_ceph_context available to import-rados
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit ddc4613ec71752e5dccbbfe6dc078b86f0f186a9)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit bbed3a728471292de625d922abeae8b39d290045
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Dec 9 18:09:04 2014 -0800
+
+    ceph_objectstore_tool: Fix import-rados skipping of snapshots
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit fe936026ed87c9f95f3b7ad235b24c22e8de5f55)
+
+commit d962c79dc1f0f2189e25743c6d253fac412c004d
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Nov 20 13:00:10 2014 -0800
+
+    ceph_objectstore_tool: read_fd() doesn't handle ^D from tty stdin, don't allow
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5cb692528e3ac0ebea3f1714b3ac43f69d176888)
+
+commit 8b7f4cb232c2f1bde6f50c1f092cb622fe2c41f1
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 19 13:47:32 2014 -0800
+
+    ceph-objectstore-tool: Remove --pretty-format and use new --format options
+    
+    Call new_formatter() with --format specified argument
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 22b71744bb0cb56434d5f6214ccea7d81f771860)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit ee183b8e56c6f8a88ac781cf1fedb6a7a93f1005
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Oct 15 15:20:03 2014 -0700
+
+    ceph_objectstore_tool: Describe super_ver values
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0aeba0f216a54390288b5e3d6147deb31877f744)
+
+commit 5f82f824c7b1bb246bdb54b11a694133a49da70a
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Jan 2 18:36:54 2015 +0100
+
+    ceph_objectstore_tool.cc: reduce scope of variable
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 78542f9a901c05e627b53b5306ea604be3bc82e8)
+
+commit 2f97c51b5ee5de7c1657bc8fee6ccaa474f6f478
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Jan 2 15:48:08 2015 +0100
+
+    ceph_objectstore_tool.cc: prefer ++operator for non-primitive iterators
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 252fc03ba21c7b09922598a8d40997fc639bb994)
+
+commit 2a22bfedc4fa9f461dc8cfd42c659b9c55ddafca
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Nov 25 16:56:19 2014 -0800
+
+    ceph_objectstore_tool: Prevent tool from transitioning struct_v on rm-past-intervals
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit f056bdf93980a0a8e6157dbb124a79389a8f1a3c)
+
+commit 53aa04f95c43795da81a7d9f3117d7e5816aedcb
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 4 18:53:08 2014 -0800
+
+    ceph_objectstore_tool: Accept json object with --pgid instead of array
+    
+    It isn't anticipated that anyone would use this but keeps backward compatible
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 59b423e2e8846b098326fdec440de46b8e3d2769)
+
+commit 60e9a8120b292628ee4e5ef33fe933222609b861
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 4 18:27:50 2014 -0800
+
+    ceph_objectstore_tool: Improve object spec parsing error messages
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit de6384fda183801c16af1b61ed36eaed289bb4f6)
+
+commit 4f95409c0dadeed18334c00630ddc6d7c99d2819
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 4 17:48:28 2014 -0800
+
+    ceph_objectstore_tool: Fix errors messages in newer code
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit eae7c02fded460f6c8aaf18aa83d2730b89e0eb1)
+
+commit 1703867735c8f8ab1c83aa526c84b278436f38d5
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 4 16:00:40 2014 -0800
+
+    ceph_objectstore_tool: Remove extraneous endl on error throw messages
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 32c832f0c62259a492d1c934c56ac165496763a0)
+
+commit f2d2110a8cb1a1b1216c1083b54ea6212138dc93
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 4 14:01:39 2014 -0800
+
+    ceph_objectstore_tool: Add --format and --pretty-format support
+    
+    --pretty-format defaults true
+    Add --format so xml output can be requested
+    --op list defaults to single line of json per object
+    To override this more human readable output use --pretty-format=false
+    Add testing of --op list special handling
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit cca85a534fe488ae314400e8faad55a758609467)
+
+commit a5544c12c3e982edf66f55a8edfb7fc69300520b
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Dec 3 17:53:11 2014 -0800
+
+    ceph_objectstore_tool: Strip _* (always _head) from pgid in list entry output
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5eacd3c5f39766cb8be6b3251d139d16431cf6b6)
+
+commit 4a0a42f3e6b9a1b7ed4df3d4b6c417acfc00050a
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Dec 3 16:39:04 2014 -0800
+
+    ceph_objectstore_tool: BUG: --op list wasn't including snapshots
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b617ee2d45886ec6b3dc0db0edbf814ea5748083)
+
+commit 06579b9f269dc9864e920368c5bea9bcb9dd8be9
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Dec 3 16:38:22 2014 -0800
+
+    ceph_objectstore_tool: For terminal output of list one object per line
+    
+    Instead of a parsable array make it easier to cut and paste listed objects
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5a66db9418aeed31fec98999c5053dab357d9c1e)
+
+commit 22c6bf410de1b0c81f131aa4d5682f5162dd1a56
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Dec 3 16:35:09 2014 -0800
+
+    ceph_objectstore_tool: In error case umount objectstore
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit bc6ea9cb8a2b86c73f7f15bc46145177ccf91f4b)
+
+commit d802ab69a4a0f37ed9328ec385746f59643e1420
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 27 01:24:03 2014 +0100
+
+    objectstore_tool: test --op list variants
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit ddba2676c4c48c2a556f5d4ffd817bfe134a9153)
+
+commit f30e053fe7b3e5efc679b20cf1b3e2f7f8ed7e54
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 27 00:11:45 2014 +0100
+
+    objectstore_tool: parse new object description format
+    
+    The object format changed from
+    
+        {json object}
+    
+    to
+    
+        [pgid,{json object}]
+    
+    The parser is updated accordingly. If the --pgid is present, check that
+    it equals the pgid from the object description.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit df9d5c5cfd8b0ff793647a592c7661965cef5c92)
+
+commit fce87c9d7dbb51989826d068d6b6657a2f3d129d
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Nov 26 23:35:21 2014 +0100
+
+    objectstore_tool: filter --op list and explore all PGs
+    
+    The positional object name is used to filter the output of --op list and
+    only show the objects with a matching name. If both the object name and
+    the pgid are omitted, all objects from all PGs are displayed.
+    
+    The output format is changed from
+    
+        {"oid":"GROUP","key":"","snapid":-2,
+         "hash":2659194943,"max":0,"pool":0,"namespace":""}
+    
+    to
+    
+        [["0.7_head",{"oid":"GROUP","key":"","snapid":-2,
+                      "hash":2659194943,"max":0,"pool":0,
+                      "namespace":""}]]
+    
+    where the first member is the pgid where the object is found.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit c69aaceac7f370e5369d511bf17898adc338ae43)
+
+commit 2f874fd3715d216a68658e94a5c741e665c76632
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Nov 26 23:34:22 2014 +0100
+
+    objectstore_tool: lookup objects by name
+    
+    If the object is not a parsable JSON string, assume an object name and
+    look it up in all the PGs. If multiple objects have the same name, only
+    apply the command to one of them. It is primarily useful in a test
+    environment where the names of the tests objects are known and only a
+    small number of objects exists. It replaces the following:
+    
+        path='--data-path dev/osd0 --journal-path dev/osd0.journal'
+        for pgid in $(./ceph_objectstore_tool $path --op list-pgs) ; do
+          object=$(./ceph_objectstore_tool $path --pgid $pgid --op list |
+                   grep '"oid":"NAME"')
+          test -n "$object" && break
+        done
+        ./ceph_objectstore_tool $path --pgid $pgid "$object" remove
+    
+    with:
+    
+        ./ceph_objectstore_tool $path NAME remove
+    
+    http://tracker.ceph.com/issues/10192 Fixes: #10192
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 7c1165f96391821c00cca1ac04b3433dbec6bb6e)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit eb48aba2119959c53ea8a103b53f0c2e07c52acb
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Nov 26 17:30:30 2014 +0100
+
+    objectstore_tool: refactor list-lost and fix-lost
+    
+    Abstract out the PG exploration loops and encapsulate the list-lost and
+    fix-lost semantic in a callable object.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit d9e747b1bdb53d1fe543ef311e3db35fb78d8051)
+
+commit eab3226edc8ecc6d2d93f463e019ef4eacb9f468
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Nov 26 17:26:54 2014 +0100
+
+    objectstore_tool: update usage strings
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit a90233c8b79ae6c035b5169c7f8809f853631689)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit 5bbe41cb1e7faf40a9c53a9bdc01db8c35670a36
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Nov 18 13:00:15 2014 -0800
+
+    ceph_objectstore_tool: Add feature called set-allow-sharded-objects
+    
+    Uses --op set-allow-sharded-objects option
+    This operation will be rejected if on the target OSD's osdmap there is
+        at least one OSD which does not support ERASURE CODES.
+    Prompt the user that they could import if sharded state allowed
+    Prompt the user to use new feature if sharded state found inconsistent
+    
+    Fixes: #10077
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit f3dab446fc8e58b3b3d9334b8c38722e73881b9e)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit 4e30d8c53c0a4952f81cc3b5680c7e92fffb1355
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Nov 18 11:59:18 2014 -0800
+
+    ceph_objectstore_tool: Add utility routine get_osdmap()
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b3021b0d3362000b5938d406ed2e032a8eb38405)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit f997b126afaeadebe6b6d76954fbe2008bd2a7d8
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Nov 12 21:14:11 2014 -0800
+
+    ceph_objectstore_tool: Clear ...INCOMPAT_SHARDS from feature if exporting replicated pg
+    
+    Don't require importing OSD to have shards feature for replicated pg
+    
+    http://tracker.ceph.com/issues/10077 Fixes: #10077
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 86baf2d38170ef19de2dd5e9ce3f280237d8474d)
+
+commit 3f862da57945f821ed459f5a77f8032331c9cb20
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Nov 18 00:10:41 2014 -0800
+
+    tests: ceph_objectstore_tool.py test all variants of export/import
+    
+    Handle change of error message text
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 9e53c3554c71121f2e2dd0234b5232da37ad5a1b)
+
+commit 2a58bdee19eb8f02a2800d728d402e76566d7f58
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Nov 17 23:23:40 2014 -0800
+
+    ceph_objectstore_tool: Make --file option consistent by treating "-" as stdout/stdin
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 8c87f3284f87d1121218cb7f41edc81b74c9df29)
+
+commit 70329be7be5d80e52d5424958cecd7f4d939add6
+Author: David Zafman <dzafman@redhat.com>
+Date:   Sat Nov 15 11:43:10 2014 -0800
+
+    tests: ceph_objectstore_tool.py fix list-attr for erasure code
+    
+    Adding testing of xattr for erasure coded shards
+    Fix error message when finding an unexpected xattr key
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit cbecab477a70782f2f69258f035e78fb5c829810)
+    
+    Conflicts:
+    	src/test/ceph_objectstore_tool.py
+
+commit bc921c7ecbc061ccef4847d967986c9fa902111f
+Author: David Zafman <dzafman@redhat.com>
+Date:   Sat Nov 15 11:46:15 2014 -0800
+
+    tests: ceph_objectstore_tool.py check for malformed JSON for erasure code objs
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 40717aa4c399e87d2c3e32038f78788eb213f87d)
+
+commit 99ffd137f17c438e3ee9dbbc0ab73cdcd3a45a5c
+Author: David Zafman <dzafman@redhat.com>
+Date:   Sat Nov 15 11:44:54 2014 -0800
+
+    tests: ceph_objectstore_tool.py fix off by 1 ATTR_OBJS handling
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit eaf1d1e35243566c46b478788e79e0ebf7583015)
+
+commit 951c951a0f164271c5e9b96ecbd510cf5c6663b6
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Nov 14 11:00:17 2014 +0100
+
+    tests: ceph_objectstore_tool.py skip if /dev/tty fails
+    
+    Some environments do not have a /dev/tty. When opening /dev/tty fails,
+    skip the test instead of returning an error.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 4c94f1778fdf483e9e0b62f89f7e46e78aeeebf3)
+
+commit 8dc263555d7aca2befa912c78c585a43c8e7592c
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 19:15:50 2014 +0100
+
+    tests: ceph_objectstore_tool.py encapsulate init-ceph stop
+    
+    Call init-ceph in kill_daemons and add a call to kill_daemon when main
+    returns on error so that it never leaves daemons hanging.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit fc435ff3623d196dd7cc375302acd8dfc9eb59fd)
+
+commit b78d802f3e082b0762203ae37b3c3a44b7608907
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 19:14:49 2014 +0100
+
+    tests: ceph_objectstore_tool.py main returns
+    
+    Instead of calling sys.exit() the main function returns the desired exit
+    code.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 0f3d7b1315f2b5595047d8bd13949ed0d9194bfa)
+
+commit 04e480b09b59f5318e9b206e6c3e529d8bb22328
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 17:32:14 2014 +0100
+
+    tests: ceph_objectstore_tool.py replace stop.sh with init-ceph
+    
+    The stop.sh will stop all ceph-* processes. Use the init-ceph script
+    instead to selectively kill the daemons run by the vstart.sh cluster
+    used for ceph_objectstore_tool.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit e8f34bd62bf282144b8851fb9764cf4429a49c25)
+
+commit 51855584eb970b28dfa266ee3653963fb77a2b1e
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 17:30:29 2014 +0100
+
+    tests: ceph_objectstore_tool.py use a dedicated directory
+    
+    Set CEPH_DIR to a directory that is specific to ceph_objectstore_tool so
+    that it can run in parallel with other vstart.sh clusters.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit e303d1afde58e68c1f587962010da9e1f1278bc3)
+    
+    Conflicts:
+    	src/test/ceph_objectstore_tool.py
+
+commit 454ec85ae449cb20c2ddecade421262d9d9de615
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 17:27:01 2014 +0100
+
+    tests: ceph_objectstore_tool.py run faster by default
+    
+    By default use only a small number of objects to speed up the tests. If
+    the argument "big" is given, use a large number of objects as it may
+    help find some problems.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 235257c257aea98b770d9637957818c8aeb6c745)
+
+commit 427fe9177f90db091685b937839dcc4dfe4c8a01
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 17:21:48 2014 +0100
+
+    tests: ceph_objectstore_tool.py run mon and osd on specific port
+    
+    By default vstart.sh runs MDS but they are not needed for the tests,
+    only run mon and osd instead. Instead of using the default vstart.sh
+    port which may conflict with a already running vstart.sh, set the
+    CEPH_PORT=7400 which is not used by any other test run with make check.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit f04d4e7539bc8c1b6cf94db815f9dcdecc52faa2)
+
+commit 28ed34a7dc32033be61cd61178eb59471de45aac
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 17:16:41 2014 +0100
+
+    tests: ceph_objectstore_tool.py can use a WARN cluster
+    
+    The tests do not need HEALTH_OK exclusively, a HEALTH_WARN cluster can
+    also run them successfully.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 783378c019aaac36d542e1b12c0d64196ea21012)
+
+commit 8548d7c65e8743d4e743c77981acd702efab3fb2
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Nov 13 17:12:35 2014 +0100
+
+    tests: ceph_objectstore_tool.py use env python
+    
+    Using #/usr/bin/env python instead of a hard coded path is more flexible
+    and can also be used to run from virtualenv.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 74506d2506d03d05935cbe342fef9dc1d9022a13)
+
+commit 5b4c2ee0902d94e6fa5bee67188fddcf0e0c38a2
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Nov 12 15:22:04 2014 -0800
+
+    ceph_objectstore_tool: Fixes to make import work again
+    
+    The is_pg() call is now true even for pgs pending removal, fix broken
+        finish_remove_pgs() by removing is_pg() check.
+    Need to add create_collection() to the initial transaction on import
+    
+    Fixes: #10090
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 5ce09198bf475e5c3a2df26232fa04ba9912b103)
+    
+    Conflicts:
+    	src/tools/ceph_objectstore_tool.cc
+
+commit e0dab883d29bd3a54b5707f8d3ea830f8a1ce516
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Oct 6 18:26:44 2014 -0700
+
+    ceph_objectstore_tool: Accept CEPH_ARGS environment arguments
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 10fe7cfe561f91717f2ac2e13aeecc06a903704e)
+
+commit 5f788eaa61054c6cb27960b5544b321078706343
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Oct 3 15:12:28 2014 -0700
+
+    ceph_objectstore_tool: MemStore needs a CephContext
+    
+    Pass g_ceph_context to ObjectStore::create() needed by MemStore
+    
+    Fixes: #9661
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0b155d00c542f0d8b8b5b0324dac4b3cf7ff37b5)
+
+commit 7470c7ca02ef6313b925be3ce4b27437a0c2e1e0
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Mar 3 10:41:28 2015 -0800
+
+    ceph_objectstore_tool: Rename generated binary to ceph-objectstore-tool
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 4f72ba545e204a24a55adead43c61cb1d4394381)
+    
+    Conflicts:
+    	debian/ceph-test.install
+    	src/.gitignore
+    	src/test/ceph-helpers.sh (doesn't exist in firefly)
+    	src/test/ceph_objectstore_tool.py
+    	src/tools/ceph_objectstore_tool.cc
+
+commit 4b51645fdfe8a761f7ebc0faee1a87187d498fee
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Nov 12 13:35:43 2014 -0800
+
+    vstart.sh: warn less
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a69b8450f642af91a352d0de4378d93828291933)
+
+commit 3075919c0dcee1f33a0beb299e98d8a88836c5f8
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Nov 17 23:02:50 2014 -0800
+
+    ceph_objectstore_tool: When exporting to stdout, don't cout messages
+    
+    Fixes: #10128
+    Caused by a2bd2aa7
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0d5262ac2f69ed3996af76a72894b1722a27b37d)
+    (cherry picked from commit 6cb9a2499cac2645e2cc6903ab29dfd95aac26c7)
+
+commit ca9df2803f3200431f5f7ea99a713005f15b7f5a
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Sep 2 14:56:10 2014 +0200
+
+    ceph_objectstore_tool.cc: prefer ++operator for non-primitive iterators
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit a5468abe4459159e8a9f7a4f21d082bb414e1cdd)
+
+commit ac396f5df3c51d09b9dbf7e6be7bed1d755d2317
+Author: Zhiqiang Wang <wonzhq@hotmail.com>
+Date:   Fri Aug 29 16:39:40 2014 +0800
+
+    Test: fixing a compile warning in ceph_objectstore_tool.cc
+    
+    For the compiler's sake:
+    tools/ceph_objectstore_tool.cc:2547:15: warning: ‘r’ may be used
+    uninitialized in this function [-Wmaybe-uninitialized]
+    
+    Signed-off-by: Zhiqiang Wang <wonzhq@hotmail.com>
+    (cherry picked from commit c3e1466b46076f133b62f98e2c0b712bdde0e119)
+
+commit b863970110e7f8e835e77864ea59b81f0b026158
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Aug 20 01:33:45 2014 -0700
+
+    ceph_objectstore_tool: Bug fixes and test improvements
+    
+    ceph_objectgstore_tool:
+    Fix bugs in the way collection_list_partial() was being called
+    which caused objects to be seen over and over again.
+    
+    Unit test:
+    Fix get_objs() to walk pg tree for pg with sub-directories
+    Create more objects to test object listing code
+    Limit number of larger objects
+    Limit number of objects which get attributes and omaps
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit a03f719eb3a46f410550afce313e6720e0c27946)
+
+commit 4f83005bb8a615df370de7b6dfe5d926c7cfef7f
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue Aug 5 18:26:11 2014 -0700
+
+    ceph_objectstore_tool, test: Implement import-rados feature and unit test code
+    
+    Fixes: #8276
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 23ec93a86140c4b271b45d87c62682288079cbba)
+
+commit df334617705fe862b820ef5de674ae54efad0cea
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed Aug 6 19:53:43 2014 -0700
+
+    test: ceph_objectstore_tool unit test improvements
+    
+    Add namespaces to testing
+    Increase filesize so export will have multiple chunks
+    Put json for each object into the db dict
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+
+commit ecd25cf6ce1a1a34e536c7fd313225b3bdedd2e0
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Thu Aug 7 13:31:48 2014 -0700
+
+    ceph_objectstore_tool: Add operation "rm-past-intervals" for testing purposes
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 3694068b67fd625495c4511390bc5bcbfbbd28f5)
+
+commit 6b50b384efc1f0735f8635a59663b50e3155de1a
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Thu Aug 7 11:46:08 2014 -0700
+
+    ceph_objectstore_tool: Add past_intervals to export/import code
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 9325ec15d4b89c5537cbcbda4c7594e25dc6e7df)
+
+commit 63529079b97c99cbaa863e1be865e2693e90c556
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Thu Aug 7 14:11:21 2014 -0700
+
+    ceph_objectstore_tool: Minor improvements
+    
+    Make all non-error non-debug output to stdout
+    Fix a message
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit a2bd2aa7babb4ad45ba21c70f9d179fda27742aa)
+
+commit 5e3f89ece7bdd09ed06ca4208cfa0a0b3104f109
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue Aug 5 12:26:42 2014 -0700
+
+    ceph_objectstore_tool, test: Add list-pgs operations and unit test case
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit f01e334c697057158354f0ce5ecff6d6ba8e2704)
+
+commit edc9f71efeebe5241004c669cc58089905907634
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed Jul 30 12:39:49 2014 -0700
+
+    Complete replacement of ceph_filestore_tool and ceph_filestore_dump
+    with unified ceph_objectstore_tool
+    
+    Move list-lost-objects and fix-lost-objects features from
+      ceph_filestore_tool to ceph_objectstore_tool as list-lost, fix-lost
+    Change --type to --op for info, log, export...operations
+    Add --type for the ObjectStore type (defaults to filestore)
+    Change --filestore-path to --data-path
+    Update installation, Makefile.am, and .gitignore
+    Fix and rename test case to match
+      Add some additional invalid option checks
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 83fbc91e5c4e52cc1513f34908f99d2ac3b930df)
+
+commit a42273ecd955470105cba1cc4ac7eb782ac46833
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed Jul 30 11:22:29 2014 -0700
+
+    Renames and removal towards a unified ceph_objectstore_tool
+    
+    Rename ceph_filestore_dump.cc and ceph_filestore_dump.py
+    Remove ceph_filestore_tool.cc
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 77864193a1162393ade783480aee39a232934377)
+
+commit 9ee2c27096784efceb02b06a0df4325979385f44
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue May 20 11:19:19 2014 -0700
+
+    ceph_filestore_dump: Add set-omaphdr object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit b4d95cc85af9af64d33d541cd69c5f28fd45423b)
+
+commit c7d261d40367ab01a577bf255da776a622f8984a
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue May 20 10:44:37 2014 -0700
+
+    ceph_filestore_dump: Add get-omaphdr object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 30c0f3114e665acdd99e64bf0d2a7399b33e8d61)
+
+commit 271e3ca19b9e878c6c3c26a9ec461faf06e7a19d
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 19 20:55:47 2014 -0700
+
+    ceph_filestore_dump: Add rm-omap object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 0fc6bd2777edf24a044f454beacf1647cc52f9fe)
+
+commit 20165d101a30c6beb591ca56b56bdf5505f70cf3
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 19 20:47:14 2014 -0700
+
+    ceph_filestore_dump: Add set-omap object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 50cd57e902fe508f98f63fea30626780b07561d9)
+
+commit 7547f3d17bc89437c529aa96413b0bebb808da5e
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 19 20:37:01 2014 -0700
+
+    ceph_filestore_dump: Add get-omap object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit b50c43ce5e52f5bbcb3684f6793d50f34ed741d1)
+
+commit f391feb1f50632adbe94c3e8cdc4b75091d6b8e1
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 19 18:33:24 2014 -0700
+
+    ceph_filestore_dump: Add rm-attr object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 465d77733c7499fbd65bebe7141895714c625e0d)
+
+commit 7bd2dd3a1d022df6d3f886ad12a191d0cfcef1d6
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 19 18:17:27 2014 -0700
+
+    ceph_filestore_dump: Add set-attr object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 95554e03dcb74b6d74b2f1b2891b3570abb187b8)
+
+commit 6724da821158ddee6ef6ee7b5bac9e97dcfc2292
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Thu May 15 15:50:48 2014 -0700
+
+    ceph_filestore_dump: Add get-attr object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 55d43c0e20fc853daec134449b9954248fd7ef31)
+
+commit 55c21b898834d77234227d3fc14c8580ef698663
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 17:52:09 2014 -0700
+
+    ceph_filestore_dump: Add set-bytes object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 3c24d1f46a624d0a053ad234997a1f8c8b036db5)
+
+commit 2f1926d2f57082666350d8223b09f61da5f95b6f
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 17:51:29 2014 -0700
+
+    ceph_filestore_dump: Add get-bytes object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 869dd92cc8ec29a3a684f88c335d359f225bba24)
+
+commit fcabb8133af3b90d5d9e976ce658ceccfc5b89c5
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 17:50:16 2014 -0700
+
+    ceph_filestore_dump: Add list-omap object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 48890c7741d76cf92b5f589f49378ca57292e88b)
+
+commit 303e4cedd91ca3553e956eec495a05e3136b3c56
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 18:32:42 2014 -0700
+
+    ceph_filestore_dump: Add list-attrs object command
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 00c6b0673288ca76fe144575b7af76eaa36f5857)
+
+commit aff2c995f67bdde1a592a9b24e4e96e85735d500
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 17:39:17 2014 -0700
+
+    ceph_filestore_dump: Add --type list to output objects in a pg in json
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 844dabb7f311e68eba0293ae9ca4c68521745877)
+
+commit 7cda8b7a0b43d709b73d875088ecd169f47d59ab
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 17:44:31 2014 -0700
+
+    ceph_filestore_dump: Add remove object command and usage for new commands
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 605caec64b036f8ab5ae451d7e9e7515d414f28e)
+
+commit a4694643ae4503746d3fac8a0feac706ddc13a16
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Fri Jun 6 17:05:53 2014 -0700
+
+    ceph_filestore_dump: Add utility function get_fd_data()
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit d4a9dafe442f139562497d746f80ba49faa954e8)
+
+commit 62dc823fb3b969c0ad52594419e8a86a3ff1e6ef
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 19 18:16:52 2014 -0700
+
+    ceph_filestore_dump: Fail import/export with a tty for stdin/stdout
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 7520e504cf2cdd3de2f236acb2cbf8a5016e6698)
+
+commit 9816f872ad59bcaa1a125b297f3991b333aad39c
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue May 20 11:56:20 2014 -0700
+
+    ceph_filstore_dump: Save if stdout is a tty and add routine to clean binary strings
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 3a574cc78b0e3ec6d8dd0c39ee20e7a54ad64056)
+
+commit d4aedeb833f23bf4ce6187cb82910ab2e71d48e5
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 15:30:11 2014 -0700
+
+    common: Add missing ghobject_t::decode() for json
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit c05f895d15a1d0e78ff5e9ae1a83f0a5424103d0)
+    
+    Changes:
+    	Adjusted for older shard_t
+
+commit dadecb1e05e528093642ba356fa7a70a0b546727
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 15:37:17 2014 -0700
+
+    ceph_filestore_dump: Add --skip-journal-replay and --skip-mount-omap
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 2e9dcb256509e7c921556202052f0cc1dcd91398)
+
+commit c6369987b1e1e55a9d0ab0bc328f61f52fc608d0
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 15:41:15 2014 -0700
+
+    os: Add optional flags to generic ObjectStore creation (SKIP_JOURNAL_REPLAY
+    and SKIP_MOUNT_OMAP)
+    
+    Only FileStore cares about these flags, so passed on during create()
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 3d9fde9d92322cd8ac3e3d8bcbf5b0a01ef0528b)
+    
+    Conflicts:
+    	src/os/FileStore.cc
+
+commit 3381aebb113d14249f6998a86ebf6b4ec6adc42d
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Fri May 16 18:20:11 2014 -0700
+
+    ceph_filestore_dump: Improve debug output by showing actual offset
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 44b261d5d1b36528bfbcb37dbd866b615e14be99)
+
+commit 1164b2e1610028a40cddbed09f9da5649bd2023a
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 12:36:37 2014 -0700
+
+    ceph_filestore_dump: Use cerr now that we aren't closing stderr
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 087c0f9d31e0f3d5bae7eac6231978105a71677e)
+
+commit f224429aa4fcba897be5e438bbb49d1025e2c482
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed May 14 12:42:21 2014 -0700
+
+    common,ceph_filestore_dump: Add ability for utilities to suppress library dout output
+    
+    Suppress dout output with CODE_ENVIRONMENT_UTILITY_NODOUT
+    ceph_filestore_dump turns on dout output if --debug specified
+    When used it can still be enable with --log-to-stderr --err-to-stderr
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit f7f9b251fc377651d8da4cbfd1942c3b86f3247e)
+
+commit 3f4cabdb84e58fcec0c3f508f980881c59fba948
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue May 13 18:27:30 2014 -0700
+
+    ceph_filestore_dump: Export omap in batches for large omap case
+    
+    New function get_omap_batch()
+    Create a TYPE_OMAP section for each batch
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 501dd3c05b8983159a289b021943cb828b908f53)
+
+commit 0b757af5be338b65fd9124ac5158bfe02ad5f899
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon May 12 15:50:34 2014 -0700
+
+    ceph_filestore_dump: Remove unused bufferlist databl
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 398b418e2b9f8260bcfacac8bcebea5beffcceca)
+
+commit 4a742fe29b6d959912a38d132344c695f89dd34f
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed May 7 14:12:15 2014 +0200
+
+    ceph_filestore_dump.cc: cleanup includes
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 8620609884243596d35b69c571d2da751e63cf2b)
+
+commit 420ea03aa3cd52bd035d31ba111c3d6d0745352d
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Thu Jan 29 18:19:16 2015 +0100
+
+    librados: rectify the guard in RadosClient::wait_for_osdmap().
+    
+    RadosClient::wait_for_osdmap() did not signalize lack of connection
+    via -ENOTCONN error code when the Objecter instance was allocated.
+    The proper way is to check the connection state explicitly.
+    
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit 34473f78f101d87d2606e0e7112682a47ff24830)
+    
+    Conflicts:
+    	src/librados/RadosClient.cc
+            the modified guard was not present: add the new guard instead
+            of modifying it
+
+commit 1b2667211f90a1b630d2ddffe99b0fb00bb3c07c
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Mon Jan 19 15:07:21 2015 +0100
+
+    librados: fix resources leakage in RadosClient::connect().
+    
+    If RadosClient::connect was called a second time (which could
+    happen as a part of recovery from failure), the instances
+    of Objecter and Messenger allocated by the first call were leaked.
+    
+    Additionally, the implementation of the method wrongly reported
+    memory allocation problems -- it throwed std::bad_alloc exception
+    instead of returning -ENOMEM error code.
+    
+    Fixes: #10425
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit 624c056da093c8741242892413438a291c03c7d5)
+    
+    Conflicts:
+    	src/librados/RadosClient.cc
+            resolve adding (std::nothrow) that failed because the
+            prototype of the constructor is not the same
+
+commit 4e32ff2b60549742d01b18429810c89f5f707548
+Author: Samuel Just <sjust@redhat.com>
+Date:   Fri Dec 5 15:29:52 2014 -0800
+
+    osd_types: op_queue_age_hist and fs_perf_stat should be in osd_stat_t::operator==
+    
+    Fixes: 10259
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1ac17c0a662e6079c2c57edde2b4dc947f547f57)
+
+commit 6e58732f546ec6241b198d2473902d66327cdc36
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Mon Jan 19 18:49:15 2015 +0000
+
+    mon: PGMonitor: skip zeroed osd stats on get_rule_avail()
+    
+    Fixes: #10257
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit b311e7c36273efae39aa2602c1f8bd90d39e5975)
+    
+    Conflicts:
+    	src/mon/PGMonitor.cc
+            ceph::unordered_map changed the context, simple resolution
+
+commit bcc8cfb24a96a7874a24760771755088a231a8d7
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Jan 16 18:13:05 2015 +0000
+
+    mon: PGMonitor: available size 0 if no osds on pool's ruleset
+    
+    get_rule_avail() may return < 0, which we were using blindly assuming it
+    would always return an unsigned value.  We would end up with weird
+    values if the ruleset had no osds.
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 8be6a6ab2aa5a000a39c73a98b11a0ab32fffa1c)
+
+commit 894c8ad26fd2da203dcbf8eb0ad5e2af0223d5a9
+Author: Joao Eduardo Luis <joao@redhat.com>
+Date:   Fri Jan 16 18:12:42 2015 +0000
+
+    mon: PGMonitor: fix division by zero on stats dump
+    
+    Signed-off-by: Joao Eduardo Luis <joao@redhat.com>
+    (cherry picked from commit 50547dc3c00b7556e26b9a44ec68640c5c3a2384)
+
+commit 1e58bb49b99118d064c1ca92e42cbfb2786fdaff
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Dec 17 16:06:55 2014 +0100
+
+    crush: set_choose_tries = 100 for erasure code rulesets
+    
+    It is common for people to try to map 9 OSDs out of a 9 OSDs total ceph
+    cluster. The default tries (50) will frequently lead to bad mappings for
+    this use case. Changing it to 100 makes no significant CPU performance
+    difference, as tested manually by running crushtool on one million
+    mappings.
+    
+    http://tracker.ceph.com/issues/10353 Fixes: #10353
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 2f87ac807f3cc7ac55d9677d2051645bf5396a62)
+    
+    Conflicts:
+    	src/erasure-code/lrc/ErasureCodeLrc.cc
+            safely ignored because the file does not exist
+
+commit 27dbbb3c312ea68a96b011ccb12394c75c0fb0f3
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Feb 12 13:49:50 2015 -0800
+
+    mon/OSDMonitor: do not trust small values in osd epoch cache
+    
+    If the epoch cache says the osd has epoch 100 and the osd is asking for
+    epoch 200+, do not send it 100+.
+    
+    Fixes: #10787
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a5759e9b97107488a8508f36adf9ca1aba3fae07)
