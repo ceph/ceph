@@ -1400,7 +1400,9 @@ public:
     return !(get_type() == TYPE_ERASURE);
   }
 
-  bool requires_aligned_append() const { return is_erasure(); }
+  bool requires_aligned_append() const {
+    return is_erasure() && !has_flag(FLAG_EC_OVERWRITES);
+  }
   uint64_t required_alignment() const { return stripe_width; }
 
   bool can_shift_osds() const {
