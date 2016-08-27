@@ -162,6 +162,8 @@ public:
       const pg_log_entry_t &entry) {
       rolledback.push_back(entry);
     }
+    void rollforward(
+      const pg_log_entry_t &entry) {}
     void remove(
       const hobject_t &hoid) {
       removed.insert(hoid);
@@ -275,6 +277,8 @@ struct TestHandler : public PGLog::LogEntryHandler {
   explicit TestHandler(list<hobject_t> &removed) : removed(removed) {}
 
   void rollback(
+    const pg_log_entry_t &entry) {}
+  void rollforward(
     const pg_log_entry_t &entry) {}
   void remove(
     const hobject_t &hoid) {
@@ -483,7 +487,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
       add(e);
     }
     TestHandler h(remove_snap);
-    trim_rollback_info(eversion_t(1, 6), &h);
+    roll_forward_to(eversion_t(1, 6), &h);
     rewind_divergent_log(t, eversion_t(1, 5), info, &h,
 			 dirty_info, dirty_big_info);
     pg_log_t log;

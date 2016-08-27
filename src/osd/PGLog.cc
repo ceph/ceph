@@ -30,25 +30,6 @@ static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
 
 //////////////////// PGLog::IndexedLog ////////////////////
 
-void PGLog::IndexedLog::advance_rollback_info_trimmed_to(
-  eversion_t to,
-  LogEntryHandler *h)
-{
-  assert(to <= can_rollback_to);
-
-  if (to > rollback_info_trimmed_to)
-    rollback_info_trimmed_to = to;
-
-  while (rollback_info_trimmed_to_riter != log.rbegin()) {
-    --rollback_info_trimmed_to_riter;
-    if (rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to) {
-      ++rollback_info_trimmed_to_riter;
-      break;
-    }
-    h->trim(*rollback_info_trimmed_to_riter);
-  }
-}
-
 void PGLog::IndexedLog::filter_log(spg_t pgid, const OSDMap &map, const string &hit_set_namespace)
 {
   IndexedLog out;
@@ -104,7 +85,7 @@ void PGLog::IndexedLog::trim(
 
   if (s > can_rollback_to)
     can_rollback_to = s;
-  advance_rollback_info_trimmed_to(s, handler);
+  trim_rollback_info_to(s, handler);
 
   while (!log.empty()) {
     pg_log_entry_t &e = *log.begin();

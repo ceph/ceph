@@ -1848,6 +1848,11 @@ void PG::activate(ObjectStore::Transaction& t,
 
     state_set(PG_STATE_ACTIVATING);
   }
+  if (acting.size() >= pool.info.min_size) {
+    PGLogEntryHandler handler;
+    pg_log.roll_forward(&handler);
+    handler.apply(this, &t);
+  }
 }
 
 bool PG::op_has_sufficient_caps(OpRequestRef& op)
@@ -3056,14 +3061,14 @@ void PG::append_log(
 
   PGLogEntryHandler handler;
   if (!transaction_applied) {
-    pg_log.clear_can_rollback_to(&handler);
+    pg_log.roll_forward(&handler);
     t.register_on_applied(
       new C_UpdateLastRollbackInfoTrimmedToApplied(
 	this,
 	get_osdmap()->get_epoch(),
 	info.last_update));
   } else if (roll_forward_to > pg_log.get_rollback_trimmed_to()) {
-    pg_log.trim_rollback_info(
+    pg_log.roll_forward_to(
       roll_forward_to,
       &handler);
     t.register_on_applied(
@@ -3075,7 +3080,7 @@ void PG::append_log(
 
   pg_log.trim(&handler, trim_to, info);
 
-  dout(10) << __func__ << ": trimming to " << roll_forward_to
+  dout(10) << __func__ << ": rolling forward to " << roll_forward_to
 	   << " entries " << handler.to_trim << dendl;
   handler.apply(this, &t);
 
