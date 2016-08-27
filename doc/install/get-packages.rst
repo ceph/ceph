@@ -107,30 +107,16 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	https://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph include:
+The major releases of Ceph are summarized at:
 
-- **Hammer:** Hammer is the most recent, and is also the eighth major release
-  of Ceph.  These packages are recommended for anyone deploying Ceph in a
-  production environment. Critical bug fixes are backported and point releases
-  are made as necessary.
+        http://download.ceph.com/docs/master/releases/
 
-- **Giant:** Giant is the seventh major release of Ceph. These packages are
-  recommended for anyone deploying Ceph in a production environment.  Critical
-  bug fixes are backported and point releases are made as necessary.
+Every second major release is considered Long Term Stable (LTS). Critical
+bugfixes are backported to LTS releases until their retirement. Since retired
+releases are no longer maintained, we recommend that users upgrade their
+clusters regularly - preferably to the latest LTS release.
 
-- **Firefly:** Firefly is the sixth major release of Ceph. These packages
-  are recommended for anyone deploying Ceph in a production environment.
-  Firefly is a long-term stable release, so critical bug fixes are backported
-  and point releases are made as necessary.
-
-- **Emperor:** Emperor is the fifth major release of Ceph. These packages
-  are are old and no longer maintained, so we recommend that users upgrade to
-  Firefly immediately.
-
-- **Argonaut, Bobtail, Cuttlefish, Dumpling:** These are the first four
-  releases of Ceph. These packages are old and no longer maintained (Dumpling
-  was retired in May 2015), so we recommend that users upgrade to a more
-  recent version.
+The most recent LTS release is Jewel (10.2.x).
 
 .. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
 
