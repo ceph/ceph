@@ -2261,7 +2261,7 @@ public:
   void append_log(
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
-    eversion_t trim_rollback_to,
+    eversion_t roll_forward_to,
     ObjectStore::Transaction &t,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
