@@ -153,6 +153,10 @@ void MDSRankDispatcher::tick()
   // Expose ourselves to Beacon to update health indicators
   beacon.notify_health(this);
 
+  if (is_active() || is_stopping()) {
+    mdlog->trim();  // NOT during recovery!
+  }
+
   if (is_clientreplay() || is_active() || is_stopping()) {
     mds_lock.Unlock();
     // FIXME: use seperate timer to do this
@@ -699,6 +703,13 @@ void MDSRank::dump_status(Formatter *f) const
 void MDSRank::queue_context(MDSInternalContextBase *c)
 {
   finisher->queue(c);
+}
+
+void MDSRank::queue_contexts(std::list<MDSInternalContextBase*>& ls)
+{
+  for (auto c : ls)
+    finisher->queue(c);
+  ls.clear();
 }
 
 MDSRank::OpWQ::OpWQ(MDSRank *m, time_t ti, ThreadPool *tp)

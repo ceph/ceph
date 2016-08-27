@@ -36,6 +36,16 @@ public:
   }
 };
 
+class LockerLogContext : public MDSLogContextBase {
+protected:
+  Locker *locker;
+  MDSRank *get_mds() { return locker->mds; }
+public:
+  explicit LockerLogContext(Locker *l) : locker(l) {
+    assert(locker != NULL);
+  }
+};
+
 /* This function DOES put the passed message before returning */
 void Locker::dispatch(Message *m)
 {
@@ -676,9 +686,8 @@ bool Locker::rdlock_start(SimpleLock *lock, const MDRequestRef& mut)
 void Locker::nudge_log(SimpleLock *lock)
 {
   dout(10) << "nudge_log " << *lock << " on " << *lock->get_parent() << dendl;
-  if (!lock->is_stable())    // as with xlockdone, or cap flush
-	  ;
-   // mds->mdlog->flush();
+  if (lock->is_unstable_and_locked())    // as with xlockdone, or cap flush
+    mds->mdlog->flush();
 }
 
 void Locker::rdlock_finish(SimpleLock *lock, const MutationRef& mut, bool *pneed_issue)
@@ -1337,12 +1346,12 @@ public:
   }
 };
 
-class C_Locker_ScatterWBFinish : public LockerContext {
+class C_Locker_ScatterWBFinish : public LockerLogContext {
   ScatterLock *lock;
   MutationRef mut;
 public:
   C_Locker_ScatterWBFinish(Locker *l, ScatterLock *sl, const MutationRef& m) :
-    LockerContext(l), lock(sl), mut(m) {}
+    LockerLogContext(l), lock(sl), mut(m) {}
   void finish(int r) { 
     locker->scatter_writebehind_finish(lock, mut); 
   }
@@ -2314,7 +2323,7 @@ void Locker::resume_stale_caps(Session *session, uint64_t sseq)
   session->mutex_lock();
 }
 
-class C_Locker_FileUpdateFinish : public LockerContext {
+class C_Locker_FileUpdateFinish : public LockerLogContext {
   CInode *in;
   MutationRef mut;
   bool share;
@@ -2323,7 +2332,7 @@ class C_Locker_FileUpdateFinish : public LockerContext {
   public:
   C_Locker_FileUpdateFinish(Locker *l, CInode *i, const MutationRef& m,
 			    bool s, client_t c=-1, MClientCaps *ac = 0)
-    : LockerContext(l), in(i), mut(m), share(s), client(c), ack(ac) { }
+    : LockerLogContext(l), in(i), mut(m), share(s), client(c), ack(ac) { }
   void finish(int r) {
     locker->file_update_finish(in, mut, share, client, ack);
   }
@@ -2564,7 +2573,6 @@ bool Locker::check_inode_max_size(CInode *in, bool parent_locked, bool force_wrl
 
   mds->mdlog->start_entry(le);
   mut->ls = mds->mdlog->get_current_segment();
-  // use finisher to simulate log flush
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdateFinish(this, in, mut, true), max_increased);
 
   mut->remove_locked_object(in);

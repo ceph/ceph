@@ -13,12 +13,13 @@
  */
 
 
-#ifndef MDS_CONTEXT_H
-#define MDS_CONTEXT_H
+#ifndef MDS2_CONTEXT_H
+#define MDS2_CONTEXT_H
 
 #include "include/Context.h"
 
 class MDSRank;
+class MDLog;
 
 
 /**
@@ -55,28 +56,40 @@ public:
   }
 };
 
-class MDSIOContextBase : public MDSContext
-{
-  void complete(int r);
-};
-
-class MDSIOContext : public MDSIOContextBase
-{
-protected:
-  MDSRank *mds;
-  virtual MDSRank* get_mds();
-
-public:
-  explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
-  }
-};
-
 class C_MDSInternalNoop : public MDSInternalContextBase
 {
   virtual MDSRank* get_mds() {assert(0);}
 public:
   void finish(int r) {}
   void complete(int r) {}
+};
+
+/*
+ * Gather needs a default-constructable class
+ */
+class MDSInternalContextGather : public MDSInternalContextBase
+{
+protected:
+  MDSRank *get_mds();
+};
+
+
+class MDSGather : public C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>
+{
+public:
+  MDSGather(CephContext *cct, MDSInternalContextBase *onfinish) : C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>(cct, onfinish) {}
+protected:
+  virtual MDSRank *get_mds() {return NULL;}
+};
+typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
+
+class MDSLogContextBase : public MDSInternalContextBase
+{
+private:
+  uint64_t write_pos;
+public:
+  void set_write_pos(uint64_t wp) { write_pos = wp; }
+  void complete(int r);
+  MDSLogContextBase(uint64_t wp=0) : write_pos(wp) {}
 };
 #endif  // MDS_CONTEXT_H

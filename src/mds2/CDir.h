@@ -1,7 +1,7 @@
 #ifndef CEPH_CDIR_H
 #define CEPH_CDIR_H
 
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 #include "CObject.h"
 
 #include "include/elist.h"
@@ -18,22 +18,22 @@ public:
   MDCache* const mdcache;
   CInode* const inode;
 
+  // -- pins --
+  static const int PIN_CHILD =        3;
+  static const int PIN_COMITTING =    4;
+
+  // -- states ==
+  static const unsigned STATE_NEW =		(1<<0);
+  static const unsigned STATE_COMMITTING =	(1<< 6);   // mid-commit
+  static const unsigned STATE_ASSIMRSTAT =	(1<<17);  // assimilating inode->frag rstats
+
+  typedef std::map<dentry_key_t, CDentry*> map_t;
 protected:
   fnode_t fnode;
   std::list<fnode_t> projected_fnode;
   version_t projected_version;
 
-  void first_get();
-  void last_put();
 public:
-  // -- pins --
-  static const int PIN_CHILD =        3;
-
-  // -- states ==
-  static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
-
-
-  typedef std::map<dentry_key_t, CDentry*> map_t;
 
   CDir(CInode *i);
 
@@ -66,16 +66,25 @@ public:
   fnode_t *project_fnode();
   void pop_and_dirty_projected_fnode(LogSegment *ls);
   bool is_projected() { return !projected_fnode.empty(); }
+
+protected:
+  version_t committing_version;
+  version_t committed_version;
+
+  elist<CDentry*> dirty_dentries;
+public:
+
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
   void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
-  
-  bool is_new() { return true; /* FIXME */ }
-  void mark_new(LogSegment *ls) { /* FIXME */ }
 
-  void inc_num_dirty() { }
-  void dec_num_dirty() { }
+  void add_dirty_dentry(CDentry *dn);
+  void remove_dirty_dentry(CDentry *dn);
+  
+  bool is_new() { return state_test(STATE_NEW); }
+  void clear_new();
+
 protected:
   map_t items;
 
@@ -102,8 +111,8 @@ public:
   }
 
   void encode_dirstat(bufferlist& bl, mds_rank_t whoami);
-protected:
 
+protected:
   elist<CInode*> dirty_rstat_inodes;
 public:
   void resync_accounted_fragstat(fnode_t *pf);
@@ -113,8 +122,21 @@ public:
   void assimilate_dirty_rstat_inodes(const MutationRef& mut);
   void assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlob *blob);
 
+protected:
+  map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
+  object_t get_ondisk_object() const;
+  void _omap_commit(int op_prio);
+  void _encode_dentry(CDentry *dn, bufferlist& bl);
+  void _committed(int r, version_t v);  
+  friend class C_Dir_Committed;
+public:
+  void commit(MDSInternalContextBase *c, int op_prio=-1);
+
 public:
    elist<CDir*>::item item_dirty, item_new;
+protected:
+  void first_get();
+  void last_put();
 };
 
 ostream& operator<<(ostream& out, const CDir& dir);

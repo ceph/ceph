@@ -20,6 +20,7 @@
 MDCache::MDCache(MDSRank *_mds) :
   mds(_mds), server(_mds->server), locker(_mds->locker),
   inode_map_lock("MDCache::inode_map_lock"),
+  log_segments_lock("MDCache::log_segments_lock"),
   request_map_lock("MDCache::request_map_lock"),
   rename_dir_mutex("MDCache::rename_dir_mutex")
 {
@@ -688,11 +689,14 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
       }
     }
 
+    bool stop = false;
     // rstat
     if (!parent_dn) {
+      stop = true;
       // don't update parent this pass
     } else if (!linkunlink && !(pin->nestlock.can_wrlock(-1) &&
 				pin->versionlock.can_wrlock())) {
+      stop = true;
       cur->mark_dirty_rstat();
     } else {
       if (linkunlink)
@@ -707,7 +711,6 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
       cur->clear_dirty_rstat();
     }
 
-    bool stop = false;
 
     CDentry *parentdn = NULL; 
     if (!stop && !pin->is_base()) {
@@ -724,12 +727,10 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
     }
 
     if (stop) {
-      locker->mark_updated_scatterlock(&pin->nestlock);
-      //mut->ls->dirty_dirfrag_nest.push_back(&pin->item_dirty_dirfrag_nest);
-      if (update_parent_mtime || linkunlink) {
-	locker->mark_updated_scatterlock(&pin->filelock);
-	//mut->ls->dirty_dirfrag_dir.push_back(&pin->item_dirty_dirfrag_dir);
-      }
+      int mask = CEPH_LOCK_INEST;
+      if (update_parent_mtime || linkunlink)
+	mask |= CEPH_LOCK_IFILE;
+      mut->add_updated_lock(pin, mask);
       break;
     }
 

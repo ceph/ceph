@@ -54,6 +54,11 @@ void MutationImpl::add_projected_fnode(CDir *dir, bool early)
     projected_nodes[1].push_back(dir);
 }
 
+void MutationImpl::add_updated_lock(CInode *in, int mask)
+{
+  updated_locks[in] |= mask;
+}
+
 CObject* MutationImpl::pop_early_projected_node()
 {
   assert(!projected_nodes[0].empty());
@@ -82,6 +87,12 @@ void MutationImpl::pop_and_dirty_early_projected_nodes()
       in->pop_and_dirty_projected_inode(ls);
     else if (dir)
       dir->pop_and_dirty_projected_fnode(ls);
+
+    auto q = updated_locks.find(in ? : dir->get_inode());
+    if (q != updated_locks.end()) {
+      q->first->mark_dirty_scattered(ls, q->second);
+      updated_locks.erase(q);
+    }
   }
   projected_nodes[0].clear();
 }
@@ -129,8 +140,16 @@ void MutationImpl::pop_and_dirty_projected_nodes()
       in->pop_and_dirty_projected_inode(ls);
     else if (dir)
       dir->pop_and_dirty_projected_fnode(ls);
+
+    auto q = updated_locks.find(in ? : dir->get_inode());
+    if (q != updated_locks.end()) {
+      q->first->mark_dirty_scattered(ls, q->second);
+      updated_locks.erase(q);
+    }
   }
   projected_nodes[1].clear();
+
+  assert(updated_locks.empty());
   
   unlock_all_objects();
 }

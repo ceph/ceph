@@ -914,10 +914,10 @@ endif()
 add_subdirectory(script)
 
 set(ceph_mds2_srcs
-  mds/mdstypes.cc
-  mds/locks.c
-  mds/JournalPointer.cc
   mds2/ceph_mds2.cc
+  mds2/mdstypes.cc
+  mds2/locks.c
+  mds2/JournalPointer.cc
   mds2/MDSAuthCaps.cc
   mds2/CInode.cc
   mds2/CDir.cc

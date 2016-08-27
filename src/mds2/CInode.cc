@@ -4,9 +4,12 @@
 
 #include "MDSRank.h"
 #include "MDCache.h"
+#include "Locker.h"
 #include "Mutation.h"
 #include "MDLog.h"
 #include "SessionMap.h"
+
+#include "osdc/Objecter.h"
 
 #include "messages/MClientCaps.h"
 
@@ -16,13 +19,34 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.inode(" << vino() << ") "
 
+class CInodeContext : public MDSInternalContextBase
+{
+protected:
+  CInodeRef in;
+  MDSRank *get_mds() {return in->mdcache->mds;}
+public:
+  explicit CInodeContext(CInode *in_) : in(in_) {
+    assert(in != NULL);
+  }
+};
+
+class CInodeLogContext : public MDSLogContextBase
+{
+protected:
+  CInodeRef in;
+  MDSRank *get_mds() {return in->mdcache->mds;}
+public:
+  explicit CInodeLogContext(CInode *in_) : in(in_) {
+    assert(in != NULL);
+  }
+};
+
 // crap
 snapid_t CInode::first(2);
 snapid_t CInode::last(CEPH_NOSNAP);
 snapid_t CInode::oldest_snap(CEPH_NOSNAP);
 fragtree_t CInode::dirfragtree;
 compact_map<snapid_t, old_inode_t> CInode::old_inodes;
-
 
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
@@ -148,19 +172,6 @@ CInode::CInode(MDCache *_mdcache) :
 
 }
 
-void CInode::first_get()
-{
-  Mutex::Locker l(mutex);
-  if (parent)
-    parent->get(CDentry::PIN_INODEPIN);
-}
-void CInode::last_put()
-{
-  Mutex::Locker l(mutex);
-  if (parent)
-    parent->put(CDentry::PIN_INODEPIN);
-}
-
 void CInode::make_string(string& s) const
 {
   mutex_assert_locked_by_me();
@@ -284,13 +295,14 @@ void CInode::_mark_dirty(LogSegment *ls)
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
     get(PIN_DIRTY);
-//    assert(ls);
+    assert(ls);
   }
 
-  /*
-  if (ls)
+  if (ls) {
+    mdcache->lock_log_segments();
     ls->dirty_inodes.push_back(&item_dirty);
-    */
+    mdcache->unlock_log_segments();
+  }
 }
 
 void CInode::mark_dirty(version_t pv, LogSegment *ls) {
@@ -312,11 +324,13 @@ void CInode::mark_clean()
 {
   dout(10) << " mark_clean " << *this << dendl;
   if (state_test(STATE_DIRTY)) {
+    // remove myself from ls dirty list
+    mdcache->lock_log_segments();
+    item_dirty.remove_myself();
+    mdcache->unlock_log_segments();
+
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
-
-    // remove myself from ls dirty list
-//    item_dirty.remove_myself();
   }
 }
 
@@ -920,17 +934,15 @@ void CInode::__frag_update_finish(CDir *dir, const MutationRef& mut)
 }
 
 
-class C_Inode_FragUpdate : public MDSInternalContextBase {
-  CInode *in;
+class C_Inode_FragUpdate : public CInodeLogContext {
   CDir *dir;
   MutationRef mut;
-  MDSRank *get_mds() { return in->mdcache->mds; }
   void finish(int r) {
     in->__frag_update_finish(dir, mut);
   }
 public:
   C_Inode_FragUpdate(CInode *i, CDir *d, const MutationRef& m)
-    : in(i), dir(d), mut(m) {}
+    : CInodeLogContext(i), dir(d), mut(m) {}
 };
 
 void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir)
@@ -1142,13 +1154,15 @@ void CInode::clear_dirty_rstat()
 
 void CInode::clear_dirty_scattered(int type)
 {
+  mutex_assert_locked_by_me();
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
+  mdcache->lock_log_segments();
   switch (type) {
     case CEPH_LOCK_IFILE:
-//      item_dirty_dirfrag_dir.remove_myself();
+      item_dirty_dirfrag_dir.remove_myself();
       break;
     case CEPH_LOCK_INEST:
-//      item_dirty_dirfrag_nest.remove_myself();
+      item_dirty_dirfrag_nest.remove_myself();
       break;
     case CEPH_LOCK_IDFT:
 //      item_dirty_dirfrag_dirfragtree.remove_myself();
@@ -1156,6 +1170,26 @@ void CInode::clear_dirty_scattered(int type)
     default:
       assert(0);
   }
+  mdcache->unlock_log_segments();
+}
+
+void CInode::mark_dirty_scattered(LogSegment *ls, int mask)
+{
+  assert(!(mask & ~(CEPH_LOCK_IFILE|CEPH_LOCK_INEST|CEPH_LOCK_IDFT)));
+  mutex_assert_locked_by_me();
+  dout(10) << "mark_dirty_scattered " << mask << " on " << *this << dendl;
+
+  if (mask & CEPH_LOCK_IFILE)
+    mdcache->locker->mark_updated_scatterlock(&filelock);
+  if (mask & CEPH_LOCK_INEST)
+    mdcache->locker->mark_updated_scatterlock(&nestlock);
+
+  mdcache->lock_log_segments();
+  if (mask & CEPH_LOCK_IFILE)
+    ls->dirty_dirfrag_dir.push_back(&item_dirty_dirfrag_dir);
+  if (mask & CEPH_LOCK_INEST)
+    ls->dirty_dirfrag_nest.push_back(&item_dirty_dirfrag_nest);
+  mdcache->unlock_log_segments();
 }
 
 Capability *CInode::add_client_cap(Session *session)
@@ -1238,6 +1272,104 @@ void CInode::remove_client_cap(Session *session)
   }
 */
 }
+
+
+void CInode::encode_bare(bufferlist &bl, uint64_t features)
+{
+  ::encode(inode, bl, features);
+  if (is_symlink())
+    ::encode(symlink, bl);
+  ::encode(dirfragtree, bl);
+  ::encode(xattrs, bl);
+  ::encode(bufferlist(), bl); // snapbl
+  ::encode(old_inodes, bl, features);
+}
+
+void CInode::encode(bufferlist &bl, uint64_t features)
+{
+  ENCODE_START(4, 4, bl);
+  encode_bare(bl, features);
+  ENCODE_FINISH(bl);
+}
+
+struct C_Inode_Stored : public CInodeContext {
+  version_t version;
+  MDSInternalContextBase *fin;
+  C_Inode_Stored(CInode *i, version_t v, MDSInternalContextBase *f) :
+    CInodeContext(i), version(v), fin(f) {}
+  void finish(int r) {
+    in->_stored(r, version, fin);
+  }
+};
+
+object_t CInode::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
+{
+  char n[60];
+  snprintf(n, sizeof(n), "%llx.%08llx%s", (long long unsigned)ino, (long long unsigned)fg, suffix ? suffix : "");
+  return object_t(n);
+}
+
+void CInode::store(MDSInternalContextBase *fin)
+{
+  mutex_assert_locked_by_me();
+  dout(10) << "store " << get_version() << dendl;
+  assert(is_base());
+
+  // encode
+  bufferlist bl;
+  string magic = CEPH_FS_ONDISK_MAGIC;
+  ::encode(magic, bl);
+  encode(bl, mdcache->mds->mdsmap->get_up_features());
+
+  // write it.
+  SnapContext snapc;
+  ObjectOperation m;
+  m.write_full(bl);
+
+  object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+
+  Context *newfin =
+    new C_OnFinisher(new C_Inode_Stored(this, get_version(), fin),
+	mdcache->mds->finisher);
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
+      ceph::real_clock::now(g_ceph_context), 0,
+      NULL, newfin);
+}
+
+void CInode::_stored(int r, version_t v, MDSInternalContextBase *fin)
+{
+  if (r < 0) {
+    dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
+    mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
+      << " errno " << r << "\n";
+    mdcache->mds->handle_write_error(r);
+    fin->complete(r);
+    return;
+  }
+
+  mutex_lock();
+  dout(10) << "_stored " << v << " on " << *this << dendl;
+  if (v >= get_version())
+    mark_clean();
+  mutex_unlock();
+
+  mdcache->mds->queue_context(fin);
+}
+
+void CInode::first_get()
+{
+  Mutex::Locker l(mutex);
+  if (parent)
+    parent->get(CDentry::PIN_INODEPIN);
+}
+void CInode::last_put()
+{
+  Mutex::Locker l(mutex);
+  if (parent)
+    parent->put(CDentry::PIN_INODEPIN);
+}
+
 
 void intrusive_ptr_add_ref(CInode *o)
 {

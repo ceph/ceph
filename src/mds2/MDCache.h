@@ -1,7 +1,7 @@
 #ifndef CEPH_MDCACHE_H
 #define CEPH_MDCACHE_H
 
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 #include "CObject.h"
 
 class Message;
@@ -38,16 +38,11 @@ protected:
   CInodeRef myin;
   CInodeRef strays[NUM_STRAY]; 
 
+  Mutex log_segments_lock;
+
   file_layout_t default_file_layout;
   file_layout_t default_log_layout;
-
 public:
-  const file_layout_t& get_default_file_layout() const {
-    return default_file_layout;
-  }
-  const file_layout_t& get_default_log_layout() const {
-    return default_log_layout;
-  }
 
   CInodeRef create_system_inode(inodeno_t ino, int mode);
   void create_empty_hierarchy();
@@ -69,6 +64,16 @@ public:
 
   void advance_stray() {}
   CDentryRef get_or_create_stray_dentry(CInode *in);
+
+  void lock_log_segments() { log_segments_lock.Lock(); }
+  void unlock_log_segments() { log_segments_lock.Unlock(); }
+
+  const file_layout_t& get_default_file_layout() const {
+    return default_file_layout;
+  }
+  const file_layout_t& get_default_log_layout() const {
+    return default_log_layout;
+  }
 
 protected:
   Mutex request_map_lock;
@@ -106,7 +111,6 @@ protected:
   ceph::atomic64_t last_cap_id;
 public:
   uint64_t get_new_cap_id() { return last_cap_id.inc(); }
-
 
   MDCache(MDSRank *_mds);
 public:

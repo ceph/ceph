@@ -31,7 +31,7 @@
 #include "include/CompatSet.h"
 #include "include/ceph_features.h"
 #include "common/Formatter.h"
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 
 /*
 

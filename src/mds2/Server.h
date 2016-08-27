@@ -64,7 +64,7 @@ protected:
   void early_reply(const MDRequestRef& mdr);
 
   void journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
-		  	 LogEvent *le, MDSInternalContextBase *fin, bool flush=false);
+		  	 LogEvent *le, MDSLogContextBase *fin, bool flush=false);
 
   CInodeRef prepare_new_inode(const MDRequestRef& mdr, CDentryRef& dn, inodeno_t useino,
 			      unsigned mode, file_layout_t *layout=NULL);

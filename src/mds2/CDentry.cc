@@ -5,6 +5,7 @@
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "SessionMap.h"
+#include "LogSegment.h"
 #include "DentryLease.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -71,13 +72,6 @@ CDentry::CDentry(CDir *d, const std::string &n) :
   CObject("CDentry"), dir(d), name(n),
   lock(this, &lock_type),
   versionlock(this, &versionlock_type)
-{
-}
-
-void CDentry::first_get()
-{
-}
-void CDentry::last_put()
 {
 }
 
@@ -213,12 +207,15 @@ void CDentry::_mark_dirty(LogSegment *ls)
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dir->dec_num_dirty();
     get(PIN_DIRTY);
- //   assert(ls);
+    dir->add_dirty_dentry(this);
+    assert(ls);
   }
-//  if (ls) 
-//    ls->dirty_dentries.push_back(&item_dirty);
+  if (ls) {
+    dir->mdcache->lock_log_segments();
+    ls->dirty_dentries.push_back(&item_dirty);
+    dir->mdcache->unlock_log_segments();
+  }
 }
 
 void CDentry::mark_dirty(version_t pv, LogSegment *ls)
@@ -239,12 +236,15 @@ void CDentry::mark_clean()
   dout(10) << " mark_clean " << *this << dendl;
   assert(is_dirty());
 
+  dir->mdcache->lock_log_segments();
+  item_dirty.remove_myself();
+  dir->mdcache->unlock_log_segments();
+
+  dir->remove_dirty_dentry(this);
+
   // state+pin
   state_clear(STATE_DIRTY | STATE_NEW);
-  dir->dec_num_dirty();
   put(PIN_DIRTY);
-
-//  item_dirty.remove_myself();
 }
 
 void CDentry::mark_new()
@@ -256,7 +256,7 @@ void CDentry::mark_new()
 void CDentry::clear_new()
 {
   dout(10) << " clear_new " << *this << dendl;
-  state_set(STATE_NEW);
+  state_clear(STATE_NEW);
 }
 
 DentryLease *CDentry::add_client_lease(Session *session)
@@ -307,6 +307,13 @@ void CDentry::remove_client_lease(Session *session)
 
   if (client_leases.empty())
     put(PIN_CLIENTLEASE);
+}
+
+void CDentry::first_get()
+{
+}
+void CDentry::last_put()
+{
 }
 
 void intrusive_ptr_add_ref(CDentry *o)

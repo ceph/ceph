@@ -20,10 +20,10 @@
 
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
-#include "mds/MDLog.h"
-#include "mds/MDSRank.h"
-#include "mds/MDSMap.h"
-#include "mds/Locker.h"
+#include "MDLog.h"
+#include "MDSRank.h"
+#include "MDSMap.h"
+#include "Locker.h"
 
 #include "Beacon.h"
 

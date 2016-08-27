@@ -9,12 +9,6 @@ class LogSegment;
 class DentryLease;
 
 class CDentry : public CObject {
-protected:
-  CDir *dir;
-  const std::string name;
-
-  void first_get();
-  void last_put();
 public:
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
@@ -23,6 +17,10 @@ public:
   // -- states --
   static const int STATE_NEW =          (1<<0);
 
+protected:
+  CDir *dir;
+  const std::string name;
+public:
   CDentry(CDir *d, const std::string &n);
 
   CDir *get_dir() const { return dir; }
@@ -79,6 +77,8 @@ public:
   }
   void push_projected_linkage(CInode *in);
   void pop_projected_linkage();
+  bool is_projected() const { return !projected_linkages.empty(); }
+
   void link_inode_work(CInode *in);
   void link_inode_work(inodeno_t ino, uint8_t d_type);
   void unlink_inode_work();
@@ -117,8 +117,11 @@ public:
   void remove_client_lease(Session *session);
 
 public:
-  elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_dirty, item_dir_dirty;
 
+protected:
+  void first_get();
+  void last_put();
 public: // crap
   static snapid_t first, last;
 };

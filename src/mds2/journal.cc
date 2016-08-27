@@ -59,54 +59,52 @@
 
 void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio)
 {
-#if 0
-  set<CDir*> commit;
+  set<CObjectRef> commit;
 
   dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire" << dendl;
 
   assert(g_conf->mds_kill_journal_expire_at != 1);
 
+  mds->mdcache->lock_log_segments();
   // commit dirs
   for (elist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
     dout(20) << " new_dirfrag " << **p << dendl;
-    assert((*p)->is_auth());
     commit.insert(*p);
   }
   for (elist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
     dout(20) << " dirty_dirfrag " << **p << dendl;
-    assert((*p)->is_auth());
     commit.insert(*p);
   }
   for (elist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
     dout(20) << " dirty_dentry " << **p << dendl;
-    assert((*p)->is_auth());
     commit.insert((*p)->get_dir());
   }
   for (elist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
     dout(20) << " dirty_inode " << **p << dendl;
-    assert((*p)->is_auth());
-    if ((*p)->is_base()) {
-      (*p)->store(gather_bld.new_sub());
-    } else
+    if ((*p)->is_base())
+      commit.insert(*p);
+    else
       commit.insert((*p)->get_parent_dn()->get_dir());
   }
+  mds->mdcache->unlock_log_segments();
 
-  if (!commit.empty()) {
-    for (set<CDir*>::iterator p = commit.begin();
-	 p != commit.end();
-	 ++p) {
-      CDir *dir = *p;
-      assert(dir->is_auth());
-      if (dir->can_auth_pin()) {
-	dout(15) << "try_to_expire committing " << *dir << dendl;
-	dir->commit(0, gather_bld.new_sub(), false, op_prio);
-      } else {
-	dout(15) << "try_to_expire waiting for unfreeze on " << *dir << dendl;
-	dir->add_waiter(CDir::WAIT_UNFREEZE, gather_bld.new_sub());
-      }
+  for (auto p = commit.begin(); p != commit.end(); ++p) {
+    if (CDir *dir = dynamic_cast<CDir*>(p->get())) {
+      dir->get_inode()->mutex_lock();
+      dout(15) << "try_to_expire committing " << *dir << dendl;
+      dir->commit(gather_bld.new_sub(), op_prio);
+      dir->get_inode()->mutex_unlock();
+    } else if (CInode *in = dynamic_cast<CInode*>(p->get())) {
+      dout(15) << "try_to_expire committing " << *in << dendl;
+      in->mutex_lock();
+      in->store(gather_bld.new_sub());
+      in->mutex_unlock();
+    } else {
+      assert(0);
     }
   }
 
+#if 0
   // master ops with possibly uncommitted slaves
   for (set<metareqid_t>::iterator p = uncommitted_masters.begin();
        p != uncommitted_masters.end();
@@ -122,26 +120,43 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     dout(10) << "try_to_expire waiting for uncommitted fragment " << *p << dendl;
     mds->mdcache->wait_for_uncommitted_fragment(*p, gather_bld.new_sub());
   }
+#endif
 
+  map<CInodeRef, int> dirty_locks;
+  mds->mdcache->lock_log_segments();
   // nudge scatterlocks
   for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
-    mds->locker->scatter_nudge(&in->filelock, gather_bld.new_sub());
+    dirty_locks[*p] |= CEPH_LOCK_IFILE;
   }
+  for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
+    dirty_locks[*p] |= CEPH_LOCK_INEST;
+  }
+#if 0
   for (elist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirfragtreelock flush on " << *in << dendl;
     mds->locker->scatter_nudge(&in->dirfragtreelock, gather_bld.new_sub());
   }
-  for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
-    mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
+#endif
+  mds->mdcache->unlock_log_segments();
+
+  for (auto p = dirty_locks.begin(); p != dirty_locks.end(); ++p) {
+    CInode *in = p->first.get();
+    in->mutex_lock();
+    if (p->second & CEPH_LOCK_IFILE) {
+      dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
+      mds->locker->scatter_nudge(&in->filelock, gather_bld.new_sub());
+    }
+    if (p->second & CEPH_LOCK_INEST) {
+      dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
+      mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
+    }
+    in->mutex_unlock();
   }
 
   assert(g_conf->mds_kill_journal_expire_at != 2);
 
+#if 0
   // open files and snap inodes 
   if (!open_files.empty()) {
     assert(!mds->mdlog->is_capped()); // hmm FIXME
@@ -195,9 +210,11 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
       dout(10) << "try_to_expire waiting for open files to rejournal" << dendl;
     }
   }
+#endif
 
   assert(g_conf->mds_kill_journal_expire_at != 3);
 
+#if 0
   // backtraces to be stored/updated
   for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
     CInode *in = *p;
@@ -222,8 +239,10 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     assert(su->waiter == 0);
     su->waiter = gather_bld.new_sub();
   }
+#endif
 
   // idalloc
+  mds->inotable->mutex_lock();
   if (inotablev > mds->inotable->get_committed_version()) {
     dout(10) << "try_to_expire saving inotable table, need " << inotablev
 	      << ", committed is " << mds->inotable->get_committed_version()
@@ -231,19 +250,24 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 	      << dendl;
     mds->inotable->save(gather_bld.new_sub(), inotablev);
   }
+  mds->inotable->mutex_unlock();
 
   // sessionmap
-  if (sessionmapv > mds->sessionmap.get_committed()) {
+  mds->sessionmap->mutex_lock();
+  if (sessionmapv > mds->sessionmap->get_committed()) {
     dout(10) << "try_to_expire saving sessionmap, need " << sessionmapv 
-	      << ", committed is " << mds->sessionmap.get_committed()
-	      << " (" << mds->sessionmap.get_committing() << ")"
+	      << ", committed is " << mds->sessionmap->get_committed()
+	      << " (" << mds->sessionmap->get_committing() << ")"
 	      << dendl;
-    mds->sessionmap.save(gather_bld.new_sub(), sessionmapv);
+    mds->sessionmap->save(gather_bld.new_sub(), sessionmapv);
   }
 
   // updates to sessions for completed_requests
-  mds->sessionmap.save_if_dirty(touched_sessions, &gather_bld);
-  touched_sessions.clear();
+  //mds->sessionmap->save_if_dirty(touched_sessions, &gather_bld);
+  //touched_sessions.clear();
+  mds->sessionmap->mutex_unlock();
+
+#if 0
 
   // pending commit atids
   for (map<int, ceph::unordered_set<version_t> >::iterator p = pending_commit_tids.begin();
@@ -1089,20 +1113,21 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       dir->_mark_dirty(logseg);
 
       const fnode_t *pf = dir->get_fnode();
-      if (!(pf->rstat == pf->accounted_rstat)) {
+      int mask = 0;
+      if (pf->rstat != pf->accounted_rstat) {
+	mask |= CEPH_LOCK_INEST;
 	dout(10) << "EMetaBlob.replay      dirty nestinfo on " << *dir << dendl;
-	mds->locker->mark_updated_scatterlock(&diri->nestlock);
-	//logseg->dirty_dirfrag_nest.push_back(&dir->inode->item_dirty_dirfrag_nest);
       } else {
 	dout(10) << "EMetaBlob.replay      clean nestinfo on " << *dir << dendl;
       }
-      if (!(pf->fragstat == pf->accounted_fragstat)) {
+      if (pf->fragstat != pf->accounted_fragstat) {
+	mask |= CEPH_LOCK_IFILE;
 	dout(10) << "EMetaBlob.replay      dirty fragstat on " << *dir << dendl;
-	mds->locker->mark_updated_scatterlock(&diri->filelock);
-	//logseg->dirty_dirfrag_dir.push_back(&dir->inode->item_dirty_dirfrag_dir);
       } else {
 	dout(10) << "EMetaBlob.replay      clean fragstat on " << *dir << dendl;
       }
+      if (mask)
+	diri->mark_dirty_scattered(logseg, mask);
     }
     /*
     if (lump.is_dirty_dft()) {

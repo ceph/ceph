@@ -12,10 +12,11 @@
  * 
  */
 
+#include "MDSContext.h"
 
 #include "MDSRank.h"
+#include "MDLog.h"
 
-#include "MDSContext.h"
 
 #include "common/dout.h"
 #define dout_subsys ceph_subsys_mds
@@ -31,12 +32,14 @@ MDSRank *MDSInternalContext::get_mds() {
   return mds;
 }
 
-void MDSIOContextBase::complete(int r) {
-  MDSRank *mds = get_mds();
-  assert(mds != NULL);
-  MDSContext::complete(r);
+MDSRank *MDSInternalContextGather::get_mds()
+{
+  derr << "Forbidden call to MDSInternalContextGather::get_mds by " << typeid(*this).name() << dendl;
+  assert(0);
 }
 
-MDSRank *MDSIOContext::get_mds() {
-  return mds;
+void MDSLogContextBase::complete(int r) {
+  assert(write_pos > 0);
+  get_mds()->mdlog->set_safe_pos(write_pos);
+  MDSContext::complete(r);
 }

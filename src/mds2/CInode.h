@@ -1,7 +1,7 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 #include "CObject.h"
 
 #include "SimpleLock.h"
@@ -22,6 +22,16 @@ typedef std::map<string, bufferptr> xattr_map_t;
 class CInode : public CObject {
 public:
   MDCache* const mdcache;
+
+  // pins
+  static const int PIN_DIRFRAG =		-1;
+  static const int PIN_CAPS =			2;  // client caps
+  static const int PIN_DIRTYRSTAT =		21;
+  // states
+  static const unsigned STATE_FREEING =		(1<<0);
+  static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
+  static const unsigned STATE_DIRTYRSTAT =	(1<<15);
+
 protected:
 
   inode_t inode;
@@ -46,19 +56,7 @@ protected:
   list<CDentry*> projected_parent;
 
   map<frag_t,CDir*> dirfrags;
-
-  void first_get();
-  void last_put();
 public:
-  // pins
-  static const int PIN_DIRFRAG =		-1;
-  static const int PIN_CAPS =			2;  // client caps
-  static const int PIN_DIRTYRSTAT =		21;
-  // states
-  static const unsigned STATE_FREEING =		(1<<0);
-  static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
-  static const unsigned STATE_DIRTYRSTAT =	(1<<15);
-
   CInode(MDCache *_mdcache);
 
   inodeno_t ino() const { return inode.ino; }
@@ -183,6 +181,18 @@ public:
 		       unsigned max_bytes=0, int getattr_wants=0);
   void encode_cap_message(MClientCaps *m, Capability *cap);
 
+
+
+  object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
+  void encode(bufferlist &bl, uint64_t features);
+  void encode_bare(bufferlist &bl, uint64_t features);
+
+protected:
+  void _stored(int r, version_t v, MDSInternalContextBase *fin);
+  friend class C_Inode_Stored;
+public:
+  void store(MDSInternalContextBase *fin);
+
 protected:
   static LockType versionlock_type;
   static LockType authlock_type;
@@ -295,16 +305,23 @@ public:
   void finish_scatter_gather_update_accounted(int type, const MutationRef& mut,
 		  			      EMetaBlob *metablob);
   void clear_dirty_scattered(int type);
+  void mark_dirty_scattered(LogSegment *ls, int mask);
 
+  // list item node for when we have unpropagated rstat data
+  elist<CInode*>::item item_dirty_rstat;
   bool is_dirty_rstat() { return state_test(STATE_DIRTYRSTAT); }
   void mark_dirty_rstat();
   void clear_dirty_rstat();
-
 public:
-  elist<CInode*>::item dirty_rstat_item;
+
+  // LogSegment lists i (may) belong to
   elist<CInode*>::item item_dirty;
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
+
+protected:
+  void first_get();
+  void last_put();
 
 public: // crap
   static snapid_t first, last;

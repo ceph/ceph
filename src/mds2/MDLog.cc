@@ -19,7 +19,7 @@
 #include "MDSContext.h"
 
 #include "osdc/Journaler.h"
-#include "mds/JournalPointer.h"
+#include "JournalPointer.h"
 
 #include "common/entity_name.h"
 #include "common/perf_counters.h"
@@ -113,16 +113,6 @@ class C_MDL_WriteError : public MDSInternalContextBase {
   explicit C_MDL_WriteError(MDLog *m) : mdlog(m) {}
 };
 
-
-void MDLog::write_head(MDSInternalContextBase *c) 
-{
-  C_OnFinisher *fin = NULL;
-  if (c != NULL) {
-    fin = new C_OnFinisher(new C_IO_Wrapper(mds, c), mds->finisher);
-  }
-  journaler->write_head(fin);
-}
-
 uint64_t MDLog::get_read_pos()
 {
   return journaler->get_read_pos(); 
@@ -139,7 +129,6 @@ uint64_t MDLog::get_safe_pos()
 }
 
 
-
 void MDLog::create(MDSInternalContextBase *c)
 {
   dout(5) << "create empty log" << dendl;
@@ -147,7 +136,7 @@ void MDLog::create(MDSInternalContextBase *c)
   C_GatherBuilder gather(g_ceph_context);
   // This requires an OnFinisher wrapper because Journaler will call back the completion for write_head inside its own lock
   // XXX but should maybe that be handled inside Journaler?
-  gather.set_finisher(new C_OnFinisher(new C_IO_Wrapper(mds, c), mds->finisher));
+  gather.set_finisher(new C_OnFinisher(c, mds->finisher));
 
   // The inode of the default Journaler we will create
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
@@ -269,7 +258,7 @@ void MDLog::cancel_entry(LogEvent *le)
   delete le;
 }
 
-void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c, bool flush)
+void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c, bool flush)
 {
   assert(submit_mutex.is_locked_by_me());
   assert(!mds->is_any_replay());
@@ -329,30 +318,20 @@ void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c, bool flush)
   }
 }
 
-/**
- * Invoked on the flush after each entry submitted
- */
-class C_MDL_Flushed : public MDSIOContextBase {
-  protected:
+void MDLog::set_safe_pos(uint64_t pos)
+{
+  assert(pos >= safe_pos.read());
+  safe_pos.set(pos);
+}
+
+class MDSLogContextNoop : public MDSLogContextBase {
+protected:
   MDLog *mdlog;
-  MDSRank *get_mds() {return mdlog->mds;}
-  uint64_t flushed_to;
-  MDSInternalContextBase *wrapped;
-
-  void finish(int r) {
-    if (wrapped) {
-      wrapped->complete(r);
-    }
-
-    mdlog->submit_mutex.Lock();
-    assert(mdlog->safe_pos <= flushed_to);
-    mdlog->safe_pos = flushed_to;
-    mdlog->submit_mutex.Unlock();
-  }
-
-  public:
-  C_MDL_Flushed(MDLog *m, uint64_t ft, MDSInternalContextBase *w)
-    : mdlog(m), flushed_to(ft), wrapped(w) {}
+  MDSRank *get_mds() {return mdlog->mds; }
+  void finish(int r) { }
+public:
+  MDSLogContextNoop(MDLog *l, uint64_t pos)
+    : MDSLogContextBase(pos), mdlog(l) {}
 };
 
 void MDLog::_submit_thread()
@@ -403,9 +382,13 @@ void MDLog::_submit_thread()
       const uint64_t new_write_pos = journaler->append_entry(bl);  // bl is destroyed.
       ls->end = new_write_pos;
 
-      journaler->wait_for_flush(new C_MDL_Flushed(
-            this, new_write_pos, data.fin));
-
+      if (data.fin) {
+	dynamic_cast<MDSLogContextBase*>(data.fin)->set_write_pos(new_write_pos);
+      } else {
+	data.fin = new MDSLogContextNoop(this, new_write_pos);
+      }
+  
+      journaler->wait_for_flush(new C_OnFinisher(data.fin, mds->finisher));
       if (data.flush)
 	journaler->flush();
 
@@ -414,8 +397,8 @@ void MDLog::_submit_thread()
 
       delete le;
     } else {
-      journaler->wait_for_flush(new C_MDL_Flushed(
-            this, journaler->get_write_pos(), data.fin));
+      if (data.fin)
+	journaler->wait_for_flush(new C_OnFinisher(data.fin, mds->finisher));
       if (data.flush)
 	journaler->flush();
     }
@@ -450,7 +433,7 @@ void MDLog::wait_for_safe(MDSInternalContextBase *c)
   submit_mutex.Unlock();
 
   if (no_pending && c)
-    journaler->wait_for_flush(new C_IO_Wrapper(mds, c));
+    journaler->wait_for_flush(new C_OnFinisher(c, mds->finisher));
 }
 
 void MDLog::flush()
@@ -561,7 +544,7 @@ void MDLog::_prepare_new_segment()
   mds->mdcache->advance_stray();
 }
 
-void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
+void MDLog::_journal_segment_subtree_map(MDSLogContextBase *onsync)
 {
   assert(submit_mutex.is_locked_by_me());
 
@@ -630,7 +613,7 @@ void MDLog::trim(int m)
     ++p;
     
     if (pending_events.count(ls->seq) ||
-	ls->end > safe_pos) {
+	ls->end > safe_pos.read()) {
       dout(5) << "trim segment " << ls->seq << "/" << ls->offset << ", not fully flushed yet, safe "
 	      << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
       break;
@@ -692,7 +675,7 @@ int MDLog::trim_all()
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end() &&
-	 p->first < last_seq && p->second->end <= safe_pos) {
+	 p->first < last_seq && p->second->end <= safe_pos.read()) {
     LogSegment *ls = p->second;
     ++p;
 
@@ -786,7 +769,8 @@ void MDLog::_trim_expired_segments()
       
     // this was the oldest segment, adjust expire pos
     if (journaler->get_expire_pos() < ls->end) {
-      journaler->set_expire_pos(ls->end);
+      // FIXME: log reply code is not finished
+      //journaler->set_expire_pos(ls->end);
     }
     
     logger->set(l_mdl_expos, ls->offset);
@@ -1390,7 +1374,7 @@ void MDLog::_replay_thread()
     logger->set(l_mdl_expos, journaler->get_expire_pos());
   }
 
-  safe_pos = journaler->get_write_safe_pos();
+  set_safe_pos(journaler->get_write_safe_pos());
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
   {

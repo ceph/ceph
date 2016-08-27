@@ -26,7 +26,7 @@ using namespace std;
 #include "common/strtol.h"
 
 #include "mon/MonMap.h"
-#include "mds/MDSDaemon.h"
+#include "MDSDaemon.h"
 
 #include "msg/Messenger.h"
 

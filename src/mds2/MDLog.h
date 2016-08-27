@@ -39,6 +39,7 @@ enum {
 
 #include "include/types.h"
 #include "include/Context.h"
+#include "include/atomic.h"
 
 #include "common/Thread.h"
 #include "common/Cond.h"
@@ -61,10 +62,9 @@ using std::map;
 
 #include "common/Finisher.h"
 
-
 class MDLog {
 public:
-  MDSRank *mds;
+  MDSRank* const mds;
 protected:
   int num_events; // in events
 
@@ -75,7 +75,7 @@ protected:
   // Log position which is persistent *and* for which
   // submit_entry wait_for_safe callbacks have already
   // been called.
-  uint64_t safe_pos;
+  ceph::atomic64_t safe_pos;
 
   inodeno_t ino;
   Journaler *journaler;
@@ -203,7 +203,7 @@ private:
   // -- segments --
   void _start_new_segment();
   void _prepare_new_segment();
-  void _journal_segment_subtree_map(MDSInternalContextBase *onsync);
+  void _journal_segment_subtree_map(MDSLogContextBase *onsync);
   LogSegment *_get_current_segment() { 
     assert(!segments.empty());
     return segments.rbegin()->second;
@@ -211,6 +211,8 @@ private:
   LogSegment *_peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
   }
+  void set_safe_pos(uint64_t pos);
+  friend class MDSLogContextBase;
 public:
   void start_new_segment() {
     Mutex::Locker l(submit_mutex);
@@ -220,7 +222,7 @@ public:
     Mutex::Locker l(submit_mutex);
     _prepare_new_segment();
   }
-  void journal_segment_subtree_map(MDSInternalContextBase *onsync=NULL) {
+  void journal_segment_subtree_map(MDSLogContextBase *onsync=NULL) {
     submit_mutex.Lock();
     _journal_segment_subtree_map(onsync);
     submit_mutex.Unlock();
@@ -270,14 +272,14 @@ public:
     _start_entry(e);
   }
   void cancel_entry(LogEvent *e);
-  void _submit_entry(LogEvent *e, MDSInternalContextBase *c, bool flush);
-  void submit_entry(LogEvent *e, MDSContextBase *c=0, bool flush=false) {
+  void _submit_entry(LogEvent *e, MDSLogContextBase *c, bool flush);
+  void submit_entry(LogEvent *e, MDSLogContextBase *c=0, bool flush=false) {
     assert(submit_mutex.is_locked_by_me());
     _submit_entry(e, c, flush);
     submit_cond.Signal();
     submit_mutex.Unlock();
   }
-  void start_submit_entry(LogEvent *e, MDSInternalContextBase *c=0, bool flush=false) {
+  void start_submit_entry(LogEvent *e, MDSLogContextBase *c=0, bool flush=false) {
     Mutex::Locker l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c, flush);
@@ -308,9 +310,6 @@ public:
   {
     return expiring_segments.empty() && expired_segments.empty();
   };
-
-private:
-  void write_head(MDSInternalContextBase *onfinish);
 
 public:
   void create(MDSInternalContextBase *onfinish);  // fresh, empty log! 

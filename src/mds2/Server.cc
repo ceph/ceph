@@ -23,7 +23,7 @@
 
 #define dout_subsys ceph_subsys_mds
 
-class ServerContext : public MDSInternalContextBase {
+class ServerContext : public MDSLogContextBase {
 protected:
   Server *server;
   MDSRank *get_mds() { return server->mds; }
@@ -202,14 +202,18 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
     session->mutex_lock();
   }
 
+  client_t client = session->get_client();
   while (!session->caps.empty()) {
     Capability *cap = session->caps.front();
     CInodeRef in = cap->get_inode();
     session->mutex_unlock();
 
     in->mutex_lock();
-    dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-    locker->remove_client_cap(in.get(), session);
+    cap = in->get_client_cap(client);
+    if (cap) {
+      dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
+      locker->remove_client_cap(in.get(), session);
+    }
     in->mutex_unlock();
     in.reset();
 
@@ -222,8 +226,11 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
     session->mutex_unlock();
 
     dn->mutex_lock();
-    dout(20) << " killing lease on " << *dn << dendl;
-    locker->remove_client_lease(dn.get(), session);
+    l = dn->get_client_lease(client);
+    if (l) {
+      dout(20) << " killing lease " << l << " on " << *dn << dendl;
+      locker->remove_client_lease(dn.get(), session);
+    }
     dn->mutex_unlock();
     dn.reset();
 
@@ -849,7 +856,7 @@ int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
 }
 
 void Server::journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
-			       LogEvent *le, MDSInternalContextBase *fin, bool flush)
+			       LogEvent *le, MDSLogContextBase *fin, bool flush)
 {
   // start journal
   mds->mdlog->start_entry(le);

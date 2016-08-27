@@ -16,7 +16,7 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 #include "CObject.h"
 
 // -- lock types --
@@ -46,7 +46,7 @@ struct MutationImpl;
 typedef ceph::shared_ptr<MutationImpl> MutationRef;
 
 extern "C" {
-#include "mds/locks.h"
+#include "locks.h"
 }
 
 

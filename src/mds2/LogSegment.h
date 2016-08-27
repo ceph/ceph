@@ -18,7 +18,7 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"

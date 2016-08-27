@@ -15,7 +15,7 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
-#include "mds/mdstypes.h"
+#include "mdstypes.h"
 #include "CObject.h"
 #include "SimpleLock.h"
 #include "include/elist.h"
@@ -25,6 +25,7 @@ class LogSegment;
 class Session;
 class MClientRequest;
 class filepath;
+class ScatterLock;
 
 struct MutationImpl {
   metareqid_t reqid;
@@ -38,6 +39,7 @@ struct MutationImpl {
 
   // for applying projected inode/fnode changes
   list<CObject*> projected_nodes[2];
+  map<CInode*, int> updated_locks;
 
   // mutex locks we hold
   set<CObject*> locked_objects;
@@ -89,6 +91,7 @@ struct MutationImpl {
 
   void add_projected_inode(CInode *in, bool early);
   void add_projected_fnode(CDir *dir, bool early);
+  void add_updated_lock(CInode *in, int mask);
   void pop_and_dirty_projected_nodes();
   void pop_and_dirty_early_projected_nodes();
   CObject* pop_early_projected_node();

@@ -28,8 +28,8 @@ using std::set;
 #include "common/Mutex.h"
 #include "msg/Message.h"
 
-#include "mds/mdstypes.h"
-#include "mds/MDSAuthCaps.h"
+#include "mdstypes.h"
+#include "MDSAuthCaps.h"
 #include "Capability.h"
 #include "DentryLease.h"
 
@@ -647,6 +647,7 @@ public:
    */
   void replay_advance_version();
 
+#if 0
   /**
    * For these session IDs, if a session exists with this ID, and it has
    * dirty completed_requests, then persist it immediately
@@ -655,6 +656,7 @@ public:
    */
   void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                      MDSGatherBuilder *gather_bld);
+#endif
 };
 
 

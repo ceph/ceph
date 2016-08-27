@@ -9,11 +9,24 @@
 
 #include "events/EMetaBlob.h"
 
+#include "osdc/Objecter.h"
 #include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
+
+class CDirContext : public MDSInternalContextBase
+{
+protected:
+  CDirRef dir;
+  MDSRank* get_mds() { return dir->mdcache->mds; }
+
+public:
+  explicit CDirContext(CDir *d) : dir(d) {
+    assert(dir != NULL);
+  }
+};
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
@@ -60,18 +73,11 @@ ostream& operator<<(ostream& out, const CDir& dir)
 
 CDir::CDir(CInode *i) :
   CObject("CDir"), mdcache(i->mdcache), inode(i),
-  dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item))
+  projected_version(0),
+  committing_version(0), committed_version(0),
+  dirty_dentries(member_offset(CDentry, item_dir_dirty)),
+  dirty_rstat_inodes(member_offset(CInode, item_dirty_rstat))
 {
-}
-
-void CDir::first_get()
-{
-  inode->get(CInode::PIN_DIRFRAG);
-}
-
-void CDir::last_put()
-{
-  inode->put(CInode::PIN_DIRFRAG);
 }
 
 dirfrag_t CDir::dirfrag() const
@@ -124,7 +130,6 @@ version_t CDir::pre_dirty(version_t min)
 
 void CDir::mark_dirty(version_t pv, LogSegment *ls)
 {
-  inode->mutex_assert_locked_by_me();
   assert(get_version() < pv);
   assert(pv <= projected_version);
   fnode.version = pv;
@@ -133,32 +138,60 @@ void CDir::mark_dirty(version_t pv, LogSegment *ls)
 
 void CDir::_mark_dirty(LogSegment *ls)
 {
+  inode->mutex_assert_locked_by_me();
   if (!state_test(STATE_DIRTY)) {
     dout(10) << "mark_dirty (was clean) " << *this << " version " << get_version() << dendl;
     state_set(STATE_DIRTY);
     get(PIN_DIRTY);
- //   assert(ls);
+    assert(ls);
   } else {
     dout(10) << "mark_dirty (already dirty) " << *this << " version " << get_version() << dendl;
   }
-  /*
+
   if (ls) {
+    mdcache->lock_log_segments();
     ls->dirty_dirfrags.push_back(&item_dirty);
-    if (committed_version == 0 && !item_new.is_on_list())
+    if (committed_version == 0 && !is_new()) {
+      state_set(STATE_NEW);
       ls->new_dirfrags.push_back(&item_new);
+    }
+    mdcache->unlock_log_segments();
   }
-  */
 }
 
 void CDir::mark_clean()
 {
   dout(10) << "mark_clean " << *this << " version " << get_version() << dendl;
   if (state_test(STATE_DIRTY)) {
-//    item_dirty.remove_myself();
-//    item_new.remove_myself();
+    mdcache->lock_log_segments();
+    item_dirty.remove_myself();
+    item_new.remove_myself();
+    mdcache->unlock_log_segments();
 
-    state_clear(STATE_DIRTY);
+    state_clear(STATE_DIRTY|STATE_NEW);
     put(PIN_DIRTY);
+  }
+}
+
+void CDir::add_dirty_dentry(CDentry *dn)
+{
+  inode->mutex_assert_locked_by_me();
+  dirty_dentries.push_back(&dn->item_dir_dirty);
+}
+
+void CDir::remove_dirty_dentry(CDentry *dn)
+{
+  inode->mutex_assert_locked_by_me();
+  dn->item_dir_dirty.remove_myself();
+}
+
+void CDir::clear_new()
+{
+  if (state_test(STATE_NEW)) {
+    mdcache->lock_log_segments();
+    item_new.remove_myself();
+    mdcache->unlock_log_segments();
+    state_clear(STATE_DIRTY);
   }
 }
 
@@ -292,16 +325,14 @@ void CDir::resync_accounted_rstat(fnode_t *pf)
 void CDir::add_dirty_rstat_inode(CInode *in)
 {
   inode->mutex_assert_locked_by_me();
-  in->get(CInode::PIN_DIRTYRSTAT);
-  dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
+  dirty_rstat_inodes.push_back(&in->item_dirty_rstat);
   mdcache->locker->mark_updated_scatterlock(&inode->nestlock);
 }
 
 void CDir::remove_dirty_rstat_inode(CInode *in)
 {
   inode->mutex_assert_locked_by_me();
-  in->dirty_rstat_item.remove_myself();
-  in->put(CInode::PIN_DIRTYRSTAT);
+  in->item_dirty_rstat.remove_myself();
 }
 
 void CDir::assimilate_dirty_rstat_inodes(const MutationRef& mut)
@@ -349,11 +380,353 @@ void CDir::assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlo
     in->mutex_unlock();
   }
 
-  /*
-  if (!dirty_rstat_inodes.empty())
-    mdcache->locker->mark_updated_scatterlock(&inode->nestlock);
-  */
+  assert(dirty_rstat_inodes.empty());
 }
+
+// -----------------------
+// COMMIT
+
+/**
+ * commit
+ *
+ * @param want - min version i want committed
+ * @param c - callback for completion
+ */
+void CDir::commit(MDSInternalContextBase *c, int op_prio)
+{
+  inode->mutex_assert_locked_by_me();
+
+  dout(10) << "commit on " << *this << dendl;
+
+  version_t want = get_version();
+  assert(want >= committed_version);
+
+  if (committed_version == want) {
+    dout(10) << "already committed " << committed_version << " == " << want << dendl;
+    assert(!state_test(STATE_COMMITTING));
+    mdcache->mds->queue_context(c);
+    return;
+  }
+
+#if 0
+  if (inode->inode.nlink == 0 && !inode->snaprealm) {
+    dout(7) << "commit dirfrag for unlinked directory, mark clean" << dendl;
+    try_remove_dentries_for_stray();
+    if (c)
+      cache->mds->queue_waiter(c);
+    return;
+  }
+#endif
+
+  // auth_pin on first waiter
+  if (waiting_for_commit.empty())
+    get(PIN_COMITTING);
+  if (c)
+    waiting_for_commit[want].push_back(c);
+  else
+    waiting_for_commit[want].size();
+
+  // alrady committed an older version?
+  if (committing_version > committed_version) {
+    dout(10) << "already committing older " << committing_version << ", waiting for that to finish" << dendl;
+    assert(state_test(STATE_COMMITTING));
+    return;
+  }
+
+  // commit.
+  committing_version = want;
+
+  // mark committing (if not already)
+  assert(!state_test(STATE_COMMITTING));
+  dout(10) << "marking committing" << dendl;
+  state_set(STATE_COMMITTING);
+
+  // ok.
+  _omap_commit(op_prio);
+}
+
+class C_Dir_Committed : public CDirContext {
+  version_t version;
+public:
+  C_Dir_Committed(CDir *d, version_t v) : CDirContext(d), version(v) { }
+  void finish(int r) {
+    dir->_committed(r, version);
+  }
+};
+
+object_t CDir::get_ondisk_object() const {
+  dirfrag_t df = dirfrag();
+  return file_object_t(df.ino, df.frag);
+}
+
+/**
+ * Flush out the modified dentries in this dir. Keep the bufferlist
+ * below max_write_size;
+ */
+void CDir::_omap_commit(int op_prio)
+{
+  dout(10) << "_omap_commit" << dendl;
+
+  unsigned max_write_size = /* FIXME: mdcache->max_dir_commit_size; */ 128 * 1024 * 1024;
+  unsigned write_size = 0;
+
+  if (op_prio < 0)
+    op_prio = CEPH_MSG_PRIO_DEFAULT;
+
+
+  set<string> to_remove;
+  map<string, bufferlist> to_set;
+
+  C_GatherBuilder gather(g_ceph_context,
+			 new C_OnFinisher(new C_Dir_Committed(this, get_version()),
+					  mdcache->mds->finisher));
+
+  SnapContext snapc;
+  object_t oid = get_ondisk_object();
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+
+  for (auto p = dirty_dentries.begin(); !p.end(); ) {
+    CDentry *dn = *p;
+    ++p;
+
+    string key;
+    dn->get_key().encode(key);
+
+    assert(dn->is_dirty());
+
+    if (dn->get_linkage()->is_null()) {
+      dout(10) << " rm " << dn->get_name() << " " << *dn << dendl;
+      write_size += key.length();
+      to_remove.insert(key);
+    } else {
+      dout(10) << " set " << dn->get_name() << " " << *dn << dendl;
+      bufferlist dnbl;
+      _encode_dentry(dn, dnbl);
+      write_size += key.length() + dnbl.length();
+      to_set[key].swap(dnbl);
+    }
+
+    if (write_size >= max_write_size) {
+      ObjectOperation op;
+      op.priority = op_prio;
+
+      // don't create new dirfrag blindly
+      if (!is_new())
+	op.stat(NULL, (ceph::real_time*) NULL, NULL);
+
+      if (!to_set.empty())
+	op.omap_set(to_set);
+      if (!to_remove.empty())
+	op.omap_rm_keys(to_remove);
+
+      mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
+				   ceph::real_clock::now(g_ceph_context),
+				   0, NULL, gather.new_sub());
+
+      write_size = 0;
+      to_set.clear();
+      to_remove.clear();
+    }
+  }
+
+  ObjectOperation op;
+  op.priority = op_prio;
+
+  // don't create new dirfrag blindly
+  if (!is_new())
+    op.stat(NULL, (ceph::real_time*)NULL, NULL);
+
+  /*
+   * save the header at the last moment.. If we were to send it off before other
+   * updates, but die before sending them all, we'd think that the on-disk state
+   * was fully committed even though it wasn't! However, since the messages are
+   * strictly ordered between the MDS and the OSD, and since messages to a given
+   * PG are strictly ordered, if we simply send the message containing the header
+   * off last, we cannot get our header into an incorrect state.
+   */
+  bufferlist header;
+  ::encode(fnode, header);
+  op.omap_set_header(header);
+
+  if (!to_set.empty())
+    op.omap_set(to_set);
+  if (!to_remove.empty())
+    op.omap_rm_keys(to_remove);
+
+  mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
+		  		 ceph::real_clock::now(g_ceph_context),
+				 0, NULL, gather.new_sub());
+
+  gather.activate();
+}
+
+void CDir::_encode_dentry(CDentry *dn, bufferlist& bl)
+{
+  // clear dentry NEW flag, if any.  we can no longer silently drop it.
+  dn->clear_new();
+
+  ::encode(dn->first, bl);
+
+  // primary or remote?
+  if (dn->get_linkage()->is_remote()) {
+    inodeno_t ino = dn->get_linkage()->get_remote_ino();
+    unsigned char d_type = dn->get_linkage()->get_remote_d_type();
+    dout(14) << " pos " << bl.length() << " dn '" << dn->get_name() << "' remote ino " << ino << dendl;
+    
+    // marker, name, ino
+    bl.append('L');         // remote link
+    ::encode(ino, bl);
+    ::encode(d_type, bl);
+  } else if (dn->get_linkage()->is_primary()) {
+    // primary link
+    CInode *in = dn->get_linkage()->get_inode();
+    assert(in);
+    
+    dout(14) << " pos " << bl.length() << " dn '" << dn->get_name() << "' inode " << *in << dendl;
+    
+    // marker, name, inode, [symlink string]
+    bl.append('I');         // inode
+
+    /*
+    if (in->is_multiversion()) {
+      if (!in->snaprealm) {
+	if (snaps)
+	  in->purge_stale_snap_data(*snaps);
+      } else if (in->snaprealm->have_past_parents_open()) {
+	in->purge_stale_snap_data(in->snaprealm->get_snaps());
+      }
+    }
+    */
+
+    in->encode_bare(bl, mdcache->mds->mdsmap->get_up_features());
+  } else {
+    assert(0);
+  }
+}
+
+
+/**
+ * _committed
+ *
+ * @param v version i just committed
+ */
+void CDir::_committed(int r, version_t v)
+{
+  if (r < 0) {
+#if 0
+    // the directory could be partly purged during MDS failover
+    if (r == -ENOENT && committed_version == 0 &&
+	inode->inode.nlink == 0 && inode->snaprealm) {
+      inode->state_set(CInode::STATE_MISSINGOBJS);
+      r = 0;
+    }
+#endif
+    if (r < 0) {
+      dout(1) << "commit error " << r << " v " << v << dendl;
+      mdcache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
+	      			  << " errno " << r << "\n";
+      mdcache->mds->handle_write_error(r);
+      return;
+    }
+  }
+
+  inode->mutex_lock();
+
+  dout(10) << "_committed v " << v << " on " << *this << dendl;
+
+  bool stray = inode->is_stray();
+
+  // take note.
+  assert(v > committed_version);
+  assert(v <= committing_version);
+  committed_version = v;
+
+  // _all_ commits done?
+  if (committing_version == committed_version) 
+    state_clear(CDir::STATE_COMMITTING);
+  
+  // dir clean?
+  if (committed_version == get_version()) {
+    mark_clean();
+  } else {
+    // _any_ commit, even if we've been redirtied, means we're no longer new.
+    clear_new();
+  }
+
+  // dentries clean?
+  for (auto p = dirty_dentries.begin(); !p.end(); ) {
+    CDentry *dn = *p;
+    ++p;
+    
+    assert(dn->is_dirty());
+    // inode?
+    if (dn->get_linkage()->is_primary()) {
+      CInodeRef in = dn->get_linkage()->get_inode();
+      assert(in);
+
+      in->mutex_lock();
+      assert(in->is_dirty());
+      if (committed_version >= in->get_version()) {
+	dout(15) << " dir " << committed_version << " >= inode " << in->get_version() << " now clean " << *in << dendl;
+	in->mark_clean();
+      }
+      in->mutex_unlock();
+    }
+
+    // dentry
+    if (committed_version >= dn->get_version()) {
+      dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
+      dn->mark_clean();
+
+      // drop clean null stray dentries immediately
+      if (stray && 
+	  dn->get_num_ref() == 0 &&
+	  !dn->is_projected() &&
+	  dn->get_linkage()->is_null())
+	remove_dentry(dn);
+    } 
+  }
+
+  // finishers?
+  bool were_waiting = !waiting_for_commit.empty();
+  for (auto p = waiting_for_commit.begin(); p != waiting_for_commit.end(); ) {
+    auto n = p;
+    ++n;
+    if (p->first > committed_version) {
+      if (!state_test(STATE_COMMITTING)) {
+	dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
+	commit(NULL, -1);
+      }
+      break;
+    }
+    mdcache->mds->queue_contexts(p->second);
+    waiting_for_commit.erase(p);
+    p = n;
+  } 
+
+#if 0
+  // try drop dentries in this dirfrag if it's about to be purged
+  if (inode->inode.nlink == 0 && inode->snaprealm)
+    cache->maybe_eval_stray(inode, true);
+#endif
+
+  // unpin if we kicked the last waiter.
+  if (were_waiting && waiting_for_commit.empty())
+    put(PIN_COMITTING);
+
+  inode->mutex_unlock();
+}
+
+void CDir::first_get()
+{
+  inode->get(CInode::PIN_DIRFRAG);
+}
+
+void CDir::last_put()
+{
+  inode->put(CInode::PIN_DIRFRAG);
+}
+
 
 void intrusive_ptr_add_ref(CDir *o)
 {

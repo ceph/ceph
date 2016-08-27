@@ -245,6 +245,7 @@ protected:
 public:
   Finisher *finisher;
   void queue_context(MDSInternalContextBase *c);
+  void queue_contexts(std::list<MDSInternalContextBase*>& ls);
 
   struct OpWQ: public ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t> {
     MDSRank *mds;

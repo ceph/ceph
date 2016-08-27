@@ -29,7 +29,7 @@
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
 
-class SessionMapIOContext : public MDSIOContextBase
+class SessionMapIOContext : public MDSInternalContextBase
 {
   protected:
     SessionMap *sessionmap;
@@ -130,7 +130,6 @@ void SessionMapStore::decode_values(std::map<std::string, bufferlist> &session_v
   }
 }
 
-#if 0
 /**
  * An OMAP read finished.
  */
@@ -417,7 +416,6 @@ void SessionMap::_save_finish(version_t v)
   finish_contexts(g_ceph_context, commit_waiters[v]);
   commit_waiters.erase(v);
 }
-#endif
 
 
 /**
