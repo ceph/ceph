@@ -5162,11 +5162,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	if (!obs.exists) {
-	  if (pool.info.require_rollback() && op.extent.offset) {
+	  if (pool.info.requires_aligned_append() && op.extent.offset) {
 	    result = -EOPNOTSUPP;
 	    break;
 	  }
-	} else if (op.extent.offset != oi.size && pool.info.require_rollback()) {
+	} else if (op.extent.offset != oi.size &&
+		   pool.info.requires_aligned_append()) {
 	  result = -EOPNOTSUPP;
 	  break;
 	}
