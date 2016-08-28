@@ -139,8 +139,8 @@ Timeline
 .. _10.2.0: ../release-notes#v10.2.0-jewel
 .. _Jewel: ../release-notes#v10.2.0-jewel
 
-.. _10.1.2: ../release-notes#v10-1-2
-.. _10.1.1: ../release-notes#v10-1-1
+.. _10.1.2: ../release-notes#v10-1-2-jewel-release-candidate
+.. _10.1.1: ../release-notes#v10-1-1-jewel-release-candidate
 .. _10.1.0: ../release-notes#v10-1-0-jewel-release-candidate
 .. _10.0.5: ../release-notes#v10-0-5
 .. _10.0.3: ../release-notes#v10-0-3
