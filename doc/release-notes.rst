@@ -14,6 +14,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 Notable Changes
 ---------------
 
+* build/ops: rocksdb do not link against tcmalloc if it's disabled (`issue#14799 <http://tracker.ceph.com/issues/14799`_, `pr#10750 <http://github.com/ceph/ceph/pull/10750>`_, Sage Weil, Kefu Chai)
 * build/ops: Add -D_LARGEFILE64_SOURCE to Linux build. (`issue#16611 <http://tracker.ceph.com/issues/16611>`_, `pr#10182 <http://github.com/ceph/ceph/pull/10182>`_, Ira Cooper)
 * build/ops: boost uuid makes valgrind complain (`issue#12736 <http://tracker.ceph.com/issues/12736>`_, `pr#9741 <http://github.com/ceph/ceph/pull/9741>`_, Sage Weil, Rohan Mars)
 * build/ops: ceph-disk s/by-parttype-uuid/by-parttypeuuid/ (`issue#15867 <http://tracker.ceph.com/issues/15867>`_, `pr#9107 <http://github.com/ceph/ceph/pull/9107>`_, Nathan Cutler)
