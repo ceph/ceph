@@ -989,6 +989,7 @@ OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
 OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
