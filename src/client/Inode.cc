@@ -359,6 +359,7 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
   f->dump_int("time_warp_seq", time_warp_seq);
+  f->dump_int("change_attr", change_attr);
 
   f->dump_object("layout", layout);
   if (is_dir()) {
