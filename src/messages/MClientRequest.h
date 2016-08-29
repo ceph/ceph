@@ -50,7 +50,7 @@ class MClientRequest : public Message {
   static const int COMPAT_VERSION = 1;
 
 public:
-  struct ceph_mds_request_head head;
+  struct ceph_mds_request_head_legacy head;
   utime_t stamp;
 
   struct Release {
