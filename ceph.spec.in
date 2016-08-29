@@ -287,13 +287,6 @@ namespace, coordinating access to the shared OSD cluster.
 Summary:	Ceph Monitor Daemon
 Group:		System Environment/Base
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
-# For ceph-rest-api
-%if 0%{?fedora} || 0%{?rhel}
-Requires:      python-flask
-%endif
-%if 0%{?suse_version}
-Requires:      python-Flask
-%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -1055,10 +1048,7 @@ fi
 #################################################################################
 %files mon
 %{_bindir}/ceph-mon
-%{_bindir}/ceph-rest-api
 %{_mandir}/man8/ceph-mon.8*
-%{_mandir}/man8/ceph-rest-api.8*
-%{python_sitelib}/ceph_rest_api.py*
 %if 0%{?_with_systemd}
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target

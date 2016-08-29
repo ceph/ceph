@@ -2,7 +2,6 @@ ceph_sbin_SCRIPTS = ceph-create-keys
 
 bin_SCRIPTS += \
 	ceph-run \
-	ceph-rest-api \
 	ceph-debugpack \
 	ceph-crush-location
 

@@ -126,7 +126,6 @@ EXTRA_DIST += \
 	ceph.in \
 	ceph-disk-udev \
 	ceph-create-keys \
-	ceph-rest-api \
 	ceph-crush-location \
 	mount.fuse.ceph \
 	rbd-replay-many \

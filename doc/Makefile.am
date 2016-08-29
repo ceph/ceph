@@ -15,7 +15,6 @@ EXTRA_DIST = \
 	man/8/ceph-osd.rst	\
 	man/8/ceph-post-file.rst	\
 	man/8/ceph-rbdnamer.rst	\
-	man/8/ceph-rest-api.rst	\
 	man/8/ceph.rst	\
 	man/8/ceph-run.rst	\
 	man/8/ceph-syn.rst	\
