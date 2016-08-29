@@ -28,7 +28,7 @@ class ConsoleLog(Task):
             if not hasattr(remote.console, 'spawn_sol_log'):
                 log.debug("%s does not support IPMI; excluding",
                           remote.shortname)
-            elif not remote.console.has_credentials:
+            elif not remote.console.has_ipmi_credentials:
                 log.debug("IPMI credentials not found for %s; excluding",
                           remote.shortname)
             else:

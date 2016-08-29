@@ -32,13 +32,13 @@ class PhysicalConsole():
         self.ipmiuser = ipmiuser or config.ipmi_user
         self.ipmipass = ipmipass or config.ipmi_password
         self.ipmidomain = ipmidomain or config.ipmi_domain
-        self.has_credentials = all(map(
+        self.has_ipmi_credentials = all(map(
             lambda x: x is not None,
             [self.ipmiuser, self.ipmipass, self.ipmidomain]
         ))
 
     def _check_credentials(self):
-        if not self.has_credentials:
+        if not self.has_ipmi_credentials:
             log.error(
                 "Must set ipmi_user, ipmi_password, and ipmi_domain in " \
                 ".teuthology.yaml"
