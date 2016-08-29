@@ -908,6 +908,8 @@ private:
 
   mds_rank_t _get_random_up_mds() const;
 
+  int _ll_getattr(Inode *in, int uid, int gid);
+
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
