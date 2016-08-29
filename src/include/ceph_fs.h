@@ -399,7 +399,7 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_READDIR_FRAG_COMPLETE	(1<<8)
 #define CEPH_READDIR_HASH_ORDER		(1<<9)
 
-union ceph_mds_request_args {
+union ceph_mds_request_args_legacy {
 	struct {
 		__le32 mask;                 /* CEPH_CAP_* */
 	} __attribute__ ((packed)) getattr;
@@ -456,7 +456,7 @@ union ceph_mds_request_args {
 #define CEPH_MDS_FLAG_REPLAY        1  /* this is a replayed op */
 #define CEPH_MDS_FLAG_WANT_DENTRY   2  /* want dentry in reply */
 
-struct ceph_mds_request_head {
+struct ceph_mds_request_head_legacy {
 	__le64 oldest_client_tid;
 	__le32 mdsmap_epoch;           /* on client */
 	__le32 flags;                  /* CEPH_MDS_FLAG_* */
@@ -466,7 +466,7 @@ struct ceph_mds_request_head {
 	__le32 caller_uid, caller_gid;
 	__le64 ino;                    /* use this ino for openc, mkdir, mknod,
 					  etc. (if replaying) */
-	union ceph_mds_request_args args;
+	union ceph_mds_request_args_legacy args;
 } __attribute__ ((packed));
 
 /* cap/lease release record */

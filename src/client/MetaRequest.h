@@ -27,7 +27,7 @@ private:
 public:
   uint64_t tid;
   utime_t  op_stamp;
-  ceph_mds_request_head head;
+  ceph_mds_request_head_legacy head;
   filepath path, path2;
   bufferlist data;
   int inode_drop; //the inode caps this operation will drop
@@ -86,7 +86,7 @@ public:
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
     caller_cond(0), dispatch_cond(0) {
-    memset(&head, 0, sizeof(ceph_mds_request_head));
+    memset(&head, 0, sizeof(ceph_mds_request_head_legacy));
     head.op = op;
   }
   ~MetaRequest();
