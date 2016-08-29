@@ -226,11 +226,12 @@ public:
   virtual int64_t get_used_blocks() = 0;
 
   virtual void shutdown() = 0;
-  virtual int64_t alloc_blocks(bool wait, int64_t num_blocks, int64_t *start_block) {
+  virtual int64_t alloc_blocks(bool wait, int64_t num_blocks,
+                               int64_t hint, int64_t *start_block) {
     debug_assert(0);
     return 0;
   }
-  virtual int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block) {
+  virtual int64_t alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block) {
     debug_assert(0);
     return 0;
   }
@@ -348,7 +349,8 @@ public:
   ~BitMapZone();
   void shutdown();
 
-  virtual int64_t alloc_blocks(bool wait, int64_t num_blocks, int64_t *start_block) {
+  virtual int64_t alloc_blocks(bool wait, int64_t num_blocks,
+                               int64_t hint, int64_t *start_block) {
     debug_assert(0);
     return 0;
   }
@@ -359,7 +361,7 @@ public:
     return 0;
   }
 
-  int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block);
+  int64_t alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block);
   using BitMapArea::alloc_blocks_dis;
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
@@ -406,7 +408,7 @@ protected:
   void init_common(int64_t total_blocks, int64_t zone_size_block, bool def);
 
   int64_t alloc_blocks_int_work(bool wait, bool wrap,
-                         int64_t num_blocks, int64_t *start_block);
+                         int64_t num_blocks, int64_t hint, int64_t *start_block);
   int64_t alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t num_blocks, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
 
@@ -427,11 +429,11 @@ public:
     return m_total_blocks;
   }
 
-  virtual int64_t alloc_blocks_int(bool wait,
-                     int64_t num_blocks, int64_t *start_block);
+  virtual int64_t alloc_blocks_int(bool wait, int64_t num_blocks,
+		  int64_t hint, int64_t *start_block);
   using BitMapArea::alloc_blocks; //non-wait version
   using BitMapArea::alloc_blocks_dis; //non-wait version
-  virtual int64_t alloc_blocks(bool wait, int64_t num_blocks, int64_t *start_block);
+  virtual int64_t alloc_blocks(bool wait, int64_t num_blocks, int64_t hint, int64_t *start_block);
   virtual int64_t alloc_blocks_dis_int(bool wait, int64_t num_blocks, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
   virtual int64_t alloc_blocks_dis(bool wait, int64_t num_blocks, int64_t hint,
@@ -464,8 +466,7 @@ public:
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock);
   void child_unlock(BitMapArea *child);
 
-  int64_t alloc_blocks_int(bool wait,
-                         int64_t num_blocks, int64_t *start_block);
+  int64_t alloc_blocks_int(bool wait, int64_t num_blocks, int64_t hint, int64_t *start_block);
   int64_t alloc_blocks_dis_int(bool wait, int64_t num_blocks, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
   void free_blocks_int(int64_t start_block, int64_t num_blocks);
@@ -507,6 +508,10 @@ private:
   void init_check(int64_t total_blocks, int64_t zone_size_block,
                  bmap_alloc_mode_t mode, bool def, bool stats_on);
   int64_t alloc_blocks_dis_work(int64_t num_blocks, int64_t hint, ExtentList *block_list, bool reserved);
+  int64_t alloc_blocks_int(bool wait, int64_t num_blocks, int64_t hint, int64_t *start_block);
+
+  int64_t alloc_blocks_dis_int(bool wait, int64_t num_blocks,
+           int64_t hint, int64_t area_blk_off, ExtentList *block_list);
 
 public:
 
@@ -519,17 +524,12 @@ public:
   using BitMapAreaIN::alloc_blocks; //Wait version
   using BitMapAreaIN::alloc_blocks_dis; //Wait version
 
-  int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block);
-  int64_t alloc_blocks_res(int64_t num_blocks, int64_t *start_block);
+  int64_t alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block);
+  int64_t alloc_blocks_res(int64_t num_blocks, int64_t hint, int64_t *start_block);
   void free_blocks(int64_t start_block, int64_t num_blocks);
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
   void unreserve_blocks(int64_t blocks);
 
-  int64_t alloc_blocks_int(bool wait,
-                         int64_t num_blocks, int64_t *start_block);
-
-  int64_t alloc_blocks_dis_int(bool wait, int64_t num_blocks,
-           int64_t hint, int64_t area_blk_off, ExtentList *block_list);
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t hint, ExtentList *block_list);
   int64_t alloc_blocks_dis_res(int64_t num_blocks, int64_t hint, ExtentList *block_list);
 

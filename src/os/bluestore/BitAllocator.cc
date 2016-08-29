@@ -533,17 +533,15 @@ bool BitMapZone::check_locked()
  *
  * Caller must take exclusive lock on Zone.
  */
-int64_t BitMapZone::alloc_blocks(int64_t num_blocks, int64_t *start_block)
+int64_t BitMapZone::alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block)
 {
-  int64_t bmap_idx = 0;
-  int bit_idx = 0;
+  int64_t bmap_idx = hint / BmapEntry::size();
+  int bit_idx = hint % BmapEntry::size();
   BmapEntry *bmap = NULL;
   int64_t allocated = 0;
 
   debug_assert(check_locked());
 
-  bit_idx = 0;
-  bmap_idx = 0;
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
           m_bmap_list, bmap_idx);
 
@@ -597,7 +595,7 @@ void BitMapZone::free_blocks(int64_t start_block, int64_t num_blocks)
  * Allocate N blocks, dis-contiguous are fine
  */
 int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
-		                           int64_t hint,
+                               int64_t hint,
                                    int64_t zone_blk_off, 
                                    ExtentList *alloc_blocks)
 {
@@ -620,7 +618,7 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
     if (allocated == num_blocks) {
       break;
     }
-	bit = 0;
+    bit = 0;
   }
 
   add_used_blocks(allocated);
@@ -870,22 +868,23 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
   return true;
 }
 
-int64_t BitMapAreaIN::alloc_blocks_int_work(bool wait, bool wrap,
-                         int64_t num_blocks, int64_t *start_block)
+int64_t BitMapAreaIN::alloc_blocks_int_work(bool wait, bool wrap, int64_t num_blocks,
+                         int64_t hint, int64_t *start_block)
 {
   BitMapArea *child = NULL;
   int64_t allocated = 0;
 
   *start_block = 0;
   BmapEntityListIter iter = BmapEntityListIter(
-                                m_child_list, 0, wrap);
+                                m_child_list, hint / m_child_size_blocks, wrap);
 
   while ((child = (BitMapArea *) iter.next())) {
     if (!child_check_n_lock(child, num_blocks - allocated)) {
+    hint = 0;
       continue;
     }
 
-    allocated = child->alloc_blocks(wait, num_blocks, start_block);
+    allocated = child->alloc_blocks(wait, num_blocks, hint % m_child_size_blocks, start_block);
     child_unlock(child);
     if (allocated == num_blocks) {
       (*start_block) += child->get_index() * m_child_size_blocks;
@@ -893,19 +892,20 @@ int64_t BitMapAreaIN::alloc_blocks_int_work(bool wait, bool wrap,
     }
 
     child->free_blocks(*start_block, allocated);
+  hint = 0;
     *start_block = 0;
     allocated = 0;
   }
   return allocated;
 }
 
-int64_t BitMapAreaIN::alloc_blocks_int(bool wait,
-                         int64_t num_blocks, int64_t *start_block)
+int64_t BitMapAreaIN::alloc_blocks_int(bool wait, int64_t num_blocks,
+                         int64_t hint, int64_t *start_block)
 {
-  return alloc_blocks_int_work(wait, false, num_blocks, start_block);
+  return alloc_blocks_int_work(wait, false, num_blocks, hint, start_block);
 }
 
-int64_t BitMapAreaIN::alloc_blocks(bool wait, int64_t num_blocks,
+int64_t BitMapAreaIN::alloc_blocks(bool wait, int64_t num_blocks, int64_t hint,
                       int64_t *start_block)
 {
   int64_t allocated = 0;
@@ -916,7 +916,7 @@ int64_t BitMapAreaIN::alloc_blocks(bool wait, int64_t num_blocks,
     goto exit;
   }
 
-  allocated = alloc_blocks_int(wait, num_blocks, start_block);
+  allocated = alloc_blocks_int(wait, num_blocks, hint, start_block);
 
   unreserve(num_blocks, allocated);
   debug_assert((get_used_blocks() <= m_total_blocks));
@@ -939,13 +939,14 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t nu
 
   while ((child = (BitMapArea *) iter.next())) {
     if (!child_check_n_lock(child, 1)) {
+    hint = 0;
       continue;
     }
 
     blk_off = child->get_index() * m_child_size_blocks + area_blk_off;
     allocated += child->alloc_blocks_dis(wait, num_blocks - allocated,
                             hint % m_child_size_blocks, blk_off, block_list);
-	hint = 0;
+    hint = 0;
     child_unlock(child);
     if (allocated == num_blocks) {
       break;
@@ -958,9 +959,8 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t nu
 int64_t BitMapAreaIN::alloc_blocks_dis_int(bool wait, int64_t num_blocks,
            int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
-  return alloc_blocks_dis_int_work(wait, true, num_blocks, hint,
-		  						   area_blk_off, block_list);
-
+  return alloc_blocks_dis_int_work(wait, false, num_blocks, hint,
+                     area_blk_off, block_list);
 }
 
 int64_t BitMapAreaIN::alloc_blocks_dis(bool wait, int64_t num_blocks,
@@ -1132,8 +1132,8 @@ void BitMapAreaLeaf::child_unlock(BitMapArea *child)
   child->unlock();
 }
 
-int64_t BitMapAreaLeaf::alloc_blocks_int(bool wait,
-                         int64_t num_blocks, int64_t *start_block)
+int64_t BitMapAreaLeaf::alloc_blocks_int(bool wait, int64_t num_blocks,
+                int64_t hint, int64_t *start_block)
 {
   BitMapArea *child = NULL;
   int64_t allocated = 0;
@@ -1141,15 +1141,16 @@ int64_t BitMapAreaLeaf::alloc_blocks_int(bool wait,
   *start_block = 0;
 
   BmapEntityListIter iter = BmapEntityListIter(
-                                m_child_list, 0, false);
+                                m_child_list, hint / m_child_size_blocks, false);
 
   while ((child = iter.next())) {
     if (!child_check_n_lock(child, num_blocks - allocated, false)) {
+    hint = 0;
       continue;
     }
     debug_assert(child->get_type() == ZONE);
 
-    allocated = child->alloc_blocks(num_blocks, start_block);
+    allocated = child->alloc_blocks(num_blocks, hint % m_child_size_blocks, start_block);
     child_unlock(child);
     if (allocated == num_blocks) {
       (*start_block) += child->get_index() * m_child_size_blocks;
@@ -1157,6 +1158,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_int(bool wait,
     }
 
     child->free_blocks(*start_block, allocated);
+    hint = 0;
     *start_block = 0;
     allocated = 0;
   }
@@ -1175,16 +1177,18 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(bool wait, int64_t num_blocks,
 
   while ((child = (BitMapArea *) iter.next())) {
     if (!child_check_n_lock(child, 1, false)) {
+    hint = 0;
       continue;
     }
 
     blk_off = child->get_index() * m_child_size_blocks + area_blk_off;
-    allocated += child->alloc_blocks_dis(num_blocks - allocated, hint, blk_off, block_list);
-	hint = 0;
+    allocated += child->alloc_blocks_dis(num_blocks - allocated, hint % m_child_size_blocks,
+                                         blk_off, block_list);
     child_unlock(child);
     if (allocated == num_blocks) {
       break;
     }
+  hint = 0;
   }
   return allocated;
 }
@@ -1391,43 +1395,16 @@ bool BitAllocator::check_input(int64_t num_blocks)
   return true;
 }
 
-int64_t BitAllocator::alloc_blocks_int(bool wait,
-                         int64_t num_blocks, int64_t *start_block)
+int64_t BitAllocator::alloc_blocks_int(bool wait, int64_t num_blocks,
+                         int64_t hint, int64_t *start_block)
 {
-
-  return alloc_blocks_int_work(wait, true, num_blocks, start_block);
-#if 0
-  BitMapArea *child = NULL;
-  int64_t allocated = 0;
-
-  *start_block = 0;
-  BmapEntityListIter iter = BmapEntityListIter(
-                                m_child_list, 0, true);
-
-  while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, num_blocks - allocated)) {
-      continue;
-    }
-
-    allocated = child->alloc_blocks(wait, num_blocks, start_block);
-    child_unlock(child);
-    if (allocated == num_blocks) {
-      (*start_block) += child->get_index() * m_child_size_blocks;
-      break;
-    }
-
-    child->free_blocks(*start_block, allocated);
-    *start_block = 0;
-    allocated = 0;
-  }
-  return allocated;
-#endif
+  return alloc_blocks_int_work(wait, true, num_blocks, hint, start_block);
 }
 
 /*
  * Interface to allocate blocks after reserve.
  */
-int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
+int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t hint, int64_t *start_block)
 {
   int scans = 1;
   int64_t allocated = 0;
@@ -1445,7 +1422,7 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
   }
 
   while (scans && !allocated) {
-    allocated = alloc_blocks_int(false, num_blocks, start_block);
+    allocated = alloc_blocks_int(false, num_blocks, hint, start_block);
     scans--;
   }
 
@@ -1458,7 +1435,7 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
     unlock();
     lock_excl();
     serial_lock();
-    allocated = alloc_blocks_int(false, num_blocks, start_block);
+    allocated = alloc_blocks_int(false, num_blocks, hint, start_block);
     if (is_stats_on()) {
       m_stats->add_serial_scans(1);
     }
@@ -1473,7 +1450,7 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
   return allocated;
 }
 
-int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
+int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block)
 {
   int scans = 1;
   int64_t allocated = 0;
@@ -1501,7 +1478,7 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
   }
 
   while (scans && !allocated) {
-    allocated = alloc_blocks_int(false, num_blocks, start_block);
+    allocated = alloc_blocks_int(false, num_blocks, hint, start_block);
     scans--;
   }
 
@@ -1514,9 +1491,9 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
     unlock();
     lock_excl();
     serial_lock();
-    allocated = alloc_blocks_int(false, num_blocks, start_block);
+    allocated = alloc_blocks_int(false, num_blocks, hint, start_block);
     if (!allocated) {
-      allocated = alloc_blocks_int(false, num_blocks, start_block);
+      allocated = alloc_blocks_int(false, num_blocks, hint, start_block);
       debug_assert(allocated);
     }
     if (is_stats_on()) {
@@ -1578,34 +1555,8 @@ void BitAllocator::set_blocks_used(int64_t start_block, int64_t num_blocks)
 int64_t BitAllocator::alloc_blocks_dis_int(bool wait, int64_t num_blocks,
            int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
-  
   return alloc_blocks_dis_int_work(wait, true, num_blocks, hint,
-		  						   area_blk_off, block_list);
- #if 0
-  BitMapArea *child = NULL;
-  int64_t allocated = 0;
-  int64_t blk_off = 0;
-
-  BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, hint / m_child_size_blocks, true);
-
-  while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1)) {
-      continue;
-    }
-
-    blk_off = child->get_index() * m_child_size_blocks + area_blk_off;
-    allocated += child->alloc_blocks_dis(wait, num_blocks - allocated,
-                            hint % m_child_size_blocks, blk_off, block_list);
-	hint = 0;
-    child_unlock(child);
-    if (allocated == num_blocks) {
-      break;
-    }
-  }
-
-  return allocated;
- #endif
+                     area_blk_off, block_list);
 }
 
 int64_t BitAllocator::alloc_blocks_dis(int64_t num_blocks, int64_t hint, ExtentList *block_list)
@@ -1661,7 +1612,8 @@ int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t hint, Ex
     unlock();
     lock_excl();
     serial_lock();
-    allocated += alloc_blocks_dis_int(false, num_blocks - allocated, hint + allocated, blk_off, block_list);
+    allocated += alloc_blocks_dis_int(false, num_blocks - allocated, hint + allocated,
+                                      blk_off, block_list);
     if (is_stats_on()) {
       m_stats->add_serial_scans(1);
     }
