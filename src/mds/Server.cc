@@ -2357,6 +2357,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   in->inode.btime = in->inode.ctime = in->inode.mtime = in->inode.atime =
     mdr->get_op_stamp();
 
+  in->inode.change_attr = 0;
+
   MClientRequest *req = mdr->client_request;
   if (req->get_data().length()) {
     bufferlist::iterator p = req->get_data().begin();
