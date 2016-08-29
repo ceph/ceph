@@ -31,6 +31,8 @@ librbd_internal_la_SOURCES = \
 	librbd/ObjectWatcher.cc \
 	librbd/Operations.cc \
 	librbd/Utils.cc \
+	librbd/cache/ImageWriteback.cc \
+	librbd/cache/PassthroughImageCache.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
 	librbd/exclusive_lock/ReacquireRequest.cc \
 	librbd/exclusive_lock/ReleaseRequest.cc \
@@ -123,6 +125,9 @@ noinst_HEADERS += \
 	librbd/TaskFinisher.h \
 	librbd/Utils.h \
 	librbd/WatchNotifyTypes.h \
+	librbd/cache/ImageCache.h \
+	librbd/cache/ImageWriteback.h \
+	librbd/cache/PassthroughImageCache.h \
 	librbd/exclusive_lock/AcquireRequest.h \
 	librbd/exclusive_lock/Policy.h \
 	librbd/exclusive_lock/ReacquireRequest.h \

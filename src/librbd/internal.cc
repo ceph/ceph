@@ -2465,7 +2465,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = AioCompletion::create_and_start(ctx, src,
                                                             AIO_TYPE_READ);
-      AioImageRequest<>::aio_read(src, comp, offset, len, NULL, bl,
+      AioImageRequest<>::aio_read(src, comp, {{offset, len}}, nullptr, bl,
                                   fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
@@ -2691,7 +2691,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       C_SaferCond ctx;
       AioCompletion *c = AioCompletion::create_and_start(&ctx, ictx,
                                                          AIO_TYPE_READ);
-      AioImageRequest<>::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
+      AioImageRequest<>::aio_read(ictx, c, {{off, read_len}}, nullptr, &bl, 0);
 
       int ret = ctx.wait();
       if (ret < 0) {

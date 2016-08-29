@@ -789,8 +789,6 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                         const bufferlist &bl,
                                         const AioObjectRequests &requests,
                                         bool flush_entry) {
-  assert(m_image_ctx.owner_lock.is_locked());
-
   assert(m_max_append_size > journal::AioWriteEvent::get_fixed_size());
   uint64_t max_write_data_size =
     m_max_append_size - journal::AioWriteEvent::get_fixed_size();
@@ -824,8 +822,6 @@ uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
                                      uint64_t offset, size_t length,
                                      bool flush_entry) {
-  assert(m_image_ctx.owner_lock.is_locked());
-
   bufferlist bl;
   ::encode(event_entry, bl);
   return append_io_events(event_entry.get_event_type(), {bl}, requests, offset,
@@ -838,7 +834,6 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const AioObjectRequests &requests,
                                       uint64_t offset, size_t length,
                                       bool flush_entry) {
-  assert(m_image_ctx.owner_lock.is_locked());
   assert(!bufferlists.empty());
 
   Futures futures;
@@ -1587,7 +1582,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
       (*it)->complete(r);
     } else {
       // send any waiting aio requests now that journal entry is safe
-      RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
       (*it)->send();
     }
   }

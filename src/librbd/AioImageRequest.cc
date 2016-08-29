@@ -8,6 +8,7 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/ImageCache.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
 #include "common/WorkQueue.h"
@@ -119,9 +120,47 @@ private:
 };
 
 template <typename ImageCtxT>
-class C_CacheRead : public Context {
+class C_ImageCacheRead : public C_AioRequest {
 public:
-  explicit C_CacheRead(ImageCtxT &ictx, AioObjectRead<ImageCtxT> *req)
+  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+
+  C_ImageCacheRead(AioCompletion *completion, const Extents &image_extents)
+    : C_AioRequest(completion), m_image_extents(image_extents) {
+  }
+
+  inline bufferlist &get_data() {
+    return m_bl;
+  }
+
+protected:
+  virtual void finish(int r) {
+    CephContext *cct = m_completion->ictx->cct;
+    ldout(cct, 10) << "C_ImageCacheRead::finish() " << this << ": r=" << r
+                   << dendl;
+    if (r >= 0) {
+      size_t length = 0;
+      for (auto &image_extent : m_image_extents) {
+        length += image_extent.second;
+      }
+      assert(length == m_bl.length());
+
+      m_completion->lock.Lock();
+      m_completion->destriper.add_partial_result(cct, m_bl, m_image_extents);
+      m_completion->lock.Unlock();
+      r = length;
+    }
+    C_AioRequest::finish(r);
+  }
+
+private:
+  bufferlist m_bl;
+  Extents m_image_extents;
+};
+
+template <typename ImageCtxT>
+class C_ObjectCacheRead : public Context {
+public:
+  explicit C_ObjectCacheRead(ImageCtxT &ictx, AioObjectRead<ImageCtxT> *req)
     : m_image_ctx(ictx), m_req(req), m_enqueued(false) {}
 
   virtual void complete(int r) {
@@ -149,27 +188,26 @@ private:
 } // anonymous namespace
 
 template <typename I>
-void AioImageRequest<I>::aio_read(
-    I *ictx, AioCompletion *c,
-    const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-    char *buf, bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags);
+void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
+                                  Extents &&image_extents, char *buf,
+                                  bufferlist *pbl, int op_flags) {
+  AioImageRead<I> req(*ictx, c, std::move(image_extents), buf, pbl, op_flags);
   req.send();
 }
 
 template <typename I>
-void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
-                                  uint64_t off, size_t len, char *buf,
-                                  bufferlist *pbl, int op_flags) {
-  AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags);
+void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c, uint64_t off,
+                                   size_t len, const char *buf, int op_flags) {
+  AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags);
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
-                                   uint64_t off, size_t len, const char *buf,
+                                   Extents &&image_extents, bufferlist &&bl,
                                    int op_flags) {
-  AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags);
+  AioImageWrite<I> req(*ictx, c, std::move(image_extents), std::move(bl),
+                       op_flags);
   req.send();
 }
 
@@ -189,7 +227,6 @@ void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
 template <typename I>
 void AioImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
   assert(m_aio_comp->is_initialized(get_aio_type()));
   assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
 
@@ -199,7 +236,32 @@ void AioImageRequest<I>::send() {
                  << "completion=" << aio_comp <<  dendl;
 
   aio_comp->get();
-  send_request();
+  int r = clip_request();
+  if (r < 0) {
+    m_aio_comp->fail(r);
+    return;
+  }
+
+  if (m_bypass_image_cache || m_image_ctx.image_cache == nullptr) {
+    send_request();
+  } else {
+    send_image_cache_request();
+  }
+}
+
+template <typename I>
+int AioImageRequest<I>::clip_request() {
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  for (auto &image_extent : m_image_extents) {
+    size_t clip_len = image_extent.second;
+    int r = clip_io(get_image_ctx(&m_image_ctx), image_extent.first, &clip_len);
+    if (r < 0) {
+      return r;
+    }
+
+    image_extent.second = clip_len;
+  }
+  return 0;
 }
 
 template <typename I>
@@ -214,9 +276,10 @@ void AioImageRead<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
+  auto &image_extents = this->m_image_extents;
   if (image_ctx.object_cacher && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), m_image_extents);
+    readahead(get_image_ctx(&image_ctx), image_extents);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -229,24 +292,16 @@ void AioImageRead<I>::send_request() {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     snap_id = image_ctx.snap_id;
 
-    // map
-    for (vector<pair<uint64_t,uint64_t> >::const_iterator p =
-           m_image_extents.begin();
-         p != m_image_extents.end(); ++p) {
-      uint64_t len = p->second;
-      int r = clip_io(get_image_ctx(&image_ctx), p->first, &len);
-      if (r < 0) {
-        aio_comp->fail(r);
-        return;
-      }
-      if (len == 0) {
+    // map image extents to object extents
+    for (auto &extent : image_extents) {
+      if (extent.second == 0) {
         continue;
       }
 
-      Striper::file_to_extents(cct, image_ctx.format_string,
-                               &image_ctx.layout, p->first, len, 0,
-                               object_extents, buffer_ofs);
-      buffer_ofs += len;
+      Striper::file_to_extents(cct, image_ctx.format_string, &image_ctx.layout,
+                               extent.first, extent.second, 0, object_extents,
+                               buffer_ofs);
+      buffer_ofs += extent.second;
     }
   }
 
@@ -276,7 +331,8 @@ void AioImageRead<I>::send_request() {
       req_comp->set_req(req);
 
       if (image_ctx.object_cacher) {
-        C_CacheRead<I> *cache_comp = new C_CacheRead<I>(image_ctx, req);
+        C_ObjectCacheRead<I> *cache_comp = new C_ObjectCacheRead<I>(image_ctx,
+                                                                    req);
         image_ctx.aio_read_from_cache(extent.oid, extent.objectno,
                                       &req->data(), extent.length,
                                       extent.offset, cache_comp, m_op_flags);
@@ -293,6 +349,20 @@ void AioImageRead<I>::send_request() {
 }
 
 template <typename I>
+void AioImageRead<I>::send_image_cache_request() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  C_ImageCacheRead<I> *req_comp = new C_ImageCacheRead<I>(
+    aio_comp, this->m_image_extents);
+  image_ctx.image_cache->aio_read(std::move(this->m_image_extents),
+                                  &req_comp->get_data(), m_op_flags,
+                                  req_comp);
+}
+
+template <typename I>
 void AbstractAioImageWrite<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -302,7 +372,7 @@ void AbstractAioImageWrite<I>::send_request() {
   bool journaling = false;
 
   AioCompletion *aio_comp = this->m_aio_comp;
-  uint64_t clip_len = m_len;
+  uint64_t clip_len = 0;
   ObjectExtents object_extents;
   ::SnapContext snapc;
   {
@@ -314,21 +384,18 @@ void AbstractAioImageWrite<I>::send_request() {
       return;
     }
 
-    int r = clip_io(get_image_ctx(&image_ctx), m_off, &clip_len);
-    if (r < 0) {
-      aio_comp->fail(r);
-      return;
+    for (auto &extent : this->m_image_extents) {
+      if (extent.second == 0) {
+        continue;
+      }
+
+      // map to object extents
+      Striper::file_to_extents(cct, image_ctx.format_string, &image_ctx.layout,
+                               extent.first, extent.second, 0, object_extents);
+      clip_len += extent.second;
     }
 
     snapc = image_ctx.snapc;
-
-    // map to object extents
-    if (clip_len > 0) {
-      Striper::file_to_extents(cct, image_ctx.format_string,
-                               &image_ctx.layout, m_off, clip_len, 0,
-                               object_extents);
-    }
-
     journaling = (image_ctx.journal != nullptr &&
                   image_ctx.journal->is_journal_appending());
   }
@@ -338,7 +405,7 @@ void AbstractAioImageWrite<I>::send_request() {
   if (!object_extents.empty()) {
     uint64_t journal_tid = 0;
     aio_comp->set_request_count(
-      object_extents.size() + get_cache_request_count(journaling));
+      object_extents.size() + get_object_cache_request_count(journaling));
 
     AioObjectRequests requests;
     send_object_requests(object_extents, snapc,
@@ -351,7 +418,7 @@ void AbstractAioImageWrite<I>::send_request() {
     }
 
     if (image_ctx.object_cacher != NULL) {
-      send_cache_requests(object_extents, journal_tid);
+      send_object_cache_requests(object_extents, journal_tid);
     }
   } else {
     // no IO to perform -- fire completion
@@ -394,20 +461,29 @@ void AioImageWrite<I>::assemble_extent(const ObjectExtent &object_extent,
                                     bufferlist *bl) {
   for (auto q = object_extent.buffer_extents.begin();
        q != object_extent.buffer_extents.end(); ++q) {
-    bl->append(m_buf + q->first, q->second);;
+    bufferlist sub_bl;
+    sub_bl.substr_of(m_bl, q->first, q->second);
+    bl->claim_append(sub_bl);
   }
 }
 
 template <typename I>
 uint64_t AioImageWrite<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
-  bufferlist bl;
-  bl.append(m_buf, this->m_len);
-
   I &image_ctx = this->m_image_ctx;
-  uint64_t tid = image_ctx.journal->append_write_event(this->m_off, this->m_len,
-                                                       bl, requests,
-                                                       synchronous);
+
+  uint64_t tid;
+  uint64_t buffer_offset = 0;
+  assert(!this->m_image_extents.empty());
+  for (auto &extent : this->m_image_extents) {
+    bufferlist sub_bl;
+    sub_bl.substr_of(m_bl, buffer_offset, extent.second);
+    buffer_offset += extent.second;
+
+    tid = image_ctx.journal->append_write_event(extent.first, extent.second,
+                                                sub_bl, requests, synchronous);
+  }
+
   if (image_ctx.object_cacher == NULL) {
     AioCompletion *aio_comp = this->m_aio_comp;
     aio_comp->associate_journal_event(tid);
@@ -416,8 +492,20 @@ uint64_t AioImageWrite<I>::append_journal_event(
 }
 
 template <typename I>
-void AioImageWrite<I>::send_cache_requests(const ObjectExtents &object_extents,
-                                        uint64_t journal_tid) {
+void AioImageWrite<I>::send_image_cache_request() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+  image_ctx.image_cache->aio_write(std::move(this->m_image_extents),
+                                   std::move(m_bl), m_op_flags, req_comp);
+}
+
+template <typename I>
+void AioImageWrite<I>::send_object_cache_requests(const ObjectExtents &object_extents,
+                                                  uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
   for (auto p = object_extents.begin(); p != object_extents.end(); ++p) {
     const ObjectExtent &object_extent = *p;
@@ -473,11 +561,15 @@ uint64_t AioImageDiscard<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
-  journal::EventEntry event_entry(journal::AioDiscardEvent(this->m_off,
-                                                           this->m_len));
-  uint64_t tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                                    requests, this->m_off,
-                                                    this->m_len, synchronous);
+  uint64_t tid;
+  assert(!this->m_image_extents.empty());
+  for (auto &extent : this->m_image_extents) {
+    journal::EventEntry event_entry(journal::AioDiscardEvent(extent.first,
+                                                             extent.second));
+    tid = image_ctx.journal->append_io_event(std::move(event_entry),
+                                             requests, extent.first,
+                                             extent.second, synchronous);
+  }
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->associate_journal_event(tid);
@@ -505,15 +597,28 @@ void AioImageDiscard<I>::prune_object_extents(ObjectExtents &object_extents) {
 }
 
 template <typename I>
-uint32_t AioImageDiscard<I>::get_cache_request_count(bool journaling) const {
+uint32_t AioImageDiscard<I>::get_object_cache_request_count(bool journaling) const {
   // extra completion request is required for tracking journal commit
   I &image_ctx = this->m_image_ctx;
   return (image_ctx.object_cacher != nullptr && journaling ? 1 : 0);
 }
 
 template <typename I>
-void AioImageDiscard<I>::send_cache_requests(const ObjectExtents &object_extents,
-                                          uint64_t journal_tid) {
+void AioImageDiscard<I>::send_image_cache_request() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(this->m_image_extents.size());
+  for (auto &extent : this->m_image_extents) {
+    C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+    image_ctx.image_cache->aio_discard(extent.first, extent.second, req_comp);
+  }
+}
+
+template <typename I>
+void AioImageDiscard<I>::send_object_cache_requests(const ObjectExtents &object_extents,
+                                                    uint64_t journal_tid) {
   I &image_ctx = this->m_image_ctx;
   if (journal_tid == 0) {
     Mutex::Locker cache_locker(image_ctx.cache_lock);
@@ -600,6 +705,17 @@ void AioImageFlush<I>::send_request() {
   aio_comp->put();
 
   image_ctx.perfcounter->inc(l_librbd_aio_flush);
+}
+
+template <typename I>
+void AioImageFlush<I>::send_image_cache_request() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.image_cache != nullptr);
+
+  AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+  C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+  image_ctx.image_cache->aio_flush(req_comp);
 }
 
 } // namespace librbd

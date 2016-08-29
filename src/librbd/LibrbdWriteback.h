@@ -44,9 +44,6 @@ namespace librbd {
 				  uint64_t len, ceph_tid_t original_journal_tid,
                                   ceph_tid_t new_journal_tid);
 
-    virtual void get_client_lock();
-    virtual void put_client_lock();
-
     struct write_result_d {
       bool done;
       int ret;

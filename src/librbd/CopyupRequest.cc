@@ -39,7 +39,6 @@ public:
   }
 
   virtual int send() {
-    assert(m_image_ctx.owner_lock.is_locked());
     uint64_t snap_id = m_snap_ids[m_snap_id_idx];
     if (snap_id == CEPH_NOSNAP) {
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
@@ -79,8 +78,7 @@ private:
 
 
 CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno,
-      		       vector<pair<uint64_t,uint64_t> >& image_extents)
+                             uint64_t objectno, Extents &&image_extents)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
     m_image_extents(image_extents), m_state(STATE_READ_FROM_PARENT)
 {
@@ -189,9 +187,8 @@ void CopyupRequest::send()
                          << ", oid " << m_oid
                          << ", extents " << m_image_extents
                          << dendl;
-  RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
-  AioImageRequest<>::aio_read(m_ictx->parent, comp, m_image_extents, NULL,
-                              &m_copyup_data, 0);
+  AioImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
+                              nullptr, &m_copyup_data, 0);
 }
 
 void CopyupRequest::complete(int r)
@@ -207,7 +204,6 @@ bool CopyupRequest::should_complete(int r)
   CephContext *cct = m_ictx->cct;
   ldout(cct, 20) << __func__ << " " << this
                  << ": oid " << m_oid
-                 << ", extents " << m_image_extents
                  << ", r " << r << dendl;
 
   uint64_t pending_copyups;
@@ -260,7 +256,6 @@ void CopyupRequest::remove_from_list()
 
 bool CopyupRequest::send_object_map() {
   {
-    RWLock::RLocker owner_locker(m_ictx->owner_lock);
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     if (m_ictx->object_map != nullptr) {
       bool copy_on_read = m_pending_requests.empty();

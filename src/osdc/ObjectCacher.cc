@@ -1749,7 +1749,6 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 void ObjectCacher::flusher_entry()
 {
   ldout(cct, 10) << "flusher start" << dendl;
-  writeback_handler.get_client_lock();
   lock.Lock();
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() +
@@ -1791,8 +1790,6 @@ void ObjectCacher::flusher_entry()
       if (!max) {
 	// back off the lock to avoid starving other threads
 	lock.Unlock();
-	writeback_handler.put_client_lock();
-	writeback_handler.get_client_lock();
 	lock.Lock();
 	continue;
       }
@@ -1800,12 +1797,7 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
-    writeback_handler.put_client_lock();
     flusher_cond.WaitInterval(cct, lock, seconds(1));
-    lock.Unlock();
-
-    writeback_handler.get_client_lock();
-    lock.Lock();
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -1821,7 +1813,6 @@ void ObjectCacher::flusher_entry()
   }
 
   lock.Unlock();
-  writeback_handler.put_client_lock();
   ldout(cct, 10) << "flusher finish" << dendl;
 }
 

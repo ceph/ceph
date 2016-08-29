@@ -51,6 +51,7 @@ namespace librbd {
   template <typename> class Operations;
   class LibrbdWriteback;
 
+  namespace cache { struct ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace journal { struct Policy; }
 
@@ -127,6 +128,7 @@ namespace librbd {
 
     file_layout_t layout;
 
+    cache::ImageCache *image_cache = nullptr;
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
