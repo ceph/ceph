@@ -958,6 +958,7 @@ if(${WITH_RADOSGW})
     rgw_a
     global
     curl
+    uuid
     expat
     ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
@@ -983,6 +984,7 @@ if(${WITH_RADOSGW})
     librados
     global
     curl
+    uuid
     expat
     ${CMAKE_DL_LIBS}
     ${TCMALLOC_LIBS}
@@ -1003,6 +1005,7 @@ if(${WITH_RADOSGW})
     rgw_a
     global
     curl
+    uuid
     expat
     cls_version_client
     cls_log_client
@@ -1029,6 +1032,7 @@ if(${WITH_RADOSGW})
     rgw_a
     global
     curl
+    uuid
     expat
     cls_version_client
     cls_log_client
@@ -1065,6 +1069,7 @@ if(${WITH_RADOSGW})
     cls_lock_client
     global
     curl
+    uuid
     expat
     ${CMAKE_DL_LIBS}
     ${TCMALLOC_LIBS}

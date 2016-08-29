@@ -21,6 +21,8 @@
 
 #include "mds/MDSMap.h"
 
+#include <uuid/uuid.h>
+
 
 
 /**
