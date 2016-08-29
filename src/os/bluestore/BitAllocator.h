@@ -405,6 +405,11 @@ protected:
   void init(int64_t total_blocks, int64_t zone_size_block, bool def);
   void init_common(int64_t total_blocks, int64_t zone_size_block, bool def);
 
+  int64_t alloc_blocks_int_work(bool wait, bool wrap,
+                         int64_t num_blocks, int64_t *start_block);
+  int64_t alloc_blocks_dis_int_work(bool wait, bool wrap, int64_t num_blocks, int64_t hint,
+        int64_t blk_off, ExtentList *block_list);  
+
 public:
   BitMapAreaIN();
   BitMapAreaIN(int64_t zone_num, int64_t total_blocks);
@@ -422,7 +427,7 @@ public:
     return m_total_blocks;
   }
 
-  virtual int64_t alloc_blocks_int(bool wait, bool wrap,
+  virtual int64_t alloc_blocks_int(bool wait,
                      int64_t num_blocks, int64_t *start_block);
   using BitMapArea::alloc_blocks; //non-wait version
   using BitMapArea::alloc_blocks_dis; //non-wait version
@@ -459,7 +464,7 @@ public:
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock);
   void child_unlock(BitMapArea *child);
 
-  int64_t alloc_blocks_int(bool wait, bool wrap,
+  int64_t alloc_blocks_int(bool wait,
                          int64_t num_blocks, int64_t *start_block);
   int64_t alloc_blocks_dis_int(bool wait, int64_t num_blocks, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
@@ -520,6 +525,11 @@ public:
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
   void unreserve_blocks(int64_t blocks);
 
+  int64_t alloc_blocks_int(bool wait,
+                         int64_t num_blocks, int64_t *start_block);
+
+  int64_t alloc_blocks_dis_int(bool wait, int64_t num_blocks,
+           int64_t hint, int64_t area_blk_off, ExtentList *block_list);
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t hint, ExtentList *block_list);
   int64_t alloc_blocks_dis_res(int64_t num_blocks, int64_t hint, ExtentList *block_list);
 
