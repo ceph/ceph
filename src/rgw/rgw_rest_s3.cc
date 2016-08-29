@@ -10,6 +10,7 @@
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
 #include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/replace.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -3580,6 +3581,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   if (s->aws4_auth->canonical_uri.empty()) {
     s->aws4_auth->canonical_uri = "/";
+  } else {
+    boost::replace_all(s->aws4_auth->canonical_uri, "+", "%20");
   }
 
   /* craft canonical query string */
