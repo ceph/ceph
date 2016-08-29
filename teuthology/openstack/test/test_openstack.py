@@ -27,6 +27,7 @@ import os
 import pytest
 import subprocess
 import tempfile
+import time
 from mock import patch
 
 import teuthology
@@ -264,14 +265,91 @@ class TestOpenStack(object):
         }
         assert defaults == OpenStack().interpret_hints(defaults, None)
 
-    def test_set_provider(self):
+    def test_get_provider(self):
         auth = os.environ.get('OS_AUTH_URL', None)
         os.environ['OS_AUTH_URL'] = 'cloud.ovh.net'
-        assert OpenStack().set_provider() == 'ovh'
+        assert OpenStack().get_provider() == 'ovh'
         if auth != None:
             os.environ['OS_AUTH_URL'] = auth
         else:
             del os.environ['OS_AUTH_URL']
+
+    @patch('teuthology.misc.sh')
+    def test_cache_token(self, m_sh):
+        token = 'TOKEN VALUE'
+        m_sh.return_value = token
+        OpenStack.token = None
+        o = OpenStack()
+        #
+        # Only for OVH
+        #
+        o.provider = 'something'
+        assert False == o.cache_token()
+        o.provider = 'ovh'
+        #
+        # Set the environment with the token
+        #
+        assert 'OS_AUTH_TYPE' not in os.environ
+        assert 'OS_TOKEN' not in os.environ
+        assert 'OS_TOKEN_EXPIRES' not in os.environ
+        assert True == o.cache_token()
+        m_sh.assert_called_with('openstack -q token issue -c id -f value')
+        assert 'v2token' == os.environ['OS_AUTH_TYPE']
+        assert token == os.environ['OS_TOKEN']
+        assert token == OpenStack.token
+        assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
+        assert time.time() < OpenStack.token_expires
+        #
+        # Reset after it expires
+        #
+        token_expires = int(time.time()) - 2000
+        OpenStack.token_expires = token_expires
+        assert True == o.cache_token()
+        assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
+        assert time.time() < OpenStack.token_expires
+        del os.environ['OS_AUTH_TYPE']
+        del os.environ['OS_TOKEN']
+        del os.environ['OS_TOKEN_EXPIRES']
+
+    @patch('teuthology.misc.sh')
+    def test_cache_token_from_environment(self, m_sh):
+        OpenStack.token = None
+        o = OpenStack()
+        o.provider = 'ovh'
+        token = 'TOKEN VALUE'
+        os.environ['OS_AUTH_TYPE'] = 'v2token'
+        os.environ['OS_TOKEN'] = token
+        token_expires = int(time.time()) + OpenStack.token_cache_duration
+        os.environ['OS_TOKEN_EXPIRES'] = str(token_expires)
+        assert True == o.cache_token()
+        assert token == OpenStack.token
+        assert token_expires == OpenStack.token_expires
+        m_sh.assert_not_called()
+        del os.environ['OS_AUTH_TYPE']
+        del os.environ['OS_TOKEN']
+        del os.environ['OS_TOKEN_EXPIRES']
+        
+    @patch('teuthology.misc.sh')
+    def test_cache_token_expired_environment(self, m_sh):
+        token = 'TOKEN VALUE'
+        m_sh.return_value = token
+        OpenStack.token = None
+        o = OpenStack()
+        o.provider = 'ovh'
+        os.environ['OS_AUTH_TYPE'] = 'v2token'
+        os.environ['OS_TOKEN'] = token
+        token_expires = int(time.time()) - 2000
+        os.environ['OS_TOKEN_EXPIRES'] = str(token_expires)
+        assert True == o.cache_token()
+        m_sh.assert_called_with('openstack -q token issue -c id -f value')
+        assert 'v2token' == os.environ['OS_AUTH_TYPE']
+        assert token == os.environ['OS_TOKEN']
+        assert token == OpenStack.token
+        assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
+        assert time.time() < OpenStack.token_expires
+        del os.environ['OS_AUTH_TYPE']
+        del os.environ['OS_TOKEN']
+        del os.environ['OS_TOKEN_EXPIRES']
 
 class TestTeuthologyOpenStack(object):
 
@@ -286,7 +364,7 @@ class TestTeuthologyOpenStack(object):
         ip = TeuthologyOpenStack.create_floating_ip()
         if ip:
             ip_id = TeuthologyOpenStack.get_floating_ip_id(ip)
-            misc.sh("openstack -q ip floating delete " + ip_id)
+            OpenStack().run("ip floating delete " + ip_id)
             self.can_create_floating_ips = True
         else:
             self.can_create_floating_ips = False
@@ -378,4 +456,4 @@ openstack keypair delete {key_name} || true
         ip = TeuthologyOpenStack.get_unassociated_floating_ip()
         assert expected == ip
         ip_id = TeuthologyOpenStack.get_floating_ip_id(ip)
-        misc.sh("openstack -q ip floating delete " + ip_id)
+        OpenStack().run("ip floating delete " + ip_id)

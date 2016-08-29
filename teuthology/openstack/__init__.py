@@ -32,6 +32,7 @@ import socket
 import subprocess
 import tempfile
 import teuthology
+import time
 import types
 
 from subprocess import CalledProcessError
@@ -66,7 +67,7 @@ class OpenStackInstance(object):
     def set_info(self):
         try:
             self.info = json.loads(
-                misc.sh("openstack -q server show -f json " + self.name_or_id))
+                OpenStack().run("server show -f json " + self.name_or_id))
             enforce_json_dictionary(self.info)
         except CalledProcessError:
             self.info = None
@@ -142,7 +143,7 @@ class OpenStackInstance(object):
                               self.get_addresses())[0]
 
     def get_floating_ip(self):
-        ips = json.loads(misc.sh("openstack -q ip floating list -f json"))
+        ips = json.loads(OpenStack().run("ip floating list -f json"))
         for ip in ips:
             if ip['Instance ID'] == self['id']:
                 return ip['IP']
@@ -162,13 +163,13 @@ class OpenStackInstance(object):
         if not self.exists():
             return True
         volumes = self.get_volumes()
-        misc.sh("openstack -q server set --name REMOVE-ME-" + self.name_or_id +
-                " " + self['id'])
-        misc.sh("openstack -q server delete --wait " + self['id'] +
-                " || true")
+        OpenStack().run("server set --name REMOVE-ME-" + self.name_or_id +
+                        " " + self['id'])
+        OpenStack().run("server delete --wait " + self['id'] +
+                        " || true")
         for volume in volumes:
-            misc.sh("openstack -q volume set --name REMOVE-ME " + volume + " || true")
-            misc.sh("openstack -q volume delete " + volume + " || true")
+            OpenStack().run("volume set --name REMOVE-ME " + volume + " || true")
+            OpenStack().run("volume delete " + volume + " || true")
         return True
 
 
@@ -200,11 +201,46 @@ class OpenStack(object):
     }
 
     def __init__(self):
+        self.provider = None
         self.key_filename = None
         self.username = 'ubuntu'
         self.up_string = "UNKNOWN"
         self.teuthology_suite = 'teuthology-suite'
 
+    token = None
+    token_expires = None
+    token_cache_duration = 3600
+
+    def cache_token(self):
+        if self.provider != 'ovh':
+            return False
+        if (OpenStack.token is None and
+            os.environ.get('OS_AUTH_TYPE') == 'v2token' and
+            'OS_TOKEN' in os.environ and
+            'OS_TOKEN_EXPIRES' in os.environ):
+            log.debug("get token from the environment of the parent process")
+            OpenStack.token = os.environ['OS_TOKEN']
+            OpenStack.token_expires = int(os.environ['OS_TOKEN_EXPIRES'])
+        if (OpenStack.token_expires is not None and
+            OpenStack.token_expires < time.time()):
+            log.debug("token discarded because it has expired")
+            OpenStack.token = None
+        if OpenStack.token is None:
+            if os.environ.get('OS_AUTH_TYPE') == 'v2token':
+                del os.environ['OS_AUTH_TYPE']
+            OpenStack.token = misc.sh("openstack -q token issue -c id -f value").strip()
+            os.environ['OS_AUTH_TYPE'] = 'v2token'
+            os.environ['OS_TOKEN'] = OpenStack.token
+            OpenStack.token_expires = int(time.time() + OpenStack.token_cache_duration)
+            os.environ['OS_TOKEN_EXPIRES'] = str(OpenStack.token_expires)
+            log.info("caching OS_TOKEN and setting OS_AUTH_TYPE=v2token "
+                     "during %s seconds" % OpenStack.token_cache_duration)
+        return True
+        
+    def run(self, cmd, *args, **kwargs):
+        self.cache_token()
+        return misc.sh("openstack --quiet " + cmd, *args, **kwargs)
+    
     def set_provider(self):
         if 'OS_AUTH_URL' not in os.environ:
             raise Exception('no OS_AUTH_URL environment variable')
@@ -212,11 +248,16 @@ class OpenStack(object):
                      ('entercloudsuite.com', 'entercloudsuite'),
                      ('rackspacecloud.com', 'rackspace'),
                      ('dream.io', 'dreamhost'))
-        self.provider = None
+        self.provider = 'any'
         for (pattern, provider) in providers:
             if pattern in os.environ['OS_AUTH_URL']:
                 self.provider = provider
                 break
+        return self.provider
+
+    def get_provider(self):
+        if self.provider is None:
+            self.set_provider()
         return self.provider
 
     @staticmethod
@@ -237,7 +278,7 @@ class OpenStack(object):
         """
         Return true if the image exists in OpenStack.
         """
-        found = misc.sh("openstack -q image list -f json --property name='" +
+        found = self.run("image list -f json --property name='" +
                         self.image_name(image) + "'")
         return len(json.loads(found)) > 0
 
@@ -245,7 +286,7 @@ class OpenStack(object):
         """
         Return the uuid of the network in OpenStack.
         """
-        r = json.loads(misc.sh("openstack -q network show -f json " +
+        r = json.loads(self.run("network show -f json " +
                                network))
         return self.get_value(r, 'id')
 
@@ -267,8 +308,7 @@ class OpenStack(object):
         Upload an image into OpenStack with glance.
         """
         misc.sh("wget -c -O " + name + ".qcow2 " + self.image2url[name])
-        self.set_provider()
-        if self.provider == 'dreamhost':
+        if self.get_provider() == 'dreamhost':
             image = name + ".raw"
             disk_format = 'raw'
             misc.sh("qemu-img convert " + name + ".qcow2 " + image)
@@ -294,7 +334,7 @@ class OpenStack(object):
         """
         Return the smallest flavor that satisfies the desired size.
         """
-        flavors_string = misc.sh("openstack -q flavor list -f json")
+        flavors_string = self.run("flavor list -f json")
         flavors = json.loads(flavors_string)
         found = []
         for flavor in flavors:
@@ -339,15 +379,14 @@ class OpenStack(object):
     @staticmethod
     def list_instances():
         ownedby = "ownedby='" + teuth_config.openstack['ip'] + "'"
-        all = json.loads(misc.sh(
-            "openstack -q server list -f json --long --name 'target'"))
+        all = json.loads(OpenStack().run(
+            "server list -f json --long --name 'target'"))
         return filter(lambda instance: ownedby in instance['Properties'], all)
 
     @staticmethod
     def list_volumes():
         ownedby = "ownedby='" + teuth_config.openstack['ip'] + "'"
-        all = json.loads(misc.sh(
-            "openstack -q volume list -f json --long"))
+        all = json.loads(OpenStack().run("volume list -f json --long"))
         def select(volume):
             return (ownedby in volume['Properties'] and
                     volume['Display Name'].startswith('target'))
@@ -540,7 +579,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
     def setup(self):
         self.instance = OpenStackInstance(self.args.name)
         if not self.instance.exists():
-            if self.provider != 'rackspace':
+            if self.get_provider() != 'rackspace':
                 self.create_security_group()
             self.create_cluster()
 
@@ -588,11 +627,10 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         know already.
         """
         try:
-            misc.sh("openstack -q flavor list | tail -2")
+            self.run("flavor list | tail -2")
         except subprocess.CalledProcessError:
-            log.exception("openstack -q flavor list")
+            log.exception("flavor list")
             raise Exception("verify openrc.sh has been sourced")
-        self.set_provider()
 
     def flavor(self):
         """
@@ -613,7 +651,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             hint['ram'] = 4000 # MB
 
         select = None
-        if self.provider == 'ovh':
+        if self.get_provider() == 'ovh':
             select = '^(vps|eg)-'
         return super(TeuthologyOpenStack, self).flavor(hint, select)
 
@@ -623,7 +661,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         By default it should not be set. But some providers such as
         entercloudsuite require it is.
         """
-        if self.provider == 'entercloudsuite':
+        if self.get_provider() == 'entercloudsuite':
             return "--nic net-id=default"
         else:
             return ""
@@ -677,7 +715,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         among instances created within the same tenant.
         """
         try:
-            misc.sh("openstack -q security group show teuthology")
+            self.run("security group show teuthology")
             return
         except subprocess.CalledProcessError:
             pass
@@ -699,7 +737,7 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
         """
         Return a floating IP address not associated with an instance or None.
         """
-        ips = json.loads(misc.sh("openstack -q ip floating list -f json"))
+        ips = json.loads(OpenStack().run("ip floating list -f json"))
         for ip in ips:
             if not ip['Instance ID']:
                 return ip['IP']
@@ -707,13 +745,13 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
 
     @staticmethod
     def create_floating_ip():
-        pools = json.loads(misc.sh("openstack -q ip floating pool list -f json"))
+        pools = json.loads(OpenStack().run("ip floating pool list -f json"))
         if not pools:
             return None
         pool = pools[0]['Name']
         try:
-            ip = json.loads(misc.sh(
-                "openstack -q ip floating create -f json '" + pool + "'"))
+            ip = json.loads(OpenStack().run(
+                "ip floating create -f json '" + pool + "'"))
             return TeuthologyOpenStack.get_value(ip, 'ip')
         except subprocess.CalledProcessError:
             log.debug("create_floating_ip: not creating a floating ip")
@@ -730,14 +768,14 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
         if not ip:
             ip = TeuthologyOpenStack.create_floating_ip()
         if ip:
-            misc.sh("openstack -q ip floating add " + ip + " " + name_or_id)
+            OpenStack().run("ip floating add " + ip + " " + name_or_id)
 
     @staticmethod
     def get_floating_ip_id(ip):
         """
         Return the id of a floating IP
         """
-        results = json.loads(misc.sh("openstack -q ip floating list -f json"))
+        results = json.loads(OpenStack().run("ip floating list -f json"))
         for result in results:
             if result['IP'] == ip:
                 return str(result['ID'])
@@ -755,18 +793,18 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
         ip = OpenStackInstance(instance_id).get_floating_ip()
         if not ip:
             return
-        misc.sh("openstack -q ip floating remove " + ip + " " + instance_id)
+        OpenStack().run("ip floating remove " + ip + " " + instance_id)
         ip_id = TeuthologyOpenStack.get_floating_ip_id(ip)
-        misc.sh("openstack -q ip floating delete " + ip_id)
+        OpenStack().run("ip floating delete " + ip_id)
 
     def create_cluster(self):
         user_data = self.get_user_data()
-        if self.provider == 'rackspace':
+        if self.get_provider() == 'rackspace':
             security_group = ''
         else:
             security_group = " --security-group teuthology"
-        misc.sh(
-            "openstack server create " +
+        self.run(
+            "server create " +
             " --image '" + self.image('ubuntu', '14.04') + "' " +
             " --flavor '" + self.flavor() + "' " +
             " " + self.net() +
@@ -788,8 +826,8 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
         self.ssh("sudo /etc/init.d/teuthology stop || true")
         instance_id = self.get_instance_id(self.args.name)
         self.delete_floating_ip(instance_id)
-        misc.sh("openstack -q server delete packages-repository || true")
-        misc.sh("openstack -q server delete --wait " + self.args.name)
+        self.run("server delete packages-repository || true")
+        self.run("server delete --wait " + self.args.name)
 
 def main(ctx, argv):
     return TeuthologyOpenStack(ctx, teuth_config, argv).main()

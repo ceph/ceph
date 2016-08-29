@@ -438,7 +438,7 @@ function verify_openstack() {
     elif echo $OS_AUTH_URL | grep -qq entercloudsuite.com ; then
         provider=entercloudsuite
     else
-        provider=standardopenstack
+        provider=any
     fi
     echo "OPENSTACK PROVIDER $provider" >&2
     echo $provider

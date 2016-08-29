@@ -86,7 +86,7 @@ def stale_openstack_instances(ctx, instances, locked_nodes):
 
 
 def openstack_delete_volume(id):
-    sh("openstack volume delete " + id + " || true")
+    OpenStack().run("volume delete " + id + " || true")
 
 
 def stale_openstack_volumes(ctx, volumes):
@@ -94,8 +94,8 @@ def stale_openstack_volumes(ctx, volumes):
     for volume in volumes:
         volume_id = volume.get('ID') or volume['id']
         try:
-            volume = json.loads(sh("openstack -q volume show -f json " +
-                                   volume_id))
+            volume = json.loads(OpenStack().run("volume show -f json " +
+                                                volume_id))
         except subprocess.CalledProcessError:
             log.debug("stale-openstack: {id} disappeared, ignored"
                       .format(id=volume_id))
