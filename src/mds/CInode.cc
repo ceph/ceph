@@ -3359,6 +3359,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
   if (session->connection->has_feature(CEPH_FEATURE_FS_BTIME)) {
     ::encode(any_i->btime, bl);
+    ::encode(any_i->change_attr, bl);
   }
 
   return valid;
