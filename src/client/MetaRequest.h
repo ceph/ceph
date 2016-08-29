@@ -27,7 +27,7 @@ private:
 public:
   uint64_t tid;
   utime_t  op_stamp;
-  ceph_mds_request_head_legacy head;
+  ceph_mds_request_head head;
   filepath path, path2;
   bufferlist data;
   int inode_drop; //the inode caps this operation will drop

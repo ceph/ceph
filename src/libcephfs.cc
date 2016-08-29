@@ -634,6 +634,14 @@ extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
   return cmount->get_client()->setattr(relpath, attr, mask);
 }
 
+extern "C" int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath,
+			    struct ceph_statx *stx, int mask, int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->setattrx(relpath, stx, mask, flags);
+}
+
 // *xattr() calls supporting samba/vfs
 extern "C" int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
 {
@@ -1427,6 +1435,13 @@ extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,
 			       int mask, int uid, int gid)
 {
   return (cmount->get_client()->ll_setattr(in, st, mask, uid, gid));
+}
+
+extern "C" int ceph_ll_setattrx(class ceph_mount_info *cmount,
+			       Inode *in, struct ceph_statx *stx,
+			       int mask, int uid, int gid)
+{
+  return (cmount->get_client()->ll_setattrx(in, stx, mask, uid, gid));
 }
 
 extern "C" int ceph_ll_open(class ceph_mount_info *cmount, Inode *in,
