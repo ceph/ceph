@@ -185,6 +185,10 @@ struct InodeStat {
 
     if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
       ::decode(layout.pool_ns, p);
+    if ((features & CEPH_FEATURE_FS_BTIME))
+      ::decode(btime, p);
+    else
+      btime = utime_t();
   }
   
   // see CInode::encode_inodestat for encoder.
