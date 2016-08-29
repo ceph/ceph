@@ -890,6 +890,14 @@ extern "C" int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *s
   return cmount->get_client()->fstat(fd, stbuf);
 }
 
+extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
+			    unsigned int want, unsigned int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fstatx(fd, stx, want, flags);
+}
+
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())

@@ -928,6 +928,19 @@ int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
  */
 int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
 
+/**
+ * Get an open file's extended statistics and attributes.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param fd the file descriptor of the file to get statistics of.
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
+		unsigned int want, unsigned int flags);
+
 /** @} file */
 
 /**
