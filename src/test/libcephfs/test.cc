@@ -14,6 +14,7 @@
 
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/stat.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -1501,4 +1502,52 @@ TEST(LibCephFS, Btime) {
   ASSERT_FALSE(old_btime == stx.stx_ctime && old_btime_ns == stx.stx_ctime_ns);
 
   ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, LazyStatx) {
+  struct ceph_mount_info *cmount1, *cmount2;
+  ASSERT_EQ(ceph_create(&cmount1, NULL), 0);
+  ASSERT_EQ(ceph_create(&cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount1, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount2, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount1, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount2, NULL));
+  ASSERT_EQ(ceph_mount(cmount1, "/"), 0);
+  ASSERT_EQ(ceph_mount(cmount2, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "lazystatx%x", getpid());
+
+  Inode *root1, *file1, *root2, *file2;
+  struct stat st;
+  Fh *fh;
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root1), 0);
+  ceph_ll_unlink(cmount1, root1, filename, getuid(), getgid());
+  ASSERT_EQ(ceph_ll_create(cmount1, root1, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
+			    &st, &file1, &fh, getuid(), getgid()), 0);
+
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
+  ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &st, &file2, getuid(), getgid()), 0);
+
+  int64_t old_ctime = stat_get_ctime_sec(&st);
+  int32_t old_ctime_ns = stat_get_ctime_nsec(&st);
+
+  /*
+   * Now sleep, do a chmod on the first client and the see whether we get a
+   * different ctime with a statx that uses AT_NO_ATTR_SYNC
+   */
+  sleep(1);
+  st.st_mode = 0644;
+  ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &st, CEPH_SETATTR_MODE, getuid(), getgid()), 0);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_ll_getattrx(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, getuid(), getgid()), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
+  ASSERT_EQ(stx.stx_ctime, old_ctime);
+  ASSERT_EQ(stx.stx_ctime_ns, old_ctime_ns);
+
+  ceph_shutdown(cmount1);
+  ceph_shutdown(cmount2);
 }
