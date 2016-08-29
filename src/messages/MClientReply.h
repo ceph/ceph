@@ -105,6 +105,7 @@ struct InodeStat {
   utime_t ctime, btime, mtime, atime;
   uint32_t time_warp_seq;
   uint64_t size, max_size;
+  uint64_t change_attr;
   uint64_t truncate_size;
   uint32_t truncate_seq;
   uint32_t mode, uid, gid, nlink;
@@ -185,10 +186,13 @@ struct InodeStat {
 
     if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
       ::decode(layout.pool_ns, p);
-    if ((features & CEPH_FEATURE_FS_BTIME))
+    if ((features & CEPH_FEATURE_FS_BTIME)) {
       ::decode(btime, p);
-    else
+      ::decode(change_attr, p);
+    } else {
       btime = utime_t();
+      change_attr = 0;
+    }
   }
   
   // see CInode::encode_inodestat for encoder.
