@@ -14,21 +14,26 @@ const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
 void frag_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(version, bl);
   ::encode(mtime, bl);
   ::encode(nfiles, bl);
   ::encode(nsubdirs, bl);
+  ::encode(change_attr, bl);
   ENCODE_FINISH(bl);
 }
 
 void frag_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(version, bl);
   ::decode(mtime, bl);
   ::decode(nfiles, bl);
   ::decode(nsubdirs, bl);
+  if (struct_v >= 3)
+    ::decode(change_attr, bl);
+  else
+    change_attr = 0;
   DECODE_FINISH(bl);
 }
 
