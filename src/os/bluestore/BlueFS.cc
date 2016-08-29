@@ -670,6 +670,7 @@ int BlueFS::_replay(bool noop)
 	    assert(q != dir_map.end());
 	    map<string,FileRef>::iterator r = q->second->file_map.find(filename);
 	    assert(r != q->second->file_map.end());
+            assert(r->second->refs > 0); 
 	    --r->second->refs;
 	    q->second->file_map.erase(r);
 	  }
@@ -788,6 +789,7 @@ void BlueFS::_drop_link(FileRef file)
 {
   dout(20) << __func__ << " had refs " << file->refs
 	   << " on " << file->fnode << dendl;
+  assert(file->refs > 0);
   --file->refs;
   if (file->refs == 0) {
     dout(20) << __func__ << " destroying " << file->fnode << dendl;
@@ -2007,10 +2009,10 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
   } else {
     file = q->second.get();
-  }
-  if (file->locked) {
-    dout(10) << __func__ << " already locked" << dendl;
-    return -EBUSY;
+    if (file->locked) {
+      dout(10) << __func__ << " already locked" << dendl;
+      return -EBUSY;
+    }
   }
   file->locked = true;
   *plock = new FileLock(file);
@@ -2074,6 +2076,11 @@ int BlueFS::unlink(const string& dirname, const string& filename)
     return -ENOENT;
   }
   FileRef file = q->second;
+  if (file->locked) {
+    dout(20) << __func__ << " file " << dirname << "/" << filename
+             << " is locked" << dendl;
+    return -EBUSY;
+  }
   dir->file_map.erase(filename);
   log_t.op_dir_unlink(dirname, filename);
   _drop_link(file);
