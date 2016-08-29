@@ -1,6 +1,7 @@
 overrides:
   kernel:
-    branch: nightly_pre-single-major # nightly/pre-single-major, v3.13
+    client.0:
+      branch: nightly_pre-single-major # nightly/pre-single-major, v3.13
 tasks:
 - exec:
     client.0:
