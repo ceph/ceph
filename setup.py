@@ -20,7 +20,7 @@ setup(
          'openstack-centos-7.1-user-data.txt',
          'openstack-centos-7.2-user-data.txt',
          'openstack-debian-8.0-user-data.txt',
-         'openstack-opensuse-user-data.txt',
+         'openstack-opensuse-42.1-user-data.txt',
          'openstack-teuthology.cron',
          'openstack-teuthology.init',
          'openstack-ubuntu-12.04-user-data.txt',

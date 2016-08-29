@@ -193,6 +193,7 @@ class OpenStack(object):
         'centos-7.0': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
         'centos-7.1': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1503.qcow2',
         'centos-7.2': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1511.qcow2',
+        'opensuse-42.1': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.1/images/openSUSE-Leap-42.1-OpenStack.x86_64.qcow2',
         'ubuntu-12.04': 'https://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img',
         'ubuntu-14.04': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
         'debian-8.0': 'http://cdimage.debian.org/cdimage/openstack/current/debian-8.2.0-openstack-amd64.qcow2',
