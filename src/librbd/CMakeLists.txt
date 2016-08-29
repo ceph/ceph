@@ -38,6 +38,14 @@ set(librbd_internal_srcs
   deep_copy/SnapshotCopyRequest.cc
   deep_copy/SnapshotCreateRequest.cc
   deep_copy/Utils.cc
+  cache/ImageWriteback.cc
+  cache/FileImageCache.cc
+  cache/file/AioFile.cc
+  cache/file/ImageStore.cc
+  cache/file/JournalStore.cc
+  cache/file/MetaStore.cc
+  cache/file/StupidPolicy.cc
+  cache/file/Types.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
