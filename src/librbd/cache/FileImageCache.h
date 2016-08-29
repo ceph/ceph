@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_CACHE_PASSTHROUGH_IMAGE_CACHE
-#define CEPH_LIBRBD_CACHE_PASSTHROUGH_IMAGE_CACHE
+#ifndef CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
+#define CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
 
 #include "ImageCache.h"
 #include "ImageWriteback.h"
@@ -14,12 +14,12 @@ struct ImageCtx;
 namespace cache {
 
 /**
- * Example passthrough client-side, image extent cache
+ * Prototype file-based, client-side, image extent cache
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class PassthroughImageCache : public ImageCache {
+class FileImageCache : public ImageCache {
 public:
-  PassthroughImageCache(ImageCtx &image_ctx);
+  FileImageCache(ImageCtx &image_ctx);
 
   /// client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
@@ -53,6 +53,6 @@ private:
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::PassthroughImageCache<librbd::ImageCtx>;
+extern template class librbd::cache::FileImageCache<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_CACHE_PASSTHROUGH_IMAGE_CACHE
+#endif // CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
