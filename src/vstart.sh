@@ -98,6 +98,8 @@ cache=""
 memstore=0
 bluestore=0
 lockdep=${LOCKDEP:-1}
+max_mds=1
+allow_multimds="false"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -135,6 +137,7 @@ usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
+usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
 
 usage_exit() {
 	printf "$usage"
@@ -274,6 +277,11 @@ case $1 in
     --nolockdep )
             lockdep=0
             ;;
+    --multimds)
+        max_mds="$2"
+        allow_multimds="true"
+        shift
+        ;;
     * )
 	    usage_exit
 esac
@@ -570,6 +578,8 @@ $extra_conf
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool
+        max mds = ${max_mds}
+        mon allow multimds = ${allow_multimds}
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
