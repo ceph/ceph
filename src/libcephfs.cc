@@ -610,6 +610,14 @@ extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path,
   return cmount->get_client()->stat(path, stbuf);
 }
 
+extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
+			  struct ceph_statx *stx, unsigned int want, unsigned int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->statx(path, stx, want, flags);
+}
+
 extern "C" int ceph_lstat(struct ceph_mount_info *cmount, const char *path,
 			  struct stat *stbuf)
 {
@@ -1404,6 +1412,14 @@ extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
 			       int uid, int gid)
 {
   return (cmount->get_client()->ll_getattr(in, attr, uid, gid));
+}
+
+extern "C" int ceph_ll_getattrx(class ceph_mount_info *cmount,
+			        Inode *in, struct ceph_statx *stx,
+				unsigned int want, unsigned int flags,
+				int uid, int gid)
+{
+  return (cmount->get_client()->ll_getattrx(in, stx, want, flags, uid, gid));
 }
 
 extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,

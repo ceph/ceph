@@ -27,6 +27,8 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
+#include "ceph_statx.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -617,6 +619,19 @@ int ceph_rename(struct ceph_mount_info *cmount, const char *from, const char *to
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
+
+/**
+ * Get a file's extended statistics and attributes.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param path the file or directory to get the statistics of.
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_statx(struct ceph_mount_info *cmount, const char *path, struct ceph_statx *stx,
+	       unsigned int want, unsigned int flags);
 
 /**
  * Get a file's statistics and attributes, without following symlinks.
@@ -1393,6 +1408,9 @@ int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 		 struct stat *attr);
 int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *attr, int uid, int gid);
+int ceph_ll_getattrx(struct ceph_mount_info *cmount, struct Inode *in,
+		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
+		    int uid, int gid);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,

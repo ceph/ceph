@@ -1467,3 +1467,38 @@ TEST(LibCephFS, SlashDotDot) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, Btime) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/getattrx%x", getpid());
+
+  ceph_unlink(cmount, filename);
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
+  ASSERT_EQ(stx.stx_btime, stx.stx_ctime);
+  ASSERT_EQ(stx.stx_btime_ns, stx.stx_ctime_ns);
+
+  int64_t old_btime = stx.stx_btime;
+  int32_t old_btime_ns = stx.stx_btime_ns;
+
+  /* Now sleep, do a chmod and verify that the ctime changed, but btime didn't */
+  sleep(1);
+  ASSERT_EQ(ceph_chmod(cmount, filename, 0644), 0);
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_BTIME);
+  ASSERT_EQ(stx.stx_btime, old_btime);
+  ASSERT_EQ(stx.stx_btime_ns, old_btime_ns);
+  ASSERT_FALSE(old_btime == stx.stx_ctime && old_btime_ns == stx.stx_ctime_ns);
+
+  ceph_shutdown(cmount);
+}
