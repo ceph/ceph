@@ -438,7 +438,7 @@ Summary:	Python 3 libraries for the RADOS object store
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	python%{python3_pkgversion}
-Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
@@ -508,8 +508,8 @@ block device.
 Summary:	Python 3 libraries for the RADOS block device
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rados = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	python%{python3_pkgversion}-rados = %{version}-%{release}
 %description -n python%{python3_pkgversion}-rbd
 This package contains Python 3 libraries for interacting with Cephs RADOS
 block device.
@@ -556,8 +556,8 @@ file system.
 Summary:	Python 3 libraries for Ceph distributed file system
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rados = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Requires:	python%{python3_pkgversion}-rados = %{version}-%{release}
 %description -n python%{python3_pkgversion}-cephfs
 This package contains Python 3 libraries for interacting with Cephs distributed
 file system.
@@ -642,9 +642,9 @@ Summary:	Compatibility package for Cephs python libraries
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Obsoletes:	python-ceph
-Requires:	python-rados = %{epoch}:%{version}-%{release}
-Requires:	python-rbd = %{epoch}:%{version}-%{release}
-Requires:	python-cephfs = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{version}-%{release}
+Requires:	python-rbd = %{version}-%{release}
+Requires:	python-cephfs = %{version}-%{release}
 Provides:	python-ceph
 %description -n python-ceph-compat
 This is a compatibility package to accommodate python-ceph split into
