@@ -198,6 +198,8 @@ namespace librbd {
     bool skip_partial_discard;
     bool blkin_trace_all;
 
+    bool persistent_cache_enabled;
+
     LibrbdAdminSocketHook *asok_hook;
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;

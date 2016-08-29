@@ -55,6 +55,9 @@ private:
    *    |              <apply>
    *    |                 |
    *    |                 v
+   *    |             INVALIDATE_IMAGE_CACHE (skip if disabled)
+   *    |                 |
+   *    |                 v
    *    |             FINALIZE_REFRESH_PARENT (skip if no parent
    *    |                 |                    or refresh not needed)
    *    |                 v
@@ -67,6 +70,9 @@ private:
    *                      |           or refresh not needed)
    *                      v
    *                   <apply>
+   *                      |
+   *                      v
+   *                  INVALIDATE_IMAGE_CACHE (skip if disabled)
    *                      |
    *                      v
    *                  FINALIZE_REFRESH_PARENT (skip if no parent
@@ -107,6 +113,9 @@ private:
 
   Context *send_open_object_map(int *result);
   Context *handle_open_object_map(int *result);
+
+  Context *send_invalidate_image_cache(int *result);
+  Context *handle_invalidate_image_cache(int *result);
 
   Context *send_finalize_refresh_parent(int *result);
   Context *handle_finalize_refresh_parent(int *result);
