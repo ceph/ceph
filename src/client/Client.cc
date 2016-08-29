@@ -3235,6 +3235,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->mtime = in->mtime;
   m->atime = in->atime;
   m->ctime = in->ctime;
+  m->btime = in->btime;
   m->time_warp_seq = in->time_warp_seq;
     
   if (flush & CEPH_CAP_FILE_WR) {
@@ -3421,6 +3422,7 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
     capsnap->uid = in->uid;
     capsnap->gid = in->gid;
     capsnap->mode = in->mode;
+    capsnap->btime = in->btime;
     capsnap->xattrs = in->xattrs;
     capsnap->xattr_version = in->xattr_version;
  
@@ -3519,6 +3521,7 @@ void Client::flush_snaps(Inode *in, bool all_again)
     m->head.uid = capsnap->uid;
     m->head.gid = capsnap->gid;
     m->head.mode = capsnap->mode;
+    m->btime = capsnap->btime;
 
     m->size = capsnap->size;
 
@@ -3526,6 +3529,7 @@ void Client::flush_snaps(Inode *in, bool all_again)
     ::encode(capsnap->xattrs, m->xattrbl);
 
     m->ctime = capsnap->ctime;
+    m->btime = capsnap->btime;
     m->mtime = capsnap->mtime;
     m->atime = capsnap->atime;
     m->time_warp_seq = capsnap->time_warp_seq;
@@ -4869,6 +4873,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->mode = m->head.mode;
     in->uid = m->head.uid;
     in->gid = m->head.gid;
+    in->btime = m->btime;
   }
   bool deleted_inode = false;
   if ((issued & CEPH_CAP_LINK_EXCL) == 0) {

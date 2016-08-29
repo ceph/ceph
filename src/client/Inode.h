@@ -51,7 +51,7 @@ struct CapSnap {
   int issued, dirty;
 
   uint64_t size;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   version_t time_warp_seq;
   uint32_t   mode;
   uid_t      uid;
