@@ -220,7 +220,7 @@ int BitMapAllocator::alloc_extents_dis(
   int64_t num = 0;
   *count = 0;
 
-  num = m_bit_alloc->alloc_blocks_dis_res(nblks, &block_list);
+  num = m_bit_alloc->alloc_blocks_dis_res(nblks, hint, &block_list);
   if (num < nblks) {
     m_bit_alloc->free_blocks_dis(num, &block_list);
     return -ENOSPC;
