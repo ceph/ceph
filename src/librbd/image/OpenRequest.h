@@ -64,6 +64,9 @@ private:
    *                                             SET_SNAP (skip if no snap)
    *                                                |
    *                                                v
+   *                                             INIT_IMAGE_CACHE (skip if
+   *                                                |              disabled)
+   *                                                v
    *                                             <finish>
    *                                                ^
    *     (on error)                                 |
@@ -116,6 +119,9 @@ private:
 
   Context *send_set_snap(int *result);
   Context *handle_set_snap(int *result);
+
+  Context *send_init_image_cache(int *result);
+  Context *handle_init_image_cache(int *result);
 
   void send_close_image(int error_result);
   Context *handle_close_image(int *result);

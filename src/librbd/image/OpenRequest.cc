@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/FileImageCache.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -479,8 +480,7 @@ Context *OpenRequest<I>::handle_register_watch(int *result) {
 template <typename I>
 Context *OpenRequest<I>::send_set_snap(int *result) {
   if (m_image_ctx->snap_name.empty()) {
-    *result = 0;
-    return m_on_finish;
+    return send_init_image_cache(result);
   }
 
   CephContext *cct = m_image_ctx->cct;
@@ -501,6 +501,41 @@ Context *OpenRequest<I>::handle_set_snap(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "failed to set image snapshot: " << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  // TODO SetSnapRequest should handle (re)-initializing image cache
+  return m_on_finish;
+}
+
+template <typename I>
+Context *OpenRequest<I>::send_init_image_cache(int *result) {
+  if (m_image_ctx->old_format || m_image_ctx->read_only ||
+      !m_image_ctx->persistent_cache_enabled) {
+    *result = 0;
+    return m_on_finish;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  // TODO: hard-coded FileImageCache for prototype
+  m_image_ctx->image_cache = new cache::FileImageCache<ImageCtx>(*m_image_ctx);
+  Context *ctx = create_context_callback<
+    OpenRequest<I>, &OpenRequest<I>::handle_init_image_cache>(this);
+  m_image_ctx->image_cache->init(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_init_image_cache(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to init image cache: " << cpp_strerror(*result)
                << dendl;
     send_close_image(*result);
     return nullptr;

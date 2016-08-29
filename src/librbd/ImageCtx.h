@@ -204,6 +204,8 @@ namespace librbd {
     bool blkin_trace_all;
     uint64_t qos_iops_limit;
 
+    bool persistent_cache_enabled;
+
     LibrbdAdminSocketHook *asok_hook;
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;

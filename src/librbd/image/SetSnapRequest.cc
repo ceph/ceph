@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/ImageCache.h"
 #include "librbd/image/RefreshParentRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 
@@ -200,8 +201,12 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
     if (m_snap_id == CEPH_NOSNAP) {
       // object map is loaded when exclusive lock is acquired
       *result = apply();
-      finalize();
-      return m_on_finish;
+      if (*result < 0) {
+        finalize();
+        return m_on_finish;
+      }
+
+      return send_invalidate_image_cache(result);
     } else {
       // load snapshot object map
       return send_open_object_map(result);
@@ -239,7 +244,7 @@ Context *SetSnapRequest<I>::handle_refresh_parent(int *result) {
       return m_on_finish;
     }
 
-    return send_finalize_refresh_parent(result);
+    return send_invalidate_image_cache(result);
   } else {
     // load snapshot object map
     return send_open_object_map(result);
@@ -255,7 +260,7 @@ Context *SetSnapRequest<I>::send_open_object_map(int *result) {
       return m_on_finish;
     }
 
-    return send_finalize_refresh_parent(result);
+    return send_invalidate_image_cache(result);
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -285,6 +290,35 @@ Context *SetSnapRequest<I>::handle_open_object_map(int *result) {
   if (*result < 0) {
     finalize();
     return m_on_finish;
+  }
+
+  return send_invalidate_image_cache(result);
+}
+
+template <typename I>
+Context *SetSnapRequest<I>::send_invalidate_image_cache(int *result) {
+  if (m_image_ctx.image_cache == nullptr) {
+    return send_finalize_refresh_parent(result);
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  // TODO add support for snapshots to the cache
+  Context *ctx = create_context_callback<
+    SetSnapRequest<I>, &SetSnapRequest<I>::handle_invalidate_image_cache>(this);
+  m_image_ctx.image_cache->invalidate(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *SetSnapRequest<I>::handle_invalidate_image_cache(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to invalidate image cache: " << cpp_strerror(*result)
+               << dendl;
   }
 
   return send_finalize_refresh_parent(result);
