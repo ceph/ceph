@@ -2278,7 +2278,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       dout(20) << "predirty_journal_parents add_delta " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
-      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime);
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;

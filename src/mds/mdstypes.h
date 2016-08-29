@@ -181,10 +181,11 @@ struct frag_info_t : public scatter_info_t {
   }
 
   // *this += cur - acc;
-  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
+  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool *touched_mtime=0) {
     if (cur.mtime > mtime) {
       mtime = cur.mtime;
-      touched_mtime = true;
+      if (touched_mtime)
+	*touched_mtime = true;
     }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
