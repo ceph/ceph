@@ -35,6 +35,7 @@ endif(WITH_TESTS)
 
 add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
+  rebuild_mondb.cc
   RadosDump.cc)
 target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
