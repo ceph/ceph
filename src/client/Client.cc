@@ -869,6 +869,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->mode = st->mode;
       in->uid = st->uid;
       in->gid = st->gid;
+      in->btime = st->btime;
     }
 
     if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
@@ -9495,6 +9496,7 @@ Inode *Client::open_snapdir(Inode *diri)
     in->gid = diri->gid;
     in->mtime = diri->mtime;
     in->ctime = diri->ctime;
+    in->btime = diri->btime;
     in->size = diri->size;
 
     in->dirfragtree.clear();

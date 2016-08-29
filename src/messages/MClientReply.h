@@ -102,7 +102,7 @@ struct InodeStat {
   version_t xattr_version;
   ceph_mds_reply_cap cap;
   file_layout_t layout;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   uint32_t time_warp_seq;
   uint64_t size, max_size;
   uint64_t truncate_size;

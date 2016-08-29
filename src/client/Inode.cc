@@ -346,6 +346,7 @@ void Inode::dump(Formatter *f) const
   if (rdev)
     f->dump_unsigned("rdev", rdev);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
