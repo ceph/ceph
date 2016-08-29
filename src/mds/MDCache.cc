@@ -359,6 +359,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
     in->inode.btime = ceph_clock_now(g_ceph_context);
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
+  in->inode.change_attr = 0;
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
