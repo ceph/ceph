@@ -13,6 +13,22 @@
 
 namespace journal {
 
+struct JournalTrimmer::C_RemoveSet : public Context {
+  JournalTrimmer *journal_trimmer;
+  uint64_t object_set;
+  Mutex lock;
+  uint32_t refs;
+  int return_value;
+
+  C_RemoveSet(JournalTrimmer *_journal_trimmer, uint64_t _object_set,
+              uint8_t _splay_width);
+  virtual void complete(int r);
+  virtual void finish(int r) {
+    journal_trimmer->handle_set_removed(r, object_set);
+    journal_trimmer->m_async_op_tracker.finish_op();
+  }
+};
+
 JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const std::string &object_oid_prefix,
                                const JournalMetadataPtr &journal_metadata)

@@ -58,21 +58,8 @@ private:
     virtual void finish(int r) {
     }
   };
-  struct C_RemoveSet : public Context {
-    JournalTrimmer *journal_trimmer;
-    uint64_t object_set;
-    Mutex lock;
-    uint32_t refs;
-    int return_value;
 
-    C_RemoveSet(JournalTrimmer *_journal_trimmer, uint64_t _object_set,
-                uint8_t _splay_width);
-    virtual void complete(int r);
-    virtual void finish(int r) {
-      journal_trimmer->handle_set_removed(r, object_set);
-      journal_trimmer->m_async_op_tracker.finish_op();
-    }
-  };
+  struct C_RemoveSet;
 
   librados::IoCtx m_ioctx;
   CephContext *m_cct;
