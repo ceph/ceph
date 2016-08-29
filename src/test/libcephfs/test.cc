@@ -1551,3 +1551,47 @@ TEST(LibCephFS, LazyStatx) {
   ceph_shutdown(cmount1);
   ceph_shutdown(cmount2);
 }
+
+TEST(LibCephFS, ChangeAttr) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/changeattr%x", getpid());
+
+  ceph_unlink(cmount, filename);
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+
+  uint64_t old_change_attr = stx.stx_version;
+
+  /* do chmod, and check whether change_attr changed */
+  ASSERT_EQ(ceph_chmod(cmount, filename, 0644), 0);
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+  old_change_attr = stx.stx_version;
+
+  /* now do a write and see if it changed again */
+  ASSERT_EQ(3, ceph_write(cmount, fd, "foo", 3, 0));
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+  old_change_attr = stx.stx_version;
+
+  /* Now truncate and check again */
+  ASSERT_EQ(0, ceph_ftruncate(cmount, fd, 0));
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
