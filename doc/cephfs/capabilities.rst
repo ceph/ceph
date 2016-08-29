@@ -58,6 +58,17 @@ There is one exception:
 
 The "pin" just pins the inode into memory, without granting any other caps.
 
+Graphically:
+
+::
+    +---+---+---+---+---+---+---+---+
+    | p | _ |As   x |Ls   x |Xs   x |
+    +---+---+---+---+---+---+---+---+
+    |Fs   x   c   r   w   b   a   l |
+    +---+---+---+---+---+---+---+---+
+
+The second bit is currently unused.
+
 Abilities granted by each cap:
 ------------------------------
 While that is how capabilities are granted (and communicated), the important
