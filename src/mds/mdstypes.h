@@ -470,6 +470,7 @@ struct inode_t {
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
+  utime_t    btime;   // birth time
 
   // perm (namespace permissions)
   uint32_t   mode;
