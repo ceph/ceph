@@ -499,7 +499,7 @@ void OSDService::init()
 
 void OSDService::final_init()
 {
-  objecter->start();
+  objecter->start(osdmap.get());
 }
 
 void OSDService::activate_map()
