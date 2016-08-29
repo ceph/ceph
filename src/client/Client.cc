@@ -6677,7 +6677,7 @@ unsigned Client::statx_to_mask(unsigned int flags, unsigned int want)
     mask |= CEPH_CAP_AUTH_SHARED;
   if (want & CEPH_STATX_NLINK)
     mask |= CEPH_CAP_LINK_SHARED;
-  if (want & (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS))
+  if (want & (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_VERSION))
     mask |= CEPH_CAP_FILE_SHARED;
 
 out:
@@ -6836,6 +6836,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
     stx->stx_atime_ns = in->atime.nsec();
     stx->stx_mtime = in->mtime.sec();
     stx->stx_mtime_ns = in->mtime.nsec();
+    stx->stx_version = in->change_attr;
 
     if (in->is_dir()) {
       if (cct->_conf->client_dirsize_rbytes)
@@ -6847,7 +6848,8 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
       stx->stx_size = in->size;
       stx->stx_blocks = (in->size + 511) >> 9;
     }
-    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS);
+    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|
+		      CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_VERSION);
   }
 }
 
