@@ -14,9 +14,9 @@ struct ElasticConfig {
   RGWRESTConn *conn{nullptr};
 };
 
-static string es_get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key)
+static string es_get_obj_path(const RGWRealm& realm, const RGWBucketInfo& bucket_info, const rgw_obj_key& key)
 {
-  string path = "/rgw/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
+  string path = "/rgw-" + realm.get_name() + "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
   return path;
 }
 
@@ -123,7 +123,7 @@ public:
                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
                               << " attrs=" << attrs << dendl;
       yield {
-        string path = es_get_obj_path(bucket_info, key);
+        string path = es_get_obj_path(sync_env->store->get_realm(), bucket_info, key);
         es_obj_metadata doc(sync_env->cct, bucket_info, key, mtime, size, attrs);
 
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf.conn,
@@ -175,7 +175,7 @@ public:
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        string path = es_get_obj_path(bucket_info, key);
+        string path = es_get_obj_path(sync_env->store->get_realm(), bucket_info, key);
 
         call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn,
                                          sync_env->http_manager,
