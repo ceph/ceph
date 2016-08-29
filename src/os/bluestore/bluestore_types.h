@@ -741,6 +741,7 @@ struct bluestore_wal_transaction_t {
 
   bluestore_wal_transaction_t() : seq(0) {}
 
+  bool can_bypass_wal(uint64_t block_size) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;

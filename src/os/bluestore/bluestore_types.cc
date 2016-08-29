@@ -1130,6 +1130,20 @@ void bluestore_wal_op_t::generate_test_instances(list<bluestore_wal_op_t*>& o)
   o.back()->data.append("my data");
 }
 
+bool bluestore_wal_transaction_t::can_bypass_wal(uint64_t block_size) const
+{
+  bool res = false;
+  if (released.size() == 0 &&
+      ops.size() == 1 &&
+      ops.front().op == bluestore_wal_op_t::OP_WRITE &&
+      ops.front().extents.size() == 1 &&
+      ops.front().extents.front().length == block_size &&
+      (ops.front().extents.front().offset % block_size) == 0) {
+    res = true;
+  }
+  return res;
+}
+
 void bluestore_wal_transaction_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);

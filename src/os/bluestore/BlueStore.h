@@ -1323,7 +1323,8 @@ private:
   bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
   int _wal_apply(TransContext *txc);
   int _wal_finish(TransContext *txc);
-  int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo);
+  void _do_wal_ops(TransContext *txc, bool increment_counter);
+  int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo, bool increment_counter);
   int _wal_replay();
 
   // for fsck

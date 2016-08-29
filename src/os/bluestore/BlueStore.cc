@@ -5278,14 +5278,7 @@ int BlueStore::_wal_apply(TransContext *txc)
     dout(20) << __func__ << " finished sleep" << dendl;
   }
 
-  assert(txc->ioc.pending_aios.empty());
-  vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
-  for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
-       p != wt.ops.end();
-       ++p, ++q) {
-    int r = _do_wal_op(txc, *p);
-    assert(r == 0);
-  }
+  _do_wal_ops(txc, true);
 
   _txc_state_proc(txc);
   return 0;
@@ -5309,14 +5302,29 @@ int BlueStore::_wal_finish(TransContext *txc)
   return 0;
 }
 
-int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
+void BlueStore::_do_wal_ops(TransContext *txc, bool increment_counters)
+{
+  bluestore_wal_transaction_t& wt = *txc->wal_txn;
+  assert(txc->ioc.pending_aios.empty());
+  vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
+  for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
+       p != wt.ops.end();
+       ++p, ++q) {
+    int r = _do_wal_op(txc, *p, increment_counters);
+    assert(r == 0);
+  }
+}
+
+int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo, bool increment_counters)
 {
   switch (wo.op) {
   case bluestore_wal_op_t::OP_WRITE:
     {
       dout(20) << __func__ << " write " << wo.extents << dendl;
-      logger->inc(l_bluestore_wal_write_ops);
-      logger->inc(l_bluestore_wal_write_bytes, wo.data.length());
+      if (increment_counters) {
+        logger->inc(l_bluestore_wal_write_ops);
+        logger->inc(l_bluestore_wal_write_bytes, wo.data.length());
+      }
       bufferlist::iterator p = wo.data.begin();
       for (auto& e : wo.extents) {
 	bufferlist bl;
@@ -5415,7 +5423,7 @@ int BlueStore::queue_transactions(
     b->dirty_blob().calc_csum(d.b_off, d.data);
   }
 
-  _txc_write_nodes(txc, txc->t);
+  bool queued = _txc_write_nodes(txc, txc->t);
   // journal wal items
   if (txc->wal_txn) {
     // move releases to after wal
@@ -5423,11 +5431,20 @@ int BlueStore::queue_transactions(
     assert(txc->released.empty());
 
     txc->wal_txn->seq = wal_seq.inc();
+
     bufferlist bl;
-    ::encode(*txc->wal_txn, bl);
-    string key;
-    get_wal_key(txc->wal_txn->seq, &key);
-    txc->t->set(PREFIX_WAL, key, bl);
+    if (!queued && txc->wal_txn->can_bypass_wal(block_size)) {
+      dout(20) << __func__ << " WAL bypassed" << dendl;
+      _do_wal_ops(txc, false);
+      delete txc->wal_txn;
+      txc->wal_txn = NULL;
+    } else {
+      bufferlist bl;
+      ::encode(*txc->wal_txn, bl);
+      string key;
+      get_wal_key(txc->wal_txn->seq, &key);
+      txc->t->set(PREFIX_WAL, key, bl);
+    }
   }
 
   throttle_ops.get(txc->ops);
