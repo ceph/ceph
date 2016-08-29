@@ -258,6 +258,18 @@ public:
   ~RGWDeleteObj_ObjStore() {}
 };
 
+class  RGWGetCrossDomainPolicy_ObjStore : public RGWGetCrossDomainPolicy {
+public:
+  RGWGetCrossDomainPolicy_ObjStore() = default;
+  ~RGWGetCrossDomainPolicy_ObjStore() = default;
+};
+
+class  RGWGetHealthCheck_ObjStore : public RGWGetHealthCheck {
+public:
+  RGWGetHealthCheck_ObjStore() = default;
+  ~RGWGetHealthCheck_ObjStore() = default;
+};
+
 class RGWCopyObj_ObjStore : public RGWCopyObj {
 public:
   RGWCopyObj_ObjStore() {}
@@ -373,6 +385,12 @@ public:
   virtual int get_params();
 };
 
+class RGWInfo_ObjStore : public RGWInfo {
+public:
+    RGWInfo_ObjStore() = default;
+    ~RGWInfo_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;
@@ -404,6 +422,9 @@ protected:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
 public:
+  static constexpr int MAX_BUCKET_NAME_LEN = 255;
+  static constexpr int MAX_OBJ_NAME_LEN = 1024;
+
   RGWHandler_REST() {}
   virtual ~RGWHandler_REST() {}
 
@@ -426,19 +447,30 @@ class RGWHandler_REST_S3;
 class RGWRESTMgr {
   bool should_log;
 protected:
-  map<string, RGWRESTMgr *> resource_mgrs;
-  multimap<size_t, string> resources_by_size;
-  RGWRESTMgr *default_mgr;
+  std::map<std::string, RGWRESTMgr*> resource_mgrs;
+  std::multimap<std::size_t, std::string> resources_by_size;
+  RGWRESTMgr* default_mgr;
 
 public:
-  RGWRESTMgr() : should_log(false), default_mgr(NULL) {}
+  RGWRESTMgr()
+    : should_log(false),
+      default_mgr(nullptr) {
+  }
   virtual ~RGWRESTMgr();
 
   void register_resource(string resource, RGWRESTMgr *mgr);
   void register_default_mgr(RGWRESTMgr *mgr);
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri,
-				       string *out_uri);
+  virtual RGWRESTMgr* get_resource_mgr(struct req_state *s,
+                                       const std::string& uri,
+                                       std::string* out_uri);
+
+  virtual RGWRESTMgr* get_resource_mgr_as_default(struct req_state* s,
+                                                  const std::string& uri,
+                                                  std::string* our_uri) {
+    return this;
+  }
+
   virtual RGWHandler_REST *get_handler(struct req_state *s) { return NULL; }
   virtual void put_handler(RGWHandler_REST *handler) { delete handler; }
 
