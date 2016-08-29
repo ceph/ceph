@@ -2978,12 +2978,6 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
     pi->ctime = m->get_ctime();
   }
 
-  if (dirty && m->get_change_attr() > pi->change_attr) {
-    dout(7) << "  change_attr " << pi->change_attr << " -> " << m->get_change_attr()
-	    << " for " << *in << dendl;
-    pi->change_attr = m->get_change_attr();
-  }
-
   // file
   if (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) {
     utime_t atime = m->get_atime();
@@ -3050,6 +3044,24 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
 	      << " -> " << m->get_btime() << dec
 	      << " for " << *in << dendl;
       pi->btime = m->get_btime();
+    }
+  }
+
+  /*
+   * Different clients can hold different exclusive caps on the same inode,
+   * but the change_attr field is under the aegis of the FILE cap. If the
+   * client isn't returning the FILE_EXCL cap, and the change_attr in the
+   * MClientCaps is not newer than the one in the inode, then we must bump it
+   * an extra time to ensure that any client that _does_ hold FILE_EXCL sees
+   * a new change_attr.
+   */
+  if (dirty) {
+    if (m->get_change_attr() > pi->change_attr) {
+      dout(7) << "  change_attr " << pi->change_attr << " -> " << m->get_change_attr()
+	      << " for " << *in << dendl;
+      pi->change_attr = m->get_change_attr();
+    } else if (!(dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) {
+      pi->change_attr++;
     }
   }
 
