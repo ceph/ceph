@@ -69,6 +69,7 @@ struct ceph_statx {
 #define CEPH_STATX_BLOCKS	0x00000400U     /* Want/got stx_blocks */
 #define CEPH_STATX_BASIC_STATS	0x000007ffU     /* The stuff in the normal stat struct */
 #define CEPH_STATX_BTIME	0x00000800U     /* Want/got stx_btime */
+#define CEPH_STATX_VERSION	0x00001000U     /* Want/got stx_version */
 #define CEPH_STATX_GEN		0x00002000U     /* Want/got stx_gen */
 #define CEPH_STATX_ALL_STATS	0x00003fffU     /* All supported stats */
 
