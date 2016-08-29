@@ -1483,7 +1483,15 @@ TEST(LibCephFS, Btime) {
   int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
   ASSERT_LT(0, fd);
 
+  /* make sure fstatx works */
   struct ceph_statx	stx;
+
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
+  ASSERT_EQ(stx.stx_btime, stx.stx_ctime);
+  ASSERT_EQ(stx.stx_btime_ns, stx.stx_ctime_ns);
+  ceph_close(cmount, fd);
+
   ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
   ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
   ASSERT_EQ(stx.stx_btime, stx.stx_ctime);
