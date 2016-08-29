@@ -140,7 +140,6 @@ private:
   bool m_sparse;
   int m_op_flags;
   ceph::bufferlist m_read_data;
-  AioCompletion *m_parent_completion;
   ExtentMap m_ext_map;
 
   /**
@@ -169,7 +168,7 @@ private:
 
   void send_copyup();
 
-  void read_from_parent(const Extents& image_extents);
+  void read_from_parent(Extents&& image_extents);
 };
 
 class AbstractAioObjectWrite : public AioObjectRequest<> {

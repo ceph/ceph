@@ -26,6 +26,8 @@ set(librbd_internal_srcs
   ObjectWatcher.cc 
   Operations.cc
   Utils.cc
+  cache/ImageWriteback.cc
+  cache/PassthroughImageCache.cc
   exclusive_lock/AcquireRequest.cc
   exclusive_lock/ReacquireRequest.cc
   exclusive_lock/ReleaseRequest.cc

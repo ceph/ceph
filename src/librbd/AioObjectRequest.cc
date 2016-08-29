@@ -128,7 +128,6 @@ bool AioObjectRequest<I>::compute_parent_extents() {
 }
 
 static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
-  assert(ictx->owner_lock.is_locked());
   assert(ictx->snap_lock.is_locked());
   return (ictx->clone_copy_on_read &&
           !ictx->read_only && snap_id == CEPH_NOSNAP &&
@@ -148,9 +147,7 @@ AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
   : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
                         snap_id, completion, false),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
-    m_op_flags(op_flags), m_parent_completion(NULL),
-    m_state(LIBRBD_AIO_READ_FLAT) {
-
+    m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
 }
 
@@ -186,7 +183,6 @@ bool AioObjectRead<I>::should_complete(int r)
     // This is the step to read from parent
     if (!m_tried_parent && r == -ENOENT) {
       {
-        RWLock::RLocker owner_locker(image_ctx->owner_lock);
         RWLock::RLocker snap_locker(image_ctx->snap_lock);
         RWLock::RLocker parent_locker(image_ctx->parent_lock);
         if (image_ctx->parent == NULL) {
@@ -216,17 +212,9 @@ bool AioObjectRead<I>::should_complete(int r)
             m_state = LIBRBD_AIO_READ_COPYUP;
           }
 
-          read_from_parent(parent_extents);
+          read_from_parent(std::move(parent_extents));
           finished = false;
         }
-      }
-
-      if (m_tried_parent) {
-        // release reference to the parent read completion.  this request
-        // might be completed after unblock is invoked.
-        AioCompletion *parent_completion = m_parent_completion;
-        parent_completion->unblock();
-        parent_completion->put();
       }
     }
     break;
@@ -301,7 +289,6 @@ void AioObjectRead<I>::send_copyup()
 {
   ImageCtx *image_ctx = this->m_ictx;
   {
-    RWLock::RLocker owner_locker(image_ctx->owner_lock);
     RWLock::RLocker snap_locker(image_ctx->snap_lock);
     RWLock::RLocker parent_locker(image_ctx->parent_lock);
     if (!this->compute_parent_extents() ||
@@ -316,34 +303,30 @@ void AioObjectRead<I>::send_copyup()
     image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
-    CopyupRequest *new_req = new CopyupRequest(image_ctx, this->m_oid,
-                                               this->m_object_no,
-                                               this->m_parent_extents);
+    CopyupRequest *new_req = new CopyupRequest(
+      image_ctx, this->m_oid, this->m_object_no,
+      std::move(this->m_parent_extents));
+    this->m_parent_extents.clear();
+
     image_ctx->copyup_list[this->m_object_no] = new_req;
     new_req->send();
   }
 }
 
 template <typename I>
-void AioObjectRead<I>::read_from_parent(const Extents& parent_extents)
+void AioObjectRead<I>::read_from_parent(Extents&& parent_extents)
 {
   ImageCtx *image_ctx = this->m_ictx;
-  assert(!m_parent_completion);
-  m_parent_completion = AioCompletion::create_and_start<AioObjectRequest<I> >(
-    this, image_ctx, AIO_TYPE_READ);
-
-  // prevent the parent image from being deleted while this
-  // request is still in-progress
-  m_parent_completion->get();
-  m_parent_completion->block();
+  AioCompletion *parent_completion = AioCompletion::create_and_start<
+    AioObjectRequest<I> >(this, image_ctx, AIO_TYPE_READ);
 
   ldout(image_ctx->cct, 20) << "read_from_parent this = " << this
-                            << " parent completion " << m_parent_completion
+                            << " parent completion " << parent_completion
                             << " extents " << parent_extents
                             << dendl;
-  RWLock::RLocker owner_locker(image_ctx->parent->owner_lock);
-  AioImageRequest<>::aio_read(image_ctx->parent, m_parent_completion,
-                              parent_extents, NULL, &m_read_data, 0);
+  AioImageRequest<>::aio_read(image_ctx->parent, parent_completion,
+                              std::move(parent_extents), nullptr, &m_read_data,
+                              0);
 }
 
 /** write **/
@@ -444,7 +427,6 @@ bool AbstractAioObjectWrite::should_complete(int r)
 }
 
 void AbstractAioObjectWrite::send() {
-  assert(m_ictx->owner_lock.is_locked());
   ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this <<" "
                          << m_oid << " " << m_object_off << "~"
                          << m_object_len << dendl;
@@ -452,8 +434,6 @@ void AbstractAioObjectWrite::send() {
 }
 
 void AbstractAioObjectWrite::send_pre() {
-  assert(m_ictx->owner_lock.is_locked());
-
   bool write = false;
   {
     RWLock::RLocker snap_lock(m_ictx->snap_lock);
@@ -493,7 +473,6 @@ void AbstractAioObjectWrite::send_pre() {
 }
 
 bool AbstractAioObjectWrite::send_post() {
-  RWLock::RLocker owner_locker(m_ictx->owner_lock);
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr || !post_object_map_update()) {
     return true;
@@ -544,7 +523,8 @@ void AbstractAioObjectWrite::send_copyup()
   if (it == m_ictx->copyup_list.end()) {
     CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
                                                m_object_no,
-                                               m_parent_extents);
+                                               std::move(m_parent_extents));
+    m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
     new_req->append_request(this);
