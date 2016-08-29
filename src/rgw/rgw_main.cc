@@ -341,18 +341,51 @@ int main(int argc, const char **argv)
   }
 
   // S3 website mode is a specialization of S3
-  bool s3website_enabled = apis_map.count("s3website") > 0;
-  if (apis_map.count("s3") > 0 || s3website_enabled)
-    rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
-
-  if (apis_map.count("swift") > 0) {
-    rest.register_resource(g_conf->rgw_swift_url_prefix,
-               set_logging(new RGWRESTMgr_SWIFT));
+  const bool s3website_enabled = apis_map.count("s3website") > 0;
+  // Swift API entrypoint could placed in the root instead of S3
+  const bool swift_at_root = g_conf->rgw_swift_url_prefix == "/";
+  if (apis_map.count("s3") > 0 || s3website_enabled) {
+    if (! swift_at_root) {
+      rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
+    } else {
+      derr << "Cannot have the S3 or S3 Website enabled together with "
+           << "Swift API placed in the root of hierarchy" << dendl;
+      return EINVAL;
+    }
   }
 
-  if (apis_map.count("swift_auth") > 0)
+  if (apis_map.count("swift") > 0) {
+    RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
+
+    if (! g_conf->rgw_cross_domain_policy.empty()) {
+      swift_resource->register_resource("crossdomain.xml",
+                          set_logging(new RGWRESTMgr_SWIFT_CrossDomain));
+    }
+
+    swift_resource->register_resource("healthcheck",
+                          set_logging(new RGWRESTMgr_SWIFT_HealthCheck));
+
+    swift_resource->register_resource("info",
+                          set_logging(new RGWRESTMgr_SWIFT_Info));
+
+    if (! swift_at_root) {
+      rest.register_resource(g_conf->rgw_swift_url_prefix,
+                          set_logging(swift_resource));
+    } else {
+      if (store->get_zonegroup().zones.size() > 1) {
+        derr << "Placing Swift API in the root of URL hierarchy while running"
+             << " multi-site configuration requires another instance of RadosGW"
+             << " with S3 API enabled!" << dendl;
+      }
+
+      rest.register_default_mgr(set_logging(swift_resource));
+    }
+  }
+
+  if (apis_map.count("swift_auth") > 0) {
     rest.register_resource(g_conf->rgw_swift_auth_entry,
                set_logging(new RGWRESTMgr_SWIFT_Auth));
+  }
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
