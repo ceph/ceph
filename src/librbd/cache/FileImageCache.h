@@ -13,6 +13,15 @@ struct ImageCtx;
 
 namespace cache {
 
+namespace file {
+
+class Policy;
+template <typename> class ImageStore;
+template <typename> class JournalStore;
+template <typename> class MetaStore;
+
+} // namespace file
+
 /**
  * Prototype file-based, client-side, image extent cache
  */
@@ -20,6 +29,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class FileImageCache : public ImageCache {
 public:
   FileImageCache(ImageCtx &image_ctx);
+  ~FileImageCache();
 
   /// client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
@@ -47,6 +57,13 @@ public:
 private:
   ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
+
+  file::Policy *m_policy = nullptr;
+  file::MetaStore<ImageCtx> *m_meta_store = nullptr;
+  file::JournalStore<ImageCtx> *m_journal_store = nullptr;
+  file::ImageStore<ImageCtx> *m_image_store = nullptr;
+
+  void invalidate(Extents&& image_extents, Context *on_finish);
 
 };
 
