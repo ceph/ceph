@@ -286,6 +286,7 @@ void inode_t::encode(bufferlist &bl, uint64_t features) const
   ::encode(last_scrub_stamp, bl);
 
   ::encode(btime, bl);
+  ::encode(change_attr, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -367,8 +368,10 @@ void inode_t::decode(bufferlist::iterator &p)
   }
   if (struct_v >= 14) {
     ::decode(btime, p);
+    ::decode(change_attr, p);
   } else {
     btime = utime_t();
+    change_attr = 0;
   }
 
   DECODE_FINISH(p);
@@ -406,6 +409,7 @@ void inode_t::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
   f->dump_unsigned("time_warp_seq", time_warp_seq);
+  f->dump_unsigned("change_attr", change_attr);
 
   f->open_array_section("client_ranges");
   for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin(); p != client_ranges.end(); ++p) {
@@ -465,6 +469,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         truncate_size != other.truncate_size ||
         truncate_from != other.truncate_from ||
         truncate_pending != other.truncate_pending ||
+	change_attr != other.change_attr ||
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
