@@ -388,9 +388,11 @@ void ImageReadRequest<I>::send_image_cache_request() {
 
   auto *req_comp = new io::ReadResult::C_ImageReadRequest(
     aio_comp, this->m_image_extents);
+
   image_ctx.image_cache->aio_read(std::move(this->m_image_extents),
                                   &req_comp->bl, m_op_flags,
                                   req_comp);
+  aio_comp->put();
 }
 
 template <typename I>
@@ -534,8 +536,10 @@ void ImageWriteRequest<I>::send_image_cache_request() {
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
   C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+
   image_ctx.image_cache->aio_write(std::move(this->m_image_extents),
                                    std::move(m_bl), m_op_flags, req_comp);
+  aio_comp->put();
 }
 
 template <typename I>
@@ -649,11 +653,13 @@ void ImageDiscardRequest<I>::send_image_cache_request() {
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(this->m_image_extents.size());
+
   for (auto &extent : this->m_image_extents) {
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.image_cache->aio_discard(extent.first, extent.second,
                                        this->m_skip_partial_discard, req_comp);
   }
+  aio_comp->put();
 }
 
 template <typename I>
@@ -761,7 +767,9 @@ void ImageFlushRequest<I>::send_image_cache_request() {
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
   C_AioRequest *req_comp = new C_AioRequest(aio_comp);
+
   image_ctx.image_cache->aio_flush(req_comp);
+  aio_comp->put();
 }
 
 template <typename I>
