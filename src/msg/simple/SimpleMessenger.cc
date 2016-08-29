@@ -87,10 +87,15 @@ int SimpleMessenger::shutdown()
 {
   ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
   mark_down_all();
-  dispatch_queue.shutdown();
 
   // break ref cycles on the loopback connection
   local_connection->set_priv(NULL);
+
+  lock.Lock();
+  stop_cond.Signal();
+  stopped = true;
+  lock.Unlock();
+
   return 0;
 }
 
@@ -312,6 +317,7 @@ int SimpleMessenger::start()
 
   assert(!started);
   started = true;
+  stopped = false;
 
   if (!did_bind) {
     my_inst.addr.nonce = nonce;
@@ -525,14 +531,10 @@ void SimpleMessenger::wait()
     lock.Unlock();
     return;
   }
-  lock.Unlock();
+  if (!stopped)
+    stop_cond.Wait(lock);
 
-  if (dispatch_queue.is_started()) {
-    ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
-    dispatch_queue.wait();
-    dispatch_queue.discard_local();
-    ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
-  }
+  lock.Unlock();
 
   // done!  clean up.
   if (did_bind) {
@@ -540,6 +542,14 @@ void SimpleMessenger::wait()
     accepter.stop();
     did_bind = false;
     ldout(cct,20) << "wait: stopped accepter thread" << dendl;
+  }
+
+  dispatch_queue.shutdown();
+  if (dispatch_queue.is_started()) {
+    ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
+    dispatch_queue.wait();
+    dispatch_queue.discard_local();
+    ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   }
 
   if (reaper_started) {
