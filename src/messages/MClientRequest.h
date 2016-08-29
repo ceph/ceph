@@ -36,6 +36,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "include/ceph_features.h"
 
 #include <sys/types.h>
 #include <utime.h>
@@ -46,11 +47,11 @@
 // metadata ops.
 
 class MClientRequest : public Message {
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
 public:
-  struct ceph_mds_request_head_legacy head;
+  struct ceph_mds_request_head head;
   utime_t stamp;
 
   struct Release {
@@ -160,7 +161,28 @@ public:
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
+
+    if (header.version >= 4) {
+      ::decode(head, p);
+    } else {
+      struct ceph_mds_request_head_legacy *old_mds_head =
+	(struct ceph_mds_request_head_legacy *)&(head.oldest_client_tid);
+
+      ::decode(*old_mds_head, p);
+
+      head.version = 0;
+
+      /* Can't set the btime from legacy struct */
+      if (head.op == CEPH_MDS_OP_SETATTR) {
+	int localmask = head.args.setattr.mask;
+
+	localmask &= ~CEPH_SETATTR_BTIME;
+
+	head.args.setattr.btime = { 0 };
+	head.args.setattr.mask = localmask;
+      }
+    }
+
     ::decode(path, p);
     ::decode(path2, p);
     ::decode_nohead(head.num_releases, releases, p);
@@ -170,7 +192,17 @@ public:
 
   void encode_payload(uint64_t features) {
     head.num_releases = releases.size();
-    ::encode(head, payload);
+    head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
+
+    if (features & CEPH_FEATURE_FS_BTIME) {
+      ::encode(head, payload);
+    } else {
+      struct ceph_mds_request_head_legacy *old_mds_head =
+	(struct ceph_mds_request_head_legacy *)&(head.oldest_client_tid);
+
+      ::encode(*old_mds_head, payload);
+    }
+
     ::encode(path, payload);
     ::encode(path2, payload);
     ::encode_nohead(releases, payload);

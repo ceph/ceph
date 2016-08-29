@@ -3746,7 +3746,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   __u32 access_mask = MAY_WRITE;
 
   // xlock inode
-  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME))
     xlocks.insert(&cur->authlock);
   if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
     xlocks.insert(&cur->filelock);
@@ -3811,7 +3811,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     pi->mtime = req->head.args.setattr.mtime;
   if (mask & CEPH_SETATTR_ATIME)
     pi->atime = req->head.args.setattr.atime;
-  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
+  if (mask & CEPH_SETATTR_BTIME)
+    pi->btime = req->head.args.setattr.btime;
+  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_BTIME))
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {

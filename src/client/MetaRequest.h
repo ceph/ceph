@@ -86,7 +86,7 @@ public:
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
     caller_cond(0), dispatch_cond(0) {
-    memset(&head, 0, sizeof(ceph_mds_request_head_legacy));
+    memset(&head, 0, sizeof(head));
     head.op = op;
   }
   ~MetaRequest();
