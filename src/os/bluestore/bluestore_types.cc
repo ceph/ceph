@@ -960,6 +960,15 @@ void bluestore_onode_t::punch_hole(
   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
 {
   auto p = seek_lextent(offset);
+  punch_hole(p, offset, length, deref);
+}
+
+void bluestore_onode_t::punch_hole(
+  map<uint64_t,bluestore_lextent_t>::iterator p,
+  uint64_t offset,
+  uint64_t length,
+  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
+{
   uint64_t end = offset + length;
   while (p != extent_map.end()) {
     if (p->first >= end) {
@@ -1022,17 +1031,31 @@ void bluestore_onode_t::punch_hole(
   }
 }
 
-void bluestore_onode_t::set_lextent(uint64_t offset,
+bool bluestore_onode_t::set_lextent(uint64_t offset,
                    const bluestore_lextent_t& lext,
                    bluestore_blob_t* b,
                    vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
 {
-  punch_hole(offset, lext.length, deref);
-  extent_map[offset] = lext;
-  //increment reference for shared blobs only
-  if (b->has_refmap()) {
-    b->get_ref(lext.offset, lext.length);
+  bool changed = true;
+  uint64_t length = lext.length;
+  uint64_t end = offset + length;
+  auto p = seek_lextent(offset);
+  if (p != extent_map.end() && p->first < end) {
+    if (p->first <= offset && p->first + p->second.length >= end && p->second.blob == lext.blob) {
+      changed = false;
+    } else {
+      punch_hole(p, offset, length, deref);
+    }
   }
+ 
+  if (changed){
+    extent_map[offset] = lext;
+    //increment reference for shared blobs only
+    if (b->has_refmap()) {
+      b->get_ref(lext.offset, lext.length);
+    }
+  }
+  return changed;
 }
 
 bool bluestore_onode_t::deref_lextent( uint64_t offset,

@@ -431,7 +431,8 @@ struct bluestore_blob_t {
   }
 
   /// indicate that a range has (now) been used.
-  void mark_used(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
+  bool mark_used(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
+    bool changed = false;
     if (has_unused()) {
       assert((min_alloc_size % unused.size()) == 0);
       assert(offset + length <= min_alloc_size);
@@ -440,12 +441,14 @@ struct bluestore_blob_t {
       uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
       assert(end <= unused.size());
       for (auto i = start; i < end; ++i) {
+        changed = changed || unused[i] != 0;
         unused[i] = 0;
       }
       if (unused.none()) {
         clear_flag(FLAG_HAS_UNUSED);
       }
     }
+    return changed;
   }
 
   /// get logical references
@@ -685,9 +688,13 @@ struct bluestore_onode_t {
   /// punch a logical hole.  add lextents to deref to target list.
   void punch_hole(uint64_t offset, uint64_t length,
 		  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
+  /// punch a logical hole.  add lextents to deref to target list.
+  void punch_hole(map<uint64_t,bluestore_lextent_t>::iterator p,
+                  uint64_t offset, uint64_t length,
+		  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
 
-  /// put new lextent into lextent_map overwriting existing ones if any and update references accordingly
-  void set_lextent(uint64_t offset,
+  /// put new lextent into lextent_map overwriting existing ones if any and update references accordingly. returns false if no changes needed
+  bool set_lextent(uint64_t offset,
 		   const bluestore_lextent_t& lext,
 		   bluestore_blob_t* b,
 		   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);

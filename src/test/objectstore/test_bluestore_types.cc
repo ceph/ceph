@@ -877,8 +877,9 @@ TEST(bluestore_onode_t, insert_remove_lextent)
   bool empty;
 
   bluestore_lextent_t lextent(1, 0, 100);
-  on.set_lextent(0, lextent, &blob, &r);
+  bool changed = on.set_lextent(0, lextent, &blob, &r);
 
+  ASSERT_TRUE(changed);
   ASSERT_EQ(1u, on.extent_map.size());
   ASSERT_EQ(0u, r.size());
   ASSERT_TRUE(blob.ref_map.contains(0,100));
@@ -887,8 +888,9 @@ TEST(bluestore_onode_t, insert_remove_lextent)
   lextent.blob = 2;
   lextent.offset = 1;
   lextent.length = 99;
-  on.set_lextent(101, lextent, &blob2, &r);
+  changed = on.set_lextent(101, lextent, &blob2, &r);
 
+  ASSERT_TRUE(changed);
   ASSERT_EQ(2u, on.extent_map.size());
   ASSERT_EQ(0u, r.size());
   ASSERT_TRUE(blob.ref_map.contains(0,100));
@@ -899,8 +901,9 @@ TEST(bluestore_onode_t, insert_remove_lextent)
   lextent.blob = 3;
   lextent.offset = 1;
   lextent.length = 99;
-  on.set_lextent(101, lextent, &blob3, &r);
+  changed = on.set_lextent(101, lextent, &blob3, &r);
 
+  ASSERT_TRUE(changed);
   ASSERT_EQ(2u, on.extent_map.size());
   ASSERT_EQ(1u, r.size());
   ASSERT_EQ(2, r[0].second.blob);
@@ -920,14 +923,43 @@ TEST(bluestore_onode_t, insert_remove_lextent)
   r.clear();
   rp.clear();
 
+  //full overwrite lextent/blob that in fact don't need metadata update
+  lextent.blob = 3;
+  lextent.offset = 1;
+  lextent.length = 99;
+  changed = on.set_lextent(101, lextent, &blob3, &r);
+
+  ASSERT_TRUE(!changed);
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //partially overwrite lextent/blob that in fact don't need metadata update
+  lextent.blob = 3;
+  lextent.offset = 2;
+  lextent.length = 98;
+  changed = on.set_lextent(102, lextent, &blob3, &r);
+
+  ASSERT_TRUE(!changed);
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
   //overwrite lextent/blob that has a REF_MAP with one that doesn't
   lextent.blob = 2;
   lextent.offset = 0;
   lextent.length = 100;
   blob2.extents.clear(); //for sure
   blob2.extents.push_back(pext2);
-  on.set_lextent(0, lextent, &blob2, &r);
+  changed = on.set_lextent(0, lextent, &blob2, &r);
 
+  ASSERT_TRUE(changed);
   ASSERT_EQ(2u, on.extent_map.size());
   ASSERT_EQ(1u, r.size());
   ASSERT_EQ(1, r[0].second.blob);
@@ -952,8 +984,9 @@ TEST(bluestore_onode_t, insert_remove_lextent)
   lextent.blob = 3;
   lextent.offset = 200;
   lextent.length = 50;
-  on.set_lextent(300, lextent, &blob3, &r);
+  changed = on.set_lextent(300, lextent, &blob3, &r);
 
+  ASSERT_TRUE(changed);
   ASSERT_EQ(3u, on.extent_map.size());
   ASSERT_EQ(0u, r.size());
   ASSERT_TRUE(blob3.ref_map.empty());
