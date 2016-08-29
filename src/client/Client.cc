@@ -704,7 +704,7 @@ void Client::trim_dentry(Dentry *dn)
 
 void Client::update_inode_file_bits(Inode *in,
 				    uint64_t truncate_seq, uint64_t truncate_size,
-				    uint64_t size,
+				    uint64_t size, uint64_t change_attr,
 				    uint64_t time_warp_seq, utime_t ctime,
 				    utime_t mtime,
 				    utime_t atime,
@@ -770,6 +770,8 @@ void Client::update_inode_file_bits(Inode *in,
     ldout(cct, 30) << "Yay have enough caps to look at our times" << dendl;
     if (ctime > in->ctime) 
       in->ctime = ctime;
+    if (change_attr > in->change_attr)
+      in->change_attr = change_attr;
     if (time_warp_seq > in->time_warp_seq) {
       ldout(cct, 10) << "mds time_warp_seq " << time_warp_seq << " on inode " << *in
 	       << " is higher than local time_warp_seq "
@@ -889,9 +891,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     }
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
-			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
-			   st->inline_version, st->inline_data,
-			   issued);
+			   st->change_attr, st->time_warp_seq, st->ctime,
+			   st->mtime, st->atime, st->inline_version,
+			   st->inline_data, issued);
   } else if (st->inline_version > in->inline_version) {
     in->inline_data = st->inline_data;
     in->inline_version = st->inline_version;
@@ -3237,6 +3239,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->ctime = in->ctime;
   m->btime = in->btime;
   m->time_warp_seq = in->time_warp_seq;
+  m->change_attr = in->change_attr;
     
   if (flush & CEPH_CAP_FILE_WR) {
     m->inline_version = in->inline_version;
@@ -3445,6 +3448,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
   capsnap->atime = in->atime;
   capsnap->ctime = in->ctime;
   capsnap->time_warp_seq = in->time_warp_seq;
+  capsnap->change_attr = in->change_attr;
 
   capsnap->dirty |= in->caps_dirty();
 
@@ -3533,6 +3537,7 @@ void Client::flush_snaps(Inode *in, bool all_again)
     m->mtime = capsnap->mtime;
     m->atime = capsnap->atime;
     m->time_warp_seq = capsnap->time_warp_seq;
+    m->change_attr = capsnap->change_attr;
 
     if (capsnap->dirty & CEPH_CAP_FILE_WR) {
       m->inline_version = in->inline_version;
@@ -4665,10 +4670,9 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
   int issued = in->caps_issued(&implemented) | in->caps_dirty();
   issued |= implemented;
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(),
-                         m->get_size(), m->get_time_warp_seq(), m->get_ctime(),
-                         m->get_mtime(), m->get_atime(),
-                         m->inline_version, m->inline_data,
-                         issued);
+			 m->get_size(), m->get_change_attr(), m->get_time_warp_seq(),
+			 m->get_ctime(), m->get_mtime(), m->get_atime(),
+                         m->inline_version, m->inline_data, issued);
   m->put();
 }
 
@@ -4890,7 +4894,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
-			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(),
+			 m->get_change_attr(), m->get_time_warp_seq(), m->get_ctime(),
+			 m->get_mtime(), m->get_atime(),
 			 m->inline_version, m->inline_data, issued);
 
   // max_size
@@ -9623,6 +9628,7 @@ Inode *Client::open_snapdir(Inode *diri)
     in->ctime = diri->ctime;
     in->btime = diri->btime;
     in->size = diri->size;
+    in->change_attr = diri->change_attr;
 
     in->dirfragtree.clear();
     in->snapdir_parent = diri;
