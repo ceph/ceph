@@ -212,14 +212,14 @@ void MDSRankDispatcher::shutdown()
 /**
  * Helper for simple callbacks that call a void fn with no args.
  */
-class C_MDS_VoidFn : public MDSInternalContext
+class C_MDS_VoidFn : public MDSContext
 {
   typedef void (MDSRank::*fn_ptr)();
   protected:
    fn_ptr fn;
   public:
   C_MDS_VoidFn(MDSRank *mds_, fn_ptr fn_)
-    : MDSInternalContext(mds_), fn(fn_)
+    : MDSContext(mds_), fn(fn_)
   {
     assert(mds_);
     assert(fn_);
@@ -452,11 +452,11 @@ void MDSRank::request_state(MDSMap::DaemonState s)
   beacon.send();
 }
 
-class C_MDS_BootStart : public MDSInternalContext {
+class C_MDS_BootStart : public MDSContext {
   MDSRank::BootStep nextstep;
 public:
   C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n)
-    : MDSInternalContext(m), nextstep(n) {}
+    : MDSContext(m), nextstep(n) {}
   void finish(int r) {
     mds->boot_start(nextstep, r);
   }
@@ -590,7 +590,7 @@ void MDSRank::boot_create()
   inotable->set_rank(whoami);
   inotable->reset();
 
-  mdlog->create(new C_MDSInternalNoop);
+  mdlog->create(new C_MDSContextNoop);
   mdlog->start_new_segment();
 
   creating_done();
@@ -700,12 +700,12 @@ void MDSRank::dump_status(Formatter *f) const
 {
 }
 
-void MDSRank::queue_context(MDSInternalContextBase *c)
+void MDSRank::queue_context(MDSContextBase *c, int r)
 {
-  finisher->queue(c);
+  finisher->queue(c, r);
 }
 
-void MDSRank::queue_contexts(std::list<MDSInternalContextBase*>& ls)
+void MDSRank::queue_contexts(std::list<MDSContextBase*>& ls, int r)
 {
   for (auto c : ls)
     finisher->queue(c);

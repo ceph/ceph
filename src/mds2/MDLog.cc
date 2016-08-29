@@ -85,7 +85,7 @@ void MDLog::set_write_iohint(unsigned iohint_flags)
   journaler->set_write_iohint(iohint_flags);
 }
 
-class C_MDL_WriteError : public MDSInternalContextBase {
+class C_MDL_WriteError : public MDSContextBase {
   protected:
   MDLog *mdlog;
   MDSRank *get_mds() {return mdlog->mds;}
@@ -129,7 +129,7 @@ uint64_t MDLog::get_safe_pos()
 }
 
 
-void MDLog::create(MDSInternalContextBase *c)
+void MDLog::create(MDSContextBase *c)
 {
   dout(5) << "create empty log" << dendl;
 
@@ -167,7 +167,7 @@ void MDLog::create(MDSInternalContextBase *c)
   submit_thread.create("md_submit");
 }
 
-void MDLog::open(MDSInternalContextBase *c)
+void MDLog::open(MDSContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
@@ -183,11 +183,11 @@ void MDLog::open(MDSInternalContextBase *c)
  * Final part of reopen() procedure, after recovery_thread
  * has done its thing we call append()
  */
-class C_ReopenComplete : public MDSInternalContext {
+class C_ReopenComplete : public MDSContext {
   MDLog *mdlog;
-  MDSInternalContextBase *on_complete;
+  MDSContextBase *on_complete;
 public:
-  C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
+  C_ReopenComplete(MDLog *mdlog_, MDSContextBase *on_complete_) : MDSContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
   void finish(int r) {
     mdlog->append();
     on_complete->complete(r);
@@ -199,7 +199,7 @@ public:
  * recovery procedure again, potentially reformatting the journal if it
  * was in an old format.
  */
-void MDLog::reopen(MDSInternalContextBase *c)
+void MDLog::reopen(MDSContextBase *c)
 {
   dout(5) << "reopen" << dendl;
 
@@ -324,14 +324,23 @@ void MDLog::set_safe_pos(uint64_t pos)
   safe_pos.set(pos);
 }
 
-class MDSLogContextNoop : public MDSLogContextBase {
+class C_MDL_Flushed : public MDSLogContextBase {
 protected:
   MDLog *mdlog;
   MDSRank *get_mds() {return mdlog->mds; }
-  void finish(int r) { }
+
+  MDSContextBase *wrapped;
+  void finish(int r) {
+    if (wrapped)
+      wrapped->complete(r);
+  }
 public:
-  MDSLogContextNoop(MDLog *l, uint64_t pos)
-    : MDSLogContextBase(pos), mdlog(l) {}
+  C_MDL_Flushed(MDLog *l, MDSContextBase* c) : mdlog(l), wrapped(c) {}
+  C_MDL_Flushed(MDLog *l, uint64_t pos, Finisher *finisher) :
+    mdlog(l), wrapped(NULL) {
+    set_write_pos(pos);
+    set_finisher(finisher);
+  }
 };
 
 void MDLog::_submit_thread()
@@ -383,12 +392,15 @@ void MDLog::_submit_thread()
       ls->end = new_write_pos;
 
       if (data.fin) {
-	dynamic_cast<MDSLogContextBase*>(data.fin)->set_write_pos(new_write_pos);
+	MDSLogContextBase *fin = dynamic_cast<MDSLogContextBase*>(data.fin);
+	assert(fin);
+	fin->set_write_pos(new_write_pos);
+	fin->set_finisher(mds->finisher);
       } else {
-	data.fin = new MDSLogContextNoop(this, new_write_pos);
+	data.fin = new C_MDL_Flushed(this, new_write_pos, mds->finisher);
       }
   
-      journaler->wait_for_flush(new C_OnFinisher(data.fin, mds->finisher));
+      journaler->wait_for_flush(data.fin);
       if (data.flush)
 	journaler->flush();
 
@@ -397,8 +409,12 @@ void MDLog::_submit_thread()
 
       delete le;
     } else {
-      if (data.fin)
-	journaler->wait_for_flush(new C_OnFinisher(data.fin, mds->finisher));
+      if (data.fin) {
+	MDSAsyncContextBase *fin = dynamic_cast<MDSAsyncContextBase*>(data.fin);
+	assert(fin);
+	fin->set_finisher(mds->finisher);
+	journaler->wait_for_flush(data.fin);
+      }
       if (data.flush)
 	journaler->flush();
     }
@@ -413,13 +429,15 @@ void MDLog::_submit_thread()
   submit_mutex.Unlock();
 }
 
-void MDLog::wait_for_safe(MDSInternalContextBase *c)
+void MDLog::wait_for_safe(MDSAsyncContextBase *c)
 {
   if (!g_conf->mds_log) {
     // hack: bypass.
     c->complete(0);
     return;
   }
+    
+  c->set_finisher(mds->finisher);
 
   submit_mutex.Lock();
 
@@ -433,7 +451,7 @@ void MDLog::wait_for_safe(MDSInternalContextBase *c)
   submit_mutex.Unlock();
 
   if (no_pending && c)
-    journaler->wait_for_flush(new C_OnFinisher(c, mds->finisher));
+    journaler->wait_for_flush(c);
 }
 
 void MDLog::flush()
@@ -554,6 +572,14 @@ void MDLog::_journal_segment_subtree_map(MDSLogContextBase *onsync)
   _submit_entry(sle, onsync, false);
 }
 
+void MDLog::journal_segment_subtree_map(MDSContextBase *onsync) {
+  submit_mutex.Lock();
+  _journal_segment_subtree_map(new C_MDL_Flushed(this, onsync));
+  submit_mutex.Unlock();
+  if (onsync)
+    flush();
+}
+
 void MDLog::trim(int m)
 {
   unsigned max_segments = g_conf->mds_log_max_segments;
@@ -642,13 +668,13 @@ void MDLog::trim(int m)
   _trim_expired_segments();
 }
 
-class C_MaybeExpiredSegment : public MDSInternalContext {
+class C_MaybeExpiredSegment : public MDSContext {
   MDLog *mdlog;
   LogSegment *ls;
   int op_prio;
   public:
   C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
-    MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
+    MDSContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
   void finish(int res) {
     if (res < 0)
       mdlog->mds->handle_write_error(res);
@@ -810,7 +836,7 @@ void MDLog::_expired(LogSegment *ls)
     expired_events += ls->num_events;
 
     // Trigger all waiters
-    for (std::list<MDSInternalContextBase*>::iterator i = ls->expiry_waiters.begin();
+    for (std::list<MDSContextBase*>::iterator i = ls->expiry_waiters.begin();
         i != ls->expiry_waiters.end(); ++i) {
       (*i)->complete(0);
     }
@@ -828,7 +854,7 @@ void MDLog::_expired(LogSegment *ls)
 
 
 
-void MDLog::replay(MDSInternalContextBase *c)
+void MDLog::replay(MDSContextBase *c)
 {
   assert(journaler->is_active());
   assert(journaler->is_readonly());
@@ -874,7 +900,7 @@ void MDLog::replay(MDSInternalContextBase *c)
  * When this function completes, the `journaler` attribute will be set to
  * a Journaler instance using the latest available serialization format.
  */
-void MDLog::_recovery_thread(MDSInternalContextBase *completion)
+void MDLog::_recovery_thread(MDSContextBase *completion)
 {
   assert(journaler == NULL);
   if (g_conf->mds_journal_format > JOURNAL_FORMAT_MAX) {
@@ -1021,7 +1047,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
  * swapping pointers to make that one the front journal only when we have
  * safely completed.
  */
-void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, MDSInternalContextBase *completion)
+void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, MDSContextBase *completion)
 {
   assert(!jp_in.is_null());
   assert(completion != NULL);

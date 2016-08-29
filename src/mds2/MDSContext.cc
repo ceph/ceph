@@ -17,29 +17,38 @@
 #include "MDSRank.h"
 #include "MDLog.h"
 
-
+#include "common/Finisher.h"
 #include "common/dout.h"
+
 #define dout_subsys ceph_subsys_mds
 
-
-void MDSInternalContextBase::complete(int r) {
-  MDSRank *mds = get_mds();
-  assert(mds != NULL);
-  MDSContext::complete(r);
-}
-
-MDSRank *MDSInternalContext::get_mds() {
-  return mds;
-}
-
-MDSRank *MDSInternalContextGather::get_mds()
+MDSRank *MDSContextGather::get_mds()
 {
-  derr << "Forbidden call to MDSInternalContextGather::get_mds by " << typeid(*this).name() << dendl;
+  derr << "Forbidden call to MDSContextGather::get_mds by " << typeid(*this).name() << dendl;
   assert(0);
+}
+
+void MDSAsyncContextBase::complete(int r) {
+  if (finisher) {
+    Finisher *f = finisher;
+    finisher = NULL;
+    f->queue(this, r);
+    return;
+  }
+  MDSContextBase::complete(r);
 }
 
 void MDSLogContextBase::complete(int r) {
   assert(write_pos > 0);
-  get_mds()->mdlog->set_safe_pos(write_pos);
-  MDSContext::complete(r);
+  if (finisher) {
+    Finisher *f = finisher;
+    finisher = NULL;
+    f->queue(this, r);
+    return;
+  }
+  MDLog *mdlog = get_mds()->mdlog;
+  uint64_t safe_pos = write_pos;
+  // MDSContextBase::complete() free this
+  MDSContextBase::complete(r);
+  mdlog->set_safe_pos(safe_pos);
 }

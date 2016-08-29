@@ -297,10 +297,10 @@ public:
     }
   };
 
-  void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
+  void add_waiter(uint64_t mask, MDSContextBase *c) {
     parent->add_waiter((mask << get_wait_shift()) | CObject::WAIT_ORDERED, c);
   }
-  void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
+  void take_waiting(uint64_t mask, list<MDSContextBase*>& ls) {
     parent->take_waiting(mask << get_wait_shift(), ls);
   }
   void finish_waiting(uint64_t mask) {

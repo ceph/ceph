@@ -244,8 +244,8 @@ protected:
 
 public:
   Finisher *finisher;
-  void queue_context(MDSInternalContextBase *c);
-  void queue_contexts(std::list<MDSInternalContextBase*>& ls);
+  void queue_context(MDSContextBase *c, int r=0);
+  void queue_contexts(std::list<MDSContextBase*>& ls, int r=0);
 
   struct OpWQ: public ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t> {
     MDSRank *mds;
@@ -288,22 +288,22 @@ public:
   void retry_dispatch(const MDRequestRef &mdr);
 };
 
-class C_MDS_RetryMessage : public MDSInternalContext {
+class C_MDS_RetryMessage : public MDSContext {
   protected:
     Message *msg;
   public:
     C_MDS_RetryMessage(MDSRank *mds, Message *m)
-      : MDSInternalContext(mds) , msg(m) {}
+      : MDSContext(mds) , msg(m) {}
     virtual void finish(int r) {
 //      mds->retry_dispatch(m);
     }
 };
 
-class C_MDS_RetryRequest : public MDSInternalContext {
+class C_MDS_RetryRequest : public MDSContext {
   MDRequestRef mdr;
 public:
   C_MDS_RetryRequest(MDSRank *mds, const MDRequestRef& r)
-    : MDSInternalContext(mds), mdr(r) {}
+    : MDSContext(mds), mdr(r) {}
   virtual void finish(int r) {
     get_mds()->retry_dispatch(mdr);
   }

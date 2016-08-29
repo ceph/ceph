@@ -19,77 +19,76 @@
 #include "include/Context.h"
 
 class MDSRank;
-class MDLog;
+class Finisher;
 
 
-/**
- * Completion which has access to a reference to the global MDS instance.
- *
- * This class exists so that Context subclasses can provide the MDS pointer
- * from a pointer they already had, e.g. MDCache or Locker, rather than
- * necessarily having to carry around an extra MDS* pointer. 
- */
-class MDSContext : public Context
+class MDSContextBase : public Context
 {
 protected:
   virtual MDSRank *get_mds() = 0;
 };
 
-class MDSInternalContextBase : public MDSContext
-{
-public:
-    void complete(int r);
-};
-
 /**
  * General purpose, lets you pass in an MDS pointer.
  */
-class MDSInternalContext : public MDSInternalContextBase
+class MDSContext : public MDSContextBase
 {
 protected:
   MDSRank *mds;
-  virtual MDSRank* get_mds();
-
+  virtual MDSRank* get_mds() { return mds; }
 public:
-  explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
+  explicit MDSContext(MDSRank *mds_) : mds(mds_) {
     assert(mds != NULL);
   }
 };
 
-class C_MDSInternalNoop : public MDSInternalContextBase
+class C_MDSContextNoop : public MDSContextBase
 {
-  virtual MDSRank* get_mds() {assert(0);}
+  virtual MDSRank* get_mds() { assert(0); }
 public:
   void finish(int r) {}
-  void complete(int r) {}
 };
 
 /*
  * Gather needs a default-constructable class
  */
-class MDSInternalContextGather : public MDSInternalContextBase
+class MDSContextGather : public MDSContextBase
 {
 protected:
   MDSRank *get_mds();
 };
 
 
-class MDSGather : public C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>
+class MDSGather : public C_GatherBase<MDSContextBase, MDSContextGather>
 {
 public:
-  MDSGather(CephContext *cct, MDSInternalContextBase *onfinish) : C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>(cct, onfinish) {}
+  MDSGather(CephContext *cct, MDSContextBase *onfinish) :
+    C_GatherBase<MDSContextBase, MDSContextGather>(cct, onfinish) {}
 protected:
   virtual MDSRank *get_mds() {return NULL;}
 };
-typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
+typedef C_GatherBuilderBase<MDSContextBase, MDSGather> MDSGatherBuilder;
 
-class MDSLogContextBase : public MDSInternalContextBase
+class MDSAsyncContextBase : public MDSContextBase
 {
 private:
+  Finisher *finisher;
+public:
+  MDSAsyncContextBase() : finisher(NULL) {}
+  void set_finisher(Finisher *f) { finisher = f; }
+  void complete(int r) final;
+};
+
+class MDSLogContextBase : public MDSContextBase
+{
+private:
+  Finisher *finisher;
   uint64_t write_pos;
 public:
+  MDSLogContextBase() : finisher(NULL), write_pos(0) {}
+  void set_finisher(Finisher *f) { finisher = f; }
   void set_write_pos(uint64_t wp) { write_pos = wp; }
-  void complete(int r);
-  MDSLogContextBase(uint64_t wp=0) : write_pos(wp) {}
+  void complete(int r) final;
 };
+
 #endif  // MDS_CONTEXT_H

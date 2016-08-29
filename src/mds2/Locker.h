@@ -88,7 +88,7 @@ protected:
   // scatter
 public:
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
-  void scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange=false);
+  void scatter_nudge(ScatterLock *lock, MDSContextBase *c, bool forcelockchange=false);
   void mark_updated_scatterlock(ScatterLock *lock);
   void scatter_tick();
 protected:

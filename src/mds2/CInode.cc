@@ -19,14 +19,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.inode(" << vino() << ") "
 
-class CInodeContext : public MDSInternalContextBase
+class CInodeContext : public MDSAsyncContextBase
 {
 protected:
   CInodeRef in;
-  MDSRank *get_mds() {return in->mdcache->mds;}
+  MDSRank *get_mds() { return in->mdcache->mds; }
 public:
   explicit CInodeContext(CInode *in_) : in(in_) {
     assert(in != NULL);
+    set_finisher(get_mds()->finisher);
   }
 };
 
@@ -1266,7 +1267,7 @@ void CInode::remove_client_cap(Session *session)
   bool fcntl_removed = fcntl_locks ? fcntl_locks->remove_all_from(client) : false;
   bool flock_removed = flock_locks ? flock_locks->remove_all_from(client) : false;
   if (fcntl_removed || flock_removed) {
-    list<MDSInternalContextBase*> waiters;
+    list<MDSContextBase*> waiters;
     take_waiting(CInode::WAIT_FLOCK, waiters);
     mdcache->mds->queue_waiters(waiters);
   }
@@ -1294,8 +1295,8 @@ void CInode::encode(bufferlist &bl, uint64_t features)
 
 struct C_Inode_Stored : public CInodeContext {
   version_t version;
-  MDSInternalContextBase *fin;
-  C_Inode_Stored(CInode *i, version_t v, MDSInternalContextBase *f) :
+  MDSContextBase *fin;
+  C_Inode_Stored(CInode *i, version_t v, MDSContextBase *f) :
     CInodeContext(i), version(v), fin(f) {}
   void finish(int r) {
     in->_stored(r, version, fin);
@@ -1309,7 +1310,7 @@ object_t CInode::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
   return object_t(n);
 }
 
-void CInode::store(MDSInternalContextBase *fin)
+void CInode::store(MDSContextBase *fin)
 {
   mutex_assert_locked_by_me();
   dout(10) << "store " << get_version() << dendl;
@@ -1329,15 +1330,11 @@ void CInode::store(MDSInternalContextBase *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
-  Context *newfin =
-    new C_OnFinisher(new C_Inode_Stored(this, get_version(), fin),
-	mdcache->mds->finisher);
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
-      ceph::real_clock::now(g_ceph_context), 0,
-      NULL, newfin);
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph::real_clock::now(g_ceph_context),
+				 0, NULL, new C_Inode_Stored(this, get_version(), fin));
 }
 
-void CInode::_stored(int r, version_t v, MDSInternalContextBase *fin)
+void CInode::_stored(int r, version_t v, MDSContextBase *fin)
 {
   if (r < 0) {
     dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;

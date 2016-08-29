@@ -36,6 +36,7 @@ using std::set;
 struct MDRequestImpl;
 class CInode;
 class Message;
+class MDSContextBase;
 
 /* 
  * session
@@ -204,7 +205,7 @@ public:
   // -- caps --
 private:
   version_t cap_push_seq;        // cap push seq #
-  map<version_t, list<MDSInternalContextBase*> > waitfor_flush; // flush session messages
+  map<version_t, list<MDSContextBase*> > waitfor_flush; // flush session messages
 
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
@@ -215,11 +216,11 @@ public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
 
-  version_t wait_for_flush(MDSInternalContextBase* c) {
+  version_t wait_for_flush(MDSContextBase* c) {
     waitfor_flush[get_push_seq()].push_back(c);
     return get_push_seq();
   }
-  void finish_flush(version_t seq, list<MDSInternalContextBase*>& ls) {
+  void finish_flush(version_t seq, list<MDSContextBase*>& ls) {
     while (!waitfor_flush.empty()) {
       if (waitfor_flush.begin()->first > seq)
 	break;
@@ -435,15 +436,13 @@ public:
   void mutex_lock() { mutex.Lock(); }
   void mutex_unlock() { mutex.Unlock(); }
 
-public:
-  MDSRank *mds;
-
+  MDSRank* const mds;
 protected:
   version_t projected, committing, committed;
 public:
   map<int,xlist<Session*>* > by_state;
   uint64_t set_state(Session *session, int state);
-  map<version_t, list<MDSInternalContextBase*> > commit_waiters;
+  map<version_t, list<MDSContextBase*> > commit_waiters;
 
   explicit SessionMap(MDSRank *m) :
     mutex("SessionMap::mutex"),
@@ -585,11 +584,11 @@ public:
 
   // -- loading, saving --
   inodeno_t ino;
-  list<MDSInternalContextBase*> waiting_for_load;
+  list<MDSContextBase*> waiting_for_load;
 
   object_t get_object_name();
 
-  void load(MDSInternalContextBase *onload);
+  void load(MDSContextBase *onload);
   void _load_finish(
       int operation_r,
       int header_r,
@@ -601,7 +600,7 @@ public:
   void load_legacy();
   void _load_legacy_finish(int r, bufferlist &bl);
 
-  void save(MDSInternalContextBase *onsave, version_t needv=0);
+  void save(MDSContextBase *onsave, version_t needv=0);
   void _save_finish(version_t v);
 
 protected:

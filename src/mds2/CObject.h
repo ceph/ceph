@@ -98,7 +98,7 @@ public:
   };
 
 protected:
-  compact_multimap<uint64_t, pair<uint64_t, MDSInternalContextBase*> > waiting;
+  compact_multimap<uint64_t, pair<uint64_t, MDSContextBase*> > waiting;
   uint64_t last_wait_seq;
 public:
   // -- wait --
@@ -118,7 +118,7 @@ public:
     }
     return false;
   }
-  virtual void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
+  virtual void add_waiter(uint64_t mask, MDSContextBase *c) {
     if (waiting.empty())
       get(PIN_WAITER);
 
@@ -127,16 +127,16 @@ public:
       seq = ++last_wait_seq;
       mask &= ~WAIT_ORDERED;
     }
-    waiting.insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
+    waiting.insert(pair<uint64_t, pair<uint64_t, MDSContextBase*> >(
 		      mask,
-		      pair<uint64_t, MDSInternalContextBase*>(seq, c)));
+		      pair<uint64_t, MDSContextBase*>(seq, c)));
   }
-  virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
+  virtual void take_waiting(uint64_t mask, list<MDSContextBase*>& ls) {
     if (waiting.empty())
       return;
 
     // process ordered waiters in the same order that they were added.
-    std::map<uint64_t, MDSInternalContextBase*> ordered_waiters;
+    std::map<uint64_t, MDSContextBase*> ordered_waiters;
 
     for (auto it = waiting.begin(); it != waiting.end(); ) {
       if (it->first & mask) {
@@ -156,7 +156,7 @@ public:
       put(PIN_WAITER);
   }
   void finish_waiting(uint64_t mask, int result = 0) {
-    list<MDSInternalContextBase*> finished;
+    list<MDSContextBase*> finished;
     take_waiting(mask, finished);
     finish_contexts(g_ceph_context, finished, result);
   }

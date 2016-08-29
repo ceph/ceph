@@ -29,15 +29,16 @@
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
 
-class SessionMapIOContext : public MDSInternalContextBase
+class SessionMapIOContext : public MDSAsyncContextBase
 {
-  protected:
-    SessionMap *sessionmap;
-    MDSRank *get_mds() {return sessionmap->mds;}
-  public:
-    explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
-      assert(sessionmap != NULL);
-    }
+protected:
+  SessionMap *sessionmap;
+  MDSRank *get_mds() {return sessionmap->mds;}
+public:
+  explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
+    assert(sessionmap != NULL);
+    set_finisher(get_mds()->finisher);
+  }
 };
 
 
@@ -205,8 +206,7 @@ void SessionMap::_load_finish(
     ObjectOperation op;
     op.omap_get_vals(last_key, "", g_conf->mds_sessionmap_keys_per_op,
         &c->session_vals, &c->values_r);
-    mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0,
-        new C_OnFinisher(c, mds->finisher));
+    mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, c);
   } else {
     // I/O is complete.  Update `by_state`
     dout(10) << __func__ << ": omap load complete" << dendl;
@@ -231,7 +231,7 @@ void SessionMap::_load_finish(
  * Populate session state from OMAP records in this
  * rank's sessionmap object.
  */
-void SessionMap::load(MDSInternalContextBase *onload)
+void SessionMap::load(MDSContextBase *onload)
 {
   dout(10) << "load" << dendl;
 
@@ -247,7 +247,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
   op.omap_get_vals("", "", g_conf->mds_sessionmap_keys_per_op,
       &c->session_vals, &c->values_r);
 
-  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
+  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, c);
 }
 
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
@@ -274,8 +274,7 @@ void SessionMap::load_legacy()
   object_t oid = get_object_name();
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
-  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
-			   new C_OnFinisher(c, mds->finisher));
+  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
 void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
@@ -321,7 +320,7 @@ public:
   }
 };
 
-void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
+void SessionMap::save(MDSContextBase *onsave, version_t needv)
 {
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
@@ -402,10 +401,8 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   dirty_sessions.clear();
   null_sessions.clear();
 
-  mds->objecter->mutate(oid, oloc, op, snapc,
-			ceph::real_clock::now(g_ceph_context),
-      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version),
-				mds->finisher));
+  mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(g_ceph_context),
+			0, NULL, new C_IO_SM_Save(this, version));
 }
 
 void SessionMap::_save_finish(version_t v)
@@ -593,7 +590,7 @@ void SessionMap::_mark_dirty(Session *s)
     // Pre-empt the usual save() call from journal segment trim, in
     // order to avoid building up an oversized OMAP update operation
     // from too many sessions modified at once
-//    save(new C_MDSInternalNoop, version);
+//    save(new C_MDSContextNoop, version);
   }
 
   dirty_sessions.insert(s->info.inst.name);
@@ -638,9 +635,9 @@ version_t SessionMap::mark_projected(Session *s)
 /*
 
 class C_IO_SM_Save_One : public SessionMapIOContext {
-  MDSInternalContextBase *on_safe;
+  MDSContextBase *on_safe;
 public:
-  C_IO_SM_Save_One(SessionMap *cm, MDSInternalContextBase *on_safe_)
+  C_IO_SM_Save_One(SessionMap *cm, MDSContextBase *on_safe_)
     : SessionMapIOContext(cm), on_safe(on_safe_) {}
   void finish(int r) {
     if (r != 0) {
@@ -726,12 +723,10 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       SnapContext snapc;
       object_t oid = get_object_name();
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-      MDSInternalContextBase *on_safe = gather_bld->new_sub();
+      MDSContextBase *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
 			    ceph::real_clock::now(g_ceph_context),
-			    0, NULL, new C_OnFinisher(
-			      new C_IO_SM_Save_One(this, on_safe),
-			      mds->finisher));
+			    0, NULL, new C_IO_SM_Save_One(this, on_safe));
     }
   }
 }

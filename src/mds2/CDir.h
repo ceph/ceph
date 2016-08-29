@@ -123,14 +123,14 @@ public:
   void assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlob *blob);
 
 protected:
-  map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
+  map<version_t, std::list<MDSContextBase*> > waiting_for_commit;
   object_t get_ondisk_object() const;
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl);
   void _committed(int r, version_t v);  
   friend class C_Dir_Committed;
 public:
-  void commit(MDSInternalContextBase *c, int op_prio=-1);
+  void commit(MDSContextBase *c, int op_prio=-1);
 
 public:
    elist<CDir*>::item item_dirty, item_new;

@@ -26,7 +26,7 @@ Locker::Locker(MDSRank *_mds) :
 
 }
 
-class LockerContext : public MDSInternalContextBase {
+class LockerContext : public MDSContextBase {
 protected:
   Locker *locker;
   MDSRank *get_mds() { return locker->mds; }
@@ -73,7 +73,7 @@ void Locker::tick()
 
 void Locker::finish_waiting(SimpleLock *lock, uint64_t mask)
 {
-  list<MDSInternalContextBase*> ls;
+  list<MDSContextBase*> ls;
   lock->take_waiting(mask, ls);
   for (auto c : ls)
     mds->queue_context(c);
@@ -81,7 +81,7 @@ void Locker::finish_waiting(SimpleLock *lock, uint64_t mask)
 
 void Locker::finish_waiting(CInode *in, uint64_t mask)
 {
-  list<MDSInternalContextBase*> ls;
+  list<MDSContextBase*> ls;
   in->take_waiting(mask, ls);
   for (auto c : ls)
     mds->queue_context(c);
@@ -1554,7 +1554,7 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
  * we need to lock|scatter in order to push fnode changes into the
  * inode.dirstat.
  */
-void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange)
+void Locker::scatter_nudge(ScatterLock *lock, MDSContextBase *c, bool forcelockchange)
 {
   CInode *p = static_cast<CInode *>(lock->get_parent());
 

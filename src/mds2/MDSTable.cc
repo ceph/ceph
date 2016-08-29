@@ -33,15 +33,16 @@
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
 
 
-class MDSTableIOContext : public MDSInternalContextBase
+class MDSTableIOContext : public MDSAsyncContextBase
 {
-  protected:
-    MDSTable *ida;
-    MDSRank *get_mds() {return ida->mds;}
-  public:
-    explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
-      assert(ida != NULL);
-    }
+protected:
+  MDSTable *ida;
+  MDSRank *get_mds() { return ida->mds; }
+public:
+  explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
+    assert(ida != NULL);
+    set_finisher(get_mds()->finisher);
+  }
 };
 
 
@@ -54,7 +55,7 @@ public:
   }
 };
 
-void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
+void MDSTable::save(MDSContextBase *onfinish, version_t v)
 {
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
@@ -83,8 +84,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
 			    snapc,
 			    bl, ceph::real_clock::now(g_ceph_context), 0,
 			    NULL,
-			    new C_OnFinisher(new C_IO_MT_Save(this, version),
-					     mds->finisher));
+			    new C_IO_MT_Save(this, version));
 }
 
 void MDSTable::save_2(int r, version_t v)
@@ -100,7 +100,7 @@ void MDSTable::save_2(int r, version_t v)
   dout(10) << "save_2 v " << v << dendl;
   committed_version = v;
   
-  list<MDSInternalContextBase*> ls;
+  list<MDSContextBase*> ls;
   while (!waitfor_save.empty()) {
     if (waitfor_save.begin()->first > v) break;
     ls.splice(ls.end(), waitfor_save.begin()->second);
@@ -140,7 +140,7 @@ object_t MDSTable::get_object_name()
   return object_t(n);
 }
 
-void MDSTable::load(MDSInternalContextBase *onfinish)
+void MDSTable::load(MDSContextBase *onfinish)
 { 
   dout(10) << "load" << dendl;
 
@@ -150,8 +150,7 @@ void MDSTable::load(MDSInternalContextBase *onfinish)
   C_IO_MT_Load *c = new C_IO_MT_Load(this, onfinish);
   object_t oid = get_object_name();
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
-			   new C_OnFinisher(c, mds->finisher));
+  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
 void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)

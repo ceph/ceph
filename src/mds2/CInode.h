@@ -188,10 +188,10 @@ public:
   void encode_bare(bufferlist &bl, uint64_t features);
 
 protected:
-  void _stored(int r, version_t v, MDSInternalContextBase *fin);
+  void _stored(int r, version_t v, MDSContextBase *fin);
   friend class C_Inode_Stored;
 public:
-  void store(MDSInternalContextBase *fin);
+  void store(MDSContextBase *fin);
 
 protected:
   static LockType versionlock_type;

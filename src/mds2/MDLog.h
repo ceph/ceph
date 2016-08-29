@@ -98,7 +98,7 @@ protected:
   friend class ReplayThread;
   friend class C_MDL_Replay;
 
-  list<MDSInternalContextBase*> waitfor_replay;
+  list<MDSContextBase*> waitfor_replay;
 
   void _replay();         // old way
   void _replay_thread();  // new way
@@ -106,17 +106,17 @@ protected:
   // Journal recovery/rewrite logic
   class RecoveryThread : public Thread {
     MDLog *log;
-    MDSInternalContextBase *completion;
+    MDSContextBase *completion;
   public:
-    void set_completion(MDSInternalContextBase *c) {completion = c;}
+    void set_completion(MDSContextBase *c) {completion = c;}
     explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
     void* entry() {
       log->_recovery_thread(completion);
       return 0;
     }
   } recovery_thread;
-  void _recovery_thread(MDSInternalContextBase *completion);
-  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSInternalContextBase *completion);
+  void _recovery_thread(MDSContextBase *completion);
+  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSContextBase *completion);
 
   // -- segments --
   map<uint64_t,LogSegment*> segments;
@@ -128,9 +128,9 @@ protected:
 
   struct PendingEvent {
     LogEvent *le;
-    MDSInternalContextBase *fin;
+    MDSContextBase *fin;
     bool flush;
-    PendingEvent(LogEvent *e, MDSInternalContextBase *c, bool f=false) : le(e), fin(c), flush(f) {}
+    PendingEvent(LogEvent *e, MDSContextBase *c, bool f=false) : le(e), fin(c), flush(f) {}
   };
 
   map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
@@ -222,13 +222,7 @@ public:
     Mutex::Locker l(submit_mutex);
     _prepare_new_segment();
   }
-  void journal_segment_subtree_map(MDSLogContextBase *onsync=NULL) {
-    submit_mutex.Lock();
-    _journal_segment_subtree_map(onsync);
-    submit_mutex.Unlock();
-    if (onsync)
-      flush();
-  }
+  void journal_segment_subtree_map(MDSContextBase *onsync);
 
   LogSegment *get_current_segment() { 
     assert(submit_mutex.is_locked_by_me());
@@ -287,7 +281,7 @@ public:
   }
   bool entry_is_open() { return cur_event != NULL; }
 
-  void wait_for_safe(MDSInternalContextBase *c);
+  void wait_for_safe(MDSAsyncContextBase *c);
   void flush();
   bool is_flushed() {
     return unflushed == 0;
@@ -312,11 +306,11 @@ public:
   };
 
 public:
-  void create(MDSInternalContextBase *onfinish);  // fresh, empty log! 
-  void open(MDSInternalContextBase *onopen);      // append() or replay() to follow!
-  void reopen(MDSInternalContextBase *onopen);
+  void create(MDSContextBase *onfinish);  // fresh, empty log! 
+  void open(MDSContextBase *onopen);      // append() or replay() to follow!
+  void reopen(MDSContextBase *onopen);
   void append();
-  void replay(MDSInternalContextBase *onfinish);
+  void replay(MDSContextBase *onfinish);
 
   void standby_trim_segments();
 

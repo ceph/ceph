@@ -16,7 +16,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
 
-class CDirContext : public MDSInternalContextBase
+class CDirContext : public MDSAsyncContextBase
 {
 protected:
   CDirRef dir;
@@ -25,6 +25,7 @@ protected:
 public:
   explicit CDirContext(CDir *d) : dir(d) {
     assert(dir != NULL);
+    set_finisher(get_mds()->finisher);
   }
 };
 
@@ -392,7 +393,7 @@ void CDir::assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlo
  * @param want - min version i want committed
  * @param c - callback for completion
  */
-void CDir::commit(MDSInternalContextBase *c, int op_prio)
+void CDir::commit(MDSContextBase *c, int op_prio)
 {
   inode->mutex_assert_locked_by_me();
 
@@ -477,9 +478,7 @@ void CDir::_omap_commit(int op_prio)
   set<string> to_remove;
   map<string, bufferlist> to_set;
 
-  C_GatherBuilder gather(g_ceph_context,
-			 new C_OnFinisher(new C_Dir_Committed(this, get_version()),
-					  mdcache->mds->finisher));
+  C_GatherBuilder gather(g_ceph_context, new C_Dir_Committed(this, get_version()));
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
@@ -688,6 +687,8 @@ void CDir::_committed(int r, version_t v)
   }
 
   // finishers?
+
+  std::list<MDSContextBase*> finished;
   bool were_waiting = !waiting_for_commit.empty();
   for (auto p = waiting_for_commit.begin(); p != waiting_for_commit.end(); ) {
     auto n = p;
@@ -699,7 +700,8 @@ void CDir::_committed(int r, version_t v)
       }
       break;
     }
-    mdcache->mds->queue_contexts(p->second);
+
+    finished.splice(finished.begin(), p->second);
     waiting_for_commit.erase(p);
     p = n;
   } 
@@ -715,6 +717,8 @@ void CDir::_committed(int r, version_t v)
     put(PIN_COMITTING);
 
   inode->mutex_unlock();
+
+  finish_contexts(g_ceph_context, finished, 0);
 }
 
 void CDir::first_get()

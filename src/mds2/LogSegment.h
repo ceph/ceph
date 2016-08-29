@@ -74,9 +74,9 @@ class LogSegment {
   // try to expire
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
 
-  std::list<MDSInternalContextBase*> expiry_waiters;
+  std::list<MDSContextBase*> expiry_waiters;
 
-  void wait_for_expiry(MDSInternalContextBase *c)
+  void wait_for_expiry(MDSContextBase *c)
   {
     assert(c != NULL);
     expiry_waiters.push_back(c);

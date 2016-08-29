@@ -1303,7 +1303,6 @@ inline bool operator==(const MDSCacheObjectInfo& l, const MDSCacheObjectInfo& r)
 }
 WRITE_CLASS_ENCODER(MDSCacheObjectInfo)
 
-
 // parse a map of keys/values.
 namespace qi = boost::spirit::qi;
 
