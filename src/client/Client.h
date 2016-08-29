@@ -519,7 +519,7 @@ protected:
   // path traversal for high-level interface
   InodeRef cwd;
   int path_walk(const filepath& fp, InodeRef *end, bool followsym=true,
-		int uid=-1, int gid=-1);
+		int mask=0, int uid=-1, int gid=-1);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);

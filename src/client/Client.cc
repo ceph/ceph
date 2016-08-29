@@ -6032,7 +6032,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 }
 
 int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
-		      int uid, int gid)
+		      int mask, int uid, int gid)
 {
   filepath path = origpath;
   InodeRef cur;
@@ -6050,10 +6050,10 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
   ldout(cct, 10) << "path_walk " << path << dendl;
 
   int symlinks = 0;
-  int caps = 0;
 
   unsigned i=0;
   while (i < path.depth() && cur) {
+    int caps = 0;
     const string &dname = path[i];
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
@@ -6064,6 +6064,11 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
 	return r;
       caps = CEPH_CAP_AUTH_SHARED;
     }
+
+    /* Get extra requested caps on the last component */
+    if (i == (path.depth() - 1))
+      caps |= mask;
+
     int r = _lookup(cur.get(), dname, caps, &next, uid, gid);
     if (r < 0)
       return r;
@@ -6629,7 +6634,7 @@ int Client::stat(const char *relpath, struct stat *stbuf,
   tout(cct) << relpath << std::endl;
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, true, mask);
   if (r < 0)
     return r;
   r = _getattr(in, mask);
@@ -6652,7 +6657,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
   filepath path(relpath);
   InodeRef in;
   // don't follow symlinks
-  int r = path_walk(path, &in, false);
+  int r = path_walk(path, &in, false, mask);
   if (r < 0)
     return r;
   r = _getattr(in, mask);
@@ -7554,7 +7559,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   bool created = false;
   /* O_CREATE with O_EXCL enforces O_NOFOLLOW. */
   bool followsym = !((flags & O_NOFOLLOW) || ((flags & O_CREAT) && (flags & O_EXCL)));
-  int r = path_walk(path, &in, followsym, uid, gid);
+  int r = path_walk(path, &in, followsym, ceph_caps_for_mode(mode), uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -7571,7 +7576,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     string dname = dirpath.last_dentry();
     dirpath.pop_dentry();
     InodeRef dir;
-    r = path_walk(dirpath, &dir, true, uid, gid);
+    r = path_walk(dirpath, &dir, true, 0, uid, gid);
     if (r < 0)
       goto out;
     if (cct->_conf->client_permissions) {
@@ -9553,7 +9558,7 @@ int Client::ll_walk(const char* name, Inode **out, struct stat *attr)
   tout(cct) << "ll_walk" << std::endl;
   tout(cct) << name << std::endl;
 
-  rc = path_walk(fp, &in, false);
+  rc = path_walk(fp, &in, false, CEPH_STAT_CAP_INODE_ALL);
   if (rc < 0) {
     attr->st_ino = 0;
     *out = NULL;
@@ -9739,7 +9744,7 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, true);
+  int r = Client::path_walk(path, &in, true, CEPH_STAT_CAP_XATTR);
   if (r < 0)
     return r;
   return _getxattr(in, name, value, size);
@@ -9749,7 +9754,7 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, false);
+  int r = Client::path_walk(path, &in, false, CEPH_STAT_CAP_XATTR);
   if (r < 0)
     return r;
   return _getxattr(in, name, value, size);
@@ -9768,7 +9773,7 @@ int Client::listxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, true);
+  int r = Client::path_walk(path, &in, true, CEPH_STAT_CAP_XATTR);
   if (r < 0)
     return r;
   return Client::_listxattr(in.get(), list, size);
@@ -9778,7 +9783,7 @@ int Client::llistxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
   InodeRef in;
-  int r = Client::path_walk(path, &in, false);
+  int r = Client::path_walk(path, &in, false, CEPH_STAT_CAP_XATTR);
   if (r < 0)
     return r;
   return Client::_listxattr(in.get(), list, size);
