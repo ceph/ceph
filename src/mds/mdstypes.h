@@ -494,6 +494,9 @@ struct inode_t {
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
   inline_data_t inline_data;
 
+  // change attribute
+  uint64_t   change_attr;
+
   std::map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
@@ -522,7 +525,7 @@ struct inode_t {
 	      size(0), max_size_ever(0),
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
-	      time_warp_seq(0),
+	      time_warp_seq(0), change_attr(0),
 	      version(0), file_data_version(0), xattr_version(0),
 	      last_scrub_version(0), backtrace_version(0) {
     clear_layout();
