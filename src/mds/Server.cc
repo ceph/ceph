@@ -3835,6 +3835,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
@@ -3869,6 +3870,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->mtime = pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
 
   uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
@@ -3984,6 +3986,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   pi->add_old_pool(old_pool);
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -4503,6 +4506,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->xattr_version++;
   px->erase(name);
   if (!(flags & CEPH_XATTR_REMOVE)) {
@@ -4564,6 +4568,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->xattr_version++;
   px->erase(name);
 
@@ -4955,6 +4960,7 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   inode_t *pi = targeti->project_inode();
   pi->nlink++;
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->version = tipv;
 
   // log + wait
@@ -5604,6 +5610,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->nlink--;
   if (pi->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
@@ -6787,11 +6794,13 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (!silent) {
     if (pi) {
       pi->ctime = mdr->get_op_stamp();
+      pi->change_attr++;
       if (linkmerge)
 	pi->nlink--;
     }
     if (tpi) {
       tpi->ctime = mdr->get_op_stamp();
+      tpi->change_attr++;
       destdn->make_path_string(tpi->stray_prior_path);
       tpi->nlink--;
       if (tpi->nlink == 0)
