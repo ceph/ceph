@@ -106,13 +106,14 @@ struct CephContext;
 
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
-# define CEPH_SETATTR_MODE   1
-# define CEPH_SETATTR_UID    2
-# define CEPH_SETATTR_GID    4
-# define CEPH_SETATTR_MTIME  8
-# define CEPH_SETATTR_ATIME 16
-# define CEPH_SETATTR_SIZE  32
-# define CEPH_SETATTR_CTIME 64
+# define CEPH_SETATTR_MODE	1
+# define CEPH_SETATTR_UID	2
+# define CEPH_SETATTR_GID	4
+# define CEPH_SETATTR_MTIME	8
+# define CEPH_SETATTR_ATIME	16
+# define CEPH_SETATTR_SIZE	32
+# define CEPH_SETATTR_CTIME	64
+# define CEPH_SETATTR_BTIME	512
 #endif
 
 /* define error codes for the mount function*/
@@ -649,10 +650,22 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
  * @param cmount the ceph mount handle to use for performing the setattr.
  * @param relpath the path to the file/directory to set the attributes of.
  * @param attr the stat struct that must include attribute values to set on the file.
- * @param mask a mask of all the stat values that have been set on the stat struct.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the stat struct.
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
+
+/**
+ * Set a file's attributes (extended version).
+ *
+ * @param cmount the ceph mount handle to use for performing the setattr.
+ * @param relpath the path to the file/directory to set the attributes of.
+ * @param stx the statx struct that must include attribute values to set on the file.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+ * @param flags mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath, struct ceph_statx *stx, int mask, int flags);
 
 /**
  * Change the mode bits (permissions) of a file/directory.
@@ -1413,6 +1426,8 @@ int ceph_ll_getattrx(struct ceph_mount_info *cmount, struct Inode *in,
 		    int uid, int gid);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
+int ceph_ll_setattrx(struct ceph_mount_info *cmount, struct Inode *in,
+		    struct ceph_statx *stx, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
 		 struct Fh **fh, int uid, int gid);
 off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
