@@ -1,26 +1,32 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "PassthroughImageCache.h"
+#include "FileImageCache.h"
 #include "include/buffer.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::PassthroughImageCache: " << this << " " \
+#define dout_prefix *_dout << "librbd::cache::FileImageCache: " << this << " " \
                            <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {
 
+namespace {
+
+static const uint32_t IO_ALIGNMENT = 4096;
+
+} // anonymous namespace
+
 template <typename I>
-PassthroughImageCache<I>::PassthroughImageCache(ImageCtx &image_ctx)
+FileImageCache<I>::FileImageCache(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_image_writeback(image_ctx) {
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_read(Extents &&image_extents, bufferlist *bl,
+void FileImageCache<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                         int fadvise_flags, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "image_extents=" << image_extents << ", "
@@ -31,7 +37,7 @@ void PassthroughImageCache<I>::aio_read(Extents &&image_extents, bufferlist *bl,
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_write(Extents &&image_extents,
+void FileImageCache<I>::aio_write(Extents &&image_extents,
                                          bufferlist&& bl,
                                          int fadvise_flags,
                                          Context *on_finish) {
@@ -44,8 +50,8 @@ void PassthroughImageCache<I>::aio_write(Extents &&image_extents,
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
-                                           bool skip_partial_discard, Context *on_finish) {
+void FileImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
+                                           Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
@@ -55,7 +61,7 @@ void PassthroughImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_flush(Context *on_finish) {
+void FileImageCache<I>::aio_flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "on_finish=" << on_finish << dendl;
 
@@ -63,7 +69,7 @@ void PassthroughImageCache<I>::aio_flush(Context *on_finish) {
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_writesame(uint64_t offset, uint64_t length,
+void FileImageCache<I>::aio_writesame(uint64_t offset, uint64_t length,
                                              bufferlist&& bl, int fadvise_flags,
                                              Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
@@ -77,7 +83,7 @@ void PassthroughImageCache<I>::aio_writesame(uint64_t offset, uint64_t length,
 }
 
 template <typename I>
-void PassthroughImageCache<I>::aio_compare_and_write(Extents &&image_extents,
+void FileImageCache<I>::aio_compare_and_write(Extents &&image_extents,
                                                      bufferlist&& cmp_bl,
                                                      bufferlist&& bl,
                                                      uint64_t *mismatch_offset,
@@ -93,7 +99,7 @@ void PassthroughImageCache<I>::aio_compare_and_write(Extents &&image_extents,
 }
 
 template <typename I>
-void PassthroughImageCache<I>::init(Context *on_finish) {
+void FileImageCache<I>::init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
@@ -101,7 +107,7 @@ void PassthroughImageCache<I>::init(Context *on_finish) {
 }
 
 template <typename I>
-void PassthroughImageCache<I>::shut_down(Context *on_finish) {
+void FileImageCache<I>::shut_down(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
@@ -109,7 +115,7 @@ void PassthroughImageCache<I>::shut_down(Context *on_finish) {
 }
 
 template <typename I>
-void PassthroughImageCache<I>::invalidate(Context *on_finish) {
+void FileImageCache<I>::invalidate(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
@@ -118,7 +124,7 @@ void PassthroughImageCache<I>::invalidate(Context *on_finish) {
 }
 
 template <typename I>
-void PassthroughImageCache<I>::flush(Context *on_finish) {
+void FileImageCache<I>::flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
@@ -130,4 +136,4 @@ void PassthroughImageCache<I>::flush(Context *on_finish) {
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::PassthroughImageCache<librbd::ImageCtx>;
+template class librbd::cache::FileImageCache<librbd::ImageCtx>;
