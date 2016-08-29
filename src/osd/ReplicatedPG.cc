@@ -8530,7 +8530,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
   return repop;
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_repop(
+boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&on_complete)
 {
@@ -8543,11 +8543,10 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
   repop->start = ceph_clock_now(cct);
 
   repop_queue.push_back(&repop->queue_item);
-  repop->get();
 
   osd->logger->inc(l_osd_op_wip);
 
-  return repop;
+  return boost::intrusive_ptr<RepGather>(repop);
 }
  
 void ReplicatedPG::remove_repop(RepGather *repop)
