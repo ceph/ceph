@@ -368,7 +368,7 @@ def download_kernel(ctx, config):
 
             gitbuilder = GitbuilderProject(
                 'kernel',
-                ctx.config.get('kernel'),
+                {'sha1': src},
                 ctx=ctx,
                 remote=role_remote,
             )
@@ -1219,7 +1219,7 @@ def task(ctx, config):
         else:
             gitbuilder = GitbuilderProject(
                 "kernel",
-                ctx.config.get('kernel'),
+                role_config,
                 ctx=ctx,
                 remote=role_remote,
             )
