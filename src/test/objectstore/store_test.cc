@@ -2517,7 +2517,6 @@ TEST_P(StoreTest, SimpleMoveRangeDelSrcTest) {
   ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
-  if ((GetParam() == string("filestore")) || (GetParam() == string("kstore"))) {
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
@@ -2574,7 +2573,6 @@ TEST_P(StoreTest, SimpleMoveRangeDelSrcTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
- }
 }
 
 TEST_P(StoreTest, OmapSimple) {

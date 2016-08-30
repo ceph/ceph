@@ -2362,11 +2362,11 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_MERGE_DELETE:
       {
-  const ghobject_t& boid = i.get_oid(op->dest_oid);
-  OnodeRef bo = c->get_onode(boid, true);
-  vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
-  i.decode_move_info(move_info);
-  r = _move_ranges_destroy_src(txc, c, o, cvec[op->dest_cid], bo, move_info);
+        const ghobject_t& boid = i.get_oid(op->dest_oid);
+        OnodeRef bo = c->get_onode(boid, true);
+        vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
+        i.decode_move_info(move_info);
+        r = _move_ranges_destroy_src(txc, c, o, cvec[op->dest_cid], bo, move_info);
       }
 			break;
 
@@ -3179,6 +3179,9 @@ int KStore::_clone_range(TransContext *txc,
   return r;
 }
 
+/* Move contents of src object according to move_info to base object.
+ * Once the move_info is traversed completely, delete the src object.
+ */
 int KStore::_move_ranges_destroy_src(TransContext *txc,
                            CollectionRef& c,
                            OnodeRef& srco,
@@ -3191,7 +3194,7 @@ int KStore::_move_ranges_destroy_src(TransContext *txc,
   baseo->exists = true;
   _assign_nid(txc, baseo);
 
-//for loop
+// Traverse move_info completely, move contents from src to base object.
   for (unsigned i = 0; i < move_info.size(); ++i) {
     uint64_t srcoff;
     uint64_t dstoff;
@@ -3210,7 +3213,7 @@ int KStore::_move_ranges_destroy_src(TransContext *txc,
     r = 0;
   }
 
-// after for loop ends, remove src obj
+// After for loop ends, remove src obj
   r = _do_remove(txc, srco);
 
   out:
