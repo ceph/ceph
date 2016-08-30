@@ -145,7 +145,7 @@ override_dh_python2:
 
 override_dh_python3:
 	for binding in rados cephfs rbd; do                                \
-	  dh_python3 -p python-$$binding; \
+	  dh_python3 -p python3-$$binding; \
 	done
 	dh_python3 -p python3-ceph-argparse
 
