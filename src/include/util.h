@@ -81,4 +81,5 @@ void collect_sys_info(map<string, string> *m, CephContext *cct);
 /// @param type the service type of given @p services, for example @p osd or @p mon.
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type);
 
+void cleanbin(string &str);
 #endif /* CEPH_UTIL_H */
