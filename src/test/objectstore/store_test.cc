@@ -1123,6 +1123,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
   g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_min_alloc_size", "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ObjectStore::Sequencer osr("test");
@@ -1154,7 +1155,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     exists = store->exists(cid, hoid);
     ASSERT_EQ(true, exists);
   }
-  uint64_t available0 = 0;
   {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
@@ -1166,7 +1166,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     //force fsck
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
-    available0 = statfs.available;
   }
   {
     ObjectStore::Transaction t;
@@ -1182,7 +1181,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(5, statfs.stored);
     ASSERT_EQ(0x10000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x10000, statfs.available);
     ASSERT_EQ(0, statfs.compressed);
     ASSERT_EQ(0, statfs.compressed_original);
     ASSERT_EQ(0, statfs.compressed_allocated);
@@ -1205,7 +1203,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005, statfs.stored);
     ASSERT_EQ(0x20000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x20000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
@@ -1226,7 +1223,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005 - 3 - 9, statfs.stored);
     ASSERT_EQ(0x20000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x20000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000 - 9, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
@@ -1250,7 +1246,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30001 - 9 + 0x1000, statfs.stored);
     ASSERT_EQ(0x30000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x30000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000 - 9 - 0x1000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
