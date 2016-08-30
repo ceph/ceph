@@ -12,3 +12,6 @@ RemainAfterExit=yes
 ExecStart=/usr/bin/rbdmap map
 ExecReload=/usr/bin/rbdmap map
 ExecStop=/usr/bin/rbdmap unmap
+
+[Install]
+WantedBy=multi-user.target
