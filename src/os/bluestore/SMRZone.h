@@ -16,9 +16,8 @@ typedef enum zone_state { EMPTY, IMPLICIT_OPEN, EXPLICIT_OPEN , FULL, OFFLINE, R
 
 class SMRZone {
 public:
-  SMRZone() {}
+  SMRZone() {};
   SMRZone(uint64_t num, uint64_t zone_size, zone_type zt, zone_state zs);
-
   ~SMRZone() {}
 
 private:

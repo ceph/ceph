@@ -5,8 +5,8 @@
 #include "kv/KeyValueDB.h"
 #include "kv.h"
 #include <string>
-#include "zbc.h"
-#include "zbc_tools.h"
+#include "libzbc/zbc.h"
+#include "libzbc/lib/zbc_tools.h"
 
 #include "common/debug.h"
 

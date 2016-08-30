@@ -6,10 +6,19 @@
 
 #include <mutex>
 
+#include "StupidAllocator.h"
+#include <vector>
 #include "Allocator.h"
-#include "include/btree_interval_set.h"
+#include <string>
+#include "SMRZone.h"
+#include "libzbc/lib/zbc_tools.h"
+#include "libzbc/zbc.h"
 
-class SMRAllocator : public Allocator {
+class SMRAllocator : public StupidAllocator {
+
+  std::vector<SMRZone> zoneInfo;
+  void _insert_free(uint64_t offset, uint64_t len);
+ 
   std::mutex lock;
 
   int64_t num_free;     ///< total bytes in freelist
@@ -17,19 +26,18 @@ class SMRAllocator : public Allocator {
   int64_t num_committing;
   int64_t num_reserved; ///< reserved bytes
 
-  std::vector<btree_interval_set<uint64_t> > free;        ///< leading-edge copy
+  //std::vector<btree_interval_set<uint64_t> > free;        ///< leading-edge copy
   btree_interval_set<uint64_t> uncommitted; ///< released but not yet usable
   btree_interval_set<uint64_t> committing;  ///< released but not yet usable
 
   uint64_t last_alloc;
 
-  unsigned _choose_bin(uint64_t len){};
-
-  void _insert_free(uint64_t offset, uint64_t len);
+  unsigned _choose_bin(uint64_t len);
+  size_t m_numZones;
 
 public:
   SMRAllocator();
-  SMRAllocator(int64_t size);
+  SMRAllocator(int64_t size, string bdev_path);
   ~SMRAllocator();
 
   int reserve(uint64_t need){};

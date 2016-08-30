@@ -9,29 +9,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "smralloc "
   
-SMRAllocator::SMRAllocator()
-  : num_free(0),
-    num_uncommitted(0),
-    num_committing(0),
-    num_reserved(0),
-    free(10),
-    last_alloc(0) 
-{
-  int64_t block_size = g_conf->bdev_block_size;
-  dout(10) << __func__ << "size of block " << block_size << dendl;  
-}
-
-SMRAllocator::SMRAllocator(int64_t size)
-  : num_free(0),
-    num_uncommitted(0),
-    num_committing(0),
-    num_reserved(0),
-    free(10),
-    last_alloc(0) 
+SMRAllocator::SMRAllocator(int64_t size, string bdev_path)
 {
   int64_t block_size = g_conf->bdev_block_size;
   dout(10) << __func__ << "size of block " << block_size << dendl;  
   dout(10) << __func__ << "size sent " << size << dendl;  
+  
+  size_t numZones = zbc_get_zones(bdev_path);
+    
 }
 
 SMRAllocator::~SMRAllocator()
@@ -40,11 +25,6 @@ SMRAllocator::~SMRAllocator()
 
 void SMRAllocator::_insert_free(uint64_t offset, uint64_t len)
 {
-  // TODO logic to add SMR extent information here
   std::lock_guard<std::mutex> l(lock);
-  
   num_free += len;
 }
-
-
-
