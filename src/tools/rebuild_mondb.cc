@@ -215,7 +215,10 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
 
   // trim stale maps
   unsigned ntrimmed = 0;
-  for (auto e = first_committed; e < sb.oldest_map; e++) {
+  // osdmap starts at 1. if we have a "0" first_committed, then there is nothing
+  // to trim. and "1 osdmaps trimmed" in the output message is misleading. so
+  // let's make it an exception.
+  for (auto e = first_committed; first_committed && e < sb.oldest_map; e++) {
     t->erase(prefix, e);
     t->erase(prefix, ms.combine_strings("full", e));
     ntrimmed++;
