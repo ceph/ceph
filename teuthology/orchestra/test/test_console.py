@@ -70,6 +70,41 @@ class TestPhysicalConsole(TestConsole):
             c='power cycle',
         )
 
+    def test_spawn_log_conserver(self):
+        with patch(
+            'teuthology.orchestra.console.subprocess.Popen',
+            autospec=True,
+        ) as m_popen:
+            m_popen.return_value.wait.return_value = 0
+            cons = self.klass(self.hostname)
+            assert cons.has_conserver is True
+            m_popen.reset_mock()
+            m_popen.return_value.poll.return_value = None
+            m_popen.poll.return_value = None
+            cons.spawn_sol_log('/fake/path')
+            assert m_popen.call_count == 1
+            call_args = m_popen.call_args_list[0][0][0]
+            assert any(
+                [teuth_config.conserver_master in arg for arg in call_args]
+            )
+
+    def test_spawn_log_ipmi(self):
+        with patch(
+            'teuthology.orchestra.console.subprocess.Popen',
+            autospec=True,
+        ) as m_popen:
+            m_popen.return_value.wait.return_value = 1
+            cons = self.klass(self.hostname)
+            assert cons.has_conserver is False
+            m_popen.reset_mock()
+            m_popen.return_value.poll.return_value = 1
+            cons.spawn_sol_log('/fake/path')
+            assert m_popen.call_count == 1
+            call_args = m_popen.call_args_list[0][0][0]
+            assert any(
+                ['ipmitool' in arg for arg in call_args]
+            )
+
     def test_get_console_conserver(self):
         with patch(
             'teuthology.orchestra.console.subprocess.Popen',
