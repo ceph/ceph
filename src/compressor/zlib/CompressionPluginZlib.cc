@@ -15,6 +15,9 @@
 
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
+#include "arch/probe.h"
+#include "arch/intel.h"
+#include "arch/arm.h"
 #include "compressor/CompressionPlugin.h"
 #include "ZlibCompressor.h"
 #include "common/debug.h"
@@ -32,7 +35,9 @@ public:
                       ostream *ss)
   {
     if (compressor == 0) {
-      ZlibCompressor *interface = new ZlibCompressor();
+      ceph_arch_probe();
+      bool isal = (ceph_arch_intel_pclmul && ceph_arch_intel_sse41);
+      ZlibCompressor *interface = new ZlibCompressor(isal);
       compressor = CompressorRef(interface);
     }
     *cs = compressor;
