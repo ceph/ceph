@@ -876,6 +876,7 @@ public:
     boost::intrusive::list_member_hook<> sequencer_item;
 
     uint64_t ops, bytes;
+    uint64_t cur_transact_ops;
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
@@ -970,6 +971,7 @@ public:
 	osr(o),
 	ops(0),
 	bytes(0),
+	cur_transact_ops(0),
 	oncommit(NULL),
 	onreadable(NULL),
 	onreadable_sync(NULL),
@@ -1588,6 +1590,13 @@ private:
   };
 
   void _do_write_small(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef o,
+    uint64_t offset, uint64_t length,
+    bufferlist::iterator& blp,
+    WriteContext *wctx);
+  void _do_write_big_fast(
     TransContext *txc,
     CollectionRef &c,
     OnodeRef o,

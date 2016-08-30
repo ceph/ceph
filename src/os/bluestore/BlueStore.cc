@@ -5487,6 +5487,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   }
   vector<OnodeRef> ovec(i.objects.size());
 
+  txc->cur_transact_ops = t->get_num_ops();
+
   for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
     int r = 0;
@@ -6189,6 +6191,48 @@ void BlueStore::_do_write_small(
   return;
 }
 
+void BlueStore::_do_write_big_fast(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef o,
+    uint64_t offset, uint64_t length,
+    bufferlist::iterator& blp,
+    WriteContext *wctx)
+{
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   << std::dec << dendl;
+  assert((offset % min_alloc_size) == 0);
+  assert(length == block_size && length == min_alloc_size);
+  assert(csum_type == bluestore_blob_t::CSUM_NONE);
+  assert(blp.get_bl().length() == length);
+  auto l = length;
+
+  bool fallback_to_slow = true;
+  BlobRef b = 0;
+  map<uint64_t,bluestore_lextent_t>::iterator ep = o->onode.seek_lextent(offset);
+  if (ep != o->onode.extent_map.end() && 
+      ep->first <= offset && ep->first + ep->second.length >= offset + l) {
+    b = c->get_blob(o, ep->second.blob);
+    uint64_t b_off = offset - ep->first + ep->second.offset;
+    if (b->get_blob().is_mutable() && !b->get_blob().has_csum()) {
+      _buffer_cache_write(txc, b, b_off, blp.get_bl(), wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+
+      b->get_blob().map_bl(
+	b_off, blp.get_bl(),
+	[&](uint64_t offset, uint64_t length, bufferlist& t) {
+	  bdev->aio_write(offset, t,
+			  &txc->ioc, wctx->buffered);
+	});
+      wctx->onode_changed = false;
+      fallback_to_slow = false;
+    }
+  }
+  if (fallback_to_slow) {
+    dout(20) << __func__ << " fallback to slow write" << dendl;
+    _do_write_big(txc, c, o, offset, length, blp, wctx);
+  }
+}
+
 void BlueStore::_do_write_big(
     TransContext *txc,
     CollectionRef &c,
@@ -6516,7 +6560,13 @@ int BlueStore::_do_write(
       _do_write_small(txc, c, o, head_offset, head_length, p, &wctx);
     }
 
-    if (middle_length) {
+    if( txc->cur_transact_ops == 1 &&
+	csum_type == bluestore_blob_t::CSUM_NONE &&
+	head_length == 0 && tail_length == 0 &&
+        middle_length == block_size &&
+        min_alloc_size == block_size ){
+      _do_write_big_fast(txc, c, o, middle_offset, middle_length, p, &wctx);
+    } else if (middle_length) {
       _do_write_big(txc, c, o, middle_offset, middle_length, p, &wctx);
     }
 
