@@ -1125,6 +1125,8 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   g_conf->set_val("bluestore_compression", "force");
   g_conf->set_val("bluestore_min_alloc_size", "65536");
   g_ceph_context->_conf->apply_changes(NULL);
+  store->umount();
+  store->mount(); //to force min_alloc_size update
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -1338,6 +1340,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
   g_conf->set_val("bluestore_compression", "none");
+  g_conf->set_val("bluestore_min_alloc_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
