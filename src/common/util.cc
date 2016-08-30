@@ -264,25 +264,38 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   f->close_section();
 }
 
-// Convert non-printable characters to '\###'
-void cleanbin(string &str)
-{
-  bool cleaned = false;
-  string clean;
 
-  for (string::iterator it = str.begin(); it != str.end(); ++it) {
-    if (!isprint(*it)) {
-      clean.push_back('\\');
-      clean.push_back('0' + ((*it >> 6) & 7));
-      clean.push_back('0' + ((*it >> 3) & 7));
-      clean.push_back('0' + (*it & 7));
-      cleaned = true;
-    } else {
-      clean.push_back(*it);
-    }
+// If non-printable characters found then convert bufferlist to
+// base64 encoded string indicating whether it did.
+string cleanbin(bufferlist &bl, bool &base64)
+{
+  bufferlist::iterator it;
+  for (it = bl.begin(); it != bl.end(); ++it) {
+    if (iscntrl(*it))
+      break;
+  }
+  if (it == bl.end()) {
+    base64 = false;
+    string result(bl.c_str(), bl.length());
+    return result;
   }
 
-  if (cleaned)
-    str = clean;
-  return;
+  bufferlist b64;
+  bl.encode_base64(b64);
+  string encoded(b64.c_str(), b64.length());
+  base64 = true;
+  return encoded;
+}
+
+// If non-printable characters found then convert to "Base64:" followed by
+// base64 encoding
+string cleanbin(string &str)
+{
+  bool base64;
+  bufferlist bl;
+  bl.append(str);
+  string result = cleanbin(bl, base64);
+  if (base64)
+    result = "Base64:" + result;
+  return result;
 }
