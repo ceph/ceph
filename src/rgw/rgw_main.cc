@@ -187,6 +187,30 @@ static void reloader_handler(int signum)
   sighup_handler(signum);
 }
 
+static int parse_civetweb_portno(const string &port) {
+  char *portend;
+  const char *portstart = port.c_str();
+  const char *cp = strrchr(portstart, ':');
+  if (cp)
+    ++cp;
+  else
+    cp = portstart;
+  int portno = strtol(cp, &portend, 10);
+  if (cp == portend) {
+    derr << "ERROR: cannot parse port " << port << dendl;
+    return -1;
+  }
+  // could also be `r' - but until we support both
+  //  ssl & non-ssl that's not useful.
+  if (*portend && (*portend != 's' || portend[1])) {
+    derr << "ERROR: trailing stuff on port " << port << dendl;
+    return -1;
+  }
+  if (portno <= 0 || portno > 65535) {
+    derr << "ERROR: port out of range " << port << dendl;
+    return -1;
+  }
+}
 
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
@@ -435,10 +459,15 @@ int main(int argc, const char **argv)
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "civetweb" || framework == "mongoose") {
-      int port;
-      config->get_val("port", 80, &port);
+      string port;
+      int portno;
+      config->get_val("port", "80", &port);
+      portno = parse_civetweb_portno(port);
+      if (portno == -1) {
+	return -1;
+      }
 
-      RGWProcessEnv env = { store, &rest, olog, port };
+      RGWProcessEnv env = { store, &rest, olog, portno };
 
       fe = new RGWMongooseFrontend(env, config);
     } else if (framework == "loadgen") {
