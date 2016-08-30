@@ -82,6 +82,14 @@ namespace rgw {
 
   void RGWLibProcess::run()
   {
+    /* write completion interval */
+    RGWLibFS::write_completion_interval_s =
+      cct->_conf->rgw_nfs_write_completion_interval_s;
+
+    /* start write timer */
+    RGWLibFS::write_timer.resume();
+
+    /* gc loop */
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
       unique_lock uniq(mtx);

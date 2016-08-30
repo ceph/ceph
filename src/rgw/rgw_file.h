@@ -28,6 +28,7 @@
 #include "include/buffer.h"
 #include "common/sstring.hh"
 #include "common/cohort_lru.h"
+#include "common/ceph_timer.h"
 #include "rgw_common.h"
 #include "rgw_user.h"
 #include "rgw_lib.h"
@@ -234,6 +235,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_DELETED = 0x0080;
     static constexpr uint32_t FLAG_UNLINK_THIS = 0x0100;
     static constexpr uint32_t FLAG_LOCKED = 0x0200;
+    static constexpr uint32_t FLAG_STATELESS_OPEN = 0x0400;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -497,10 +499,14 @@ namespace rgw {
     bool is_dir() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
     bool creating() const { return flags & FLAG_CREATING; }
     bool deleted() const { return flags & FLAG_DELETED; }
+    bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
 
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
       if (! (flags & FLAG_OPEN)) {
+	if (gsh_flags & RGW_OPEN_FLAG_V3) {
+	  flags |= FLAG_STATELESS_OPEN;
+	}
 	flags |= FLAG_OPEN;
 	return 0;
       }
@@ -510,7 +516,18 @@ namespace rgw {
     int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof,
 		uint32_t flags);
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
-    int write_finish();
+
+    int commit(uint64_t offset, uint64_t length, uint32_t flags) {
+      /* NFS3 and NFSv4 COMMIT implementation
+       * the current atomic update strategy doesn't actually permit
+       * clients to read-stable until either CLOSE (NFSv4+) or the
+       * expiration of the active write timer (NFS3).  In the
+       * interim, the client may send an arbitrary number of COMMIT
+       * operations which must return a success result */
+      return 0;
+    }
+
+    int write_finish(uint32_t flags = FLAG_NONE);
     int close();
 
     void open_for_create() {
@@ -698,6 +715,7 @@ namespace rgw {
     RGWAccessKey key; // XXXX acc_key
 
     static atomic<uint32_t> fs_inst;
+    static uint32_t write_completion_interval_s;
     std::string fsid;
 
     using lock_guard = std::lock_guard<std::mutex>;
@@ -716,11 +734,29 @@ namespace rgw {
     using event_vector = /* boost::small_vector<event, 16> */
       std::vector<event>;
 
-    struct state {
+    struct WriteCompletion
+    {
+      RGWFileHandle& rgw_fh;
+
+      WriteCompletion(RGWFileHandle& _fh) : rgw_fh(_fh) {
+	rgw_fh.get_fs()->ref(&rgw_fh);
+      }
+
+      void operator()() {
+	rgw_fh.write_finish();
+	rgw_fh.get_fs()->unref(&rgw_fh);
+      }
+    };
+
+    static ceph::timer<ceph::mono_clock> write_timer;
+
+    struct State {
       std::mutex mtx;
       std::atomic<uint32_t> flags;
       std::deque<event> events;
-      state() : flags(0) {}
+
+      State() : flags(0) {}
+
       void push_event(const event& ev) {
 	lock_guard guard(mtx);
 	events.push_back(ev);
@@ -728,6 +764,7 @@ namespace rgw {
     } state;
 
     friend class RGWFileHandle;
+    friend class RGWLibProcess;
 
   public:
 
@@ -1934,6 +1971,7 @@ public:
   RGWFileHandle* rgw_fh;
   RGWPutObjProcessor *processor;
   buffer::list data;
+  uint64_t timer_id;
   MD5 hash;
   off_t real_ofs;
   size_t bytes_written;

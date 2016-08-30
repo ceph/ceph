@@ -24,6 +24,12 @@
 extern "C" {
 #endif
 
+#define LIBRGW_FILE_VER_MAJOR 1
+#define LIBRGW_FILE_VER_MINOR 1
+#define LIBRGW_FILE_VER_EXTRA 0
+
+#define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
+#define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
 
 /*
  * object types
@@ -143,8 +149,9 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 #define RGW_CREATE_FLAG_NONE     0x0000
 
 int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
-	      const char *name, struct stat *st, uint32_t mask,
-	      struct rgw_file_handle **fh, uint32_t flags);
+	       const char *name, struct stat *st, uint32_t mask,
+	       struct rgw_file_handle **fh, uint32_t posix_flags,
+	       uint32_t flags);
 
 /*
   create a new directory
@@ -220,9 +227,11 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 */
 #define RGW_OPEN_FLAG_NONE         0x0000
 #define RGW_OPEN_FLAG_CREATE       0x0001
+#define RGW_OPEN_FLAG_V3           0x0002 /* ops have v3 semantics */
+#define RGW_OPEN_FLAG_STATELESS    0x0002 /* alias it */
 
 int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
-	    uint32_t flags);
+	     uint32_t posix_flags, uint32_t flags);
 
 /*
    close file
@@ -296,6 +305,15 @@ int rgw_writev(struct rgw_fs *rgw_fs,
 
 int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	      uint32_t flags);
+
+/*
+   NFS commit operation
+*/
+
+#define RGW_COMMIT_FLAG_NONE        0x0000
+
+int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	       uint64_t offset, uint64_t length, uint32_t flags);
 
 #ifdef __cplusplus
 }
