@@ -1892,7 +1892,8 @@ int BlueStore::_open_alloc()
   assert(bdev->get_size());
   alloc = Allocator::create(g_conf->bluestore_allocator,
                             bdev->get_size(),
-                            min_alloc_size);
+                            min_alloc_size,
+                            path);
   uint64_t num = 0, bytes = 0;
 
   // initialize from freelist

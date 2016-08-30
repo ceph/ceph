@@ -33,3 +33,6 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
+[submodule "src/libzbc"]
+	path = src/libzbc
+	url = https://github.com/ceph/libzbc

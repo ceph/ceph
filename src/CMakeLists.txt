@@ -547,6 +547,13 @@ endif(HAVE_ARMV8_CRC)
 
 add_library(common_utf8 STATIC common/utf8.c)
 
+option(WITH_LIBZBC "add libzbc support" OFF)
+if(${WITH_LIBZBC})
+  add_subdirectory(libzbc)
+  set(LIBZBC_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/src/libzbc/include/)
+  include_directories(${LIBZBC_INCLUDE_PATH})
+endif(${WITH_LIBZBC})
+
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
 endif(${WITH_LTTNG})
@@ -797,6 +804,10 @@ if(WITH_LIBCEPHFS)
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:common_mountcephfs_objs>)
   target_link_libraries(mount.ceph keyutils)
+
+  if(${WITH_LIBZBC})
+    target_link_libraries(cephfs zbc)
+  endif(${WITH_LIBZBC})
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
