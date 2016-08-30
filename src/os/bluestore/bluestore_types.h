@@ -567,7 +567,8 @@ struct bluestore_blob_t {
   /// verify csum: return -EOPNOTSUPP for unsupported checksum type;
   /// return -1 and valid(nonnegative) b_bad_off for checksum error;
   /// return 0 if all is well.
-  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off) const;
+  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off,
+		  uint64_t *bad_csum) const;
 
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)

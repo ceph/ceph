@@ -156,7 +156,8 @@ public:
     size_t offset,
     size_t length,
     const bufferlist &bl,
-    const bufferptr& csum_data
+    const bufferptr& csum_data,
+    uint64_t *bad_csum=0
     ) {
     assert(length % csum_block_size == 0);
     bufferlist::const_iterator p = bl.begin();
@@ -172,6 +173,9 @@ public:
     while (length > 0) {
       typename Alg::value_t v = Alg::calc(state, csum_block_size, p);
       if (*pv != v) {
+	if (bad_csum) {
+	  *bad_csum = v;
+	}
 	return pos;
       }
       ++pv;

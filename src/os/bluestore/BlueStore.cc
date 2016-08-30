@@ -3904,19 +3904,23 @@ int BlueStore::_verify_csum(OnodeRef& o,
 			    const bufferlist& bl) const
 {
   int bad;
-  int r = csum_type != bluestore_blob_t::CSUM_NONE ? blob->verify_csum(blob_xoffset, bl, &bad)  :0;
+  uint64_t bad_csum;
+  int r = csum_type != bluestore_blob_t::CSUM_NONE ?
+    blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum)  :0;
   if (r < 0) {
     if (r == -1) {
       vector<bluestore_pextent_t> pex;
       blob->map(
-	blob_xoffset,
+	bad,
 	blob->get_csum_chunk_size(),
 	[&](uint64_t offset, uint64_t length) {
 	  pex.emplace_back(bluestore_pextent_t(offset, length));
 	});
       derr << __func__ << " bad " << blob->get_csum_type_string(blob->csum_type)
 	   << "/0x" << std::hex << blob->get_csum_chunk_size()
-	   << " checksum at blob offset 0x" << bad << std::dec
+	   << " checksum at blob offset 0x" << bad
+	   << ", got 0x" << bad_csum << ", expected 0x"
+	   << blob->get_csum_item(bad / blob->get_csum_chunk_size()) << std::dec
 	   << ", device location " << pex
 	   << ", object " << o->oid << dendl;
     } else {
