@@ -5322,6 +5322,22 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
+v0.94.9 Hammer
+==============
+
+This Hammer point release fixes a build issue present in 0.94.8 that prevented us
+from generating packages for Ubuntu Precise and CentOS 6.x.
+
+We recommend all users of v0.94.7 or older upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.9.txt>`.
+
+Notable Changes
+---------------
+
+* build/ops: revert: boost uuid makes valgrind complain (`pr#10913 <http://github.com/ceph/ceph/pull/10913>`_, Sage Weil)
+
+
 v0.94.8 Hammer
 ==============
 
