@@ -35,5 +35,5 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(osd ${LEVELDB_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 if(WITH_LTTNG)
-  add_dependencies(osd osd-tp)
+  add_dependencies(osd oprequest-tp osd-tp pg-tp)
 endif()

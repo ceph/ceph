@@ -73,7 +73,7 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 if(WITH_LTTNG)
-  add_dependencies(os os-tp)
+  add_dependencies(os objectstore-tp)
 endif()
 
 target_link_libraries(os kv)

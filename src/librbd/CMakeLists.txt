@@ -75,7 +75,7 @@ add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
-  add_dependencies(rbd_api rbd-tp)
+  add_dependencies(rbd_api librbd-tp)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
