@@ -66,8 +66,15 @@ class PhysicalConsole():
         )
 
     def _get_console(self, readonly=True):
-        cmd = self._console_command(readonly=readonly)
-        child = self._pexpect_spawn(cmd)
+        def start():
+            cmd = self._console_command(readonly=readonly)
+            return self._pexpect_spawn(cmd)
+
+        child = start()
+        if self.has_conserver and not child.isalive():
+            log.error("conserver failed to get the console; will try ipmitool")
+            self.has_conserver = False
+            child = start()
         return child
 
     def _console_command(self, readonly=True):
@@ -267,21 +274,29 @@ class PhysicalConsole():
 
         :returns: a subprocess.Popen object
         """
-        console_cmd = self._console_command()
         pexpect_templ = \
             "import pexpect; " \
             "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"
-        python_cmd = [
-            '/usr/bin/env', 'python', '-c',
-            pexpect_templ.format(
-                cmd=console_cmd,
-                log=dest_path,
-            ),
-        ]
-        proc = subprocess.Popen(
-            python_cmd,
-            env=os.environ,
-        )
+
+        def start():
+            console_cmd = self._console_command()
+            python_cmd = [
+                '/usr/bin/env', 'python', '-c',
+                pexpect_templ.format(
+                    cmd=console_cmd,
+                    log=dest_path,
+                ),
+            ]
+            return subprocess.Popen(
+                python_cmd,
+                env=os.environ,
+            )
+
+        proc = start()
+        if self.has_conserver and proc.poll() is not None:
+            log.error("conserver failed to get the console; will try ipmitool")
+            self.has_conserver = False
+            proc = start()
         return proc
 
 
