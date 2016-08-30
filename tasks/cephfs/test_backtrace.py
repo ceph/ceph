@@ -9,11 +9,8 @@ class TestBacktrace(CephFSTestCase):
         are updated correctly.
         """
 
-        def get_pool_id(name):
-            return self.fs.mon_manager.get_pool_dump(name)['pool']
-
         old_data_pool_name = self.fs.get_data_pool_name()
-        old_pool_id = get_pool_id(old_data_pool_name)
+        old_pool_id = self.fs.get_data_pool_id()
 
         # Create a file for subsequent checks
         self.mount_a.run_shell(["mkdir", "parent_a"])
@@ -44,10 +41,7 @@ class TestBacktrace(CephFSTestCase):
 
         # Create a new data pool
         new_pool_name = "data_new"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool_name,
-                                            self.fs.get_pgs_per_fs_pool().__str__())
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'add_data_pool', new_pool_name)
-        new_pool_id = get_pool_id(new_pool_name)
+        new_pool_id = self.fs.add_data_pool(new_pool_name)
 
         # That an object which has switched pools gets its backtrace updated
         self.mount_a.run_shell(["setfattr", "-n", "ceph.file.layout.pool", "-v", new_pool_name, "./parent_b/alpha"])

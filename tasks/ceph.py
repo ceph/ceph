@@ -316,9 +316,7 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
-        if not ceph_fs.legacy_configured():
-            ceph_fs.create()
+        Filesystem(ctx, create='cephfs') # TODO: make Filesystem cluster-aware
 
         is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]

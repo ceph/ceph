@@ -62,9 +62,7 @@ class TestPoolPerm(CephFSTestCase):
         # Set up
         client_name = "client.{0}".format(self.mount_a.client_id)
         new_pool_name = "data_new"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool_name,
-                                            self.fs.get_pgs_per_fs_pool().__str__())
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'add_data_pool', new_pool_name)
+        self.fs.add_data_pool(new_pool_name)
 
         self.mount_a.run_shell(["touch", "layoutfile"])
         self.mount_a.run_shell(["mkdir", "layoutdir"])

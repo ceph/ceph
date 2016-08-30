@@ -26,33 +26,40 @@ class MDSThrasher(Greenlet):
     to use when selecting a random value from a range.  To always use the maximum
     value, set no_random to true.  The config is a dict containing some or all of:
 
-    seed: [no default] seed the random number generator
-
-    randomize: [default: true] enables randomization and use the max/min values
-
-    max_thrash: [default: 1] the maximum number of MDSs that will be thrashed at
+    max_thrash: [default: 1] the maximum number of active MDSs per FS that will be thrashed at
       any given time.
 
     max_thrash_delay: [default: 30] maximum number of seconds to delay before
       thrashing again.
 
+    max_replay_thrash_delay: [default: 4] maximum number of seconds to delay while in
+      the replay state before thrashing.
+
     max_revive_delay: [default: 10] maximum number of seconds to delay before
-      bringing back a thrashed MDS
+      bringing back a thrashed MDS.
+
+    randomize: [default: true] enables randomization and use the max/min values
+
+    seed: [no default] seed the random number generator
 
     thrash_in_replay: [default: 0.0] likelihood that the MDS will be thrashed
-      during replay.  Value should be between 0.0 and 1.0
+      during replay.  Value should be between 0.0 and 1.0.
 
-    max_replay_thrash_delay: [default: 4] maximum number of seconds to delay while in
-      the replay state before thrashing
+    thrash_max_mds: [default: 0.25] likelihood that the max_mds of the mds
+      cluster will be modified to a value [1, current) or (current, starting
+      max_mds]. When reduced, randomly selected MDSs other than rank 0 will be
+      deactivated to reach the new max_mds.  Value should be between 0.0 and 1.0.
 
-    thrash_weights: allows specific MDSs to be thrashed more/less frequently.  This option
-      overrides anything specified by max_thrash.  This option is a dict containing
-      mds.x: weight pairs.  For example, [mds.a: 0.7, mds.b: 0.3, mds.c: 0.0].  Each weight
-      is a value from 0.0 to 1.0.  Any MDSs not specified will be automatically
-      given a weight of 0.0.  For a given MDS, by default the trasher delays for up
-      to max_thrash_delay, trashes, waits for the MDS to recover, and iterates.  If a non-zero
-      weight is specified for an MDS, for each iteration the thrasher chooses whether to thrash
-      during that iteration based on a random value [0-1] not exceeding the weight of that MDS.
+    thrash_weights: allows specific MDSs to be thrashed more/less frequently.
+      This option overrides anything specified by max_thrash.  This option is a
+      dict containing mds.x: weight pairs.  For example, [mds.a: 0.7, mds.b:
+      0.3, mds.c: 0.0].  Each weight is a value from 0.0 to 1.0.  Any MDSs not
+      specified will be automatically given a weight of 0.0 (not thrashed).
+      For a given MDS, by default the trasher delays for up to
+      max_thrash_delay, trashes, waits for the MDS to recover, and iterates.
+      If a non-zero weight is specified for an MDS, for each iteration the
+      thrasher chooses whether to thrash during that iteration based on a
+      random value [0-1] not exceeding the weight of that MDS.
 
     Examples::
 
@@ -85,34 +92,28 @@ class MDSThrasher(Greenlet):
 
     """
 
-    def __init__(self, ctx, manager, mds_cluster, config, logger, failure_group, weight):
+    def __init__(self, ctx, manager, config, logger, fs, max_mds):
         super(MDSThrasher, self).__init__()
 
         self.ctx = ctx
         self.manager = manager
         assert self.manager.is_clean()
-        self.mds_cluster = mds_cluster
+        self.config = config
+        self.logger = logger
+        self.fs = fs
+        self.max_mds = max_mds
 
         self.stopping = Event()
-        self.logger = logger
-        self.config = config
 
         self.randomize = bool(self.config.get('randomize', True))
-        self.max_thrash_delay = float(self.config.get('thrash_delay', 30.0))
+        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.25))
+        self.max_thrash = int(self.config.get('max_thrash', 1))
+        self.max_thrash_delay = float(self.config.get('thrash_delay', 120.0))
         self.thrash_in_replay = float(self.config.get('thrash_in_replay', False))
         assert self.thrash_in_replay >= 0.0 and self.thrash_in_replay <= 1.0, 'thrash_in_replay ({v}) must be between [0.0, 1.0]'.format(
             v=self.thrash_in_replay)
-
         self.max_replay_thrash_delay = float(self.config.get('max_replay_thrash_delay', 4.0))
-
         self.max_revive_delay = float(self.config.get('max_revive_delay', 10.0))
-
-        self.failure_group = failure_group
-        self.weight = weight
-
-        # TODO support multiple filesystems: will require behavioural change to select
-        # which filesystem to act on when doing rank-ish things
-        self.fs = Filesystem(self.ctx)
 
     def _run(self):
         try:
@@ -147,13 +148,6 @@ class MDSThrasher(Greenlet):
             "powercycling requested but RemoteConsole is not "
             "initialized.  Check ipmi config.")
 
-    def kill_mds_by_rank(self, rank):
-        """
-        kill_mds wrapper to kill based on rank passed.
-        """
-        status = self.mds_cluster.get_mds_info_by_rank(rank)
-        self.kill_mds(status['name'])
-
     def revive_mds(self, mds, standby_for_rank=None):
         """
         Revive mds -- do an ipmpi powercycle (if indicated by the config)
@@ -172,23 +166,44 @@ class MDSThrasher(Greenlet):
             args.extend(['--hot-standby', standby_for_rank])
         self.ctx.daemons.get_daemon('mds', mds).restart(*args)
 
-    def revive_mds_by_rank(self, rank, standby_for_rank=None):
-        """
-        revive_mds wrapper to revive based on rank passed.
-        """
-        status = self.mds_cluster.get_mds_info_by_rank(rank)
-        self.revive_mds(status['name'], standby_for_rank)
-
-    def get_mds_status_all(self):
-        return self.fs.get_mds_map()
+    def wait_for_stable(self, rank = None, gid = None):
+        self.log('waiting for mds cluster to stabilize...')
+        status = self.fs.status()
+        itercount = 0
+        while True:
+            max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
+            if rank is not None:
+                try:
+                    info = status.get_rank(self.fs.id, rank)
+                    if info['gid'] != gid:
+                        self.log('mds.{name} has gained rank={rank}, replacing gid={gid}'.format(name = info['name'], rank = rank, gid = gid))
+                        return status, info['name']
+                except:
+                    pass # no rank present
+            else:
+                ranks = filter(lambda info: "up:active" == info['state'] and "laggy_since" not in info, list(status.get_ranks(self.fs.id)))
+                count = len(ranks)
+                if count >= max_mds:
+                    self.log('mds cluster has {count} alive and active, now stable!'.format(count = count))
+                    return status, None
+            itercount = itercount + 1
+            if itercount > 10:
+                self.log('mds map: {status}'.format(status=self.fs.status()))
+            time.sleep(2)
+            status = self.fs.status()
 
     def do_thrash(self):
         """
         Perform the random thrashing action
         """
 
-        self.log('starting mds_do_thrash for failure group: ' + ', '.join(
-            ['mds.{_id}'.format(_id=_f) for _f in self.failure_group]))
+        self.log('starting mds_do_thrash for fs {fs}'.format(fs = self.fs.name))
+        stats = {
+            "max_mds": 0,
+            "deactivate": 0,
+            "kill": 0,
+        }
+
         while not self.stopping.is_set():
             delay = self.max_thrash_delay
             if self.randomize:
@@ -200,112 +215,128 @@ class MDSThrasher(Greenlet):
                 if self.stopping.is_set():
                     continue
 
-            skip = random.randrange(0.0, 1.0)
-            if self.weight < 1.0 and skip > self.weight:
-                self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip,
-                                                                                                   weight=self.weight))
-                continue
+            status = self.fs.status()
 
-            # find the active mds in the failure group
-            statuses = [self.mds_cluster.get_mds_info(m) for m in self.failure_group]
-            actives = filter(lambda s: s and s['state'] == 'up:active', statuses)
-            assert len(actives) == 1, 'Can only have one active in a failure group'
+            if random.randrange(0.0, 1.0) <= self.thrash_max_mds:
+                max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
+                options = range(1, max_mds)+range(max_mds+1, self.max_mds+1)
+                if len(options) > 0:
+                    sample = random.sample(options, 1)
+                    new_max_mds = sample[0]
+                    self.log('thrashing max_mds: %d -> %d' % (max_mds, new_max_mds))
+                    self.fs.set_max_mds(new_max_mds)
+                    stats['max_mds'] += 1
 
-            active_mds = actives[0]['name']
-            active_rank = actives[0]['rank']
+                    # Now randomly deactivate mds if we shrank
+                    for rank in random.sample(range(1, max_mds), max(0, max_mds-new_max_mds)):
+                        self.fs.deactivate(rank)
+                        stats['deactivate'] += 1
 
-            self.log('kill mds.{id} (rank={r})'.format(id=active_mds, r=active_rank))
-            self.kill_mds_by_rank(active_rank)
+                    status = self.wait_for_stable()[0]
 
-            # wait for mon to report killed mds as crashed
-            last_laggy_since = None
-            itercount = 0
-            while True:
-                failed = self.fs.get_mds_map()['failed']
-                status = self.mds_cluster.get_mds_info(active_mds)
-                if not status:
+            count = 0
+            for info in status.get_ranks(self.fs.id):
+                name = info['name']
+                label = 'mds.' + name
+                rank = info['rank']
+                gid = info['gid']
+
+                # if thrash_weights isn't specified and we've reached max_thrash,
+                # we're done
+                count = count + 1
+                if 'thrash_weights' not in self.config and count > self.max_thrash:
                     break
-                if 'laggy_since' in status:
-                    last_laggy_since = status['laggy_since']
-                    break
-                if any([(f == active_mds) for f in failed]):
-                    break
-                self.log(
-                    'waiting till mds map indicates mds.{_id} is laggy/crashed, in failed state, or mds.{_id} is removed from mdsmap'.format(
-                        _id=active_mds))
-                itercount = itercount + 1
-                if itercount > 10:
-                    self.log('mds map: {status}'.format(status=self.mds_cluster.get_fs_map()))
-                time.sleep(2)
-            if last_laggy_since:
-                self.log(
-                    'mds.{_id} reported laggy/crashed since: {since}'.format(_id=active_mds, since=last_laggy_since))
-            else:
-                self.log('mds.{_id} down, removed from mdsmap'.format(_id=active_mds, since=last_laggy_since))
 
-            # wait for a standby mds to takeover and become active
-            takeover_mds = None
-            takeover_rank = None
-            itercount = 0
-            while True:
-                statuses = [self.mds_cluster.get_mds_info(m) for m in self.failure_group]
-                actives = filter(lambda s: s and s['state'] == 'up:active', statuses)
-                if len(actives) > 0:
-                    assert len(actives) == 1, 'Can only have one active in failure group'
-                    takeover_mds = actives[0]['name']
-                    takeover_rank = actives[0]['rank']
-                    break
-                itercount = itercount + 1
-                if itercount > 10:
-                    self.log('mds map: {status}'.format(status=self.mds_cluster.get_fs_map()))
+                weight = 1.0
+                if 'thrash_weights' in self.config:
+                    weight = self.config['thrash_weights'].get(label, '0.0')
+                skip = random.randrange(0.0, 1.0)
+                if weight <= skip:
+                    self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip, weight=weight))
+                    continue
 
-            self.log('New active mds is mds.{_id}'.format(_id=takeover_mds))
+                self.log('kill {label} (rank={rank})'.format(label=label, rank=rank))
+                self.kill_mds(name)
+                stats['kill'] += 1
 
-            # wait for a while before restarting old active to become new
-            # standby
-            delay = self.max_revive_delay
-            if self.randomize:
-                delay = random.randrange(0.0, self.max_revive_delay)
+                # wait for mon to report killed mds as crashed
+                last_laggy_since = None
+                itercount = 0
+                while True:
+                    status = self.fs.status()
+                    info = status.get_mds(name)
+                    if not info:
+                        break
+                    if 'laggy_since' in info:
+                        last_laggy_since = info['laggy_since']
+                        break
+                    if any([(f == name) for f in status.get_fsmap(self.fs.id)['mdsmap']['failed']]):
+                        break
+                    self.log(
+                        'waiting till mds map indicates {label} is laggy/crashed, in failed state, or {label} is removed from mdsmap'.format(
+                            label=label))
+                    itercount = itercount + 1
+                    if itercount > 10:
+                        self.log('mds map: {status}'.format(status=status))
+                    time.sleep(2)
 
-            self.log('waiting for {delay} secs before reviving mds.{id}'.format(
-                delay=delay, id=active_mds))
-            time.sleep(delay)
+                if last_laggy_since:
+                    self.log(
+                        '{label} reported laggy/crashed since: {since}'.format(label=label, since=last_laggy_since))
+                else:
+                    self.log('{label} down, removed from mdsmap'.format(label=label, since=last_laggy_since))
 
-            self.log('reviving mds.{id}'.format(id=active_mds))
-            self.revive_mds(active_mds, standby_for_rank=takeover_rank)
+                # wait for a standby mds to takeover and become active
+                status, takeover_mds = self.wait_for_stable(rank, gid)
+                self.log('New active mds is mds.{_id}'.format(_id=takeover_mds))
 
-            status = {}
-            while True:
-                status = self.mds_cluster.get_mds_info(active_mds)
-                if status and (status['state'] == 'up:standby' or status['state'] == 'up:standby-replay'):
-                    break
-                self.log(
-                    'waiting till mds map indicates mds.{_id} is in standby or standby-replay'.format(_id=active_mds))
-                time.sleep(2)
-            self.log('mds.{_id} reported in {state} state'.format(_id=active_mds, state=status['state']))
-
-            # don't do replay thrashing right now
-            continue
-            # this might race with replay -> active transition...
-            if status['state'] == 'up:replay' and random.randrange(0.0, 1.0) < self.thrash_in_replay:
-
-                delay = self.max_replay_thrash_delay
-                if self.randomize:
-                    delay = random.randrange(0.0, self.max_replay_thrash_delay)
-                time.sleep(delay)
-                self.log('kill replaying mds.{id}'.format(id=self.to_kill))
-                self.kill_mds(self.to_kill)
-
+                # wait for a while before restarting old active to become new
+                # standby
                 delay = self.max_revive_delay
                 if self.randomize:
                     delay = random.randrange(0.0, self.max_revive_delay)
 
-                self.log('waiting for {delay} secs before reviving mds.{id}'.format(
-                    delay=delay, id=self.to_kill))
+                self.log('waiting for {delay} secs before reviving {label}'.format(
+                    delay=delay, label=label))
                 time.sleep(delay)
 
-                self.log('revive mds.{id}'.format(id=self.to_kill))
-                self.revive_mds(self.to_kill)
+                self.log('reviving {label}'.format(label=label))
+                self.revive_mds(name)
+
+                while True:
+                    status = self.fs.status()
+                    info = status.get_mds(name)
+                    if info and info['state'] in ('up:standby', 'up:standby-replay'):
+                        self.log('{label} reported in {state} state'.format(label=label, state=info['state']))
+                        break
+                    self.log(
+                        'waiting till mds map indicates {label} is in standby or standby-replay'.format(label=label))
+                    time.sleep(2)
+
+        for stat in stats:
+            self.log("stat['{key}'] = {value}".format(key = stat, value = stats[stat]))
+
+             # don't do replay thrashing right now
+#            for info in status.get_replays(self.fs.id):
+#                # this might race with replay -> active transition...
+#                if status['state'] == 'up:replay' and random.randrange(0.0, 1.0) < self.thrash_in_replay:
+#                    delay = self.max_replay_thrash_delay
+#                    if self.randomize:
+#                        delay = random.randrange(0.0, self.max_replay_thrash_delay)
+#                time.sleep(delay)
+#                self.log('kill replaying mds.{id}'.format(id=self.to_kill))
+#                self.kill_mds(self.to_kill)
+#
+#                delay = self.max_revive_delay
+#                if self.randomize:
+#                    delay = random.randrange(0.0, self.max_revive_delay)
+#
+#                self.log('waiting for {delay} secs before reviving mds.{id}'.format(
+#                    delay=delay, id=self.to_kill))
+#                time.sleep(delay)
+#
+#                self.log('revive mds.{id}'.format(id=self.to_kill))
+#                self.revive_mds(self.to_kill)
 
 
 @contextlib.contextmanager
@@ -336,9 +367,6 @@ def task(ctx, config):
     log.info('mds thrasher using random seed: {seed}'.format(seed=seed))
     random.seed(seed)
 
-    max_thrashers = config.get('max_thrash', 1)
-    thrashers = {}
-
     (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()
     manager = ceph_manager.CephManager(
         first, ctx=ctx, logger=log.getChild('ceph_manager'),
@@ -346,71 +374,41 @@ def task(ctx, config):
 
     # make sure everyone is in active, standby, or standby-replay
     log.info('Wait for all MDSs to reach steady state...')
-    statuses = None
-    statuses_by_rank = None
+    status = mds_cluster.status()
     while True:
-        statuses = {m: mds_cluster.get_mds_info(m) for m in mdslist}
-        statuses_by_rank = {}
-        for _, s in statuses.iteritems():
-            if isinstance(s, dict):
-                statuses_by_rank[s['rank']] = s
-
-        ready = filter(lambda (_, s): s is not None and (s['state'] == 'up:active'
-                                                         or s['state'] == 'up:standby'
-                                                         or s['state'] == 'up:standby-replay'),
-                       statuses.items())
-        if len(ready) == len(statuses):
+        steady = True
+        for info in status.get_all():
+            state = info['state']
+            if state not in ('up:active', 'up:standby', 'up:standby-replay'):
+                steady = False
+                break
+        if steady:
             break
         time.sleep(2)
+        status = mds_cluster.status()
     log.info('Ready to start thrashing')
 
-    # setup failure groups
-    failure_groups = {}
-    actives = {s['name']: s for (_, s) in statuses.iteritems() if s['state'] == 'up:active'}
-    log.info('Actives is: {d}'.format(d=actives))
-    log.info('Statuses is: {d}'.format(d=statuses_by_rank))
-    for active in actives:
-        for (r, s) in statuses.iteritems():
-            if s['standby_for_name'] == active:
-                if not active in failure_groups:
-                    failure_groups[active] = []
-                log.info('Assigning mds rank {r} to failure group {g}'.format(r=r, g=active))
-                failure_groups[active].append(r)
-
     manager.wait_for_clean()
-    for (active, standbys) in failure_groups.iteritems():
-        weight = 1.0
-        if 'thrash_weights' in config:
-            weight = int(config['thrash_weights'].get('mds.{_id}'.format(_id=active), '0.0'))
-
-        failure_group = [active]
-        failure_group.extend(standbys)
-
+    thrashers = {}
+    for fs in status.get_filesystems():
+        name = fs['mdsmap']['fs_name']
+        log.info('Running thrasher against FS {f}'.format(f = name))
         thrasher = MDSThrasher(
-            ctx, manager, mds_cluster, config,
-            logger=log.getChild('mds_thrasher.failure_group.[{a}, {sbs}]'.format(
-                a=active,
-                sbs=', '.join(standbys)
+            ctx, manager, config,
+            log.getChild('fs.[{f}]'.format(f = name)),
+            Filesystem(ctx, fs['id']), fs['mdsmap']['max_mds']
             )
-            ),
-            failure_group=failure_group,
-            weight=weight)
         thrasher.start()
-        thrashers[active] = thrasher
-
-        # if thrash_weights isn't specified and we've reached max_thrash,
-        # we're done
-        if 'thrash_weights' not in config and len(thrashers) == max_thrashers:
-            break
+        thrashers[name] = thrasher
 
     try:
         log.debug('Yielding')
         yield
     finally:
         log.info('joining mds_thrashers')
-        for t in thrashers:
-            log.info('join thrasher for failure group [{fg}]'.format(fg=', '.join(failure_group)))
-            thrashers[t].stop()
-            thrashers[t].get()  # Raise any exception from _run()
-            thrashers[t].join()
+        for name in thrashers:
+            log.info('join thrasher mds_thrasher.fs.[{f}]'.format(f=name))
+            thrashers[name].stop()
+            thrashers[name].get()  # Raise any exception from _run()
+            thrashers[name].join()
         log.info('done joining')
