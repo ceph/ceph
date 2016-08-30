@@ -70,7 +70,6 @@ target_link_libraries(unittest_librbd
   cls_journal_client
   rados_test_stub
   librados
-  librados_api
   rbd_test
   rbd_test_mock
   rbd_api

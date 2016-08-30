@@ -7,6 +7,12 @@ Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 License: LGPL2.1 (see COPYING-LGPL2.1)
 
+Files: cmake/modules/FindLTTngUST.cmake
+Copyright:
+    Copyright 2016 Kitware, Inc.
+    Copyright 2016 Philippe Proulx <pproulx@efficios.com>
+License: BSD 3-clause
+
 Files: doc/*
 Copyright: (c) 2010-2012 New Dream Network and contributors
 License: Creative Commons Attribution-ShareAlike (CC BY-SA)
