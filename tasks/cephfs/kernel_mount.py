@@ -107,6 +107,9 @@ class KernelMount(CephFSMount):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
+        if not self.is_mounted():
+            return
+
         try:
             self.umount()
         except CommandFailedError:
