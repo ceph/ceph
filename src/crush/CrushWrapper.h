@@ -50,7 +50,6 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
 
 using namespace std;
 class CrushWrapper {
-  mutable Mutex mapper_lock;
 public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
@@ -78,8 +77,7 @@ public:
   CrushWrapper(const CrushWrapper& other);
   const CrushWrapper& operator=(const CrushWrapper& other);
 
-  CrushWrapper() : mapper_lock("CrushWrapper::mapper_lock"),
-		   crush(0), have_rmaps(false) {
+  CrushWrapper() : crush(0), have_rmaps(false) {
     create();
   }
   ~CrushWrapper() {
@@ -1088,7 +1086,6 @@ public:
 
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
-    Mutex::Locker l(mapper_lock);
     int rawout[maxout];
     char work[crush_work_size(crush, maxout)];
     crush_init_workspace(crush, work);
