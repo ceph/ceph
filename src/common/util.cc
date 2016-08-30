@@ -263,3 +263,26 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   }
   f->close_section();
 }
+
+// Convert non-printable characters to '\###'
+void cleanbin(string &str)
+{
+  bool cleaned = false;
+  string clean;
+
+  for (string::iterator it = str.begin(); it != str.end(); ++it) {
+    if (!isprint(*it)) {
+      clean.push_back('\\');
+      clean.push_back('0' + ((*it >> 6) & 7));
+      clean.push_back('0' + ((*it >> 3) & 7));
+      clean.push_back('0' + (*it & 7));
+      cleaned = true;
+    } else {
+      clean.push_back(*it);
+    }
+  }
+
+  if (cleaned)
+    str = clean;
+  return;
+}

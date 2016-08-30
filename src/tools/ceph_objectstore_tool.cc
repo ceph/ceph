@@ -41,6 +41,7 @@
 #include "rebuild_mondb.h"
 #include "ceph_objectstore_tool.h"
 #include "include/compat.h"
+#include "include/util.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -294,29 +295,6 @@ int file_fd = fd_none;
 bool debug = false;
 super_header sh;
 uint64_t testalign;
-
-// Convert non-printable characters to '\###'
-static void cleanbin(string &str)
-{
-  bool cleaned = false;
-  string clean;
-
-  for (string::iterator it = str.begin(); it != str.end(); ++it) {
-    if (!isprint(*it)) {
-      clean.push_back('\\');
-      clean.push_back('0' + ((*it >> 6) & 7));
-      clean.push_back('0' + ((*it >> 3) & 7));
-      clean.push_back('0' + (*it & 7));
-      cleaned = true;
-    } else {
-      clean.push_back(*it);
-    }
-  }
-
-  if (cleaned)
-    str = clean;
-  return;
-}
 
 static int get_fd_data(int fd, bufferlist &bl)
 {
