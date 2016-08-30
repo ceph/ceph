@@ -288,9 +288,15 @@ public:
   struct Blob : public boost::intrusive::set_base_hook<> {
     std::atomic_int nref;  ///< reference count
     int64_t id = 0;          ///< id
-    bluestore_blob_t blob;   ///< blob metadata
     BufferSpace bc;          ///< buffer cache
 
+  private:
+    mutable bluestore_blob_t blob;  ///< decoded blob metadata
+    mutable bool undecoded = false; ///< true if blob_bl is newer than blob
+    mutable bool dirty = true;      ///< true if blob is newer than blob_bl
+    mutable bufferlist blob_bl;     ///< cached encoded blob
+
+  public:
     Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
     ~Blob() {
       assert(bc.empty());
@@ -311,7 +317,37 @@ public:
     }
 
     friend ostream& operator<<(ostream& out, const Blob &b) {
-      return out << b.id << ":" << b.blob;
+      return out << b.id << ":" << b.get_blob();
+    }
+
+    const bluestore_blob_t& get_blob() const {
+      if (undecoded) {
+	bufferlist::iterator p = blob_bl.begin();
+	::decode(blob, p);
+	undecoded = false;
+      }
+      return blob;
+    }
+    bluestore_blob_t& dirty_blob() {
+      if (undecoded) {
+	bufferlist::iterator p = blob_bl.begin();
+	::decode(blob, p);
+	undecoded = false;
+      }
+      if (!dirty) {
+	dirty = true;
+	blob_bl.clear();
+      }
+      return blob;
+    }
+    size_t get_encoded_length() const {
+      return blob_bl.length();
+    }
+    bool is_dirty() const {
+      return dirty;
+    }
+    bool is_undecoded() const {
+      return undecoded;
     }
 
     /// discard buffers for unallocated regions
@@ -323,6 +359,21 @@ public:
     void put() {
       if (--nref == 0)
 	delete this;
+    }
+
+    void encode(bufferlist& bl) const {
+      if (dirty) {
+	::encode(blob, blob_bl);
+	dirty = false;
+      } else {
+	assert(blob_bl.length());
+      }
+      ::encode(blob_bl, bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      ::decode(blob_bl, p);
+      undecoded = true;
+      dirty = false;
     }
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
@@ -389,7 +440,7 @@ public:
 	if (p != m.blob_map.begin()) {
 	  out << ',';
 	}
-	out << p->id << '=' << p->blob;
+	out << p->id << '=' << p->get_blob();
       }
       return out << '}';
     }
