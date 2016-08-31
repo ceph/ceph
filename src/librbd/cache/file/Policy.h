@@ -32,6 +32,10 @@ public:
   virtual ~Policy() {
   }
 
+  virtual void set_block_count(uint64_t block_count) = 0;
+
+  virtual int invalidate(uint64_t block) = 0;
+
   virtual int map(OpType op_type, uint64_t block, bool partial_block,
                   MapResult *map_result, uint64_t *replace_cache_block) = 0;
   virtual void tick() = 0;

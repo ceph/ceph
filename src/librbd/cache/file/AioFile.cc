@@ -116,6 +116,7 @@ void AioFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
   m_work_queue.queue(new FunctionContext(
     [this, offset, length, bl, on_finish](int r) {
       bufferptr bp = buffer::create(length);
+      bl->push_back(bp);
 
       char *buffer = reinterpret_cast<char *>(bp.c_str());
       uint64_t count = 0;

@@ -26,6 +26,8 @@ public:
   // TODO use IO queue instead of individual commands so operations can be
   // submitted in batch
 
+  // TODO use scatter/gather API
+
   void open(Context *on_finish);
   void close(Context *on_finish);
 
