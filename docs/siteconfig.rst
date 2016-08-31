@@ -222,5 +222,6 @@ Here is a sample configuration with many of the options set and documented::
     pcp_host: http://pcp.front.sepia.ceph.com:44323/
 
     # Settings for http://www.conserver.com/
+    use_conserver: true
     conserver_master: conserver.front.sepia.ceph.com
     conserver_port: 3109

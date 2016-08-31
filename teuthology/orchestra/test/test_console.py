@@ -21,6 +21,7 @@ class TestPhysicalConsole(TestConsole):
         teuth_config.ipmi_password = 'ipmi_pass'
         teuth_config.conserver_master = 'conserver_master'
         teuth_config.conserver_port = 3109
+        teuth_config.use_conserver = True
 
     def test_has_ipmi_creds(self):
         cons = self.klass(self.hostname)
@@ -191,3 +192,13 @@ class TestPhysicalConsole(TestConsole):
             assert m_spawn.call_count == 2
             assert cons.has_conserver is False
             assert 'ipmitool' in m_spawn.call_args_list[1][0][0]
+
+    def test_disable_conserver(self):
+        with patch(
+            'teuthology.orchestra.console.subprocess.Popen',
+            autospec=True,
+        ) as m_popen:
+            m_popen.return_value.wait.return_value = 0
+            teuth_config.use_conserver = False
+            cons = self.klass(self.hostname)
+            assert cons.has_conserver is False

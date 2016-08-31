@@ -43,6 +43,7 @@ class PhysicalConsole():
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT).wait() == 0
         self.has_conserver = all([
+            config.use_conserver is not False,
             self.conserver_master,
             self.conserver_port,
             conserver_client_found,
