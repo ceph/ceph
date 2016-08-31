@@ -38,8 +38,9 @@ class RGWPutObj_Compress : public RGWPutObj_Filter
   bool compressed;
   std::vector<compression_block> blocks;
 public:
-  RGWPutObj_Compress(CephContext* cct_, RGWPutObjDataProcessor* next) :  RGWPutObj_Filter(next), 
-                                                                         cct(cct_) {}
+  RGWPutObj_Compress(CephContext* cct_, RGWPutObjDataProcessor* next) :  RGWPutObj_Filter(next),
+                                                                         cct(cct_),
+                                                                         compressed(false) {}
   virtual ~RGWPutObj_Compress(){}
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override;
 
