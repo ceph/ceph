@@ -67,6 +67,8 @@ void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
 
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
                 std::set<cls::journal::Client> *clients);
+void client_list(librados::IoCtx &ioctx, const std::string &oid,
+                 std::set<cls::journal::Client> *clients, Context *on_finish);
 
 // journal tag helpers
 int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,
