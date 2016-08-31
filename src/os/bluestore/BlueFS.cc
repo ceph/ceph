@@ -156,7 +156,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 {
   std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id
-          << " want 0x" << std::hex << want << std:: dec << dendl;
+          << " want 0x" << std::hex << want << std::dec << dendl;
   assert(id < alloc.size());
   assert(alloc[id]);
   int r = alloc[id]->reserve(want);
@@ -1770,7 +1770,6 @@ int BlueFS::open_for_write(
     }
     file = new File;
     file->fnode.ino = ++ino_last;
-    file->fnode.mtime = ceph_clock_now(NULL);
     file_map[ino_last] = file;
     dir->file_map[filename] = file;
     ++file->refs;
@@ -1792,9 +1791,9 @@ int BlueFS::open_for_write(
       }
       file->fnode.extents.clear();
     }
-    file->fnode.mtime = ceph_clock_now(NULL);
   }
 
+  file->fnode.mtime = ceph_clock_now(NULL);
   file->fnode.prefer_bdev = BlueFS::BDEV_DB;
   if (dirname.length() > 5) {
     // the "db.slow" and "db.wal" directory names are hard-coded at
