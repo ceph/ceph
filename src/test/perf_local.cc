@@ -184,7 +184,7 @@ double buffer_basic()
 }
 
 struct DummyBlock {
-  int a, b, c, d;
+  int a = 1, b = 2, c = 3, d = 4;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(a, bl);
