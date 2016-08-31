@@ -35,11 +35,11 @@ class KeyRing;
 #define MIN_GLOBAL_ID 0x1000
 
 class AuthMonitor : public PaxosService {
+public:
   enum IncType {
     GLOBAL_ID,
     AUTH_DATA,
   };
-public:
   struct Incremental {
     IncType inc_type;
     uint64_t max_global_id;
