@@ -56,6 +56,8 @@ namespace librbd {
 		     const std::string &object_prefix);
     int get_features(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, uint64_t *features);
+    void set_features(librados::ObjectWriteOperation *op, uint64_t features,
+                     uint64_t mask);
     int set_features(librados::IoCtx *ioctx, const std::string &oid,
                      uint64_t features, uint64_t mask);
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
