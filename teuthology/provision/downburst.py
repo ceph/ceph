@@ -180,20 +180,26 @@ class Downburst(object):
                 ['passwd', '-d', self.user],
             ]
         }
-        # On CentOS/RHEL/Fedora, write the correct mac address
+        # Install git on downbursted VMs to clone upstream linux-firmware.
+        # Issue #17154
+        if 'packages' not in user_info:
+            user_info['packages'] = list()
+        user_info['packages'].extend([
+            'git',
+            'wget',
+        ])
+        # On CentOS/RHEL/Fedora, write the correct mac address and
+        # install redhab-lsb-core for `lsb_release`
         if os_type in ['centos', 'rhel', 'fedora']:
             user_info['runcmd'].extend([
                 ['sed', '-ie', 's/HWADDR=".*"/HWADDR="%s"/' % mac_address,
                  '/etc/sysconfig/network-scripts/ifcfg-eth0'],
             ])
+            user_info['packages'].append('redhat-lsb-core')
         # On Ubuntu, starting with 16.04, we need to install 'python' to get
         # python2.7, which ansible needs
         elif os_type == 'ubuntu':
-            if 'packages' not in user_info:
-                user_info['packages'] = list()
-            user_info['packages'].extend([
-                'python',
-            ])
+            user_info['packages'].append('python')
         user_fd = tempfile.NamedTemporaryFile(delete=False)
         yaml.safe_dump(user_info, user_fd)
         self.user_path = user_fd.name
