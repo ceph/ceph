@@ -7377,6 +7377,13 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
     return;
   }
 
+  if (peer_missing_requested.count(auth_log_shard)) {
+    if (msgs[auth_log_shard]) {
+      msg = msgs[auth_log_shard];
+      post_event(GotLog());
+    }
+    return;
+  }
   // how much log to request?
   eversion_t request_log_from = pg->info.last_update;
   assert(!pg->actingbackfill.empty());
