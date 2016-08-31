@@ -119,6 +119,7 @@ else
         ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."
+	exit 1
         ;;
     esac
 fi
