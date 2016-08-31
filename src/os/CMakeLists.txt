@@ -29,7 +29,6 @@ set(libos_srcs
 
 if(HAVE_LIBAIO)
   list(APPEND libos_srcs
-    bluestore/kv.cc
     bluestore/Allocator.cc
     bluestore/BitmapFreelistManager.cc
     bluestore/BlockDevice.cc
