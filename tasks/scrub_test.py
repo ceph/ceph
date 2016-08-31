@@ -273,7 +273,7 @@ class InconsistentObjChecker:
         self._check_attrs(inc, 'data_digest')
 
     def missing(self, inc):
-        assert 'missing' in inc['errors']
+        assert 'missing' in inc['union_shard_errors']
         self._check_errors(inc, 'missing')
 
     def size_mismatch(self, inc):
