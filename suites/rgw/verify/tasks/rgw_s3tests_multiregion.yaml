@@ -63,3 +63,8 @@ tasks:
       force-branch: ceph-master
       idle_timeout: 300
       rgw_server: client.0
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw lc debug interval: 10

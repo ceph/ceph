@@ -10,3 +10,8 @@ tasks:
     client.0:
       force-branch: ceph-master
       rgw_server: client.0
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw lc debug interval: 10

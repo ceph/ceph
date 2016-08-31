@@ -3,3 +3,8 @@ tasks:
 - s3tests:
     client.1:
       rgw_server: client.1
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw lc debug interval: 10
