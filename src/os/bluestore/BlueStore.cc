@@ -5433,7 +5433,9 @@ int BlueStore::queue_transactions(
     txc->wal_txn->seq = wal_seq.inc();
 
     bufferlist bl;
-    if (!queued && txc->wal_txn->can_bypass_wal(block_size)) {
+    if (!queued &&
+	g_conf->bluestore_fast_overwrite &&
+        txc->wal_txn->can_bypass_wal(block_size)) {
       dout(20) << __func__ << " WAL bypassed" << dendl;
       _do_wal_ops(txc, false);
       delete txc->wal_txn;
@@ -6165,7 +6167,8 @@ void BlueStore::_do_write_small(
         wctx->onode_changed = wctx->onode_changed || changed;
       }
       dout(20) << __func__ << "  lex 0x" << std::hex << offset
-	       << std::dec << ": " << lex << dendl;
+	       << std::dec << ": " << lex
+	       << (wctx->onode_changed ? "" : " unchanged") << dendl;
       dout(20) << __func__ << "  old " << blob << ": " << *b << dendl;
       return;
     }
@@ -6560,7 +6563,8 @@ int BlueStore::_do_write(
       _do_write_small(txc, c, o, head_offset, head_length, p, &wctx);
     }
 
-    if( txc->cur_transact_ops == 1 &&
+    if( g_conf->bluestore_fast_overwrite &&
+        txc->cur_transact_ops == 1 &&
 	csum_type == bluestore_blob_t::CSUM_NONE &&
 	head_length == 0 && tail_length == 0 &&
         middle_length == block_size &&

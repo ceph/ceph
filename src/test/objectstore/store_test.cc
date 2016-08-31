@@ -5332,6 +5332,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
   g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
   g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
+  g_ceph_context->_conf->set_val("bluestore_fast_overwrite", "true");
 
   // set small cache sizes so we see trimming during Synthetic tests
   g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
