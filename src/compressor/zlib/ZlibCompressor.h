@@ -22,11 +22,7 @@
 class ZlibCompressor : public Compressor {
   bool isal_enabled;
 public:
-  ZlibCompressor(bool isal) : Compressor("zlib"), isal_enabled(isal)
-  {
-    if (isal)
-      Compressor::type = "isa-l";
-  }
+  ZlibCompressor(bool isal) : Compressor("zlib"), isal_enabled(isal) {}
 
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
