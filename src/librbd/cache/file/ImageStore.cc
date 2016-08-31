@@ -65,10 +65,14 @@ void ImageStore<I>::read_block(uint64_t cache_block,
                                BlockExtents &&block_extents,
                                bufferlist *bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "block=" << cache_block << ", "
+                 << "extents=" << block_extents << dendl;
 
-  // TODO
-  on_finish->complete(0);
+  // TODO add gather support
+  assert(block_extents.size() == 1);
+  auto &extent = block_extents.front();
+  m_cache_file.read(m_metastore.block_to_offset(cache_block) + extent.first,
+                    extent.second, bl, on_finish);
 }
 
 template <typename I>
@@ -76,10 +80,22 @@ void ImageStore<I>::write_block(uint64_t cache_block,
                                 BlockExtents &&block_extents,
                                 bufferlist &&bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "block=" << cache_block << ", "
+                 << "extents=" << block_extents << dendl;
 
-  // TODO
-  on_finish->complete(0);
+  // TODO add scatter support
+  C_Gather *ctx = new C_Gather(cct, on_finish);
+  uint64_t buffer_offset = 0;
+  for (auto &extent : block_extents) {
+    bufferlist sub_bl;
+    sub_bl.substr_of(bl, buffer_offset, extent.second);
+    buffer_offset += extent.second;
+
+    m_cache_file.write(m_metastore.block_to_offset(cache_block) + extent.first,
+                       std::move(sub_bl), ctx->new_sub());
+
+  }
+  ctx->activate();
 }
 
 template <typename I>
