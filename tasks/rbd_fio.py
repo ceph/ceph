@@ -6,6 +6,7 @@
 
 """
 import contextlib
+import json
 import logging
 import StringIO
 import re
@@ -196,6 +197,13 @@ def run_fio(remote, config, rbd_test_dir):
         remote.run(args=['sudo', run.Raw('{tdir}/fio-fio-{v}/fio {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
         remote.run(args=['ceph', '-s'])
     finally:
+        out=StringIO.StringIO()
+        remote.run(args=['rbd','showmapped', '--format=json'], stdout=out)
+        mapped_images = json.loads(out.getvalue())
+        if mapped_images:
+            log.info("Unmapping rbd images on {sn}".format(sn=sn))
+            for image in mapped_images.itervalues():
+                remote.run(args=['sudo', 'rbd', 'unmap', str(image['device'])])
         log.info("Cleaning up fio install")
         remote.run(args=['rm','-rf', run.Raw(rbd_test_dir)])
         if system_type == 'rpm' and ioengine == 'rbd':
