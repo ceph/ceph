@@ -22,21 +22,22 @@ namespace librbd {
 namespace journal {
 
 enum EventType {
-  EVENT_TYPE_AIO_DISCARD    = 0,
-  EVENT_TYPE_AIO_WRITE      = 1,
-  EVENT_TYPE_AIO_FLUSH      = 2,
-  EVENT_TYPE_OP_FINISH      = 3,
-  EVENT_TYPE_SNAP_CREATE    = 4,
-  EVENT_TYPE_SNAP_REMOVE    = 5,
-  EVENT_TYPE_SNAP_RENAME    = 6,
-  EVENT_TYPE_SNAP_PROTECT   = 7,
-  EVENT_TYPE_SNAP_UNPROTECT = 8,
-  EVENT_TYPE_SNAP_ROLLBACK  = 9,
-  EVENT_TYPE_RENAME         = 10,
-  EVENT_TYPE_RESIZE         = 11,
-  EVENT_TYPE_FLATTEN        = 12,
-  EVENT_TYPE_DEMOTE         = 13,
-  EVENT_TYPE_SNAP_LIMIT     = 14
+  EVENT_TYPE_AIO_DISCARD     = 0,
+  EVENT_TYPE_AIO_WRITE       = 1,
+  EVENT_TYPE_AIO_FLUSH       = 2,
+  EVENT_TYPE_OP_FINISH       = 3,
+  EVENT_TYPE_SNAP_CREATE     = 4,
+  EVENT_TYPE_SNAP_REMOVE     = 5,
+  EVENT_TYPE_SNAP_RENAME     = 6,
+  EVENT_TYPE_SNAP_PROTECT    = 7,
+  EVENT_TYPE_SNAP_UNPROTECT  = 8,
+  EVENT_TYPE_SNAP_ROLLBACK   = 9,
+  EVENT_TYPE_RENAME          = 10,
+  EVENT_TYPE_RESIZE          = 11,
+  EVENT_TYPE_FLATTEN         = 12,
+  EVENT_TYPE_DEMOTE          = 13,
+  EVENT_TYPE_SNAP_LIMIT      = 14,
+  EVENT_TYPE_UPDATE_FEATURES = 15,
 };
 
 struct AioDiscardEvent {
@@ -288,6 +289,23 @@ struct DemoteEvent {
   void dump(Formatter *f) const;
 };
 
+struct UpdateFeaturesEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_UPDATE_FEATURES;
+
+  uint64_t features;
+  bool enabled;
+
+  UpdateFeaturesEvent() : features(0), enabled(false) {
+  }
+  UpdateFeaturesEvent(uint64_t op_tid, uint64_t _features, bool _enabled)
+    : OpEventBase(op_tid), features(_features), enabled(_enabled) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownEvent {
   static const EventType TYPE = static_cast<EventType>(-1);
 
@@ -311,6 +329,7 @@ typedef boost::variant<AioDiscardEvent,
                        FlattenEvent,
                        DemoteEvent,
 		       SnapLimitEvent,
+		       UpdateFeaturesEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {
