@@ -328,7 +328,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
       dout(0) << "RGWLC::bucket_lc_post() failed to acquire lock on, sleep 5, try again" << obj_names[index] << dendl;
-      sleep(10);
+      sleep(5);
       continue;
     }
     if (ret < 0)
@@ -408,7 +408,7 @@ int RGWLC::process(int index, int max_lock_secs)
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
       dout(0) << "RGWLC::process() failed to acquire lock on, sleep 5, try again" << obj_names[index] << dendl;
-      sleep(10);
+      sleep(5);
       continue;
     }
     if (ret < 0)
@@ -497,16 +497,16 @@ bool RGWLC::going_down()
 bool RGWLC::LCWorker::should_work(utime_t& now)
 {
   int start_hour;
-  int start_minite;
+  int start_minute;
   int end_hour;
-  int end_minite;
+  int end_minute;
   string worktime = cct->_conf->rgw_lifecycle_work_time;
-  sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minite, &end_hour, &end_minite);
+  sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute, &end_hour, &end_minute);
   struct tm bdt;
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
-  if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minite)||
-      (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minite)) {
+  if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute)||
+      (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
     return true;
   } else {
     return false;
@@ -517,17 +517,17 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
 int RGWLC::LCWorker::shedule_next_start_time(utime_t& now)
 {
   int start_hour;
-  int start_minite;
+  int start_minute;
   int end_hour;
-  int end_minite;
+  int end_minute;
   string worktime = cct->_conf->rgw_lifecycle_work_time;
-  sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minite, &end_hour, &end_minite);
+  sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute, &end_hour, &end_minute);
   struct tm bdt;
   time_t tt = now.sec();
   time_t nt;
   localtime_r(&tt, &bdt);
   bdt.tm_hour = start_hour;
-  bdt.tm_min = start_minite;
+  bdt.tm_min = start_minute;
   bdt.tm_sec = 0;
   nt = mktime(&bdt);
   return (nt+24*60*60 - tt);
