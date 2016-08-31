@@ -837,10 +837,6 @@ int BlueFS::_read_random(
     uint64_t x_off = 0;
     vector<bluefs_extent_t>::iterator p = h->file->fnode.seek(off, &x_off);
     uint64_t l = MIN(p->length - x_off, len);
-    if (!h->ignore_eof &&
-	off + l > h->file->fnode.size) {
-      l = h->file->fnode.size - off;
-    }
     dout(20) << __func__ << " read buffered 0x"
              << std::hex << x_off << "~" << l << std::dec
              << " of " << *p << dendl;
