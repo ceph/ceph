@@ -198,15 +198,22 @@ namespace librbd {
       return 0;
     }
 
+    void set_features(librados::ObjectWriteOperation *op, uint64_t features,
+                      uint64_t mask)
+    {
+      bufferlist bl;
+      ::encode(features, bl);
+      ::encode(mask, bl);
+
+      op->exec("rbd", "set_features", bl);
+    }
+
     int set_features(librados::IoCtx *ioctx, const std::string &oid,
                       uint64_t features, uint64_t mask)
     {
-      bufferlist inbl;
-      ::encode(features, inbl);
-      ::encode(mask, inbl);
-
       librados::ObjectWriteOperation op;
-      op.exec("rbd", "set_features", inbl);
+      set_features(&op, features, mask);
+
       return ioctx->operate(oid, &op);
     }
 
