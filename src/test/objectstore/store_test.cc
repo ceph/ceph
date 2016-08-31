@@ -122,7 +122,8 @@ public:
 
   virtual void TearDown() {
     if (store) {
-      store->umount();
+      int r = store->umount();
+      EXPECT_EQ(r, 0);
       rm_r("store_test_temp_dir");
     }
   }
@@ -157,8 +158,9 @@ TEST_P(StoreTest, Trivial) {
 }
 
 TEST_P(StoreTest, TrivialRemount) {
-  store->umount();
-  int r = store->mount();
+  int r = store->umount();
+  ASSERT_EQ(0, r);
+  r = store->mount();
   ASSERT_EQ(0, r);
 }
 
@@ -178,7 +180,8 @@ TEST_P(StoreTest, SimpleRemount) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  store->umount();
+  r = store->umount();
+  ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
   {
@@ -196,7 +199,8 @@ TEST_P(StoreTest, SimpleRemount) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  store->umount();
+  r = store->umount();
+  ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
   {
@@ -244,7 +248,8 @@ TEST_P(StoreTest, IORemount) {
       ASSERT_EQ(r, 0);
     }
   }
-  store->umount();
+  r = store->umount();
+  ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
   {
@@ -1125,11 +1130,12 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   g_conf->set_val("bluestore_compression", "force");
   g_conf->set_val("bluestore_min_alloc_size", "65536");
   g_ceph_context->_conf->apply_changes(NULL);
-  store->umount();
-  store->mount(); //to force min_alloc_size update
+  int r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount(); //to force min_alloc_size update
+  ASSERT_EQ(r, 0);
 
   ObjectStore::Sequencer osr("test");
-  int r;
   coll_t cid;
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   {
@@ -1656,8 +1662,9 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
 
   // force cached tail to clear ...
   {
-    store->umount();
-    int r = store->mount();
+    int r = store->umount();
+    ASSERT_EQ(0, r);
+    r = store->mount();
     ASSERT_EQ(0, r);
   }
 
