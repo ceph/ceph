@@ -72,7 +72,7 @@ TEST(ZlibCompressor, compress_decompress_chunk)
 TEST(ZlibCompressor, compress_decompress_isal)
 {
   ZlibCompressor sp(true);
-  EXPECT_STREQ(sp.get_type().c_str(), "isa-l");
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
   int len = strlen(test);
   bufferlist in, out;
@@ -97,7 +97,7 @@ TEST(ZlibCompressor, compress_decompress_isal)
 TEST(ZlibCompressor, compress_decompress_chunk_isal)
 {
   ZlibCompressor sp(true);
-  EXPECT_STREQ(sp.get_type().c_str(), "isa-l");
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
   buffer::ptr test2 ("1234567890", 10);
   int len = strlen(test);
@@ -117,7 +117,7 @@ TEST(ZlibCompressor, compress_decompress_chunk_isal)
 TEST(ZlibCompressor, zlib_isal_compatibility)
 {
   ZlibCompressor isal(true);
-  EXPECT_STREQ(isal.get_type().c_str(), "isa-l");
+  EXPECT_STREQ(isal.get_type().c_str(), "zlib");
   ZlibCompressor zlib(false);
   EXPECT_STREQ(zlib.get_type().c_str(), "zlib");
   char test[101];
