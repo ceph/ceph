@@ -130,7 +130,7 @@ public:
   }
 };
 
-object_t MDSTable::get_object_name()
+object_t MDSTable::get_object_name() const
 {
   char n[50];
   if (per_mds)
