@@ -99,7 +99,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   return 0;
 }
 
-#if __x86_64__
+#if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
 int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
 {
   int ret;
@@ -154,7 +154,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
 
 int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 {
-#if __x86_64__
+#if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
   if (isal_enabled)
     return isal_compress(in, out);
   else
