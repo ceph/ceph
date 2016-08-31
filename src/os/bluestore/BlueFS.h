@@ -196,7 +196,9 @@ private:
   // cache
   map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
-  dirty_file_list_t dirty_files;                  ///< list of dirty files
+
+  // map of dirty files, files of same dirty_seq are grouped into list.
+  map<uint64_t, dirty_file_list_t> dirty_files;
 
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
