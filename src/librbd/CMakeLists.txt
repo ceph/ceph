@@ -48,6 +48,8 @@ set(librbd_internal_srcs
   journal/CreateRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
+  mirror/DisableRequest.cc
+  mirror/EnableRequest.cc
   object_map/CreateRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
