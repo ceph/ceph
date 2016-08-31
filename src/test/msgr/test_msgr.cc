@@ -558,7 +558,7 @@ TEST_P(MessengerTest, StatelessTest) {
     while (!srv_dispatcher.got_new)
       srv_dispatcher.cond.Wait(srv_dispatcher.lock);
   }
-  ASSERT_EQ(static_cast<Session*>(server_conn->get_priv())->get_count(), 1);
+  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv())->get_count());
 
   // 2. test for client lossy
   server_conn->mark_down();
