@@ -22,6 +22,13 @@ class TestPhysicalConsole(TestConsole):
         teuth_config.conserver_master = 'conserver_master'
         teuth_config.conserver_port = 3109
 
+    def test_has_ipmi_creds(self):
+        cons = self.klass(self.hostname)
+        assert cons.has_ipmi_credentials is True
+        teuth_config.ipmi_domain = None
+        cons = self.klass(self.hostname)
+        assert cons.has_ipmi_credentials is False
+
     def test_console_command_conserver(self):
         cons = self.klass(
             self.hostname,
