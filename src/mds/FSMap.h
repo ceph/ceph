@@ -269,8 +269,11 @@ public:
   /**
    * A daemon reports that it is STATE_STOPPED: remove it,
    * and the rank it held.
+   *
+   * @returns a list of any additional GIDs that were removed from the map
+   * as a side effect (like standby replays)
    */
-  void stop(mds_gid_t who);
+  std::list<mds_gid_t> stop(mds_gid_t who);
 
   /**
    * The rank held by 'who', if any, is to be relinquished, and
