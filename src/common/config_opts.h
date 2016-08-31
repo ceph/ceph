@@ -1299,6 +1299,8 @@ OPTION(rgw_ldap_dnattr, OPT_STR, "uid")
 OPTION(rgw_ldap_secret, OPT_STR, "/etc/openldap/secret")
 /* rgw_s3_auth_use_ldap  use LDAP for RGW auth? */
 OPTION(rgw_s3_auth_use_ldap, OPT_BOOL, false)
+/* rgw_ldap_searchfilter  LDAP search filter */
+OPTION(rgw_ldap_searchfilter, OPT_STR, "")
 
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
