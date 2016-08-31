@@ -66,16 +66,8 @@ class Beacon : public Dispatcher
   MDSHealth health;
 
   // Ticker
-  class C_MDS_BeaconSender : public Context {
-    Beacon *beacon;
-  public:
-    explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
-    void finish(int r) {
-      assert(beacon->lock.is_locked_by_me());
-      beacon->sender = NULL;
-      beacon->_send();
-    }
-  } *sender;
+  class C_MDS_BeaconSender;
+  C_MDS_BeaconSender *sender;
 
   void _notify_mdsmap(MDSMap const *mdsmap);
   void _send();
