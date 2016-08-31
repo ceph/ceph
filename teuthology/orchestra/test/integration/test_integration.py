@@ -80,3 +80,15 @@ class TestIntegration():
         rem = remote.Remote(HOST)
         assert rem.os.name
         assert rem.os.version
+
+    def test_17102(self, caplog):
+        # http://tracker.ceph.com/issues/17102
+        rem = remote.Remote(HOST)
+        interval = 3
+        rem.run(args="echo before; sleep %s; echo after" % interval)
+        for record in caplog.records():
+            if record.msg == 'before':
+                before_time = record.created
+            elif record.msg == 'after':
+                after_time = record.created
+        assert int(round(after_time - before_time)) == interval
