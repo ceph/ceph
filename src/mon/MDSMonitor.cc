@@ -480,6 +480,24 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
 }
 
 
+namespace {
+class C_Updated : public Context {
+  MDSMonitor *mm;
+  MonOpRequestRef op;
+public:
+  C_Updated(MDSMonitor *a, MonOpRequestRef c) :
+    mm(a), op(c) {}
+  void finish(int r) {
+    if (r >= 0)
+      mm->_updated(op);   // success
+    else if (r == -ECANCELED) {
+      mm->mon->no_reply(op);
+    } else {
+      mm->dispatch(op);        // try again
+    }
+  }
+};
+}
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 {
