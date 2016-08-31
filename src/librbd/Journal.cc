@@ -170,6 +170,168 @@ public:
   }
 };
 
+template <typename I>
+struct C_IsTagOwner : public Context {
+  I *image_ctx;
+  bool *is_tag_owner;
+  Context *on_finish;
+
+  typedef ::journal::Journaler Journaler;
+  Journaler *journaler;
+  cls::journal::Client client;
+  journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
+  journal::TagData tag_data;
+
+  C_IsTagOwner(I *image_ctx, bool *is_tag_owner, Context *on_finish)
+    : image_ctx(image_ctx), is_tag_owner(is_tag_owner), on_finish(on_finish),
+      journaler(new Journaler(image_ctx->md_ctx, image_ctx->id,
+                              Journal<>::IMAGE_CLIENT_ID, {})) {
+  }
+
+  virtual void finish(int r) {
+    CephContext *cct = image_ctx->cct;
+
+    ldout(cct, 20) << this << " C_IsTagOwner::" << __func__ << ": r=" << r
+		   << dendl;
+    if (r < 0) {
+      lderr(cct) << this << " C_IsTagOwner::" << __func__ << ": "
+                 << "failed to get tag owner: " << cpp_strerror(r) << dendl;
+    } else {
+      *is_tag_owner = (tag_data.mirror_uuid == Journal<>::LOCAL_MIRROR_UUID);
+    }
+
+    Journaler *journaler = this->journaler;
+    Context *on_finish = this->on_finish;
+    FunctionContext *ctx = new FunctionContext(
+      [journaler, on_finish](int r) {
+	on_finish->complete(r);
+	delete journaler;
+      });
+    image_ctx->op_work_queue->queue(ctx, r);
+  }
+};
+
+template <typename J>
+struct GetTagsRequest {
+  CephContext *cct;
+  J *journaler;
+  cls::journal::Client *client;
+  journal::ImageClientMeta *client_meta;
+  uint64_t *tag_tid;
+  journal::TagData *tag_data;
+  Context *on_finish;
+
+  Mutex lock;
+
+  GetTagsRequest(CephContext *cct, J *journaler, cls::journal::Client *client,
+                 journal::ImageClientMeta *client_meta, uint64_t *tag_tid,
+                 journal::TagData *tag_data, Context *on_finish)
+    : cct(cct), journaler(journaler), client(client), client_meta(client_meta),
+      tag_tid(tag_tid), tag_data(tag_data), on_finish(on_finish), lock("lock") {
+  }
+
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    v
+   * GET_CLIENT * * * * * * * * * * * *
+   *    |                             *
+   *    v                             *
+   * GET_TAGS * * * * * * * * * * * * * (error)
+   *    |                             *
+   *    v                             *
+   * <finish> * * * * * * * * * * * * *
+   *
+   * @endverbatim
+   */
+
+  void send() {
+    send_get_client();
+  }
+
+  void send_get_client() {
+    ldout(cct, 20) << __func__ << dendl;
+
+    FunctionContext *ctx = new FunctionContext(
+      [this](int r) {
+        handle_get_client(r);
+      });
+    journaler->get_client(Journal<ImageCtx>::IMAGE_CLIENT_ID, client, ctx);
+  }
+
+  void handle_get_client(int r) {
+    ldout(cct, 20) << __func__ << ": r=" << r << dendl;
+
+    if (r < 0) {
+      complete(r);
+      return;
+    }
+
+    librbd::journal::ClientData client_data;
+    bufferlist::iterator bl_it = client->data.begin();
+    try {
+      ::decode(client_data, bl_it);
+    } catch (const buffer::error &err) {
+      lderr(cct) << this << " OpenJournalerRequest::" << __func__ << ": "
+                 << "failed to decode client data" << dendl;
+      complete(-EBADMSG);
+      return;
+    }
+
+    journal::ImageClientMeta *image_client_meta =
+      boost::get<journal::ImageClientMeta>(&client_data.client_meta);
+    if (image_client_meta == nullptr) {
+      lderr(cct) << this << " OpenJournalerRequest::" << __func__ << ": "
+                 << "failed to get client meta" << dendl;
+      complete(-EINVAL);
+      return;
+    }
+    *client_meta = *image_client_meta;
+
+    send_get_tags();
+  }
+
+  void send_get_tags() {
+    ldout(cct, 20) << __func__ << dendl;
+
+    FunctionContext *ctx = new FunctionContext(
+      [this](int r) {
+        handle_get_tags(r);
+      });
+    C_DecodeTags *tags_ctx = new C_DecodeTags(cct, &lock, tag_tid, tag_data,
+                                              ctx);
+    journaler->get_tags(client_meta->tag_class, &tags_ctx->tags, tags_ctx);
+  }
+
+  void handle_get_tags(int r) {
+    ldout(cct, 20) << __func__ << ": r=" << r << dendl;
+
+    complete(r);
+  }
+
+  void complete(int r) {
+    on_finish->complete(r);
+    delete this;
+  }
+};
+
+template <typename J>
+void get_tags(CephContext *cct, J *journaler,
+              cls::journal::Client *client,
+              journal::ImageClientMeta *client_meta,
+              uint64_t *tag_tid, journal::TagData *tag_data,
+              Context *on_finish) {
+  ldout(cct, 20) << __func__ << dendl;
+
+  GetTagsRequest<J> *req =
+    new GetTagsRequest<J>(cct, journaler, client, client_meta, tag_tid,
+                          tag_data, on_finish);
+  req->send();
+}
+
 template <typename J>
 int open_journaler(CephContext *cct, J *journaler,
                    cls::journal::Client *client,
@@ -514,6 +676,19 @@ int Journal<I>::is_tag_owner(IoCtx& io_ctx, std::string& image_id,
 }
 
 template <typename I>
+void Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner,
+                              Context *on_finish) {
+  CephContext *cct = image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  C_IsTagOwner<I> *is_tag_owner_ctx =  new C_IsTagOwner<I>(
+    image_ctx, is_tag_owner, on_finish);
+  get_tags(cct, is_tag_owner_ctx->journaler, &is_tag_owner_ctx->client,
+	   &is_tag_owner_ctx->client_meta, &is_tag_owner_ctx->tag_tid,
+	   &is_tag_owner_ctx->tag_data, is_tag_owner_ctx);
+}
+
+template <typename I>
 int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
   return get_tag_owner(image_ctx->md_ctx, image_ctx->id, mirror_uuid);
 }
@@ -530,14 +705,17 @@ int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
   journal::ImageClientMeta client_meta;
   uint64_t tag_tid;
   journal::TagData tag_data;
-  int r = open_journaler(cct, &journaler, &client, &client_meta, &tag_tid,
-                         &tag_data);
-  if (r >= 0) {
-    *mirror_uuid = tag_data.mirror_uuid;
+  C_SaferCond get_tags_ctx;
+  get_tags(cct, &journaler, &client, &client_meta, &tag_tid,
+	   &tag_data, &get_tags_ctx);
+
+  int r = get_tags_ctx.wait();
+  if (r < 0) {
+    return r;
   }
 
-  journaler.shut_down();
-  return r;
+  *mirror_uuid = tag_data.mirror_uuid;
+  return 0;
 }
 
 template <typename I>
