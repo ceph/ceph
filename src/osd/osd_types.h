@@ -2315,6 +2315,7 @@ struct pg_query_t {
     LOG = 1,
     MISSING = 4,
     FULLLOG = 5,
+    ALL = 6,
   };
   const char *get_type_name() const {
     switch (type) {
@@ -2322,6 +2323,7 @@ struct pg_query_t {
     case LOG: return "log";
     case MISSING: return "missing";
     case FULLLOG: return "fulllog";
+    case ALL: return "all";
     default: return "???";
     }
   }
