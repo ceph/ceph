@@ -263,7 +263,8 @@ static int read_policy(RGWRados *store, struct req_state *s,
     obj.init_ns(bucket, oid, mp_ns);
     obj.set_in_extra_data(true);
   } else {
-    obj = rgw_obj(bucket, object);
+    obj = rgw_obj(bucket, object.name);
+    obj.set_instance(s->object.instance);
   }
   int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj);
   if (ret == -ENOENT && !object.empty()) {
@@ -410,6 +411,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     s->object_acl = new RGWAccessControlPolicy(s->cct);
 
     rgw_obj obj(s->bucket, s->object);
+      
     store->set_atomic(s->obj_ctx, obj);
     if (prefetch_data) {
       store->set_prefetch_data(s->obj_ctx, obj);
@@ -430,7 +432,8 @@ static void rgw_bucket_object_pre_exec(struct req_state *s)
 
 int RGWGetObj::verify_permission()
 {
-  obj = rgw_obj(s->bucket, s->object);
+  obj = rgw_obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
   store->set_atomic(s->obj_ctx, obj);
   if (get_data)
     store->set_prefetch_data(s->obj_ctx, obj);
