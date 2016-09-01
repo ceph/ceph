@@ -7611,6 +7611,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  set<pg_shard_t> pm_requested;
   assert(!pg->actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = pg->actingbackfill.begin();
        i != pg->actingbackfill.end();
@@ -7643,33 +7648,44 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
       continue;
     }
 
-    // We pull the log from the peer's last_epoch_started to ensure we
-    // get enough log to detect divergent updates.
-    eversion_t since(pi.last_epoch_started, 0);
-    assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
-    if (pi.log_tail <= since) {
-      dout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
-      context< RecoveryMachine >().send_query(
-	*i,
-	pg_query_t(
-	  pg_query_t::LOG,
-	  i->shard, pg->pg_whoami.shard,
-	  since, pg->info.history,
-	  pg->get_osdmap()->get_epoch()));
+    if (msgs[*i]) {
+      pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
+                      msgs[*i]->info, msgs[*i]->log, msgs[*i]->missing, *i);
     } else {
-      dout(10) << " requesting fulllog+missing from osd." << *i
-	       << " (want since " << since << " < log.tail " << pi.log_tail << ")"
-	       << dendl;
-      context< RecoveryMachine >().send_query(
-	*i, pg_query_t(
-	  pg_query_t::FULLLOG,
-	  i->shard, pg->pg_whoami.shard,
-	  pg->info.history, pg->get_osdmap()->get_epoch()));
+      if (peer_missing_requested.count(*i)) {
+        dout(10) << " already requested missing from osd." << *i << dendl;
+      } else {
+        // We pull the log from the peer's last_epoch_started to ensure we
+        // get enough log to detect divergent updates.
+        eversion_t since(pi.last_epoch_started, 0);
+        assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
+        if (pi.log_tail <= since) {
+          dout(10) << " requesting log+missing since " << since
+            << " from osd." << *i << dendl;
+          context< RecoveryMachine >().send_query(
+	    *i,
+	    pg_query_t(
+	      pg_query_t::LOG,
+	      i->shard, pg->pg_whoami.shard,
+	      since, pg->info.history,
+	      pg->get_osdmap()->get_epoch()));
+        } else {
+          dout(10) << " requesting fulllog+missing from osd." << *i
+	           << " (want since " << since << " < log.tail "
+                   << pi.log_tail << ")"
+	           << dendl;
+          context< RecoveryMachine >().send_query(
+	    *i, pg_query_t(
+	      pg_query_t::FULLLOG,
+	      i->shard, pg->pg_whoami.shard,
+	      pg->info.history, pg->get_osdmap()->get_epoch()));
+        }
+      }
+      pm_requested.insert(*i);
+      pg->blocked_by.insert(i->osd);
     }
-    peer_missing_requested.insert(*i);
-    pg->blocked_by.insert(i->osd);
   }
-
+  peer_missing_requested.swap(pm_requested);
   if (peer_missing_requested.empty()) {
     if (pg->need_up_thru) {
       dout(10) << " still need up_thru update before going active" << dendl;
