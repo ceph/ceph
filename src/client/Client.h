@@ -298,6 +298,11 @@ public:
     return UserPerm(uid, gid);
   }
 
+  static UserPerm pick_my_perms(CephContext *c) {
+    uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : ::geteuid();
+    gid_t gid = c->_conf->client_mount_gid >= 0 ? c->_conf->client_mount_gid : ::getegid();
+    return UserPerm(uid, gid);
+  }
 protected:
   MonClient *monclient;
   Messenger *messenger;  
