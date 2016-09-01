@@ -906,7 +906,8 @@ void BlueStore::BufferSpace::_clear()
 int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 {
   // note: we already hold cache->lock
-  dout(20) << __func__ << std::hex << " 0x" << offset << "~" << length << dendl;
+  dout(20) << __func__ << std::hex << " 0x" << offset << "~" << length
+           << std::dec << dendl;
   int cache_private = 0;
   cache->_audit("discard start");
   auto i = _data_lower_bound(offset);
@@ -2392,22 +2393,16 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents)
 	     << " > max_ratio " << g_conf->bluestore_bluefs_max_ratio
 	     << ", should reclaim " << pretty_si_t(reclaim) << dendl;
   }
-  if (bluefs_total < g_conf->bluestore_bluefs_min) {
-    uint64_t g = g_conf->bluestore_bluefs_min;
+  if (bluefs_total < g_conf->bluestore_bluefs_min &&
+    g_conf->bluestore_bluefs_min <
+      (uint64_t)(g_conf->bluestore_bluefs_max_ratio * total_free)) {
+    uint64_t g = g_conf->bluestore_bluefs_min - bluefs_total;
     dout(10) << __func__ << " bluefs_total " << bluefs_total
 	     << " < min " << g_conf->bluestore_bluefs_min
 	     << ", should gift " << pretty_si_t(g) << dendl;
     if (g > gift)
       gift = g;
     reclaim = 0;
-  }
-  if (gift) {
-    float new_bluefs_ratio = (float)(bluefs_free + gift) / (float)total_free;
-    if (new_bluefs_ratio >= g_conf->bluestore_bluefs_max_ratio) {
-      dout(10) << __func__ << " gift would push us past the max_ratio,"
-	       << " doing nothing" << dendl;
-      gift = 0;
-    }
   }
 
   if (gift) {
