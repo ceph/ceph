@@ -97,7 +97,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     } else if (CInode *in = dynamic_cast<CInode*>(p->get())) {
       dout(15) << "try_to_expire committing " << *in << dendl;
       in->mutex_lock();
-      in->store(gather_bld.new_sub());
+      in->store(gather_bld.new_sub(), op_prio);
       in->mutex_unlock();
     } else {
       assert(0);
@@ -153,6 +153,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
     in->mutex_unlock();
   }
+  dirty_locks.clear();
 
   assert(g_conf->mds_kill_journal_expire_at != 2);
 
@@ -214,22 +215,25 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   assert(g_conf->mds_kill_journal_expire_at != 3);
 
-#if 0
   // backtraces to be stored/updated
+  list<CInodeRef> dirty_parent_list;
+  mds->mdcache->lock_log_segments();
   for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
-    CInode *in = *p;
-    assert(in->is_auth());
-    if (in->can_auth_pin()) {
-      dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
-      in->store_backtrace(gather_bld.new_sub(), op_prio);
-    } else {
-      dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
-      in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
-    }
+    dirty_parent_list.push_back(*p);
   }
+  mds->mdcache->unlock_log_segments();
+
+  for (auto p = dirty_parent_list.begin(); p != dirty_parent_list.end(); ++p) {
+    CInodeRef& in = *p;
+    in->mutex_lock();
+    in->store_backtrace(gather_bld.new_sub(), op_prio);
+    in->mutex_unlock();
+  }
+  dirty_parent_list.clear();
 
   assert(g_conf->mds_kill_journal_expire_at != 4);
 
+#if 0
   // slave updates
   for (elist<MDSlaveUpdate*>::iterator p = slave_updates.begin(member_offset(MDSlaveUpdate,
 									     item));
@@ -1096,10 +1100,14 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
     CInodeRef diri = mds->mdcache->get_inode((*lp).ino);
     if (!diri) {
-      dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
-      mds->clog->error() << "failure replaying journal (EMetaBlob)";
-      mds->damaged();
-      assert(0);  // Should be unreachable because damaged() calls respawn()
+      if (MDS_INO_IS_BASE((*lp).ino)) {
+	dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
+	mds->clog->error() << "failure replaying journal (EMetaBlob)";
+	mds->damaged();
+	assert(0);  // Should be unreachable because damaged() calls respawn()
+      } else {
+	diri = mds->mdcache->replay_invent_inode((*lp).ino);
+      }
     }
 
     diri->mutex_lock();
@@ -1176,7 +1184,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       } else {
 	in->mutex_lock();
 	p->update_inode(mds, in.get());
-	if (in->get_parent_dn() != dn) {
+	if (in->state_test(CInode::STATE_REPLAYUNDEF)) {
+	  in->clear_replay_undefined();
+	} else if (in->get_parent_dn() != dn) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  CDentryRef other_dn = in->get_parent_dn();
 	  if (other_dn->get_dir_inode() != diri.get()) {
@@ -1215,8 +1225,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       }
       if (p->is_dirty())
 	in->_mark_dirty(logseg);
-  //    if (p->is_dirty_parent())
-//	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+      if (p->is_dirty_parent())
+	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
       assert(g_conf->mds_kill_journal_replay_at != 2);
 
       in->mutex_unlock();

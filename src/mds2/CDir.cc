@@ -199,7 +199,7 @@ void CDir::clear_new()
     mdcache->lock_log_segments();
     item_new.remove_myself();
     mdcache->unlock_log_segments();
-    state_clear(STATE_DIRTY);
+    state_clear(STATE_NEW);
   }
 }
 
@@ -229,6 +229,7 @@ void CDir::unlink_inode(CDentry *dn)
 
 CDentryRef CDir::add_null_dentry(const string& dname)
 {
+  dout(12) << "add_null_dentry " << dname << dendl;
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
 
@@ -501,7 +502,7 @@ void CDir::_omap_commit(int op_prio)
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->get_metadata_pool());
 
   for (auto p = dirty_dentries.begin(); !p.end(); ) {
     CDentry *dn = *p;
@@ -786,7 +787,7 @@ void CDir::_omap_fetch(MDSContextBase *c, const std::set<dentry_key_t>& keys)
 {
   C_Dir_Fetched *fin = new C_Dir_Fetched(this, c);
   object_t oid = get_ondisk_object();
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->get_metadata_pool());
   ObjectOperation rd;
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   if (keys.empty()) {
@@ -869,9 +870,7 @@ CDentryRef CDir::_load_dentry(const std::string &dname, const snapid_t last,
         dout(12) << "_fetched  had dentry " << *dn << dendl;
       }
     } else {
-      // add inode
       CInode* newi = new CInode(mdcache);
-
       try {
 	newi->decode_bare(q);
       } catch (buffer::error &err) {
@@ -880,24 +879,32 @@ CDentryRef CDir::_load_dentry(const std::string &dname, const snapid_t last,
       }
 
       CInodeRef in = mdcache->get_inode(newi->ino(), last);
-      if (!in) {
-	in = newi;
+      if (!in || in->state_test(CInode::STATE_REPLAYUNDEF)) {
+	if (!in)
+	  in = newi;
 	in->mutex_lock();
 
-	dn = add_primary_dentry(dname, in.get()); // link
+	if (in.get() == newi) {
+	  mdcache->add_inode(in.get()); // add
+	} else {
+	  in->clone(newi);
+	  in->clear_replay_undefined();
+	}
 
+	dn = add_primary_dentry(dname, in.get()); // link
 	if (in->get_inode()->is_dirty_rstat())
 	  in->mark_dirty_rstat();
 
-	mdcache->add_inode(in.get()); // add
-
 	in->mutex_unlock();
 
+	if (in.get() != newi)
+	  delete newi;
 	/*
 	if (inode->is_stray()) {
 	  cache->notify_stray_loaded(dn);
 	}
 	*/
+	dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
       } else {
 	LogChannelRef clog = mdcache->mds->clog;
 	string dirpath, inopath;
@@ -969,6 +976,14 @@ void CDir::_omap_fetched(int r, bufferlist& hdrbl, map<string, bufferlist>& omap
     assert(!state_test(STATE_COMMITTING));
     fnode = got_fnode;
     projected_version = committing_version = committed_version = got_fnode.version;
+  } else {
+    assert(get_version() >= got_fnode.version);
+    if (committed_version == 0 && is_dirty() &&
+	get_version() == got_fnode.version) {
+      dout(10) << "_fetched version == get_version(), marking clean" << dendl;
+      mark_clean();
+      committed_version = get_version();
+    }
   }
 
   unsigned pos = omap.size() - 1;

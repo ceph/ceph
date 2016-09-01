@@ -79,7 +79,7 @@ void MDSTable::save(MDSContextBase *onfinish, version_t v)
   // write (async)
   SnapContext snapc;
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
   mds->objecter->write_full(oid, oloc,
 			    snapc,
 			    bl, ceph::real_clock::now(g_ceph_context), 0,
@@ -149,7 +149,7 @@ void MDSTable::load(MDSContextBase *onfinish)
 
   C_IO_MT_Load *c = new C_IO_MT_Load(this, onfinish);
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mds->get_metadata_pool());
   mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
 }
 

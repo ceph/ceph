@@ -26,11 +26,16 @@ public:
   static const int PIN_CAPS =			2;  // client caps
   static const int PIN_STRAY =			19; 
   static const int PIN_DIRTYRSTAT =		21;
+  static const int PIN_DIRTYPARENT =		23;
+
   // states
   static const unsigned STATE_FREEING =		(1<<0);
   static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
+  static const unsigned STATE_DIRTYPARENT =	(1<<2);
+  static const unsigned STATE_DIRTYPOOL =	(1<<3);
   static const unsigned STATE_DIRTYRSTAT =	(1<<15);
   static const unsigned STATE_STRAYPINNED =	(1<<16);
+  static const unsigned STATE_REPLAYUNDEF =	(1<<17);
 
   MDCache* const mdcache;
 protected:
@@ -130,6 +135,12 @@ public:
   void mark_dirty(version_t projected_dirv, LogSegment *ls);
   void mark_clean();
 
+  void _mark_dirty_parent(LogSegment *ls, bool dirty_pool);
+  void clear_dirty_parent();
+  bool is_dirty_parent() const { return state_test(STATE_DIRTYPARENT); }
+
+  void clear_replay_undefined();
+
   void set_primary_parent(CDentry *p) {
     assert(parent == NULL);
     parent = p;
@@ -183,21 +194,28 @@ public:
   void encode_cap_message(MClientCaps *m, Capability *cap);
 
 protected:
-  object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
   void encode(bufferlist &bl, uint64_t features);
   void decode(bufferlist::iterator &bl);
 
   void _stored(int r, version_t v, MDSContextBase *fin);
-  void _fetched(int r, bufferlist& bl, Context *fin);
-  friend class C_Inode_Stored;
+  void _fetched(int r, bufferlist& bl, MDSContextBase *fin);
   friend class C_Inode_Fetched;
+  friend class C_Inode_Stored;
+
+  int64_t get_backtrace_pool() const;
+  void build_backtrace(int64_t pool, inode_backtrace_t& bt);
+  void _backtrace_stored(int r, version_t v, MDSContextBase *fin);
+  friend class C_Inode_BacktraceStored;
 public:
+  static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
+
+  void clone(const CInode *other);
   void encode_bare(bufferlist &bl, uint64_t features);
   void decode_bare(bufferlist::iterator &bl, __u8 struct_v=4);
-
-  void store(MDSContextBase *fin);
+  void store(MDSContextBase *fin, int op_prio=-1);
   void fetch(MDSContextBase *fin);
 
+  void store_backtrace(MDSContextBase *fin, int op_prio=-1);
 protected:
   static LockType versionlock_type;
   static LockType authlock_type;
@@ -314,13 +332,14 @@ public:
 
   // list item node for when we have unpropagated rstat data
   elist<CInode*>::item item_dirty_rstat;
-  bool is_dirty_rstat() { return state_test(STATE_DIRTYRSTAT); }
+  bool is_dirty_rstat() const { return state_test(STATE_DIRTYRSTAT); }
   void mark_dirty_rstat();
   void clear_dirty_rstat();
 public:
 
   // LogSegment lists i (may) belong to
   elist<CInode*>::item item_dirty;
+  elist<CInode*>::item item_dirty_parent;
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
 

@@ -3,6 +3,7 @@
 
 #include "mdstypes.h"
 #include "CObject.h"
+#include "include/elist.h"
 
 class Message;
 class MClientRequest;
@@ -38,16 +39,12 @@ protected:
   CInodeRef myin;
   CInodeRef strays[NUM_STRAY]; 
 
-  Mutex log_segments_lock;
-
-  file_layout_t default_file_layout;
-  file_layout_t default_log_layout;
 public:
   CInodeRef create_system_inode(inodeno_t ino, int mode);
   void create_empty_hierarchy(MDSGather *gather);
   void create_mydir_hierarchy(MDSGather *gather);
 
-  void open_root_mydir();
+  void open_root_and_mydir();
   void populate_mydir(MDSGatherBuilder& gather);
 
   void add_inode(CInode *in);
@@ -68,16 +65,32 @@ public:
   void advance_stray() {}
   CDentryRef get_or_create_stray_dentry(CInode *in);
 
-  void lock_log_segments() { log_segments_lock.Lock(); }
-  void unlock_log_segments() { log_segments_lock.Unlock(); }
+protected:
+  elist<CInode*>  replay_undef_inodes;
+public:
+  CInodeRef replay_invent_inode(inodeno_t ino);
+  void open_replay_undef_inodes(MDSContextBase *fin);
+  bool has_replay_undef_inodes() const { return !replay_undef_inodes.empty(); }
 
+protected:
+  int64_t metadata_pool;
+  file_layout_t default_file_layout;
+  file_layout_t default_log_layout;
+public:
   void init_layouts();
+  int64_t get_metadata_pool() const { return metadata_pool; }
   const file_layout_t& get_default_file_layout() const {
     return default_file_layout;
   }
   const file_layout_t& get_default_log_layout() const {
     return default_log_layout;
   }
+
+protected:
+  Mutex log_segments_lock;
+public:
+  void lock_log_segments() { log_segments_lock.Lock(); }
+  void unlock_log_segments() { log_segments_lock.Unlock(); }
 
 protected:
   Mutex request_map_lock;
@@ -108,8 +121,30 @@ public:
 				int linkunlink = 0);
   void journal_dirty_inode(const MutationRef& mut, EMetaBlob *metablob, CInode *in);
 
-  void dispatch(Message *m) { assert(0); } // does not support cache message yet
-  void shutdown() {}
+protected:
+  Mutex open_inode_mutex;
+  struct open_inode_info_t {
+    int64_t pool;
+    vector<inode_backpointer_t> ancestors;
+    list<MDSContextBase*> waiters;
+    open_inode_info_t() : pool(-1) {}
+  };
+  map<inodeno_t,open_inode_info_t> opening_inodes;
+
+  void _open_inode_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
+  void _open_inode_lookup_dentry(inodeno_t ino, int64_t pool,
+				 inode_backpointer_t& parent);
+  void _open_inode_lookup_dentry(inodeno_t ino);
+  void _open_inode_finish(inodeno_t ino, open_inode_info_t& info, int err);
+
+  friend class C_MDC_OI_BacktraceFetched;
+  friend class C_MDC_OI_LookupDentry;
+public:
+  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl,
+		       MDSAsyncContextBase *fin);
+  void open_inode(inodeno_t ino, int64_t pool, MDSContextBase* fin=NULL);
+  void open_remote_dentry(inodeno_t ino, uint8_t d_type, MDSContextBase *fin=NULL);
+public:
 
 protected:
   ceph::atomic64_t last_cap_id;
@@ -117,6 +152,8 @@ public:
   uint64_t get_new_cap_id() { return last_cap_id.inc(); }
 
   MDCache(MDSRank *_mds);
+  void dispatch(Message *m) { assert(0); } // does not support cache message yet
+  void shutdown() {}
 public:
 
   ESubtreeMap *create_subtree_map();

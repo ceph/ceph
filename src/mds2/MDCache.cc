@@ -15,14 +15,19 @@
 #include "include/filepath.h"
 #include "messages/MClientRequest.h"
 
+#include "osdc/Objecter.h"
+
 #define dout_subsys ceph_subsys_mds
 
 MDCache::MDCache(MDSRank *_mds) :
   mds(_mds), server(_mds->server), locker(_mds->locker),
   inode_map_lock("MDCache::inode_map_lock"),
+  replay_undef_inodes(member_offset(CInode, item_dirty_parent)),
+  metadata_pool(-1),
   log_segments_lock("MDCache::log_segments_lock"),
   request_map_lock("MDCache::request_map_lock"),
-  rename_dir_mutex("MDCache::rename_dir_mutex")
+  rename_dir_mutex("MDCache::rename_dir_mutex"),
+  open_inode_mutex("MDCache::open_inode_mutex")
 {
 }
 
@@ -203,6 +208,8 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
     straydir->commit(gather->new_sub());
 
     stray->mark_dirty(stray->pre_dirty(), ls);
+    stray->_mark_dirty_parent(ls, true);
+    stray->store_backtrace(gather->new_sub());
     stray->mutex_unlock();
   }
 
@@ -240,11 +247,11 @@ public:
       assert(0);  // damaged should never return
       return;
     }
-    mdcache->open_root_mydir();
+    mdcache->open_root_and_mydir();
   }
 };
 
-void MDCache::open_root_mydir()
+void MDCache::open_root_and_mydir()
 {
   assert(root);
   assert(myin);
@@ -268,7 +275,7 @@ void MDCache::open_root_mydir()
     gather.set_finisher(new C_MDS_OpenRootMydir(this));
     gather.activate();
   } else {
-    dout(10) << "open_root_mydir done" << dendl;
+    dout(10) << "open_root_and_mydir done" << dendl;
   }
 }
 
@@ -443,8 +450,12 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 	in = dnl->get_inode();
 	if (dnl->is_remote() && !in) {
 	  in = get_inode(dnl->get_remote_ino());
+	  if (!in) {
+	    open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type(),
+			       new C_MDS_RetryRequest(mds, mdr));
+	    err = 1;
+	  }
 	}
-	assert(in);
       }
     } else if (!curdir->is_complete() &&
 	       !(curdir->has_bloom() && !curdir->is_in_bloom(dname))) {
@@ -479,12 +490,63 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
   return err;
 }
 
+CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
+{
+  string straydname;
+  in->name_stray_dentry(straydname);
+
+  CInodeRef& strayi = strays[0]; 
+  strayi->mutex_lock();
+
+  frag_t fg = strayi->pick_dirfrag(straydname);
+  CDirRef straydir = strayi->get_dirfrag(fg);
+  assert(straydir);
+  CDentryRef straydn = straydir->lookup(straydname);
+  if (!straydn) {
+    straydn = straydir->add_null_dentry(straydname);
+  } else {
+    assert(straydn->get_projected_linkage()->is_null());
+  }
+
+  strayi->mutex_unlock();
+  return straydn;
+}
+
+CInodeRef MDCache::replay_invent_inode(inodeno_t ino)
+{
+  CInodeRef in = new CInode(this);
+  inode_t *pi = in->__get_inode();
+  pi->ino = ino;
+  pi->mode = S_IFDIR|0755;
+  in->state_set(CInode::STATE_REPLAYUNDEF);
+  replay_undef_inodes.push_back(&in->item_dirty_parent);
+  add_inode(in.get());
+  dout(10) << "replay_invent_inode " << *in << dendl;
+  return in;
+}
+
+void MDCache::open_replay_undef_inodes(MDSContextBase *fin)
+{
+  dout(10) << "open_replay_undef_inodes" << dendl;
+  list<inodeno_t> inos;
+  for (auto p = replay_undef_inodes.begin(); !p.end(); ++p)
+    inos.push_back((*p)->ino());
+
+  MDSGatherBuilder gather(g_ceph_context, fin);
+  for (auto ino : inos)
+    open_inode(ino, metadata_pool, gather.new_sub());
+
+  assert(gather.has_subs());
+  gather.activate();
+}
+
 void MDCache::init_layouts()
 {
+  metadata_pool = mds->get_metadata_pool();
   default_file_layout = file_layout_t::get_default();
   default_file_layout.pool_id = mds->mdsmap->get_first_data_pool();
   default_log_layout = file_layout_t::get_default();
-  default_log_layout.pool_id = mds->mdsmap->get_metadata_pool();
+  default_log_layout.pool_id = metadata_pool;
 }
 
 MDRequestRef MDCache::request_start(MClientRequest *req)
@@ -936,26 +998,229 @@ void MDCache::journal_dirty_inode(const MutationRef& mut, EMetaBlob *metablob, C
   }
 }
 
-CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
+// -------------------------------------------------------------------------------
+// Open inode by inode number
+
+class C_MDC_OI_BacktraceFetched : public MDSAsyncContextBase {
+protected:
+  MDCache *mdcache;
+  inodeno_t ino;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  bufferlist bl;
+  C_MDC_OI_BacktraceFetched(MDCache *c, inodeno_t i) : mdcache(c), ino(i) {
+    set_finisher(get_mds()->finisher);
+  }
+  void finish(int r) {
+    mdcache->_open_inode_backtrace_fetched(ino, bl, r);
+  }
+};
+
+struct C_MDC_OI_LookupDentry : public MDSContextBase {
+  MDCache *mdcache;
+  inodeno_t ino;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  C_MDC_OI_LookupDentry(MDCache *c, inodeno_t i) : mdcache(c), ino(i) {}
+  void finish(int r) {
+    assert(r >= 0);
+    mdcache->_open_inode_lookup_dentry(ino);
+  }
+};
+
+void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl,
+			      MDSAsyncContextBase *fin)
 {
-  string straydname;
-  in->name_stray_dentry(straydname);
+  object_t oid = CInode::get_object_name(ino, frag_t(), "");
+  mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
+}
 
-  CInodeRef& strayi = strays[0]; 
-  strayi->mutex_lock();
+void MDCache::_open_inode_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err)
+{
+  dout(10) << "_open_ino_backtrace_fetched ino " << ino << " errno " << err << dendl;
 
-  frag_t fg = strayi->pick_dirfrag(straydname);
-  CDirRef straydir = strayi->get_dirfrag(fg);
-  assert(straydir);
-  CDentryRef straydn = straydir->lookup(straydname);
-  if (!straydn) {
-    straydn = straydir->add_null_dentry(straydname);
-  } else {
-    assert(straydn->get_projected_linkage()->is_null());
+  open_inode_mutex.Lock();
+
+  auto p = opening_inodes.find(ino);
+  assert(p != opening_inodes.end());
+  open_inode_info_t& info = p->second;
+
+  CInodeRef in = get_inode(ino);
+  if (in && !in->state_test(CInode::STATE_REPLAYUNDEF)) {
+    dout(10) << " found cached " << *in << dendl;
+    _open_inode_finish(ino, info, 0);
+    return;
   }
 
-  strayi->mutex_unlock();
-  return straydn;
+  inode_backtrace_t backtrace;
+  if (err == 0) {
+    ::decode(backtrace, bl);
+    if (backtrace.pool != info.pool && backtrace.pool != -1) {
+      dout(10) << " old object in pool " << info.pool
+               << ", retrying pool " << backtrace.pool << dendl;
+      info.pool = backtrace.pool;
+      open_inode_mutex.Unlock();
+
+      C_MDC_OI_BacktraceFetched *fin = new C_MDC_OI_BacktraceFetched(this, ino);
+      fetch_backtrace(ino, backtrace.pool, fin->bl, fin);
+      return;
+    }
+  } else if (err == -ENOENT) {
+    if (info.pool != metadata_pool) {
+      dout(10) << " no object in pool " << info.pool
+               << ", retrying pool " << metadata_pool << dendl;
+      info.pool = metadata_pool;
+      open_inode_mutex.Unlock();
+
+      C_MDC_OI_BacktraceFetched *fin = new C_MDC_OI_BacktraceFetched(this, ino);
+      fetch_backtrace(ino, metadata_pool, fin->bl, fin);
+      return;
+    }
+  }
+  if (err == 0) {
+    if (backtrace.ancestors.empty()) {
+      dout(10) << " got empty backtrace " << dendl;
+      err = -EIO;
+    } else if (!info.ancestors.empty()) {
+      if (info.ancestors[0] == backtrace.ancestors[0]) {
+        dout(10) << " got same parents " << info.ancestors[0] << " 2 times" << dendl;
+        err = -EIO;
+      }
+    }
+  }
+  if (err < 0) {
+    dout(10) << " failed to open ino " << ino << dendl;
+    _open_inode_finish(ino, info, err);
+    return;
+  }
+
+  dout(10) << " got backtrace " << backtrace << dendl;
+  info.ancestors = backtrace.ancestors;
+  int64_t pool = info.pool;
+  open_inode_mutex.Unlock();
+
+  _open_inode_lookup_dentry(ino, pool, backtrace.ancestors[0]);
+  return;
+}
+
+void MDCache::_open_inode_lookup_dentry(inodeno_t ino)
+{
+  dout(10) << "_open_ino_lookup_dentry ino " << ino << dendl;
+  open_inode_mutex.Lock();
+
+  auto p = opening_inodes.find(ino);
+  assert(p != opening_inodes.end());
+  open_inode_info_t& info = p->second;
+
+  CInodeRef in = get_inode(ino);
+  if (in && !in->state_test(CInode::STATE_REPLAYUNDEF)) {
+    dout(10) << " found cached " << *in << dendl;
+    _open_inode_finish(ino, info, 0);
+    return;
+  }
+
+  inode_backpointer_t parent = info.ancestors[0];
+  int64_t pool = info.pool;
+  open_inode_mutex.Unlock();
+
+  _open_inode_lookup_dentry(ino, pool, parent);
+}
+
+void MDCache::_open_inode_lookup_dentry(inodeno_t ino, int64_t pool, inode_backpointer_t& parent)
+{ 
+  CInodeRef diri = get_inode(parent.dirino);
+  if (!diri || diri->state_test(CInode::STATE_REPLAYUNDEF)) {
+    open_inode(parent.dirino, metadata_pool, new C_MDC_OI_LookupDentry(this, ino));
+    return;
+  }
+
+  int err;
+  if (diri->is_dir()) {
+    err = -ENOENT;
+    diri->mutex_lock();
+    const string &dname = parent.dname;
+    frag_t fg = diri->pick_dirfrag(dname);
+    CDirRef dir = diri->get_or_open_dirfrag(fg);
+
+    CDentryRef dn = dir->lookup(dname);
+    if (dn) {
+      const CDentry::linkage_t *dnl = dn->get_linkage();
+      if (dnl->is_primary() && dnl->get_inode()->ino() == ino) {
+	if (dnl->get_inode()->state_test(CInode::STATE_REPLAYUNDEF)) {
+	  dir->fetch(new C_MDC_OI_LookupDentry(this, ino));
+	  err = 1;
+	} else {
+	  err = 0;
+	}
+      }
+    } else if (!dir->is_complete() &&
+	       !(dir->has_bloom() && !dir->is_in_bloom(dname))) {
+      dir->fetch(new C_MDC_OI_LookupDentry(this, ino));
+      err = 1;
+    }
+    diri->mutex_unlock();
+  } else {
+    err = -ENOTDIR;
+  }
+
+  if (err > 0)
+    return;
+
+  if (err == 0) {
+    open_inode_mutex.Lock();
+    auto p = opening_inodes.find(ino);
+    assert(p != opening_inodes.end());
+    dout(10) << " found cached ino " << ino << dendl;
+    _open_inode_finish(ino, p->second, 0);
+    return;
+  }
+
+  dout(10) << " lookup err " << err << ", check backtrace again"  << dendl;
+  C_MDC_OI_BacktraceFetched *fin = new C_MDC_OI_BacktraceFetched(this, ino);
+  fetch_backtrace(ino, pool, fin->bl, fin);
+}
+
+void MDCache::_open_inode_finish(inodeno_t ino, open_inode_info_t& info, int ret)
+{
+  assert(open_inode_mutex.is_locked_by_me());
+  dout(10) << "_open_inode_finish ino " << ino << " ret " << ret << dendl;
+
+  list<MDSContextBase*> waiters;
+  waiters.swap(info.waiters);
+  opening_inodes.erase(ino);
+
+  open_inode_mutex.Unlock();
+
+  finish_contexts(g_ceph_context, waiters, ret);
+}
+
+void MDCache::open_inode(inodeno_t ino, int64_t pool, MDSContextBase* fin)
+{
+  dout(10) << "_open_inode ino " << ino << " pool " << pool << dendl;
+  bool is_new = false;
+  open_inode_mutex.Lock();
+  auto p = opening_inodes.find(ino);
+  if (p != opening_inodes.end()) {
+    p->second.waiters.push_back(fin);
+  } else {
+    is_new = true;
+    if (pool < 0)
+      pool = default_file_layout.pool_id;
+    open_inode_info_t& oi = opening_inodes[ino];
+    oi.pool = pool;
+    if (fin)
+      oi.waiters.push_back(fin);
+  }
+  open_inode_mutex.Unlock();
+  if (is_new) {
+    C_MDC_OI_BacktraceFetched *fin = new C_MDC_OI_BacktraceFetched(this, ino);
+    fetch_backtrace(ino, pool, fin->bl, fin);
+  }
+}
+
+void MDCache::open_remote_dentry(inodeno_t ino, uint8_t d_type , MDSContextBase* fin) {
+  int64_t pool = (d_type == DT_DIR) ? metadata_pool : -1;
+  open_inode(ino, pool, fin);
 }
 
 ESubtreeMap *MDCache::create_subtree_map()
@@ -964,3 +1229,5 @@ ESubtreeMap *MDCache::create_subtree_map()
   mds->mdlog->_start_entry(le);
   return le;
 }
+
+

@@ -220,7 +220,6 @@ CDirRef CInode::get_or_open_dirfrag(frag_t fg)
     assert(fg == frag_t());
     CDir *dir = new CDir(this);
     dirfrags[fg] = dir;
-    dir->__set_version(1);
     ref = dir;
   }
   return ref;
@@ -268,6 +267,9 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   dout(10) << "pop_and_dirty_projected_inode " << pi << dendl;
 
   mark_dirty(pi->inode.version, ls);
+  if (pi->inode.is_backtrace_updated())
+    _mark_dirty_parent(ls, pi->inode.layout.pool_id != inode.layout.pool_id);
+
   inode = pi->inode;
 
   if (pi->xattrs_projected)
@@ -332,6 +334,47 @@ void CInode::mark_clean()
 
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
+  }
+}
+
+void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
+{
+  if (!state_test(STATE_DIRTYPARENT)) {
+    dout(10) << "mark_dirty_parent" << dendl;
+    state_set(STATE_DIRTYPARENT);
+    get(PIN_DIRTYPARENT);
+    assert(ls);
+  }
+  if (dirty_pool)
+    state_set(STATE_DIRTYPOOL);
+  if (ls) {
+    mdcache->lock_log_segments();
+    ls->dirty_parent_inodes.push_back(&item_dirty_parent);
+    mdcache->unlock_log_segments();
+  }
+}
+
+void CInode::clear_dirty_parent()
+{
+  if (state_test(STATE_DIRTYPARENT)) {
+    dout(10) << "clear_dirty_parent" << dendl;
+    mdcache->lock_log_segments();
+    item_dirty_parent.remove_myself();
+    mdcache->unlock_log_segments();
+
+    state_clear(STATE_DIRTYPARENT|STATE_DIRTYPOOL);
+    put(PIN_DIRTYPARENT);
+  }
+}
+
+void CInode::clear_replay_undefined()
+{
+  if (state_test(STATE_REPLAYUNDEF)) {
+    dout(10) << "clear_replay_undef" << dendl;
+    mdcache->lock_log_segments();
+    item_dirty_parent.remove_myself();
+    mdcache->unlock_log_segments();
+    state_clear(STATE_REPLAYUNDEF);
   }
 }
 
@@ -1274,6 +1317,12 @@ void CInode::remove_client_cap(Session *session)
 */
 }
 
+void CInode::clone(const CInode *other)
+{
+  inode = other->inode;
+  symlink = other->symlink;
+  xattrs= other->xattrs;
+}
 
 void CInode::encode_bare(bufferlist &bl, uint64_t features)
 {
@@ -1340,11 +1389,14 @@ object_t CInode::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
   return object_t(n);
 }
 
-void CInode::store(MDSContextBase *fin)
+void CInode::store(MDSContextBase *fin, int op_prio)
 {
   mutex_assert_locked_by_me();
   dout(10) << "store " << get_version() << dendl;
   assert(is_base());
+
+  if (op_prio < 0)
+    op_prio = CEPH_MSG_PRIO_DEFAULT;
 
   // encode
   bufferlist bl;
@@ -1358,7 +1410,7 @@ void CInode::store(MDSContextBase *fin)
   m.write_full(bl);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->get_metadata_pool());
 
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph::real_clock::now(g_ceph_context),
 				 0, NULL, new C_Inode_Stored(this, get_version(), fin));
@@ -1386,8 +1438,8 @@ void CInode::_stored(int r, version_t v, MDSContextBase *fin)
 
 struct C_Inode_Fetched : public CInodeContext {
   bufferlist bl;
-  Context *fin;
-  C_Inode_Fetched(CInode *i, Context *f) : CInodeContext(i), fin(f) {}
+  MDSContextBase *fin;
+  C_Inode_Fetched(CInode *i, MDSContextBase *f) : CInodeContext(i), fin(f) {}
   void finish(int r) {
     in->_fetched(r, bl, fin);
   }
@@ -1401,11 +1453,11 @@ void CInode::fetch(MDSContextBase *fin)
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
-  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  object_locator_t oloc(mdcache->get_metadata_pool());
   mdcache->mds->objecter->read(oid, oloc, 0, 0, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
-void CInode::_fetched(int r, bufferlist& bl, Context *fin)
+void CInode::_fetched(int r, bufferlist& bl, MDSContextBase *fin)
 {
   if (r < 0) {
     derr << "fetch error " << r << " on " << *this << dendl;
@@ -1441,6 +1493,134 @@ void CInode::_fetched(int r, bufferlist& bl, Context *fin)
   fin->complete(err);
 }
 
+int64_t CInode::get_backtrace_pool() const
+{
+  if (is_dir()) {
+    return mdcache->get_metadata_pool();
+  } else {
+    // Files are required to have an explicit layout that specifies
+    // a pool
+    assert(inode.layout.pool_id != -1);
+    return inode.layout.pool_id;
+  }
+}
+
+void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
+{
+  bt.ino = ino();
+  bt.ancestors.clear();
+  bt.pool = pool;
+
+  CDentry *pdn = get_parent_dn();
+  assert(pdn);
+  CInode *diri = pdn->get_dir_inode();
+  bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(), get_version()));
+  for (auto p = inode.old_pools.begin(); p != inode.old_pools.end(); ++p) {
+    // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
+    if (*p != pool)
+      bt.old_pools.insert(*p);
+  }
+}
+
+struct C_Inode_BacktraceStored : public CInodeContext {
+  version_t version;
+  MDSContextBase *fin;
+  C_Inode_BacktraceStored(CInode *i, version_t v, MDSContextBase *f) :
+    CInodeContext(i), version(v), fin(f) {}
+  void finish(int r) {
+    in->_backtrace_stored(r, version, fin);
+  }
+};
+
+void CInode::store_backtrace(MDSContextBase *fin, int op_prio)
+{
+  mutex_assert_locked_by_me();
+  dout(10) << "store_backtrace on " << *this << dendl;
+  assert(is_dirty_parent());
+
+  if (op_prio < 0)
+    op_prio = CEPH_MSG_PRIO_DEFAULT;
+
+  const int64_t pool = get_backtrace_pool();
+  inode_backtrace_t bt;
+  build_backtrace(pool, bt);
+  bufferlist parent_bl;
+  ::encode(bt, parent_bl);
+
+  ObjectOperation op;
+  op.priority = op_prio;
+  op.create(false);
+  op.setxattr("parent", parent_bl);
+
+  /*
+  bufferlist layout_bl;
+  ::encode(inode.layout, layout_bl, mdcache->mds->mdsmap->get_up_features());
+  op.setxattr("layout", layout_bl);
+  */
+
+  SnapContext snapc;
+  object_t oid = get_object_name(ino(), frag_t(), "");
+  object_locator_t oloc(pool);
+  Context *fin2 = new C_Inode_BacktraceStored(this, inode.backtrace_version, fin);
+
+  if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
+    dout(20) << __func__ << ": no dirtypool or no old pools" << dendl;
+    mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
+                                   ceph::real_clock::now(g_ceph_context),
+                                   0, NULL, fin2);
+    return;
+  }
+
+  C_GatherBuilder gather(g_ceph_context, fin2);
+  mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
+                                 ceph::real_clock::now(g_ceph_context),
+                                 0, NULL, gather.new_sub());
+
+  // In the case where DIRTYPOOL is set, we update all old pools backtraces
+  // such that anyone reading them will see the new pool ID in
+  // inode_backtrace_t::pool and go read everything else from there.
+  for (compact_set<int64_t>::iterator p = inode.old_pools.begin();
+       p != inode.old_pools.end();
+       ++p) {
+    if (*p == pool)
+      continue;
+    dout(20) << __func__ << ": updating old pool " << *p << dendl;
+
+    ObjectOperation op;
+    op.priority = op_prio;
+    op.create(false);
+    op.setxattr("parent", parent_bl);
+
+    object_locator_t oloc(*p);
+    mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
+                                   ceph::real_clock::now(g_ceph_context),
+                                   0, NULL, gather.new_sub());
+  }
+  gather.activate();
+}
+
+void CInode::_backtrace_stored(int r, version_t v, MDSContextBase *fin)
+{
+  if (r < 0) {
+    dout(1) << "store backtrace error " << r << " v " << v << dendl;
+    mdcache->mds->clog->error() << "failed to store backtrace on ino "
+				<< ino() << " object, errno " << r << "\n";
+    mdcache->mds->handle_write_error(r);
+    if (fin)
+      fin->complete(r);
+    return;
+  }
+
+  dout(10) << "_backtrace_stored v " << v <<  dendl;
+
+  mutex_lock();
+  if (v == get_inode()->backtrace_version)
+    clear_dirty_parent();
+  mutex_unlock();
+  if (fin)
+    fin->complete(0);
+}
+
 void CInode::first_get()
 {
   Mutex::Locker l(mutex);
@@ -1453,7 +1633,6 @@ void CInode::last_put()
   if (parent)
     parent->put(CDentry::PIN_INODEPIN);
 }
-
 
 void intrusive_ptr_add_ref(CInode *o)
 {

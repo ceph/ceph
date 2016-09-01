@@ -75,8 +75,9 @@ void Locker::finish_waiting(SimpleLock *lock, uint64_t mask)
 {
   list<MDSContextBase*> ls;
   lock->take_waiting(mask, ls);
-  for (auto c : ls)
+  for (auto c : ls) {
     mds->queue_context(c);
+  }
 }
 
 void Locker::finish_waiting(CInode *in, uint64_t mask)
@@ -3060,7 +3061,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  schedule_check_max_size(in, forced_change_max ? new_max : 0, true);
 	  change_max = false;
 	}
-      } else if (!mut) {
+      }
+      if (change_max && !mut) {
 	assert(!in->is_base());
 	CDentry *parent_dn = in->get_projected_parent_dn();
 	if (parent_dn->get_dir_inode()->mutex_trylock()) {

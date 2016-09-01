@@ -229,6 +229,7 @@ public:
   void finish(int r)
   {
     Mutex::Locker l(mds->mds_lock);
+    assert(r >= 0);
     (mds->*fn)();
   }
 };
@@ -523,7 +524,7 @@ void MDSRank::starting_done()
   dout(3) << "starting_done" << dendl;
   assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
-  mdcache->open_root_mydir();
+  mdcache->open_root_and_mydir();
   mdlog->start_new_segment();
 }
 
@@ -537,6 +538,12 @@ void MDSRank::replay_start()
 void MDSRank::replay_done()
 {
   dout(1) << "replay_done" << dendl;
+
+  if (mdcache->has_replay_undef_inodes()) {
+    dout(1) << "opening replay undef inodes" << dendl;
+    mdcache->open_replay_undef_inodes(new C_MDS_VoidFn(this, &MDSRank::replay_done));
+    return;
+  }
 
   dout(1) << "making mds journal writeable" << dendl;
   mdlog->get_journaler()->set_writeable();
@@ -597,7 +604,7 @@ void MDSRank::recovery_done(int oldstate)
   if (oldstate == MDSMap::STATE_CREATING)
     return;
 
-  mdcache->open_root_mydir();
+  mdcache->open_root_and_mydir();
 }
 
 void MDSRank::creating_done()
