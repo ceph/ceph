@@ -81,10 +81,15 @@ endif()
 add_library(librbd ${CEPH_SHARED}
   $<TARGET_OBJECTS:osdc_rbd_objs>
   $<TARGET_OBJECTS:common_util_obj>
-  $<TARGET_OBJECTS:krbd_objs>
-  $<TARGET_OBJECTS:parse_secret_objs>  
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
+if(LINUX)
+  list(APPEND librbd 
+    $<TARGET_OBJECTS:parse_secret_objs>  
+    $<TARGET_OBJECTS:krbd_objs>
+    )
+endif(LINUX)
+
 target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types

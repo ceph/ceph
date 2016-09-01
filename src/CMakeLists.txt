@@ -603,11 +603,20 @@ if(${WITH_RADOSGW})
     cls_rgw_client
   )
 endif(${WITH_RADOSGW})
-if(${WITH_RBD})
+if(WITH_RBD)
   set(DENCODER_EXTRALIBS
       ${DENCODER_EXTRALIBS}
       rbd_replay_types)
-endif(${WITH_RBD})
+  if(LINUX)
+    list(APPEND dencoder_srcs
+      $<TARGET_OBJECTS:krbd_objs>
+      $<TARGET_OBJECTS:parse_secret_objs>)
+    set(DENCODER_EXTRALIBS
+      ${DENCODER_EXTRALIBS}
+      keyutils
+      udev)
+  endif(LINUX)
+endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
 target_link_libraries(ceph-dencoder
@@ -799,7 +808,7 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
-  if(HAVE_LIBFUSE)
+  if(WITH_FUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
@@ -808,7 +817,7 @@ if(WITH_LIBCEPHFS)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
-  endif(HAVE_LIBFUSE)
+  endif(WITH_FUSE)
 endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
@@ -834,7 +843,7 @@ if(WITH_KVS)
   add_subdirectory(key_value_store)
 endif(WITH_KVS)
 
-if(${WITH_RADOSGW})
+if(WITH_RADOSGW)
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
   target_include_directories(civetweb_common_objs PUBLIC
@@ -846,7 +855,7 @@ if(${WITH_RADOSGW})
       "${SSL_INCLUDE_DIR}")
   endif(HAVE_SSL)
   add_subdirectory(rgw)
-endif(${WITH_RADOSGW})
+endif(WITH_RADOSGW)
 
 install(FILES
   sample.ceph.conf
