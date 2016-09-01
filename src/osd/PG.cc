@@ -7126,6 +7126,8 @@ void PG::RecoveryState::GetInfo::get_infos()
 {
   PG *pg = context< RecoveryMachine >().pg;
   unique_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
 
   pg->blocked_by.clear();
   for (set<pg_shard_t>::const_iterator it = prior_set->probe.begin();
@@ -7146,11 +7148,20 @@ void PG::RecoveryState::GetInfo::get_infos()
       dout(10) << " not querying info from down osd." << peer << dendl;
     } else {
       dout(10) << " querying info from osd." << peer << dendl;
-      context< RecoveryMachine >().send_query(
-	peer, pg_query_t(pg_query_t::INFO,
-			 it->shard, pg->pg_whoami.shard,
-			 pg->info.history,
-			 pg->get_osdmap()->get_epoch()));
+      if (prior_set->request_log.find(peer) == prior_set->request_log.end()) {
+        context< RecoveryMachine >().send_query(
+	  peer, pg_query_t(pg_query_t::INFO,
+			   it->shard, pg->pg_whoami.shard,
+			   pg->info.history,
+			   pg->get_osdmap()->get_epoch()));
+      } else {
+        context< RecoveryMachine >().send_query(
+	  peer, pg_query_t(pg_query_t::ALL,
+			   it->shard, pg->pg_whoami.shard,
+			   pg->info.history,
+			   pg->get_osdmap()->get_epoch()));
+        peer_missing_requested.insert(peer);
+      }
       peer_info_requested.insert(peer);
       pg->blocked_by.insert(peer.osd);
     }
