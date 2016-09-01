@@ -6,6 +6,7 @@
 
 """
 import contextlib
+import json
 import logging
 import StringIO
 import re
@@ -133,13 +134,13 @@ def run_fio(remote, config, rbd_test_dir):
            rbd_name = 'i{i}f{f}{sn}'.format(i=frmt,f=feature_name,sn=sn)
            rbd_snap_name = 'i{i}f{f}{sn}@i{i}f{f}{sn}Snap'.format(i=frmt,f=feature_name,sn=sn)
            rbd_clone_name = 'i{i}f{f}{sn}Clone'.format(i=frmt,f=feature_name,sn=sn)
-           create_args=['sudo', 'rbd', 'create',
+           create_args=['rbd', 'create',
                         '--size', '{size}'.format(size=image_size),
                         '--image', rbd_name,
                         '--image-format', '{f}'.format(f=frmt)]
            map(lambda x: create_args.extend(['--image-feature', x]), feature)
            remote.run(args=create_args)
-           remote.run(args=['sudo', 'rbd', 'info', rbd_name])
+           remote.run(args=['rbd', 'info', rbd_name])
            if ioengine != 'rbd':
                out=StringIO.StringIO()
                remote.run(args=['sudo', 'rbd', 'map', rbd_name ],stdout=out)
@@ -147,9 +148,9 @@ def run_fio(remote, config, rbd_test_dir):
                rbd_dev=dev.group(1)
                if config.get('test-clone-io'):
                     log.info("Testing clones using fio")
-                    remote.run(args=['sudo', 'rbd', 'snap', 'create', rbd_snap_name])
-                    remote.run(args=['sudo', 'rbd', 'snap', 'protect', rbd_snap_name])
-                    remote.run(args=['sudo', 'rbd', 'clone', rbd_snap_name, rbd_clone_name])
+                    remote.run(args=['rbd', 'snap', 'create', rbd_snap_name])
+                    remote.run(args=['rbd', 'snap', 'protect', rbd_snap_name])
+                    remote.run(args=['rbd', 'clone', rbd_snap_name, rbd_clone_name])
                     remote.run(args=['sudo', 'rbd', 'map', rbd_clone_name], stdout=out)
                     dev=re.search(r'(/dev/rbd\d+)',out.getvalue())
                     rbd_clone_dev=dev.group(1)
@@ -167,9 +168,9 @@ def run_fio(remote, config, rbd_test_dir):
            else:
                if config.get('test-clone-io'):
                     log.info("Testing clones using fio")
-                    remote.run(args=['sudo', 'rbd', 'snap', 'create', rbd_snap_name])
-                    remote.run(args=['sudo', 'rbd', 'snap', 'protect', rbd_snap_name])
-                    remote.run(args=['sudo', 'rbd', 'clone', rbd_snap_name, rbd_clone_name])
+                    remote.run(args=['rbd', 'snap', 'create', rbd_snap_name])
+                    remote.run(args=['rbd', 'snap', 'protect', rbd_snap_name])
+                    remote.run(args=['rbd', 'clone', rbd_snap_name, rbd_clone_name])
                fio_config.write('[{img_name}]\n'.format(img_name=rbd_name))
                if config.get('rw'):
                    rw=config['rw']
@@ -192,10 +193,17 @@ def run_fio(remote, config, rbd_test_dir):
         remote.run(args=['cd' , run.Raw(rbd_test_dir),
                          run.Raw(';'), 'wget' , fio , run.Raw(';'), run.Raw('tar -xvf fio*tar.gz'), run.Raw(';'),
                          run.Raw('cd fio-fio*'), 'configure', run.Raw(';') ,'make'])
-        remote.run(args=['sudo', 'ceph', '-s'])
+        remote.run(args=['ceph', '-s'])
         remote.run(args=['sudo', run.Raw('{tdir}/fio-fio-{v}/fio {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
-        remote.run(args=['sudo', 'ceph', '-s'])
+        remote.run(args=['ceph', '-s'])
     finally:
+        out=StringIO.StringIO()
+        remote.run(args=['rbd','showmapped', '--format=json'], stdout=out)
+        mapped_images = json.loads(out.getvalue())
+        if mapped_images:
+            log.info("Unmapping rbd images on {sn}".format(sn=sn))
+            for image in mapped_images.itervalues():
+                remote.run(args=['sudo', 'rbd', 'unmap', str(image['device'])])
         log.info("Cleaning up fio install")
         remote.run(args=['rm','-rf', run.Raw(rbd_test_dir)])
         if system_type == 'rpm' and ioengine == 'rbd':
