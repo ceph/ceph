@@ -7339,6 +7339,10 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
 
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
   // adjust acting?
   if (!pg->choose_acting(auth_log_shard,
       &context< Peering >().history_les_bound)) {
@@ -7349,7 +7353,15 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
     }
     return;
   }
-
+  set<pg_shard_t>::iterator p = peer_missing_requested.begin();
+  while (p != peer_missing_requested.end()) {
+    if (pg->actingbackfill.count(*p) == 0) {
+      dout(20) << " dropping osd." << *p << " from missing_requested" << dendl;
+      peer_missing_requested.erase(p++);
+    } else {
+      ++p;
+    }
+  }
   // am i the best?
   if (auth_log_shard == pg->pg_whoami) {
     post_event(GotLog());
