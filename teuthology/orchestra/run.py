@@ -237,14 +237,11 @@ def quote(args):
 
 
 def copy_to_log(f, logger, loglevel=logging.INFO):
-    """
-    Interface to older xreadlines api.
-    """
     # Work-around for http://tracker.ceph.com/issues/8313
     if isinstance(f, ChannelFile):
         f._flags += ChannelFile.FLAG_BINARY
 
-    for line in f.readlines():
+    for line in f:
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         try:
