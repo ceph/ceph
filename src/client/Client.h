@@ -896,7 +896,7 @@ private:
   }
 
   int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-		   struct flock *fl, uint64_t owner);
+		   struct flock *fl, uint64_t owner, bool removing=false);
   int _interrupt_filelock(MetaRequest *req);
   void _encode_filelocks(Inode *in, bufferlist& bl);
   void _release_filelocks(Fh *fh);
