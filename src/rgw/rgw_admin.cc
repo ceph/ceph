@@ -1170,7 +1170,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
 
-  int ret = read_op.prepare(NULL, NULL);
+  int ret = read_op.prepare();
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1232,7 +1232,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  int ret = read_op.prepare(NULL, NULL);
+  int ret = read_op.prepare();
   bool needs_fixing = (ret == -ENOENT);
 
   f->dump_bool("needs_fixing", needs_fixing);
@@ -5106,7 +5106,7 @@ next:
     read_op.params.attrs = &attrs;
     read_op.params.obj_size = &obj_size;
 
-    ret = read_op.prepare(NULL, NULL);
+    ret = read_op.prepare();
     if (ret < 0) {
       cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;

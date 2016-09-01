@@ -274,7 +274,7 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
   read_op.params.attrs = &attrs;
   read_op.params.perr = &s->err;
 
-  return read_op.prepare(NULL, NULL);
+  return read_op.prepare();
 }
 
 static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
@@ -818,7 +818,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = &s->err;
 
-  op_ret = read_op.prepare(&cur_ofs, &cur_end);
+  op_ret = read_op.prepare();
+  if (op_ret < 0)
+    return op_ret;
+  op_ret = read_op.range_to_ofs(obj_size, cur_ofs, cur_end);
   if (op_ret < 0)
     return op_ret;
 
@@ -1369,13 +1372,16 @@ void RGWGetObj::execute()
   read_op.conds.if_nomatch = if_nomatch;
   read_op.params.attrs = &attrs;
   read_op.params.lastmod = &lastmod;
-  read_op.params.read_size = &total_len;
   read_op.params.obj_size = &s->obj_size;
   read_op.params.perr = &s->err;
 
-  op_ret = read_op.prepare(&new_ofs, &new_end);
-  if (op_ret < 0 && op_ret != -ERANGE) // check erange error later
+  op_ret = read_op.prepare();
+  if (op_ret < 0)
     goto done_err;
+
+  op_ret = read_op.range_to_ofs(s->obj_size, new_ofs, new_end);
+  // check erange error later
+  total_len = (new_ofs <= new_end ? new_end + 1 - new_ofs : 0);
 
   cret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (cret < 0) {

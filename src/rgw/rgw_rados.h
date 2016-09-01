@@ -2420,17 +2420,17 @@ public:
 
       struct Params {
         ceph::real_time *lastmod;
-        uint64_t *read_size;
         uint64_t *obj_size;
         map<string, bufferlist> *attrs;
         struct rgw_err *perr;
 
-        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL), perr(NULL) {}
+        Params() : lastmod(NULL), obj_size(NULL), attrs(NULL), perr(NULL) {}
       } params;
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
 
-      int prepare(int64_t *pofs, int64_t *pend);
+      int prepare();
+      static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
       int read(int64_t ofs, int64_t end, bufferlist& bl);
       int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb);
       int get_attr(const char *name, bufferlist& dest);

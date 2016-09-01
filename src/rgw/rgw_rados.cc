@@ -6756,7 +6756,6 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
   int64_t end = -1;
 
   real_time mtime;
-  uint64_t total_len;
   uint64_t obj_size;
   RGWObjectCtx rctx(this);
 
@@ -6765,10 +6764,9 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
 
   read_op.params.attrs = &attrset;
   read_op.params.lastmod = &mtime;
-  read_op.params.read_size = &total_len;
   read_op.params.obj_size = &obj_size;
 
-  int ret = read_op.prepare(&ofs, &end);
+  int ret = read_op.prepare();
   if (ret < 0)
     return ret;
 
@@ -6782,7 +6780,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
     return ret;
   }
 
-  return copy_obj_data(rctx, dest_bucket_info, read_op, end, obj, obj, max_chunk_size, NULL, mtime, attrset,
+  return copy_obj_data(rctx, dest_bucket_info, read_op, obj_size - 1, obj, obj, max_chunk_size, NULL, mtime, attrset,
                        RGW_OBJ_CATEGORY_MAIN, 0, real_time(), NULL, NULL, NULL, NULL);
 }
 
@@ -7299,7 +7297,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                void *progress_data)
 {
   int ret;
-  uint64_t total_len, obj_size;
+  uint64_t obj_size;
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
 
@@ -7328,8 +7326,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   map<string, bufferlist> src_attrs;
-  int64_t ofs = 0;
-  int64_t end = -1;
   RGWRados::Object src_op_target(this, src_bucket_info, obj_ctx, src_obj);
   RGWRados::Object::Read read_op(&src_op_target);
 
@@ -7340,11 +7336,10 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   read_op.conds.if_nomatch = if_nomatch;
   read_op.params.attrs = &src_attrs;
   read_op.params.lastmod = src_mtime;
-  read_op.params.read_size = &total_len;
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = err;
 
-  ret = read_op.prepare(&ofs, &end);
+  ret = read_op.prepare();
   if (ret < 0) {
     return ret;
   }
@@ -7408,7 +7403,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(obj_ctx, dest_bucket_info, read_op, end, dest_obj, src_obj,
+    return copy_obj_data(obj_ctx, dest_bucket_info, read_op, obj_size - 1, dest_obj, src_obj,
                          max_chunk_size, mtime, real_time(), attrs, category, olh_epoch, delete_at,
                          version_id, ptag, petag, err);
   }
@@ -7504,7 +7499,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.olh_epoch = olh_epoch;
   write_op.meta.delete_at = delete_at;
 
-  ret = write_op.write_meta(end + 1, attrs);
+  ret = write_op.write_meta(obj_size, attrs);
   if (ret < 0) {
     goto done_ret;
   }
@@ -8990,8 +8985,6 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
  * obj: name/key of the object to read
  * data: if get_data==true, this pointer will be set
  *    to an address containing the object's data/value
- * ofs: the offset of the object to read from
- * end: the point in the object to stop reading
  * attrs: if non-NULL, the pointed-to map will contain
  *    all the attrs of the object when this function returns
  * mod_ptr: if non-NULL, compares the object's mtime to *mod_ptr,
@@ -9008,15 +9001,12 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
  *          (if get_data==false) length of the object
  */
 // P3 XXX get_data is not seen used anywhere.
-int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
+int RGWRados::Object::Read::prepare()
 {
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
 
   bufferlist etag;
-
-  off_t ofs = 0;
-  off_t end = -1;
 
   map<string, bufferlist>::iterator iter;
 
@@ -9092,43 +9082,34 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     }
   }
 
-  if (pofs)
-    ofs = *pofs;
-  if (pend)
-    end = *pend;
-
-  if (ofs < 0) {
-    ofs += astate->size;
-    if (ofs < 0)
-      ofs = 0;
-    end = astate->size - 1;
-  } else if (end < 0) {
-    end = astate->size - 1;
-  }
-
-  int ret = 0;
-
-  if (astate->size > 0) {
-    if (ofs >= (off_t)astate->size) {
-      ret = -ERANGE;
-    }
-    if (end >= (off_t)astate->size) {
-      end = astate->size - 1;
-    }
-  }
-
-  if (pofs)
-    *pofs = ofs;
-  if (pend)
-    *pend = end;
-  if (params.read_size)
-    *params.read_size = (ofs <= end ? end + 1 - ofs : 0);
   if (params.obj_size)
     *params.obj_size = astate->size;
   if (params.lastmod)
     *params.lastmod = astate->mtime;
 
-  return ret;
+  return 0;
+}
+
+int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
+{
+  if (ofs < 0) {
+    ofs += obj_size;
+    if (ofs < 0)
+      ofs = 0;
+    end = obj_size - 1;
+  } else if (end < 0) {
+    end = obj_size - 1;
+  }
+
+  if (obj_size > 0) {
+    if (ofs >= (off_t)obj_size) {
+      return -ERANGE;
+    }
+    if (end >= (off_t)obj_size) {
+      end = obj_size - 1;
+    }
+  }
+  return 0;
 }
 
 int RGWRados::SystemObject::get_state(RGWObjState **pstate, RGWObjVersionTracker *objv_tracker)
