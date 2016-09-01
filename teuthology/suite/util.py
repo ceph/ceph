@@ -17,7 +17,7 @@ from ..exceptions import BranchNotFoundError, ScheduleFailError
 from ..misc import deep_merge
 from ..repo_utils import fetch_qa_suite, fetch_teuthology
 from ..orchestra.opsys import OS
-from ..packaging import GitbuilderProject
+from ..packaging import get_builder_project
 from ..task.install import get_flavor
 
 log = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def get_gitbuilder_hash(project=None, branch=None, flavor=None,
     (arch, release, _os) = get_distro_defaults(distro, machine_type)
     if distro is None:
         distro = _os.name
-    gp = GitbuilderProject(
+    bp = get_builder_project()(
         project,
         dict(
             branch=branch,
@@ -109,7 +109,7 @@ def get_gitbuilder_hash(project=None, branch=None, flavor=None,
             arch=arch,
         ),
     )
-    return gp.sha1
+    return bp.sha1
 
 
 def get_distro_defaults(distro, machine_type):
@@ -147,7 +147,7 @@ def get_distro_defaults(distro, machine_type):
     else:
         raise ValueError("Invalid distro value passed: %s", distro)
     _os = OS(name=os_type, version=os_version)
-    release = GitbuilderProject._get_distro(
+    release = get_builder_project()._get_distro(
         _os.name,
         _os.version,
         _os.codename,
@@ -262,7 +262,7 @@ def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
     (arch, release, _os) = get_distro_defaults(distro, machine_type)
     if distro in (None, 'None'):
         distro = _os.name
-    gp = GitbuilderProject(
+    bp = get_builder_project()(
         'ceph',
         dict(
             flavor=kernel_flavor,
@@ -272,7 +272,7 @@ def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
             sha1=hash,
         ),
     )
-    return gp.version
+    return bp.version
 
 
 def get_arch(machine_type):

@@ -817,3 +817,15 @@ class ShamanProject(GitbuilderProject):
     def _get_package_version(self):
         self.assert_result()
         return self._result.json()[0]['extra']['package_manager_version']
+
+
+def get_builder_project():
+    """
+    Depending on whether config.use_shaman is True or False, return
+    GitbuilderProject or ShamanProject (the class, not an instance).
+    """
+    if config.use_shaman is True:
+        builder_class = ShamanProject
+    else:
+        builder_class = GitbuilderProject
+    return builder_class
