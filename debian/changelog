@@ -1,5 +1,16 @@
 
 
+ceph (0.94.2-1~bpo70+1.fk3) stable; urgency=low
+
+  * Flipkart New upstream release
+    - rgw: bucket listing following object delete is partial http://tracker.ceph.com/issues/14826
+    - Orphan data gets leaked on Bucket deletion http://tracker.ceph.com/issues/17164
+
+ -- Praveen Kumar <praveen.gt@flipkart.com>  Wed, 31 Aug 2016 17:10:00 -0700
+
+ceph (0.94.2-1~bpo70+1.fk2) stable; urgency=low
+
+
   * Flipkart New upstream release
     - HTTP Status count for RGW requests http://tracker.ceph.com/issues/16971
     - RGW: Make RADOS handles in RGW to be a configurable option https://github.com/ceph/ceph/pull/4309
