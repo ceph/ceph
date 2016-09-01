@@ -165,11 +165,10 @@ public:
     if (header.version >= 4) {
       ::decode(head, p);
     } else {
-      struct ceph_mds_request_head_legacy *old_mds_head =
-	(struct ceph_mds_request_head_legacy *)&(head.oldest_client_tid);
+      struct ceph_mds_request_head_legacy old_mds_head;
 
-      ::decode(*old_mds_head, p);
-
+      ::decode(old_mds_head, p);
+      memcpy(&head.oldest_client_tid, &old_mds_head, sizeof(old_mds_head));
       head.version = 0;
 
       /* Can't set the btime from legacy struct */
@@ -197,10 +196,10 @@ public:
     if (features & CEPH_FEATURE_FS_BTIME) {
       ::encode(head, payload);
     } else {
-      struct ceph_mds_request_head_legacy *old_mds_head =
-	(struct ceph_mds_request_head_legacy *)&(head.oldest_client_tid);
+      struct ceph_mds_request_head_legacy old_mds_head;
 
-      ::encode(*old_mds_head, payload);
+      memcpy(&old_mds_head, &(head.oldest_client_tid), sizeof(old_mds_head));
+      ::encode(old_mds_head, payload);
     }
 
     ::encode(path, payload);
