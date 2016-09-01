@@ -882,7 +882,7 @@ extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
 }
 
 
-extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
+extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh, uint32_t *stripe_unit)
 {
   file_layout_t l;
   int r;
@@ -892,10 +892,11 @@ extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
-  return l.stripe_unit;
+  *stripe_unit = l.stripe_unit;
+  return 0;
 }
 
-extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path)
+extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path, uint32_t *stripe_unit)
 {
   file_layout_t l;
   int r;
@@ -905,10 +906,11 @@ extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const c
   r = cmount->get_client()->describe_layout(path, &l);
   if (r < 0)
     return r;
-  return l.stripe_unit;
+  *stripe_unit = l.stripe_unit;
+  return 0;
 }
 
-extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh)
+extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh, uint32_t *stripe_count)
 {
   file_layout_t l;
   int r;
@@ -918,10 +920,11 @@ extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
-  return l.stripe_count;
+  *stripe_count = l.stripe_count;
+  return 0;
 }
 
-extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path)
+extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path, uint32_t *stripe_count)
 {
   file_layout_t l;
   int r;
@@ -931,7 +934,8 @@ extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const 
   r = cmount->get_client()->describe_layout(path, &l);
   if (r < 0)
     return r;
-  return l.stripe_count;
+  *stripe_count = l.stripe_count;
+  return 0;
 }
 
 extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh, uint32_t *object_size)

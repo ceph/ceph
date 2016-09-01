@@ -1076,36 +1076,40 @@ int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char 
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the striping unit of.
- * @returns the striping unit of the file or a negative error code on failure.
+ * @param return the striping unit of the file.
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh, uint32_t *stripe_unit);
 
 /**
  * Get the file striping unit.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the striping unit of.
- * @returns the striping unit of the file or a negative error code on failure.
+ * @param return the striping unit of the path.
+ * @returns a negative error code on failure.
  */
-int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path, uint32_t *stripe_unit);
 
 /**
  * Get the file striping count from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the striping count of.
- * @returns the striping count of the file or a negative error code on failure.
+ * @param return the striping count of the file.
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh, uint32_t *stripe_count);
 
 /**
  * Get the file striping count.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the striping count of.
- * @returns the striping count of the file or a negative error code on failure.
+ * @param return the striping count of the path.
+ * @returns a negative error code on failure.
  */
-int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path, uint32_t *stripe_count);
 
 /**
  * Get the file object size from an open file descriptor.
