@@ -7703,8 +7703,16 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& logevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
 
+  if (!peer_missing_requested.count(logevt.from)) {
+    dout(10) << "GetMissing: discarding log from osd."
+            << logevt.from << dendl;
+    return discard_event();
+  }
   peer_missing_requested.erase(logevt.from);
+  pg->blocked_by.erase(logevt.from.osd);
   pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
 		       logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   
@@ -7724,6 +7732,8 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
 boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
