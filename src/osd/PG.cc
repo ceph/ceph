@@ -7274,6 +7274,24 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::GetInfo::react(const MLogRec& logevt)
+{
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
+  if (!peer_missing_requested.count(logevt.from)) {
+    dout(10) << "GetInfo: discarding log from osd."
+            << logevt.from << dendl;
+    return discard_event();
+  }
+  dout(10) << "GetInfo: received log from osd."
+          << logevt.from << dendl;
+  msgs[logevt.from] = logevt.msg;
+  peer_missing_requested.erase(logevt.from);
+  return discard_event();
+}
+
 boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
 {
   PG *pg = context< RecoveryMachine >().pg;
