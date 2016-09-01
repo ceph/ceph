@@ -8958,7 +8958,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 }
 
 int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-			 struct flock *fl, uint64_t owner)
+			 struct flock *fl, uint64_t owner, bool removing)
 {
   ldout(cct, 10) << "_do_filelock ino " << in->ino
 		 << (lock_type == CEPH_LOCK_FCNTL ? " fcntl" : " flock")
@@ -9047,7 +9047,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       }
       _update_lock_state(fl, owner, lock_state);
 
-      if (fh) {
+      if (!removing) {
 	if (lock_type == CEPH_LOCK_FCNTL) {
 	  if (!fh->fcntl_locks)
 	    fh->fcntl_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL);
@@ -9162,7 +9162,8 @@ void Client::_release_filelocks(Fh *fh)
     fl.l_start = p->second.start;
     fl.l_len = p->second.length;
     fl.l_pid = p->second.pid;
-    _do_filelock(in, NULL, p->first, CEPH_MDS_OP_SETFILELOCK, 0, &fl, p->second.owner);
+    _do_filelock(in, fh, p->first, CEPH_MDS_OP_SETFILELOCK, 0, &fl,
+		 p->second.owner, true);
   }
 }
 
