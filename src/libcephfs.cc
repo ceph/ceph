@@ -427,7 +427,7 @@ extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
   std::string mount_root;
   if (root)
     mount_root = root;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
+  UserPerm perms = Client::pick_my_perms(cmount->get_ceph_context());
   return cmount->mount(mount_root, perms);
 }
 
