@@ -133,6 +133,7 @@ private:
   int thrash_map;
   int thrash_last_up_osd;
   bool thrash();
+  version_t create_initial_version;
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
