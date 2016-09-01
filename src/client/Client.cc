@@ -725,6 +725,10 @@ void Client::update_inode_file_bits(Inode *in,
     in->inline_version = inline_version;
   }
 
+  /* always take a newer change attr */
+  if (change_attr > in->change_attr)
+    in->change_attr = change_attr;
+
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
     ldout(cct, 10) << "size " << in->size << " -> " << size << dendl;
@@ -770,8 +774,6 @@ void Client::update_inode_file_bits(Inode *in,
     ldout(cct, 30) << "Yay have enough caps to look at our times" << dendl;
     if (ctime > in->ctime) 
       in->ctime = ctime;
-    if (change_attr > in->change_attr)
-      in->change_attr = change_attr;
     if (time_warp_seq > in->time_warp_seq) {
       ldout(cct, 10) << "mds time_warp_seq " << time_warp_seq << " on inode " << *in
 	       << " is higher than local time_warp_seq "
