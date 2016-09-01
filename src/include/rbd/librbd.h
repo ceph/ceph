@@ -611,6 +611,9 @@ CEPH_RBD_API ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
 CEPH_RBD_API int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
 CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
                                const char *buf, rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_write_traced(rbd_image_t image, uint64_t off, size_t len,
+                               const char *buf, rbd_completion_t c,
+                               const struct blkin_trace_info *trace_info);
 
 /*
  * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
@@ -619,6 +622,10 @@ CEPH_RBD_API int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
                                 const char *buf, rbd_completion_t c, int op_flags);
 CEPH_RBD_API int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
                               char *buf, rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_read_traced(rbd_image_t image, uint64_t off, size_t len,
+                              char *buf, rbd_completion_t c,
+                              const struct blkin_trace_info *trace_info);
+
 /*
  * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
  */
