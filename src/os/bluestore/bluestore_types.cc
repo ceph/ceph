@@ -791,15 +791,21 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 // bluestore_lextent_t
 void bluestore_lextent_t::encode(bufferlist& bl) const
 {
+  ENCODE_START(1, 1, bl);
   small_encode_signed_varint(blob, bl);
   small_encode_varint_lowz(offset, bl);
   small_encode_varint_lowz(length, bl);
+  ::encode(blob_depth, bl);
+  ENCODE_FINISH(bl);
 }
 void bluestore_lextent_t::decode(bufferlist::iterator& p)
 {
+  DECODE_START(1, p);
   small_decode_signed_varint(blob, p);
   small_decode_varint_lowz(offset, p);
   small_decode_varint_lowz(length, p);
+  ::decode(blob_depth, p);
+  DECODE_FINISH(p);
 }
 
 void bluestore_lextent_t::dump(Formatter *f) const
@@ -807,6 +813,7 @@ void bluestore_lextent_t::dump(Formatter *f) const
   f->dump_int("blob", blob);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
+  f->dump_unsigned("blob_depth", blob_depth);
 }
 
 void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& ls)
