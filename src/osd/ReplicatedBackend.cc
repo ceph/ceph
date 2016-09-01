@@ -1485,7 +1485,7 @@ void ReplicatedBackend::prepare_pull(
 
   dout(7) << "pull " << soid
 	  << " v " << v
-	  << " on osds " << *p
+	  << " on osds " << q->second
 	  << " from osd." << fromshard
 	  << dendl;
 
