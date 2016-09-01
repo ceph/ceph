@@ -934,7 +934,7 @@ extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const 
   return l.stripe_count;
 }
 
-extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh)
+extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh, uint32_t *object_size)
 {
   file_layout_t l;
   int r;
@@ -944,10 +944,11 @@ extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh)
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
-  return l.object_size;
+  *object_size = l.object_size;
+  return 0;
 }
 
-extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path)
+extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path, uint32_t *object_size)
 {
   file_layout_t l;
   int r;
@@ -957,7 +958,8 @@ extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const c
   r = cmount->get_client()->describe_layout(path, &l);
   if (r < 0)
     return r;
-  return l.object_size;
+  *object_size = l.object_size;
+  return 0;
 }
 
 extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)

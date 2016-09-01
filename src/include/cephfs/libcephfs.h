@@ -1112,18 +1112,20 @@ int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path)
  *
  * @param cmount the ceph mount handle to use.
  * @param fh the open file descriptor referring to the file to get the object size of.
- * @returns the object size of the file or a negative error code on failure.
+ * @param the object size of the file
+ * @returns a negative error code on failure.
  */
-int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh);
+int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh, uint32_t *object_size);
 
 /**
  * Get the file object size.
  *
  * @param cmount the ceph mount handle to use.
  * @param path the path of the file/directory get the object size of.
- * @returns the object size of the file or a negative error code on failure.
+ * @param the object size of the path
+ * @return a negative error code on failure.
  */
-int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path);
+int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path, uint32_t *object_size);
 
 /**
  * Get the file pool information from an open file descriptor.
