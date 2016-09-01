@@ -23,8 +23,8 @@ class PhysicalConsole():
     """
     Physical Console (set from getRemoteConsole)
     """
-    def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None,
-                 timeout=20):
+    def __init__(self, name, ipmiuser=None, ipmipass=None, ipmidomain=None,
+                 logfile=None, timeout=20):
         self.name = name
         self.shortname = remote.getShortName(name)
         self.timeout = timeout
@@ -32,32 +32,65 @@ class PhysicalConsole():
         self.ipmiuser = ipmiuser or config.ipmi_user
         self.ipmipass = ipmipass or config.ipmi_password
         self.ipmidomain = ipmidomain or config.ipmi_domain
-        self.has_ipmi_credentials = all(map(
-            lambda x: x is not None,
+        self.has_ipmi_credentials = all(
             [self.ipmiuser, self.ipmipass, self.ipmidomain]
-        ))
+        )
+        self.conserver_master = config.conserver_master
+        self.conserver_port = config.conserver_port
+        conserver_client_found = subprocess.Popen(
+            'which console',
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT).wait() == 0
+        self.has_conserver = all([
+            config.use_conserver is not False,
+            self.conserver_master,
+            self.conserver_port,
+            conserver_client_found,
+        ])
 
-    def _check_credentials(self):
-        if not self.has_ipmi_credentials:
-            log.error(
-                "Must set ipmi_user, ipmi_password, and ipmi_domain in " \
-                ".teuthology.yaml"
-            )
-
-    def _pexpect_spawn(self, cmd):
+    def _pexpect_spawn_ipmi(self, ipmi_cmd):
         """
         Run the cmd specified using ipmitool.
         """
-        self._check_credentials()
-        full_command = self._build_command(cmd)
-        log.debug('pexpect command: %s', full_command)
-        child = pexpect.spawn(
-            full_command,
+        full_command = self._ipmi_command(ipmi_cmd)
+        return self._pexpect_spawn(full_command)
+
+    def _pexpect_spawn(self, cmd):
+        """
+        Run a command using pexpect.spawn(). Return the child object.
+        """
+        log.debug('pexpect command: %s', cmd)
+        return pexpect.spawn(
+            cmd,
             logfile=self.logfile,
         )
+
+    def _get_console(self, readonly=True):
+        def start():
+            cmd = self._console_command(readonly=readonly)
+            return self._pexpect_spawn(cmd)
+
+        child = start()
+        if self.has_conserver and not child.isalive():
+            log.error("conserver failed to get the console; will try ipmitool")
+            self.has_conserver = False
+            child = start()
         return child
 
-    def _build_command(self, subcommand):
+    def _console_command(self, readonly=True):
+        if self.has_conserver:
+            return 'console -M {master} -p {port} {ro}{host}'.format(
+                master=self.conserver_master,
+                port=self.conserver_port,
+                ro='-s ' if readonly else '',
+                host=self.shortname,
+            )
+        else:
+            return self._ipmi_command('sol activate')
+
+    def _ipmi_command(self, subcommand):
+        self._check_ipmi_credentials()
         template = \
             'ipmitool -H {s}.{dn} -I lanplus -U {ipmiuser} -P {ipmipass} {cmd}'
         return template.format(
@@ -68,13 +101,30 @@ class PhysicalConsole():
             ipmipass=self.ipmipass,
         )
 
+    def _check_ipmi_credentials(self):
+        if not self.has_ipmi_credentials:
+            log.error(
+                "Must set ipmi_user, ipmi_password, and ipmi_domain in "
+                ".teuthology.yaml"
+            )
+
     def _exit_session(self, child, timeout=None):
-        child.send('~.')
         t = timeout or self.timeout
-        r = child.expect(
-            ['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
-        if r != 0:
-            self._pexpect_spawn('sol deactivate')
+        if self.has_conserver:
+            child.sendcontrol('e')
+            child.send('c.')
+            r = child.expect(
+                ['[disconnect]', pexpect.TIMEOUT, pexpect.EOF],
+                timeout=t)
+            if r != 0:
+                child.kill(15)
+        else:
+            child.send('~.')
+            r = child.expect(
+                ['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF],
+                timeout=t)
+            if r != 0:
+                self._pexpect_spawn_ipmi('sol deactivate')
 
     def _wait_for_login(self, timeout=None, attempts=2):
         """
@@ -86,7 +136,7 @@ class PhysicalConsole():
         for i in range(0, attempts):
             start = time.time()
             while time.time() - start < t:
-                child = self._pexpect_spawn('sol activate')
+                child = self._get_console(readonly=False)
                 child.send('\n')
                 log.debug('expect: {s} login'.format(s=self.shortname))
                 r = child.expect(
@@ -111,7 +161,7 @@ class PhysicalConsole():
         total = t
         ta = time.time()
         while total < timeout:
-            c = self._pexpect_spawn('power status')
+            c = self._pexpect_spawn_ipmi('power status')
             r = c.expect(['Chassis Power is {s}'.format(
                 s=state), pexpect.EOF, pexpect.TIMEOUT], timeout=t)
             tb = time.time()
@@ -146,7 +196,7 @@ class PhysicalConsole():
         Power cycle and wait for login.
         """
         log.info('Power cycling {s}'.format(s=self.shortname))
-        child = self._pexpect_spawn('power cycle')
+        child = self._pexpect_spawn_ipmi('power cycle')
         child.expect('Chassis Power Control: Cycle', timeout=self.timeout)
         self._wait_for_login(timeout=300)
         log.info('Power cycle for {s} completed'.format(s=self.shortname))
@@ -159,7 +209,7 @@ class PhysicalConsole():
         log.info('Performing hard reset of {s}'.format(s=self.shortname))
         start = time.time()
         while time.time() - start < self.timeout:
-            child = self._pexpect_spawn('power reset')
+            child = self._pexpect_spawn_ipmi('power reset')
             r = child.expect(['Chassis Power Control: Reset', pexpect.EOF],
                              timeout=self.timeout)
             if r == 0:
@@ -174,7 +224,7 @@ class PhysicalConsole():
         log.info('Power on {s}'.format(s=self.shortname))
         start = time.time()
         while time.time() - start < self.timeout:
-            child = self._pexpect_spawn('power on')
+            child = self._pexpect_spawn_ipmi('power on')
             r = child.expect(['Chassis Power Control: Up/On', pexpect.EOF],
                              timeout=self.timeout)
             if r == 0:
@@ -190,7 +240,7 @@ class PhysicalConsole():
         log.info('Power off {s}'.format(s=self.shortname))
         start = time.time()
         while time.time() - start < self.timeout:
-            child = self._pexpect_spawn('power off')
+            child = self._pexpect_spawn_ipmi('power off')
             r = child.expect(['Chassis Power Control: Down/Off', pexpect.EOF],
                              timeout=self.timeout)
             if r == 0:
@@ -207,12 +257,12 @@ class PhysicalConsole():
         """
         log.info('Power off {s} for {i} seconds'.format(
             s=self.shortname, i=interval))
-        child = self._pexpect_spawn('power off')
+        child = self._pexpect_spawn_ipmi('power off')
         child.expect('Chassis Power Control: Down/Off', timeout=self.timeout)
 
         time.sleep(interval)
 
-        child = self._pexpect_spawn('power on')
+        child = self._pexpect_spawn_ipmi('power on')
         child.expect('Chassis Power Control: Up/On', timeout=self.timeout)
         self._wait_for_login()
         log.info('Power off for {i} seconds completed'.format(
@@ -225,20 +275,29 @@ class PhysicalConsole():
 
         :returns: a subprocess.Popen object
         """
-        self._check_credentials()
-        ipmi_cmd = self._build_command('sol activate')
         pexpect_templ = \
             "import pexpect; " \
             "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"
-        python_cmd = 'python -c "%s"' % pexpect_templ.format(
-            cmd=ipmi_cmd,
-            log=dest_path,
-        )
-        proc = subprocess.Popen(
-            python_cmd,
-            shell=True,
-            env=os.environ,
-        )
+
+        def start():
+            console_cmd = self._console_command()
+            python_cmd = [
+                '/usr/bin/env', 'python', '-c',
+                pexpect_templ.format(
+                    cmd=console_cmd,
+                    log=dest_path,
+                ),
+            ]
+            return subprocess.Popen(
+                python_cmd,
+                env=os.environ,
+            )
+
+        proc = start()
+        if self.has_conserver and proc.poll() is not None:
+            log.error("conserver failed to get the console; will try ipmitool")
+            self.has_conserver = False
+            proc = start()
         return proc
 
 

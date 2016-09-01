@@ -52,6 +52,7 @@ class TestConsoleLog(TestTask):
     def test_has_ipmi_credentials(self):
         for remote in self.ctx.cluster.remotes.keys():
             remote.console.has_ipmi_credentials = False
+            remote.console.has_conserver = False
         task = self.klass(self.ctx, self.task_config)
         assert len(task.cluster.remotes.keys()) == 0
 

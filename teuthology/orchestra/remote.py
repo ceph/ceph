@@ -15,7 +15,7 @@ import pwd
 import tempfile
 import netaddr
 
-from . import console
+import console
 
 log = logging.getLogger(__name__)
 
