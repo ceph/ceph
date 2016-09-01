@@ -2177,8 +2177,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     fsid_fd(-1),
     mounted(false),
     coll_lock("BlueStore::coll_lock"),
-    nid_last(0),
-    nid_max(0),
     throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
     throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
     throttle_wal_ops(cct, "bluestore_wal_max_ops",
@@ -5661,34 +5659,19 @@ int BlueStore::_open_super_meta()
 
 void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
 {
-#warning racy because txn commit may be delayed by io
   if (o->onode.nid)
     return;
-  std::lock_guard<std::mutex> l(nid_lock);
-  o->onode.nid = ++nid_last;
-  dout(20) << __func__ << " " << o->onode.nid << dendl;
-  if (nid_last > nid_max) {
-    nid_max += g_conf->bluestore_nid_prealloc;
-    bufferlist bl;
-    ::encode(nid_max, bl);
-    txc->t->set(PREFIX_SUPER, "nid_max", bl);
-    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
-  }
+  uint64_t nid = ++nid_last;
+  dout(20) << __func__ << " " << nid << dendl;
+  o->onode.nid = nid;
+  txc->last_nid = nid;
 }
 
 uint64_t BlueStore::_assign_blobid(TransContext *txc)
 {
-#warning racy because txn commit may be delayed by io
-  std::lock_guard<std::mutex> l(blobid_lock);
   uint64_t bid = ++blobid_last;
   dout(20) << __func__ << " " << bid << dendl;
-  if (blobid_last > blobid_max) {
-    blobid_max += g_conf->bluestore_blobid_prealloc;
-    bufferlist bl;
-    ::encode(blobid_max, bl);
-    txc->t->set(PREFIX_SUPER, "blobid_max", bl);
-    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
-  }
+  txc->last_blobid = bid;
   return bid;
 }
 
@@ -6101,13 +6084,38 @@ void BlueStore::_kv_sync_thread()
       // flush/barrier on block device
       bdev->flush();
 
+      uint64_t high_nid = 0, high_blobid = 0;
       if (!g_conf->bluestore_sync_transaction &&
 	  !g_conf->bluestore_sync_submit_transaction) {
-	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
-	     it != kv_committing.end();
-	     ++it) {
-	  _txc_finalize_kv((*it), (*it)->t);
-	  int r = db->submit_transaction((*it)->t);
+	for (auto txc : kv_committing) {
+	  _txc_finalize_kv(txc, txc->t);
+	  if (txc->last_nid > high_nid) {
+	    high_nid = txc->last_nid;
+	  }
+	  if (txc->last_blobid > high_blobid) {
+	    high_blobid = txc->last_blobid;
+	  }
+	}
+	if (!kv_committing.empty()) {
+	  TransContext *first_txc = kv_committing.front();
+	  std::lock_guard<std::mutex> l(id_lock);
+	  if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
+	    nid_max = high_nid + g_conf->bluestore_nid_prealloc;
+	    bufferlist bl;
+	    ::encode(nid_max, bl);
+	    first_txc->t->set(PREFIX_SUPER, "nid_max", bl);
+	    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+	  }
+	  if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
+	    blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
+	    bufferlist bl;
+	    ::encode(blobid_max, bl);
+	    first_txc->t->set(PREFIX_SUPER, "blobid_max", bl);
+	    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+	  }
+	}
+	for (auto txc : kv_committing) {
+	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
       }
