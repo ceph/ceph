@@ -7761,7 +7761,9 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     string dname = dirpath.last_dentry();
     dirpath.pop_dentry();
     InodeRef dir;
-    r = path_walk(dirpath, &dir, true, 0, uid, gid);
+    r = path_walk(dirpath, &dir, true,
+		  cct->_conf->client_permissions ? CEPH_CAP_AUTH_SHARED : 0,
+		  uid, gid);
     if (r < 0)
       goto out;
     if (cct->_conf->client_permissions) {
