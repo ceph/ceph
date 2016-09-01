@@ -7430,9 +7430,13 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
 boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
 {
   assert(!msg);
+  set<pg_shard_t> &peer_missing_requested =
+    context< Peering >().peer_missing_requested;
+  map<pg_shard_t, boost::intrusive_ptr<MOSDPGLog> > &msgs =
+    context< Peering >().msgs;
   if (logevt.from != auth_log_shard) {
-    dout(10) << "GetLog: discarding log from "
-	     << "non-auth_log_shard osd." << logevt.from << dendl;
+    if (peer_missing_requested.count(logevt.from))
+      msgs[logevt.from] = logevt.msg;
     return discard_event();
   }
   dout(10) << "GetLog: received master log from osd"
