@@ -1036,6 +1036,9 @@ public:
     uint64_t seq = 0;
     utime_t start;
 
+    uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
+    uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
+
     struct DeferredCsum {
       BlobRef blob;
       uint64_t b_off;
@@ -1259,12 +1262,10 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex nid_lock;
-  uint64_t nid_last;
-  uint64_t nid_max;
-
-  std::mutex blobid_lock;
-  uint64_t blobid_last = 0;
+  std::mutex id_lock;
+  std::atomic<uint64_t> nid_last = {0};
+  uint64_t nid_max = 0;
+  std::atomic<uint64_t> blobid_last = {0};
   uint64_t blobid_max = 0;
 
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
