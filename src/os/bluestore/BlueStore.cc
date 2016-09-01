@@ -5553,27 +5553,26 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       assert(0 == "unexpected error");
     }
 
+    // these operations implicity create the object
+    bool create = false;
+    if (op->op == Transaction::OP_TOUCH ||
+	op->op == Transaction::OP_WRITE ||
+	op->op == Transaction::OP_ZERO) {
+      create = true;
+    }
+
     // object operations
     RWLock::WLocker l(c->lock);
     OnodeRef &o = ovec[op->oid];
     if (!o) {
-      // these operations implicity create the object
-      bool create = false;
-      if (op->op == Transaction::OP_TOUCH ||
-	  op->op == Transaction::OP_WRITE ||
-	  op->op == Transaction::OP_ZERO) {
-	create = true;
-      }
       ghobject_t oid = i.get_oid(op->oid);
       o = c->get_onode(oid, create);
-      if (!create) {
-	if (!o || !o->exists) {
-	  dout(10) << __func__ << " op " << op->op << " got ENOENT on "
-		   << oid << dendl;
-	  r = -ENOENT;
-	  goto endop;
-	}
-      }
+    }
+    if (!create && (!o || !o->exists)) {
+      dout(10) << __func__ << " op " << op->op << " got ENOENT on "
+	       << i.get_oid(op->oid) << dendl;
+      r = -ENOENT;
+      goto endop;
     }
 
     switch (op->op) {
