@@ -997,8 +997,8 @@ namespace crimson {
 	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
 	    if (erase_point && i2->second->last_tick <= erase_point) {
-	      client_map.erase(i2);
 	      delete_from_heaps(i2->second);
+	      client_map.erase(i2);
 	    } else if (idle_point && i2->second->last_tick <= idle_point) {
 	      i2->second->idle = true;
 	    }
