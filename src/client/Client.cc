@@ -6724,13 +6724,14 @@ unsigned Client::statx_to_mask(unsigned int flags, unsigned int want)
 
   /* Always set PIN to distinguish from AT_NO_ATTR_SYNC case */
   mask |= CEPH_CAP_PIN;
-  if (want & (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_RDEV|CEPH_STATX_BTIME))
+  if (want & (CEPH_STATX_MODE|CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_BTIME|CEPH_STATX_VERSION))
     mask |= CEPH_CAP_AUTH_SHARED;
-  if (want & CEPH_STATX_NLINK)
+  if (want & CEPH_STATX_NLINK|CEPH_STATX_VERSION)
     mask |= CEPH_CAP_LINK_SHARED;
   if (want & (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_VERSION))
     mask |= CEPH_CAP_FILE_SHARED;
-
+  if (want & CEPH_STATX_VERSION)
+    mask |= CEPH_CAP_XATTR_SHARED;
 out:
   return mask;
 }
