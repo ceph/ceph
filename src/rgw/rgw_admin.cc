@@ -232,7 +232,7 @@ void _usage()
   cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
   cout << "                             replica log operations\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
-  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
+  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
   cout << "   --reset-regions           reset regionmap when regionmap update\n";
   cout << "   --bypass-gc               when specified with bucket deletion, triggers\n";
