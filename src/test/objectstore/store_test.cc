@@ -3721,6 +3721,7 @@ public:
 };
 
 void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
+		     int num_ops,
 		     uint64_t max_obj, uint64_t max_wr, uint64_t align)
 {
   ObjectStore::Sequencer osr("test");
@@ -3731,11 +3732,11 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid,
 				  max_obj, max_wr, align);
   test_obj.init();
-  for (int i = 0; i < 1000; ++i) {
+  for (int i = 0; i < num_ops/10; ++i) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < num_ops; ++i) {
     if (!(i % 1000)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
@@ -3769,7 +3770,7 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
 }
 
 TEST_P(StoreTest, Synthetic) {
-  doSyntheticTest(store, 400*1024, 40*1024, 0);
+  doSyntheticTest(store, 10000, 400*1024, 40*1024, 0);
 }
 
 
@@ -3777,6 +3778,7 @@ TEST_P(StoreTest, Synthetic) {
 uint64_t max_write = 40 * 1024;
 uint64_t max_size = 400 * 1024;
 uint64_t alignment = 0;
+uint64_t num_ops = 10000;
 
 string matrix_get(const char *k) {
   if (string(k) == "max_write") {
@@ -3785,6 +3787,8 @@ string matrix_get(const char *k) {
     return stringify(max_size);
   } else if (string(k) == "alignment") {
     return stringify(alignment);
+  } else if (string(k) == "num_ops") {
+    return stringify(num_ops);
   } else {
     char *buf;
     g_conf->get_val(k, &buf, -1);
@@ -3801,6 +3805,8 @@ void matrix_set(const char *k, const char *v) {
     max_size = atoll(v);
   } else if (string(k) == "alignment") {
     alignment = atoll(v);
+  } else if (string(k) == "num_ops") {
+    num_ops = atoll(v);
   } else {
     g_conf->set_val(k, v);
   }
@@ -3824,7 +3830,7 @@ void do_matrix_choose(const char *matrix[][10],
 	   << std::endl;
     }
     g_ceph_context->_conf->apply_changes(NULL);
-    doSyntheticTest(store, max_size, max_write, alignment);
+    doSyntheticTest(store, num_ops, max_size, max_write, alignment);
   }
 }
 
@@ -3852,6 +3858,7 @@ TEST_P(StoreTest, SyntheticMatrixSharding) {
     return;
 
   const char *m[][10] = {
+    { "num_ops", "50000", 0 },
     { "max_write", "65536", 0 },
     { "max_size", "262144", 0 },
     { "alignment", "4096", 0 },
