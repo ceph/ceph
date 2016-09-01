@@ -1,6 +1,8 @@
 from StringIO import StringIO
 import json
 import logging
+from unittest import SkipTest
+
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -192,9 +194,6 @@ class TestSessionMap(CephFSTestCase):
         for the client to use.
         """
 
-        # This keyring stuff won't work for kclient
-        assert(isinstance(mount, FuseMount))
-
         if osd_caps is None:
             osd_caps = "allow rw"
 
@@ -212,6 +211,9 @@ class TestSessionMap(CephFSTestCase):
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def test_session_reject(self):
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Requires FUSE client to inject client metadata")
+
         self.mount_a.run_shell(["mkdir", "foo"])
         self.mount_a.run_shell(["mkdir", "foo/bar"])
         self.mount_a.umount_wait()
