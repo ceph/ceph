@@ -104,4 +104,5 @@ def task(ctx, config):
     finally:
         log.info('Unmounting kernel clients...')
         for mount in mounts.values():
-            mount.umount()
+            if mount.is_mounted():
+                mount.umount()
