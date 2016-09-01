@@ -584,12 +584,12 @@ struct bluestore_lextent_t {
   bluestore_blob_id_t blob;  ///< blob
   uint32_t offset;           ///< relative offset within the blob
   uint32_t length;           ///< length within the blob
-  uint32_t blob_depth;       /// How many blobs overlaps the lolgical offset
+  uint8_t  blob_depth;       /// How many blobs overlaps the lolgical offset
 
   bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
 		      uint32_t o = 0,
 		      uint32_t l = 0,
-                      uint32_t d = 1)
+                      uint8_t d = 1)
     : blob(_blob),
       offset(o),
       length(l),
