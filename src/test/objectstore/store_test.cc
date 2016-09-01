@@ -4668,7 +4668,6 @@ TEST_P(StoreTest, Rename) {
   {
     ObjectStore::Transaction t;
     t.collection_move_rename(cid, srcoid, cid, dstoid);
-    t.remove(cid, srcoid);
     t.write(cid, srcoid, 0, b.length(), b);
     t.setattr(cid, srcoid, "attr", b);
     r = apply_transaction(store, &osr, std::move(t));
@@ -4687,12 +4686,12 @@ TEST_P(StoreTest, Rename) {
     ObjectStore::Transaction t;
     t.remove(cid, dstoid);
     t.collection_move_rename(cid, srcoid, cid, dstoid);
-    t.remove(cid, srcoid);
-    t.setattr(cid, srcoid, "attr", a);
+    t.setattr(cid, srcoid, "attr", a);  // note: this is a no-op
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   ASSERT_TRUE(store->exists(cid, dstoid));
+  ASSERT_FALSE(store->exists(cid, srcoid));
   {
     bufferlist bl;
     store->read(cid, dstoid, 0, 3, bl);
@@ -4701,7 +4700,6 @@ TEST_P(StoreTest, Rename) {
   {
     ObjectStore::Transaction t;
     t.remove(cid, dstoid);
-    t.remove(cid, srcoid);
     t.remove_collection(cid);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
