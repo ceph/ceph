@@ -7818,14 +7818,19 @@ PG::PriorSet::PriorSet(bool ec_pool,
   for (unsigned i = 0; i < acting.size(); i++) {
     if (acting[i] != CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+      request_log.insert(pg_shard_t(acting[i], ec_pool ?
+        shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   // It may be possible to exclude the up nodes, but let's keep them in
   // there for now.
   for (unsigned i = 0; i < up.size(); i++) {
     if (up[i] != CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+      request_log.insert(pg_shard_t(up[i], ec_pool ?
+        shard_id_t(i) : shard_id_t::NO_SHARD));
   }
 
+  bool first_interval = true;
   for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        ++p) {
@@ -7862,6 +7867,8 @@ PG::PriorSet::PriorSet(bool ec_pool,
 	// include past acting osds if they are up.
 	probe.insert(so);
 	up_now.insert(so);
+       if (first_interval)
+         request_log.insert(so);
       } else if (!pinfo) {
 	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
 	down.insert(o);
@@ -7896,6 +7903,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
 	}
       }
     }
+    first_interval = false;
   }
 
   dout(10) << "build_prior final: probe " << probe
