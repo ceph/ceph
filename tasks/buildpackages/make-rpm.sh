@@ -135,7 +135,10 @@ function build_package() {
         # Build RPMs
         if [ "$suse" = true ]; then
           sed -i -e '0,/%package/s//%debug_package\n&/' \
-                  -e 's/%{epoch}://g' -e '/^Epoch:/d' ceph.spec
+                 -e 's/%{epoch}://g' \
+                 -e '/^Epoch:/d' \
+                 -e 's/%bcond_with ceph_test_package/%bcond_without ceph_test_package/' \
+                 ceph.spec
         fi
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
         PATH=$ccache:$PATH rpmbuild -ba --define "_unpackaged_files_terminate_build 0" --define "_topdir ${buildarea}" ceph.spec
