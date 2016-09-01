@@ -70,6 +70,7 @@ enum {
   l_bluestore_compressed,
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
+  l_bluestore_gc_bytes,
   l_bluestore_last
 };
 
@@ -1564,6 +1565,7 @@ private:
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
+    uint8_t le_depth = 0;       ///< depth of the logical extent
     unsigned csum_order = 0;     ///< target checksum chunk order
 
     vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
@@ -1620,12 +1622,29 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+
+bool blobs_need_garbage_collection(OnodeRef o,
+                          uint64_t start_offset,
+                          uint64_t end_offset,
+                          uint8_t  *blob_depth,
+                          uint64_t *gc_start_offset,
+                          uint64_t *gc_end_offset);
+
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
 		bufferlist& bl,
 		uint32_t fadvise_flags);
+void _do_write_data(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef o,
+  uint64_t offset,
+  uint64_t length,
+  bufferlist& bl,
+  WriteContext *wctx);
+
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o);
