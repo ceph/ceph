@@ -4870,8 +4870,8 @@ TEST_P(StoreTest, SetAllocHint) {
 TEST_P(StoreTest, TryMoveRename) {
   ObjectStore::Sequencer osr("test");
   coll_t cid;
-  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, 0, ""));
-  ghobject_t hoid2(hobject_t("test_hint2", "", CEPH_NOSNAP, 0, 0, ""));
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, -1, ""));
+  ghobject_t hoid2(hobject_t("test_hint2", "", CEPH_NOSNAP, 0, -1, ""));
   int r;
   {
     ObjectStore::Transaction t;
@@ -4898,7 +4898,7 @@ TEST_P(StoreTest, TryMoveRename) {
     ASSERT_EQ(r, 0);
   }
   struct stat st;
-  ASSERT_EQ(store->stat(cid, hoid, &st), -2);
+  ASSERT_EQ(store->stat(cid, hoid, &st), -ENOENT);
   ASSERT_EQ(store->stat(cid, hoid2, &st), 0);
 }
 
