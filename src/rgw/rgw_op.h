@@ -140,7 +140,6 @@ protected:
 
   // compression attrs
   RGWCompressionInfo cs_info;
-  bool need_decompress;
   off_t first_block, last_block;
   off_t q_ofs, q_len;
   bool first_data;
@@ -168,8 +167,6 @@ public:
     range_parsed = false;
     skip_manifest = false;
     is_slo = false;
-    rgwx_stat = false;
-    need_decompress = false;
     first_block = 0;
     last_block = 0;
     q_ofs = 0;
