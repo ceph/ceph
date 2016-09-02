@@ -3045,7 +3045,7 @@ int BlueStore::_fsck_verify_blob_map(
       if (already_allocated) {
 	derr << " " << what << " extent 0x" << std::hex
 	     << p.offset << "~" << p.length
-	     << " or its' subset is already allocated" << dendl;
+	     << " or its' subset is already allocated" << std::dec << dendl;
 	++errors;
       } else {
 	if (p.end() > bdev->get_size()) {
