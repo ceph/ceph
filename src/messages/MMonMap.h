@@ -34,7 +34,9 @@ public:
   const char *get_type_name() const { return "mon_map"; }
 
   void encode_payload(uint64_t features) { 
-    if (monmapbl.length() && (features & CEPH_FEATURE_MONENC) == 0) {
+    if (monmapbl.length() &&
+	((features & CEPH_FEATURE_MONENC) == 0 ||
+	 (features & CEPH_FEATURE_MSG_ADDR2) == 0)) {
       // reencode old-format monmap
       MonMap t;
       t.decode(monmapbl);
