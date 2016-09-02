@@ -976,9 +976,13 @@ OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
  * And ask for compressing at least 12.5%(1/8) off, by default.
  */
 OPTION(bluestore_compression_required_ratio, OPT_DOUBLE, .875)
+OPTION(bluestore_extent_map_shard_max_size, OPT_U32, 1200)
+OPTION(bluestore_extent_map_shard_target_size, OPT_U32, 500)
+OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
 OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
+OPTION(bluestore_shared_blob_hash_table_size_ratio, OPT_FLOAT, 2)  // multiple of onode_cache_size
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
@@ -1000,6 +1004,7 @@ OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_wal_max_ops, OPT_U64, 512)
 OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_blobid_prealloc, OPT_U64, 10240)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
