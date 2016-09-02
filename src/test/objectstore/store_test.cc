@@ -2711,6 +2711,33 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ASSERT_EQ(stat.st_size, stat2.st_size);
     ASSERT_EQ(1024*1024, stat2.st_size);
   }
+  newdata.clear();
+  pg_t pgid(1,2);
+  spg_t pg(pgid);
+  ghobject_t hoid3 = pg.make_temp_ghobject("Object 3");
+  {
+    ObjectStore::Transaction t;
+    t.clone_range(cid, hoid, hoid3, 10, 5, 0);
+    cerr << "Clone range temp object" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+    r = store->read(cid, hoid3, 0, 5, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(bl_eq(small, newdata));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.truncate(cid, hoid, 1024*1024);
+    t.clone_range(cid, hoid, hoid3, 0, 1024*1024, 0);
+    cerr << "Clone range temp object" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+    struct stat stat, stat2;
+    r = store->stat(cid, hoid, &stat);
+    r = store->stat(cid, hoid3, &stat2);
+    ASSERT_EQ(stat.st_size, stat2.st_size);
+    ASSERT_EQ(1024*1024, stat2.st_size);
+  }
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
