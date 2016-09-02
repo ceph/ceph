@@ -1808,7 +1808,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_write2(self.image, _offset, length, _data, _fadvise_flags)
 
-        if ret == length:
+        if ret == <ssize_t>length:
             return ret
         elif ret < 0:
             raise make_ex(ret, "error writing to %s" % (self.name,))
