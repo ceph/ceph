@@ -4,6 +4,7 @@
 #include "librbd/cache/file/StupidPolicy.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/cache/BlockGuard.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -15,8 +16,8 @@ namespace cache {
 namespace file {
 
 template <typename I>
-StupidPolicy<I>::StupidPolicy(I &image_ctx)
-  : m_image_ctx(image_ctx),
+StupidPolicy<I>::StupidPolicy(I &image_ctx, BlockGuard &block_guard)
+  : m_image_ctx(image_ctx), m_block_guard(block_guard),
     m_lock("librbd::cache::file::StupidPolicy::m_lock") {
 
   // TODO support resizing of entries based on number of provisioned blocks
@@ -67,15 +68,16 @@ int StupidPolicy<I>::invalidate(uint64_t block) {
 }
 
 template <typename I>
-int StupidPolicy<I>::map(OpType op_type, uint64_t block, bool partial_block,
-                         MapResult *map_result, uint64_t *replace_cache_block) {
+int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
+                         PolicyMapResult *policy_map_result,
+                         uint64_t *replace_cache_block) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "block=" << block << dendl;
 
   Mutex::Locker locker(m_lock);
   if (block >= m_block_count) {
     lderr(cct) << "block outside of valid range" << dendl;
-    *map_result = MAP_RESULT_MISS;
+    *policy_map_result = POLICY_MAP_RESULT_MISS;
     // TODO return error once resize handling is in-place
     return 0;
   }
@@ -85,7 +87,7 @@ int StupidPolicy<I>::map(OpType op_type, uint64_t block, bool partial_block,
   if (entry_it != m_block_to_entries.end()) {
     // cache hit -- move entry to the front of the queue
     ldout(cct, 20) << "cache hit" << dendl;
-    *map_result = MAP_RESULT_HIT;
+    *policy_map_result = POLICY_MAP_RESULT_HIT;
 
     entry = entry_it->second;
     LRUList *lru;
@@ -105,7 +107,7 @@ int StupidPolicy<I>::map(OpType op_type, uint64_t block, bool partial_block,
   if (entry != nullptr) {
     // entries are available -- allocate a slot
     ldout(cct, 20) << "cache miss -- new entry" << dendl;
-    *map_result = MAP_RESULT_NEW;
+    *policy_map_result = POLICY_MAP_RESULT_NEW;
     m_free_lru.remove(entry);
 
     entry->block = block;
@@ -117,10 +119,10 @@ int StupidPolicy<I>::map(OpType op_type, uint64_t block, bool partial_block,
   // if we have clean entries we can demote, attempt to steal the oldest
   entry = reinterpret_cast<Entry*>(m_clean_lru.get_tail());
   if (entry != nullptr) {
-    // TODO attempt to lock would-be evicted block
-    if (true) {
+    int r = m_block_guard.detain(entry->block, nullptr);
+    if (r >= 0) {
       ldout(cct, 20) << "cache miss -- replace entry" << dendl;
-      *map_result = MAP_RESULT_REPLACE;
+      *policy_map_result = POLICY_MAP_RESULT_REPLACE;
       *replace_cache_block = entry->block;
 
       m_block_to_entries.erase(entry->block);
@@ -131,11 +133,13 @@ int StupidPolicy<I>::map(OpType op_type, uint64_t block, bool partial_block,
       m_clean_lru.insert_head(entry);
       return 0;
     }
+    ldout(cct, 20) << "cache miss -- replacement deferred" << dendl;
+  } else {
+    ldout(cct, 20) << "cache miss" << dendl;
   }
 
   // no clean entries to evict -- treat this as a miss
-  ldout(cct, 20) << "cache miss" << dendl;
-  *map_result = MAP_RESULT_MISS;
+  *policy_map_result = POLICY_MAP_RESULT_MISS;
   return 0;
 }
 

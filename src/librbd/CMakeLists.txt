@@ -38,6 +38,7 @@ set(librbd_internal_srcs
   deep_copy/SnapshotCopyRequest.cc
   deep_copy/SnapshotCreateRequest.cc
   deep_copy/Utils.cc
+  cache/BlockGuard.cc
   cache/ImageWriteback.cc
   cache/FileImageCache.cc
   cache/file/AioFile.cc

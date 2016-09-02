@@ -4,8 +4,11 @@
 #ifndef CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
 #define CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
 
-#include "ImageCache.h"
-#include "ImageWriteback.h"
+#include "librbd/cache/ImageCache.h"
+#include "librbd/cache/BlockGuard.h"
+#include "librbd/cache/ImageWriteback.h"
+#include "librbd/cache/file/Policy.h"
+#include <functional>
 
 namespace librbd {
 
@@ -15,7 +18,6 @@ namespace cache {
 
 namespace file {
 
-class Policy;
 template <typename> class ImageStore;
 template <typename> class JournalStore;
 template <typename> class MetaStore;
@@ -55,13 +57,33 @@ public:
   void flush(Context *on_finish) override;
 
 private:
+  typedef std::function<void(uint64_t)> ReleaseBlock;
+
   ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
+  BlockGuard m_block_guard;
 
   file::Policy *m_policy = nullptr;
   file::MetaStore<ImageCtx> *m_meta_store = nullptr;
   file::JournalStore<ImageCtx> *m_journal_store = nullptr;
   file::ImageStore<ImageCtx> *m_image_store = nullptr;
+
+  ReleaseBlock m_release_block;
+
+  Mutex m_lock;
+  BlockGuard::BlockIOs m_deferred_block_ios;
+  BlockGuard::BlockIOs m_deferred_detained_block_ios;
+
+  bool m_wake_up_scheduled = false;
+  Context *m_on_shutdown = nullptr;
+
+  void map_blocks(IOType io_type, Extents &&image_extents,
+                  BlockGuard::C_BlockRequest *block_request);
+  void map_block(bool detain_block, BlockGuard::BlockIO &&block_io);
+  void release_block(uint64_t block);
+
+  void wake_up();
+  void process_work();
 
   void invalidate(Extents&& image_extents, Context *on_finish);
 
