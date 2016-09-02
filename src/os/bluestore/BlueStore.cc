@@ -1355,7 +1355,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     on = new Onode(&onode_map, oid, key);
   } else {
     // loaded
-    assert(r >=0);
+    assert(r >= 0);
     on = new Onode(&onode_map, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
@@ -2040,8 +2040,6 @@ int BlueStore::_lock_fsid()
   memset(&l, 0, sizeof(l));
   l.l_type = F_WRLCK;
   l.l_whence = SEEK_SET;
-  l.l_start = 0;
-  l.l_len = 0;
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
     int err = errno;
