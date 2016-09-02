@@ -72,12 +72,35 @@ AcquireRequest<I>::AcquireRequest(I &image_ctx, const std::string &cookie,
 
 template <typename I>
 AcquireRequest<I>::~AcquireRequest() {
+  if (!m_prepare_lock_completed) {
+    m_image_ctx.state->handle_prepare_lock_complete();
+  }
   delete m_on_acquire;
 }
 
 template <typename I>
 void AcquireRequest<I>::send() {
+  send_prepare_lock();
+}
+
+template <typename I>
+void AcquireRequest<I>::send_prepare_lock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  // acquire the lock if the image is not busy performing other actions
+  Context *ctx = create_context_callback<
+    AcquireRequest<I>, &AcquireRequest<I>::handle_prepare_lock>(this);
+  m_image_ctx.state->prepare_lock(ctx);
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_prepare_lock(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
   send_flush_notifies();
+  return nullptr;
 }
 
 template <typename I>
@@ -563,12 +586,17 @@ Context *AcquireRequest<I>::handle_break_lock(int *ret_val) {
 
 template <typename I>
 void AcquireRequest<I>::apply() {
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  assert(m_image_ctx.object_map == nullptr);
-  m_image_ctx.object_map = m_object_map;
+  {
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    assert(m_image_ctx.object_map == nullptr);
+    m_image_ctx.object_map = m_object_map;
 
-  assert(m_image_ctx.journal == nullptr);
-  m_image_ctx.journal = m_journal;
+    assert(m_image_ctx.journal == nullptr);
+    m_image_ctx.journal = m_journal;
+  }
+
+  m_prepare_lock_completed = true;
+  m_image_ctx.state->handle_prepare_lock_complete();
 }
 
 template <typename I>
