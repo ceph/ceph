@@ -3831,6 +3831,23 @@ void do_matrix(const char *matrix[][10],
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, SyntheticMatrixSharding) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "262144", 0 },
+    { "alignment", "4096", 0 },
+    { "bluestore_min_alloc_size", "4096", 0 },
+    { "bluestore_extent_map_shard_min_size", "60", 0 },
+    { "bluestore_extent_map_shard_max_size", "300", 0 },
+    { "bluestore_extent_map_shard_target_size", "150", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
 TEST_P(StoreTest, SyntheticMatrixCsumAlgorithm) {
   if (string(GetParam()) != "bluestore")
     return;
