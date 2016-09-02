@@ -1340,14 +1340,15 @@ void RGWGetObj::execute()
   gc_invalidate_time = ceph_clock_now(s->cct);
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
+  bool need_decompress;
+  int64_t ofs_x, end_x;
+
   RGWGetObj_CB cb(this);
   RGWGetDataCB* filter = (RGWGetDataCB*)&cb;
   boost::optional<RGWGetObj_Decompress> decompress;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
-  int64_t new_ofs, new_end;
-  int cret;
 
   RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -1359,9 +1360,6 @@ void RGWGetObj::execute()
   op_ret = init_common();
   if (op_ret < 0)
     goto done_err;
-
-  new_ofs = ofs;
-  new_end = end;
 
   read_op.conds.mod_ptr = mod_ptr;
   read_op.conds.unmod_ptr = unmod_ptr;
@@ -1378,64 +1376,6 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare();
   if (op_ret < 0)
     goto done_err;
-
-  op_ret = read_op.range_to_ofs(s->obj_size, new_ofs, new_end);
-  // check erange error later
-  total_len = (new_ofs <= new_end ? new_end + 1 - new_ofs : 0);
-
-  cret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
-  if (cret < 0) {
-    lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
-    if (op_ret == 0)
-      op_ret = cret;
-    goto done_err;
-  }
-
-  if (op_ret == -ERANGE && !need_decompress) 
-    goto done_err;
-
-  if (need_decompress) {
-    op_ret = 0;
-    s->obj_size = cs_info.orig_size;
-
-    if (partial_content) {
-      // recheck user range for correctness
-      if (ofs < 0) {
-        ofs += cs_info.orig_size;
-        if (ofs < 0)
-          ofs = 0;
-        end = cs_info.orig_size - 1;
-      } else if (end < 0) {
-        end = cs_info.orig_size - 1;
-      }
-
-      if ((unsigned)ofs >= cs_info.orig_size) {
-        lderr(s->cct) << "ERROR: begin of the bytes range more than object size (" << cs_info.orig_size
-                         << ")" <<  dendl;
-        op_ret = -ERANGE;
-        goto done_err;
-      } else
-        new_ofs = ofs;
-
-      if ((unsigned)end >= cs_info.orig_size) {
-        ldout(s->cct, 5) << "WARNING: end of the bytes range more than object size (" << cs_info.orig_size
-                         << ")" <<  dendl;
-        new_end = cs_info.orig_size - 1;
-      } else
-        new_end = end;
-
-      total_len = new_end - new_ofs + 1;
-
-    } else
-      total_len = cs_info.orig_size;
-  }
-
-  // for range requests with obj size 0
-  if (range_str && !(s->obj_size)) {
-    total_len = 0;
-    op_ret = -ERANGE;
-    goto done_err;
-  }
 
   /* start gettorrent */
   if (torrent.get_flag())
@@ -1458,6 +1398,29 @@ void RGWGetObj::execute()
     return;
   }
   /* end gettorrent */
+
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  if (op_ret < 0) {
+    lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
+    goto done_err;
+  }
+  if (need_decompress) {
+    s->obj_size = cs_info.orig_size;
+    decompress = boost::in_place(s->cct, &cs_info, partial_content, filter);
+    filter = &*decompress;
+  }
+
+  // for range requests with obj size 0
+  if (range_str && !(s->obj_size)) {
+    total_len = 0;
+    op_ret = -ERANGE;
+    goto done_err;
+  }
+
+  op_ret = read_op.range_to_ofs(s->obj_size, ofs, end);
+  if (op_ret < 0)
+    goto done_err;
+  total_len = (ofs <= end ? end + 1 - ofs : 0);
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
@@ -1488,37 +1451,25 @@ void RGWGetObj::execute()
     goto done_err;
   }
 
-  ofs = new_ofs;
-  end = new_end;
-
   start = ofs;
-
-  if (need_decompress) {
-
-    if (cs_info.blocks.size() == 0) {
-      lderr(s->cct) << "ERROR: no info about compression blocks, cannot decompress" << dendl;
-      op_ret = -EIO;
-      goto done_err;
-    }
-
-    decompress = boost::in_place(s->cct, &cs_info, partial_content, filter);
-    filter = &*decompress;
-  }
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
 
-  if (!get_data || new_ofs > new_end) {
+  if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
     return;
   }
 
-  perfcounter->inc(l_rgw_get_b, new_end - new_ofs);
+  perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  filter->fixup_range(new_ofs, new_end);
-  op_ret = read_op.iterate(new_ofs, new_end, filter);
+  ofs_x = ofs;
+  end_x = end;
+  filter->fixup_range(ofs_x, end_x);
+  op_ret = read_op.iterate(ofs_x, end_x, filter);
+
   if (op_ret >= 0)
     op_ret = filter->flush();
 

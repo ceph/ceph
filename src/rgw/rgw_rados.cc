@@ -12860,6 +12860,9 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
     } catch (buffer::error& err) {
       return -EIO;
     }
+    if (cs_info.blocks.size() == 0) {
+      return -EIO;
+    }
     if (cs_info.compression_type != "none")
       need_decompress = true;
     else
