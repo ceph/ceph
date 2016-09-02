@@ -1141,16 +1141,15 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   bluefs_transaction_t t;
   _compact_log_dump_metadata(&t);
 
+  // conservative estimate for final encoded size
+  new_log_jump_to = ROUND_UP_TO(t.op_bl.length() + super.block_size * 2,
+                                g_conf->bluefs_alloc_size);
+  t.op_jump(log_seq, new_log_jump_to);
+
   bufferlist bl;
   ::encode(t, bl);
   _pad_bl(bl);
 
-  new_log_jump_to = ROUND_UP_TO(bl.length() + super.block_size,
-                                g_conf->bluefs_alloc_size);
-  bluefs_transaction_t t2;
-  t2.op_jump(log_seq, new_log_jump_to);
-  ::encode(t2, bl);
-  _pad_bl(bl);
   dout(10) << __func__ << " new_log_jump_to 0x" << std::hex << new_log_jump_to
 	   << std::dec << dendl;
 
