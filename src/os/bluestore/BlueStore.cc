@@ -2138,15 +2138,18 @@ int BlueStore::_open_db(bool create)
              << cpp_strerror(r) << dendl;
         goto free_bluefs;
       }
-      r = _check_or_set_bdev_label(
-	bfn,
-	bluefs->get_block_device_size(BlueFS::BDEV_DB),
-        "bluefs db", create);
-      if (r < 0) {
-        derr << __func__
-	     << " check block device(" << bfn << ") label returned: " 
-             << cpp_strerror(r) << dendl;
-        goto free_bluefs;
+
+      if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
+        r = _check_or_set_bdev_label(
+	  bfn,
+	  bluefs->get_block_device_size(BlueFS::BDEV_DB),
+          "bluefs db", create);
+        if (r < 0) {
+          derr << __func__
+	       << " check block device(" << bfn << ") label returned: "
+               << cpp_strerror(r) << dendl;
+          goto free_bluefs;
+        }
       }
       if (create) {
 	bluefs->add_block_extent(
@@ -2189,15 +2192,19 @@ int BlueStore::_open_db(bool create)
 	     << cpp_strerror(r) << dendl;
         goto free_bluefs;			
       }
-      r = _check_or_set_bdev_label(
-	bfn,
-	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
-        "bluefs wal", create);
-      if (r < 0) {
-        derr << __func__ << " check block device(" << bfn << ") label returned: "
-	     << cpp_strerror(r) << dendl;
-        goto free_bluefs;
+
+      if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
+        r = _check_or_set_bdev_label(
+	  bfn,
+	  bluefs->get_block_device_size(BlueFS::BDEV_WAL),
+          "bluefs wal", create);
+        if (r < 0) {
+          derr << __func__ << " check block device(" << bfn
+               << ") label returned: " << cpp_strerror(r) << dendl;
+          goto free_bluefs;
+        }
       }
+
       if (create) {
 	bluefs->add_block_extent(
 	  BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
