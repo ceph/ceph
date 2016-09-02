@@ -13,6 +13,7 @@ class LocalLock;
 class MClientCaps;
 class MClientCapRelease;
 class MClientLease;
+class LogSegment;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -89,7 +90,7 @@ protected:
 public:
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
   void scatter_nudge(ScatterLock *lock, MDSContextBase *c, bool forcelockchange=false);
-  void mark_updated_scatterlock(ScatterLock *lock);
+  void mark_updated_scatterlock(ScatterLock *lock, LogSegment *ls);
   void scatter_tick();
 protected:
   xlist<ScatterLock*> updated_scatterlocks;

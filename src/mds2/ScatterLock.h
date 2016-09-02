@@ -17,6 +17,7 @@
 #define CEPH_SCATTERLOCK_H
 
 #include "SimpleLock.h"
+class LogSegment;
 
 class ScatterLock : public SimpleLock {
 
@@ -140,12 +141,14 @@ public:
     return have_more() ? (is_dirty() || is_flushing()) : false;
   }
 
-  void mark_dirty() { 
+  void mark_dirty(LogSegment *ls) { 
     if (!is_dirty()) {
       if (!is_flushing())
 	parent->get(CObject::PIN_DIRTYSCATTERED);
       set_dirty();
     }
+    if (ls)
+      parent->mark_dirty_scattered(get_type(), ls);
   }
   void start_flush() {
     if (is_dirty()) {

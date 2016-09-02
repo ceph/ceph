@@ -37,7 +37,6 @@ protected:
 public:
   explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
     assert(sessionmap != NULL);
-    set_finisher(get_mds()->finisher);
   }
 };
 
@@ -322,6 +321,8 @@ public:
 
 void SessionMap::save(MDSContextBase *onsave, version_t needv)
 {
+  mutex_assert_locked_by_me();
+
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
   if (needv && committing >= needv) {
@@ -408,10 +409,16 @@ void SessionMap::save(MDSContextBase *onsave, version_t needv)
 void SessionMap::_save_finish(version_t v)
 {
   dout(10) << "_save_finish v" << v << dendl;
+
+  mutex_lock();
   committed = v;
 
-  finish_contexts(g_ceph_context, commit_waiters[v]);
+  list<MDSContextBase*> ls;
+  ls.swap(commit_waiters[v]);
   commit_waiters.erase(v);
+
+  mutex_unlock();
+  finish_contexts(g_ceph_context, ls);
 }
 
 

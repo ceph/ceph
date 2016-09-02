@@ -13,6 +13,8 @@
 
 //#define __MDS_REF_SET
 
+class LogSegment;
+
 class CObject {
 protected:
 #ifdef __MDS_REF_SET
@@ -161,13 +163,14 @@ public:
     finish_contexts(g_ceph_context, finished, result);
   }
 
+  virtual void mark_dirty_scattered(int type, LogSegment *ls) { assert(0); }
   virtual void clear_dirty_scattered(int type) { assert(0); }
 
   virtual bool is_lt(const CObject *r) const = 0;
   struct ptr_lt {
-	  bool operator()(const CObject* l, const CObject* r) const {
-		  return l->is_lt(r);
-	  }
+    bool operator()(const CObject* l, const CObject* r) const {
+      return l->is_lt(r);
+    }
   };
 
   CObject(const string &type_name) :

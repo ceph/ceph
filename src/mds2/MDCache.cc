@@ -18,6 +18,8 @@
 #include "osdc/Objecter.h"
 
 #define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".cache "
 
 MDCache::MDCache(MDSRank *_mds) :
   mds(_mds), server(_mds->server), locker(_mds->locker),
@@ -1008,9 +1010,7 @@ protected:
   MDSRank* get_mds() { return mdcache->mds; };
 public:
   bufferlist bl;
-  C_MDC_OI_BacktraceFetched(MDCache *c, inodeno_t i) : mdcache(c), ino(i) {
-    set_finisher(get_mds()->finisher);
-  }
+  C_MDC_OI_BacktraceFetched(MDCache *c, inodeno_t i) : mdcache(c), ino(i) { }
   void finish(int r) {
     mdcache->_open_inode_backtrace_fetched(ino, bl, r);
   }

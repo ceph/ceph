@@ -29,6 +29,8 @@ class MDSTable {
 public:
   void mutex_lock() { mutex.Lock(); }
   void mutex_unlock() { mutex.Unlock(); }
+  void mutex_assert_locked_by_me() const { assert(mutex.is_locked_by_me()); }
+
   MDSRank* const mds;
 protected:
   const char *table_name;

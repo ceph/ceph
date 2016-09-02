@@ -328,7 +328,8 @@ public:
   void finish_scatter_gather_update_accounted(int type, const MutationRef& mut,
 		  			      EMetaBlob *metablob);
   void clear_dirty_scattered(int type);
-  void mark_dirty_scattered(LogSegment *ls, int mask);
+  void mark_dirty_scattered(int type, LogSegment *ls);
+  void mark_updated_scatterlocks(int mask, LogSegment *ls);
 
   // list item node for when we have unpropagated rstat data
   elist<CInode*>::item item_dirty_rstat;

@@ -90,7 +90,7 @@ void MutationImpl::pop_and_dirty_early_projected_nodes()
 
     auto q = updated_locks.find(in ? : dir->get_inode());
     if (q != updated_locks.end()) {
-      q->first->mark_dirty_scattered(ls, q->second);
+      q->first->mark_updated_scatterlocks(q->second, ls);
       updated_locks.erase(q);
     }
   }
@@ -143,7 +143,7 @@ void MutationImpl::pop_and_dirty_projected_nodes()
 
     auto q = updated_locks.find(in ? : dir->get_inode());
     if (q != updated_locks.end()) {
-      q->first->mark_dirty_scattered(ls, q->second);
+      q->first->mark_updated_scatterlocks(q->second, ls);
       updated_locks.erase(q);
     }
   }

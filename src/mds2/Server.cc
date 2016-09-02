@@ -22,6 +22,7 @@
 #include "events/ESession.h"
 
 #define dout_subsys ceph_subsys_mds
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
 
 class ServerContext : public MDSLogContextBase {
 protected:
@@ -545,7 +546,7 @@ void Server::handle_client_request(MClientRequest *req)
     req->releases.clear();
   }
 
-  mds->op_wq.queue(mdr);
+  mds->req_wq.queue(mdr);
   //dispatch_client_request(mdr);
   return;
 }

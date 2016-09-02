@@ -19,15 +19,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.inode(" << vino() << ") "
 
-class CInodeContext : public MDSAsyncContextBase
+class CInodeIOContext : public MDSAsyncContextBase
 {
 protected:
   CInodeRef in;
   MDSRank *get_mds() { return in->mdcache->mds; }
 public:
-  explicit CInodeContext(CInode *in_) : in(in_) {
+  explicit CInodeIOContext(CInode *in_) : in(in_) {
     assert(in != NULL);
-    set_finisher(get_mds()->finisher);
   }
 };
 
@@ -1217,23 +1216,33 @@ void CInode::clear_dirty_scattered(int type)
   mdcache->unlock_log_segments();
 }
 
-void CInode::mark_dirty_scattered(LogSegment *ls, int mask)
+void CInode::mark_dirty_scattered(int type, LogSegment *ls)
 {
-  assert(!(mask & ~(CEPH_LOCK_IFILE|CEPH_LOCK_INEST|CEPH_LOCK_IDFT)));
   mutex_assert_locked_by_me();
-  dout(10) << "mark_dirty_scattered " << mask << " on " << *this << dendl;
-
-  if (mask & CEPH_LOCK_IFILE)
-    mdcache->locker->mark_updated_scatterlock(&filelock);
-  if (mask & CEPH_LOCK_INEST)
-    mdcache->locker->mark_updated_scatterlock(&nestlock);
-
+  dout(10) << "mark_dirty_scattered " << type << " on " << *this << dendl;
   mdcache->lock_log_segments();
-  if (mask & CEPH_LOCK_IFILE)
-    ls->dirty_dirfrag_dir.push_back(&item_dirty_dirfrag_dir);
-  if (mask & CEPH_LOCK_INEST)
-    ls->dirty_dirfrag_nest.push_back(&item_dirty_dirfrag_nest);
+  switch (type) {
+    case CEPH_LOCK_IFILE:
+      ls->dirty_dirfrag_dir.push_back(&item_dirty_dirfrag_dir);
+      break;
+    case CEPH_LOCK_INEST:
+      ls->dirty_dirfrag_nest.push_back(&item_dirty_dirfrag_nest);
+      break;
+    case CEPH_LOCK_IDFT:
+//      ls->dirty_dirfrag_dirfragtree.push_back(&tem_dirty_dirfrag_dirfragtree);
+    default:
+      assert(0);
+  }
   mdcache->unlock_log_segments();
+}
+
+void CInode::mark_updated_scatterlocks(int mask, LogSegment *ls)
+{
+  dout(10) << "mark_updated_scatterlocks " << mask << " on " << *this << dendl;
+  if (mask & CEPH_LOCK_IFILE)
+    mdcache->locker->mark_updated_scatterlock(&filelock, ls);
+  if (mask & CEPH_LOCK_INEST)
+    mdcache->locker->mark_updated_scatterlock(&nestlock, ls);
 }
 
 Capability *CInode::add_client_cap(Session *session)
@@ -1372,11 +1381,11 @@ void CInode::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
-struct C_Inode_Stored : public CInodeContext {
+struct C_Inode_Stored : public CInodeIOContext {
   version_t version;
   MDSContextBase *fin;
   C_Inode_Stored(CInode *i, version_t v, MDSContextBase *f) :
-    CInodeContext(i), version(v), fin(f) {}
+    CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
     in->_stored(r, version, fin);
   }
@@ -1436,10 +1445,11 @@ void CInode::_stored(int r, version_t v, MDSContextBase *fin)
   fin->complete(0);
 }
 
-struct C_Inode_Fetched : public CInodeContext {
+struct C_Inode_Fetched : public CInodeIOContext {
   bufferlist bl;
   MDSContextBase *fin;
-  C_Inode_Fetched(CInode *i, MDSContextBase *f) : CInodeContext(i), fin(f) {}
+  C_Inode_Fetched(CInode *i, MDSContextBase *f) :
+    CInodeIOContext(i), fin(f) {}
   void finish(int r) {
     in->_fetched(r, bl, fin);
   }
@@ -1522,11 +1532,11 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   }
 }
 
-struct C_Inode_BacktraceStored : public CInodeContext {
+struct C_Inode_BacktraceStored : public CInodeIOContext {
   version_t version;
   MDSContextBase *fin;
   C_Inode_BacktraceStored(CInode *i, version_t v, MDSContextBase *f) :
-    CInodeContext(i), version(v), fin(f) {}
+    CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
     in->_backtrace_stored(r, version, fin);
   }

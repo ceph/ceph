@@ -16,16 +16,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << dirfrag() << ") "
 
-class CDirContext : public MDSAsyncContextBase
+class CDirIOContext : public MDSAsyncContextBase
 {
 protected:
   CDirRef dir;
   MDSRank* get_mds() { return dir->mdcache->mds; }
 
 public:
-  explicit CDirContext(CDir *d) : dir(d) {
+  explicit CDirIOContext(CDir *d) : dir(d) {
     assert(dir != NULL);
-    set_finisher(get_mds()->finisher);
   }
 };
 
@@ -347,7 +346,7 @@ void CDir::add_dirty_rstat_inode(CInode *in)
 {
   inode->mutex_assert_locked_by_me();
   dirty_rstat_inodes.push_back(&in->item_dirty_rstat);
-  mdcache->locker->mark_updated_scatterlock(&inode->nestlock);
+  mdcache->locker->mark_updated_scatterlock(&inode->nestlock, NULL);
 }
 
 void CDir::remove_dirty_rstat_inode(CInode *in)
@@ -466,10 +465,11 @@ void CDir::commit(MDSContextBase *c, int op_prio)
   _omap_commit(op_prio);
 }
 
-class C_Dir_Committed : public CDirContext {
+class C_Dir_Committed : public CDirIOContext {
   version_t version;
 public:
-  C_Dir_Committed(CDir *d, version_t v) : CDirContext(d), version(v) { }
+  C_Dir_Committed(CDir *d, version_t v) :
+    CDirIOContext(d), version(v) { }
   void finish(int r) {
     dir->_committed(r, version);
   }
@@ -765,7 +765,7 @@ void CDir::fetch(MDSContextBase *c)
   _omap_fetch(NULL, empty);
 }
 
-class C_Dir_Fetched : public CDirContext {
+class C_Dir_Fetched : public CDirIOContext {
   MDSContextBase *fin;
 public:
   bufferlist hdrbl;
@@ -773,7 +773,7 @@ public:
   int ret1, ret2;
 
   C_Dir_Fetched(CDir *d, MDSContextBase *f) :
-    CDirContext(d), fin(f), ret1(0), ret2(0) { }
+    CDirIOContext(d), fin(f), ret1(0), ret2(0) { }
   void finish(int r) {
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;

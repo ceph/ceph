@@ -143,7 +143,7 @@ void MDLog::create(MDSContextBase *c)
   journaler = new Journaler(ino, mds->mdcache->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter,
 			    logger, l_mdl_jlat,
 			    &mds->timer,
-                            mds->finisher);
+                            mds->get_log_finisher());
   assert(journaler->is_readonly());
   journaler->set_write_error_handler(new C_MDL_WriteError(this));
   journaler->set_writeable();
@@ -333,10 +333,9 @@ protected:
   }
 public:
   C_MDL_Flushed(MDLog *l, MDSContextBase* c) : mdlog(l), wrapped(c) {}
-  C_MDL_Flushed(MDLog *l, uint64_t pos, Finisher *finisher) :
+  C_MDL_Flushed(MDLog *l, uint64_t pos) :
     mdlog(l), wrapped(NULL) {
     set_write_pos(pos);
-    set_finisher(finisher);
   }
 };
 
@@ -392,9 +391,8 @@ void MDLog::_submit_thread()
 	MDSLogContextBase *fin = dynamic_cast<MDSLogContextBase*>(data.fin);
 	assert(fin);
 	fin->set_write_pos(new_write_pos);
-	fin->set_finisher(mds->finisher);
       } else {
-	data.fin = new C_MDL_Flushed(this, new_write_pos, mds->finisher);
+	data.fin = new C_MDL_Flushed(this, new_write_pos);
       }
   
       journaler->wait_for_flush(data.fin);
@@ -409,7 +407,6 @@ void MDLog::_submit_thread()
       if (data.fin) {
 	MDSAsyncContextBase *fin = dynamic_cast<MDSAsyncContextBase*>(data.fin);
 	assert(fin);
-	fin->set_finisher(mds->finisher);
 	journaler->wait_for_flush(data.fin);
       }
       if (data.flush)
@@ -434,7 +431,6 @@ void MDLog::wait_for_safe(MDSAsyncContextBase *c)
     return;
   }
     
-  c->set_finisher(mds->finisher);
 
   submit_mutex.Lock();
 
@@ -944,7 +940,7 @@ void MDLog::_recovery_thread(MDSContextBase *completion)
     dout(1) << "Erasing journal " << jp.back << dendl;
     C_SaferCond erase_waiter;
     Journaler back(jp.back, mds->mdcache->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
-        mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->finisher);
+        mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->get_log_finisher());
 
     // Read all about this journal (header + extents)
     C_SaferCond recover_wait;
@@ -978,7 +974,8 @@ void MDLog::_recovery_thread(MDSContextBase *completion)
 
   /* Read the header from the front journal */
   Journaler *front_journal = new Journaler(jp.front, mds->mdcache->get_metadata_pool(),
-      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->finisher);
+      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer,
+      mds->get_log_finisher());
 
   // Assign to ::journaler so that we can be aborted by ::shutdown while
   // waiting for journaler recovery
@@ -1060,7 +1057,8 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Create the new Journaler file */
   Journaler *new_journal = new Journaler(jp.back, mds->mdcache->get_metadata_pool(),
-      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->finisher);
+      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer,
+      mds->get_log_finisher());
   dout(4) << "Writing new journal header " << jp.back << dendl;
   file_layout_t new_layout = old_journal->get_layout();
   new_journal->set_writeable();

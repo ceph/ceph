@@ -29,26 +29,27 @@ MDSRank *MDSContextGather::get_mds()
 }
 
 void MDSAsyncContextBase::complete(int r) {
-  if (finisher) {
-    Finisher *f = finisher;
-    finisher = NULL;
-    f->queue(this, r);
+  if (async) {
+    async = false;
+    get_mds()->ctx_wq.queue(this, r);
+  } else {
+    //dout(12) << "complete " << this << " " << typeid(*this).name() << dendl;
+    MDSContextBase::complete(r);
     return;
   }
-  MDSContextBase::complete(r);
 }
 
 void MDSLogContextBase::complete(int r) {
   assert(write_pos > 0);
-  if (finisher) {
-    Finisher *f = finisher;
-    finisher = NULL;
-    f->queue(this, r);
-    return;
+  if (async) {
+    async = false;
+    get_mds()->get_log_finisher()->queue(this, r);
+  } else {
+    MDLog *mdlog = get_mds()->mdlog;
+    uint64_t safe_pos = write_pos;
+    //dout(12) << "complete " << this << " " << typeid(*this).name() << dendl;
+    // MDSContextBase::complete() free this
+    MDSContextBase::complete(r);
+    mdlog->set_safe_pos(safe_pos);
   }
-  MDLog *mdlog = get_mds()->mdlog;
-  uint64_t safe_pos = write_pos;
-  // MDSContextBase::complete() free this
-  MDSContextBase::complete(r);
-  mdlog->set_safe_pos(safe_pos);
 }

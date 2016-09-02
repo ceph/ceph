@@ -69,9 +69,10 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
-    op_tp(msgr->cct, "MDSRank::op_tp", "tp_op",  g_conf->osd_op_threads, "mds_op_threads"),
+    op_tp(msgr->cct, "MDSRank::op_tp", "tp_op",  g_conf->osd_op_threads * 2, "mds_op_threads"),
     msg_tp(msgr->cct, "MDSRank::msg_tp", "tp_msg",  g_conf->osd_op_threads, "mds_msg_threads"),
-    op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
+    ctx_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
+    req_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
     msg_wq(this, g_conf->osd_op_thread_timeout, &msg_tp)
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
@@ -86,7 +87,7 @@ MDSRank::MDSRank(
   sessionmap = new SessionMap(this);
   inotable = new InoTable(this);
 
-  finisher = new Finisher(msgr->cct);
+  log_finisher = new Finisher(msgr->cct);
 }
 
 MDSRank::~MDSRank()
@@ -102,8 +103,8 @@ MDSRank::~MDSRank()
   if (sessionmap) { delete sessionmap; sessionmap = NULL; }
   if (inotable) { delete inotable; inotable = NULL; }
 
-  delete finisher;
-  finisher = NULL;
+  delete log_finisher;
+  log_finisher = NULL;
 
   delete suicide_hook;
   suicide_hook = NULL;
@@ -136,7 +137,7 @@ void MDSRankDispatcher::init()
 
   op_tp.start();
   msg_tp.start();
-  finisher->start();
+  log_finisher->start();
 }
 
 void MDSRankDispatcher::tick()
@@ -193,7 +194,7 @@ void MDSRankDispatcher::shutdown()
 
   op_tp.stop();
   msg_tp.stop();
-  finisher->stop();
+  log_finisher->stop();
 
   // shut down messenger
   messenger->shutdown();
@@ -224,7 +225,6 @@ public:
   {
     assert(mds);
     assert(fn);
-    set_finisher(mds->finisher);
   }
   void finish(int r)
   {
@@ -463,7 +463,6 @@ protected:
 public:
   C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n) : mds(m), nextstep(n) {
     assert(mds);
-    set_finisher(mds->finisher);
   }
   void finish(int r) {
     Mutex::Locker l(mds->mds_lock);
@@ -756,26 +755,19 @@ void MDSRank::dump_status(Formatter *f) const
 {
 }
 
-void MDSRank::queue_context(MDSContextBase *c, int r)
+MDSRank::CtxWQ::CtxWQ(MDSRank *m, time_t ti, ThreadPool *tp)
+  : ThreadPool::WorkQueueVal<pair<MDSContextBase*,int> >("MDSRank::CtxWQ", ti, ti*10, tp), mds(m)
 {
-  finisher->queue(c, r);
 }
 
-void MDSRank::queue_contexts(std::list<MDSContextBase*>& ls, int r)
-{
-  for (auto c : ls)
-    finisher->queue(c);
-  ls.clear();
-}
-
-MDSRank::OpWQ::OpWQ(MDSRank *m, time_t ti, ThreadPool *tp)
+MDSRank::ReqWQ::ReqWQ(MDSRank *m, time_t ti, ThreadPool *tp)
   : ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t>("MDSRank::MsgWQ", ti, ti*10, tp),
-    mds(m), qlock("OpWQ::qlock"),
+    mds(m), qlock("ReqWQ::qlock"),
     pqueue(g_conf->osd_op_pq_max_tokens_per_priority,
            g_conf->osd_op_pq_min_cost)
 {}
 
-void MDSRank::OpWQ::_enqueue(const MDRequestRef& mdr)
+void MDSRank::ReqWQ::_enqueue(const MDRequestRef& mdr)
 {
   if (mdr->retries > 0)
     pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_HIGH, mdr);
@@ -783,15 +775,15 @@ void MDSRank::OpWQ::_enqueue(const MDRequestRef& mdr)
     pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
 }
 
-void MDSRank::OpWQ::_enqueue_front(const MDRequestRef& mdr)
+void MDSRank::ReqWQ::_enqueue_front(const MDRequestRef& mdr)
 {
   assert(0);
 
   MDRequestRef other;
   {
     Mutex::Locker l(qlock);
-    auto it = op_for_processing.find(mdr->reqid.name);
-    if (it != op_for_processing.end()) {
+    auto it = req_for_processing.find(mdr->reqid.name);
+    if (it != req_for_processing.end()) {
       it->second.push_front(mdr);
       other = it->second.back();
       it->second.pop_back();
@@ -801,7 +793,7 @@ void MDSRank::OpWQ::_enqueue_front(const MDRequestRef& mdr)
 			      other ? other : mdr);
 }
 
-entity_name_t MDSRank::OpWQ::_dequeue()
+entity_name_t MDSRank::ReqWQ::_dequeue()
 {
   assert(!pqueue.empty());
   entity_name_t name;
@@ -809,26 +801,25 @@ entity_name_t MDSRank::OpWQ::_dequeue()
     Mutex::Locker l(qlock);
     MDRequestRef mdr = pqueue.dequeue();
     name = mdr->reqid.name;
-    op_for_processing[name].push_back(mdr);
+    req_for_processing[name].push_back(mdr);
   }
   return name;
 }
 
-void MDSRank::OpWQ::_process(entity_name_t name, ThreadPool::TPHandle &handle)
+void MDSRank::ReqWQ::_process(entity_name_t name, ThreadPool::TPHandle &handle)
 {
   MDRequestRef mdr;
   {
     Mutex::Locker l(qlock);
-    auto it = op_for_processing.find(name);
-    if (it == op_for_processing.end())
+    auto it = req_for_processing.find(name);
+    if (it == req_for_processing.end())
       return;
 
     mdr = it->second.front();
     it->second.pop_front();
     if (it->second.empty())
-      op_for_processing.erase(it);
+      req_for_processing.erase(it);
   }
-
   mds->mdcache->dispatch_request(mdr);
 }
 
@@ -922,7 +913,7 @@ void MDSRank::MsgWQ::_process(entity_inst_t inst, ThreadPool::TPHandle &handle)
 void MDSRank::retry_dispatch(const MDRequestRef &mdr)
 {
   mdr->retries++;
-  op_wq.queue(mdr);
+  req_wq.queue(mdr);
 }
 
 

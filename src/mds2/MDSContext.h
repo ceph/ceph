@@ -26,6 +26,8 @@ class MDSContextBase : public Context
 {
 protected:
   virtual MDSRank *get_mds() = 0;
+public:
+  virtual bool is_async() const { return false; }
 };
 
 /**
@@ -72,21 +74,21 @@ typedef C_GatherBuilderBase<MDSContextBase, MDSGather> MDSGatherBuilder;
 class MDSAsyncContextBase : public MDSContextBase
 {
 private:
-  Finisher *finisher;
+  bool async;
 public:
-  MDSAsyncContextBase() : finisher(NULL) {}
-  void set_finisher(Finisher *f) { finisher = f; }
+  MDSAsyncContextBase() : async(true) {}
+  bool is_async() const { return async; }
   void complete(int r) final;
 };
 
 class MDSLogContextBase : public MDSContextBase
 {
 private:
-  Finisher *finisher;
+  bool async;
   uint64_t write_pos;
 public:
-  MDSLogContextBase() : finisher(NULL), write_pos(0) {}
-  void set_finisher(Finisher *f) { finisher = f; }
+  MDSLogContextBase() : async(true), write_pos(0) {}
+  bool is_async() const { return async; }
   void set_write_pos(uint64_t wp) { write_pos = wp; }
   void complete(int r) final;
 };

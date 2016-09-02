@@ -238,21 +238,60 @@ protected:
   // <<<
 
 protected:
-
   ThreadPool op_tp;
   ThreadPool msg_tp;
-
+  // finish log contexts in same order of log entires
+  Finisher *log_finisher;
 public:
-  Finisher *finisher;
-  void queue_context(MDSContextBase *c, int r=0);
-  void queue_contexts(std::list<MDSContextBase*>& ls, int r=0);
+  Finisher *get_log_finisher() { return log_finisher; }
 
-  struct OpWQ: public ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t> {
+  class CtxWQ: public ThreadPool::WorkQueueVal<pair<MDSContextBase*,int> > {
+  public:
+    CtxWQ(MDSRank *m, time_t ti, ThreadPool *tp);
+    void queue(MDSContextBase *ctx, int result = 0) {
+      ThreadPool::WorkQueueVal<pair<MDSContextBase*,int> >::queue(make_pair(ctx, result));
+    }
+  protected:
+    MDSRank *mds;
+    list<pair<MDSContextBase*,int> > context_queue;
+    bool _empty() override {
+      return context_queue.empty();
+    }
+    void _enqueue(pair<MDSContextBase*,int> item) override {
+      context_queue.push_back(item);
+    }
+    void _enqueue_front(pair<MDSContextBase*,int> item) override {
+      context_queue.push_front(item);
+    }
+    pair<MDSContextBase*,int> _dequeue() override {
+      auto item = context_queue.front();
+      context_queue.pop_front();
+      return item;
+    }
+    void _process(pair<MDSContextBase*,int> item, ThreadPool::TPHandle &) override {
+      item.first->complete(item.second);
+    }
+    void _clear() override {
+      assert(context_queue.empty());
+    }
+  } ctx_wq;
+
+  void queue_context(MDSContextBase *c, int r=0) {
+    ctx_wq.queue(c, r);
+  }
+  void queue_contexts(std::list<MDSContextBase*>& ls, int r=0) {
+    for (auto c : ls)
+      ctx_wq.queue(c, r);
+  }
+
+  class ReqWQ: public ThreadPool::WorkQueueVal<const MDRequestRef&, entity_name_t> {
+  public:
+    ReqWQ(MDSRank *m, time_t ti, ThreadPool *tp);
+  protected:
     MDSRank *mds;
     Mutex qlock;
-    std::map<entity_name_t, std::list<MDRequestRef> > op_for_processing;
+    std::map<entity_name_t, std::list<MDRequestRef> > req_for_processing;
     PrioritizedQueue<MDRequestRef, entity_name_t> pqueue;
-    OpWQ(MDSRank *m, time_t ti, ThreadPool *tp);
 
     void _enqueue_front(const MDRequestRef&);
     void _enqueue(const MDRequestRef&);
@@ -262,15 +301,20 @@ public:
       return pqueue.empty();
     }
     void _process(entity_name_t, ThreadPool::TPHandle &handle);
-  } op_wq;
+    void _clear() override {
+      assert(pqueue.empty() && req_for_processing.empty());
+    }
+  } req_wq;
 
-  struct MsgWQ: public ThreadPool::WorkQueueVal<Message*, entity_inst_t> {
+  class MsgWQ: public ThreadPool::WorkQueueVal<Message*, entity_inst_t> {
+  public:
+    MsgWQ(MDSRank *m, time_t ti, ThreadPool *tp);
+  protected:
     MDSRank *mds;
     Mutex qlock;
     std::map<entity_inst_t, pair<bool, std::list<Message*> > > msg_for_processing;
     std::list<entity_inst_t> more_to_process;
     PrioritizedQueue<Message*, entity_inst_t> pqueue;
-    MsgWQ(MDSRank *m, time_t ti, ThreadPool *tp);
 
     void _enqueue_front(Message*);
     void _enqueue(Message*);
@@ -283,6 +327,9 @@ public:
       return more_to_process.empty();
     }
     void _process(entity_inst_t, ThreadPool::TPHandle &handle);
+    void _clear() override {
+      assert(pqueue.empty() && msg_for_processing.empty());
+    }
   } msg_wq;
 
   void retry_dispatch(const MDRequestRef &mdr);
@@ -304,6 +351,7 @@ class C_MDS_RetryRequest : public MDSContext {
 public:
   C_MDS_RetryRequest(MDSRank *mds, const MDRequestRef& r)
     : MDSContext(mds), mdr(r) {}
+  bool is_async() const { return true; }
   virtual void finish(int r) {
     get_mds()->retry_dispatch(mdr);
   }

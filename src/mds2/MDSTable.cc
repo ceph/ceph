@@ -41,7 +41,6 @@ protected:
 public:
   explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
     assert(ida != NULL);
-    set_finisher(get_mds()->finisher);
   }
 };
 
@@ -57,6 +56,8 @@ public:
 
 void MDSTable::save(MDSContextBase *onfinish, version_t v)
 {
+  mutex_assert_locked_by_me();
+
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
 	     << committing_version << " >= needed " << v << dendl;
@@ -97,6 +98,8 @@ void MDSTable::save_2(int r, version_t v)
     return;
   }
 
+  mutex_lock();
+
   dout(10) << "save_2 v " << v << dendl;
   committed_version = v;
   
@@ -106,7 +109,10 @@ void MDSTable::save_2(int r, version_t v)
     ls.splice(ls.end(), waitfor_save.begin()->second);
     waitfor_save.erase(waitfor_save.begin());
   }
-  finish_contexts(g_ceph_context, ls,0);
+
+  mutex_unlock();
+
+  finish_contexts(g_ceph_context, ls, 0);
 }
 
 
@@ -169,6 +175,8 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
   }
 
+  mutex_lock();
+
   dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
   bufferlist::iterator p = bl.begin();
 
@@ -183,6 +191,8 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     mds->damaged();
     assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
   }
+
+  mutex_unlock();
 
   if (onfinish) {
     onfinish->complete(0);

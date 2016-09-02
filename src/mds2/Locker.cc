@@ -18,6 +18,7 @@
 #include "events/EOpen.h"
 
 #define dout_subsys ceph_subsys_mds
+#define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".locker "
 
 Locker::Locker(MDSRank *_mds) :
   mds(_mds), mdcache(_mds->mdcache), server(_mds->server),
@@ -75,17 +76,30 @@ void Locker::finish_waiting(SimpleLock *lock, uint64_t mask)
 {
   list<MDSContextBase*> ls;
   lock->take_waiting(mask, ls);
-  for (auto c : ls) {
-    mds->queue_context(c);
+  for (auto p = ls.begin(); p != ls.end(); ) {
+    if ((*p)->is_async()) {
+      ++p;
+    } else {
+      mds->queue_context(*p);
+      ls.erase(p++);
+    }
   }
+  finish_contexts(g_ceph_context, ls, 0);
 }
 
 void Locker::finish_waiting(CInode *in, uint64_t mask)
 {
   list<MDSContextBase*> ls;
   in->take_waiting(mask, ls);
-  for (auto c : ls)
-    mds->queue_context(c);
+  for (auto p = ls.begin(); p != ls.end(); ) {
+    if ((*p)->is_async()) {
+      ++p;
+    } else {
+      mds->queue_context(*p);
+      ls.erase(p++);
+    }
+  }
+  finish_contexts(g_ceph_context, ls, 0);
 }
 
 /* If this function returns false, the mdr has been placed
@@ -132,9 +146,7 @@ int Locker::acquire_locks(const MDRequestRef& mdr,
   }
 
   // rdlocks
-  for (set<SimpleLock*>::iterator p = rdlocks.begin();
-	 p != rdlocks.end();
-       ++p) {
+  for (set<SimpleLock*>::iterator p = rdlocks.begin(); p != rdlocks.end(); ++p) {
     CObject *object = (*p)->get_parent();
     dout(20) << " must rdlock " << **p << " " << *object << dendl;
     sorted.insert(*p);
@@ -1529,10 +1541,10 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
 /*
  * mark a scatterlock to indicate that the dir fnode has some dirty data
  */
-void Locker::mark_updated_scatterlock(ScatterLock *lock)
+void Locker::mark_updated_scatterlock(ScatterLock *lock, LogSegment *ls)
 {
   lock->get_parent()->mutex_assert_locked_by_me();
-  lock->mark_dirty();
+  lock->mark_dirty(ls);
   Mutex::Locker l(updated_scatterlocks_mutex);
   if (lock->get_updated_item()->is_on_list()) {
     dout(10) << "mark_updated_scatterlock " << *lock

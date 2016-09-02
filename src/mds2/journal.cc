@@ -1135,7 +1135,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dout(10) << "EMetaBlob.replay      clean fragstat on " << *dir << dendl;
       }
       if (mask)
-	diri->mark_dirty_scattered(logseg, mask);
+	diri->mark_updated_scatterlocks(mask, logseg);
     }
     if (lump.is_complete())
       dir->mark_complete();
