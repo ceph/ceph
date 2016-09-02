@@ -70,6 +70,10 @@ enum {
   l_bluestore_compressed,
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
+  l_bluestore_onode_hits,
+  l_bluestore_onode_misses,
+  l_bluestore_buffer_hit_bytes,
+  l_bluestore_buffer_miss_bytes,
   l_bluestore_last
 };
 
@@ -569,9 +573,12 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
+    BlueStore *store;
     std::mutex lock;                ///< protect lru and other structures
 
     static Cache *create(string type);
+
+    void set_store(BlueStore *bs) { store = bs; }
 
     virtual ~Cache() {}
 

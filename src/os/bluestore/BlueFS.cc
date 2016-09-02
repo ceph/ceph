@@ -120,6 +120,13 @@ int BlueFS::add_block_device(unsigned id, string path)
   return 0;
 }
 
+bool BlueFS::bdev_support_label(unsigned id)
+{
+  assert(id < bdev.size());
+  assert(bdev[id]);
+  return bdev[id]->supported_bdev_label();
+}
+
 uint64_t BlueFS::get_block_device_size(unsigned id)
 {
   if (id < bdev.size() && bdev[id])
