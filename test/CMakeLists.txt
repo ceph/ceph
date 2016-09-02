@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 2.8)
-
 # TO REMOVE include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src)
 include_directories(../support/src)
@@ -23,13 +21,13 @@ add_executable(dmclock-tests EXCLUDE_FROM_ALL ${test_srcs} ${support_srcs})
 if (TARGET gtest AND TARGET gtest_main)
   add_dependencies(dmclock-tests gtest gtest_main)
   target_link_libraries(dmclock-tests
-    PUBLIC $<TARGET_FILE:dmclock>
+    LINK_PRIVATE $<TARGET_FILE:dmclock>
     pthread
     $<TARGET_FILE:gtest>
     $<TARGET_FILE:gtest_main>)
 else()
   target_link_libraries(dmclock-tests
-    PUBLIC $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+    LINK_PRIVATE $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
 endif()
   
 

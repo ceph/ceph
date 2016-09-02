@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 2.8)
-
 include_directories(ssched) # ssched code
 include_directories(../../src) # dmclock code
 include_directories(../../support/src)
@@ -38,7 +36,7 @@ set_target_properties(ssched_sim dmc_sim
 
 add_dependencies(dmc_sim dmclock)
 
-target_link_libraries(ssched_sim PUBLIC pthread)
-target_link_libraries(dmc_sim PUBLIC pthread $<TARGET_FILE:dmclock>)
+target_link_libraries(ssched_sim LINK_PRIVATE pthread)
+target_link_libraries(dmc_sim LINK_PRIVATE pthread $<TARGET_FILE:dmclock>)
 
 add_custom_target(dmclock-sims DEPENDS ssched_sim dmc_sim)

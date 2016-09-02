@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 2.8)
-
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src)
 
@@ -24,7 +22,7 @@ set_target_properties(data-struct-tests
   RUNTIME_OUTPUT_DIRECTORY ../../test)
 
 target_link_libraries(data-struct-tests
-  PUBLIC ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY} pthread)
+  LINK_PRIVATE ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY} pthread)
 
 # for every argument, adds a test with that name, using it as a gtest filter
 function(make_tests)
