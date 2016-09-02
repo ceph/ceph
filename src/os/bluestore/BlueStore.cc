@@ -2690,10 +2690,11 @@ int BlueStore::mkfs()
 	dout(1) << __func__ << " expected bluestore, but type is " << type << dendl;
 	return -EIO;
       }
+    } else {
+      r = write_meta("type", "bluestore");
+      if (r < 0)
+        return r;
     }
-    r = write_meta("type", "bluestore");
-    if (r < 0)
-      return r;
   }
 
   freelist_type = g_conf->bluestore_freelist_type;
