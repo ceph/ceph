@@ -16,7 +16,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::ImageState: "
+#define dout_prefix *_dout << "librbd::ImageState: " << this << " "
 
 namespace librbd {
 
