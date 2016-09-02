@@ -1880,14 +1880,20 @@ bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
   return true;
 }
 
-int BlueStore::ExtentMap::compress_extent_map()
+int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
 {
   if (extent_map.empty())
     return 0;
   int removed = 0;
-  auto p = extent_map.begin();
+  auto p = seek_lextent(offset);
+  if (p != extent_map.begin()) {
+    --p;  // start to the left of offset
+  }
   auto n = p;
   for (++n; n != extent_map.end(); p = n++) {
+    if (n->logical_offset > offset + length) {
+      break;  // stop after end
+    }
     while (n != extent_map.end() &&
 	   p->logical_offset + p->length == n->logical_offset &&
 	   p->blob == n->blob &&
@@ -7287,8 +7293,6 @@ void BlueStore::_wctx_finish(
       }
     }
   }
-
-  o->extent_map.compress_extent_map();
 }
 
 int BlueStore::_do_write(
@@ -7395,6 +7399,8 @@ int BlueStore::_do_write(
   }
 
   _wctx_finish(txc, c, o, &wctx);
+
+  o->extent_map.compress_extent_map(offset, length);
 
   o->extent_map.dirty_range(txc->t, offset, length);
 
