@@ -30,6 +30,26 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
   return *_dout << pgb->get_parent()->gen_dbg_prefix();
 }
 
+struct ReplicatedBackend::C_OSD_RepModifyApply : public Context {
+  ReplicatedBackend *pg;
+  RepModifyRef rm;
+  C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
+    : pg(pg), rm(r) {}
+  void finish(int r) {
+    pg->sub_op_modify_applied(rm);
+  }
+};
+
+struct ReplicatedBackend::C_OSD_RepModifyCommit : public Context {
+  ReplicatedBackend *pg;
+  RepModifyRef rm;
+  C_OSD_RepModifyCommit(ReplicatedBackend *pg, RepModifyRef r)
+    : pg(pg), rm(r) {}
+  void finish(int r) {
+    pg->sub_op_modify_commit(rm);
+  }
+};
+
 static void log_subop_stats(
   PerfCounters *logger,
   OpRequestRef op, int subop)
