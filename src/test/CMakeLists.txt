@@ -363,6 +363,8 @@ target_link_libraries(ceph_multi_stress_watch librados global radostest
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 #ceph_perf_local
+include(SIMDExt)
+
 add_executable(ceph_perf_local 
   perf_local.cc
   perf_helper.cc)
