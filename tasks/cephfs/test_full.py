@@ -6,6 +6,7 @@ import os
 from textwrap import dedent
 import time
 from teuthology.orchestra.run import CommandFailedError
+from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
@@ -28,6 +29,9 @@ class FullnessTestCase(CephFSTestCase):
 
     def setUp(self):
         CephFSTestCase.setUp(self)
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("FUSE needed: ENOSPC handling in kclient is tracker #17204")
 
         # These tests just use a single active MDS throughout, so remember its ID
         # for use in mds_asok calls
