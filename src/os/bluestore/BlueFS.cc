@@ -1284,8 +1284,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   assert(!log_t.empty());
 
   // allocate some more space (before we run out)?
-  uint64_t runway = log_writer->file->fnode.get_allocated() - log_writer->pos;
-  if (runway < g_conf->bluefs_min_log_runway) {
+  int64_t runway = log_writer->file->fnode.get_allocated() -
+    log_writer->get_effective_write_pos();
+  if (runway < (int64_t)g_conf->bluefs_min_log_runway) {
     dout(10) << __func__ << " allocating more log runway (0x"
 	     << std::hex << runway << std::dec  << " remaining)" << dendl;
     while (new_log_writer) {
