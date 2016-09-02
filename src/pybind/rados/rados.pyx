@@ -194,6 +194,8 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx)
     int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key, const char **nspace)
+    int rados_nobjects_list_get_pg_hash_position(rados_list_ctx_t ctx)
+    int rados_nobjects_list_seek(rados_list_ctx_t ctx, uint32_t pos)
     void rados_nobjects_list_close(rados_list_ctx_t ctx)
 
     int rados_ioctx_snap_rollback(rados_ioctx_t io, const char * oid, const char * snapname)
@@ -1404,6 +1406,32 @@ cdef class ObjectIterator(object):
         locator = decode_cstr(locator_) if locator_ != NULL else None
         nspace = decode_cstr(nspace_) if nspace_ != NULL else None
         return Object(self.ioctx, key, locator, nspace)
+
+    def get_pg_hash_position(self):
+        """
+        Get hash position of object iterator
+
+        :returns: current hash position, rounded to current PG
+        """
+        with nogil:
+            ret = rados_nobjects_list_get_pg_hash_position(self.ctx)
+
+        return ret
+
+    @requires(('pos', int))
+    def seek(self, pos):
+        """
+        Reposition object iterator to a different hash position
+
+        :returns: actual (rounded) position we moved to
+        """
+        cdef:
+            uint32_t _pos = pos
+
+        with nogil:
+            ret = rados_nobjects_list_seek(self.ctx, _pos)
+
+        return ret
 
     def __dealloc__(self):
         with nogil:
