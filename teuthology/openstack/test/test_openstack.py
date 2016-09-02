@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015 Red Hat, Inc.
+# Copyright (c) 2015,2016 Red Hat, Inc.
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -274,6 +274,31 @@ class TestOpenStack(object):
         else:
             del os.environ['OS_AUTH_URL']
 
+    def test_get_os_url(self):
+        o = OpenStack()
+        #
+        # Only for OVH
+        #
+        o.provider = 'something'
+        assert "" == o.get_os_url("server ")
+        o.provider = 'ovh'
+        assert "" == o.get_os_url("unknown ")
+        type2cmd = {
+            'compute': ('server', 'flavor'),
+            'network': ('ip', 'security', 'network'),
+            'image': ('image',),
+            'volume': ('volume',),
+        }
+        os.environ['OS_REGION_NAME'] = 'REGION'
+        os.environ['OS_TENANT_ID'] = 'TENANT'
+        for (type, cmds) in type2cmd.iteritems():
+            for cmd in cmds:
+                assert ("//" + type) in o.get_os_url(cmd + " ")
+        for type in type2cmd.keys():
+            assert ("//" + type) in o.get_os_url("whatever ", type=type)
+        del os.environ['OS_REGION_NAME']
+        del os.environ['OS_TENANT_ID']
+
     @patch('teuthology.misc.sh')
     def test_cache_token(self, m_sh):
         token = 'TOKEN VALUE'
@@ -289,13 +314,11 @@ class TestOpenStack(object):
         #
         # Set the environment with the token
         #
-        assert 'OS_AUTH_TYPE' not in os.environ
-        assert 'OS_TOKEN' not in os.environ
+        assert 'OS_TOKEN_VALUE' not in os.environ
         assert 'OS_TOKEN_EXPIRES' not in os.environ
         assert True == o.cache_token()
         m_sh.assert_called_with('openstack -q token issue -c id -f value')
-        assert 'v2token' == os.environ['OS_AUTH_TYPE']
-        assert token == os.environ['OS_TOKEN']
+        assert token == os.environ['OS_TOKEN_VALUE']
         assert token == OpenStack.token
         assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
         assert time.time() < OpenStack.token_expires
@@ -307,8 +330,7 @@ class TestOpenStack(object):
         assert True == o.cache_token()
         assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
         assert time.time() < OpenStack.token_expires
-        del os.environ['OS_AUTH_TYPE']
-        del os.environ['OS_TOKEN']
+        del os.environ['OS_TOKEN_VALUE']
         del os.environ['OS_TOKEN_EXPIRES']
 
     @patch('teuthology.misc.sh')
@@ -317,16 +339,14 @@ class TestOpenStack(object):
         o = OpenStack()
         o.provider = 'ovh'
         token = 'TOKEN VALUE'
-        os.environ['OS_AUTH_TYPE'] = 'v2token'
-        os.environ['OS_TOKEN'] = token
+        os.environ['OS_TOKEN_VALUE'] = token
         token_expires = int(time.time()) + OpenStack.token_cache_duration
         os.environ['OS_TOKEN_EXPIRES'] = str(token_expires)
         assert True == o.cache_token()
         assert token == OpenStack.token
         assert token_expires == OpenStack.token_expires
         m_sh.assert_not_called()
-        del os.environ['OS_AUTH_TYPE']
-        del os.environ['OS_TOKEN']
+        del os.environ['OS_TOKEN_VALUE']
         del os.environ['OS_TOKEN_EXPIRES']
         
     @patch('teuthology.misc.sh')
@@ -336,19 +356,16 @@ class TestOpenStack(object):
         OpenStack.token = None
         o = OpenStack()
         o.provider = 'ovh'
-        os.environ['OS_AUTH_TYPE'] = 'v2token'
-        os.environ['OS_TOKEN'] = token
+        os.environ['OS_TOKEN_VALUE'] = token
         token_expires = int(time.time()) - 2000
         os.environ['OS_TOKEN_EXPIRES'] = str(token_expires)
         assert True == o.cache_token()
         m_sh.assert_called_with('openstack -q token issue -c id -f value')
-        assert 'v2token' == os.environ['OS_AUTH_TYPE']
-        assert token == os.environ['OS_TOKEN']
+        assert token == os.environ['OS_TOKEN_VALUE']
         assert token == OpenStack.token
         assert time.time() < int(os.environ['OS_TOKEN_EXPIRES'])
         assert time.time() < OpenStack.token_expires
-        del os.environ['OS_AUTH_TYPE']
-        del os.environ['OS_TOKEN']
+        del os.environ['OS_TOKEN_VALUE']
         del os.environ['OS_TOKEN_EXPIRES']
 
 class TestTeuthologyOpenStack(object):

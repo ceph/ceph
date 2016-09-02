@@ -215,31 +215,66 @@ class OpenStack(object):
         if self.provider != 'ovh':
             return False
         if (OpenStack.token is None and
-            os.environ.get('OS_AUTH_TYPE') == 'v2token' and
-            'OS_TOKEN' in os.environ and
+            'OS_TOKEN_VALUE' in os.environ and
             'OS_TOKEN_EXPIRES' in os.environ):
             log.debug("get token from the environment of the parent process")
-            OpenStack.token = os.environ['OS_TOKEN']
+            OpenStack.token = os.environ['OS_TOKEN_VALUE']
             OpenStack.token_expires = int(os.environ['OS_TOKEN_EXPIRES'])
         if (OpenStack.token_expires is not None and
             OpenStack.token_expires < time.time()):
             log.debug("token discarded because it has expired")
             OpenStack.token = None
         if OpenStack.token is None:
-            if os.environ.get('OS_AUTH_TYPE') == 'v2token':
-                del os.environ['OS_AUTH_TYPE']
+            if 'OS_TOKEN_VALUE' in os.environ:
+                del os.environ['OS_TOKEN_VALUE']
             OpenStack.token = misc.sh("openstack -q token issue -c id -f value").strip()
-            os.environ['OS_AUTH_TYPE'] = 'v2token'
-            os.environ['OS_TOKEN'] = OpenStack.token
+            os.environ['OS_TOKEN_VALUE'] = OpenStack.token
             OpenStack.token_expires = int(time.time() + OpenStack.token_cache_duration)
             os.environ['OS_TOKEN_EXPIRES'] = str(OpenStack.token_expires)
-            log.info("caching OS_TOKEN and setting OS_AUTH_TYPE=v2token "
+            log.info("caching OS_TOKEN_VALUE "
                      "during %s seconds" % OpenStack.token_cache_duration)
         return True
+
+    def get_os_url(self, cmd, type=None):
+        if self.provider != 'ovh':
+            return ""
+        url = ""
+        if (type == 'compute' or
+            cmd.startswith("server ") or
+            cmd.startswith("flavor ")):
+            url = "https://compute.{reg}.cloud.ovh.net/v2/{tenant}"
+        elif (type == 'network' or
+              cmd.startswith("ip ") or
+              cmd.startswith("security ") or
+              cmd.startswith("network ")):
+            url = "https://network.compute.{reg}.cloud.ovh.net/"
+        elif (type == 'image' or
+              cmd.startswith("image ")):
+            url = "https://image.compute.{reg}.cloud.ovh.net/"
+        elif (type == 'volume' or
+              cmd.startswith("volume ")):
+            url = "https://volume.compute.{reg}.cloud.ovh.net/v2/{tenant}"
+        if url != "":
+            url = url.format(reg=os.environ['OS_REGION_NAME'],
+                             tenant=os.environ['OS_TENANT_ID'])
+        return url
         
     def run(self, cmd, *args, **kwargs):
-        self.cache_token()
-        return misc.sh("openstack --quiet " + cmd, *args, **kwargs)
+        url = self.get_os_url(cmd, kwargs.get('type'))
+        if url != "":
+            if self.cache_token():
+                os.environ['OS_TOKEN'] = os.environ['OS_TOKEN_VALUE']
+                os.environ['OS_URL'] = url
+        if re.match('(server|flavor|ip|security|network|image|volume)', cmd):
+            cmd = "openstack --quiet " + cmd
+        try:
+            status = misc.sh(cmd)
+        finally:
+            if 'OS_TOKEN' in os.environ:
+                del os.environ['OS_TOKEN']
+            if 'OS_URL' in os.environ:
+                del os.environ['OS_URL']
+        return status
     
     def set_provider(self):
         if 'OS_AUTH_URL' not in os.environ:
@@ -681,6 +716,8 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         template = open(user_data).read()
         openrc = ''
         for (var, value) in os.environ.iteritems():
+            if var in ('OS_TOKEN_VALUE', 'OS_TOKEN_EXPIRES'):
+                continue
             if var.startswith('OS_'):
                 openrc += ' ' + var + '=' + value
         if self.args.upload:
@@ -745,7 +782,11 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
 
     @staticmethod
     def create_floating_ip():
-        pools = json.loads(OpenStack().run("ip floating pool list -f json"))
+        try:
+            pools = json.loads(OpenStack().run("ip floating pool list -f json"))
+        except subprocess.CalledProcessError:
+            log.debug("create_floating_ip: ip floating pool list failed")
+            return None
         if not pools:
             return None
         pool = pools[0]['Name']
