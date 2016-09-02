@@ -286,28 +286,113 @@ public:
     }
   };
 
-  struct BnodeSet;
+  struct SharedBlobSet;
+
+  /// in-memory shared blob state (incl cached buffers)
+  struct SharedBlob : public boost::intrusive::unordered_set_base_hook<> {
+    std::atomic_int nref = {0}; ///< reference count
+
+    // these are defined/set if the blob is marked 'shared'
+    uint64_t sbid = 0;          ///< shared blob id
+    string key;                 ///< key in kv store
+    SharedBlobSet *parent_set = 0;  ///< containing SharedBlobSet
+
+    // these are defined/set if the shared_blob is 'loaded'
+    bluestore_shared_blob_t shared_blob; ///< the actual shared state
+    bool loaded = false;        ///< whether shared_blob_t is loaded
+
+    BufferSpace bc;             ///< buffer cache
+
+    SharedBlob(uint64_t i, const string& k, Cache *c) : sbid(i), key(k), bc(c) {}
+    ~SharedBlob() {
+      assert(bc.empty());
+    }
+
+    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
+    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
+
+    friend ostream& operator<<(ostream& out, const SharedBlob& sb);
+
+    void get() {
+      ++nref;
+    }
+    void put();
+
+    friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
+      return l.sbid == r.sbid;
+    }
+    friend std::size_t hash_value(const SharedBlob &e) {
+      rjhash<uint32_t> h;
+      return h(e.sbid);
+    }
+  };
+  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
+
+  /// a lookup table of SharedBlobs
+  struct SharedBlobSet {
+    typedef boost::intrusive::unordered_set<SharedBlob>::bucket_type bucket_type;
+    typedef boost::intrusive::unordered_set<SharedBlob>::bucket_traits bucket_traits;
+
+    std::mutex lock;   ///< protect lookup, insertion, removal
+    int num_buckets;
+    vector<bucket_type> buckets;
+    boost::intrusive::unordered_set<SharedBlob> uset;
+
+    SharedBlob dummy;  ///< for lookups
+
+    explicit SharedBlobSet(unsigned n)
+      : num_buckets(n),
+	buckets(n),
+	uset(bucket_traits(buckets.data(), num_buckets)),
+	dummy(0, string(), nullptr) {
+      assert(n > 0);
+    }
+
+    SharedBlobRef lookup(uint64_t sbid);
+
+    void add(SharedBlob *sb) {
+      std::lock_guard<std::mutex> l(lock);
+      uset.insert(*sb);
+      sb->parent_set = this;
+    }
+
+    bool remove(SharedBlob *sb) {
+      std::lock_guard<std::mutex> l(lock);
+      if (sb->nref == 0) {
+	assert(sb->parent_set == this);
+	uset.erase(*sb);
+	return true;
+      }
+      return false;
+    }
+  };
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob : public boost::intrusive::set_base_hook<> {
-    std::atomic_int nref;  ///< reference count
-    int64_t id = 0;          ///< id
-    BufferSpace bc;          ///< buffer cache
+    std::atomic_int nref = {0};     ///< reference count
+    int id = -1;                    ///< id, for spanning blobs only, >= 0
+    SharedBlobRef shared_blob;      ///< shared blob state (if any)
+
+    /// refs from this shard.  ephemeral if id<0, persisted if spanning.
+    bluestore_extent_ref_map_t ref_map;
+
+
+    int last_encoded_id = -1;       ///< (ephemeral) used during encoding only
 
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
-    mutable bool undecoded = false; ///< true if blob_bl is newer than blob
     mutable bool dirty = true;      ///< true if blob is newer than blob_bl
     mutable bufferlist blob_bl;     ///< cached encoded blob
 
   public:
-    Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
+    Blob() {}
     ~Blob() {
-      assert(bc.empty());
     }
 
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
+
+    friend ostream& operator<<(ostream& out, const Blob &b);
 
     // comparators for intrusive_set
     friend bool operator<(const Blob &a, const Blob &b) {
@@ -320,24 +405,23 @@ public:
       return a.id == b.id;
     }
 
-    friend ostream& operator<<(ostream& out, const Blob &b) {
-      return out << b.id << ":" << b.get_blob();
+    bool is_spanning() const {
+      return id >= 0;
+    }
+
+    void dup(Blob& o) {
+      o.id = id;
+      o.shared_blob = shared_blob;
+      o.ref_map = ref_map;
+      o.blob = blob;
+      o.dirty = dirty;
+      o.blob_bl = blob_bl;
     }
 
     const bluestore_blob_t& get_blob() const {
-      if (undecoded) {
-	bufferlist::iterator p = blob_bl.begin();
-	::decode(blob, p);
-	undecoded = false;
-      }
       return blob;
     }
     bluestore_blob_t& dirty_blob() {
-      if (undecoded) {
-	bufferlist::iterator p = blob_bl.begin();
-	::decode(blob, p);
-	undecoded = false;
-      }
       if (!dirty) {
 	dirty = true;
 	blob_bl.clear();
@@ -350,12 +434,19 @@ public:
     bool is_dirty() const {
       return dirty;
     }
-    bool is_undecoded() const {
-      return undecoded;
+
+    bool is_unreferenced(uint64_t offset, uint64_t length) const {
+      return !ref_map.intersects(offset, length);
     }
 
     /// discard buffers for unallocated regions
     void discard_unallocated();
+
+    /// get logical references
+    void get_ref(uint64_t offset, uint64_t length);
+    /// put logical references, and get back any released extents
+    bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+		 vector<bluestore_pextent_t> *r);
 
     void get() {
       ++nref;
@@ -372,153 +463,137 @@ public:
       } else {
 	assert(blob_bl.length());
       }
-      ::encode(blob_bl, bl);
+      bl.append(blob_bl);
     }
     void decode(bufferlist::iterator& p) {
-      ::decode(blob_bl, p);
-      undecoded = true;
+      bufferlist::iterator s = p;
+      ::decode(blob, p);
+      s.copy(p.get_off() - s.get_off(), blob_bl);
       dirty = false;
     }
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
+  typedef boost::intrusive::set<Blob> blob_map_t;
 
-  /// a map of blobs, indexed by int64_t
-  struct BlobMap {
-    typedef boost::intrusive::set<Blob> blob_map_t;
+  /// a logical extent, pointing to (some portion of) a blob
+  struct Extent : public boost::intrusive::set_base_hook<> {
+    uint32_t logical_offset = 0;      ///< logical offset
+    uint32_t blob_offset = 0;         ///< blob offset
+    uint32_t length = 0;              ///< length
+    BlobRef blob;                     ///< the blob with our data
 
-    blob_map_t blob_map;
+    explicit Extent() {}
+    explicit Extent(uint32_t lo) : logical_offset(lo) {}
+    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+      : logical_offset(lo), blob_offset(o), length(l), blob(b) {}
 
-    void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& p, Cache *c);
-
-    bool empty() const {
-      return blob_map.empty();
+    // comparators for intrusive_set
+    friend bool operator<(const Extent &a, const Extent &b) {
+      return a.logical_offset < b.logical_offset;
+    }
+    friend bool operator>(const Extent &a, const Extent &b) {
+      return a.logical_offset > b.logical_offset;
+    }
+    friend bool operator==(const Extent &a, const Extent &b) {
+      return a.logical_offset == b.logical_offset;
     }
 
-    BlobRef get(int64_t id) {
-      Blob dummy(id, nullptr);
-      auto p = blob_map.find(dummy);
-      if (p != blob_map.end()) {
-	return &*p;
-      }
-      return nullptr;
-    }
-
-    BlobRef new_blob(Cache *c) {
-      int64_t id = get_new_id();
-      Blob *b = new Blob(id, c);
-      b->get();
-      blob_map.insert(*b);
-      return b;
-    }
-
-    void claim(BlobRef b) {
-      assert(b->id == 0);
-      b->id = get_new_id();
-      b->get();
-      blob_map.insert(*b);
-    }
-
-    void erase(BlobRef b) {
-      blob_map.erase(*b);
-      b->id = 0;
-      b->put();
-    }
-
-    int64_t get_new_id() {
-      return blob_map.empty() ? 1 : blob_map.rbegin()->id + 1;
-    }
-
-    // must be called under protection of the Cache lock
-    void _clear() {
-      while (!blob_map.empty()) {
-	Blob *b = &*blob_map.begin();
-	b->bc._clear();
-	erase(b);
-      }
-    }
-
-    friend ostream& operator<<(ostream& out, const BlobMap& m) {
-      out << '{';
-      for (auto p = m.blob_map.begin(); p != m.blob_map.end(); ++p) {
-	if (p != m.blob_map.begin()) {
-	  out << ',';
-	}
-	out << p->id << '=' << p->get_blob();
-      }
-      return out << '}';
+    bool blob_escapes_range(uint32_t o, uint32_t l) {
+      uint32_t bstart = logical_offset - blob_offset;
+      return (bstart < o ||
+	      bstart + blob->get_blob().get_logical_length() > o + l);
     }
   };
+  typedef boost::intrusive::set<Extent> extent_map_t;
 
-  /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
-  struct Bnode : public boost::intrusive::unordered_set_base_hook<> {
-    std::atomic_int nref;        ///< reference count
-    uint32_t hash;
-    string key;           ///< key under PREFIX_OBJ where we are stored
-    BnodeSet *bnode_set;  ///< reference to the containing set
+  friend ostream& operator<<(ostream& out, const Extent& e);
 
-    BlobMap blob_map;
+  struct Collection;
+  struct Onode;
 
-    Bnode(uint32_t h, const string& k, BnodeSet *s)
-      : nref(0),
-	hash(h),
-	key(k),
-	bnode_set(s) {}
+  /// a sharded extent map, mapping offsets to lextents to blobs
+  struct ExtentMap {
+    Onode *onode;
+    extent_map_t extent_map;        ///< map of Extents to Blobs
+    blob_map_t spanning_blob_map;   ///< blobs that span shards
 
-    void get() {
-      ++nref;
-    }
-    void put();
+    bool faulted = false;    ///< for debug only
 
-    friend void intrusive_ptr_add_ref(Bnode *e) { e->get(); }
-    friend void intrusive_ptr_release(Bnode *e) { e->put(); }
+    struct Shard {
+      string key;            ///< kv key
+      uint32_t offset;       ///< starting logical offset
+      bluestore_onode_t::shard_info *shard_info;
+      bool loaded = false;   ///< true if shard is loaded
+      bool dirty = false;    ///< true if shard is dirty and needs reencoding
+    };
+    vector<Shard> shards;    ///< shards
 
-    friend bool operator==(const Bnode &l, const Bnode &r) {
-      return l.hash == r.hash;
-    }
-    friend std::size_t hash_value(const Bnode &e) {
-      return e.hash;
-    }
-  };
-  typedef boost::intrusive_ptr<Bnode> BnodeRef;
+    bool inline_dirty = false;
+    bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
-  /// hash of Bnodes, by (object) hash value
-  struct BnodeSet {
-    typedef boost::intrusive::unordered_set<Bnode>::bucket_type bucket_type;
-    typedef boost::intrusive::unordered_set<Bnode>::bucket_traits bucket_traits;
+    ExtentMap(Onode *o) : onode(o) {}
 
-    std::mutex lock;
-    unsigned num_buckets;
-    vector<bucket_type> buckets;
-    boost::intrusive::unordered_set<Bnode> uset;
+    bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
+		     unsigned *pn);
+    void decode_some(bufferlist& bl);
 
-    Bnode dummy;  ///< dummy entry used for lookups.  protected by lock.
+    void encode_spanning_blobs(bufferlist& bl);
+    void decode_spanning_blobs(Collection *c, bufferlist::iterator& p);
 
-    explicit BnodeSet(unsigned n)
-      : num_buckets(n),
-	buckets(n),
-	uset(bucket_traits(buckets.data(), num_buckets)),
-	dummy(0, string(), NULL) {
-      assert(n > 0);
-    }
-    ~BnodeSet() {
-      assert(uset.empty());
-    }
+    BlobRef get_spanning_blob(int id);
 
-    BnodeRef get(uint32_t hash);
+    bool update(Onode *on, KeyValueDB::Transaction t, bool force);
+    void reshard(Onode *on);
 
-    void add(Bnode *b) {
-      std::lock_guard<std::mutex> l(lock);
-      uset.insert(*b);
-    }
-    bool remove(Bnode *b) {
-      std::lock_guard<std::mutex> l(lock);
-      if (b->nref == 0) {
-	uset.erase(*b);
-	return true;
+    /// initialize Shards from the onode
+    void init_shards(Onode *on, bool loaded, bool dirty);
+
+    /// return shard containing offset
+    vector<Shard>::iterator seek_shard(uint32_t offset) {
+      // fixme: we could do a binary search here
+      // we want the right-most shard that has an offset <= @offset.
+      vector<Shard>::iterator p = shards.begin();
+      while (p != shards.end() &&
+	     p->offset <= offset) {
+	++p;
       }
-      return false;
+      if (p != shards.begin()) {
+	assert(p == shards.end() || p->offset > offset);
+	--p;
+	assert(p->offset <= offset);
+      }
+      return p;
     }
+
+    /// ensure that a range of the map is loaded
+    void fault_range(KeyValueDB *db,
+		     uint32_t offset, uint32_t length);
+
+    /// ensure a range of the map is marked dirty
+    void dirty_range(KeyValueDB::Transaction t,
+		     uint32_t offset, uint32_t length);
+
+    /// find a lextent that includes offset
+    extent_map_t::iterator find_lextent(uint64_t offset);
+
+    /// seek to the first lextent including or after offset
+    extent_map_t::iterator seek_lextent(uint64_t offset);
+
+    bool has_any_lextents(uint64_t offset, uint64_t length);
+
+    /// consolidate adjacent lextents in extent_map
+    int compress_extent_map();
+
+    /// punch a logical hole.  add lextents to deref to target list.
+    void punch_hole(uint64_t offset, uint64_t length,
+		    extent_map_t *old_extents);
+
+    /// put new lextent into lextent_map overwriting existing ones if
+    /// any and update references accordingly
+    Extent *set_lextent(uint64_t logical_offset,
+			uint64_t offset, uint64_t length, BlobRef b,
+			extent_map_t *old_extents);
+
   };
 
   struct OnodeSpace;
@@ -526,6 +601,7 @@ public:
   /// an in-memory object
   struct Onode {
     std::atomic_int nref;  ///< reference count
+    Collection *c;
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
@@ -533,31 +609,23 @@ public:
     OnodeSpace *space;    ///< containing OnodeSpace
     boost::intrusive::list_member_hook<> lru_item;
 
-    BnodeRef bnode;  ///< ref to Bnode [optional]
-
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool exists;
+    bool exists;              ///< true if object logically exists
 
-    BlobMap blob_map;       ///< local blobs (this onode onode)
+    ExtentMap extent_map;
 
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(OnodeSpace *s, const ghobject_t& o, const string& k)
+    Onode(OnodeSpace *s, Collection *c, const ghobject_t& o, const string& k)
       : nref(0),
+	c(c),
 	oid(o),
 	key(k),
 	space(s),
-	exists(false) {
-    }
-
-    BlobRef get_blob(int64_t id) {
-      if (id < 0) {
-	assert(bnode);
-	return bnode->blob_map.get(-id);
-      }
-      return blob_map.get(id);
+	exists(false),
+	extent_map(this) {
     }
 
     void flush();
@@ -772,23 +840,33 @@ public:
 
     bool exists;
 
-    BnodeSet bnode_set;      ///< open Bnodes
+    SharedBlobSet shared_blob_set;      ///< open SharedBlobs
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeSpace onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
-    BnodeRef get_bnode(uint32_t hash);
 
-    BlobRef get_blob(OnodeRef& o, int64_t blob) {
-      if (blob < 0) {
-	if (!o->bnode) {
-	  o->bnode = get_bnode(o->oid.hobj.get_hash());
-	}
-	return o->bnode->blob_map.get(-blob);
-      }
-      return o->blob_map.get(blob);
+    // the terminology is confusing here, sorry!
+    //
+    //  blob_t     shared_blob_t
+    //  !shared    unused                -> open
+    //  shared     !loaded               -> open + shared
+    //  shared     loaded                -> open + shared + loaded
+    //
+    // i.e.,
+    //  open = SharedBlob is instantiated
+    //  shared = blob_t shared flag is set; SharedBlob is hashed.
+    //  loaded = SharedBlob::shared_blob_t is loaded from kv store
+    void open_shared_blob(BlobRef b);
+    void load_shared_blob(SharedBlobRef sb);
+    void make_blob_shared(BlobRef b);
+
+    BlobRef new_blob() {
+      BlobRef b = new Blob;
+      b->shared_blob = new SharedBlob(0, string(), cache);
+      return b;
     }
 
     const coll_t &get_cid() override {
@@ -882,9 +960,9 @@ public:
 
     uint64_t ops, bytes;
 
-    set<OnodeRef> onodes;     ///< these onodes need to be updated/written
-    set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
-    set<BlobRef> blobs;       ///< these blobs need to be updated on io completion
+    set<OnodeRef> onodes;     ///< these need to be updated/written
+    set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
+    set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
@@ -959,13 +1037,12 @@ public:
     utime_t start;
 
     struct DeferredCsum {
-      OnodeRef onode;
-      int64_t blob;
+      BlobRef blob;
       uint64_t b_off;
       bufferlist data;
 
-      DeferredCsum(OnodeRef& o, int64_t b, uint64_t bo, bufferlist& bl)
-	: onode(o), blob(b), b_off(bo), data(bl) {}
+      DeferredCsum(BlobRef& b, uint64_t bo, bufferlist& bl)
+	: blob(b), b_off(bo), data(bl) {}
     };
 
     list<DeferredCsum> deferred_csum;
@@ -991,12 +1068,12 @@ public:
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
     }
-    void write_bnode(BnodeRef &e) {
-      bnodes.insert(e);
+    void write_shared_blob(SharedBlobRef &sb) {
+      shared_blobs.insert(sb);
     }
 
-    void add_deferred_csum(OnodeRef& o, int64_t b, uint64_t bo, bufferlist& bl) {
-      deferred_csum.emplace_back(TransContext::DeferredCsum(o, b, bo, bl));
+    void add_deferred_csum(BlobRef& b, uint64_t bo, bufferlist& bl) {
+      deferred_csum.emplace_back(TransContext::DeferredCsum(b, bo, bl));
     }
   };
 
@@ -1186,6 +1263,10 @@ private:
   uint64_t nid_last;
   uint64_t nid_max;
 
+  std::mutex blobid_lock;
+  uint64_t blobid_last = 0;
+  uint64_t blobid_max = 0;
+
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
 
@@ -1290,11 +1371,10 @@ private:
   void _reap_collections();
 
   void _assign_nid(TransContext *txc, OnodeRef o);
+  uint64_t _assign_blobid(TransContext *txc);
 
   void _dump_onode(OnodeRef o, int log_level=30);
-  void _dump_bnode(BnodeRef b, int log_level=30);
-  void _dump_blob_map(BlobMap &bm, int log_level);
-
+  void _dump_extent_map(ExtentMap& em, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
@@ -1331,11 +1411,10 @@ private:
   int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo);
   int _wal_replay();
 
-  // for fsck
-  int _fsck_verify_blob_map(
-    string what,
-    const BlobMap& blob_map,
-    map<int64_t,bluestore_extent_ref_map_t>& v,
+  int _fsck_check_extents(
+    const ghobject_t& oid,
+    const vector<bluestore_pextent_t>& extents,
+    bool compressed,
     boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);
 
@@ -1345,8 +1424,8 @@ private:
     uint64_t offset,
     bufferlist& bl,
     unsigned flags) {
-    b->bc.write(txc->seq, offset, bl, flags);
-    txc->blobs.insert(b);
+    b->shared_blob->bc.write(txc->seq, offset, bl, flags);
+    txc->shared_blobs_written.insert(b->shared_blob);
   }
 public:
   BlueStore(CephContext *cct, const string& path);
@@ -1571,7 +1650,7 @@ private:
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
 
-    vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
+    extent_map_t old_extents;       ///< must deref these blobs
 
     struct write_item {
       BlobRef b;
