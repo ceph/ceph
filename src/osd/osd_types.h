@@ -2556,6 +2556,7 @@ public:
   void merge(const ObjectCleanRegions &other);
   void mark_data_region_dirty(uint64_t offset, uint64_t len);
   void mark_omap_dirty();
+  void mark_fully_dirty();
   interval_set<uint64_t> get_dirty_regions() const;
   bool omap_is_dirty() const;
 
@@ -2811,10 +2812,8 @@ struct pg_missing_item {
   pg_missing_item() {}
   explicit pg_missing_item(eversion_t n) : need(n) {}  // have no old version
   pg_missing_item(eversion_t n, eversion_t h, bool old_style = false) : need(n), have(h) {
-    if (old_style) {
-      clean_regions.mark_data_region_dirty(0, (uint64_t)-1);
-      clean_regions.mark_omap_dirty();
-    }
+    if (old_style)
+      clean_regions.mark_fully_dirty();
   }
 
   void encode(bufferlist& bl) const {
@@ -2930,8 +2929,7 @@ public:
     return !missing.empty();
   }
   void merge(const pg_log_entry_t& e) {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator miter
-      = missing.find(e.soid);
+    auto miter = missing.find(e.soid);
     if (miter != missing.end()
       && miter->second.have != eversion_t()
       && e.version > miter->second.have)
@@ -3014,12 +3012,11 @@ public:
   }
 
   void revise_need(hobject_t oid, eversion_t need) {
-    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    auto p = missing.find(oid);
     if (p != missing.end()) {
       rmissing.erase(p->second.need.version);
       p->second.need = need;            // no not adjust .have
-      (p->second).clean_regions.mark_data_region_dirty(0, (uint64_t)-1); 
-      (p->second).clean_regions.mark_omap_dirty();
+      (p->second).clean_regions.mark_fully_dirty();
     } else {
       missing[oid] = item(need, eversion_t());
     }
@@ -3029,12 +3026,11 @@ public:
   }
 
   void revise_have(hobject_t oid, eversion_t have) {
-    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    auto p = missing.find(oid);
     if (p != missing.end()) {
       tracker.changed(oid);
       (p->second).have = have;
-      (p->second).clean_regions.mark_data_region_dirty(0, (uint64_t)-1);
-      (p->second).clean_regions.mark_omap_dirty();
+      (p->second).clean_regions.mark_fully_dirty();
     }
   }
 

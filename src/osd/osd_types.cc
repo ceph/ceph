@@ -3441,6 +3441,12 @@ void ObjectCleanRegions::mark_omap_dirty()
   clean_omap = false;
 }
 
+void ObjectCleanRegions::mark_fully_dirty()
+{
+  mark_data_region_dirty(0, (uint64_t)-1);
+  mark_omap_dirty();
+}
+
 interval_set<uint64_t> ObjectCleanRegions::get_dirty_regions() const
 {
    interval_set<uint64_t> dirty_region;
@@ -3602,12 +3608,10 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     ::decode(extra_reqids, bl);
   if (struct_v >= 11 && op == ERROR)
     ::decode(return_code, bl);
-  if (struct_v >= 12) {
+  if (struct_v >= 12)
     ::decode(clean_regions, bl);
-  } else {
-    clean_regions.mark_data_region_dirty(0, (uint64_t)-1);
-    clean_regions.mark_omap_dirty();
-  }
+  else
+    clean_regions.mark_fully_dirty();
   DECODE_FINISH(bl);
 }
 
