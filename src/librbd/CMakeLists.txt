@@ -25,6 +25,7 @@ set(librbd_internal_srcs
   api/Group.cc
   api/Image.cc
   api/Mirror.cc
+  cache/BlockGuard.cc
   cache/ImageWriteback.cc
   cache/FileImageCache.cc
   cache/file/AioFile.cc

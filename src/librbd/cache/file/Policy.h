@@ -6,6 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
+#include "librbd/cache/Types.h"
 
 namespace librbd {
 namespace cache {
@@ -16,19 +17,6 @@ namespace file {
  */
 class Policy {
 public:
-  enum MapResult {
-    MAP_RESULT_HIT,    // block is already in cache
-    MAP_RESULT_MISS,   // block not in cache, do not promote
-    MAP_RESULT_NEW,    // block not in cache, promote
-    MAP_RESULT_REPLACE // block not in cache, demote other block first
-  };
-
-  enum OpType {
-    OP_TYPE_READ,
-    OP_TYPE_WRITE,
-    OP_TYPE_DISCARD
-  };
-
   virtual ~Policy() {
   }
 
@@ -36,8 +24,9 @@ public:
 
   virtual int invalidate(uint64_t block) = 0;
 
-  virtual int map(OpType op_type, uint64_t block, bool partial_block,
-                  MapResult *map_result, uint64_t *replace_cache_block) = 0;
+  virtual int map(IOType io_type, uint64_t block, bool partial_block,
+                  PolicyMapResult *policy_map_result,
+                  uint64_t *replace_cache_block) = 0;
   virtual void tick() = 0;
 
 };
