@@ -135,6 +135,10 @@ public:
     void append(bufferptr& bp) {
       buffer.append(bp);
     }
+
+    uint64_t get_effective_write_pos() {
+      return pos + buffer.length();
+    }
   };
 
   struct FileReaderBuffer {
