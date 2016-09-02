@@ -5553,27 +5553,26 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       assert(0 == "unexpected error");
     }
 
+    // these operations implicity create the object
+    bool create = false;
+    if (op->op == Transaction::OP_TOUCH ||
+	op->op == Transaction::OP_WRITE ||
+	op->op == Transaction::OP_ZERO) {
+      create = true;
+    }
+
     // object operations
     RWLock::WLocker l(c->lock);
     OnodeRef &o = ovec[op->oid];
     if (!o) {
-      // these operations implicity create the object
-      bool create = false;
-      if (op->op == Transaction::OP_TOUCH ||
-	  op->op == Transaction::OP_WRITE ||
-	  op->op == Transaction::OP_ZERO) {
-	create = true;
-      }
       ghobject_t oid = i.get_oid(op->oid);
       o = c->get_onode(oid, create);
-      if (!create) {
-	if (!o || !o->exists) {
-	  dout(10) << __func__ << " op " << op->op << " got ENOENT on "
-		   << oid << dendl;
-	  r = -ENOENT;
-	  goto endop;
-	}
-      }
+    }
+    if (!create && (!o || !o->exists)) {
+      dout(10) << __func__ << " op " << op->op << " got ENOENT on "
+	       << i.get_oid(op->oid) << dendl;
+      r = -ENOENT;
+      goto endop;
     }
 
     switch (op->op) {
@@ -5622,11 +5621,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_SETATTR:
       {
         string name = i.decode_string();
-        bufferlist bl;
-        i.decode_bl(bl);
-	map<string, bufferptr> to_set;
-	to_set[name] = bufferptr(bl.c_str(), bl.length());
-	r = _setattrs(txc, c, o, to_set);
+        bufferptr bp;
+        i.decode_bp(bp);
+	r = _setattr(txc, c, o, name, bp);
       }
       break;
 

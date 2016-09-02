@@ -989,6 +989,9 @@ public:
         ::decode(s, data_bl_p);
         return s;
       }
+      void decode_bp(bufferptr& bp) {
+        ::decode(bp, data_bl_p);
+      }
       void decode_bl(bufferlist& bl) {
         ::decode(bl, data_bl_p);
       }
