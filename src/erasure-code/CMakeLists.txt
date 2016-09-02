@@ -7,16 +7,17 @@ include_directories(jerasure/jerasure/include)
 include_directories(jerasure/gf-complete/include)
 include_directories(jerasure)
 
+include(SIMDExt)
 
 if(TRUE)
   list(APPEND jerasure_flavors generic)
 endif()
 
-if(ARM_NEON OR ARM_NEON2)
+if(HAVE_NEON)
   list(APPEND jerasure_flavors neon)
 endif()
 
-if(INTEL_SSE)
+if(HAVE_SSE)
   list(APPEND jerasure_flavors sse3)
 endif()
 
