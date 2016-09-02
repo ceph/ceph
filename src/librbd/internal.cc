@@ -912,7 +912,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
     assert(r == 0);
 
-    r = create(io_ctx, imgname, size, opts, "", "");
+    std::string image_id = util::generate_image_id(io_ctx);
+    r = create(io_ctx, imgname, image_id.c_str(), size, opts, "", "");
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
     assert(r1 == 0);
@@ -921,14 +922,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return r;
   }
 
-  int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     ImageOptions& opts,
+  int create(IoCtx& io_ctx, const char *imgname, const char *image_id,
+             uint64_t size, ImageOptions& opts,
              const std::string &non_primary_global_image_id,
              const std::string &primary_mirror_uuid)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 10) << __func__ << " name=" << imgname << ", "
-                   << "size=" << size << ", opts=" << opts << dendl;
+                   << "image id=" << image_id << ", size="
+                   << size << ", opts=" << opts << dendl;
 
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
@@ -963,10 +965,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       ContextWQ op_work_queue("librbd::op_work_queue",
                               cct->_conf->rbd_op_thread_timeout,
                               ImageCtx::get_thread_pool_instance(cct));
-
-      std::string id = util::generate_image_id(io_ctx);
+      std::string imagename(imgname);
+      std::string imageid(image_id);
       image::CreateRequest<> *req = image::CreateRequest<>::create(
-        io_ctx, imgname, id, size, opts, non_primary_global_image_id,
+        io_ctx, imagename, imageid, size, opts, non_primary_global_image_id,
         primary_mirror_uuid, &op_work_queue, &cond);
       req->send();
 
@@ -1021,7 +1023,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return r;
     }
 
-    r = clone(p_imctx, c_ioctx, c_name, c_opts, "", "");
+    std::string c_id = util::generate_image_id(c_ioctx);
+    r = clone(p_imctx, c_ioctx, c_name, c_id.c_str(), c_opts, "", "");
 
     int close_r = p_imctx->state->close();
     if (r == 0 && close_r < 0) {
@@ -1035,7 +1038,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   }
 
   int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const char *c_name,
-            ImageOptions& c_opts,
+            const char *c_image_id, ImageOptions& c_opts,
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
@@ -1047,7 +1050,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     ldout(cct, 20) << "clone " << &p_imctx->md_ctx << " name " << p_imctx->name
                    << " snap " << p_imctx->snap_name << " to child " << &c_ioctx
-                   << " name " << c_name << " opts = " << c_opts << dendl;
+                   << " name " << c_name << " image id " << c_image_id
+                   <<" opts = " << c_opts << dendl;
 
     bool default_format_set;
     c_opts.is_set(RBD_IMAGE_OPTION_FORMAT, &default_format_set);
@@ -1147,8 +1151,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     }
 
     c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
-               primary_mirror_uuid);
+    r = create(c_ioctx, c_name, c_image_id, size, c_opts,
+               non_primary_global_image_id, primary_mirror_uuid);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       return r;
@@ -1619,7 +1623,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -ENOSYS;
     }
 
-    int r = create(dest_md_ctx, destname, src_size, opts, "", "");
+    std::string dest_image_id = util::generate_image_id(dest_md_ctx);
+    int r = create(dest_md_ctx, destname, dest_image_id.c_str(), src_size, opts, "", "");
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;
