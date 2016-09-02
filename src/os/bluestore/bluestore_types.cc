@@ -747,7 +747,7 @@ void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
 }
 
 int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
-  int* b_bad_off) const
+				  int* b_bad_off, uint64_t *bad_csum) const
 {
   int r = 0;
 
@@ -757,23 +757,23 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     break;
   case CSUM_XXHASH32:
     *b_bad_off = Checksummer::verify<Checksummer::xxhash32>(
-      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
     break;
   case CSUM_XXHASH64:
     *b_bad_off = Checksummer::verify<Checksummer::xxhash64>(
-      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
     break;
   case CSUM_CRC32C:
     *b_bad_off = Checksummer::verify<Checksummer::crc32c>(
-      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
     break;
   case CSUM_CRC32C_16:
     *b_bad_off = Checksummer::verify<Checksummer::crc32c_16>(
-      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
     break;
   case CSUM_CRC32C_8:
     *b_bad_off = Checksummer::verify<Checksummer::crc32c_8>(
-      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
     break;
   default:
     r = -EOPNOTSUPP;
