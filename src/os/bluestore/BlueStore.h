@@ -582,7 +582,7 @@ public:
     bool has_any_lextents(uint64_t offset, uint64_t length);
 
     /// consolidate adjacent lextents in extent_map
-    int compress_extent_map();
+    int compress_extent_map(uint64_t offset, uint64_t length);
 
     /// punch a logical hole.  add lextents to deref to target list.
     void punch_hole(uint64_t offset, uint64_t length,
