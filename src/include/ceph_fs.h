@@ -559,6 +559,20 @@ struct ceph_mds_request_release {
 	__le32 dname_len;              /* string follows. */
 } __attribute__ ((packed));
 
+static inline void
+copy_from_legacy_head(struct ceph_mds_request_head *head,
+			struct ceph_mds_request_head_legacy *legacy)
+{
+	memcpy(&(head->oldest_client_tid), legacy, sizeof(*legacy));
+}
+
+static inline void
+copy_to_legacy_head(struct ceph_mds_request_head_legacy *legacy,
+			struct ceph_mds_request_head *head)
+{
+	memcpy(legacy, &(head->oldest_client_tid), sizeof(*legacy));
+}
+
 /* client reply */
 struct ceph_mds_reply_head {
 	__le32 op;
