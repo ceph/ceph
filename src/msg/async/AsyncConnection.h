@@ -294,7 +294,7 @@ class AsyncConnection : public Connection {
   AsyncMessenger *async_msgr;
   uint64_t conn_id;
   PerfCounters *logger;
-  int global_seq;
+  __u32 global_seq;
   __u32 connect_seq, peer_global_seq;
   atomic64_t out_seq;
   atomic64_t ack_left, in_seq;

@@ -868,7 +868,7 @@ ssize_t AsyncConnection::_process_connection()
         if (r < 0)
           goto fail;
 
-        center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
+        center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
         state = STATE_CONNECTING_RE;
         break;
       }
@@ -881,11 +881,11 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
         } else if (r == 0) {
           ldout(async_msgr->cct, 10) << __func__ << " nonblock connect inprogress" << dendl;
-          center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
           break;
         }
 
         center->delete_file_event(cs.fd(), EVENT_WRITABLE);
+        center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
         ldout(async_msgr->cct, 10) << __func__ << " connect successfully, ready to send banner" << dendl;
 
         bufferlist bl;
