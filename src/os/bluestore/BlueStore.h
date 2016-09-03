@@ -573,12 +573,10 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
-    BlueStore *store;
+    PerfCounters *logger;
     std::mutex lock;                ///< protect lru and other structures
 
-    static Cache *create(string type);
-
-    void set_store(BlueStore *bs) { store = bs; }
+    static Cache *create(string type, PerfCounters *logger);
 
     virtual ~Cache() {}
 

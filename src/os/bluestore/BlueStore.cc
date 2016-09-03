@@ -480,13 +480,19 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 
 // Cache
 
-BlueStore::Cache *BlueStore::Cache::create(string type)
+BlueStore::Cache *BlueStore::Cache::create(string type, PerfCounters *logger)
 {
+  Cache *c = nullptr;
+
   if (type == "lru")
-    return new LRUCache;
-  if (type == "2q")
-    return new TwoQCache;
-  assert(0 == "unrecognized cache type");
+    c = new LRUCache;
+  else if (type == "2q")
+    c = new TwoQCache;
+  else
+    assert(0 == "unrecognized cache type");
+
+  c->logger = logger;
+  return c;
 }
 
 // LRUCache
@@ -1026,8 +1032,8 @@ void BlueStore::BufferSpace::read(
   uint64_t hit_bytes = res_intervals.size();
   assert(hit_bytes <= want_bytes);
   uint64_t miss_bytes = want_bytes - hit_bytes;
-  cache->store->logger->inc(l_bluestore_buffer_hit_bytes, hit_bytes);
-  cache->store->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
+  cache->logger->inc(l_bluestore_buffer_hit_bytes, hit_bytes);
+  cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
 void BlueStore::BufferSpace::finish_write(uint64_t seq)
@@ -1083,12 +1089,12 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
   if (p == onode_map.end()) {
     dout(30) << __func__ << " " << oid << " miss" << dendl;
-    cache->store->logger->inc(l_bluestore_onode_misses);
+    cache->logger->inc(l_bluestore_onode_misses);
     return OnodeRef();
   }
   dout(30) << __func__ << " " << oid << " hit " << p->second << dendl;
   cache->_touch_onode(p->second);
-  cache->store->logger->inc(l_bluestore_onode_hits);
+  cache->logger->inc(l_bluestore_onode_hits);
   return p->second;
 }
 
@@ -2816,8 +2822,7 @@ void BlueStore::set_cache_shards(unsigned num)
   assert(num >= old);
   cache_shards.resize(num);
   for (unsigned i = old; i < num; ++i) {
-    cache_shards[i] = Cache::create(g_conf->bluestore_cache_type);
-    cache_shards[i]->set_store(this);
+    cache_shards[i] = Cache::create(g_conf->bluestore_cache_type, logger);
   }
 }
 
