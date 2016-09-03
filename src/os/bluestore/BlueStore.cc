@@ -3694,6 +3694,7 @@ int BlueStore::read(
   }
 
  out:
+  assert(allow_eio || r != -EIO);
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
@@ -3844,14 +3845,19 @@ int BlueStore::_do_read(
     if (bptr->get_blob().has_flag(bluestore_blob_t::FLAG_COMPRESSED)) {
       bufferlist compressed_bl, raw_bl;
       IOContext ioc(NULL);   // FIXME?
-      bptr->get_blob().map(
+      r = bptr->get_blob().map(
 	0, bptr->get_blob().get_ondisk_length(),
 	[&](uint64_t offset, uint64_t length) {
 	  bufferlist t;
 	  int r = bdev->read(offset, length, &t, &ioc, false);
-	  assert(r == 0);
+	  if (r < 0)
+            return r;
 	  compressed_bl.claim_append(t);
+          return 0;
 	});
+      if (r < 0)
+        return r;
+
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl) < 0) {
 	return -EIO;
       }
@@ -3890,14 +3896,19 @@ int BlueStore::_do_read(
 	// read it
 	IOContext ioc(NULL);  // FIXME?
 	bufferlist bl;
-	bptr->get_blob().map(r_off, r_len,
+	r = bptr->get_blob().map(r_off, r_len,
 			     [&](uint64_t offset, uint64_t length) {
 	    bufferlist t;
 	    int r = bdev->read(offset, length, &t, &ioc, false);
-	    assert(r == 0);
+	    if (r < 0)
+              return r;
 	    bl.claim_append(t);
+            return 0;
 	  });
-	int r = _verify_csum(o, &bptr->get_blob(), r_off, bl);
+        if (r < 0)
+          return r;
+
+	r = _verify_csum(o, &bptr->get_blob(), r_off, bl);
 	if (r < 0) {
 	  return -EIO;
 	}
@@ -3955,12 +3966,14 @@ int BlueStore::_verify_csum(OnodeRef& o,
   if (r < 0) {
     if (r == -1) {
       vector<bluestore_pextent_t> pex;
-      blob->map(
+      int r = blob->map(
 	bad,
 	blob->get_csum_chunk_size(),
 	[&](uint64_t offset, uint64_t length) {
 	  pex.emplace_back(bluestore_pextent_t(offset, length));
+          return 0;
 	});
+      assert(r == 0);
       derr << __func__ << " bad " << blob->get_csum_type_string(blob->csum_type)
 	   << "/0x" << std::hex << blob->get_csum_chunk_size()
 	   << " checksum at blob offset 0x" << bad
@@ -6164,11 +6177,13 @@ void BlueStore::_do_write_small(
       _buffer_cache_write(txc, b, b_off, padded,
 			  wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-      b->get_blob().map(
+      int r = b->get_blob().map(
 	b_off, b_len,
 	[&](uint64_t offset, uint64_t length) {
 	  op->extents.emplace_back(bluestore_pextent_t(offset, length));
+          return 0;
 	});
+      assert(r == 0);
       if (b->get_blob().csum_type) {
 	txc->add_deferred_csum(o, blob, b_off, padded);
       }
