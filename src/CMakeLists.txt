@@ -696,9 +696,11 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-set(parse_secret_files
-  common/secret.c)
-add_library(parse_secret_objs OBJECT ${parse_secret_files})
+if(KEYUTILS_FOUND)
+  set(parse_secret_files
+    common/secret.c)
+  add_library(parse_secret_objs OBJECT ${parse_secret_files})
+endif()
 
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
@@ -750,7 +752,9 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-add_library(krbd_objs OBJECT krbd.cc)
+if(LINUX)
+  add_library(krbd_objs OBJECT krbd.cc)
+endif()
 
 if(${WITH_RBD})
   add_subdirectory(librbd)
