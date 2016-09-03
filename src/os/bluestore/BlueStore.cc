@@ -3998,14 +3998,17 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
   string name = bluestore_blob_t::get_comp_alg_name(chdr.type);
-  CompressorRef compressor = Compressor::create(cct, name);
-  if (!compressor.get()) {
+  CompressorRef cp = compressor;
+  if (!cp || cp->get_type() != name)
+    cp = Compressor::create(cct, name);
+
+  if (!cp.get()) {
     // if compressor isn't available - error, because cannot return
     // decompressed data?
     derr << __func__ << " can't load decompressor " << chdr.type << dendl;
     r = -EIO;
   } else {
-    r = compressor->decompress(i, chdr.length, *result);
+    r = cp->decompress(i, chdr.length, *result);
     if (r < 0) {
       derr << __func__ << " decompression failed with exit code " << r << dendl;
       r = -EIO;
