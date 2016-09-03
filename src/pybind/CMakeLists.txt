@@ -12,11 +12,17 @@ foreach(python_version 3 2)  # Keep the default version last
   find_package(Cython REQUIRED)
 
   add_subdirectory(rados rados${PYTHON_VERSION})
-  add_subdirectory(rbd rbd${PYTHON_VERSION})
-  add_subdirectory(cephfs cephfs${PYTHON_VERSION})
-
   add_custom_target(cython${PYTHON_VERSION}_modules ALL
-    DEPENDS cython${PYTHON_VERSION}_rados cython${PYTHON_VERSION}_cephfs cython${PYTHON_VERSION}_rbd)
+    DEPENDS cython${PYTHON_VERSION}_rados)
+
+  if(WITH_RBD)
+    add_subdirectory(rbd rbd${PYTHON_VERSION})
+    add_dependencies(cython${PYTHON_VERSION}_modules cython${PYTHON_VERSION}_rbd)
+  endif()
+  if(WITH_CEPHFS)
+    add_subdirectory(cephfs cephfs${PYTHON_VERSION})
+    add_dependencies(cython${PYTHON_VERSION}_modules cython${PYTHON_VERSION}_cephfs)
+  endif()
 
   # if CMAKE_INSTALL_PREFIX is an empty string, must replace
   # it with "/" to make PYTHON_INSTALL_TEMPLATE an absolute path to be
