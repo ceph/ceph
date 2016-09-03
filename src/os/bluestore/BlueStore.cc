@@ -3268,7 +3268,6 @@ int BlueStore::fsck()
 	      dout(30) << __func__
 		       << "  got " << pretty_binary_string(it->key())
 		       << " -> " << user_key << dendl;
-	      assert(it->key() < tail);
 	    }
 	    it->next();
 	  }
@@ -3360,8 +3359,8 @@ int BlueStore::fsck()
   }
 
   dout(1) << __func__ << " checking wal events" << dendl;
-  {
-    it = db->get_iterator(PREFIX_WAL);
+  it = db->get_iterator(PREFIX_WAL);
+  if (it) {
     for (it->lower_bound(string()); it->valid(); it->next()) {
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
@@ -3419,7 +3418,6 @@ int BlueStore::fsck()
 	     << "~" << length << std::dec
 	     << " intersects allocated blocks" << dendl;
 	++errors;
-	continue;
       }
     }
     size_t count = used_blocks.count();
