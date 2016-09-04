@@ -200,8 +200,8 @@ endif()
 # Python stuff
 find_package(PythonInterp 2 REQUIRED)
 find_package(PythonLibs 2 REQUIRED)
-find_package(Python3Interp 3 REQUIRED)
-find_package(Python3Libs 3 REQUIRED)
+find_package(Python3Interp 3 QUIET)
+find_package(Python3Libs 3 QUIET)
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
