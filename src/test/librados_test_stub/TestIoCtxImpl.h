@@ -76,10 +76,10 @@ public:
                           bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
   virtual int aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                           AioCompletionImpl *c, SnapContext *snap_context,
-                          int flags);
+                          int flags, const blkin_trace_info *trace_info = nullptr);
   virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
-                               bufferlist *pbl);
+                               bufferlist *pbl, const blkin_trace_info *trace_info = nullptr);
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c) = 0;
   virtual int aio_watch(const std::string& o, AioCompletionImpl *c,
                         uint64_t *handle, librados::WatchCtx2 *ctx);

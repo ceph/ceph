@@ -73,7 +73,8 @@ template <typename I>
 AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                                       uint64_t objectno, uint64_t off,
                                       uint64_t len, librados::snap_t snap_id,
-                                      Context *completion, bool hide_enoent)
+                                      Context *completion, bool hide_enoent,
+                                      ZTracer::Trace *trace)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
     m_hide_enoent(hide_enoent) {
@@ -84,6 +85,10 @@ AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   RWLock::RLocker parent_locker(m_ictx->parent_lock);
   compute_parent_extents();
+
+  if (trace) {
+    m_trace = *trace;
+  }
 }
 
 template <typename I>
@@ -338,9 +343,10 @@ AbstractAioObjectWrite::AbstractAioObjectWrite(ImageCtx *ictx,
                                                uint64_t len,
                                                const ::SnapContext &snapc,
                                                Context *completion,
-                                               bool hide_enoent)
+                                               bool hide_enoent,
+                                               ZTracer::Trace *trace)
   : AioObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                     completion, hide_enoent),
+                     completion, hide_enoent, trace),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
@@ -548,7 +554,7 @@ void AbstractAioObjectWrite::send_write_op(bool write_guard)
   librados::AioCompletion *rados_completion =
     util::create_rados_safe_callback(this);
   int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-                                       m_snap_seq, m_snaps);
+           m_snap_seq, m_snaps, (m_trace && m_trace.valid()) ? m_trace.get_info() : nullptr);
   assert(r == 0);
   rados_completion->release();
 }

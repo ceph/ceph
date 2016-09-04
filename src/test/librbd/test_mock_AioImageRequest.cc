@@ -154,9 +154,10 @@ struct TestMockAioImageRequest : public TestMockFixture {
   void expect_write_to_cache(MockImageCtx &mock_image_ctx,
                              const object_t &object,
                              uint64_t offset, uint64_t length,
-                             uint64_t journal_tid, int r) {
+                             uint64_t journal_tid, int r,
+                             ZTracer::Trace *trace = nullptr) {
     EXPECT_CALL(mock_image_ctx, write_to_cache(object, _, length, offset, _, _,
-                journal_tid))
+                journal_tid, _))
       .WillOnce(WithArg<4>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 

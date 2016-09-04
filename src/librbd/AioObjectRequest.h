@@ -9,6 +9,7 @@
 #include <map>
 
 #include "common/snap_types.h"
+#include "common/zipkin_trace.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "librbd/ObjectMap.h"
@@ -69,7 +70,8 @@ public:
   AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                    uint64_t objectno, uint64_t off, uint64_t len,
                    librados::snap_t snap_id,
-                   Context *completion, bool hide_enoent);
+                   Context *completion, bool hide_enoent,
+                   ZTracer::Trace *trace = nullptr);
   virtual ~AioObjectRequest() {}
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
@@ -93,6 +95,7 @@ protected:
   Context *m_completion;
   Extents m_parent_extents;
   bool m_hide_enoent;
+  ZTracer::Trace m_trace;
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -176,7 +179,8 @@ public:
   AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
                          uint64_t object_no, uint64_t object_off,
                          uint64_t len, const ::SnapContext &snapc,
-                         Context *completion, bool hide_enoent);
+                         Context *completion, bool hide_enoent,
+                         ZTracer::Trace *trace = nullptr);
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
   {
@@ -258,9 +262,9 @@ public:
   AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                  uint64_t object_off, const ceph::bufferlist &data,
                  const ::SnapContext &snapc, Context *completion,
-                 int op_flags)
+                 int op_flags, ZTracer::Trace *trace = nullptr)
     : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
-                             snapc, completion, false),
+                             snapc, completion, false, trace),
       m_write_data(data), m_op_flags(op_flags) {
   }
 

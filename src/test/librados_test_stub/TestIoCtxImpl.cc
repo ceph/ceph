@@ -102,7 +102,7 @@ void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
 
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, SnapContext *snap_context,
-                               int flags) {
+                               int flags, const blkin_trace_info *trace_info) {
   // TODO flags for now
   ops.get();
   m_pending_ops.inc();
@@ -116,7 +116,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
 int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     TestObjectOperationImpl &ops,
                                     AioCompletionImpl *c, int flags,
-                                    bufferlist *pbl) {
+                                    bufferlist *pbl, const blkin_trace_info *trace_info) {
   // TODO ignoring flags for now
   ops.get();
   m_pending_ops.inc();

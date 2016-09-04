@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <random>
+#include <netdb.h>
 #include "include/Spinlock.h"
 
 #include "include/types.h"

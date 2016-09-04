@@ -388,6 +388,14 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectReadOperation *op, int flags,
+                       bufferlist *pbl, const blkin_trace_info *trace_info) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
+  return ctx->aio_operate_read(oid, *ops, c->pc, flags, pbl);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
@@ -397,6 +405,21 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
+
+  std::vector<snapid_t> snv;
+  snv.resize(snaps.size());
+  for (size_t i = 0; i < snaps.size(); ++i)
+    snv[i] = snaps[i];
+  SnapContext snapc(seq, snv);
+
+  return ctx->aio_operate(oid, *ops, c->pc, &snapc, 0);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectWriteOperation *op, snap_t seq,
+                       std::vector<snap_t>& snaps, const blkin_trace_info *trace_info) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
 

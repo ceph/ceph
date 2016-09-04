@@ -46,6 +46,7 @@
 #include "common/ceph_context.h"
 #include "common/errno.h"
 #include "common/event_socket.h"
+#include "common/zipkin_trace.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
 
@@ -1051,6 +1052,23 @@ void aio_write_test_data(rbd_image_t image, const char *test_data, uint64_t off,
   *passed = true;
 }
 
+void aio_write_test_data_traced(rbd_image_t image, const char *test_data, uint64_t off, size_t len, bool *passed)
+{
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);
+  printf("created completion\n");
+  struct blkin_trace_info trace_info;
+  rbd_aio_write_traced(image, off, len, test_data, comp, &trace_info);
+  printf("started traced write\n");
+  rbd_aio_wait_for_complete(comp);
+  int r = rbd_aio_get_return_value(comp);
+  printf("return value is: %d\n", r);
+  ASSERT_EQ(0, r);
+  printf("finished traced write\n");
+  rbd_aio_release(comp);
+  *passed = true;
+}
+
 void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   ssize_t written;
@@ -1152,6 +1170,30 @@ void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, s
   *passed = true;
 }
 
+void aio_read_test_data_traced(rbd_image_t image, const char *expected, uint64_t off, size_t len, bool *passed)
+{
+  rbd_completion_t comp;
+  char *result = (char *)malloc(len + 1);
+
+  ASSERT_NE(static_cast<char *>(NULL), result);
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  printf("created completion\n");
+  struct blkin_trace_info trace_info;
+  rbd_aio_read_traced(image, off, len, result, comp, &trace_info);
+  printf("started traced read\n");
+  rbd_aio_wait_for_complete(comp);
+  int r = rbd_aio_get_return_value(comp);
+  printf("return value is: %d\n", r);
+  ASSERT_EQ(len, static_cast<size_t>(r));
+  rbd_aio_release(comp);
+  if (memcmp(result, expected, len)) {
+    printf("traced read: %s\nexpected: %s\n", result, expected);
+    ASSERT_EQ(0, memcmp(result, expected, len));
+  }
+  free(result);
+  *passed = true;
+}
+
 void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   ssize_t read;
@@ -1205,11 +1247,17 @@ TEST_F(TestLibRBD, TestIO)
   for (i = 5; i < 10; ++i)
     ASSERT_PASSED(aio_write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
 
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_write_test_data_traced, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+
   for (i = 0; i < 5; ++i)
     ASSERT_PASSED(read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
 
   for (i = 5; i < 10; ++i)
     ASSERT_PASSED(aio_read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_read_test_data_traced, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
 
   // discard 2nd, 4th sections.
   ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
@@ -1240,8 +1288,21 @@ TEST_F(TestLibRBD, TestIO)
   ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
 
+  struct blkin_trace_info trace_info;
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_write_traced(image, info.size, 1, test_data, comp, &trace_info));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
   ASSERT_EQ(0, rbd_aio_read(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
+  rbd_aio_release(comp);
+
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(0, rbd_aio_read_traced(image, info.size, 1, test_data, comp, &trace_info));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
   ASSERT_EQ(-EINVAL, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
