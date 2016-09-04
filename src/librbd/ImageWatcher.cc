@@ -147,7 +147,8 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
 
     gather_ctx = new C_Gather(m_image_ctx.cct, create_async_context_callback(
       m_image_ctx, on_finish));
-    if (m_watch_state == WATCH_STATE_REGISTERED) {
+    if (m_watch_state == WATCH_STATE_REGISTERED ||
+        m_watch_state == WATCH_STATE_ERROR) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
 
       librados::AioCompletion *aio_comp = create_rados_safe_callback(
@@ -155,8 +156,6 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
       int r = m_image_ctx.md_ctx.aio_unwatch(m_watch_handle, aio_comp);
       assert(r == 0);
       aio_comp->release();
-    } else if (m_watch_state == WATCH_STATE_ERROR) {
-      m_watch_state = WATCH_STATE_UNREGISTERED;
     }
   }
 
@@ -1013,7 +1012,6 @@ void ImageWatcher<I>::handle_error(uint64_t handle, int err) {
 
   RWLock::WLocker l(m_watch_lock);
   if (m_watch_state == WATCH_STATE_REGISTERED) {
-    m_image_ctx.md_ctx.unwatch2(m_watch_handle);
     m_watch_state = WATCH_STATE_ERROR;
 
     FunctionContext *ctx = new FunctionContext(
@@ -1053,7 +1051,9 @@ void ImageWatcher<I>::handle_rewatch(int r) {
 
   WatchState next_watch_state = WATCH_STATE_REGISTERED;
   if (r < 0) {
-    next_watch_state = WATCH_STATE_ERROR;
+    // only EBLACKLISTED or ENOENT can be returned
+    assert(r == -EBLACKLISTED || r == -ENOENT);
+    next_watch_state = WATCH_STATE_UNREGISTERED;
   }
 
   Context *unregister_watch_ctx = nullptr;
