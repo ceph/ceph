@@ -11,6 +11,7 @@
 #include "common/Cond.h"
 #include "common/Finisher.h"
 #include "common/Thread.h"
+#include "common/zipkin_trace.h"
 
 #include "Objecter.h"
 #include "Striper.h"
@@ -130,9 +131,10 @@ class ObjectCacher {
     int error; // holds return value for failed reads
 
     map<loff_t, list<Context*> > waitfor_read;
+    ZTracer::Trace b_trace;
 
     // cons
-    explicit BufferHead(Object *o) :
+    explicit BufferHead(Object *o, ZTracer::Trace *trace) :
       state(STATE_MISSING),
       ref(0),
       dontneed(false),
@@ -143,6 +145,9 @@ class ObjectCacher {
       journal_tid(0),
       error(0) {
       ex.start = ex.length = 0;
+      if (trace) {
+        b_trace = *trace;
+      }
     }
 
     // extent
@@ -348,8 +353,10 @@ class ObjectCacher {
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
                  map<loff_t, BufferHead*>& rx,
-		 map<loff_t, BufferHead*>& errors);
-    BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid);
+		 map<loff_t, BufferHead*>& errors,
+		 ZTracer::Trace *trace);
+    BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid,
+			  ZTracer::Trace *trace);
     
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
@@ -547,7 +554,7 @@ class ObjectCacher {
   Cond read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call);
+	     bool external_call, ZTracer::Trace *trace);
   void retry_waiting_reads();
 
  public:
@@ -597,8 +604,10 @@ class ObjectCacher {
    * @note total read size must be <= INT_MAX, since
    * the return value is total bytes read
    */
-  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
-  int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace);
+  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+	    ZTracer::Trace *trace = nullptr);
+  int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
+	     ZTracer::Trace *trace = nullptr);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 		 snapid_t snapid);
 

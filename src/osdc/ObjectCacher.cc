@@ -65,16 +65,22 @@ class ObjectCacher::C_RetryRead : public Context {
   OSDRead *rd;
   ObjectSet *oset;
   Context *onfinish;
+  ZTracer::Trace r_trace;
 public:
-  C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c)
-    : oc(_oc), rd(r), oset(os), onfinish(c) {}
+  C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c,
+	      ZTracer::Trace *trace)
+    : oc(_oc), rd(r), oset(os), onfinish(c) {
+      if (trace) {
+        r_trace = *trace;
+      }
+    }
   void finish(int r) override {
     if (r < 0) {
       if (onfinish)
         onfinish->complete(r);
       return;
     }
-    int ret = oc->_readx(rd, oset, onfinish, false);
+    int ret = oc->_readx(rd, oset, onfinish, false, &r_trace);
     if (ret != 0 && onfinish) {
       onfinish->complete(ret);
     }
@@ -88,7 +94,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
   ldout(oc->cct, 20) << "split " << *left << " at " << off << dendl;
 
   // split off right
-  ObjectCacher::BufferHead *right = new BufferHead(this);
+  ObjectCacher::BufferHead *right = new BufferHead(this, &left->b_trace);
 
   //inherit and if later access, this auto clean.
   right->set_dontneed(left->get_dontneed());
@@ -271,7 +277,8 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
                                    map<loff_t, BufferHead*>& hits,
                                    map<loff_t, BufferHead*>& missing,
                                    map<loff_t, BufferHead*>& rx,
-				   map<loff_t, BufferHead*>& errors)
+				   map<loff_t, BufferHead*>& errors,
+				   ZTracer::Trace *trace)
 {
   assert(oc->lock.is_locked());
   ldout(oc->cct, 10) << "map_read " << ex.oid 
@@ -286,7 +293,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
     // at end?
     if (p == data.end()) {
       // rest is a miss.
-      BufferHead *n = new BufferHead(this);
+      BufferHead *n = new BufferHead(this, trace);
       n->set_start(cur);
       n->set_length(left);
       oc->bh_add(this, n);
@@ -332,7 +339,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
     } else if (p->first > cur) {
       // gap.. miss
       loff_t next = p->first;
-      BufferHead *n = new BufferHead(this);
+      BufferHead *n = new BufferHead(this, trace);
       loff_t len = MIN(next - cur, left);
       n->set_start(cur);
       n->set_length(len);
@@ -396,7 +403,8 @@ void ObjectCacher::Object::audit_buffers()
  * other dirty data to left and/or right.
  */
 ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
-    ceph_tid_t tid)
+							  ceph_tid_t tid,
+							  ZTracer::Trace *trace)
 {
   assert(oc->lock.is_locked());
   BufferHead *final = 0;
@@ -414,7 +422,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     // at end ?
     if (p == data.end()) {
       if (final == NULL) {
-        final = new BufferHead(this);
+        final = new BufferHead(this, trace);
         replace_journal_tid(final, tid);
         final->set_start( cur );
         final->set_length( max );
@@ -490,7 +498,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         final->set_length(final->length() + glen);
         oc->bh_stat_add(final);
       } else {
-        final = new BufferHead(this);
+        final = new BufferHead(this, trace);
 	replace_journal_tid(final, tid);
         final->set_start( cur );
         final->set_length( glen );
@@ -741,7 +749,7 @@ void ObjectCacher::bh_read(BufferHead *bh, int op_flags)
 			 bh->ob->get_oloc(), bh->start(), bh->length(),
 			 bh->ob->get_snap(), &onfinish->bl,
 			 bh->ob->truncate_size, bh->ob->truncate_seq,
-			 op_flags, onfinish);
+			 op_flags, onfinish, &bh->b_trace);
 
   ++reads_outstanding;
 }
@@ -1066,7 +1074,8 @@ void ObjectCacher::bh_write(BufferHead *bh)
 					   bh->snapc, bh->bl, bh->last_write,
 					   bh->ob->truncate_size,
 					   bh->ob->truncate_seq,
-					   bh->journal_tid, oncommit);
+					   bh->journal_tid, oncommit,
+					   &bh->b_trace);
   ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
 
   // set bh last_write_tid
@@ -1290,13 +1299,14 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
  *           must delete it)
  * returns 0 if doing async read
  */
-int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish)
+int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+			ZTracer::Trace *trace)
 {
-  return _readx(rd, oset, onfinish, true);
+  return _readx(rd, oset, onfinish, true, trace);
 }
 
 int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-			 bool external_call)
+			 bool external_call, ZTracer::Trace *trace)
 {
   assert(lock.is_locked());
   bool success = true;
@@ -1360,7 +1370,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid
 			 << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(
-	    new C_RetryRead(this,rd, oset, onfinish));
+	    new C_RetryRead(this,rd, oset, onfinish, trace));
 	  // FIXME: perfcounter!
 	  return 0;
 	}
@@ -1389,7 +1399,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     // map extent into bufferheads
     map<loff_t, BufferHead*> hits, missing, rx, errors;
-    o->map_read(*ex_it, hits, missing, rx, errors);
+    o->map_read(*ex_it, hits, missing, rx, errors, trace);
     if (external_call) {
       // retry reading error buffers
       missing.insert(errors.begin(), errors.end());
@@ -1417,7 +1427,8 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			   << waitfor_read.size() << " blocked reads, "
 			   << (MAX(rx_bytes, max_size) - max_size)
 			   << " read bytes" << dendl;
-	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish));
+	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish,
+						   trace));
 	  }
 
 	  bh_remove(o, bh_it->second);
@@ -1436,7 +1447,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	ldout(cct, 10) << "readx missed, waiting on " << *last->second
 	  << " off " << last->first << dendl;
 	last->second->waitfor_read[last->first].push_back(
-	  new C_RetryRead(this, rd, oset, onfinish) );
+	  new C_RetryRead(this, rd, oset, onfinish, trace) );
 
       }
 
@@ -1449,7 +1460,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
 			 << " off " << bh_it->first << dendl;
 	  bh_it->second->waitfor_read[bh_it->first].push_back(
-	    new C_RetryRead(this, rd, oset, onfinish) );
+	    new C_RetryRead(this, rd, oset, onfinish, trace) );
 	}
 	bytes_not_in_cache += bh_it->second->length();
 	success = false;
@@ -1616,7 +1627,8 @@ void ObjectCacher::retry_waiting_reads()
   waitfor_read.splice(waitfor_read.end(), ls);
 }
 
-int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
+int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
+			 ZTracer::Trace *trace)
 {
   assert(lock.is_locked());
   ceph::real_time now = ceph::real_clock::now();
@@ -1634,7 +1646,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
 			   ex_it->truncate_size, oset->truncate_seq);
 
     // map it all into a single bufferhead.
-    BufferHead *bh = o->map_write(*ex_it, wr->journal_tid);
+    BufferHead *bh = o->map_write(*ex_it, wr->journal_tid, trace);
     bool missing = bh->is_missing();
     bh->snapc = wr->snapc;
     
@@ -2017,7 +2029,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
   // order. But items in oset->objects are not sorted. So the iterator can
   // point to any buffer head in the ObjectSet
-  BufferHead key(*oset->objects.begin());
+  BufferHead key(*oset->objects.begin(), nullptr);
   it = dirty_or_tx_bh.lower_bound(&key);
   p = q = it;
 

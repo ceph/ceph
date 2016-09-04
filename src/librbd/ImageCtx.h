@@ -35,6 +35,8 @@ class PerfCounters;
 class ThreadPool;
 class SafeTimer;
 
+namespace ZTracer { struct Trace; }
+
 namespace librbd {
 
   class AsyncOperation;
@@ -278,10 +280,10 @@ namespace librbd {
 			   uint64_t *overlap) const;
     void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
 			     size_t len, uint64_t off, Context *onfinish,
-			     int fadvise_flags);
+			     int fadvise_flags, ZTracer::Trace *trace);
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
 			uint64_t off, Context *onfinish, int fadvise_flags,
-                        uint64_t journal_tid);
+                        uint64_t journal_tid, ZTracer::Trace *trace);
     void user_flushed();
     void flush_cache(Context *onfinish);
     void shut_down_cache(Context *on_finish);

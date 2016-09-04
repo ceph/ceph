@@ -2330,7 +2330,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	  ictx->readahead.inc_pending();
 	  ictx->aio_read_from_cache(q->oid, q->objectno, NULL,
 				    q->length, q->offset,
-				    req_comp, 0);
+				    req_comp, 0, nullptr);
 	}
       }
       ictx->perfcounter->inc(l_librbd_readahead);
