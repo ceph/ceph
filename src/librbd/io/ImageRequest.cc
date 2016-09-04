@@ -288,7 +288,8 @@ void ImageReadRequest<I>::send_request() {
                                                                     req);
         image_ctx.aio_read_from_cache(extent.oid, extent.objectno,
                                       &req->data(), extent.length,
-                                      extent.offset, cache_comp, m_op_flags);
+                                      extent.offset, cache_comp, m_op_flags,
+				      nullptr);
       } else {
         req->send();
       }
@@ -471,7 +472,7 @@ void ImageWriteRequest<I>::send_object_cache_requests(
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
                              object_extent.offset, req_comp, m_op_flags,
-                             journal_tid);
+                             journal_tid, nullptr);
   }
 }
 
@@ -776,7 +777,7 @@ void ImageWriteSameRequest<I>::send_object_cache_requests(
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
                              object_extent.offset, req_comp, m_op_flags,
-                             journal_tid);
+                             journal_tid, nullptr);
   }
 }
 

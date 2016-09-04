@@ -173,7 +173,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
                              uint64_t offset, uint64_t length,
                              uint64_t journal_tid, int r) {
     EXPECT_CALL(mock_image_ctx, write_to_cache(object, _, length, offset, _, _,
-                journal_tid))
+                journal_tid, _))
       .WillOnce(WithArg<4>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 

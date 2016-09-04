@@ -16,6 +16,7 @@
 #include "test/librbd/mock/io/MockImageRequestWQ.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
+#include "common/zipkin_trace.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
 #include <string>
@@ -192,10 +193,10 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
   MOCK_CONST_METHOD1(set_journal_policy, void(journal::Policy*));
 
-  MOCK_METHOD7(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
-                                         size_t, uint64_t, Context *, int));
-  MOCK_METHOD7(write_to_cache, void(object_t, const bufferlist&, size_t,
-                                    uint64_t, Context *, int, uint64_t));
+  MOCK_METHOD8(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
+                                         size_t, uint64_t, Context *, int, ZTracer::Trace *));
+  MOCK_METHOD8(write_to_cache, void(object_t, const bufferlist&, size_t,
+                                    uint64_t, Context *, int, uint64_t, ZTracer::Trace *));
 
   ImageCtx *image_ctx;
   CephContext *cct;
