@@ -2770,7 +2770,7 @@ extern "C" int rbd_aio_write_traced(rbd_image_t image, uint64_t off, size_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, comp->pc);
-  ictx->aio_work_queue->aio_write(get_aio_completion(comp), off, len, buf, 0, trace_info);
+  ictx->aio_work_queue->aio_write(get_aio_completion(comp), off, len, buf, 0, true, trace_info);
   tracepoint(librbd, aio_write_exit, 0);
   return 0;
 }
@@ -2819,7 +2819,7 @@ extern "C" int rbd_aio_read_traced(rbd_image_t image, uint64_t off, size_t len,
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, comp->pc);
   ictx->aio_work_queue->aio_read(get_aio_completion(comp), off, len, buf, NULL,
-                                 0, trace_info);
+                                 0, true, trace_info);
   tracepoint(librbd, aio_read_exit, 0);
   return 0;
 }

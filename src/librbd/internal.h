@@ -15,6 +15,7 @@
 #include "include/rbd_types.h"
 #include "librbd/parent_types.h"
 #include "common/WorkQueue.h"
+#include "common/zipkin_trace.h"
 
 enum {
   l_librbd_first = 26000,
@@ -189,7 +190,8 @@ namespace librbd {
 		   int (*cb)(uint64_t, size_t, int, void *),
 		   void *arg);
   void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents);
+                 const vector<pair<uint64_t,uint64_t> >& image_extents,
+                 ZTracer::Trace *trace = nullptr);
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
