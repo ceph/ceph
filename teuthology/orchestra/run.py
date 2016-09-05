@@ -380,7 +380,11 @@ def run(
                     paramiko
     """
     try:
-        (host, port) = client.get_transport().getpeername()
+        transport = client.get_transport()
+        if transport:
+            (host, port) = transport.getpeername()
+        else:
+            raise ConnectionLostError(command=quote(args), node=name)
     except socket.error:
         raise ConnectionLostError(command=quote(args), node=name)
 
