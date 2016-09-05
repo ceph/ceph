@@ -691,10 +691,8 @@ bool ImageWatcher<I>::handle_payload(const RequestLockPayload &payload,
     int r = 0;
     bool accept_request = m_image_ctx.exclusive_lock->accept_requests(&r);
 
-    // need to send something back so the client can detect a missing leader
-    ::encode(ResponseMessage(r), ack_ctx->out);
-
     if (accept_request) {
+      assert(r == 0);
       Mutex::Locker owner_client_id_locker(m_owner_client_id_lock);
       if (!m_owner_client_id.is_valid()) {
         return true;
@@ -702,8 +700,10 @@ bool ImageWatcher<I>::handle_payload(const RequestLockPayload &payload,
 
       ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
                                  << dendl;
-      m_image_ctx.get_exclusive_lock_policy()->lock_requested(payload.force);
+      r = m_image_ctx.get_exclusive_lock_policy()->lock_requested(
+        payload.force);
     }
+    ::encode(ResponseMessage(r), ack_ctx->out);
   }
   return true;
 }

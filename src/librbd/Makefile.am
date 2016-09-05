@@ -34,6 +34,7 @@ librbd_internal_la_SOURCES = \
 	librbd/cache/ImageWriteback.cc \
 	librbd/cache/PassthroughImageCache.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
+	librbd/exclusive_lock/AutomaticPolicy.cc \
 	librbd/exclusive_lock/ReacquireRequest.cc \
 	librbd/exclusive_lock/ReleaseRequest.cc \
 	librbd/exclusive_lock/StandardPolicy.cc \
@@ -129,6 +130,7 @@ noinst_HEADERS += \
 	librbd/cache/ImageWriteback.h \
 	librbd/cache/PassthroughImageCache.h \
 	librbd/exclusive_lock/AcquireRequest.h \
+	librbd/exclusive_lock/AutomaticPolicy.h \
 	librbd/exclusive_lock/Policy.h \
 	librbd/exclusive_lock/ReacquireRequest.h \
 	librbd/exclusive_lock/ReleaseRequest.h \

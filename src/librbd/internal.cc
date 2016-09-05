@@ -40,6 +40,8 @@
 #include "librbd/Operations.h"
 #include "librbd/parent_types.h"
 #include "librbd/Utils.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
+#include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/operation/TrimRequest.h"
 #include "include/util.h"
 
@@ -2005,6 +2007,77 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int lock_acquire(ImageCtx *ictx, rbd_lock_mode_t lock_mode)
+  {
+    if (lock_mode != RBD_LOCK_MODE_EXCLUSIVE) {
+      return -EOPNOTSUPP;
+    }
+
+    CephContext *cct = ictx->cct;
+    C_SaferCond lock_ctx;
+    {
+      RWLock::WLocker l(ictx->owner_lock);
+
+      if (ictx->exclusive_lock == nullptr) {
+	lderr(cct) << "exclusive-lock feature is not enabled" << dendl;
+	return -EINVAL;
+      }
+
+      if (ictx->get_exclusive_lock_policy()->may_auto_request_lock()) {
+	ictx->set_exclusive_lock_policy(
+	  new exclusive_lock::StandardPolicy(ictx));
+      }
+
+      if (ictx->exclusive_lock->is_lock_owner()) {
+	return 0;
+      }
+
+      ictx->exclusive_lock->request_lock(&lock_ctx);
+    }
+
+    int r = lock_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to request exclusive lock: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+
+    RWLock::RLocker l(ictx->owner_lock);
+
+    if (ictx->exclusive_lock == nullptr ||
+	!ictx->exclusive_lock->is_lock_owner()) {
+      lderr(cct) << "failed to acquire exclusive lock" << dendl;
+      return -EROFS;
+    }
+
+    return 0;
+  }
+
+  int lock_release(ImageCtx *ictx)
+  {
+    CephContext *cct = ictx->cct;
+    C_SaferCond lock_ctx;
+    {
+      RWLock::WLocker l(ictx->owner_lock);
+
+      if (ictx->exclusive_lock == nullptr ||
+	  !ictx->exclusive_lock->is_lock_owner()) {
+	lderr(cct) << "not exclusive lock owner" << dendl;
+	return -EINVAL;
+      }
+
+      ictx->exclusive_lock->release_lock(&lock_ctx);
+    }
+
+    int r = lock_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to release exclusive lock: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    return 0;
+  }
+
   int remove(IoCtx& io_ctx, const std::string &image_name,
              const std::string &image_id, ProgressContext& prog_ctx,
              bool force)
@@ -2041,7 +2114,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             ictx->exclusive_lock->shut_down(&ctx);
             r = ctx.wait();
             if (r < 0) {
-              lderr(cct) << "error shutting down exclusive lock"
+              lderr(cct) << "error shutting down exclusive lock: "
                          << cpp_strerror(r) << dendl;
               ictx->state->close();
               return r;
