@@ -5391,7 +5391,6 @@ int BlueStore::omap_get(
 	decode_omap_key(it->key(), &user_key);
 	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
-	assert(it->key() < tail);
 	(*out)[user_key] = it->value();
       }
       it->next();
@@ -5499,7 +5498,6 @@ int BlueStore::omap_get_keys(
       decode_omap_key(it->key(), &user_key);
       dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
-      assert(it->key() < tail);
       keys->insert(user_key);
       it->next();
     }
@@ -8037,7 +8035,6 @@ int BlueStore::_clone(TransContext *txc,
       } else {
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
-	assert(it->key() < tail);
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
