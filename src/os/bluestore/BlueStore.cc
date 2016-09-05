@@ -7585,6 +7585,9 @@ int BlueStore::_do_truncate(
 	   << " 0x" << std::hex << offset << std::dec << dendl;
   _dump_onode(o, 30);
 
+  if (offset == o->onode.size)
+    return 0;
+
   if (offset < o->onode.size) {
     // ensure any wal IO has completed before we truncate off any extents
     // they may touch.
