@@ -19,8 +19,8 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
-DISTRO=$(grep  "^ID=" /etc/os-release | sed "s/ID=//")
-case $DISTRO in
+source /etc/os-release
+case $ID in
 debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
@@ -48,7 +48,7 @@ debian|ubuntu|devuan)
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-    centos|fedora|rhel)
+centos|fedora|rhel)
         echo "Using yum to install dependencies"
         $SUDO yum install -y redhat-lsb-core
         case $(lsb_release -si) in
@@ -75,14 +75,14 @@ debian|ubuntu|devuan)
         $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-    opensuse|suse)
+opensuse|suse)
         echo "Using zypper to install dependencies"
         $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
-    *)
-        echo "$DISTRO is unknown, dependencies will have to be installed manually."
+*)
+        echo "$ID is unknown, dependencies will have to be installed manually."
         ;;
 esac
 
