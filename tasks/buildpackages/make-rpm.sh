@@ -118,7 +118,8 @@ function build_package() {
     cp ceph.spec ${buildarea}/SPECS
     mkdir -p ${buildarea}/RPMS
     mkdir -p ${buildarea}/BUILD
-    cp -a ceph-*.tar.bz2 ${buildarea}/SOURCES/.
+    CEPH_TARBALL=( ceph-*.tar.bz2 )
+    cp -a $CEPH_TARBALL ${buildarea}/SOURCES/.
     cp -a rpm/*.patch ${buildarea}/SOURCES || true
     (
         cd ${buildarea}/SPECS
@@ -129,6 +130,7 @@ function build_package() {
                  -e 's/%{epoch}://g' \
                  -e '/^Epoch:/d' \
                  -e 's/%bcond_with ceph_test_package/%bcond_without ceph_test_package/' \
+                 -e "s/^Source0:.*$/Source0: $CEPH_TARBALL/" \
                  ceph.spec
         fi
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
