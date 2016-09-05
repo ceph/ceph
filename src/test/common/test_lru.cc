@@ -28,7 +28,7 @@ public:
 
 
 TEST(lru, InsertTop) {
-  LRU lru = LRU(10);
+  LRU lru(10);
 
   lru.lru_set_midpoint(.5); // 50% of 10 elements.
   for (int i=0; i<100; i++) {
@@ -42,7 +42,7 @@ TEST(lru, InsertTop) {
 }
 
 TEST(lru, InsertMid) {
-  LRU lru = LRU(10);
+  LRU lru(10);
 
   for (int i=0; i<100; i++) {
     lru.lru_insert_mid(new Item(i));
@@ -55,7 +55,7 @@ TEST(lru, InsertMid) {
 }
 
 TEST(lru, InsertBot) {
-  LRU lru = LRU(10);
+  LRU lru(10);
 
   for (int i=0; i<100; i++) {
     lru.lru_insert_bot(new Item(i));
@@ -68,7 +68,7 @@ TEST(lru, InsertBot) {
 }
 
 TEST(lru, Adjust) {
-  LRU lru = LRU(10);
+  LRU lru(10);
 
   lru.lru_set_midpoint(.6); // 60% of 10 elements.
   for (int i=0; i<100; i++) {
@@ -90,7 +90,7 @@ TEST(lru, Adjust) {
 }
 
 TEST(lru, Pinning) {
-  LRU lru = LRU();
+  LRU lru;
 
   Item *ob0 = new Item(0);
   Item *ob1 = new Item(1);
