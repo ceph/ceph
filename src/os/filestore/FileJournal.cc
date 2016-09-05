@@ -1623,9 +1623,11 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 
   if (osd_op) {
     osd_op->mark_event("commit_queued_for_journal_write");
-    osd_op->journal_trace.init("journal", &trace_endpoint, &osd_op->store_trace);
-    osd_op->journal_trace.event("submit_entry");
-    osd_op->journal_trace.keyval("seq", seq);
+    if (osd_op->store_trace) {
+      osd_op->journal_trace.init("journal", &trace_endpoint, &osd_op->store_trace);
+      osd_op->journal_trace.event("submit_entry");
+      osd_op->journal_trace.keyval("seq", seq);
+    }
   }
   {
     Mutex::Locker l1(writeq_lock);
