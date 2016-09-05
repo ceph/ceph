@@ -1485,6 +1485,8 @@ OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object ve
 
 OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
 
+OPTION(rgw_compression_type, OPT_STR, "none") // type of compressor, none to not use
+
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 

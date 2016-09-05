@@ -9,6 +9,7 @@
 
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
+#include <boost/utility/in_place_factory.hpp>
 
 #include "common/ceph_json.h"
 #include "common/utf8.h"
@@ -66,6 +67,8 @@ using namespace librados;
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
+
+#include "compressor/Compressor.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2331,11 +2334,12 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
 {
   *again = false;
 
   *phandle = NULL;
+
   if (extra_data_len) {
     size_t extra_len = bl.length();
     if (extra_len > extra_data_len)
@@ -2365,9 +2369,6 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
     obj_len = (uint64_t)first_chunk.length();
-    if (hash) {
-      hash->Update((const byte *)first_chunk.c_str(), obj_len);
-    }
     int r = prepare_next_part(obj_len);
     if (r < 0) {
       return r;
@@ -2382,17 +2383,9 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
                                                         object and cleanup can be messy */
   int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
-    if (hash) {
-      hash->Update((const byte *)bl.c_str(), bl.length());
-    }
     bl.clear();
   }
   return ret;
-}
-
-void RGWPutObjProcessor_Atomic::complete_hash(MD5 *hash)
-{
-  hash->Update((const byte *)pending_data_bl.c_str(), pending_data_bl.length());
 }
 
 
@@ -5044,6 +5037,22 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       RGWObjEnt ent = eiter->second;
       ent.key = obj;
       ent.ns = ns;
+      rgw_obj cs_obj(bucket, obj);
+      bufferlist attr;
+      map<string, bufferlist> attrset;
+      int y = store->raw_obj_stat(cs_obj, NULL, NULL, NULL, &attrset, NULL, NULL);
+      map<string, bufferlist>::iterator cmp = attrset.find(RGW_ATTR_COMPRESSION);
+      if (!y && cmp != attrset.end()) {
+        RGWCompressionInfo cs_info;
+        bufferlist::iterator bliter = cmp->second.begin();
+        try {
+          ::decode(cs_info, bliter);
+        } catch (buffer::error& err) {
+          ldout(cct, 20) << "Failed to get decompressed obj size" << dendl;
+        }
+        if (cs_info.compression_type != "none")
+          ent.size = cs_info.orig_size;
+      }
       result->push_back(ent);
       count++;
     }
@@ -6243,7 +6252,6 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   /* update quota cache */
   store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
-
   return 0;
 
 done_cancel:
@@ -6476,7 +6484,7 @@ public:
     do {
       void *handle;
       rgw_obj obj;
-      int ret = processor->handle_data(bl, ofs, NULL, &handle, &obj, &again);
+      int ret = processor->handle_data(bl, ofs, &handle, &obj, &again);
       if (ret < 0)
         return ret;
 
@@ -7029,6 +7037,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
   attrs.erase(RGW_ATTR_SOURCE_ZONE);
+  map<string, bufferlist>::iterator cmp = src_attrs.find(RGW_ATTR_COMPRESSION);
+  if (cmp != src_attrs.end())
+    attrs[RGW_ATTR_COMPRESSION] = cmp->second;
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -7252,7 +7263,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       void *handle;
       rgw_obj obj;
 
-      ret = processor.handle_data(bl, ofs, NULL, &handle, &obj, &again);
+      ret = processor.handle_data(bl, ofs, &handle, &obj, &again);
       if (ret < 0) {
         return ret;
       }
@@ -8757,9 +8768,11 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     end = astate->size - 1;
   }
 
+  int ret = 0;
+
   if (astate->size > 0) {
     if (ofs >= (off_t)astate->size) {
-      return -ERANGE;
+      ret = -ERANGE;
     }
     if (end >= (off_t)astate->size) {
       end = astate->size - 1;
@@ -8777,7 +8790,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   if (params.lastmod)
     *params.lastmod = astate->mtime;
 
-  return 0;
+  return ret;
 }
 
 int RGWRados::SystemObject::get_state(RGWObjState **pstate, RGWObjVersionTracker *objv_tracker)
@@ -12442,3 +12455,37 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
   return ret;
 }
 
+int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info) {
+  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_COMPRESSION);
+  if (value != attrs.end()) {
+    bufferlist::iterator bliter = value->second.begin();
+    try {
+      ::decode(cs_info, bliter);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+    if (cs_info.compression_type != "none")
+      need_decompress = true;
+    else
+      need_decompress = false;
+    return 0;
+  } else {
+    need_decompress = false;
+    return 0;
+  }
+}
+
+int rgw_bucket_compression_info_from_attrset(map<string, bufferlist>& attrs, RGWBucketCompressionInfo& cs_info)
+{
+  map<string, bufferlist>::iterator cmp = attrs.find(RGW_ATTR_COMPRESSION);
+  if (cmp != attrs.end()) {
+    try {
+      ::decode(cs_info, cmp->second);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+  } else {
+    return 1;
+  }
+  return 0;
+}

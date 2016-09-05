@@ -19,6 +19,7 @@
 #include <map>
 
 #include <boost/optional.hpp>
+#include <boost/utility/in_place_factory.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -86,6 +87,8 @@ RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
   }
   int read_bucket_cors();
   bool generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age);
+  // obj_size can be positive or negative
+  int update_compressed_bucket_size(uint64_t obj_size, RGWBucketCompressionInfo& bucket_size);
 
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
@@ -134,6 +137,15 @@ protected:
   bool is_slo;
   string lo_etag;
 
+  // compression attrs
+  RGWCompressionInfo cs_info;
+  bool need_decompress;
+  off_t first_block, last_block;
+  off_t q_ofs, q_len;
+  bool first_data;
+  uint64_t cur_ofs;
+  bufferlist waiting;
+
   int init_common();
 public:
   RGWGetObj() {
@@ -155,6 +167,13 @@ public:
     range_parsed = false;
     skip_manifest = false;
     is_slo = false;
+    need_decompress = false;
+    first_block = 0;
+    last_block = 0;
+    q_ofs = 0;
+    q_len = 0;
+    first_data = true;
+    cur_ofs = 0;
  }
 
   bool prefetch_data();
@@ -194,6 +213,36 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
     return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+};
+
+class RGWGetObj_Filter : public RGWGetDataCB
+{
+protected:
+  RGWGetDataCB* next;
+public:
+  RGWGetObj_Filter(RGWGetDataCB* next): next(next) {}
+  virtual ~RGWGetObj_Filter() {}
+  /**
+   * Passes data through filter.
+   * Filter can modify content of bl.
+   * When bl_len == 0 , it means 'flush
+   */
+  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    return next->handle_data(bl, bl_ofs, bl_len);
+  }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() override {
+    return next->flush();
+  }
+  /**
+   * Allows filter to extend range required for successful filtering
+   */
+  virtual void fixup_range(off_t& ofs, off_t& end) override {
+    next->fixup_range(ofs, end);
   }
 };
 
@@ -690,7 +739,7 @@ public:
   }
 
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
-  void dispose_processor(RGWPutObjProcessor *processor);
+  void dispose_processor(RGWPutObjDataProcessor *processor);
 
   int verify_permission();
   void pre_exec();
@@ -703,6 +752,22 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_PUT_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
+
+class RGWPutObj_Filter : public RGWPutObjDataProcessor
+{
+protected:
+  RGWPutObjDataProcessor* next;
+public:
+  RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
+  next(next){}
+  virtual ~RGWPutObj_Filter() {}
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override {
+    return next->handle_data(bl, ofs, phandle, pobj, again);
+  }
+  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) override {
+    return next->throttle_data(handle, obj, need_to_wait);
+  }
+}; /* RGWPutObj_Filter */
 
 class RGWPostObj : public RGWOp {
 
@@ -742,7 +807,7 @@ public:
   void execute();
 
   RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
-  void dispose_processor(RGWPutObjProcessor *processor);
+  void dispose_processor(RGWPutObjDataProcessor *processor);
 
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
@@ -1513,9 +1578,9 @@ extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
 extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				    bool prefetch_data);
 
-static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
+static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs,
-					MD5 *hash, bool need_to_wait)
+					bool need_to_wait)
 {
   bool again;
 
@@ -1523,7 +1588,7 @@ static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
     void *handle;
     rgw_obj obj;
 
-    int ret = processor->handle_data(data, ofs, hash, &handle, &obj, &again);
+    int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
     if (ret < 0)
       return ret;
 
