@@ -55,7 +55,7 @@ if [ x`uname`x = xFreeBSDx ]; then
 
     exit
 else
-    DISTRO=$(grep  "^ID=" /etc/os-release | sed "s/ID=//")
+    DISTRO=$(grep  "^ID=" /etc/os-release | sed "s/ID=//" | tr -d '"')
     case $DISTRO in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
