@@ -6630,6 +6630,9 @@ int BlueStore::_do_truncate(
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
 
+  if (offset == o->onode.size)
+    return 0;
+
   if (offset < o->onode.size) {
     // ensure any wal IO has completed before we truncate off any extents
     // they may touch.
