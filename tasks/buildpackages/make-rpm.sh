@@ -43,10 +43,9 @@ source $(dirname $0)/common.sh
 
 init_ceph $git_ceph_url $sha1
 
-#id=$(lsb_release -s -i | tr A-Z a-z)
-#major=$(lsb_release -s -r | sed -s "s;\..*;;g")
-#codename="${id}${major}"
-releasedir=$base/$(lsb_release -si | tr ' ' '_')/WORKDIR
+distro=$( source /etc/os-release ; echo $ID )
+distro_version=$( source /etc/os-release ; echo $VERSION )
+releasedir=$base/$distro/WORKDIR
 #
 # git describe provides a version that is
 # a) human readable
@@ -67,7 +66,7 @@ function setup_rpmmacros() {
     if ! grep -q find_debuginfo_dwz_opts $HOME/.rpmmacros ; then
         echo '%_find_debuginfo_dwz_opts %{nil}' >> $HOME/.rpmmacros
     fi
-    if lsb_release -d -s | grep CentOS | grep -q 'release 7' ; then
+    if [ "x${distro}x" = "xcentosx" ] && echo $distro_version | grep -q '7' ; then
         if ! grep -q '%dist .el7' $HOME/.rpmmacros ; then
             echo '%dist .el7' >> $HOME/.rpmmacros
         fi
