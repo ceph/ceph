@@ -236,6 +236,7 @@ private:
       switch (ctx->command)
       {
         case NBD_CMD_DISC:
+          // RBD_DO_IT will return when pipe is closed
 	  dout(0) << "disconnect request received" << dendl;
           return;
         case NBD_CMD_WRITE:
@@ -650,9 +651,10 @@ static int do_unmap()
     return nbd;
   }
 
-  if (ioctl(nbd, NBD_DISCONNECT) < 0)
+  // alert the reader thread to shut down
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
-  ioctl(nbd, NBD_CLEAR_SOCK);
+  }
   close(nbd);
 
   return 0;
@@ -727,6 +729,7 @@ static int rbd_nbd(int argc, const char *argv[])
   env_to_vec(args);
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
               CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  g_ceph_context->_conf->set_val_or_die("pid_file", "");
 
   std::vector<const char*>::iterator i;
   std::ostringstream err;
