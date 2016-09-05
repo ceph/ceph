@@ -5,6 +5,7 @@
 #include <boost/utility/in_place_factory.hpp>
 
 #include "include/assert.h"
+#include "ceph_ver.h"
 
 #include "common/Formatter.h"
 #include "common/utf8.h"
@@ -498,13 +499,13 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    int r = swift_policy.create(store,
+    const bool r = swift_policy.create(store,
                                 s->user->user_id,
                                 s->user->display_name,
                                 read_list,
                                 write_list);
-    if (r < 0) {
-      return r;
+    if (r != true) {
+      return -EINVAL;
     }
 
     *policy = swift_policy;
@@ -802,12 +803,12 @@ static int get_swift_account_settings(req_state * const s,
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    int r = swift_acct_policy.create(store,
+    const bool r = swift_acct_policy.create(store,
                                      s->user->user_id,
                                      s->user->display_name,
                                      string(acl_attr));
-    if (r < 0) {
-      return r;
+    if (r != true) {
+      return -EINVAL;
     }
 
     *policy = swift_acct_policy;
@@ -870,7 +871,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
+  if (!op_ret && (op_ret != -EINVAL)) {
     op_ret = STATUS_NO_CONTENT;
   }
   set_req_state_err(s, op_ret);
@@ -1349,6 +1350,162 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+
+  std::stringstream ss;
+
+  ss << R"(<?xml version="1.0"?>)" << "\n"
+     << R"(<!DOCTYPE cross-domain-policy SYSTEM )"
+     << R"("http://www.adobe.com/xml/dtds/cross-domain-policy.dtd" >)" << "\n"
+     << R"(<cross-domain-policy>)" << "\n"
+     << g_conf->rgw_cross_domain_policy << "\n"
+     << R"(</cross-domain-policy>)";
+
+  STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+}
+
+void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+
+  if (op_ret) {
+    STREAM_IO(s)->print("DISABLED BY FILE");
+  }
+}
+
+const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT::swift_info =
+{
+    {"bulk_delete", {false, nullptr}},
+    {"container_quotas", {false, nullptr}},
+    {"swift", {false, RGWInfo_ObjStore_SWIFT::list_swift_data}},
+    {"tempurl", { false, RGWInfo_ObjStore_SWIFT::list_tempurl_data}},
+    {"slo", {false, RGWInfo_ObjStore_SWIFT::list_slo_data}},
+    {"account_quotas", {false, nullptr}},
+    {"staticweb", {false, nullptr}},
+    {"tempauth", {false, nullptr}},
+};
+
+void RGWInfo_ObjStore_SWIFT::execute()
+{
+  bool is_admin_info_enabled = false;
+
+  const string& swiftinfo_sig = s->info.args.get("swiftinfo_sig");
+  const string& swiftinfo_expires = s->info.args.get("swiftinfo_expires");
+
+  if (!swiftinfo_sig.empty() &&
+      !swiftinfo_expires.empty() &&
+      !is_expired(swiftinfo_expires, s->cct)) {
+    is_admin_info_enabled = true;
+  }
+
+  s->formatter->open_object_section("info");
+
+  for (const auto& pair : swift_info) {
+    if(!is_admin_info_enabled && pair.second.is_admin_info)
+      continue;
+
+    if (!pair.second.list_data) {
+      s->formatter->open_object_section((pair.first).c_str());
+      s->formatter->close_section();
+    }
+    else {
+      pair.second.list_data(*(s->formatter), *(s->cct->_conf), *store);
+    }
+  }
+
+  s->formatter->close_section();
+}
+
+void RGWInfo_ObjStore_SWIFT::send_response()
+{
+  if (op_ret <  0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
+                                              const md_config_t& config,
+                                              RGWRados& store)
+{
+  formatter.open_object_section("swift");
+  formatter.dump_int("max_file_size", config.rgw_max_put_size);
+  formatter.dump_int("container_listing_limit", RGW_LIST_BUCKETS_LIMIT_MAX);
+
+  string ceph_version(CEPH_GIT_NICE_VER);
+  formatter.dump_string("version", ceph_version);
+  formatter.dump_int("max_meta_name_length", 81);
+
+  formatter.open_array_section("policies");
+  RGWZoneGroup& zonegroup = store.get_zonegroup();
+
+  for (const auto& placement_targets : zonegroup.placement_targets) {
+    formatter.open_object_section("policy");
+    if (placement_targets.second.name.compare(zonegroup.default_placement) == 0)
+      formatter.dump_bool("default", true);
+    formatter.dump_string("name", placement_targets.second.name.c_str());
+    formatter.close_section();
+  }
+  formatter.close_section();
+
+  formatter.dump_int("max_object_name_size", RGWHandler_REST::MAX_OBJ_NAME_LEN);
+  formatter.dump_bool("strict_cors_mode", true);
+  formatter.dump_int("max_container_name_length", RGWHandler_REST::MAX_BUCKET_NAME_LEN);
+  formatter.close_section();
+}
+
+void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
+                                                const md_config_t& config,
+                                                RGWRados& store)
+{
+  formatter.open_object_section("tempurl");
+  formatter.open_array_section("methods");
+  formatter.dump_string("methodname", "GET");
+  formatter.dump_string("methodname", "HEAD");
+  formatter.dump_string("methodname", "PUT");
+  formatter.dump_string("methodname", "POST");
+  formatter.dump_string("methodname", "DELETE");
+  formatter.close_section();
+  formatter.close_section();
+}
+
+void RGWInfo_ObjStore_SWIFT::list_slo_data(Formatter& formatter,
+                                            const md_config_t& config,
+                                            RGWRados& store)
+{
+  formatter.open_object_section("slo");
+  formatter.dump_int("max_manifest_segments", config.rgw_max_slo_entries);
+  formatter.close_section();
+}
+
+bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, CephContext* cct)
+{
+  string err;
+  const utime_t now = ceph_clock_now(cct);
+  const uint64_t expiration = (uint64_t)strict_strtoll(expires.c_str(),
+                                                       10, &err);
+  if (!err.empty()) {
+    ldout(cct, 5) << "failed to parse siginfo_expires: " << err << dendl;
+    return true;
+  }
+
+  if (expiration <= (uint64_t)now.sec()) {
+    ldout(cct, 5) << "siginfo expired: " << expiration << " <= " << now.sec() << dendl;
+    return true;
+  }
+
+  return false;
+}
+
 RGWOp *RGWHandler_REST_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -1709,43 +1866,53 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
   s->info.args.set(p);
   s->info.args.parse();
 
-  if (*req_name != '/')
+  /* Skip the leading slash of URL hierarchy. */
+  if (req_name[0] != '/') {
     return 0;
+  } else {
+    req_name++;
+  }
 
-  req_name++;
-
-  if (!*req_name)
-    return 0;
+  if ('\0' == req_name[0]) {
+    return g_conf->rgw_swift_url_prefix == "/" ? -ERR_BAD_URL : 0;
+  }
 
   req = req_name;
 
-  int pos = req.find('/');
-  if (pos >= 0) {
+  size_t pos = req.find('/');
+  if (std::string::npos != pos && g_conf->rgw_swift_url_prefix != "/") {
     bool cut_url = g_conf->rgw_swift_url_prefix.length();
     first = req.substr(0, pos);
+
     if (first.compare(g_conf->rgw_swift_url_prefix) == 0) {
       if (cut_url) {
+        /* Rewind to the "v1/..." part. */
         next_tok(req, first, '/');
       }
     }
+  } else if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
+    s->formatter = new RGWFormatter_Plain;
+    return -ERR_BAD_URL;
   } else {
-    if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
-      s->formatter = new RGWFormatter_Plain;
-      return -ERR_BAD_URL;
-    }
     first = req;
   }
 
-  string tenant_path;
-  if (!g_conf->rgw_swift_tenant_name.empty()) {
+  std::string tenant_path;
+  if (! g_conf->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
   }
 
   /* verify that the request_uri conforms with what's expected */
   char buf[g_conf->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
-  int blen = sprintf(buf, "/%s/v1%s",
-		    g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
+  int blen;
+  if (g_conf->rgw_swift_url_prefix == "/") {
+    blen = sprintf(buf, "/v1%s", tenant_path.c_str());
+  } else {
+    blen = sprintf(buf, "/%s/v1%s",
+                   g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
+  }
+
   if (s->decoded_uri[0] != '/' ||
     s->decoded_uri.compare(0, blen, buf) !=  0) {
     return -ENOENT;
@@ -1856,4 +2023,10 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
     return new RGWHandler_REST_Bucket_SWIFT;
 
   return new RGWHandler_REST_Obj_SWIFT;
+}
+
+RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(struct req_state *s)
+{
+  s->prot_flags |= RGW_REST_SWIFT;
+  return new RGWHandler_REST_SWIFT_Info;
 }

@@ -58,8 +58,8 @@ struct SnapRealm {
     inodes_with_caps(0) 
   { }
 
-  bool exists(const string &name) {
-    for (map<snapid_t,SnapInfo>::iterator p = srnode.snaps.begin();
+  bool exists(const string &name) const {
+    for (map<snapid_t,SnapInfo>::const_iterator p = srnode.snaps.begin();
 	 p != srnode.snaps.end();
 	 ++p) {
       if (p->second.name == name)
@@ -68,7 +68,7 @@ struct SnapRealm {
     return false;
   }
 
-  bool is_open() { return open; }
+  bool is_open() const { return open; }
   void _close_parents() { open = false; }
   bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
@@ -84,7 +84,7 @@ struct SnapRealm {
   void close_parents();
 
   void prune_past_parents();
-  bool has_past_parents() { return !srnode.past_parents.empty(); }
+  bool has_past_parents() const { return !srnode.past_parents.empty(); }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,

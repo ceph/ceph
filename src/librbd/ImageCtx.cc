@@ -16,6 +16,7 @@
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
@@ -87,7 +88,6 @@ struct C_FlushCache : public Context {
   }
   virtual void finish(int r) {
     // successful cache flush indicates all IO is now safe
-    assert(image_ctx->owner_lock.is_locked());
     image_ctx->flush_cache(on_safe);
   }
 };
@@ -205,7 +205,11 @@ struct C_InvalidateCache : public Context {
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
 
-    exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
+      exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
+    } else {
+      exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    }
     journal_policy = new journal::StandardPolicy(this);
   }
 
@@ -734,7 +738,6 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::flush_cache(Context *onfinish) {
-    assert(owner_lock.is_locked());
     cache_lock.Lock();
     object_cacher->flush_set(object_set, onfinish);
     cache_lock.Unlock();
@@ -746,7 +749,6 @@ struct C_InvalidateCache : public Context {
       return;
     }
 
-    RWLock::RLocker owner_locker(owner_lock);
     cache_lock.Lock();
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -849,7 +851,6 @@ struct C_InvalidateCache : public Context {
     // ensure no locks are held when flush is complete
     on_safe = util::create_async_context_callback(*this, on_safe);
 
-    assert(owner_lock.is_locked());
     if (object_cacher != NULL) {
       // flush cache after completing all in-flight AIO ops
       on_safe = new C_FlushCache(this, on_safe);

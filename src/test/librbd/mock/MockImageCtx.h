@@ -22,6 +22,7 @@
 
 namespace librbd {
 
+namespace cache { class MockImageCache; }
 namespace operation {
 template <typename> class ResizeRequest;
 }
@@ -231,9 +232,10 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 
-
   MockAioImageRequestWQ *aio_work_queue;
   MockContextWQ *op_work_queue;
+
+  cache::MockImageCache *image_cache = nullptr;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;

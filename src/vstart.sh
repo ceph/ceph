@@ -130,7 +130,7 @@ usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
-usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
+usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
@@ -250,7 +250,7 @@ case $1 in
     --memstore )
 	    memstore=1
 	    ;;
-    --bluestore )
+    -b | --bluestore )
 	    bluestore=1
 	    ;;
     --hitset )

@@ -26,7 +26,7 @@
 
 TEST(ZlibCompressor, compress_decompress)
 {
-  ZlibCompressor sp;
+  ZlibCompressor sp(false);
   EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
   int len = strlen(test);
@@ -51,7 +51,7 @@ TEST(ZlibCompressor, compress_decompress)
 
 TEST(ZlibCompressor, compress_decompress_chunk)
 {
-  ZlibCompressor sp;
+  ZlibCompressor sp(false);
   EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
   buffer::ptr test2 ("1234567890", 10);
@@ -68,6 +68,87 @@ TEST(ZlibCompressor, compress_decompress_chunk)
   exp.append("This is test text1234567890");
   EXPECT_TRUE(exp.contents_equal(after));
 }
+
+TEST(ZlibCompressor, compress_decompress_isal)
+{
+  ZlibCompressor sp(true);
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
+  const char* test = "This is test text";
+  int len = strlen(test);
+  bufferlist in, out;
+  in.append(test, len);
+  int res = sp.compress(in, out);
+  EXPECT_EQ(res, 0);
+  bufferlist after;
+  res = sp.decompress(out, after);
+  EXPECT_EQ(res, 0);
+  bufferlist exp;
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
+  after.clear();
+  size_t compressed_len = out.length();
+  out.append_zero(12);
+  auto it = out.begin();
+  res = sp.decompress(it, compressed_len, after);
+  EXPECT_EQ(res, 0);
+  EXPECT_TRUE(exp.contents_equal(after));
+}
+
+TEST(ZlibCompressor, compress_decompress_chunk_isal)
+{
+  ZlibCompressor sp(true);
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
+  const char* test = "This is test text";
+  buffer::ptr test2 ("1234567890", 10);
+  int len = strlen(test);
+  bufferlist in, out;
+  in.append(test, len);
+  in.append(test2);
+  int res = sp.compress(in, out);
+  EXPECT_EQ(res, 0);
+  bufferlist after;
+  res = sp.decompress(out, after);
+  EXPECT_EQ(res, 0);
+  bufferlist exp;
+  exp.append("This is test text1234567890");
+  EXPECT_TRUE(exp.contents_equal(after));
+}
+
+TEST(ZlibCompressor, zlib_isal_compatibility)
+{
+  ZlibCompressor isal(true);
+  EXPECT_STREQ(isal.get_type().c_str(), "zlib");
+  ZlibCompressor zlib(false);
+  EXPECT_STREQ(zlib.get_type().c_str(), "zlib");
+  char test[101];
+  srand(time(0));
+  for (int i=0; i<100; ++i)
+    test[i] = 'a' + rand()%26;
+  test[100] = '\0';
+  int len = strlen(test);
+  bufferlist in, out;
+  in.append(test, len);
+  // isal -> zlib
+  int res = isal.compress(in, out);
+  EXPECT_EQ(res, 0);
+  bufferlist after;
+  res = zlib.decompress(out, after);
+  EXPECT_EQ(res, 0);
+  bufferlist exp;
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
+  after.clear();
+  out.clear();
+  exp.clear();
+  // zlib -> isal
+  res = zlib.compress(in, out);
+  EXPECT_EQ(res, 0);
+  res = isal.decompress(out, after);
+  EXPECT_EQ(res, 0);
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
+}
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;

@@ -1715,7 +1715,7 @@ cdef class Image(object):
             if ret < 0:
                 raise make_ex(ret, 'error reading %s %ld~%ld' % (self.name, offset, length))
 
-            if ret != length:
+            if ret != <ssize_t>length:
                 _PyBytes_Resize(&ret_s, ret)
 
             return <object>ret_s
@@ -1808,11 +1808,11 @@ cdef class Image(object):
         with nogil:
             ret = rbd_write2(self.image, _offset, length, _data, _fadvise_flags)
 
-        if ret == length:
+        if ret == <ssize_t>length:
             return ret
         elif ret < 0:
             raise make_ex(ret, "error writing to %s" % (self.name,))
-        elif ret < length:
+        elif ret < <ssize_t>length:
             raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % (ret, length))
         else:
             raise LogicError("logic error: rbd_write(%s) \

@@ -122,7 +122,8 @@ public:
 
   virtual void TearDown() {
     if (store) {
-      store->umount();
+      int r = store->umount();
+      EXPECT_EQ(r, 0);
       rm_r("store_test_temp_dir");
     }
   }
@@ -157,8 +158,9 @@ TEST_P(StoreTest, Trivial) {
 }
 
 TEST_P(StoreTest, TrivialRemount) {
-  store->umount();
-  int r = store->mount();
+  int r = store->umount();
+  ASSERT_EQ(0, r);
+  r = store->mount();
   ASSERT_EQ(0, r);
 }
 
@@ -178,7 +180,8 @@ TEST_P(StoreTest, SimpleRemount) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  store->umount();
+  r = store->umount();
+  ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
   {
@@ -196,7 +199,8 @@ TEST_P(StoreTest, SimpleRemount) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  store->umount();
+  r = store->umount();
+  ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
   {
@@ -244,7 +248,8 @@ TEST_P(StoreTest, IORemount) {
       ASSERT_EQ(r, 0);
     }
   }
-  store->umount();
+  r = store->umount();
+  ASSERT_EQ(0, r);
   r = store->mount();
   ASSERT_EQ(0, r);
   {
@@ -1123,10 +1128,14 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
   g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_min_alloc_size", "65536");
   g_ceph_context->_conf->apply_changes(NULL);
+  int r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount(); //to force min_alloc_size update
+  ASSERT_EQ(r, 0);
 
   ObjectStore::Sequencer osr("test");
-  int r;
   coll_t cid;
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   {
@@ -1154,7 +1163,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     exists = store->exists(cid, hoid);
     ASSERT_EQ(true, exists);
   }
-  uint64_t available0 = 0;
   {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
@@ -1166,7 +1174,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     //force fsck
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
-    available0 = statfs.available;
   }
   {
     ObjectStore::Transaction t;
@@ -1182,7 +1189,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(5, statfs.stored);
     ASSERT_EQ(0x10000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x10000, statfs.available);
     ASSERT_EQ(0, statfs.compressed);
     ASSERT_EQ(0, statfs.compressed_original);
     ASSERT_EQ(0, statfs.compressed_allocated);
@@ -1205,7 +1211,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005, statfs.stored);
     ASSERT_EQ(0x20000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x20000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
@@ -1226,7 +1231,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005 - 3 - 9, statfs.stored);
     ASSERT_EQ(0x20000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x20000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000 - 9, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
@@ -1250,7 +1254,6 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30001 - 9 + 0x1000, statfs.stored);
     ASSERT_EQ(0x30000, statfs.allocated);
-    ASSERT_EQ(available0 - 0x30000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000 - 9 - 0x1000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
@@ -1343,6 +1346,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
   g_conf->set_val("bluestore_compression", "none");
+  g_conf->set_val("bluestore_min_alloc_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
@@ -1658,8 +1662,9 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
 
   // force cached tail to clear ...
   {
-    store->umount();
-    int r = store->mount();
+    int r = store->umount();
+    ASSERT_EQ(0, r);
+    r = store->mount();
     ASSERT_EQ(0, r);
   }
 
@@ -4663,7 +4668,6 @@ TEST_P(StoreTest, Rename) {
   {
     ObjectStore::Transaction t;
     t.collection_move_rename(cid, srcoid, cid, dstoid);
-    t.remove(cid, srcoid);
     t.write(cid, srcoid, 0, b.length(), b);
     t.setattr(cid, srcoid, "attr", b);
     r = apply_transaction(store, &osr, std::move(t));
@@ -4682,12 +4686,12 @@ TEST_P(StoreTest, Rename) {
     ObjectStore::Transaction t;
     t.remove(cid, dstoid);
     t.collection_move_rename(cid, srcoid, cid, dstoid);
-    t.remove(cid, srcoid);
-    t.setattr(cid, srcoid, "attr", a);
+    t.setattr(cid, srcoid, "attr", a);  // note: this is a no-op
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   ASSERT_TRUE(store->exists(cid, dstoid));
+  ASSERT_FALSE(store->exists(cid, srcoid));
   {
     bufferlist bl;
     store->read(cid, dstoid, 0, 3, bl);
@@ -4696,7 +4700,6 @@ TEST_P(StoreTest, Rename) {
   {
     ObjectStore::Transaction t;
     t.remove(cid, dstoid);
-    t.remove(cid, srcoid);
     t.remove_collection(cid);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -4867,8 +4870,8 @@ TEST_P(StoreTest, SetAllocHint) {
 TEST_P(StoreTest, TryMoveRename) {
   ObjectStore::Sequencer osr("test");
   coll_t cid;
-  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, 0, ""));
-  ghobject_t hoid2(hobject_t("test_hint2", "", CEPH_NOSNAP, 0, 0, ""));
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, -1, ""));
+  ghobject_t hoid2(hobject_t("test_hint2", "", CEPH_NOSNAP, 0, -1, ""));
   int r;
   {
     ObjectStore::Transaction t;
@@ -4895,7 +4898,7 @@ TEST_P(StoreTest, TryMoveRename) {
     ASSERT_EQ(r, 0);
   }
   struct stat st;
-  ASSERT_EQ(store->stat(cid, hoid, &st), -2);
+  ASSERT_EQ(store->stat(cid, hoid, &st), -ENOENT);
   ASSERT_EQ(store->stat(cid, hoid2, &st), 0);
 }
 

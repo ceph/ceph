@@ -26,7 +26,10 @@ set(librbd_internal_srcs
   ObjectWatcher.cc 
   Operations.cc
   Utils.cc
+  cache/ImageWriteback.cc
+  cache/PassthroughImageCache.cc
   exclusive_lock/AcquireRequest.cc
+  exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/ReacquireRequest.cc
   exclusive_lock/ReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
@@ -73,16 +76,21 @@ add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
-  add_dependencies(rbd_internal rbd-tp)
+  add_dependencies(rbd_api librbd-tp)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
   $<TARGET_OBJECTS:osdc_rbd_objs>
   $<TARGET_OBJECTS:common_util_obj>
-  $<TARGET_OBJECTS:krbd_objs>
-  $<TARGET_OBJECTS:parse_secret_objs>  
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
+if(LINUX)
+  list(APPEND librbd 
+    $<TARGET_OBJECTS:parse_secret_objs>  
+    $<TARGET_OBJECTS:krbd_objs>
+    )
+endif(LINUX)
+
 target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types

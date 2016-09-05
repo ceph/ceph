@@ -342,8 +342,9 @@ struct bluestore_blob_t {
   }
 
   /// return chunk (i.e. min readable block) size for the blob
-  uint64_t get_chunk_size(bool csum_enabled, uint64_t dev_block_size) {
-    return csum_enabled && has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+  uint64_t get_chunk_size(bool csum_enabled, uint64_t dev_block_size) const {
+    return csum_enabled &&
+      has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
   }
   uint32_t get_csum_chunk_size() const {
     return 1 << csum_chunk_order;
@@ -566,7 +567,8 @@ struct bluestore_blob_t {
   /// verify csum: return -EOPNOTSUPP for unsupported checksum type;
   /// return -1 and valid(nonnegative) b_bad_off for checksum error;
   /// return 0 if all is well.
-  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off) const;
+  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off,
+		  uint64_t *bad_csum) const;
 
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)

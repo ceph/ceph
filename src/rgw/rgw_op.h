@@ -1385,6 +1385,58 @@ public:
 };
 
 
+class RGWGetCrossDomainPolicy : public RGWOp {
+public:
+  RGWGetCrossDomainPolicy() = default;
+  ~RGWGetCrossDomainPolicy() = default;
+
+  int verify_permission() override {
+    return 0;
+  }
+
+  void execute() override {
+    op_ret = 0;
+  }
+
+  const string name() override {
+    return "get_crossdomain_policy";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_GET_CROSS_DOMAIN_POLICY;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+};
+
+
+class RGWGetHealthCheck : public RGWOp {
+public:
+  RGWGetHealthCheck() = default;
+  ~RGWGetHealthCheck() = default;
+
+  int verify_permission() override {
+    return 0;
+  }
+
+  void execute() override;
+
+  const string name() override {
+    return "get_health_check";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_GET_HEALTH_CHECK;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+};
+
+
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   int max_to_delete;
@@ -1415,6 +1467,17 @@ public:
   virtual const string name() { return "multi_object_delete"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_MULTI_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+};
+
+class RGWInfo: public RGWOp {
+public:
+  RGWInfo() = default;
+  ~RGWInfo() = default;
+
+  int verify_permission() override { return 0; }
+  const string name() override { return "get info"; }
+  RGWOpType get_type() override { return RGW_OP_GET_INFO; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWHandler {

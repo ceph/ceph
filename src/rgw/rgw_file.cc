@@ -38,6 +38,11 @@ namespace rgw {
 
   atomic<uint32_t> RGWLibFS::fs_inst;
 
+  uint32_t RGWLibFS::write_completion_interval_s = 10;
+
+  ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
+    ceph::construct_suspended};
+
   LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
 				       const char *path, uint32_t flags)
   {
@@ -755,6 +760,7 @@ namespace rgw {
 			   void *buffer)
   {
     using std::get;
+    using WriteCompletion = RGWLibFS::WriteCompletion;
 
     lock_guard guard(mtx);
 
@@ -783,7 +789,7 @@ namespace rgw {
       if (off != 0) {
 	lsubdout(fs->get_context(), rgw, 5)
 	  << __func__
-	  << object_name()
+	  << " " << object_name()
 	  << " non-0 initial write position " << off
 	  << dendl;
 	return -EIO;
@@ -806,6 +812,14 @@ namespace rgw {
 	delete f->write_req;
 	f->write_req = nullptr;
         return -EIO;
+      } else {
+	if (stateless_open())  {
+	  /* start write timer */
+	  f->write_req->timer_id =
+	    RGWLibFS::write_timer.add_event(
+	      std::chrono::seconds(RGWLibFS::write_completion_interval_s),
+	      WriteCompletion(*this));
+	}
       }
     }
 
@@ -826,6 +840,11 @@ namespace rgw {
       size_t min_size = off + len;
       if (min_size > get_size())
 	set_size(min_size);
+      if (stateless_open()) {
+	/* bump write timer */
+	RGWLibFS::write_timer.adjust_event(
+	  f->write_req->timer_id, std::chrono::seconds(10));
+      }
     } else {
       /* continuation failed (e.g., non-contiguous write position) */
       lsubdout(fs->get_context(), rgw, 5)
@@ -844,13 +863,21 @@ namespace rgw {
     return rc;
   } /* RGWFileHandle::write */
 
-  int RGWFileHandle::close()
+  int RGWFileHandle::write_finish(uint32_t flags)
   {
-    lock_guard guard(mtx);
-
+    unique_lock guard{mtx, std::defer_lock};
     int rc = 0;
+
+    if (! (flags & FLAG_LOCKED)) {
+      guard.lock();
+    }
+
     file* f = get<file>(&variant_type);
     if (f && (f->write_req)) {
+      lsubdout(fs->get_context(), rgw, 10)
+	<< __func__
+	<< " finishing write trans on " << object_name()
+	<< dendl;
       rc = rgwlib.get_fe()->finish_req(f->write_req);
       if (! rc) {
 	rc = f->write_req->get_ret();
@@ -858,6 +885,15 @@ namespace rgw {
       delete f->write_req;
       f->write_req = nullptr;
     }
+
+    return rc;
+  } /* RGWFileHandle::write_finish */
+
+  int RGWFileHandle::close()
+  {
+    lock_guard guard(mtx);
+
+    int rc = write_finish(FLAG_LOCKED);
 
     flags &= ~FLAG_OPEN;
     return rc;
@@ -1114,10 +1150,10 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 /*
   generic create -- create an empty regular file
 */
-int rgw_create(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *parent_fh,
-	      const char *name, struct stat *st, uint32_t mask,
-	      struct rgw_file_handle **fh, uint32_t flags)
+int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+	       const char *name, struct stat *st, uint32_t mask,
+	       struct rgw_file_handle **fh, uint32_t posix_flags,
+	       uint32_t flags)
 {
   using std::get;
 
@@ -1284,12 +1320,6 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  int rc = -(fs->getattr(rgw_fh, st));
-  if (rc != 0) {
-    // do it again
-    rc = -(fs->getattr(rgw_fh, st));
-  }
-
   return -(fs->getattr(rgw_fh, st));
 }
 
@@ -1319,7 +1349,7 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
    open file
 */
 int rgw_open(struct rgw_fs *rgw_fs,
-	     struct rgw_file_handle *fh, uint32_t flags)
+	     struct rgw_file_handle *fh, uint32_t posix_flags, uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
@@ -1334,9 +1364,7 @@ int rgw_open(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EISDIR;
 
-  // convert flags
-  uint32_t oflags = 0;
-  return rgw_fh->open(oflags);
+  return rgw_fh->open(flags);
 }
 
 /*
@@ -1530,6 +1558,14 @@ int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *handle,
 	      uint32_t flags)
 {
   return 0;
+}
+
+int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	       uint64_t offset, uint64_t length, uint32_t flags)
+{
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  return rgw_fh->commit(offset, length, RGWFileHandle::FLAG_NONE);
 }
 
 } /* extern "C" */
