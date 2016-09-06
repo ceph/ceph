@@ -33,10 +33,11 @@ arch=$6
 suse=false
 [[ $codename =~ suse ]] && suse=true
 
+# lsb-release is required by install-deps.sh 
 if [ "$suse" = true ] ; then
-    sudo zypper -n install git
+    sudo zypper -n install --no-recommends git lsb-release
 else
-    sudo yum install -y git
+    sudo yum install -y git redhat-lsb-core
 fi
 
 source $(dirname $0)/common.sh
