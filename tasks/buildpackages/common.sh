@@ -15,7 +15,7 @@
 # GNU Library Public License for more details.
 #
 function install_deps() {
-    git archive --remote=git://git.ceph.com/ceph.git master install-deps.sh | tar -xvf -
+    git archive --remote=git://git.ceph.com/ceph.git jewel install-deps.sh | tar -xvf -
     #
     # drop the following hack when trusty is not supported anymore
     # there is no other way as long as we maintain a debian directory that tries
