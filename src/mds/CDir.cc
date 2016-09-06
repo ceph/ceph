@@ -941,10 +941,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
   frag_info_t fragstatdiff;
   if (fnode.accounted_rstat.version == rstat_version)
     rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
-  if (fnode.accounted_fragstat.version == dirstat_version) {
-    bool touched_mtime;
-    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
-  }
+  if (fnode.accounted_fragstat.version == dirstat_version)
+    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat);
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   prepare_old_fragment(replay);
@@ -1022,7 +1020,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 
   nest_info_t rstatdiff;
   frag_info_t fragstatdiff;
-  bool touched_mtime;
+  bool touched_mtime, touched_chattr;
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
@@ -1035,7 +1033,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       rstatdiff.add_delta(dir->fnode.accounted_rstat, dir->fnode.rstat);
     if (dir->fnode.accounted_fragstat.version == dirstat_version)
       fragstatdiff.add_delta(dir->fnode.accounted_fragstat, dir->fnode.fragstat,
-			     touched_mtime);
+			     &touched_mtime, &touched_chattr);
 
     dir->prepare_old_fragment(replay);
 
