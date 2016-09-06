@@ -541,8 +541,8 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.push_back(new bluestore_blob_t);
   ls.back()->init_csum(CSUM_XXHASH32, 16, 65536);
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
-  ls.back()->add_unused(0, 3, 4096);
-  ls.back()->add_unused(8, 8, 4096);
+  ls.back()->add_unused(0, 3);
+  ls.back()->add_unused(8, 8);
   ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
   ls.back()->extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));

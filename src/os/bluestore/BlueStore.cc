@@ -6963,7 +6963,7 @@ void BlueStore::_do_write_small(
       dout(20) << __func__ << "  lex old " << *ep << dendl;
       Extent *le = o->extent_map.set_lextent(offset, b_off + head_pad, length, b,
 					     &wctx->old_extents);
-      b->dirty_blob().mark_used(le->blob_offset, le->length, min_alloc_size);
+      b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
       dout(20) << __func__ << "  lex " << *le << dendl;
       return;
@@ -7035,7 +7035,7 @@ void BlueStore::_do_write_small(
 	       << " at " << op->extents << dendl;
       Extent *le = o->extent_map.set_lextent(offset, offset - bstart, length, b,
 					     &wctx->old_extents);
-      b->dirty_blob().mark_used(le->blob_offset, le->length, min_alloc_size);
+      b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
       dout(20) << __func__ << "  lex " << *le << dendl;
       return;
@@ -7216,12 +7216,13 @@ int BlueStore::_do_alloc_write(
     if (wi.mark_unused) {
       auto b_off = wi.b_off;
       auto b_len = wi.bl.length();
-      if (b_off)
-        b->dirty_blob().add_unused(0, b_off, min_alloc_size);
-      if (b_off + b_len < wi.blob_length)
+      if (b_off) {
+        b->dirty_blob().add_unused(0, b_off);
+      }
+      if (b_off + b_len < wi.blob_length) {
         b->dirty_blob().add_unused(b_off + b_len,
-				   wi.blob_length - (b_off + b_len),
-				   min_alloc_size);
+				   wi.blob_length - (b_off + b_len));
+      }
     }
 
     // queue io

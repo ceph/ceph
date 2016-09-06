@@ -412,10 +412,11 @@ struct bluestore_blob_t {
   }
 
   /// mark a range that has never been used
-  void add_unused(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
-    assert((min_alloc_size % unused.size()) == 0);
-    assert(offset + length <= min_alloc_size);
-    uint64_t chunk_size = min_alloc_size / unused.size();
+  void add_unused(uint64_t offset, uint64_t length) {
+    uint64_t blob_len = get_logical_length();
+    assert((blob_len % unused.size()) == 0);
+    assert(offset + length <= blob_len);
+    uint64_t chunk_size = blob_len / unused.size();
     uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
     assert(end <= unused.size());
@@ -428,11 +429,12 @@ struct bluestore_blob_t {
   }
 
   /// indicate that a range has (now) been used.
-  void mark_used(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
+  void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
-      assert((min_alloc_size % unused.size()) == 0);
-      assert(offset + length <= min_alloc_size);
-      uint64_t chunk_size = min_alloc_size / unused.size();
+      uint64_t blob_len = get_logical_length();
+      assert((blob_len % unused.size()) == 0);
+      assert(offset + length <= blob_len);
+      uint64_t chunk_size = blob_len / unused.size();
       uint64_t start = offset / chunk_size;
       uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
       assert(end <= unused.size());
