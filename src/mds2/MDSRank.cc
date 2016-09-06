@@ -154,13 +154,18 @@ void MDSRankDispatcher::tick()
   // Expose ourselves to Beacon to update health indicators
   beacon.notify_health(this);
 
-  if (is_active() || is_stopping()) {
-    mdlog->trim();  // NOT during recovery!
+  if (is_active() || is_stopping()) { // NOT during recovery!
+    // FIXME: use seperate timer to do this
+    mds_lock.Unlock();
+    mdcache->trim(); // trim cached objects
+    server->trim_client_leases();
+    mdlog->trim(); // trim log segments
+    mds_lock.Lock();
   }
 
   if (is_clientreplay() || is_active() || is_stopping()) {
-    mds_lock.Unlock();
     // FIXME: use seperate timer to do this
+    mds_lock.Unlock();
     server->find_idle_sessions();
     locker->tick();
     mds_lock.Lock();
@@ -923,7 +928,17 @@ bool MDSRankDispatcher::handle_asok_command(
     std::string command, cmdmap_t& cmdmap, Formatter *f,
 		    std::ostream& ss)
 {
-  return false;
+  if (command == "dump cache") {
+    string path;
+    if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
+      mdcache->dump_cache(NULL, f);
+    } else {
+      mdcache->dump_cache(path.c_str());
+    }
+  } else  {
+    return false;
+  }
+  return true;
 }
 
 void MDSRankDispatcher::update_log_config()

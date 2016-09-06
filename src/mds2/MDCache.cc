@@ -16,6 +16,9 @@
 #include "messages/MClientRequest.h"
 
 #include "osdc/Objecter.h"
+#include "common/safe_io.h"
+#include "common/errno.h"
+
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -31,6 +34,8 @@ MDCache::MDCache(MDSRank *_mds) :
   rename_dir_mutex("MDCache::rename_dir_mutex"),
   open_inode_mutex("MDCache::open_inode_mutex")
 {
+  dentry_lru.lru_set_max(g_conf->mds_cache_size);
+  dentry_lru.lru_set_midpoint(g_conf->mds_cache_mid);
 }
 
 void MDCache::add_inode(CInode *in)
@@ -66,6 +71,7 @@ void MDCache::remove_inode(CInode *in)
   delete in;
 }
 
+// Note: this function can only be called during replaying log
 void MDCache::remove_inode_recursive(CInode *in)
 {
   in->mutex_assert_locked_by_me();
@@ -101,15 +107,33 @@ void MDCache::remove_inode_recursive(CInode *in)
 
 CInodeRef MDCache::get_inode(const vinodeno_t &vino)
 {
-  CInodeRef ref;
-  Mutex::Locker l(inode_map_lock);
-  auto it = inode_map.find(vino);
-  if (it != inode_map.end()) {
-    ref = it->second;
-    if (ref->state_test(CInode::STATE_FREEING))
-      ref.reset();
+  CInode *ref = NULL;
+  for (;;) {
+    Mutex::Locker l(inode_map_lock);
+    auto it = inode_map.find(vino);
+    if (it == inode_map.end()) {
+      break;
+    }
+
+    CInode *in = it->second;
+    if (in->get_unless_zero(CInode::PIN_INTRUSIVEPTR)) {
+      ref = in;
+      break;
+    }
+    if (in->state_test(CInode::STATE_FREEING)) {
+      break;
+    }
+    if (!in->mutex_trylock()) {
+      continue;
+    }
+    if (!in->state_test(CInode::STATE_FREEING)) {
+      in->get(CInode::PIN_INTRUSIVEPTR, true);
+      ref = in;
+    }
+    in->mutex_unlock();
+    break;
   }
-  return ref;
+  return CInodeRef(ref, false);
 }
 
 CDirRef MDCache::get_dirfrag(const dirfrag_t &df) {
@@ -355,58 +379,6 @@ void MDCache::populate_mydir(MDSGatherBuilder& gather)
   //dout(10) << "populate_mydir done" << dendl;
 }
 
-bool MDCache::trim_inode(CDentry *dn, CInode *in)
-{
-  if (!in->mutex_trylock()) {
-    return false;
-  }
-
-  if (in->get_num_ref() > 0) {
-    in->mutex_unlock();
-    return false;
-  }
-  /*
-  if (in->is_dir()) {
-  }
-  */
-  in->state_set(CInode::STATE_FREEING);
-
-  if (dn)
-    dn->get_dir()->unlink_inode(dn);
-
-  in->mutex_unlock();
-
-  remove_inode(in);
-  // caller remove inode
-  return true;
-}
-
-bool MDCache::trim_dentry(CDentry *dn)
-{
-  assert(dn->get_dir()->get_num_ref() > 0);
-  CDirRef dir = dn->get_dir();
-
-  dir->get_inode()->mutex_lock();
-  if (dn->get_num_ref() > 0) {
-  }
-
-  const CDentry::linkage_t *dnl = dn->get_linkage();
-  CInode *in = dnl->get_inode();
-  if (dnl->is_primary()) {
-    if (!trim_inode(dn, in)) {
-
-    }
-  } else if (dnl->is_remote()) {
-
-  } else {
-
-  }
-
-  dir->remove_dentry(dn);
-  dir->get_inode()->mutex_unlock();
-
-  return true;
-}
 
 int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 			   vector<CDentryRef> *pdnvec, CInodeRef *pin)
@@ -420,6 +392,9 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
   if (!cur) {
     return -ESTALE;
   }
+
+  if (path.depth() == 0)
+    touch_inode(cur.get());
 
   int err = 0;
   for (unsigned depth = 0; depth < path.depth(); ++depth) {
@@ -467,13 +442,14 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
       if (pdnvec) {
 	if (depth == path.depth() - 1) {
 	  dn = curdir->add_null_dentry(path[depth]);
-	} else {
-	  assert(dn = NULL);
 	}
       }
       err = -ENOENT;
     }
     cur->mutex_unlock();
+
+    if (depth == path.depth() - 1 && dn)
+      touch_dentry(dn.get());
 
     if (pdnvec) {
       if (dn) {
@@ -486,6 +462,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
       break;
     cur.swap(in);
   }
+
   if (!err && pin)
     pin->swap(cur);
 
@@ -512,6 +489,137 @@ CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
 
   strayi->mutex_unlock();
   return straydn;
+}
+
+void MDCache::dentry_lru_insert(CDentry *dn)
+{
+  dentry_lru.lru_insert_mid(dn);
+}
+
+void MDCache::dentry_lru_remove(CDentry *dn)
+{
+  dentry_lru.lru_remove(dn);
+}
+
+void MDCache::touch_dentry(CDentry *dn)
+{
+  dentry_lru.lru_touch(dn);
+}
+
+void MDCache::touch_dentry_bottom(CDentry *dn)
+{
+  dentry_lru.lru_bottouch(dn);
+}
+
+void MDCache::touch_inode(CInode *in)
+{
+  if (in->is_base())
+    return;
+  if (in->mutex_trylock()) {
+    touch_dentry(in->get_projected_parent_dn());
+    in->mutex_unlock();
+  }
+}
+
+void MDCache::trim(int max, int count)
+{
+  // trim LRU
+  if (count > 0) {
+    max = dentry_lru.lru_get_size() - count;
+    if (max <= 0)
+      max = 1;
+  } else if (max < 0) {
+    max = g_conf->mds_cache_size;
+    if (max <= 0)
+      return;
+  }
+  dout(7) << "trim max=" << max << " cur=" << dentry_lru.lru_get_size() << dendl;
+
+  int unexpirable = 0;
+  list<CDentry*> unexpirables;
+
+  while (dentry_lru.lru_get_size() + unexpirable > (unsigned)max) {
+    CDentry *dn = static_cast<CDentry*>(dentry_lru.lru_expire());
+    if (!dn) break;
+    if (!trim_dentry(dn)) {
+      unexpirables.push_back(dn);
+      ++unexpirable;
+    }
+  }
+
+  for (auto dn : unexpirables)
+    dentry_lru_insert(dn);
+}
+
+bool MDCache::trim_dentry(CDentry *dn)
+{
+  assert(dn->get_dir()->get_num_ref() > 0);
+
+  CInodeRef diri = dn->get_dir_inode();
+  CObject::Locker l(diri.get());
+  CDir *dir = dn->get_dir();
+
+  if (dn->get_num_ref() > 0)
+    return false;
+
+  bool clear_complete = true;
+  const CDentry::linkage_t *dnl = dn->get_linkage();
+  CInode *in = dnl->get_inode();
+  if (dnl->is_primary()) {
+    if (!trim_inode(dn, in)) {
+      return false;
+    }
+  } else if (dnl->is_remote()) {
+    dir->unlink_inode(dn);
+  } else {
+    clear_complete = false;
+  }
+
+  if (clear_complete) {
+    dir->add_to_bloom(dn);
+    dir->clear_complete();
+  }
+
+  assert(dn->get_num_ref() == 0);
+  dir->remove_dentry(dn);
+
+  return true;
+}
+
+bool MDCache::trim_inode(CDentry *dn, CInode *in)
+{
+  if (!in->mutex_trylock()) {
+    return false;
+  }
+
+  if (in->get_num_ref() > 0) {
+    in->mutex_unlock();
+    return false;
+  }
+
+  in->state_set(CInode::STATE_FREEING);
+
+  if (in->is_dir()) {
+    list<CDir*> ls;
+    in->get_dirfrags(ls);
+    for (auto dir : ls) {
+      trim_dirfrag(in, dir); 
+    }
+  }
+
+  if (dn)
+    dn->get_dir()->unlink_inode(dn);
+
+  in->mutex_unlock();
+
+  remove_inode(in);
+  // caller remove inode
+  return true;
+}
+
+void MDCache::trim_dirfrag(CInode *in, CDir *dir)
+{
+  in->close_dirfrag(dir->get_frag());
 }
 
 CInodeRef MDCache::replay_invent_inode(inodeno_t ino)
@@ -1049,6 +1157,7 @@ void MDCache::_open_inode_backtrace_fetched(inodeno_t ino, bufferlist& bl, int e
   if (in && !in->state_test(CInode::STATE_REPLAYUNDEF)) {
     dout(10) << " found cached " << *in << dendl;
     _open_inode_finish(ino, info, 0);
+    touch_inode(in.get());
     return;
   }
 
@@ -1116,6 +1225,7 @@ void MDCache::_open_inode_lookup_dentry(inodeno_t ino)
   if (in && !in->state_test(CInode::STATE_REPLAYUNDEF)) {
     dout(10) << " found cached " << *in << dendl;
     _open_inode_finish(ino, info, 0);
+    touch_inode(in.get());
     return;
   }
 
@@ -1230,4 +1340,109 @@ ESubtreeMap *MDCache::create_subtree_map()
   return le;
 }
 
+void MDCache::dump_cache(const char *fn, Formatter *f)
+{
+  int r = 0;
+  int fd = -1;
+
+  if (f) {
+    f->open_array_section("inodes");
+  } else {
+    char deffn[200];
+    if (!fn) {
+      snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
+      fn = deffn;
+    }
+    
+    dout(1) << "dump_cache to " << fn << dendl;
+    
+    fd = ::open(fn, O_WRONLY|O_CREAT|O_EXCL, 0600);
+    if (fd < 0) {
+      derr << "failed to open " << fn << ": " << cpp_strerror(errno) << dendl;
+      return;
+    }
+  }
+
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
+       it != inode_map.end();
+       ++it) {
+    CInode *in = it->second;
+
+    if (f) {
+      f->open_object_section("inode");
+    //  in->dump(f);
+    } else {
+      ostringstream ss;
+      ss << *in << std::endl;
+      std::string s = ss.str();
+      r = safe_write(fd, s.c_str(), s.length());
+      if (r < 0) {
+        goto out;
+      }
+    }
+
+    CObject::Locker l(in);
+    list<CDir*> dfs;
+    in->get_dirfrags(dfs);
+    if (f) {
+      f->open_array_section("dirfrags");
+    }
+    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
+      CDir *dir = *p;
+      if (f) {
+        f->open_object_section("dir");
+  //      dir->dump(f);
+      } else {
+        ostringstream tt;
+        tt << " " << *dir << std::endl;
+        string t = tt.str();
+        r = safe_write(fd, t.c_str(), t.length());
+        if (r < 0) {
+          goto out;
+        }
+      }
+
+      if (f) {
+        f->open_array_section("dentries");
+      }
+      for (auto q = dir->begin(); q != dir->end(); ++q) {
+        CDentry *dn = q->second;
+        if (f) {
+          f->open_object_section("dentry");
+   //       dn->dump(f);
+          f->close_section();
+        } else {
+          ostringstream uu;
+          uu << "  " << *dn << std::endl;
+          string u = uu.str();
+          r = safe_write(fd, u.c_str(), u.length());
+          if (r < 0) {
+            goto out;
+          }
+        }
+      }
+      if (f) {
+        f->close_section();  //dentries
+      }
+      // dir->check_rstats();
+      if (f) {
+        f->close_section();  //dir
+      }
+    }
+    if (f) {
+      f->close_section();  // dirfrags
+    }
+
+    if (f) {
+      f->close_section();  // inode
+    }
+  }
+
+ out:
+  if (f) {
+    f->close_section();  // inodes
+  } else {
+    ::close(fd);
+  }
+}
 

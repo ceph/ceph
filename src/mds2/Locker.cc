@@ -1219,8 +1219,9 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
 
   int gather = 0;
   if (lock->is_leased()) {
-    gather++;
     revoke_client_leases(lock);
+    if (lock->is_leased())
+      gather++;
   }
   if (lock->is_rdlocked())
     gather++;
@@ -1754,7 +1755,8 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       gather++;
     if (lock->is_leased()) {
       revoke_client_leases(lock);
-      gather++;
+      if (lock->is_leased())
+	gather++;
     }
     if (lock->get_cap_shift() &&
 	in->is_head() &&
@@ -1981,7 +1983,8 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
 
   if (lock->is_leased()) {
     revoke_client_leases(lock);
-    gather++;
+    if (lock->is_leased())
+      gather++;
   }
   if (in->is_head() &&
       in->issued_caps_need_gather(lock)) {
@@ -3415,11 +3418,13 @@ void Locker::handle_client_lease(MClientLease *m)
       dout(7) << "handle_client_lease client." << client << " renew on " << *dn
 	      << (!dn->lock.can_lease(client)?", revoking lease":"") << dendl;
       if (dn->lock.can_lease(client)) {
-	float duration = 30; // FIXME;
-	l->ttl = ceph_clock_now(g_ceph_context);
-	l->ttl += duration;
+	float duration = mdcache->get_lease_duration();
+	utime_t ttl = ceph_clock_now(g_ceph_context);
+	ttl = ceph_clock_now(g_ceph_context);
+	ttl += duration;
 
 	session->mutex_lock();
+	l->ttl = ttl;
 	session->touch_lease(l);
 	session->mutex_unlock();
 
@@ -3453,11 +3458,10 @@ void Locker::issue_client_lease(CDentry *dn, bufferlist &bl, utime_t now, Sessio
       dn->lock.can_lease(client)) {
     int pool = 1;   // fixme.. do something smart!
     // issue a dentry lease
-    DentryLease *l = dn->add_client_lease(session);
-
-    float duration = 30; // FIXME;
-    l->ttl = now;
-    l->ttl += duration;
+    float duration = mdcache->get_lease_duration();
+    utime_t ttl = now;
+    ttl += duration;
+    DentryLease *l = dn->add_client_lease(session, ttl);
 
     LeaseStat e;
     e.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
@@ -3493,16 +3497,21 @@ void Locker::revoke_client_leases(SimpleLock *lock)
   CDentry *dn = static_cast<CDentry*>(lock->get_parent());
   dn->mutex_assert_locked_by_me();
 
-  CInode *diri = dn->get_dir_inode();
   int nr = 0;
+  utime_t now = ceph_clock_now(g_ceph_context);
+  CInode *diri = dn->get_dir_inode();
   for (auto p = dn->get_client_leases().begin();
        p != dn->get_client_leases().end();
        ++p) {
     DentryLease *l = p->second;
+    if (l->ttl < now) {
+      remove_client_lease(dn, l->get_session());
+      continue;
+    }
 
     int mask = 1 | CEPH_LOCK_DN; // old and new bits
     mds->send_message_client_counted(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq, mask,
-						      diri->ino(), 2, CEPH_NOSNAP, dn->get_name()),
+						      diri->ino(), 2, CEPH_NOSNAP, dn->name),
 				     l->get_session());
     nr++;
   }

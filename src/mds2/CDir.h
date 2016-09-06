@@ -102,6 +102,8 @@ public:
   bool empty() const { return items.empty(); }
   dentry_map_t::const_iterator begin() const { return items.begin(); }
   dentry_map_t::const_iterator end() const { return items.end(); }
+  dentry_map_t::const_reverse_iterator rbegin() const { return items.rbegin(); }
+  dentry_map_t::const_reverse_iterator rend() const { return items.rend(); }
 
   void link_remote_inode(CDentry *dn, inodeno_t ino, uint8_t d_type);
   void link_primary_inode(CDentry *dn, CInode *in);
@@ -167,7 +169,7 @@ public:
 public:
    elist<CDir*>::item item_dirty, item_new;
 protected:
-  void first_get();
+  void first_get(bool locked);
   void last_put();
 };
 

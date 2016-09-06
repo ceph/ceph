@@ -81,10 +81,11 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   }
   for (elist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
     dout(20) << " dirty_inode " << **p << dendl;
-    if ((*p)->is_base())
+    if ((*p)->is_base()) {
       commit.insert(*p);
-    else
-      commit.insert((*p)->get_parent_dn()->get_dir());
+    } else {
+     // already handled by dirty dentry
+    }
   }
   mds->mdcache->unlock_log_segments();
 

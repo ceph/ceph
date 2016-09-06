@@ -501,6 +501,55 @@ void Server::find_idle_sessions()
   mds->sessionmap->mutex_unlock();
 }
 
+void Server::trim_client_leases()
+{
+  dout(10) << "trim_client_leases" << dendl;
+
+  list<Session*> ls;
+  mds->sessionmap->mutex_lock();
+  mds->sessionmap->get_sessions(Session::STATE_OPEN, ls);
+  for (auto session : ls)
+    session->get();
+  mds->sessionmap->mutex_unlock();
+
+  int count = 0;
+  for (auto session : ls) {
+    utime_t now = ceph_clock_now(g_ceph_context);
+
+    session->mutex_lock();
+    client_t client = session->get_client();
+
+    while (!session->leases.empty()) {
+      if (!session->is_open())
+	break;
+
+      DentryLease *l = session->leases.front();
+      if (l->ttl > now)
+	break;
+
+      CDentryRef dn = l->get_dentry();
+      session->mutex_unlock();
+
+      dn->mutex_lock();
+      l = dn->get_client_lease(client);
+      if (l) {
+	dout(12) << " expiring client." << client << " lease of " << *dn << dendl;
+	locker->remove_client_lease(dn.get(), session);
+	count++;
+      }
+      dn->mutex_unlock();
+      dn.reset();
+
+      session->mutex_lock();
+    }
+    session->mutex_unlock();
+
+    session->put();
+  }
+
+  dout(10) << "trim_client_leases trimmed " << count << " leases " << dendl;
+}
+
 void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
@@ -637,7 +686,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     //    dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
     dn->mutex_lock();
-    ::encode(dn->get_name(), bl);
+    ::encode(dn->name, bl);
     locker->issue_client_lease(dn, bl, now, session);
     dn->mutex_unlock();
     //    dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
@@ -1525,7 +1574,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   bufferlist dnbl;
   __u32 num_entries = 0;
   auto it = dir->begin();
-  for (; num_entries < max_bytes && it != dir->end(); ++it) {
+  for (; num_entries < max && it != dir->end(); ++it) {
     CDentry *dn = it->second;
 
     const CDentry::linkage_t *dnl = dn->get_linkage(mdr->get_client(), mdr);
@@ -1538,34 +1587,49 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
         continue;
     }
 
-    CInodeRef in = dnl->get_inode();
+    mdcache->touch_dentry(dn);
 
+    bool stop = false;
+    if (num_entries > 0 &&
+	(int)(dnbl.length() + dn->name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left)
+      stop = true;
+
+    CInodeRef in = dnl->get_inode();
     // remote link?
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
       if (!in) {
-	if (dnbl.length() > 0) {
+	if (num_entries > 0) {
 	  mdcache->open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type());
-	  break;
+	} else {
+	  mdcache->open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type(),
+				      new C_MDS_RetryRequest(mds, mdr));
+	  mdr->unlock_object(diri.get());
+	  //locker->drop_locks(mdr);
 	}
-	mdcache->open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type(),
-				    new C_MDS_RetryRequest(mds, mdr));
-	mdr->unlock_object(diri.get());
-	//locker->drop_locks(mdr);
-	return;
+	stop = true;
       }
     }
 
-    assert(in);
-
-    if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+    if (stop) {
+      // touch everything I have. It's likely they will be used later
+      for (auto p = dir->rbegin(); p != dir->rend(); ++p) {
+	CDentry *odn = p->second;
+	if (!odn->get_projected_linkage()->is_null())
+	  mdcache->touch_dentry(odn);
+	if (odn == dn)
+	  break;
+      }
+      if (num_entries == 0)
+	return;
       break;
     }
 
+    assert(in);
     unsigned start_len = dnbl.length();
 
     // dentry
-    ::encode(dn->get_name(), dnbl);
+    ::encode(dn->name, dnbl);
     encode_null_lease(dnbl);
 
     in->mutex_lock();

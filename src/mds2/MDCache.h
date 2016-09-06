@@ -4,6 +4,7 @@
 #include "mdstypes.h"
 #include "CObject.h"
 #include "include/elist.h"
+#include "include/lru.h"
 
 class Message;
 class MClientRequest;
@@ -56,14 +57,26 @@ public:
     return get_inode(vinodeno_t(ino, s));
   }
   CDirRef get_dirfrag(const dirfrag_t &df);
-  bool trim_dentry(CDentry *dn);
-  bool trim_inode(CDentry *dn, CInode *in);
 
   int path_traverse(const MDRequestRef& mdr,
 		    const filepath& path, vector<CDentryRef> *pdnvec, CInodeRef *pin);
 
   void advance_stray() {}
   CDentryRef get_or_create_stray_dentry(CInode *in);
+
+protected:
+  LRU dentry_lru;
+public:
+  void dentry_lru_insert(CDentry *dn);
+  void dentry_lru_remove(CDentry *dn);
+  void touch_dentry(CDentry* dn);
+  void touch_dentry_bottom(CDentry* dn);
+  void touch_inode(CInode* in);
+
+  void trim(int max=-1, int count=-1);
+  bool trim_dentry(CDentry *dn);
+  bool trim_inode(CDentry *dn, CInode *in);
+  void trim_dirfrag(CInode *in, CDir *dir);
 
 protected:
   elist<CInode*>  replay_undef_inodes;
@@ -144,12 +157,12 @@ public:
 		       MDSAsyncContextBase *fin);
   void open_inode(inodeno_t ino, int64_t pool, MDSContextBase* fin=NULL);
   void open_remote_dentry(inodeno_t ino, uint8_t d_type, MDSContextBase *fin=NULL);
-public:
 
 protected:
   ceph::atomic64_t last_cap_id;
 public:
   uint64_t get_new_cap_id() { return last_cap_id.inc(); }
+  float get_lease_duration() const { return 30.0; }
 
   MDCache(MDSRank *_mds);
   void dispatch(Message *m) { assert(0); } // does not support cache message yet
@@ -159,7 +172,8 @@ public:
   ESubtreeMap *create_subtree_map();
 
   bool is_readonly() const { return false; }
-  bool trim(int max=-1, int count=-1) { return false; };
   void standby_trim_segment(LogSegment *ls) {}
+public:
+  void dump_cache(const char *fn=NULL, Formatter *f=NULL);
 };
 #endif

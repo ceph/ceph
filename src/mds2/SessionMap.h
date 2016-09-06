@@ -489,6 +489,13 @@ public:
   {
     return session_map;
   }
+  void get_sessions(int state, list<Session*>& ls) const {
+    auto p = by_state.find(state);
+    if (p == by_state.end())
+      return;
+    for (auto q = p->second->begin(); !q.end(); ++q)
+      ls.push_back(*q);
+  }
 
   bool is_any_state(int state) const {
     map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);

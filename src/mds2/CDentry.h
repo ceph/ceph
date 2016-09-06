@@ -4,11 +4,12 @@
 #include "CObject.h"
 #include "SimpleLock.h"
 #include "LocalLock.h"
+#include "include/lru.h"
 
 class LogSegment;
 class DentryLease;
 
-class CDentry : public CObject {
+class CDentry : public CObject, public LRUObject {
 public:
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
@@ -17,15 +18,15 @@ public:
   // -- states --
   static const int STATE_NEW =          (1<<0);
 
+  const std::string name;
 protected:
   CDir *dir;
-  const std::string name;
 public:
+
   CDentry(CDir *d, const std::string &n);
 
   CDir *get_dir() const { return dir; }
   CInode *get_dir_inode() const;
-  const std::string& get_name() const { return name; }
   dentry_key_t get_key() const { return dentry_key_t(CEPH_NOSNAP, name.c_str()); }
   void make_string(std::string& s) const;
 
@@ -113,14 +114,14 @@ public:
       return p->second;
     return NULL;
   }
-  DentryLease* add_client_lease(Session *session);
+  DentryLease* add_client_lease(Session *session, utime_t ttl);
   void remove_client_lease(Session *session);
 
 public:
   elist<CDentry*>::item item_dirty, item_dir_dirty;
 
 protected:
-  void first_get();
+  void first_get(bool locked);
   void last_put();
 public: // crap
   static snapid_t first, last;

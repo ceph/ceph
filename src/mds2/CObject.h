@@ -18,12 +18,13 @@ class LogSegment;
 class CObject {
 protected:
 #ifdef __MDS_REF_SET
+
   std::map<int,int> ref_map;
 #endif
   std::atomic<int> ref;
 
   virtual void last_put() {}
-  virtual void first_get() {}
+  virtual void first_get(bool locked) {}
 public:
   // -- pins --
   const static int PIN_DIRTY		= 1001;
@@ -35,23 +36,32 @@ public:
   static const int PIN_PTRWAITER	= -1007;
 
 
-  void get(int by) {
-
+  void get(int by, bool locked=false) {
+    int old = std::atomic_fetch_add(&ref, 1);
+    if (old == 0)
+      first_get(locked);
 #ifdef __MDS_REF_SET
   ref_map[by]++;
 #endif
-    int old = std::atomic_fetch_add(&ref, 1);
-    if (old == 0)
-      first_get();
+  }
+  bool get_unless_zero(int by) {
+    int old = std::atomic_load(&ref);
+    while (old != 0 && !std::atomic_compare_exchange_weak(&ref, &old, old + 1));
+    if (old == 0) 
+      return false;
+#ifdef __MDS_REF_SET
+    ref_map[by]++;
+#endif
+    return true;
   }
   void put(int by) {
-#ifdef __MDS_REF_SET
-  assert(--ref_map[by] >= 0);
-#endif
     int old = std::atomic_fetch_sub(&ref, 1);
     assert(old >= 1);
     if (old == 1)
       last_put();
+#ifdef __MDS_REF_SET
+  assert(--ref_map[by] >= 0);
+#endif
   }
   int get_num_ref(int by=-1) const {
     return std::atomic_load(&ref);

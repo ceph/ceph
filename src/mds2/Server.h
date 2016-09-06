@@ -42,6 +42,7 @@ public:
   void dispatch_client_request(const MDRequestRef& mdr);
 
   void find_idle_sessions();
+  void trim_client_leases();
 protected:
   void handle_client_reconnect(MClientReconnect *m);
 

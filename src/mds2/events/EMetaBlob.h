@@ -394,7 +394,7 @@ private:
   void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
     lump.nnull++;
-    lump.add_dnull(nullbit(dn->get_name(), 
+    lump.add_dnull(nullbit(dn->name,
 			   dn->first, dn->last,
 			   dn->get_projected_version(), 
 			   dirty));
@@ -413,7 +413,7 @@ private:
       rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
-    lump.add_dremote(remotebit(dn->get_name(), 
+    lump.add_dremote(remotebit(dn->name,
 			       dn->first, dn->last,
                                dn->get_projected_version(), 
                                rino, rdt,
@@ -451,7 +451,7 @@ private:
     */
 
     lump.nfull++;
-    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(),
+    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->name,
 							 dn->first, dn->last,
 							 dn->get_projected_version(),
 							 *pi, in->dirfragtree,

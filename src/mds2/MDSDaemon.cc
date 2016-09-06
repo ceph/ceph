@@ -189,11 +189,20 @@ void MDSDaemon::set_up_admin_socket()
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   assert(asok_hook == nullptr);
   asok_hook = new MDSSocketHook(this);
+
+  int r;
+  r = admin_socket->register_command("dump cache",
+      "dump cache name=path,type=CephString,req=false",
+      asok_hook,
+      "dump metadata cache (optionally to a file)");
+  assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()
 {
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+
+  admin_socket->unregister_command("dump cache");
   delete asok_hook;
   asok_hook = NULL;
 }

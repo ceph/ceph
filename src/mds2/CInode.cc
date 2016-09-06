@@ -1524,7 +1524,7 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   CDentry *pdn = get_parent_dn();
   assert(pdn);
   CInode *diri = pdn->get_dir_inode();
-  bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(), get_version()));
+  bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, get_version()));
   for (auto p = inode.old_pools.begin(); p != inode.old_pools.end(); ++p) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
     if (*p != pool)
@@ -1631,12 +1631,16 @@ void CInode::_backtrace_stored(int r, version_t v, MDSContextBase *fin)
     fin->complete(0);
 }
 
-void CInode::first_get()
+void CInode::first_get(bool locked)
 {
-  Mutex::Locker l(mutex);
+  if (!locked)
+    mutex_lock();
   if (parent)
     parent->get(CDentry::PIN_INODEPIN);
+  if (!locked)
+    mutex_unlock();
 }
+
 void CInode::last_put()
 {
   Mutex::Locker l(mutex);

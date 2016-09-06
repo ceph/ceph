@@ -116,10 +116,10 @@ struct MutationImpl {
   void cleanup();
 
   void start_committing() {
-    std::atomic_store_explicit(&committing, true, std::memory_order_acquire);
+    std::atomic_store(&committing, true);
   }
   bool is_committing() {
-    return std::atomic_load_explicit(&committing, std::memory_order_acquire);
+    return std::atomic_load(&committing);
   }
   void wait_committing() {
     while(!is_committing());

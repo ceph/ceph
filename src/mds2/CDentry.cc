@@ -10,7 +10,7 @@
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.dentry(" << dir->dirfrag() << " " << name << ") "
+#define dout_prefix *_dout << "mds." << get_dir_inode()->mdcache->mds->get_nodeid() << ".cache.dentry(" << dir->dirfrag() << " " << name << ") "
 
 snapid_t CDentry::first(2);
 snapid_t CDentry::last(CEPH_NOSNAP);
@@ -69,7 +69,7 @@ ostream& operator<<(ostream& out, const CDentry& dn)
 }
 
 CDentry::CDentry(CDir *d, const std::string &n) :
-  CObject("CDentry"), dir(d), name(n),
+  CObject("CDentry"), name(n), dir(d),
   lock(this, &lock_type),
   versionlock(this, &versionlock_type)
 {
@@ -84,7 +84,7 @@ void CDentry::make_string(std::string& s) const
 {
   get_dir()->make_string(s);
   s += "/";
-  s += get_name();
+  s += name;
 }
 
 bool CDentry::is_lt(const CObject *r) const
@@ -109,7 +109,7 @@ const CDentry::linkage_t* CDentry::get_linkage(client_t client,
 CDentry::linkage_t* CDentry::_project_linkage()
 {
   // dirfrag must be locked
-  dir->get_inode()->mutex_assert_locked_by_me();
+  get_dir_inode()->mutex_assert_locked_by_me();
   projected_linkages.push_back(linkage_t());
   return &projected_linkages.back();
 }
@@ -130,7 +130,7 @@ void CDentry::push_projected_linkage(CInode *in)
 
 void CDentry::pop_projected_linkage()
 {
-  dir->get_inode()->mutex_assert_locked_by_me();
+  get_dir_inode()->mutex_assert_locked_by_me();
   assert(!projected_linkages.empty());
   linkage_t& n = projected_linkages.front();
 
@@ -151,14 +151,14 @@ void CDentry::pop_projected_linkage()
 
 void CDentry::link_inode_work(inodeno_t ino, uint8_t d_type)
 {
-  dir->get_inode()->mutex_assert_locked_by_me();
+  get_dir_inode()->mutex_assert_locked_by_me();
   assert(linkage.is_null());
   linkage.set_remote(ino, d_type);
 }
 
 void CDentry::link_inode_work(CInode *in)
 {
-  dir->get_inode()->mutex_assert_locked_by_me();
+  get_dir_inode()->mutex_assert_locked_by_me();
   in->mutex_assert_locked_by_me();
 
   assert(linkage.is_null());
@@ -171,7 +171,7 @@ void CDentry::link_inode_work(CInode *in)
 
 void CDentry::unlink_inode_work()
 {
-  dir->get_inode()->mutex_assert_locked_by_me();
+  get_dir_inode()->mutex_assert_locked_by_me();
   assert(!linkage.is_null());
 
   CInode *in = linkage.get_inode();
@@ -260,7 +260,7 @@ void CDentry::clear_new()
   state_clear(STATE_NEW);
 }
 
-DentryLease *CDentry::add_client_lease(Session *session)
+DentryLease *CDentry::add_client_lease(Session *session, utime_t ttl)
 {
   mutex_assert_locked_by_me();
   client_t client = session->get_client();
@@ -282,6 +282,7 @@ DentryLease *CDentry::add_client_lease(Session *session)
   session->mutex_lock();
   if (is_new)
     l->seq = ++session->lease_seq;
+  l->ttl = ttl;
   session->touch_lease(l);
   session->mutex_unlock();
   return l;
@@ -310,11 +311,13 @@ void CDentry::remove_client_lease(Session *session)
     put(PIN_CLIENTLEASE);
 }
 
-void CDentry::first_get()
+void CDentry::first_get(bool locked)
 {
+  lru_pin();
 }
 void CDentry::last_put()
 {
+  lru_unpin();
 }
 
 void intrusive_ptr_add_ref(CDentry *o)

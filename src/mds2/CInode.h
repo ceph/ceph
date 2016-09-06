@@ -345,7 +345,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_nest;
 
 protected:
-  void first_get();
+  void first_get(bool locked);
   void last_put();
 
 public: // crap

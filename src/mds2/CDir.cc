@@ -231,6 +231,7 @@ CDentryRef CDir::add_null_dentry(const string& dname)
   dout(12) << "add_null_dentry " << dname << dendl;
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
+  mdcache->dentry_lru_insert(dn.get());
 
   if (items.empty())
     get(PIN_CHILD);
@@ -247,6 +248,7 @@ CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in)
 {
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
+  mdcache->dentry_lru_insert(dn.get());
 
   if (items.empty()) 
     get(PIN_CHILD);
@@ -264,6 +266,7 @@ CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d
 {
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
+  mdcache->dentry_lru_insert(dn.get());
 
   if (items.empty()) 
     get(PIN_CHILD);
@@ -277,6 +280,7 @@ CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d
   return dn;
 }
 
+// Note: this function should only be called by MDCache::trim_dentry
 void CDir::remove_dentry(CDentry *dn)
 {
   inode->mutex_assert_locked_by_me();
@@ -287,11 +291,13 @@ void CDir::remove_dentry(CDentry *dn)
   auto it = items.find(dn->get_key());
   assert(it != items.end());
   items.erase(it);
+  if (items.empty())
+    put(PIN_CHILD);
 
   num_head_null--;
 
-  if (items.empty())
-    put(PIN_CHILD);
+  mdcache->dentry_lru_remove(dn);
+  delete dn;
 }
 
 CDentry* CDir::__lookup(const char *name, snapid_t snap)
@@ -301,7 +307,7 @@ CDentry* CDir::__lookup(const char *name, snapid_t snap)
   auto it = items.lower_bound(dentry_key_t(snap, name));
   if (it == items.end())
     return 0;
-  if (it->second->get_name() == name) {
+  if (it->second->name == name) {
     dout(20) << "  hit -> " << it->first << dendl;
     return it->second;
   }
@@ -514,11 +520,11 @@ void CDir::_omap_commit(int op_prio)
     assert(dn->is_dirty());
 
     if (dn->get_linkage()->is_null()) {
-      dout(10) << " rm " << dn->get_name() << " " << *dn << dendl;
+      dout(10) << " rm " << dn->name << " " << *dn << dendl;
       write_size += key.length();
       to_remove.insert(key);
     } else {
-      dout(10) << " set " << dn->get_name() << " " << *dn << dendl;
+      dout(10) << " set " << dn->name << " " << *dn << dendl;
       bufferlist dnbl;
       _encode_dentry(dn, dnbl);
       write_size += key.length() + dnbl.length();
@@ -590,7 +596,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl)
   if (dn->get_linkage()->is_remote()) {
     inodeno_t ino = dn->get_linkage()->get_remote_ino();
     unsigned char d_type = dn->get_linkage()->get_remote_d_type();
-    dout(14) << " pos " << bl.length() << " dn '" << dn->get_name() << "' remote ino " << ino << dendl;
+    dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' remote ino " << ino << dendl;
     
     // marker, name, ino
     bl.append('L');         // remote link
@@ -601,7 +607,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl)
     CInode *in = dn->get_linkage()->get_inode();
     assert(in);
     
-    dout(14) << " pos " << bl.length() << " dn '" << dn->get_name() << "' inode " << *in << dendl;
+    dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' inode " << *in << dendl;
     
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode
@@ -697,12 +703,11 @@ void CDir::_committed(int r, version_t v)
       dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
       dn->mark_clean();
 
-      // drop clean null stray dentries immediately
+      // drop clean null stray dentries ASAP
       if (stray && 
 	  dn->get_num_ref() == 0 &&
-	  !dn->is_projected() &&
 	  dn->get_linkage()->is_null())
-	remove_dentry(dn);
+	mdcache->touch_dentry_bottom(dn);
     } 
   }
 
@@ -1083,7 +1088,7 @@ void CDir::add_to_bloom(CDentry *dn)
     bloom = new bloom_filter(size, 1.0 / size, 0);
   }
   /* This size and false positive probability is completely random.*/
-  bloom->insert(dn->get_name().c_str(), dn->get_name().size());
+  bloom->insert(dn->name.c_str(), dn->name.size());
 }
 
 bool CDir::is_in_bloom(const string& name)
@@ -1099,7 +1104,7 @@ void CDir::remove_bloom()
   bloom = NULL;
 }
 
-void CDir::first_get()
+void CDir::first_get(bool locked)
 {
   inode->get(CInode::PIN_DIRFRAG);
 }
