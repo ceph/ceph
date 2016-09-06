@@ -3864,6 +3864,14 @@ int BlueStore::fsck()
   };
   map<uint64_t,sb_info_t> sb_info;
 
+  uint64_t num_objects = 0;
+  uint64_t num_extents = 0;
+  uint64_t num_blobs = 0;
+  uint64_t num_spanning_blobs = 0;
+  uint64_t num_shared_blobs = 0;
+  uint64_t num_sharded_objects = 0;
+  uint64_t num_object_shards = 0;
+
   utime_t start = ceph_clock_now(NULL);
 
   int r = _open_path();
@@ -4040,8 +4048,14 @@ int BlueStore::fsck()
 	}
 	used_nids.insert(o->onode.nid);
       }
+      ++num_objects;
+      num_spanning_blobs += o->extent_map.spanning_blob_map.size();
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
       // shards
+      if (!o->extent_map.shards.empty()) {
+	++num_sharded_objects;
+	num_object_shards += o->extent_map.shards.size();
+      }
       for (auto& s : o->extent_map.shards) {
 	dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
 	expecting_shards.push_back(s.key);
@@ -4062,8 +4076,10 @@ int BlueStore::fsck()
 	expected_statfs.stored += l.length;
 	assert(l.blob);
 	ref_map[l.blob].get(l.blob_offset, l.length);
+	++num_extents;
       }
       for (auto &i : ref_map) {
+	++num_blobs;
 	if (i.first->ref_map != i.second) {
 	  derr << __func__ << " " << oid << " blob " << *i.first
 	       << " doesn't match expected ref_map " << i.second << dendl;
@@ -4155,6 +4171,7 @@ int BlueStore::fsck()
 	     << std::hex << sbid << std::dec << dendl;
 	++errors;
       } else {
+	++num_shared_blobs;
 	sb_info_t& sbi = p->second;
 	bluestore_shared_blob_t shared_blob;
 	bufferlist bl = it->value();
@@ -4297,6 +4314,15 @@ int BlueStore::fsck()
   // fatal errors take precedence
   if (r < 0)
     return r;
+
+  dout(2) << __func__ << " " << num_objects << " objects, "
+	  << num_sharded_objects << " of them sharded.  "
+	  << dendl;
+  dout(2) << __func__ << " " << num_extents << " extents to "
+	  << num_blobs << " blobs, "
+	  << num_spanning_blobs << " spanning, "
+	  << num_shared_blobs << " shared."
+	  << dendl;
 
   utime_t duration = ceph_clock_now(NULL) - start;
   dout(1) << __func__ << " finish with " << errors << " errors in "
