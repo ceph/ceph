@@ -2354,7 +2354,10 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   in->inode.uid = mdr->client_request->get_caller_uid();
 
-  in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->get_op_stamp();
+  in->inode.btime = in->inode.ctime = in->inode.mtime = in->inode.atime =
+    mdr->get_op_stamp();
+
+  in->inode.change_attr = 0;
 
   MClientRequest *req = mdr->client_request;
   if (req->get_data().length()) {
@@ -3743,7 +3746,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   __u32 access_mask = MAY_WRITE;
 
   // xlock inode
-  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID|CEPH_SETATTR_BTIME))
     xlocks.insert(&cur->authlock);
   if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
     xlocks.insert(&cur->filelock);
@@ -3808,7 +3811,9 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     pi->mtime = req->head.args.setattr.mtime;
   if (mask & CEPH_SETATTR_ATIME)
     pi->atime = req->head.args.setattr.atime;
-  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
+  if (mask & CEPH_SETATTR_BTIME)
+    pi->btime = req->head.args.setattr.btime;
+  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_BTIME))
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
@@ -3832,6 +3837,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
@@ -3866,6 +3872,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->mtime = pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
 
   uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
@@ -3981,6 +3988,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   pi->add_old_pool(old_pool);
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -4500,6 +4508,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->xattr_version++;
   px->erase(name);
   if (!(flags & CEPH_XATTR_REMOVE)) {
@@ -4561,6 +4570,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->xattr_version++;
   px->erase(name);
 
@@ -4952,6 +4962,7 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   inode_t *pi = targeti->project_inode();
   pi->nlink++;
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->version = tipv;
 
   // log + wait
@@ -5601,6 +5612,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->nlink--;
   if (pi->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
@@ -6784,11 +6796,13 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (!silent) {
     if (pi) {
       pi->ctime = mdr->get_op_stamp();
+      pi->change_attr++;
       if (linkmerge)
 	pi->nlink--;
     }
     if (tpi) {
       tpi->ctime = mdr->get_op_stamp();
+      tpi->change_attr++;
       destdn->make_path_string(tpi->stray_prior_path);
       tpi->nlink--;
       if (tpi->nlink == 0)

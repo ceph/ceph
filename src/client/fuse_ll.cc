@@ -41,13 +41,6 @@
 #define FINO_STAG(x) ((x) >> 48)
 #define MAKE_FINO(i,s) ((i) | ((s) << 48))
 
-#define MINORBITS	20
-#define MINORMASK	((1U << MINORBITS) - 1)
-
-#define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
-#define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
-#define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
-
 static uint32_t new_encode_dev(dev_t dev)
 {
 	unsigned major = MAJOR(dev);
