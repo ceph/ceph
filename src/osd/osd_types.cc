@@ -5414,7 +5414,7 @@ void store_statfs_t::dump(Formatter *f) const
 ostream& operator<<(ostream& out, const store_statfs_t &s)
 {
   out << std::hex
-      << " store_statfs(0x" << s.available
+      << "store_statfs(0x" << s.available
       << "/0x"  << s.total
       << ", stored 0x" << s.stored
       << "/0x"  << s.allocated
