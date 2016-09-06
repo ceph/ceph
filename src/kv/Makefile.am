@@ -40,7 +40,7 @@ endif
 
 if WITH_DLIBROCKSDB
 libkv_a_SOURCES += kv/RocksDBStore.cc
-libkv_a_LIBADD += -lrocksdb
+# libkv_a_LIBADD += -lrocksdb
 noinst_HEADERS += kv/RocksDBStore.h
 endif
 
