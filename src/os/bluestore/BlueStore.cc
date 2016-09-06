@@ -2422,6 +2422,8 @@ void BlueStore::_init_logger()
 	    "fill out the block");
   b.add_u64(l_bluestore_write_small_new, "bluestore_write_small_new",
 	    "Small write into new (sparse) blob");
+
+  b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -6395,6 +6397,8 @@ int BlueStore::queue_transactions(
   throttle_bytes.get(txc->bytes);
   throttle_wal_ops.get(txc->ops);
   throttle_wal_bytes.get(txc->bytes);
+
+  logger->inc(l_bluestore_txc);
 
   // execute (start)
   _txc_state_proc(txc);
