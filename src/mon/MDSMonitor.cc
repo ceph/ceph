@@ -90,7 +90,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
 {
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
-  fs->mds_map.max_mds = g_conf->max_mds;
+  fs->mds_map.max_mds = 1;
   fs->mds_map.data_pools.insert(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
@@ -1753,7 +1753,7 @@ int MDSMonitor::management_command(
     // Carry forward what makes sense
     new_fs->fscid = fs->fscid;
     new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
-    new_fs->mds_map.max_mds = g_conf->max_mds;
+    new_fs->mds_map.max_mds = 1;
     new_fs->mds_map.data_pools = fs->mds_map.data_pools;
     new_fs->mds_map.metadata_pool = fs->mds_map.metadata_pool;
     new_fs->mds_map.cas_pool = fs->mds_map.cas_pool;

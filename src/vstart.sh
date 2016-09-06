@@ -69,6 +69,7 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=3
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS=1
+[ -z "$CEPH_MAX_MDS" ] && CEPH_MDS_MAX=1
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
 
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
@@ -135,6 +136,7 @@ usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
+usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
 
 usage_exit() {
 	printf "$usage"
@@ -274,6 +276,10 @@ case $1 in
     --nolockdep )
             lockdep=0
             ;;
+    --multimds)
+        CEPH_MAX_MDS="$2"
+        shift
+        ;;
     * )
 	    usage_exit
 esac
@@ -677,6 +683,10 @@ if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
         ceph_adm osd pool create "cephfs_data_${name}" 8
         ceph_adm osd pool create "cephfs_metadata_${name}" 8
         ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+        if [ "$CEPH_MAX_MDS" -gt 1 ]; then
+            ceph_adm fs set "cephfs_${name}" allow_multimds true --yes-i-really-mean-it
+            ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
+        fi
         fs=$(($fs + 1))
         [ $fs -eq $CEPH_NUM_FS ] && break
     done
