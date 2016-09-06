@@ -2424,6 +2424,8 @@ void BlueStore::_init_logger()
 	    "Small write into new (sparse) blob");
 
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
+  b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
+	    "Onode extent map reshard events");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -5886,6 +5888,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 	     << dendl;
 	assert(0 == "reshard problem");
       }
+      logger->inc(l_bluestore_onode_reshard);
     }
 
     bufferlist bl;
