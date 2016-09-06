@@ -3773,6 +3773,7 @@ void apply(uint64_t off,
            uint64_t len,
            uint64_t granularity,
            boost::dynamic_bitset<> &bitset,
+	   const char *what,
           std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
   while (off < end) {
@@ -3800,7 +3801,7 @@ int BlueStore::_fsck_check_extents(
     }
     bool already = false;
     apply(
-      e.offset, e.length, min_alloc_size, used_blocks,
+      e.offset, e.length, block_size, used_blocks, __func__,
       [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
 	if (bs.test(pos))
 	  already = true;
@@ -3880,10 +3881,9 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_alloc;
 
-  used_blocks.resize(
-    ROUND_UP_TO(bdev->get_size(), min_alloc_size) / min_alloc_size);
+  used_blocks.resize(bdev->get_size() / block_size);
   apply(
-    0, BLUEFS_START, min_alloc_size, used_blocks,
+    0, BLUEFS_START, block_size, used_blocks, "0~BLUEFS_START",
     [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
       bs.set(pos);
     }
@@ -3892,7 +3892,7 @@ int BlueStore::fsck()
   if (bluefs) {
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs",
         [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
           bs.set(pos);
         }
@@ -4202,7 +4202,7 @@ int BlueStore::fsck()
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
-          e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+          e.get_start(), e.get_len(), block_size, used_blocks, "wal",
           [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
             bs.set(pos);
           }
@@ -4217,9 +4217,9 @@ int BlueStore::fsck()
     // know they are allocated.
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs_extents",
         [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
-          bs.reset(pos);
+	  bs.reset(pos);
         }
       );
     }
@@ -4228,12 +4228,12 @@ int BlueStore::fsck()
     while (fm->enumerate_next(&offset, &length)) {
       bool intersects = false;
       apply(
-        offset, length, min_alloc_size, used_blocks,
+        offset, length, block_size, used_blocks, "free",
         [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
           if (bs.test(pos)) {
             intersects = true;
           } else {
-            bs.set(pos);
+	    bs.set(pos);
           }
         }
       );
