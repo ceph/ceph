@@ -78,9 +78,7 @@ boost::pool<> CDir::pool(sizeof(CDir));
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
-  string path;
-  dir.get_inode()->make_path_string_projected(path);
-  out << "[dir " << dir.dirfrag() << " " << path << "/"
+  out << "[dir " << dir.dirfrag() << " " << dir.get_path() << "/"
       << " [" << dir.first << ",head]";
   if (dir.is_auth()) {
     out << " auth";
@@ -1729,7 +1727,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   if (hdrbl.length() == 0) {
     dout(0) << "_fetched missing object for " << *this << dendl;
-    clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
+
+    clog->error() << "dir " << dirfrag() << " object missing on disk; some "
+                     "files may be lost (" << get_path() << ")";
 
     go_bad(complete);
     return;
@@ -1744,13 +1744,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       derr << "Corrupt fnode in dirfrag " << dirfrag()
         << ": " << err << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
-		  << err;
+		  << err << " (" << get_path() << ")";
       go_bad(complete);
       return;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
-		  << hdrbl.length() - p.get_off() << " extra bytes\n";
+		  << hdrbl.length() - p.get_off() << " extra bytes ("
+                  << get_path() << ")";
       go_bad(complete);
       return;
     }
@@ -1809,7 +1810,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     } catch (const buffer::error &err) {
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
-                               << err;
+                               << err << "(" << get_path() << ")";
 
       // Remember that this dentry is damaged.  Subsequent operations
       // that try to act directly on it will get their EIOs, but this
@@ -2869,9 +2870,7 @@ void CDir::dump(Formatter *f) const
 {
   assert(f != NULL);
 
-  string path;
-  get_inode()->make_path_string_projected(path);
-  f->dump_stream("path") << path;
+  f->dump_stream("path") << get_path();
 
   f->dump_stream("dirfrag") << dirfrag();
   f->dump_int("snapid_first", first);
@@ -3134,3 +3133,11 @@ bool CDir::scrub_local()
   }
   return rval;
 }
+
+std::string CDir::get_path() const
+{
+  std::string path;
+  get_inode()->make_path_string_projected(path);
+  return path;
+}
+
