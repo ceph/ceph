@@ -5,6 +5,7 @@ import tempfile
 from copy import deepcopy
 from mock import Mock, patch
 
+from teuthology.config import config
 from teuthology.orchestra.opsys import OS
 from teuthology.suite import util
 
@@ -37,6 +38,9 @@ def git_repository(request):
 
 
 class TestUtil(object):
+    def setup(self):
+        config.use_shaman = False
+
     @patch('requests.get')
     def test_get_hash_success(self, m_get):
         mock_resp = Mock()
@@ -286,6 +290,8 @@ class TestMissingPackages(object):
 
 
 class TestDistroDefaults(object):
+    def setup(self):
+        config.use_shaman = False
 
     def test_distro_defaults_saya(self):
         expected = ('armv7l', 'saucy',
