@@ -33,6 +33,10 @@ if(WITH_RBD)
     ${CMAKE_DL_LIBS}
     keyutils
     )
+  add_dependencies(ceph_smalliobenchrbd
+    cls_rbd
+    cls_journal
+    cls_lock)
   install(TARGETS
     ceph_smalliobenchrbd
     DESTINATION bin)
