@@ -841,6 +841,17 @@ void Pipe::set_socket_options()
     }
   }
 
+  // reuse addr+port when possible
+  { 
+    int on = 1;
+    int r = ::setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    if (r < 0) {
+      lderr(msgr->cct) << "Pipe::"<< __func__ << " unable to setsockopt: "
+                       << cpp_strerror(errno) << dendl;
+      r = -errno;
+    }
+  }
+
   // block ESIGPIPE
 #if defined(SO_NOSIGPIPE)
   int val = 1;
