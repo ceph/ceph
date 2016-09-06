@@ -458,8 +458,8 @@ struct bluestore_blob_t {
                uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
                vector<bluestore_pextent_t> *r);
 
-  void map(uint64_t x_off, uint64_t x_len,
-	   std::function<void(uint64_t,uint64_t)> f) const {
+  int map(uint64_t x_off, uint64_t x_len,
+	   std::function<int(uint64_t,uint64_t)> f) const {
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
@@ -470,11 +470,14 @@ struct bluestore_blob_t {
     while (x_len > 0) {
       assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
-      f(p->offset + x_off, l);
+      int r = f(p->offset + x_off, l);
+      if (r < 0)
+        return r;
       x_off = 0;
       x_len -= l;
       ++p;
     }
+    return 0;
   }
   void map_bl(uint64_t x_off,
 	      bufferlist& bl,
