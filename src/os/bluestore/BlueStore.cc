@@ -2402,6 +2402,26 @@ void BlueStore::_init_logger()
     "Sum for bytes of read hit in the cache");
   b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
     "Sum for bytes of read missed in the cache");
+
+  b.add_u64(l_bluestore_write_big, "bluestore_write_big",
+	    "Large min_alloc_size-aligned writes into fresh blobs");
+  b.add_u64(l_bluestore_write_big_bytes, "bleustore_write_big_bytes",
+	    "Large min_alloc_size-aligned writes into fresh blobs (bytes)");
+  b.add_u64(l_bluestore_write_big_blobs, "bleustore_write_big_blobs",
+	    "Large min_alloc_size-aligned writes into fresh blobs (blobs)");
+  b.add_u64(l_bluestore_write_small, "bluestore_write_small",
+	    "Small writes into existing or sparse small blobs");
+  b.add_u64(l_bluestore_write_small_bytes, "bluestore_write_small_bytes",
+	    "Small writes into existing or sparse small blobs (bytes)");
+  b.add_u64(l_bluestore_write_small_unused, "bluestore_write_small_unused",
+	    "Small writes into unused portion of existing blob");
+  b.add_u64(l_bluestore_write_small_wal, "bluestore_write_small_wal",
+	    "Small overwrites using WAL");
+  b.add_u64(l_bluestore_write_small_pre_read, "bluestore_write_small_pre_read",
+	    "Small writes that required we read some data (possibly cached) to "
+	    "fill out the block");
+  b.add_u64(l_bluestore_write_small_new, "bluestore_write_small_new",
+	    "Small write into new (sparse) blob");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -6898,6 +6918,9 @@ void BlueStore::_do_write_small(
   assert(length < min_alloc_size);
   uint64_t end = offset + length;
 
+  logger->inc(l_bluestore_write_small);
+  logger->inc(l_bluestore_write_small_bytes, length);
+
   bufferlist bl;
   blp.copy(length, bl);
 
@@ -6992,6 +7015,7 @@ void BlueStore::_do_write_small(
       b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
       dout(20) << __func__ << "  lex " << *le << dendl;
+      logger->inc(l_bluestore_write_small_unused);
       return;
     }
 
@@ -7033,6 +7057,7 @@ void BlueStore::_do_write_small(
 	}
 	logger->inc(l_bluestore_write_penalty_read_ops);
       }
+      logger->inc(l_bluestore_write_small_pre_read);
     }
 
     // chunk-aligned wal overwrite?
@@ -7064,6 +7089,7 @@ void BlueStore::_do_write_small(
       b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
       dout(20) << __func__ << "  lex " << *le << dendl;
+      logger->inc(l_bluestore_write_small_wal);
       return;
     }
 
@@ -7082,6 +7108,7 @@ void BlueStore::_do_write_small(
   txc->statfs_delta.stored() += le->length;
   dout(20) << __func__ << "  lex " << *le << dendl;
   wctx->write(b, alloc_len, b_off, bl, true);
+  logger->inc(l_bluestore_write_small_new);
   return;
 }
 
@@ -7113,7 +7140,10 @@ void BlueStore::_do_write_big(
     dout(20) << __func__ << "  lex " << *le << dendl;
     offset += l;
     length -= l;
+    logger->inc(l_bluestore_write_big_blobs);
   }
+  logger->inc(l_bluestore_write_big);
+  logger->inc(l_bluestore_write_big_bytes, length);
 }
 
 int BlueStore::_do_alloc_write(

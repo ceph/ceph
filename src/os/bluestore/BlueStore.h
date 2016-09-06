@@ -74,6 +74,15 @@ enum {
   l_bluestore_onode_misses,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
+  l_bluestore_write_big,
+  l_bluestore_write_big_bytes,
+  l_bluestore_write_big_blobs,
+  l_bluestore_write_small,
+  l_bluestore_write_small_bytes,
+  l_bluestore_write_small_unused,
+  l_bluestore_write_small_wal,
+  l_bluestore_write_small_pre_read,
+  l_bluestore_write_small_new,
   l_bluestore_last
 };
 
