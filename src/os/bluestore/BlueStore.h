@@ -84,6 +84,7 @@ enum {
   l_bluestore_write_small_pre_read,
   l_bluestore_write_small_new,
   l_bluestore_txc,
+  l_bluestore_onode_reshard,
   l_bluestore_last
 };
 
