@@ -1026,9 +1026,13 @@ public:
 
   void start_choose_profile() {
     free(crush->choose_tries);
-    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * crush->choose_total_tries);
+    /*
+     * the original choose_total_tries value was off by one (it
+     * counted "retries" and not "tries").  add one to alloc.
+     */
+    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
     memset(crush->choose_tries, 0,
-	   sizeof(*crush->choose_tries) * crush->choose_total_tries);
+	   sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
   }
   void stop_choose_profile() {
     free(crush->choose_tries);
