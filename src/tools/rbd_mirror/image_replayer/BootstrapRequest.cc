@@ -370,6 +370,12 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     m_ret_val = r;
     close_remote_image();
     return;
+  } if (m_client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+    dout(10) << ": client flagged disconnected -- skipping bootstrap" << dendl;
+    // The caller is expected to detect disconnect initializing remote journal.
+    m_ret_val = 0;
+    close_remote_image();
+    return;
   }
 
   update_client_image();
@@ -728,14 +734,14 @@ bool BootstrapRequest<I>::decode_client_meta() {
     ::decode(client_data, it);
   } catch (const buffer::error &err) {
     derr << ": failed to decode client meta data: " << err.what() << dendl;
-    return true;
+    return false;
   }
 
   librbd::journal::MirrorPeerClientMeta *client_meta =
     boost::get<librbd::journal::MirrorPeerClientMeta>(&client_data.client_meta);
   if (client_meta == nullptr) {
     derr << ": unknown peer registration" << dendl;
-    return true;
+    return false;
   } else if (!client_meta->image_id.empty()) {
     // have an image id -- use that to open the image
     m_local_image_id = client_meta->image_id;
