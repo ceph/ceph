@@ -68,7 +68,7 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 /*
  * object name key structure
  *
- * 2 chars: shard (-- for none, or hex digit, so that we sort properly)
+ * encoded u8: shard + 2^7 (so that it sorts properly)
  * encoded u64: poolid + 2^63 (so that it sorts properly)
  * encoded u32: hash (bit reversed)
  *
@@ -194,30 +194,12 @@ static string pretty_binary_string(const string& in)
 
 static void _key_encode_shard(shard_id_t shard, string *key)
 {
-  // make field ordering match with ghobject_t compare operations
-  if (shard == shard_id_t::NO_SHARD) {
-    // otherwise ff will sort *after* 0, not before.
-    key->append("--");
-  } else {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%02x", (int)shard);
-    key->append(buf);
-  }
+  key->push_back((char)((uint8_t)shard + (uint8_t)0x80));
 }
 static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
 {
-  if (key[0] == '-') {
-    *pshard = shard_id_t::NO_SHARD;
-  } else {
-    unsigned shard;
-    int r = sscanf(key, "%x", &shard);
-    if (r < 1) {
-      assert(0 == "invalid shard of key");
-      return NULL;
-    }
-    *pshard = shard_id_t(shard);
-  }
-  return key + 2;
+  pshard->id = (uint8_t)*key - (uint8_t)0x80;
+  return key + 1;
 }
 
 static void get_coll_key_range(const coll_t& cid, int bits,
