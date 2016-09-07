@@ -1330,7 +1330,7 @@ bool BlueStore::Blob::put_ref(
 
   // search from logical releases
   for (auto le : logical) {
-    uint64_t r_off = le.offset;
+    uint64_t r_off;
     auto p = ref_map.ref_map.lower_bound(le.offset);
     if (p != ref_map.ref_map.begin()) {
       --p;
