@@ -74,10 +74,9 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  *
  * escaped string: namespace
  *
+ * escaped string: key or object name
  * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
- *         we are followed just by the key.  otherwise, we are followed by
- *         the key and then the object name.
- * escaped string: key
+ *         we are done.  otherwise, we are followed by the object name.
  * escaped string: object name (unless '=' above)
  *
  * encoded u64: snap
@@ -296,24 +295,22 @@ static void get_object_key(const ghobject_t& oid, string *key)
 
   if (oid.hobj.get_key().length()) {
     // is a key... could be < = or >.
+    append_escaped(oid.hobj.get_key(), key);
     // (ASCII chars < = and > sort in that order, yay)
     if (oid.hobj.get_key() < oid.hobj.oid.name) {
       key->append("<");
-      append_escaped(oid.hobj.get_key(), key);
       append_escaped(oid.hobj.oid.name, key);
     } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
       key->append(">");
-      append_escaped(oid.hobj.get_key(), key);
       append_escaped(oid.hobj.oid.name, key);
     } else {
       // same as no key
       key->append("=");
-      append_escaped(oid.hobj.oid.name, key);
     }
   } else {
     // no key
-    key->append("=");
     append_escaped(oid.hobj.oid.name, key);
+    key->append("=");
   }
 
   _key_encode_u64(oid.hobj.snap, key);
@@ -356,26 +353,23 @@ static int get_key_object(const string& key, ghobject_t *oid)
     return -2;
   p += r + 1;
 
+  string k;
+  r = decode_escaped(p, &k);
+  if (r < 0)
+    return -3;
+  p += r + 1;
   if (*p == '=') {
     // no key
     ++p;
-    r = decode_escaped(p, &oid->hobj.oid.name);
-    if (r < 0)
-      return -3;
-    p += r + 1;
+    oid->hobj.oid.name = k;
   } else if (*p == '<' || *p == '>') {
     // key + name
     ++p;
-    string okey;
-    r = decode_escaped(p, &okey);
-    if (r < 0)
-      return -4;
-    p += r + 1;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
       return -5;
     p += r + 1;
-    oid->hobj.set_key(okey);
+    oid->hobj.set_key(k);
   } else {
     // malformed
     return -6;
