@@ -133,7 +133,7 @@ int BitMapAllocator::allocate(
   *offset = 0;
   *length = 0;
 
-  count = m_bit_alloc->alloc_blocks_res(nblks, &start_blk);
+  count = m_bit_alloc->alloc_blocks_res(nblks, hint / m_block_size, &start_blk);
   if (count == 0) {
     return -ENOSPC;
   }
@@ -164,9 +164,11 @@ int BitMapAllocator::alloc_extents(
      << dendl;
 
   if (alloc_unit > (uint64_t) m_block_size) {
-    return alloc_extents_cont(want_size, alloc_unit, max_alloc_size, hint, extents, count);     
+    return alloc_extents_cont(want_size, alloc_unit, 
+                              max_alloc_size, hint / m_block_size, extents, count);     
   } else {
-    return alloc_extents_dis(want_size, alloc_unit, max_alloc_size, hint, extents, count); 
+    return alloc_extents_dis(want_size, alloc_unit,
+                             max_alloc_size, hint / m_block_size, extents, count); 
   }
 }
 
@@ -192,7 +194,7 @@ int BitMapAllocator::alloc_extents_cont(
   while (need_blks > 0) {
     int64_t count = 0;
     count = m_bit_alloc->alloc_blocks_res(
-      (max_blks && need_blks > max_blks) ? max_blks : need_blks, &start_blk);
+      (max_blks && need_blks > max_blks) ? max_blks : need_blks, hint, &start_blk);
     if (count == 0) {
       break;
     }
@@ -220,7 +222,7 @@ int BitMapAllocator::alloc_extents_dis(
   int64_t num = 0;
   *count = 0;
 
-  num = m_bit_alloc->alloc_blocks_dis_res(nblks, &block_list);
+  num = m_bit_alloc->alloc_blocks_dis_res(nblks, hint, &block_list);
   if (num < nblks) {
     m_bit_alloc->free_blocks_dis(num, &block_list);
     return -ENOSPC;
