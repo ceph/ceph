@@ -1246,7 +1246,6 @@ fi
 
 %files resource-agents
 %defattr(0755,root,root,-)
-# N.B. src/ocf/Makefile.am uses $(prefix)/lib
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
