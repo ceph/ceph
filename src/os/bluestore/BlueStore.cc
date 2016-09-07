@@ -1430,7 +1430,8 @@ ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 
 BlueStore::ExtentMap::ExtentMap(Onode *o)
   : onode(o),
-    inline_bl(g_conf->bluestore_extent_map_inline_shard_prealloc_size) {
+    inline_bl(
+      g_conf ? g_conf->bluestore_extent_map_inline_shard_prealloc_size : 4096) {
 }
 
 
@@ -1857,6 +1858,13 @@ void BlueStore::ExtentMap::dirty_range(
     }
     ++p;
   }
+}
+
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find(
+  uint64_t offset)
+{
+  Extent dummy(offset);
+  return extent_map.find(dummy);
 }
 
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(

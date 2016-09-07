@@ -586,6 +586,8 @@ public:
     void dirty_range(KeyValueDB::Transaction t,
 		     uint32_t offset, uint32_t length);
 
+    extent_map_t::iterator find(uint64_t offset);
+
     /// find a lextent that includes offset
     extent_map_t::iterator find_lextent(uint64_t offset);
 
