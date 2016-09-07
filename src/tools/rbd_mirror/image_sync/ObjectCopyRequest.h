@@ -81,7 +81,7 @@ private:
     SYNC_OP_TYPE_REMOVE
   };
 
-  typedef std::tuple<SyncOpType, uint64_t, uint64_t, bufferlist> SyncOp;
+  typedef std::tuple<SyncOpType, uint64_t, uint64_t, bufferlist, std::map<uint64_t, uint64_t> > SyncOp;
   typedef std::list<SyncOp> SyncOps;
   typedef std::map<librados::snap_t, SyncOps> SnapSyncOps;
   typedef std::map<librados::snap_t, uint8_t> SnapObjectStates;
