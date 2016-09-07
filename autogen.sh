@@ -45,5 +45,6 @@ aclocal -I m4 --install
 autoconf
 autoheader
 automake -a --add-missing -Wall
-( cd src/googletest/googlemock && autoreconf -fvi; )
+( cd src/googletest/googlemock && autoreconf -fvi && ./configure; )
+( cd src/ && script/make_rocksdb_makefile.sh)
 exit
