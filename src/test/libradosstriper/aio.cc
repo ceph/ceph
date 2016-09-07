@@ -22,6 +22,7 @@ public:
   }
 
   ~AioTestData() {
+    sem_unlink("test_libradosstriper_aio_sem");
     sem_close(m_sem);
   }
 
@@ -603,8 +604,8 @@ TEST_F(StriperTestPP, RemoveTestPP) {
   bufferlist bl;
   bl.append(buf, sizeof(buf));
   ASSERT_EQ(0, striper.write("RemoveTestPP", bl, sizeof(buf), 0));
-  boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
-  ASSERT_EQ(0, striper.aio_remove("RemoveTestPP", my_completion.get()));
+  AioCompletion *my_completion = cluster.aio_create_completion(0, 0, 0);
+  ASSERT_EQ(0, striper.aio_remove("RemoveTestPP", my_completion));
   {
     TestAlarm alarm;
     ASSERT_EQ(0, my_completion->wait_for_complete());
@@ -612,4 +613,5 @@ TEST_F(StriperTestPP, RemoveTestPP) {
   ASSERT_EQ(0, my_completion->get_return_value());
   bufferlist bl2;
   ASSERT_EQ(-ENOENT, striper.read("RemoveTestPP", &bl2, sizeof(buf), 0));
+  my_completion->release();
 }
