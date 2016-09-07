@@ -155,6 +155,7 @@ ostream& operator<<(ostream& out, const CInode& in)
 
 CInode::CInode(MDCache *_mdcache) :
   CObject("CInode"), mdcache(_mdcache),
+  latest_projected_xattrs(NULL),
   parent(NULL),
   versionlock(this, &versionlock_type),
   authlock(this, &authlock_type),
@@ -243,16 +244,15 @@ inode_t *CInode::project_inode(std::map<string, bufferptr> **ppx)
     if (ppx)
       px = get_xattrs();
     projected_nodes.push_back(projected_inode_t(inode, px));
-    if (ppx)
-      *ppx = &projected_nodes.back().xattrs;
   } else {
     const inode_t *pi = get_projected_inode();
     if (ppx)
       px = get_projected_xattrs();
     projected_nodes.push_back(projected_inode_t(*pi, px));
-    if (ppx)
-      *ppx = &projected_nodes.back().xattrs;
   }
+  if (ppx)
+    *ppx = latest_projected_xattrs = &projected_nodes.back().xattrs;
+
   dout(10) << "project_inode " << &projected_nodes.back() << dendl;
   return &projected_nodes.back().inode;
 }
@@ -271,8 +271,11 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
   inode = pi->inode;
 
-  if (pi->xattrs_projected)
+  if (pi->xattrs_projected) {
+    if (latest_projected_xattrs == &pi->xattrs)
+      latest_projected_xattrs = NULL;
     xattrs.swap(pi->xattrs);
+  }
 
   projected_nodes.pop_front();
 }

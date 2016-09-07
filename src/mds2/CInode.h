@@ -57,11 +57,8 @@ protected:
     }
   };
   list<projected_inode_t> projected_nodes;
+  xattr_map_t* latest_projected_xattrs;
 
-  CDentry *parent;
-  list<CDentry*> projected_parent;
-
-  map<frag_t,CDir*> dirfrags;
 public:
   CInode(MDCache *_mdcache);
 
@@ -111,9 +108,8 @@ public:
   const xattr_map_t* get_xattrs() const { return &xattrs; }
   const xattr_map_t* get_projected_xattrs() const {
     mutex_assert_locked_by_me();
-    for (auto p = projected_nodes.rbegin(); p != projected_nodes.rend(); ++p)
-      if (p->xattrs_projected)
-	return &p->xattrs;
+    if (latest_projected_xattrs)
+      return latest_projected_xattrs;
     return &xattrs;
   }
   version_t get_version() const { return inode.version; }
@@ -141,6 +137,10 @@ public:
 
   void clear_replay_undefined();
 
+protected:
+  CDentry *parent;
+  list<CDentry*> projected_parent;
+public:
   void set_primary_parent(CDentry *p) {
     assert(parent == NULL);
     parent = p;
@@ -174,6 +174,9 @@ public:
   CDentryRef get_lock_projected_parent_dn();
   bool is_projected_ancestor_of(CInode *other) const;
 
+protected:
+  map<frag_t,CDir*> dirfrags;
+public:
   frag_t pick_dirfrag(const string &dn) const {
     return frag_t();
   }
