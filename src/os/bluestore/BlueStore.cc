@@ -1428,6 +1428,12 @@ ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.extentmap(" << this << ") "
 
+BlueStore::ExtentMap::ExtentMap(Onode *o)
+  : onode(o),
+    inline_bl(g_conf->bluestore_extent_map_inline_shard_prealloc_size) {
+}
+
+
 bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 				  bool force)
 {

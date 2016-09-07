@@ -546,7 +546,7 @@ public:
     bool inline_dirty = false;
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
-    ExtentMap(Onode *o) : onode(o) {}
+    ExtentMap(Onode *o);
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
