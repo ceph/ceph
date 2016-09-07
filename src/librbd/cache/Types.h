@@ -18,9 +18,10 @@ enum PolicyMapResult {
 };
 
 enum IOType {
-  IO_TYPE_READ    = 0,
-  IO_TYPE_WRITE   = 1,
-  IO_TYPE_DISCARD = 2
+  IO_TYPE_WRITE   = 0,
+  IO_TYPE_DISCARD = 1,
+  IO_TYPE_FLUSH   = 2,
+  IO_TYPE_READ    = 3
 };
 
 typedef std::vector<uint64_t> BufferOffsets;

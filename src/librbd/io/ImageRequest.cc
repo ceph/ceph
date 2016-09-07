@@ -452,9 +452,6 @@ void ImageReadRequest<I>::send_image_cache_request() {
 
   AioCompletion *aio_comp = this->m_aio_comp;
   if (len > 0) {
-    aio_comp->read_buf = m_buf;
-    aio_comp->read_buf_len = len;
-    aio_comp->read_bl = m_pbl;
     aio_comp->set_request_count(1);
 
     auto *req_comp = new io::ReadResult::C_ImageReadRequest(

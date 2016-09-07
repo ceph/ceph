@@ -5,10 +5,12 @@
 #define CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
 
 #include "librbd/cache/ImageCache.h"
+#include "librbd/Utils.h"
 #include "librbd/cache/BlockGuard.h"
 #include "librbd/cache/ImageWriteback.h"
 #include "librbd/cache/file/Policy.h"
 #include <functional>
+#include <list>
 
 namespace librbd {
 
@@ -58,6 +60,7 @@ public:
 
 private:
   typedef std::function<void(uint64_t)> ReleaseBlock;
+  typedef std::list<Context *> Contexts;
 
   ImageCtxT &m_image_ctx;
   ImageWriteback<ImageCtxT> m_image_writeback;
@@ -70,12 +73,15 @@ private:
 
   ReleaseBlock m_release_block;
 
+  util::AsyncOpTracker m_async_op_tracker;
+
   mutable Mutex m_lock;
   BlockGuard::BlockIOs m_deferred_block_ios;
   BlockGuard::BlockIOs m_detained_block_ios;
 
   bool m_wake_up_scheduled = false;
-  Context *m_on_shutdown = nullptr;
+
+  Contexts m_post_work_contexts;
 
   void map_blocks(IOType io_type, Extents &&image_extents,
                   BlockGuard::C_BlockRequest *block_request);
