@@ -950,11 +950,13 @@ TEST_F(TestMockJournal, EventAndIOCommitOrder) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe1);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal));
+  mock_journal.get_work_queue()->drain();
 
   Context *on_journal_safe2;
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe2);
   ASSERT_EQ(2U, when_append_io_event(mock_image_ctx, mock_journal));
+  mock_journal.get_work_queue()->drain();
 
   // commit journal event followed by IO event (standard)
   on_journal_safe1->complete(0);
@@ -998,6 +1000,7 @@ TEST_F(TestMockJournal, AppendWriteEvent) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_write_event(mock_image_ctx, mock_journal, 1 << 17));
+  mock_journal.get_work_queue()->drain();
 
   on_journal_safe->complete(0);
   C_SaferCond event_ctx;
@@ -1037,6 +1040,7 @@ TEST_F(TestMockJournal, EventCommitError) {
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal,
                                      object_request));
+  mock_journal.get_work_queue()->drain();
 
   // commit the event in the journal w/o waiting writeback
   expect_future_committed(mock_journaler);
@@ -1076,6 +1080,7 @@ TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal,
                                      object_request));
+  mock_journal.get_work_queue()->drain();
 
   expect_future_is_valid(mock_future);
   C_SaferCond flush_ctx;
@@ -1111,6 +1116,7 @@ TEST_F(TestMockJournal, IOCommitError) {
   expect_append_journaler(mock_journaler);
   expect_wait_future(mock_future, &on_journal_safe);
   ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal));
+  mock_journal.get_work_queue()->drain();
 
   // failed IO remains uncommitted in journal
   on_journal_safe->complete(0);
