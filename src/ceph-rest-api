@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # vim: ts=4 sw=4 smarttab expandtab
 
+from __future__ import print_function
+
 import argparse
 import inspect
 import os
@@ -12,18 +14,24 @@ MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PYTHONPATH and LD_LIBRARY_PATH'
 
-if MYDIR.endswith('src') and \
-   os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')):
-    MYLIBPATH = os.path.join(MYDIR, '.libs')
+if (MYDIR.endswith('src') and
+    (os.path.exists(os.path.join(MYDIR, '.libs')) or
+        os.path.exists(os.path.join(MYDIR, '..', 'build', 'lib'))) and
+    os.path.exists(os.path.join(MYDIR, 'pybind'))):
+
+    if os.path.exists(os.path.join(MYDIR, '.libs')):
+        MYLIBPATH = os.path.join(MYDIR, '.libs')
+    elif os.path.exists(os.path.join(MYDIR, '..', 'build', 'lib')):
+        MYLIBPATH = os.path.join(MYDIR, '..', 'build', 'lib')
+
     if 'LD_LIBRARY_PATH' in os.environ:
         if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
             os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
-            print >> sys.stderr, DEVMODEMSG
+            print(DEVMODEMSG, file=sys.stderr)
             os.execvp('python', ['python'] + sys.argv)
     else:
         os.environ['LD_LIBRARY_PATH'] = MYLIBPATH
-        print >> sys.stderr, DEVMODEMSG
+        print(DEVMODEMSG, file=sys.stderr)
         os.execvp('python', ['python'] + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
 
@@ -37,6 +45,7 @@ def parse_args():
 
     return parser.parse_known_args()
 
+
 # main
 
 parsed_args, rest = parse_args()
@@ -45,8 +54,9 @@ parsed_args, rest = parse_args()
 
 try:
     import ceph_rest_api
-except EnvironmentError as e:
-    print >> sys.stderr, "Error importing ceph_rest_api: ", str(e)
+
+except (EnvironmentError, ImportError) as e:
+    print("Error importing ceph_rest_api:", str(e), file=sys.stderr)
     sys.exit(1)
 
 # let other exceptions generate traceback

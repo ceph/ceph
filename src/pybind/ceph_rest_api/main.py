@@ -11,6 +11,10 @@ import xml.etree.ElementTree
 import xml.sax.saxutils
 
 import flask
+import jinja2
+
+from flask import render_template
+
 from ceph_argparse import \
     ArgumentError, CephPgid, CephOsdName, CephChoices, CephPrefix, \
     concise_sig, descsort, parse_funcsig, parse_json_funcsigs, \
@@ -31,7 +35,18 @@ DEFAULT_LOGDIR = '/var/log/ceph'
 
 # 'app' must be global for decorators, etc.
 APPNAME = '__main__'
-app = flask.Flask(APPNAME)
+
+APP_ROOT_DIR = os.path.join(os.path.dirname(__file__))
+app = flask.Flask(APPNAME, static_folder=os.path.join(APP_ROOT_DIR, 'static'))
+
+my_loader = jinja2.ChoiceLoader([
+    app.jinja_loader,
+    jinja2.FileSystemLoader([
+        os.path.join(APP_ROOT_DIR, 'templates'),
+    ]),
+])
+
+app.jinja_loader = my_loader
 
 LOGLEVELS = {
     'critical': logging.CRITICAL,
@@ -149,7 +164,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
         maxkey = sorted(app.ceph_sigdict.keys())[-1]
         maxkey = int(maxkey.replace('cmd', ''))
         osdkey = maxkey + 1
-        for k, v in osd_sigdict.iteritems():
+        for k, v in osd_sigdict.items():
             newv = v
             newv['flavor'] = 'tell'
             globk = 'cmd' + str(osdkey)
@@ -165,12 +180,12 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     # 'avail', a comma-separated list of strings of consumers that should
     #    display this command (filtered by parse_json_funcsigs() above)
     app.ceph_urls = {}
-    for cmdnum, cmddict in app.ceph_sigdict.iteritems():
+    for cmdnum, cmddict in app.ceph_sigdict.items():
         cmdsig = cmddict['sig']
         flavor = cmddict.get('flavor', 'mon')
         url, params = generate_url_and_params(app, cmdsig, flavor)
         perm = cmddict['perm']
-        for k in METHOD_DICT.iterkeys():
+        for k in METHOD_DICT.keys():
             if k in perm:
                 methods = METHOD_DICT[k]
         urldict = {'paramsig': params,
@@ -260,38 +275,54 @@ def concise_sig_for_uri(sig, flavor):
 
 
 def show_human_help(prefix):
-    '''
+    """
     Dump table showing commands matching prefix
-    '''
-    # XXX There ought to be a better discovery mechanism than an HTML table
-    s = '<html><body><table border=1><th>Possible commands:</th><th>Method</th><th>Description</th>'
-
+    """
     permmap = {'r': 'GET', 'rw': 'PUT', 'rx': 'GET', 'rwx': 'PUT'}
-    line = ''
-    for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
-        concise = concise_sig(cmdsig['sig'])
+    data = []
+    for cmdsig in sorted(app.ceph_sigdict.values(), cmp=descsort):
         flavor = cmdsig.get('flavor', 'mon')
+        endpoint = concise_sig_for_uri(cmdsig['sig'], flavor)
+
+        concise = concise_sig(cmdsig['sig'])
         if flavor == 'tell':
             concise = 'tell/<target>/' + concise
-        if concise.startswith(prefix):
-            line = ['<tr><td>']
-            wrapped_sig = textwrap.wrap(
-                concise_sig_for_uri(cmdsig['sig'], flavor), 40
-            )
-            for sigline in wrapped_sig:
-                line.append(flask.escape(sigline) + '\n')
-            line.append('</td><td>')
-            line.append(permmap[cmdsig['perm']])
-            line.append('</td><td>')
-            line.append(flask.escape(cmdsig['help']))
-            line.append('</td></tr>\n')
-            s += ''.join(line)
 
-    s += '</table></body></html>'
-    if line:
-        return s
-    else:
-        return ''
+        if not concise.startswith(prefix):
+            continue
+
+        path = {
+            'module': cmdsig['module'],
+            'method': permmap[cmdsig['perm']],
+            'help': cmdsig['help'],
+            'endpoint': endpoint,
+            'header': endpoint.split('?')[0],
+            'short': concise,
+            'params': []
+        }
+
+        for each in cmdsig['sig']:
+            if each.name != 'prefix':
+                path['params'].append(
+                    {'name': each.name,
+                     'required': each.req,
+                     'n': each.N,
+                     'type_class': each.t.__name__,
+                     'type': str(each.instance)
+                     }
+                )
+
+        data.append(path)
+
+    conf = {
+        'addr': app.ceph_addr,
+        'port': app.ceph_port,
+        'baseurl': app.ceph_baseurl,
+        'version': app.ceph_baseurl.split('/')[-1],
+        'prefix': prefix or 'None (main)'
+    }
+
+    return render_template('index.html', data=data, conf=conf)
 
 
 @app.before_request
@@ -359,7 +390,6 @@ def handler(catchall_path=None, fmt=None, target=None):
     <target>.  Partial match or ?help cause the HTML-table
     "show_human_help" output.
     '''
-
     ep = catchall_path or flask.request.endpoint
     ep = ep.replace('.<fmt>', '')
 
@@ -438,7 +468,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         # if there are parameters for this endpoint, process them
         if paramsig:
             args = {}
-            for k, l in flask.request.args.iterlists():
+            for k, l in flask.request.args.items():
                 if len(l) == 1:
                     args[k] = l[0]
                 else:

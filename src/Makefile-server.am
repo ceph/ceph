@@ -6,7 +6,7 @@ bin_SCRIPTS += \
 	ceph-debugpack \
 	ceph-crush-location
 
-python_PYTHON += pybind/ceph_rest_api.py
+python_PYTHON += $(shell find pybind/ceph_rest_api -name '*')
 
 shell_scripts += ceph-coverage
 

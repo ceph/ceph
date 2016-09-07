@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Documentation of Ceph REST API">
+    <meta name="author" content="Anirudha Bose <ani07nov@gmail.com>">
+
+    <title>Ceph REST API - Documentation</title>
+
+    <!-- Bootstrap Core CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
+
+</head>
+
+<body>
+
+    <div id="wrapper">
+
+        <!-- Sidebar -->
+        <div id="sidebar-wrapper">
+            <ul class="sidebar-nav">
+                <li class="sidebar-brand">
+                    <a href="#">
+                        <img src="{{ url_for('static', filename='img/logo.png') }}">
+                    </a>
+                </li>
+
+                <li class="sidebar-header">
+                    Table of Contents
+                </li>
+
+                <div class="sideband-separator">
+                </div>
+
+
+                {% for path in data %}
+                <li>
+                    <a href="#{{path.header}}">{{path.header | truncate(35, True, '...')}}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <!-- /#sidebar-wrapper -->
+
+        <!-- Page Content -->
+        <div id="page-content-wrapper">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-lg-4 col-lg-offset-4 header">
+                        <h3>Welcome Ceph REST API Documentation</h3>
+                    </div>
+
+                    <div class="col-lg-12 configuration">
+                        <div>API version: <code>{{conf.version}}</code></div>
+                        <div>Host address: <code>{{conf.addr}}</code></div>
+                        <div>Host port: <code>{{conf.port}}</code></div>
+                        <div>API base path: <code>{{conf.baseurl}}</code></div>
+                        <div>Man page: <code>http://docs.ceph.com/docs/master/man/8/ceph-rest-api</code></div>
+                        <div>API documentation prefix: <code>{{conf.prefix}}</code></div>
+                    </div>
+                    
+                    <div class="col-lg-12">
+                        <hr>
+                        {% for path in data %}
+                        <div class="row" id="{{path.header}}">
+                        
+                        <div class="endpoint-header">
+                            <span class='endpoint-title'>{{path.header}}</span>
+                            <span class="label {{path.method}}">{{path.method}}</span>
+                            {% if "deprecated" in path | lower %}
+                                <span class="label label-danger">DEPRECATED</span>
+                            {% endif %}
+                        </div>
+
+                        <p>{{path.help | capitalize }}</p>
+                        <p>Module: <code>{{path.module}}</code></p>
+                        <p>Short representation: <code>{{path.short}}</code></p>
+                        
+                        <div class="prettyprint">
+                            <span>{{path.endpoint}}}</span>
+                        </div>
+                        
+                        {% if path.params %}
+                        <h4>Parameter</h4>
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Field</th>
+                                    <th>Required</th>
+                                    <th>Type</th>
+                                    <th>Type Class</th>
+                                    <th>N</th>
+                                </tr>
+                            </thead>
+                            {% for param in path.params %}
+                            <tr>
+                                <td>{{param.name}}</td>
+                                <td>{{param.required}}</td>
+                                <td>{{param.type}}</td>
+                                <td>{{param.type_class}}</td>
+                                <td>{{param.n}}</td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                        {% endif %}
+                        <hr>
+                        </div>
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        <!-- /#page-content-wrapper -->
+
+    </div>
+    <!-- /#wrapper -->
+
+    <!-- Bootstrap Core JavaScript -->
+    <script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
+    
+</body>
+
+</html>
