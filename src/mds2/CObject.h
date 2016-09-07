@@ -18,7 +18,7 @@ class LogSegment;
 class CObject {
 protected:
 #ifdef __MDS_REF_SET
-
+  Mutex ref_map_lock;
   std::map<int,int> ref_map;
 #endif
   std::atomic<int> ref;
@@ -41,7 +41,8 @@ public:
     if (old == 0)
       first_get(locked);
 #ifdef __MDS_REF_SET
-  ref_map[by]++;
+    Mutex::Locker l(ref_map_lock);
+    ref_map[by]++;
 #endif
   }
   bool get_unless_zero(int by) {
@@ -50,6 +51,7 @@ public:
     if (old == 0) 
       return false;
 #ifdef __MDS_REF_SET
+    Mutex::Locker l(ref_map_lock);
     ref_map[by]++;
 #endif
     return true;
@@ -60,7 +62,8 @@ public:
     if (old == 1)
       last_put();
 #ifdef __MDS_REF_SET
-  assert(--ref_map[by] >= 0);
+    Mutex::Locker l(ref_map_lock);
+    assert(--ref_map[by] >= 0);
 #endif
   }
   int get_num_ref(int by=-1) const {
@@ -184,6 +187,9 @@ public:
   };
 
   CObject(const string &type_name) :
+#ifdef __MDS_REF_SET
+    ref_map_lock("CObject::ref_map_lock"),
+#endif
     ref(ATOMIC_VAR_INIT(0)), state(ATOMIC_VAR_INIT(0)),
     mutex(type_name + "::mutex"),
     last_wait_seq(0) {}
