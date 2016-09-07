@@ -98,6 +98,10 @@ public:
     m_work_queue->queue(on_finish, r);
   }
 
+  inline ContextWQ *get_work_queue() {
+    return m_work_queue;
+  }
+
   inline SafeTimer &get_timer() {
     return *m_timer;
   }
