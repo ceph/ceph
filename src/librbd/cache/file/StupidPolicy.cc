@@ -68,6 +68,97 @@ int StupidPolicy<I>::invalidate(uint64_t block) {
 }
 
 template <typename I>
+bool StupidPolicy<I>::contains_dirty() const {
+  Mutex::Locker locker(m_lock);
+  return m_dirty_lru.get_tail() != nullptr;
+}
+
+template <typename I>
+bool StupidPolicy<I>::is_dirty(uint64_t block) const {
+  Mutex::Locker locker(m_lock);
+  auto entry_it = m_block_to_entries.find(block);
+  assert(entry_it != m_block_to_entries.end());
+
+  bool dirty = entry_it->second->dirty;
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "block=" << block << ", "
+                 << "dirty=" << dirty << dendl;
+  return dirty;
+}
+
+template <typename I>
+void StupidPolicy<I>::set_dirty(uint64_t block) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "block=" << block << dendl;
+
+  Mutex::Locker locker(m_lock);
+  auto entry_it = m_block_to_entries.find(block);
+  assert(entry_it != m_block_to_entries.end());
+
+  Entry *entry = entry_it->second;
+  if (entry->dirty) {
+    return;
+  }
+
+  entry->dirty = true;
+  m_clean_lru.remove(entry);
+  m_dirty_lru.insert_head(entry);
+}
+
+template <typename I>
+void StupidPolicy<I>::clear_dirty(uint64_t block) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "block=" << block << dendl;
+
+  Mutex::Locker locker(m_lock);
+  auto entry_it = m_block_to_entries.find(block);
+  assert(entry_it != m_block_to_entries.end());
+
+  Entry *entry = entry_it->second;
+  if (!entry->dirty) {
+    return;
+  }
+
+  entry->dirty = false;
+  m_dirty_lru.remove(entry);
+  m_clean_lru.insert_head(entry);
+}
+
+template <typename I>
+int StupidPolicy<I>::get_writeback_block(uint64_t *block) {
+  CephContext *cct = m_image_ctx.cct;
+
+  // TODO make smarter writeback policy instead of "as fast as possible"
+
+  Mutex::Locker locker(m_lock);
+  Entry *entry = reinterpret_cast<Entry*>(m_dirty_lru.get_tail());
+  if (entry == nullptr) {
+    ldout(cct, 20) << "no dirty blocks to writeback" << dendl;
+    return -ENODATA;
+  }
+
+  int r = m_block_guard.detain(entry->block, nullptr);
+  if (r < 0) {
+    ldout(cct, 20) << "dirty block " << entry->block << " already detained"
+                   << dendl;
+    return -EBUSY;
+  }
+
+  // move to clean list to prevent "double" writeback -- since the
+  // block is detained, it cannot be evicted from the cache until
+  // writeback is complete
+  assert(entry->dirty);
+  entry->dirty = false;
+  m_dirty_lru.remove(entry);
+  m_clean_lru.insert_head(entry);
+
+  *block = entry->block;
+  ldout(cct, 20) << "block=" << *block << dendl;
+  return 0;
+}
+
+template <typename I>
 int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
                          PolicyMapResult *policy_map_result,
                          uint64_t *replace_cache_block) {

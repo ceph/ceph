@@ -71,7 +71,8 @@ public:
     uint64_t block;
     BlockIOExtents extents;
 
-    IOType io_type;
+    IOType io_type : 2;     ///< IO type for deferred IO request
+    bool partial_block : 1; ///< true if not full block request
     C_BlockRequest *block_request;
   };
   typedef std::list<BlockIO> BlockIOs;

@@ -8,6 +8,7 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Utils.h"
 #include "librbd/cache/file/ImageStore.h"
 #include "librbd/cache/file/JournalStore.h"
 #include "librbd/cache/file/MetaStore.h"
@@ -27,6 +28,7 @@ using namespace librbd::cache::file;
 
 namespace {
 
+typedef std::list<bufferlist> Buffers;
 typedef std::map<uint64_t, bufferlist> ExtentBuffers;
 typedef std::function<void(uint64_t)> ReleaseBlock;
 
@@ -219,6 +221,70 @@ struct C_ReadFromImageRequest : public C_BlockIORequest {
 };
 
 template <typename I>
+struct C_WriteToImageRequest : public C_BlockIORequest {
+  ImageWriteback<I> &image_writeback;
+  BlockGuard::BlockIO block_io;
+  const bufferlist &bl;
+
+  C_WriteToImageRequest(CephContext *cct, ImageWriteback<I> &image_writeback,
+                        BlockGuard::BlockIO &&block_io, const bufferlist &bl,
+                        C_BlockIORequest *next_block_request)
+    : C_BlockIORequest(cct, next_block_request),
+      image_writeback(image_writeback), block_io(block_io), bl(bl) {
+  }
+
+  virtual void send() override {
+    ldout(cct, 20) << "(" << get_name() << "): "
+                   << "block_io=[" << block_io << "]" << dendl;
+
+    uint64_t image_offset = block_io.block * BLOCK_SIZE;
+
+    ImageCache::Extents image_extents;
+    bufferlist scatter_bl;
+    for (auto &extent : block_io.extents) {
+      image_extents.emplace_back(image_offset + extent.block_offset,
+                                 extent.block_length);
+
+      bufferlist sub_bl;
+      sub_bl.substr_of(bl, extent.buffer_offset, extent.block_length);
+      scatter_bl.claim_append(sub_bl);
+    }
+
+    image_writeback.aio_write(std::move(image_extents), std::move(scatter_bl),
+                              0, this);
+  }
+  virtual const char *get_name() const override {
+    return "C_WriteToImageRequest";
+  }
+};
+
+template <typename I>
+struct C_ReadBlockFromCacheRequest : public C_BlockIORequest {
+  ImageStore<I> &image_store;
+  uint64_t block;
+  uint32_t block_size;
+  bufferlist *block_bl;
+
+  C_ReadBlockFromCacheRequest(CephContext *cct, ImageStore<I> &image_store,
+                              uint64_t block, uint32_t block_size,
+                               bufferlist *block_bl,
+                              C_BlockIORequest *next_block_request)
+    : C_BlockIORequest(cct, next_block_request),
+      image_store(image_store), block(block), block_size(block_size),
+      block_bl(block_bl) {
+  }
+
+  virtual void send() override {
+    ldout(cct, 20) << "(" << get_name() << "): "
+                   << "block=" << block << dendl;
+    image_store.read_block(block, {{0, block_size}}, block_bl, this);
+  }
+  virtual const char *get_name() const override {
+    return "C_ReadBlockFromCacheRequest";
+  }
+};
+
+template <typename I>
 struct C_ReadBlockFromImageRequest : public C_BlockIORequest {
   ImageWriteback<I> &image_writeback;
   uint64_t block;
@@ -259,7 +325,7 @@ struct C_CopyFromBlockBuffer : public C_BlockIORequest {
 
   virtual void send() override {
     ldout(cct, 20) << "(" << get_name() << "): "
-                   << "block_io=[" << block_io << dendl;
+                   << "block_io=[" << block_io << "]" << dendl;
 
     for (auto &extent : block_io.extents) {
       bufferlist &sub_bl = (*extent_buffers)[extent.buffer_offset];
@@ -272,10 +338,52 @@ struct C_CopyFromBlockBuffer : public C_BlockIORequest {
   }
 };
 
+struct C_ModifyBlockBuffer : public C_BlockIORequest {
+  BlockGuard::BlockIO block_io;
+  const bufferlist &bl;
+  bufferlist *block_bl;
+
+  C_ModifyBlockBuffer(CephContext *cct, const BlockGuard::BlockIO &block_io,
+                      const bufferlist &bl, bufferlist *block_bl,
+                      C_BlockIORequest *next_block_request)
+    : C_BlockIORequest(cct, next_block_request),
+      block_io(block_io), bl(bl), block_bl(block_bl) {
+  }
+
+  virtual void send() override {
+    ldout(cct, 20) << "(" << get_name() << "): "
+                   << "block_io=[" << block_io << "]" << dendl;
+
+    for (auto &extent : block_io.extents) {
+      bufferlist modify_bl;
+      if (extent.block_offset > 0) {
+        bufferlist sub_bl;
+        sub_bl.substr_of(*block_bl, 0, extent.block_offset);
+        modify_bl.claim_append(sub_bl);
+      }
+      if (extent.block_length > 0) {
+        bufferlist sub_bl;
+        sub_bl.substr_of(bl, extent.buffer_offset, extent.block_length);
+        modify_bl.claim_append(sub_bl);
+      }
+      uint32_t remaining_offset = extent.block_offset + extent.block_length;
+      if (remaining_offset < block_bl->length()) {
+        bufferlist sub_bl;
+        sub_bl.substr_of(*block_bl, remaining_offset,
+                         block_bl->length() - remaining_offset);
+        modify_bl.claim_append(sub_bl);
+      }
+      std::swap(*block_bl, modify_bl);
+    }
+    complete(0);
+  }
+  virtual const char *get_name() const override {
+    return "C_ModifyBlockBuffer";
+  }
+};
+
 template <typename I>
 struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
-  typedef std::list<bufferlist> Buffers;
-
   I &image_ctx;
   ImageWriteback<I> &image_writeback;
   ImageStore<I> &image_store;
@@ -355,6 +463,175 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
   }
 };
 
+template <typename I>
+struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
+  I &image_ctx;
+  ImageWriteback<I> &image_writeback;
+  Policy &policy;
+  JournalStore<I> &journal_store;
+  ImageStore<I> &image_store;
+  ReleaseBlock &release_block;
+  bufferlist bl;
+  uint32_t block_size;
+
+  Buffers promote_buffers;
+
+  C_WriteBlockRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
+                      Policy &policy, JournalStore<I> &journal_store,
+                      ImageStore<I> &image_store, ReleaseBlock &release_block,
+                      bufferlist &&bl, uint32_t block_size, Context *on_finish)
+    : C_BlockRequest(on_finish),
+      image_ctx(image_ctx), image_writeback(image_writeback), policy(policy),
+      journal_store(journal_store), image_store(image_store),
+      release_block(release_block), bl(std::move(bl)), block_size(block_size) {
+  }
+
+  virtual void remap(PolicyMapResult policy_map_result,
+                     BlockGuard::BlockIO &&block_io) {
+    CephContext *cct = image_ctx.cct;
+
+    // TODO: consolidate multiple writes into a single request (i.e. don't
+    // have 1024 4K requests to read a single object)
+
+    // NOTE: block guard active -- must be released after IO completes
+    C_BlockIORequest *req = new C_ReleaseBlockGuard(cct, block_io.block,
+                                                         release_block, this);
+    if (policy_map_result == POLICY_MAP_RESULT_MISS) {
+      req = new C_WriteToImageRequest<I>(cct, image_writeback,
+                                         std::move(block_io), bl, req);
+    } else {
+      // block is now dirty -- can't be replaced until flushed
+      policy.set_dirty(block_io.block);
+
+      if (block_io.partial_block) {
+        // block needs to be promoted to cache but we require a
+        // read-modify-write cycle to fully populate the block
+
+        // TODO optimize by only reading missing extents
+        promote_buffers.emplace_back();
+        req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
+                                      promote_buffers.back(), req);
+        req = new C_ModifyBlockBuffer(cct, block_io, bl,
+                                      &promote_buffers.back(), req);
+        if (policy_map_result == POLICY_MAP_RESULT_HIT) {
+          if (policy.is_dirty(block_io.block)) {
+            // TODO migrate dirty block to journal to writeback journal
+          }
+          req = new C_ReadBlockFromCacheRequest<I>(cct, image_store,
+                                                   block_io.block, BLOCK_SIZE,
+                                                   &promote_buffers.back(),
+                                                   req);
+        } else {
+          req = new C_ReadBlockFromImageRequest<I>(cct, image_writeback,
+                                                   block_io.block,
+                                                   &promote_buffers.back(),
+                                                   req);
+        }
+      } else {
+        // full block overwrite
+        req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
+                                      bl, req);
+      }
+
+      if (policy_map_result == POLICY_MAP_RESULT_REPLACE) {
+        req = new C_DemoteFromCache<I>(cct, image_store, release_block,
+                                       block_io.block, req);
+      }
+    }
+    req->send();
+  }
+};
+
+template <typename I>
+struct C_WritebackRequest : public Context {
+  I &image_ctx;
+  ImageWriteback<I> &image_writeback;
+  Policy &policy;
+  JournalStore<I> &journal_store;
+  ImageStore<I> &image_store;
+  const ReleaseBlock &release_block;
+  uint64_t block;
+  uint32_t block_size;
+
+  bufferlist bl;
+
+  C_WritebackRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
+                     Policy &policy, JournalStore<I> &journal_store,
+                     ImageStore<I> &image_store,
+                     const ReleaseBlock &release_block, uint64_t block,
+                     uint32_t block_size)
+    : image_ctx(image_ctx), image_writeback(image_writeback),
+      policy(policy), journal_store(journal_store), image_store(image_store),
+      release_block(release_block), block(block), block_size(block_size) {
+  }
+
+  void send() {
+    read_from_cache();
+  }
+
+  void read_from_cache() {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << "(C_WritebackRequest)" << dendl;
+
+    Context *ctx = util::create_context_callback<
+      C_WritebackRequest<I>,
+      &C_WritebackRequest<I>::handle_read_from_cache>(this);
+    image_store.read_block(block, {{0, block_size}}, &bl, ctx);
+  }
+
+  void handle_read_from_cache(int r) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << "(C_WritebackRequest): r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to read writeback block from cache: "
+                 << cpp_strerror(r) << dendl;
+      complete(r);
+      return;
+    }
+
+    write_to_image();
+  }
+
+  void write_to_image() {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << "(C_WritebackRequest)" << dendl;
+
+    Context *ctx = util::create_context_callback<
+      C_WritebackRequest<I>,
+      &C_WritebackRequest<I>::handle_write_to_image>(this);
+    image_writeback.aio_write({{block * block_size, block_size}}, std::move(bl),
+                              0, ctx);
+  }
+
+  void handle_write_to_image(int r) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << "(C_WritebackRequest): r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to read writeback block from cache: "
+                 << cpp_strerror(r) << dendl;
+      complete(r);
+      return;
+    }
+
+    complete(0);
+  }
+
+  virtual void finish(int r) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << "r=" << r << dendl;
+
+    if (r < 0) {
+      lderr(cct) << "failed to writeback block " << block << ": "
+                 << cpp_strerror(r) << dendl;
+      policy.set_dirty(block);
+    }
+
+    release_block(block);
+  }
+};
+
 } // anonymous namespace
 
 template <typename I>
@@ -395,24 +672,19 @@ void FileImageCache<I>::aio_write(Extents &&image_extents,
   ldout(cct, 20) << "image_extents=" << image_extents << ", "
                  << "on_finish=" << on_finish << dendl;
 
-  if (!is_block_aligned(image_extents)) {
-    // For clients that don't use LBA extents, re-align the write request
-    // to work with the cache
-    ldout(cct, 20) << "aligning write to block size" << dendl;
-
-    // TODO: for non-aligned extents, invalidate the associated block-aligned
-    // regions in the cache (if any), send the aligned extents to the cache
-    // and the un-aligned extents directly to back to librbd
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+      on_finish->complete(-EROFS);
+      return;
+    }
   }
 
-  // TODO invalidate written blocks until writethrough/back support added
-  C_Gather *ctx = new C_Gather(cct, on_finish);
-  Extents invalidate_extents(image_extents);
-  invalidate(std::move(invalidate_extents), ctx->new_sub());
-
-  m_image_writeback.aio_write(std::move(image_extents), std::move(bl),
-                              fadvise_flags, ctx->new_sub());
-  ctx->activate();
+  // TODO handle fadvise flags
+  BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
+    m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
+    m_release_block, std::move(bl), BLOCK_SIZE, on_finish);
+  map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
 }
 
 template <typename I>
@@ -422,6 +694,14 @@ void FileImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
                  << "on_finish=" << on_finish << dendl;
+
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+      on_finish->complete(-EROFS);
+      return;
+    }
+  }
 
   if (!is_block_aligned({{offset, length}})) {
     // For clients that don't use LBA extents, re-align the discard request
@@ -567,6 +847,11 @@ void FileImageCache<I>::shut_down(Context *on_finish) {
     [this, ctx](int r) {
       m_journal_store->shut_down(ctx);
     });
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      // flush writeback journal to OSDs
+      flush(ctx);
+    });
 
   {
     Mutex::Locker locker(m_lock);
@@ -630,14 +915,11 @@ void FileImageCache<I>::map_block(bool detain_block,
     }
   }
 
-  bool partial_block = (block_io.extents.size() != 1 ||
-                        block_io.extents.front().block_offset != 0 ||
-                        block_io.extents.front().block_length != BLOCK_SIZE);
-
   PolicyMapResult policy_map_result;
   uint64_t replace_cache_block;
-  r = m_policy->map(block_io.io_type, block_io.block, partial_block,
-                    &policy_map_result, &replace_cache_block);
+  r = m_policy->map(static_cast<IOType>(block_io.io_type), block_io.block,
+                    block_io.partial_block, &policy_map_result,
+                    &replace_cache_block);
   if (r < 0) {
     // fail this IO and release any detained IOs to the block
     lderr(cct) << "failed to map block via cache policy: " << cpp_strerror(r)
@@ -656,7 +938,7 @@ void FileImageCache<I>::release_block(uint64_t block) {
   ldout(cct, 20) << "block=" << block << dendl;
 
   Mutex::Locker locker(m_lock);
-  m_block_guard.release(block, &m_deferred_detained_block_ios);
+  m_block_guard.release(block, &m_detained_block_ios);
   wake_up();
 }
 
@@ -682,32 +964,83 @@ void FileImageCache<I>::process_work() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  BlockGuard::BlockIOs deferred_detained_block_ios;
-  BlockGuard::BlockIOs deferred_block_ios;
+  do {
+    process_writeback_dirty_blocks();
+    process_detained_block_ios();
+    process_deferred_block_ios();
+  } while (false); // TODO need metric to only perform X amount of work per cycle
+
+  // process delayed shut down request (if any)
   Context *on_shutdown = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    std::swap(deferred_detained_block_ios, m_deferred_detained_block_ios);
-    std::swap(deferred_block_ios, m_deferred_block_ios);
-
-    // TODO while doing work ensure a flush cannot complete
-
     std::swap(on_shutdown, m_on_shutdown);
     m_wake_up_scheduled = false;
   }
-
-  ldout(cct, 20) << "deferred_detained_block_ios="
-                 << deferred_detained_block_ios.size() << ", "
-                 << "deferred_block_ios=" << deferred_block_ios.size() << dendl;
-  for (auto &block_io : deferred_detained_block_ios) {
-    map_block(false, std::move(block_io));
-  }
-  for (auto &block_io : deferred_block_ios) {
-    map_block(true, std::move(block_io));
-  }
-
   if (on_shutdown != nullptr) {
     on_shutdown->complete(0);
+  }
+}
+
+template <typename I>
+bool FileImageCache<I>::is_work_available() const {
+  Mutex::Locker locker(m_lock);
+  return (!m_detained_block_ios.empty() ||
+          !m_deferred_block_ios.empty());
+}
+
+template <typename I>
+void FileImageCache<I>::process_writeback_dirty_blocks() {
+  CephContext *cct = m_image_ctx.cct;
+
+  // TODO throttle the amount of in-flight writebacks
+  while (true) {
+    uint64_t block;
+    int r = m_policy->get_writeback_block(&block);
+    if (r == -ENODATA || r == -EBUSY) {
+      // nothing to writeback
+      return;
+    } else if (r < 0) {
+      lderr(cct) << "failed to retrieve writeback block: "
+                 << cpp_strerror(r) << dendl;
+      return;
+    }
+
+    // block is now detained -- safe for writeback
+    C_WritebackRequest<I> *req = new C_WritebackRequest<I>(
+      m_image_ctx, m_image_writeback, *m_policy, *m_journal_store,
+      *m_image_store, m_release_block, block, BLOCK_SIZE);
+    req->send();
+  }
+}
+
+template <typename I>
+void FileImageCache<I>::process_detained_block_ios() {
+  BlockGuard::BlockIOs block_ios;
+  {
+    Mutex::Locker locker(m_lock);
+    std::swap(block_ios, m_detained_block_ios);
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "block_ios=" << block_ios.size() << dendl;
+  for (auto &block_io : block_ios) {
+    map_block(false, std::move(block_io));
+  }
+}
+
+template <typename I>
+void FileImageCache<I>::process_deferred_block_ios() {
+  BlockGuard::BlockIOs block_ios;
+  {
+    Mutex::Locker locker(m_lock);
+    std::swap(block_ios, m_deferred_block_ios);
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "block_ios=" << block_ios.size() << dendl;
+  for (auto &block_io : block_ios) {
+    map_block(true, std::move(block_io));
   }
 }
 
