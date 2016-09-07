@@ -303,6 +303,11 @@ struct bluestore_blob_t {
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
+  int estimate_encoded_size() const {
+    // conservative upper bound... fixme
+    return csum_data.length() + extents.size() * 16 + 48;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;

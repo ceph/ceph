@@ -473,6 +473,9 @@ public:
 
     void encode(bufferlist& bl) const {
       if (dirty) {
+	// manage blob_bl memory carefully
+	blob_bl.clear();
+	blob_bl.reserve(blob.estimate_encoded_size());
 	::encode(blob, blob_bl);
 	dirty = false;
       } else {
