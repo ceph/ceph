@@ -1396,7 +1396,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_remove_snaps(op);
 
   default:
-    assert(0);
+    assert(0 == "unknown type!");
     return true;
   }
 }
@@ -1430,7 +1430,7 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_remove_snaps(op);
 
   default:
-    assert(0);
+    assert(0 == "unknown type!");
   }
 
   return false;
@@ -7791,8 +7791,7 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
   case POOL_OP_AUID_CHANGE:
     return false;
   default:
-    assert(0);
-    break;
+    assert(0 == "unknown type!");
   }
 
   return false;
@@ -7949,8 +7948,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     break;
 
   default:
-    assert(0);
-    break;
+    assert(0 == "unknown type!");
   }
 
   if (changed) {
