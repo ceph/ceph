@@ -1027,7 +1027,7 @@ public:
     std::mutex wal_apply_mutex;
 
     uint64_t last_seq = 0;
-
+    int id =  0;
     OpSequencer()
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL) {
@@ -1154,9 +1154,10 @@ public:
 
   struct KVSyncThread : public Thread {
     BlueStore *store;
-    explicit KVSyncThread(BlueStore *s) : store(s) {}
+    int id;
+    explicit KVSyncThread(BlueStore *s, int id) : store(s), id(id)  {}
     void *entry() {
-      store->_kv_sync_thread();
+      store->_kv_sync_thread(id);
       return NULL;
     }
   };
@@ -1200,11 +1201,16 @@ private:
   vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
+  vector<KVSyncThread *> kv_sync_threads;
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
+  vector<std::mutex *> kv_locks;
+  vector<std::condition_variable *> kv_conds;
   bool kv_stop;
   deque<TransContext*> kv_queue, kv_committing;
   deque<TransContext*> wal_cleanup_queue, wal_cleaning;
+  vector<deque<TransContext*> *> kv_queues, kv_committings;
+  vector<deque<TransContext*> *> wal_cleanup_queues, wal_cleanings;
 
   PerfCounters *logger;
 
@@ -1244,6 +1250,9 @@ private:
   CompressorRef compressor;
   uint64_t comp_min_blob_size = 0;
   uint64_t comp_max_blob_size = 0;
+
+  atomic_t osr_id;
+  int kv_threads;
 
   // --------------------------------------------------------
   // private methods
@@ -1314,14 +1323,17 @@ private:
 
   void _osr_reap_done(OpSequencer *osr);
 
-  void _kv_sync_thread();
+  void _kv_sync_thread(int id);
   void _kv_stop() {
-    {
-      std::lock_guard<std::mutex> l(kv_lock);
+    for (int i = 0; i < kv_threads; i++) {
+      std::lock_guard<std::mutex> l(*kv_locks[i]);
       kv_stop = true;
-      kv_cond.notify_all();
+      kv_conds[i]->notify_all();
     }
-    kv_sync_thread.join();
+    //kv_sync_thread.join();
+    for (int i = 0; i < kv_threads; i++) {
+      kv_sync_threads[i]->join();
+    }
     kv_stop = false;
   }
 
