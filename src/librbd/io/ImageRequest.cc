@@ -473,8 +473,6 @@ void AbstractImageWriteRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
-  RWLock::RLocker md_locker(image_ctx.md_lock);
-
   bool journaling = false;
 
   AioCompletion *aio_comp = this->m_aio_comp;
