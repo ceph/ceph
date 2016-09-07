@@ -98,6 +98,8 @@ public:
   struct Dir : public RefCountedObject {
     map<string,FileRef> file_map;
 
+    Dir() : RefCountedObject(NULL, 0) {}
+
     friend void intrusive_ptr_add_ref(Dir *d) {
       d->get();
     }
