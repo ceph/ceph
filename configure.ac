@@ -12,16 +12,20 @@ AC_INIT([ceph], [11.0.0], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
-# Create release string.  Used with VERSION for RPMs.
+# Create release and tarball string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
+TARBALL_BASENAME=$PACKAGE_NAME-$PACKAGE_VERSION
 AC_SUBST(RPM_RELEASE)
+AC_SUBST(TARBALL_BASENAME)
 if test -d ".git" ; then
   AC_CHECK_PROG(GIT_CHECK, git, yes)
   if test x"$GIT_CHECK" = x"yes" -a x"$freebsd" != x"yes"; then
     RPM_RELEASE=`if expr index $(git describe --always) '-' > /dev/null ; then git describe --always | cut -d- -f2- | tr '-' '.' ; else echo "0"; fi`
+    TARBALL_BASENAME=$PACKAGE_NAME-`if expr index $(git describe --always) '-' > /dev/null ; then git describe --match 'v*' | sed 's/^v//'; else echo "$PACKAGE_VERSION"; fi`
   fi
 fi
 AC_MSG_NOTICE([RPM_RELEASE='$RPM_RELEASE'])
+AC_MSG_NOTICE([TARBALL_BASENAME='$TARBALL_BASENAME'])
 
 AC_ARG_WITH([man-pages],
     [AS_HELP_STRING([--with-man-pages], [build man pages])],
