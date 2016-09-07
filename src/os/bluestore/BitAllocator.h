@@ -8,7 +8,6 @@
 #ifndef  CEPH_OS_BLUESTORE_BITALLOCATOR_H
 #define CEPH_OS_BLUESTORE_BITALLOCATOR_H
 
-#define debug_assert assert
 
 #include <assert.h>
 #include <stdint.h>
@@ -19,6 +18,13 @@
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
 
+#define alloc_assert assert
+
+#ifdef BIT_ALLOCATOR_DEBUG
+#define alloc_dbg_assert(x) assert(x)
+#else
+#define alloc_dbg_assert(x) (static_cast<void> (0))
+#endif
 
 class BitAllocatorStats {
 public:
@@ -118,7 +124,7 @@ public:
       return NULL;
     }
 
-    debug_assert(cur_idx < (int64_t)m_list->size());
+    alloc_assert(cur_idx < (int64_t)m_list->size());
     return &(*m_list)[cur_idx];
   }
 
@@ -127,7 +133,7 @@ public:
   }
   void decr_idx() {
     m_cur_idx--;
-    debug_assert(m_cur_idx >= 0);
+    alloc_assert(m_cur_idx >= 0);
   }
 };
 
@@ -196,24 +202,24 @@ public:
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
   virtual bool is_exhausted() = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
-      debug_assert(0);
+      alloc_assert(0);
       return true;
   }
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
-      debug_assert(0);
+      alloc_assert(0);
       return true;
   }
   virtual void child_unlock(BitMapArea *child) {
-    debug_assert(0);
+    alloc_assert(0);
   }
 
   virtual void lock_excl() = 0;
   virtual bool lock_excl_try() {
-    debug_assert(0);
+    alloc_assert(0);
     return false;
   }
   virtual void lock_shared() {
-    debug_assert(0);
+    alloc_assert(0);
     return;
   }
   virtual void unlock() = 0;
@@ -228,22 +234,22 @@ public:
   virtual void shutdown() = 0;
   virtual int64_t alloc_blocks(bool wait, int64_t num_blocks,
                                int64_t hint, int64_t *start_block) {
-    debug_assert(0);
+    alloc_assert(0);
     return 0;
   }
   virtual int64_t alloc_blocks(int64_t num_blocks, int64_t hint, int64_t *start_block) {
-    debug_assert(0);
+    alloc_assert(0);
     return 0;
   }
 
   virtual int64_t alloc_blocks_dis(bool wait, int64_t num_blocks,
              int64_t hint, int64_t blk_off, ExtentList *block_list) {
-    debug_assert(0);
+    alloc_assert(0);
     return 0;
   }
   virtual int64_t alloc_blocks_dis(int64_t num_blocks,
              int64_t hint, int64_t blk_off, ExtentList *block_list) {
-    debug_assert(0);
+    alloc_assert(0);
     return 0;
   }
   virtual void set_blocks_used(int64_t start_block, int64_t num_blocks) = 0;
@@ -351,13 +357,13 @@ public:
 
   virtual int64_t alloc_blocks(bool wait, int64_t num_blocks,
                                int64_t hint, int64_t *start_block) {
-    debug_assert(0);
+    alloc_assert(0);
     return 0;
   }
 
   virtual int64_t alloc_blocks_dis(bool wait, int64_t num_blocks,
              int64_t hint, int64_t blk_off, int64_t *block_list) {
-    debug_assert(0);
+    alloc_assert(0);
     return 0;
   }
 
@@ -387,7 +393,7 @@ protected:
   virtual bool is_exhausted();
   
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
-    debug_assert(0);
+    alloc_assert(0);
     return false;
   }
 
@@ -459,7 +465,7 @@ public:
   BitMapAreaLeaf(int64_t zone_num, int64_t total_blocks, bool def);
 
   bool child_check_n_lock(BitMapArea *child, int64_t required) {
-    debug_assert(0);
+    alloc_assert(0);
     return false;
   }
 
