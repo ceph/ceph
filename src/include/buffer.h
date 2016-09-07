@@ -456,6 +456,7 @@ namespace buffer CEPH_BUFFER_API {
       _len = 0;
       _memcopy_count = 0;
       last_p = begin();
+      append_buffer = ptr();
     }
     void push_front(ptr& bp) {
       if (bp.length() == 0)
