@@ -376,6 +376,10 @@ public:
       }
       return false;
     }
+
+    bool empty() {
+      return uset.empty();
+    }
   };
 
   /// in-memory blob metadata and associated cached buffers (if any)

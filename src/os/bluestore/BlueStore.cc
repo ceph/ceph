@@ -8215,7 +8215,9 @@ int BlueStore::_split_collection(TransContext *txc,
   // blow away the caches.  FIXME.
   c->onode_map.clear();
   d->onode_map.clear();
-#warning assert that shared_blob cache (and others?) are also cleared..
+
+  assert(c->shared_blob_set.empty());
+  assert(d->shared_blob_set.empty());
 
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
