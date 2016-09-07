@@ -175,7 +175,8 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
-  //raw reference insertion that assumes no conflicts/interference with the existing references
+  // raw reference insertion that assumes no conflicts/interference
+  // with the existing references
   void fill(uint32_t offset, uint32_t len, int refs = 1) {
     auto p = ref_map.insert(
         map<uint32_t,record_t>::value_type(offset,
@@ -218,7 +219,7 @@ struct bluestore_blob_t {
     FLAG_COMPRESSED = 2,      ///< blob is compressed
     FLAG_CSUM = 4,            ///< blob has checksums
     FLAG_HAS_UNUSED = 8,      ///< blob has unused map
-    FLAG_HAS_REFMAP  = 16,    ///< blob has non-empty reference map
+    FLAG_SHARED = 16,         ///< blob is shared; see external SharedBlob
   };
   static string get_flags_string(unsigned flags);
 
@@ -286,6 +287,7 @@ struct bluestore_blob_t {
   }
 
   vector<bluestore_pextent_t> extents;///< raw data position on device
+  uint64_t sbid = 0;                  ///< shared blob id (if shared)
   uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
@@ -293,7 +295,6 @@ struct bluestore_blob_t {
   uint8_t csum_type = CSUM_NONE;      ///< CSUM_*
   uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
 
-  bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   bufferptr csum_data;                ///< opaque vector of csum data
 
   typedef uint16_t unused_uint_t;
@@ -337,8 +338,8 @@ struct bluestore_blob_t {
   bool has_unused() const {
     return has_flag(FLAG_HAS_UNUSED);
   }
-  bool has_refmap() const {
-    return has_flag(FLAG_HAS_REFMAP);
+  bool is_shared() const {
+    return has_flag(FLAG_SHARED);
   }
 
   /// return chunk (i.e. min readable block) size for the blob
@@ -368,10 +369,6 @@ struct bluestore_blob_t {
     return p->offset + x_off;
   }
 
-  bool is_unreferenced(uint64_t offset, uint64_t length) const {
-    return !ref_map.intersects(offset, length);
-  }
-
   /// return true if the entire range is allocated (mapped to extents on disk)
   bool is_allocated(uint64_t b_off, uint64_t b_len) const {
     auto p = extents.begin();
@@ -397,13 +394,14 @@ struct bluestore_blob_t {
   }
 
   /// return true if the logical range has never been used
-  bool is_unused(uint64_t offset, uint64_t length, uint64_t min_alloc_size) const {
+  bool is_unused(uint64_t offset, uint64_t length) const {
     if (!has_unused()) {
       return false;
     }
-    assert((min_alloc_size % unused.size()) == 0);
-    assert(offset + length <= min_alloc_size);
-    uint64_t chunk_size = min_alloc_size / unused.size();
+    uint64_t blob_len = get_logical_length();
+    assert((blob_len % unused.size()) == 0);
+    assert(offset + length <= blob_len);
+    uint64_t chunk_size = blob_len / unused.size();
     uint64_t start = offset / chunk_size;
     uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
     assert(end <= unused.size());
@@ -415,10 +413,11 @@ struct bluestore_blob_t {
   }
 
   /// mark a range that has never been used
-  void add_unused(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
-    assert((min_alloc_size % unused.size()) == 0);
-    assert(offset + length <= min_alloc_size);
-    uint64_t chunk_size = min_alloc_size / unused.size();
+  void add_unused(uint64_t offset, uint64_t length) {
+    uint64_t blob_len = get_logical_length();
+    assert((blob_len % unused.size()) == 0);
+    assert(offset + length <= blob_len);
+    uint64_t chunk_size = blob_len / unused.size();
     uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
     assert(end <= unused.size());
@@ -431,11 +430,12 @@ struct bluestore_blob_t {
   }
 
   /// indicate that a range has (now) been used.
-  void mark_used(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
+  void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
-      assert((min_alloc_size % unused.size()) == 0);
-      assert(offset + length <= min_alloc_size);
-      uint64_t chunk_size = min_alloc_size / unused.size();
+      uint64_t blob_len = get_logical_length();
+      assert((blob_len % unused.size()) == 0);
+      assert(offset + length <= blob_len);
+      uint64_t chunk_size = blob_len / unused.size();
       uint64_t start = offset / chunk_size;
       uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
       assert(end <= unused.size());
@@ -447,16 +447,6 @@ struct bluestore_blob_t {
       }
     }
   }
-
-  /// get logical references
-  void get_ref(uint64_t offset, uint64_t length);
-  /// put logical references, and get back any released extents
-  bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
-              vector<bluestore_pextent_t> *r);
-  /// put logical references using external ref_map, and get back any released extents
-  bool put_ref_external( bluestore_extent_ref_map_t& ref_map,
-               uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
-               vector<bluestore_pextent_t> *r);
 
   int map(uint64_t x_off, uint64_t x_len,
 	   std::function<int(uint64_t,uint64_t)> f) const {
@@ -511,6 +501,13 @@ struct bluestore_blob_t {
     return len;
   }
 
+  uint32_t get_logical_length() const {
+    if (is_compressed()) {
+      return compressed_length_orig;
+    } else {
+      return get_ondisk_length();
+    }
+  }
 
   size_t get_csum_value_size() const {
     switch (csum_type) {
@@ -579,138 +576,72 @@ WRITE_CLASS_ENCODER(bluestore_blob_t)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
 
+/// shared blob state
+struct bluestore_shared_blob_t {
+  bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
+  //set<ghobject_t> objects;  ///< objects referencing these shared blocks (debug)
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<bluestore_shared_blob_t*>& ls);
+
+  bool empty() const {
+    return ref_map.empty();
+  }
+};
+WRITE_CLASS_ENCODER(bluestore_shared_blob_t)
+
+ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
+
+
+
 /// blob id: positive = local, negative = shared bnode
 typedef int64_t bluestore_blob_id_t;
 
 
-/// lextent: logical data block back by the extent
-struct bluestore_lextent_t {
-  bluestore_blob_id_t blob;  ///< blob
-  uint32_t offset;           ///< relative offset within the blob
-  uint32_t length;           ///< length within the blob
-
-  bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
-		      uint32_t o = 0,
-		      uint32_t l = 0)
-    : blob(_blob),
-      offset(o),
-      length(l) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
-
-  bool is_shared() const {
-    return blob < 0;
-  }
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_lextent_t*>& o);
-};
-WRITE_CLASS_ENCODER(bluestore_lextent_t)
-
-ostream& operator<<(ostream& out, const bluestore_lextent_t& o);
-
-typedef map<bluestore_blob_id_t, bluestore_blob_t> bluestore_blob_map_t;
-
-
 /// onode: per-object metadata
 struct bluestore_onode_t {
-  uint64_t nid;                        ///< numeric id (locally unique)
-  uint64_t size;                       ///< object size
+  uint64_t nid = 0;                    ///< numeric id (locally unique)
+  uint64_t size = 0;                   ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
-  uint64_t omap_head;                  ///< id for omap root node
+  uint64_t omap_head = 0;              ///< id for omap root node
 
-  uint32_t expected_object_size;
-  uint32_t expected_write_size;
-  uint32_t alloc_hint_flags;
+  struct shard_info {
+    uint32_t offset = 0;  ///< logical offset for start of shard
+    uint32_t bytes = 0;   ///< encoded bytes
+    uint32_t extents = 0; ///< extents
+    void encode(bufferlist& bl) const {
+      ::encode(offset, bl);
+      ::encode(bytes, bl);
+      ::encode(extents, bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      ::decode(offset, p);
+      ::decode(bytes, p);
+      ::decode(extents, p);
+    }
+    void dump(Formatter *f) const;
+  };
+  WRITE_CLASS_ENCODER(shard_info)
+  vector<shard_info> extent_map_shards; ///< extent map shards (if any)
 
-  bluestore_onode_t()
-    : nid(0),
-      size(0),
-      omap_head(0),
-      expected_object_size(0),
-      expected_write_size(0),
-      alloc_hint_flags(0) {}
+  uint32_t expected_object_size = 0;
+  uint32_t expected_write_size = 0;
+  uint32_t alloc_hint_flags = 0;
 
   /// get preferred csum chunk size
   size_t get_preferred_csum_order() const;
-
-  /// find a lextent that includes offset
-  map<uint64_t,bluestore_lextent_t>::iterator find_lextent(uint64_t offset) {
-    map<uint64_t,bluestore_lextent_t>::iterator fp =
-      extent_map.lower_bound(offset);
-    if (fp != extent_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    if (fp != extent_map.end() && fp->first > offset)
-      return extent_map.end();  // extent is past offset
-    return fp;
-  }
-
-  /// seek to the first lextent including or after offset
-  map<uint64_t,bluestore_lextent_t>::iterator seek_lextent(uint64_t offset) {
-    map<uint64_t,bluestore_lextent_t>::iterator fp =
-      extent_map.lower_bound(offset);
-    if (fp != extent_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    return fp;
-  }
-
-  bool has_any_lextents(uint64_t offset, uint64_t length) {
-    map<uint64_t,bluestore_lextent_t>::iterator fp =
-      extent_map.lower_bound(offset);
-    if (fp != extent_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    if (fp == extent_map.end() || fp->first >= offset + length) {
-      return false;
-    }
-    return true;
-  }
-
-  /// consolidate adjacent lextents in extent_map
-  int compress_extent_map();
-
-  /// punch a logical hole.  add lextents to deref to target list.
-  void punch_hole(uint64_t offset, uint64_t length,
-		  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
-
-  /// put new lextent into lextent_map overwriting existing ones if any and update references accordingly
-  void set_lextent(uint64_t offset,
-		   const bluestore_lextent_t& lext,
-		   bluestore_blob_t* b,
-		   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
-
-  /// post process removed lextent to take care of blob references
-  /// returns true is underlying blob has to be released
-  bool deref_lextent(uint64_t offset,
-               bluestore_lextent_t& lext,
-               bluestore_blob_t* b,
-               uint64_t min_alloc_size,
-               vector<bluestore_pextent_t>* r);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_onode_t*>& o);
 };
+WRITE_CLASS_ENCODER(bluestore_onode_t::shard_info)
 WRITE_CLASS_ENCODER(bluestore_onode_t)
 
+ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si);
 
 /// writeahead-logged op
 struct bluestore_wal_op_t {
