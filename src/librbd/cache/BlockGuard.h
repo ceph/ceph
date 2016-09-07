@@ -68,6 +68,7 @@ public:
       : block(block), extents(extents) {
     }
 
+    uint64_t tid;
     uint64_t block;
     BlockIOExtents extents;
 

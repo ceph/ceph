@@ -173,6 +173,10 @@ public:
     }
   }
 
+  bool is_waiting() const {
+    return (m_on_finish != nullptr);
+  }
+
   template <typename I>
   void wait(I &image_ctx, Context *on_finish) {
     assert(m_on_finish == nullptr);
