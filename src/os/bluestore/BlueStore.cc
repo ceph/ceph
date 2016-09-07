@@ -5008,8 +5008,9 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 	   p->state == TransContext::STATE_IO_DONE);
 }
 
-void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
+bool BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
+  bool queued = false;
   dout(20) << __func__ << " txc " << txc
 	   << " onodes " << txc->onodes
 	   << " bnodes " << txc->bnodes
@@ -5030,6 +5031,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
+    queued = true;
   }
 
   // finalize bnodes
@@ -5047,7 +5049,9 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 	       << " blob_map is " << bl.length() << dendl;
       t->set(PREFIX_OBJ, (*p)->key, bl);
     }
+    queued = true;
   }
+  return queued;
 }
 
 void BlueStore::_txc_finish_kv(TransContext *txc)
@@ -5342,14 +5346,7 @@ int BlueStore::_wal_apply(TransContext *txc)
     dout(20) << __func__ << " finished sleep" << dendl;
   }
 
-  assert(txc->ioc.pending_aios.empty());
-  vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
-  for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
-       p != wt.ops.end();
-       ++p, ++q) {
-    int r = _do_wal_op(txc, *p);
-    assert(r == 0);
-  }
+  _do_wal_ops(txc, true);
 
   _txc_state_proc(txc);
   return 0;
@@ -5373,14 +5370,29 @@ int BlueStore::_wal_finish(TransContext *txc)
   return 0;
 }
 
-int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
+void BlueStore::_do_wal_ops(TransContext *txc, bool increment_counters)
+{
+  bluestore_wal_transaction_t& wt = *txc->wal_txn;
+  assert(txc->ioc.pending_aios.empty());
+  vector<OnodeRef>::iterator q = txc->wal_op_onodes.begin();
+  for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin();
+       p != wt.ops.end();
+       ++p, ++q) {
+    int r = _do_wal_op(txc, *p, increment_counters);
+    assert(r == 0);
+  }
+}
+
+int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo, bool increment_counters)
 {
   switch (wo.op) {
   case bluestore_wal_op_t::OP_WRITE:
     {
       dout(20) << __func__ << " write " << wo.extents << dendl;
-      logger->inc(l_bluestore_wal_write_ops);
-      logger->inc(l_bluestore_wal_write_bytes, wo.data.length());
+      if (increment_counters) {
+        logger->inc(l_bluestore_wal_write_ops);
+        logger->inc(l_bluestore_wal_write_bytes, wo.data.length());
+      }
       bufferlist::iterator p = wo.data.begin();
       for (auto& e : wo.extents) {
 	bufferlist bl;
@@ -5479,7 +5491,7 @@ int BlueStore::queue_transactions(
     b->dirty_blob().calc_csum(d.b_off, d.data);
   }
 
-  _txc_write_nodes(txc, txc->t);
+  bool queued = _txc_write_nodes(txc, txc->t);
   // journal wal items
   if (txc->wal_txn) {
     // move releases to after wal
@@ -5487,11 +5499,22 @@ int BlueStore::queue_transactions(
     assert(txc->released.empty());
 
     txc->wal_txn->seq = wal_seq.inc();
+
     bufferlist bl;
-    ::encode(*txc->wal_txn, bl);
-    string key;
-    get_wal_key(txc->wal_txn->seq, &key);
-    txc->t->set(PREFIX_WAL, key, bl);
+    if (!queued &&
+	g_conf->bluestore_fast_overwrite &&
+        txc->wal_txn->can_bypass_wal(block_size)) {
+      dout(20) << __func__ << " WAL bypassed" << dendl;
+      _do_wal_ops(txc, false);
+      delete txc->wal_txn;
+      txc->wal_txn = NULL;
+    } else {
+      bufferlist bl;
+      ::encode(*txc->wal_txn, bl);
+      string key;
+      get_wal_key(txc->wal_txn->seq, &key);
+      txc->t->set(PREFIX_WAL, key, bl);
+    }
   }
 
   throttle_ops.get(txc->ops);
@@ -5533,6 +5556,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       txc->first_collection = cvec[j];
   }
   vector<OnodeRef> ovec(i.objects.size());
+
+  txc->cur_transact_ops = t->get_num_ops();
 
   for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
@@ -6124,9 +6149,11 @@ void BlueStore::_do_write_small(
       dout(20) << __func__ << "  lexold 0x" << std::hex << offset << std::dec
 	       << ": " << ep->second << dendl;
       bluestore_lextent_t lex(blob, b_off + head_pad, length);
-      o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old);
+      bool c = o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old);
+      assert(c);
       b->dirty_blob().mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
+      wctx->onode_changed = true;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	       << ": " << lex << dendl;
       dout(20) << __func__ << "  old " << blob << ": " << *b << dendl;
@@ -6192,17 +6219,23 @@ void BlueStore::_do_write_small(
       assert(r == 0);
       if (b->get_blob().csum_type) {
 	txc->add_deferred_csum(o, blob, b_off, padded);
+        wctx->onode_changed = true;
       }
       op->data.claim(padded);
       dout(20) << __func__ << "  wal write 0x" << std::hex << b_off << "~"
 	       << b_len << std::dec << " of mutable " << blob << ": " << *b
 	       << " at " << op->extents << dendl;
       bluestore_lextent_t lex(blob, offset - bstart, length);
-      o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old);
-      b->dirty_blob().mark_used(lex.offset, lex.length, min_alloc_size);
-      txc->statfs_delta.stored() += lex.length;
+      bool changed = b->dirty_blob().mark_used(lex.offset, lex.length, min_alloc_size);
+      if (o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old)) {
+        txc->statfs_delta.stored() += lex.length;
+        wctx->onode_changed = true;
+      } else {
+        wctx->onode_changed = wctx->onode_changed || changed;
+      }
       dout(20) << __func__ << "  lex 0x" << std::hex << offset
-	       << std::dec << ": " << lex << dendl;
+	       << std::dec << ": " << lex
+	       << (wctx->onode_changed ? "" : " unchanged") << dendl;
       dout(20) << __func__ << "  old " << blob << ": " << *b << dendl;
       return;
     }
@@ -6217,13 +6250,57 @@ void BlueStore::_do_write_small(
   _buffer_cache_write(txc, b, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
   bluestore_lextent_t lex(b->id, P2PHASE(offset, alloc_len), length);
-  o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old);
+  bool changed = o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old);
+  assert(changed);
   txc->statfs_delta.stored() += lex.length;
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	   << ": " << lex << dendl;
   dout(20) << __func__ << "  new " << b->id << ": " << *b << dendl;
   wctx->write(b, alloc_len, b_off, bl, true);
+  wctx->onode_changed = true;
   return;
+}
+
+void BlueStore::_do_write_big_fast(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef o,
+    uint64_t offset, uint64_t length,
+    bufferlist::iterator& blp,
+    WriteContext *wctx)
+{
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   << std::dec << dendl;
+  assert((offset % min_alloc_size) == 0);
+  assert(length == block_size && length == min_alloc_size);
+  assert(csum_type == bluestore_blob_t::CSUM_NONE);
+  assert(blp.get_bl().length() == length);
+  auto l = length;
+
+  bool fallback_to_slow = true;
+  BlobRef b = 0;
+  map<uint64_t,bluestore_lextent_t>::iterator ep = o->onode.seek_lextent(offset);
+  if (ep != o->onode.extent_map.end() && 
+      ep->first <= offset && ep->first + ep->second.length >= offset + l) {
+    b = c->get_blob(o, ep->second.blob);
+    uint64_t b_off = offset - ep->first + ep->second.offset;
+    if (b->get_blob().is_mutable() && !b->get_blob().has_csum()) {
+      _buffer_cache_write(txc, b, b_off, blp.get_bl(), wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+
+      b->get_blob().map_bl(
+	b_off, blp.get_bl(),
+	[&](uint64_t offset, uint64_t length, bufferlist& t) {
+	  bdev->aio_write(offset, t,
+			  &txc->ioc, wctx->buffered);
+	});
+      wctx->onode_changed = false;
+      fallback_to_slow = false;
+    }
+  }
+  if (fallback_to_slow) {
+    dout(20) << __func__ << " fallback to slow write" << dendl;
+    _do_write_big(txc, c, o, offset, length, blp, wctx);
+  }
 }
 
 void BlueStore::_do_write_big(
@@ -6249,9 +6326,11 @@ void BlueStore::_do_write_big(
     blp.copy(l, t);
     _buffer_cache_write(txc, b, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     wctx->write(b, l, 0, t, false);
+    wctx->onode_changed = true;
     bluestore_lextent_t lex(b->id, 0, l);
-    o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old);
-    txc->statfs_delta.stored() += l;
+    if (o->onode.set_lextent(offset, lex, &b->dirty_blob(), &wctx->lex_old)) {
+      txc->statfs_delta.stored() += l;
+    }
     dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
 	     << o->onode.extent_map[offset] << dendl;
     dout(20) << __func__ << "  blob " << *b << dendl;
@@ -6271,6 +6350,9 @@ int BlueStore::_do_alloc_write(
   uint64_t need = 0;
   for (auto &wi : wctx->writes) {
     need += wi.blob_length;
+  }
+  if (need == 0) {
+    return 0;
   }
   int r = alloc->reserve(need);
   if (r < 0) {
@@ -6412,6 +6494,9 @@ void BlueStore::_wctx_finish(
   OnodeRef o,
   WriteContext *wctx)
 {
+  if (!wctx->onode_changed) {
+    return;
+  }
   dout(10) << __func__ << " lex_old " << wctx->lex_old << dendl;
   set<pair<bool, BlobRef> > blobs2remove;
   for (auto &lo : wctx->lex_old) {
@@ -6545,7 +6630,14 @@ int BlueStore::_do_write(
       _do_write_small(txc, c, o, head_offset, head_length, p, &wctx);
     }
 
-    if (middle_length) {
+    if( g_conf->bluestore_fast_overwrite &&
+        txc->cur_transact_ops == 1 &&
+	csum_type == bluestore_blob_t::CSUM_NONE &&
+	head_length == 0 && tail_length == 0 &&
+        middle_length == block_size &&
+        min_alloc_size == block_size ){
+      _do_write_big_fast(txc, c, o, middle_offset, middle_length, p, &wctx);
+    } else if (middle_length) {
       _do_write_big(txc, c, o, middle_offset, middle_length, p, &wctx);
     }
 
@@ -6567,10 +6659,13 @@ int BlueStore::_do_write(
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
 	     << std::dec << dendl;
     o->onode.size = end;
+    assert(wctx.onode_changed);
   }
   r = 0;
 
  out:
+  if (wctx.onode_changed)
+    txc->write_onode(o);
   return r;
 }
 
@@ -6587,7 +6682,6 @@ int BlueStore::_write(TransContext *txc,
   o->exists = true;
   _assign_nid(txc, o);
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
-  txc->write_onode(o);
 
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
@@ -6630,6 +6724,7 @@ int BlueStore::_do_zero(TransContext *txc,
 
   WriteContext wctx;
   o->onode.punch_hole(offset, length, &wctx.lex_old);
+  wctx.onode_changed = true;
   _wctx_finish(txc, c, o, &wctx);
 
   if (offset + length > o->onode.size) {
@@ -6658,6 +6753,7 @@ int BlueStore::_do_truncate(
 
     WriteContext wctx;
     o->onode.punch_hole(offset, o->onode.size, &wctx.lex_old);
+    wctx.onode_changed = true;
     _wctx_finish(txc, c, o, &wctx);
   }
 

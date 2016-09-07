@@ -881,6 +881,7 @@ public:
     boost::intrusive::list_member_hook<> sequencer_item;
 
     uint64_t ops, bytes;
+    uint64_t cur_transact_ops;
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
@@ -975,6 +976,7 @@ public:
 	osr(o),
 	ops(0),
 	bytes(0),
+	cur_transact_ops(0),
 	oncommit(NULL),
 	onreadable(NULL),
 	onreadable_sync(NULL),
@@ -1299,7 +1301,7 @@ private:
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
-  void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
+  bool _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
@@ -1328,7 +1330,8 @@ private:
   bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
   int _wal_apply(TransContext *txc);
   int _wal_finish(TransContext *txc);
-  int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo);
+  void _do_wal_ops(TransContext *txc, bool increment_counter);
+  int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo, bool increment_counter);
   int _wal_replay();
 
   // for fsck
@@ -1570,6 +1573,7 @@ private:
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
+    bool onode_changed = false;  ///< if onode needs update in DB 
 
     vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
 
@@ -1591,6 +1595,13 @@ private:
   };
 
   void _do_write_small(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef o,
+    uint64_t offset, uint64_t length,
+    bufferlist::iterator& blp,
+    WriteContext *wctx);
+  void _do_write_big_fast(
     TransContext *txc,
     CollectionRef &c,
     OnodeRef o,

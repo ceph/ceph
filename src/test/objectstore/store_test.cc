@@ -908,6 +908,201 @@ TEST_P(StoreTest, CompressionTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, FastWALTest) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+
+  g_conf->set_val("bluestore_csum", "false");
+  g_conf->set_val("bluestore_min_alloc_size", "65536");
+  g_ceph_context->_conf->apply_changes(NULL);
+  store->umount();
+  store->mount(); //to apply min_alloc_size setting
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(cid, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(cid, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(0x20000, 'a');
+    bl.append(s);
+    orig = bl;
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Write 128K.." << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    string s(0x1000, 'b');
+    bl.append(s);
+
+    t.write(cid, hoid, 0x1000, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    cerr << "WAL overwrite" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0x1000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ab");
+    ASSERT_TRUE(bl_eq(exp, in));
+
+    in.clear();
+    exp.clear();
+    r = store->read(cid, hoid, 0x2000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ba");
+    ASSERT_TRUE(bl_eq(exp, in));
+  }
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+  {
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0x1000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ab");
+    ASSERT_TRUE(bl_eq(exp, in));
+
+    in.clear();
+    exp.clear();
+    r = store->read(cid, hoid, 0x2000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ba");
+    ASSERT_TRUE(bl_eq(exp, in));
+  }
+  
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_csum", "true");
+  g_conf->set_val("bluestore_min_alloc_size", "0");
+}
+
+TEST_P(StoreTest, FastBigOverwriteTest) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+
+  g_conf->set_val("bluestore_csum", "false");
+  g_conf->set_val("bluestore_min_alloc_size", "4096");
+  g_ceph_context->_conf->apply_changes(NULL);
+  store->umount();
+  store->mount(); //to apply min_alloc_size
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(cid, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(cid, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(0x4000, 'a');
+    bl.append(s);
+    orig = bl;
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Write 16K.." << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    string s(0x1000, 'b');
+    bl.append(s);
+
+    t.write(cid, hoid, 0x1000, bl.length(), bl);
+    cerr << "'BIG' overwrite" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0x1000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ab");
+    ASSERT_TRUE(bl_eq(exp, in));
+
+    in.clear();
+    exp.clear();
+    r = store->read(cid, hoid, 0x2000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ba");
+    ASSERT_TRUE(bl_eq(exp, in));
+  }
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+  {
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0x1000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ab");
+    ASSERT_TRUE(bl_eq(exp, in));
+
+    in.clear();
+    exp.clear();
+    r = store->read(cid, hoid, 0x2000-1, 2, in);
+    ASSERT_EQ(2, r);
+    exp.append("ba");
+    ASSERT_TRUE(bl_eq(exp, in));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_csum", "true");
+  g_conf->set_val("bluestore_min_alloc_size", "0");
+}
+
 TEST_P(StoreTest, SimpleObjectTest) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -1224,6 +1419,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     t.zero(cid, hoid, 0x20000, 9);
     cerr << "Punch hole at 1~3, 0x20000~9" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
+
     ASSERT_EQ(r, 0);
 
     struct store_statfs_t statfs;
@@ -5144,6 +5340,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
   g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
   g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
+  g_ceph_context->_conf->set_val("bluestore_fast_overwrite", "true");
 
   // set small cache sizes so we see trimming during Synthetic tests
   g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
