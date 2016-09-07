@@ -70,9 +70,9 @@ private:
 
   ReleaseBlock m_release_block;
 
-  Mutex m_lock;
+  mutable Mutex m_lock;
   BlockGuard::BlockIOs m_deferred_block_ios;
-  BlockGuard::BlockIOs m_deferred_detained_block_ios;
+  BlockGuard::BlockIOs m_detained_block_ios;
 
   bool m_wake_up_scheduled = false;
   Context *m_on_shutdown = nullptr;
@@ -84,6 +84,11 @@ private:
 
   void wake_up();
   void process_work();
+
+  bool is_work_available() const;
+  void process_writeback_dirty_blocks();
+  void process_detained_block_ios();
+  void process_deferred_block_ios();
 
   void invalidate(Extents&& image_extents, Context *on_finish);
 

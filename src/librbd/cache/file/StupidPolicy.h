@@ -33,6 +33,13 @@ public:
 
   virtual int invalidate(uint64_t block);
 
+  virtual bool contains_dirty() const;
+  virtual bool is_dirty(uint64_t block) const;
+  virtual void set_dirty(uint64_t block);
+  virtual void clear_dirty(uint64_t block);
+
+  virtual int get_writeback_block(uint64_t *block);
+
   virtual int map(IOType io_type, uint64_t block, bool partial_block,
                   PolicyMapResult *policy_map_result,
                   uint64_t *replace_cache_block);
@@ -51,7 +58,7 @@ private:
   ImageCtxT &m_image_ctx;
   BlockGuard &m_block_guard;
 
-  Mutex m_lock;
+  mutable Mutex m_lock;
   uint64_t m_block_count = 0;
 
   Entries m_entries;
@@ -59,7 +66,7 @@ private:
 
   LRUList m_free_lru;
   LRUList m_clean_lru;
-  LRUList m_dirty_lru;
+  mutable LRUList m_dirty_lru;
 
 };
 

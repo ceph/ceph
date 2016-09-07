@@ -47,6 +47,7 @@ void BlockGuard::create_block_ios(IOType io_type,
         block_offset + image_length, m_block_size);
       uint32_t block_length = block_end_offset - block_offset;
 
+      // TODO block extent merging(?)
       auto &block_io = block_to_block_ios[block];
       block_io.extents.emplace_back(buffer_offset, block_offset, block_length);
 
@@ -59,6 +60,10 @@ void BlockGuard::create_block_ios(IOType io_type,
   for (auto &pair : block_to_block_ios) {
     block_request->add_request();
     pair.second.io_type = io_type;
+    pair.second.partial_block = (
+      pair.second.extents.size() != 1 ||
+      pair.second.extents.front().block_offset != 0 ||
+      pair.second.extents.front().block_length != m_block_size);
     pair.second.block_request = block_request;
     pair.second.block = pair.first;
 
@@ -68,10 +73,11 @@ void BlockGuard::create_block_ios(IOType io_type,
 }
 
 int BlockGuard::detain(uint64_t block, BlockIO *block_io) {
-  ldout(m_cct, 20) << "block=" << block << dendl;
+  Mutex::Locker locker(m_lock);
+  ldout(m_cct, 20) << "block=" << block << ", "
+                   << "free_slots=" << m_free_detained_blocks.size() << dendl;
   assert(block_io == nullptr || block == block_io->block);
 
-  Mutex::Locker locker(m_lock);
   DetainedBlock *detained_block;
   auto detained_block_it = m_detained_blocks.find(block);
   if (detained_block_it != m_detained_blocks.end()) {
@@ -110,9 +116,10 @@ int BlockGuard::release(uint64_t block, BlockIOs *block_ios) {
 
   auto &detained_block = *detained_block_it;
   ldout(m_cct, 20) << "block=" << block << ", "
-                   << "pending="
+                   << "pending_ios="
                    << (detained_block.block_ios.empty() ?
-                        0 : detained_block.block_ios.size() - 1) << dendl;
+                        0 : detained_block.block_ios.size() - 1) << ", "
+                   << "free_slots=" << m_free_detained_blocks.size() << dendl;
 
   if (!detained_block.block_ios.empty()) {
     block_ios->push_back(std::move(detained_block.block_ios.front()));
