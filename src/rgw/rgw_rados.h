@@ -1786,15 +1786,6 @@ class RGWRados
   Mutex watchers_lock;
   SafeTimer *timer;
 
-  class C_Tick : public Context {
-    RGWRados *rados;
-  public:
-    explicit C_Tick(RGWRados *_r) : rados(_r) {}
-    void finish(int r) {
-      rados->tick();
-    }
-  };
-
   RGWGC *gc;
   RGWLC *lc;
   RGWObjectExpirer *obj_expirer;
