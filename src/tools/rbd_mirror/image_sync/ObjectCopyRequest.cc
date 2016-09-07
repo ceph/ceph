@@ -110,11 +110,10 @@ void ObjectCopyRequest<I>::send_read_object() {
         dout(20) << ": remote_snap_seq=" << remote_snap_seq << dendl;
         read_required = true;
       }
-
       dout(20) << ": read op: " << std::get<1>(sync_op) << "~"
                << std::get<2>(sync_op) << dendl;
-      op.read(std::get<1>(sync_op), std::get<2>(sync_op),
-              &std::get<3>(sync_op), nullptr);
+      op.sparse_read(std::get<1>(sync_op), std::get<2>(sync_op), &std::get<4>(sync_op),
+                     &std::get<3>(sync_op), nullptr);
       break;
     default:
       break;
@@ -173,14 +172,19 @@ void ObjectCopyRequest<I>::send_write_object() {
 
   auto &sync_ops = m_snap_sync_ops.begin()->second;
   assert(!sync_ops.empty());
-
+  uint64_t buffer_offset;
   librados::ObjectWriteOperation op;
   for (auto &sync_op : sync_ops) {
     switch (std::get<0>(sync_op)) {
     case SYNC_OP_TYPE_WRITE:
-      dout(20) << ": write op: " << std::get<1>(sync_op) << "~"
-               << std::get<3>(sync_op).length() << dendl;
-      op.write(std::get<1>(sync_op), std::get<3>(sync_op));
+      buffer_offset = 0;
+      for(auto it : std::get<4>(sync_op)){
+         bufferlist tmpbl;
+         tmpbl.substr_of(std::get<3>(sync_op), buffer_offset, it.second);
+         op.write(it.first, tmpbl);
+         buffer_offset += it.second;
+	 dout(20) << ": write op: " << it.first<< "~" << it.second << dendl;
+      }
       break;
     case SYNC_OP_TYPE_TRUNC:
       dout(20) << ": trunc op: " << std::get<1>(sync_op) << dendl;
@@ -228,6 +232,7 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_update_object_map() {
+
   m_local_image_ctx->snap_lock.get_read();
   if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_local_image_ctx->snap_lock) ||
@@ -258,6 +263,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   Context *ctx = create_context_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_update_object_map>(
       this);
+
   m_local_image_ctx->object_map->aio_update(snap_object_state.first,
                                             m_object_number,
                                             m_object_number + 1,
@@ -333,20 +339,23 @@ void ObjectCopyRequest<I>::compute_diffs() {
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_WRITE,
                                                          it.get_start(),
                                                          it.get_len(),
-                                                         bufferlist());
+                                                         bufferlist(),
+                                                         std::map<uint64_t, uint64_t>());
       }
       if (end_size < prev_end_size) {
         dout(20) << ": trunc op: " << end_size << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_TRUNC,
                                                          end_size, 0U,
-                                                         bufferlist());
+                                                         bufferlist(),
+                                                         std::map<uint64_t, uint64_t>());
       }
     } else {
       if (prev_exists) {
         // object remove
         dout(20) << ": remove op" << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_REMOVE,
-                                                         0U, 0U, bufferlist());
+                                                         0U, 0U, bufferlist(),
+                                                         std::map<uint64_t, uint64_t>());
       }
     }
 
