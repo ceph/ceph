@@ -72,8 +72,6 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  * encoded u64: poolid + 2^63 (so that it sorts properly)
  * encoded u32: hash (bit reversed)
  *
- * 1 char: '.'
- *
  * escaped string: namespace
  *
  * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
@@ -243,8 +241,6 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_start);
     _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), start);
     _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), temp_start);
-    start->append(".");
-    temp_start->append(".");
 
     _key_encode_u64(pgid.pool() + 0x8000000000000000ull, end);
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_end);
@@ -254,22 +250,16 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     if (end_hash <= 0xffffffffull) {
       _key_encode_u32(end_hash, end);
       _key_encode_u32(end_hash, temp_end);
-      end->append(".");
-      temp_end->append(".");
     } else {
       _key_encode_u32(0xffffffff, end);
       _key_encode_u32(0xffffffff, temp_end);
-      end->append(":");
-      temp_end->append(":");
     }
   } else {
     _key_encode_shard(shard_id_t::NO_SHARD, start);
     _key_encode_u64(-1ull + 0x8000000000000000ull, start);
     *end = *start;
     _key_encode_u32(0, start);
-    start->append(".");
     _key_encode_u32(0xffffffff, end);
-    end->append(":");
 
     // no separate temp section
     *temp_start = *end;
@@ -301,7 +291,6 @@ static void get_object_key(const ghobject_t& oid, string *key)
   _key_encode_shard(oid.shard_id, key);
   _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
   _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
-  key->append(".");
 
   append_escaped(oid.hobj.nspace, key);
 
@@ -361,13 +350,10 @@ static int get_key_object(const string& key, ghobject_t *oid)
   p = _key_decode_u32(p, &hash);
 
   oid->hobj.set_bitwise_key_u32(hash);
-  if (*p != '.')
-    return -2;
-  ++p;
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
-    return -3;
+    return -2;
   p += r + 1;
 
   if (*p == '=') {
@@ -375,7 +361,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     ++p;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -4;
+      return -3;
     p += r + 1;
   } else if (*p == '<' || *p == '>') {
     // key + name
@@ -383,24 +369,24 @@ static int get_key_object(const string& key, ghobject_t *oid)
     string okey;
     r = decode_escaped(p, &okey);
     if (r < 0)
-      return -5;
+      return -4;
     p += r + 1;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -6;
+      return -5;
     p += r + 1;
     oid->hobj.set_key(okey);
   } else {
     // malformed
-    return -7;
+    return -6;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
   p = _key_decode_u64(p, &oid->generation);
   if (*p) {
-    // if we get something other than a null terminator here, 
+    // if we get something other than a null terminator here,
     // something goes wrong.
-    return -8;
+    return -7;
   }
 
   return 0;
