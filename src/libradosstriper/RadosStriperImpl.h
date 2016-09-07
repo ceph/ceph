@@ -66,6 +66,10 @@ struct libradosstriper::RadosStriperImpl {
     std::vector<ObjectExtent>* m_extents;
     /// intermediate results
     std::vector<bufferlist>* m_resultbl;
+    /// return code of read completion, to be remembered until unlocking happened
+    int m_readRc;
+    /// completion object for the unlocking of the striped object at the end of the read
+    librados::AioCompletion *m_unlockCompletion;
     /// constructor
     ReadCompletionData(libradosstriper::RadosStriperImpl * striper,
 		       const std::string& soid,
@@ -74,11 +78,13 @@ struct libradosstriper::RadosStriperImpl {
 		       bufferlist* bl,
 		       std::vector<ObjectExtent>* extents,
 		       std::vector<bufferlist>* resultbl,
-                       int n = 1);
+                       int n);
     /// destructor
     virtual ~ReadCompletionData();
-    /// complete method
-    void complete(int r);
+    /// complete method for when reading is over
+    void complete_read(int r);
+    /// complete method for when object is unlocked
+    void complete_unlock(int r);
   };
 
   /**
@@ -88,14 +94,22 @@ struct libradosstriper::RadosStriperImpl {
   struct WriteCompletionData : CompletionData {
     /// safe completion handler
     librados::IoCtxImpl::C_aio_Safe *m_safe;
+    /// return code of write completion, to be remembered until unlocking happened
+    int m_writeRc;
+    /// completion object for the unlocking of the striped object at the end of the write
+    librados::AioCompletion *m_unlockCompletion;
     /// constructor
     WriteCompletionData(libradosstriper::RadosStriperImpl * striper,
 			const std::string& soid,
 			const std::string& lockCookie,
-			librados::AioCompletionImpl *userCompletion = 0,
-                        int n = 1);
+			librados::AioCompletionImpl *userCompletion,
+                        int n);
     /// destructor
     virtual ~WriteCompletionData();
+    /// complete method for when writing is over
+    void complete_write(int r);
+    /// complete method for when object is unlocked
+    void complete_unlock(int r);
     /// safe method
     void safe(int r);
   };
@@ -192,27 +206,9 @@ struct libradosstriper::RadosStriperImpl {
     MultiAioCompletionImpl *m_multiAioCompl;
   };
 
-  /**
-   * Helper struct to handle simple locks on objects
-   */
-  struct RadosExclusiveLock {
-    /// striper to be used to handle the locking
-    librados::IoCtx* m_ioCtx;
-    /// object to be locked
-    const std::string m_oid;
-    /// name of the lock
-    std::string m_lockCookie;
-    /// constructor : takes the lock
-    RadosExclusiveLock(librados::IoCtx* ioCtx, const std::string oid);
-    /// destructor : releases the lock
-    ~RadosExclusiveLock();
-  };
-
   struct RemoveCompletionData : CompletionData {
     /// removal flags
     int flags;
-    /// exclusive lock
-    RadosExclusiveLock *m_lock;
     /**
      * constructor
      * note that the constructed object will take ownership of the lock
@@ -221,10 +217,7 @@ struct libradosstriper::RadosStriperImpl {
 			 const std::string& soid,
 			 const std::string& lockCookie,
 			 librados::AioCompletionImpl *userCompletion,
-			 RadosExclusiveLock *lock,
 			 int flags = 0);
-    /// destructor
-    ~RemoveCompletionData();
   };
 
   /**
@@ -343,10 +336,11 @@ struct libradosstriper::RadosStriperImpl {
   std::string getObjectId(const object_t& soid, long long unsigned objectno);
 
   // opening and closing of striped objects
-  int closeForWrite(const std::string& soid,
-		    const std::string& lockCookie);
   void unlockObject(const std::string& soid,
 		    const std::string& lockCookie);
+  void aio_unlockObject(const std::string& soid,
+                        const std::string& lockCookie,
+                        librados::AioCompletion *c);
 
   // internal versions of IO method
   int write_in_open_object(const std::string& soid,
