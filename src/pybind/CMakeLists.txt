@@ -55,3 +55,11 @@ endforeach()
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_rest_api.py
   DESTINATION ${PYTHON_INSTDIR})
+
+if(WITH_MGR)
+  # Needs to match src/common/config_opts.h, which has:
+  # OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr")
+  install(DIRECTORY
+    ${CMAKE_CURRENT_SOURCE_DIR}/mgr
+    DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
+endif(WITH_MGR)

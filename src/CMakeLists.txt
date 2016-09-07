@@ -525,6 +525,7 @@ if (WITH_MGR)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr mds osdc global
       -lboost_python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
+  install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
 set(librados_config_srcs
