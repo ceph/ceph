@@ -3560,6 +3560,20 @@ public:
     return status;
   }
 
+  void fsck() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("fsck");
+    while (in_flight)
+      cond.Wait(lock);
+    store->umount();
+    // fixme: this is bluestore specific, but...
+    if (!g_conf->bluestore_fsck_on_mount &&
+	!g_conf->bluestore_fsck_on_umount) {
+      store->fsck();
+    }
+    store->mount();
+  }
+
   void scan() {
     Mutex::Locker locker(lock);
     EnterExit ee("scan");
@@ -3707,6 +3721,7 @@ public:
 };
 
 void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
+		     int num_ops,
 		     uint64_t max_obj, uint64_t max_wr, uint64_t align)
 {
   ObjectStore::Sequencer osr("test");
@@ -3717,32 +3732,34 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid,
 				  max_obj, max_wr, align);
   test_obj.init();
-  for (int i = 0; i < 1000; ++i) {
+  for (int i = 0; i < num_ops/10; ++i) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < num_ops; ++i) {
     if (!(i % 1000)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
-    boost::uniform_int<> true_false(0, 99);
+    boost::uniform_int<> true_false(0, 999);
     int val = true_false(rng);
-    if (val > 97) {
+    if (val > 998) {
+      test_obj.fsck();
+    } else if (val > 970) {
       test_obj.scan();
-    } else if (val > 95) {
+    } else if (val > 950) {
       test_obj.stat();
-    } else if (val > 85) {
+    } else if (val > 850) {
       test_obj.zero();
-    } else if (val > 80) {
+    } else if (val > 800) {
       test_obj.unlink();
-    } else if (val > 55) {
+    } else if (val > 550) {
       test_obj.write();
-    } else if (val > 50) {
+    } else if (val > 500) {
       test_obj.clone();
-    } else if (val > 30) {
+    } else if (val > 300) {
       test_obj.stash();
-    } else if (val > 10) {
+    } else if (val > 100) {
       test_obj.read();
     } else {
       test_obj.truncate();
@@ -3753,7 +3770,7 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
 }
 
 TEST_P(StoreTest, Synthetic) {
-  doSyntheticTest(store, 400*1024, 40*1024, 0);
+  doSyntheticTest(store, 10000, 400*1024, 40*1024, 0);
 }
 
 
@@ -3761,6 +3778,7 @@ TEST_P(StoreTest, Synthetic) {
 uint64_t max_write = 40 * 1024;
 uint64_t max_size = 400 * 1024;
 uint64_t alignment = 0;
+uint64_t num_ops = 10000;
 
 string matrix_get(const char *k) {
   if (string(k) == "max_write") {
@@ -3769,6 +3787,8 @@ string matrix_get(const char *k) {
     return stringify(max_size);
   } else if (string(k) == "alignment") {
     return stringify(alignment);
+  } else if (string(k) == "num_ops") {
+    return stringify(num_ops);
   } else {
     char *buf;
     g_conf->get_val(k, &buf, -1);
@@ -3785,6 +3805,8 @@ void matrix_set(const char *k, const char *v) {
     max_size = atoll(v);
   } else if (string(k) == "alignment") {
     alignment = atoll(v);
+  } else if (string(k) == "num_ops") {
+    num_ops = atoll(v);
   } else {
     g_conf->set_val(k, v);
   }
@@ -3808,7 +3830,7 @@ void do_matrix_choose(const char *matrix[][10],
 	   << std::endl;
     }
     g_ceph_context->_conf->apply_changes(NULL);
-    doSyntheticTest(store, max_size, max_write, alignment);
+    doSyntheticTest(store, num_ops, max_size, max_write, alignment);
   }
 }
 
@@ -3829,6 +3851,24 @@ void do_matrix(const char *matrix[][10],
     matrix_set(p.first.c_str(), p.second.c_str());
   }
   g_ceph_context->_conf->apply_changes(NULL);
+}
+
+TEST_P(StoreTest, SyntheticMatrixSharding) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "num_ops", "50000", 0 },
+    { "max_write", "65536", 0 },
+    { "max_size", "262144", 0 },
+    { "alignment", "4096", 0 },
+    { "bluestore_min_alloc_size", "4096", 0 },
+    { "bluestore_extent_map_shard_min_size", "60", 0 },
+    { "bluestore_extent_map_shard_max_size", "300", 0 },
+    { "bluestore_extent_map_shard_target_size", "150", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
 }
 
 TEST_P(StoreTest, SyntheticMatrixCsumAlgorithm) {
