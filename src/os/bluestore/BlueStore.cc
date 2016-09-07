@@ -1800,7 +1800,6 @@ void BlueStore::ExtentMap::fault_range(
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  faulted = true;
   auto p = seek_shard(offset);
   auto last = seek_shard(offset + length);
   while (p != shards.end()) {
@@ -1835,7 +1834,6 @@ void BlueStore::ExtentMap::dirty_range(
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  assert(faulted);
   if (shards.empty()) {
     dout(20) << __func__ << " mark inline shard dirty" << dendl;
     inline_bl.clear();
@@ -1864,7 +1862,6 @@ void BlueStore::ExtentMap::dirty_range(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(
   uint64_t offset)
 {
-  assert(faulted);
   Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
@@ -1881,7 +1878,6 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   uint64_t offset)
 {
-  assert(faulted);
   Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
@@ -1895,7 +1891,6 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
 
 bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
 {
-  assert(faulted);
   Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {

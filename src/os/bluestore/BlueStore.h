@@ -532,8 +532,6 @@ public:
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
-    bool faulted = false;    ///< for debug only
-
     struct Shard {
       string key;            ///< kv key
       uint32_t offset;       ///< starting logical offset
