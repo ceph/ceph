@@ -1012,14 +1012,11 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
       }
     }
 
-    bool stop = false;
     // rstat
     if (!parent_dn) {
-      stop = true;
       // don't update parent this pass
     } else if (!linkunlink && !(pin->nestlock.can_wrlock(-1) &&
 				pin->versionlock.can_wrlock())) {
-      stop = true;
       cur->mark_dirty_rstat();
     } else {
       if (linkunlink)
@@ -1034,6 +1031,12 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
       cur->clear_dirty_rstat();
     }
 
+    bool stop = false;
+    if (!stop && g_conf->mds_dirstat_min_interval > 0) {
+      double since_last_prop = mut->get_mds_stamp() - parent->last_stats_prop;
+      if (since_last_prop < g_conf->mds_dirstat_min_interval)
+	stop = true;
+    }
 
     CDentry *parentdn = NULL; 
     if (!stop && !pin->is_base()) {
@@ -1056,6 +1059,8 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
       mut->add_updated_lock(pin, mask);
       break;
     }
+
+    parent->last_stats_prop = mut->get_mds_stamp();
 
     assert(mut->wrlocks.count(&pin->nestlock));
     if (!mut->wrlocks.count(&pin->versionlock))

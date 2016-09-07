@@ -22,6 +22,7 @@
 #include "events/ESession.h"
 
 #define dout_subsys ceph_subsys_mds
+#undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
 
 class ServerContext : public MDSLogContextBase {

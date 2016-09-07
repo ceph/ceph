@@ -334,11 +334,12 @@ public:
   void mark_dirty_scattered(int type, LogSegment *ls);
   void mark_updated_scatterlocks(int mask, LogSegment *ls);
 
-  // list item node for when we have unpropagated rstat data
-  elist<CInode*>::item item_dirty_rstat;
   bool is_dirty_rstat() const { return state_test(STATE_DIRTYRSTAT); }
   void mark_dirty_rstat();
   void clear_dirty_rstat();
+
+  // list item node for when we have unpropagated rstat data
+  elist<CInode*>::item item_dirty_rstat;
 public:
 
   // LogSegment lists i (may) belong to

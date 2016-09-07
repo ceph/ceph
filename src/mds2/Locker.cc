@@ -18,6 +18,7 @@
 #include "events/EOpen.h"
 
 #define dout_subsys ceph_subsys_mds
+#undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".locker "
 
 Locker::Locker(MDSRank *_mds) :

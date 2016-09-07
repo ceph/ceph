@@ -134,6 +134,7 @@ public:
   void assimilate_dirty_rstat_inodes(const MutationRef& mut);
   void assimilate_dirty_rstat_inodes_finish(const MutationRef& mut, EMetaBlob *blob);
 
+  utime_t last_stats_prop;
 protected:
   map<version_t, std::list<MDSContextBase*> > waiting_for_commit;
   object_t get_ondisk_object() const;
