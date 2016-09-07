@@ -185,13 +185,21 @@ private:
 
     dout(20) << __func__ << ": " << *ctx << dendl;
 
+    if (ret == -EINVAL) {
+      // if shrinking an image, a pagecache writeback might reference
+      // extents outside of the range of the new image extents
+      dout(5) << __func__ << ": masking IO out-of-bounds error" << dendl;
+      ctx->data.clear();
+      ret = 0;
+    }
+
     if (ret < 0) {
       ctx->reply.error = htonl(-ret);
     } else if ((ctx->command == NBD_CMD_READ) &&
                 ret < static_cast<int>(ctx->request.len)) {
       int pad_byte_count = static_cast<int> (ctx->request.len) - ret;
       ctx->data.append_zero(pad_byte_count);
-      dout(20) << __func__ << ": " << *ctx << ": Pad byte count: " 
+      dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
       ctx->reply.error = 0;
     } else {
