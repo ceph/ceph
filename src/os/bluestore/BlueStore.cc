@@ -217,8 +217,6 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_start);
     _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), start);
     _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), temp_start);
-    start->append(".");
-    temp_start->append(".");
 
     _key_encode_u64(pgid.pool() + 0x8000000000000000ull, end);
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_end);
@@ -228,22 +226,16 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     if (end_hash <= 0xffffffffull) {
       _key_encode_u32(end_hash, end);
       _key_encode_u32(end_hash, temp_end);
-      end->append(".");
-      temp_end->append(".");
     } else {
       _key_encode_u32(0xffffffff, end);
       _key_encode_u32(0xffffffff, temp_end);
-      end->append(":");
-      temp_end->append(":");
     }
   } else {
     _key_encode_shard(shard_id_t::NO_SHARD, start);
     _key_encode_u64(-1ull + 0x8000000000000000ull, start);
     *end = *start;
     _key_encode_u32(0, start);
-    start->append(".");
     _key_encode_u32(0xffffffff, end);
-    end->append(":");
 
     // no separate temp section
     *temp_start = *end;
@@ -291,7 +283,6 @@ static void get_object_key(const ghobject_t& oid, string *key)
   _key_encode_shard(oid.shard_id, key);
   _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
   _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
-  key->append(".");
 
   append_escaped(oid.hobj.nspace, key);
 
@@ -351,13 +342,10 @@ static int get_key_object(const string& key, ghobject_t *oid)
   p = _key_decode_u32(p, &hash);
 
   oid->hobj.set_bitwise_key_u32(hash);
-  if (*p != '.')
-    return -2;
-  ++p;
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
-    return -3;
+    return -2;
   p += r + 1;
 
   if (*p == '=') {
@@ -365,7 +353,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     ++p;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -4;
+      return -3;
     p += r + 1;
   } else if (*p == '<' || *p == '>') {
     // key + name
@@ -373,16 +361,16 @@ static int get_key_object(const string& key, ghobject_t *oid)
     string okey;
     r = decode_escaped(p, &okey);
     if (r < 0)
-      return -5;
+      return -4;
     p += r + 1;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -6;
+      return -5;
     p += r + 1;
     oid->hobj.set_key(okey);
   } else {
     // malformed
-    return -7;
+    return -6;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
@@ -390,7 +378,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
   if (*p) {
     // if we get something other than a null terminator here, 
     // something goes wrong.
-    return -8;
+    return -7;
   }  
 
   return 0;
@@ -4526,7 +4514,6 @@ int BlueStore::omap_get(
 	decode_omap_key(it->key(), &user_key);
 	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
-	assert(it->key() < tail);
 	(*out)[user_key] = it->value();
       }
       it->next();
@@ -4634,7 +4621,6 @@ int BlueStore::omap_get_keys(
       decode_omap_key(it->key(), &user_key);
       dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
-      assert(it->key() < tail);
       keys->insert(user_key);
       it->next();
     }
@@ -6651,6 +6637,9 @@ int BlueStore::_do_truncate(
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
 
+  if (offset == o->onode.size)
+    return 0;
+
   if (offset < o->onode.size) {
     // ensure any wal IO has completed before we truncate off any extents
     // they may touch.
@@ -7070,7 +7059,6 @@ int BlueStore::_clone(TransContext *txc,
       } else {
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
-	assert(it->key() < tail);
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
