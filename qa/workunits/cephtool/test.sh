@@ -1133,9 +1133,9 @@ function test_mon_osd()
   # ceph osd find expects the OsdName, so both ints and osd.n should work.
   ceph osd find 1
   ceph osd find osd.1
-  expect_false osd find osd.xyz
-  expect_false osd find xyz
-  expect_false osd find 0.1
+  expect_false ceph osd find osd.xyz
+  expect_false ceph osd find xyz
+  expect_false ceph osd find 0.1
   ceph --format plain osd find 1 # falls back to json-pretty
   ceph osd metadata 1 | grep 'distro'
   ceph --format plain osd metadata 1 | grep 'distro' # falls back to json-pretty
