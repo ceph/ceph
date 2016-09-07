@@ -143,52 +143,28 @@ void AioFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
 
 template <typename I>
 void AioFile<I>::write(uint64_t offset, ceph::bufferlist &&bl,
-                       Context *on_finish) {
-  m_work_queue.queue(new FunctionContext(
-    make_capture(std::move(bl), [this, offset, on_finish](bufferlist &bl,
-                                                          int r) {
-      r = bl.write_fd(m_fd, offset);
-      on_finish->complete(r);
+                       bool fdatasync, Context *on_finish) {
+  m_work_queue.queue(new FunctionContext(make_capture(
+    std::move(bl),
+    [this, offset, fdatasync, on_finish](bufferlist &bl, int r) {
+      on_finish->complete(write(offset, bl, fdatasync));
     })));
 }
 
 template <typename I>
-void AioFile<I>::discard(uint64_t offset, uint64_t length, Context *on_finish) {
+void AioFile<I>::discard(uint64_t offset, uint64_t length, bool fdatasync,
+                         Context *on_finish) {
   m_work_queue.queue(new FunctionContext(
-    [this, offset, length, on_finish](int r) {
-      while (true) {
-        r = fallocate(m_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
-                      offset, length);
-        if (r == -1) {
-          r = -errno;
-          if (r == EINTR) {
-            continue;
-          }
-          on_finish->complete(r);
-          return;
-        }
-        break;
-      }
-      on_finish->complete(0);
+    [this, offset, length, fdatasync, on_finish](int r) {
+      on_finish->complete(discard(offset, length, fdatasync));
     }));
 }
 
 template <typename I>
-void AioFile<I>::truncate(uint64_t length, Context *on_finish) {
-  m_work_queue.queue(new FunctionContext([this, length, on_finish](int r) {
-      while (true) {
-        r = ftruncate(m_fd, length);
-        if (r == -1) {
-          r = -errno;
-          if (r == EINTR) {
-            continue;
-          }
-          on_finish->complete(r);
-          return;
-        }
-        break;
-      }
-      on_finish->complete(0);
+void AioFile<I>::truncate(uint64_t length, bool fdatasync, Context *on_finish) {
+  m_work_queue.queue(new FunctionContext(
+    [this, length, fdatasync, on_finish](int r) {
+      on_finish->complete(truncate(length, fdatasync));
     }));
 }
 
@@ -207,15 +183,91 @@ void AioFile<I>::fsync(Context *on_finish) {
 
 template <typename I>
 void AioFile<I>::fdatasync(Context *on_finish) {
-  m_work_queue.queue(new FunctionContext([this, on_finish](int r) {
-      r = ::fdatasync(m_fd);
-      if (r == -1) {
-        r = -errno;
-        on_finish->complete(r);
-        return;
-      }
-      on_finish->complete(0);
+  m_work_queue.queue(new FunctionContext(
+    [this, on_finish](int r) {
+      on_finish->complete(fdatasync());
     }));
+}
+
+template <typename I>
+int AioFile<I>::write(uint64_t offset, const ceph::bufferlist &bl,
+                      bool sync) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "offset=" << offset << ", "
+                 << "length=" << bl.length() << dendl;
+
+  int r = bl.write_fd(m_fd, offset);
+  if (r < 0) {
+    return r;
+  }
+
+  if (sync) {
+    r = fdatasync();
+  }
+  return r;
+}
+
+template <typename I>
+int AioFile<I>::discard(uint64_t offset, uint64_t length, bool sync) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "offset=" << offset << ", "
+                 << "length=" << length << dendl;
+
+  int r;
+  while (true) {
+    r = fallocate(m_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+                  offset, length);
+    if (r == -1) {
+      r = -errno;
+      if (r == -EINTR) {
+        continue;
+      }
+      return r;
+    }
+    break;
+  }
+
+  if (sync) {
+    r = fdatasync();
+  }
+  return r;
+}
+
+template <typename I>
+int AioFile<I>::truncate(uint64_t length, bool sync) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "length=" << length << dendl;
+
+  int r;
+  while (true) {
+    r = ftruncate(m_fd, length);
+    if (r == -1) {
+      r = -errno;
+      if (r == -EINTR) {
+        continue;
+      }
+      return r;
+    }
+    break;
+  }
+
+  if (sync) {
+    r = fdatasync();
+  }
+  return r;
+}
+
+template <typename I>
+int AioFile<I>::fdatasync() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  int r = ::fdatasync(m_fd);
+  if (r == -1) {
+    r = -errno;
+    return r;
+  }
+  return 0;
 }
 
 } // namespace file

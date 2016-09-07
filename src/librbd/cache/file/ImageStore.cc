@@ -57,7 +57,7 @@ void ImageStore<I>::reset(Context *on_finish) {
   ldout(cct, 20) << dendl;
 
   // TODO
-  m_cache_file.truncate(m_image_ctx.size, on_finish);
+  m_cache_file.truncate(m_image_ctx.size, false, on_finish);
 }
 
 template <typename I>
@@ -92,7 +92,7 @@ void ImageStore<I>::write_block(uint64_t cache_block,
     buffer_offset += extent.second;
 
     m_cache_file.write(m_metastore.block_to_offset(cache_block) + extent.first,
-                       std::move(sub_bl), ctx->new_sub());
+                       std::move(sub_bl), false, ctx->new_sub());
 
   }
   ctx->activate();

@@ -33,9 +33,11 @@ public:
 
   void read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
             Context *on_finish);
-  void write(uint64_t offset, ceph::bufferlist &&bl, Context *on_finish);
-  void discard(uint64_t offset, uint64_t length, Context *on_finish);
-  void truncate(uint64_t length, Context *on_finish);
+  void write(uint64_t offset, ceph::bufferlist &&bl, bool fdatasync,
+             Context *on_finish);
+  void discard(uint64_t offset, uint64_t length,
+               bool fdatasync, Context *on_finish);
+  void truncate(uint64_t length, bool fdatasync, Context *on_finish);
 
   void fsync(Context *on_finish);
   void fdatasync(Context *on_finish);
@@ -46,6 +48,10 @@ private:
   std::string m_name;
   int m_fd = -1;
 
+  int write(uint64_t offset, const ceph::bufferlist &bl, bool fdatasync);
+  int discard(uint64_t offset, uint64_t length, bool fdatasync);
+  int truncate(uint64_t length, bool fdatasync);
+  int fdatasync();
 };
 
 } // namespace file
