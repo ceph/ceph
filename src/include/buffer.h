@@ -387,8 +387,7 @@ namespace buffer CEPH_BUFFER_API {
     list() : _len(0), _memcopy_count(0), last_p(this) {}
     // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
-      append_buffer = buffer::create(prealloc);
-      append_buffer.set_length(0);   // unused, so far.
+      reserve(prealloc);
     }
 
     list(const list& other) : _buffers(other._buffers), _len(other._len),
@@ -499,6 +498,13 @@ namespace buffer CEPH_BUFFER_API {
     bool rebuild_aligned_size_and_memory(unsigned align_size,
 					 unsigned align_memory);
     bool rebuild_page_aligned();
+
+    void reserve(size_t prealloc) {
+      if (append_buffer.unused_tail_length() < prealloc) {
+	append_buffer = buffer::create(prealloc);
+	append_buffer.set_length(0);   // unused, so far.
+      }
+    }
 
     // assignment-op with move semantics
     const static unsigned int CLAIM_DEFAULT = 0;
