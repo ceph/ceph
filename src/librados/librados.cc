@@ -1646,10 +1646,7 @@ struct AioUnlockCompletion : public librados::ObjectOperationCompletion {
 int librados::IoCtx::aio_unlock(const std::string &oid, const std::string &name,
 			        const std::string &cookie, AioCompletion *c)
 {
-  librados::AioCompletion *completion = librados::Rados::aio_create_completion();
-  int rc = rados::cls::lock::aio_unlock(this, oid, name, cookie, completion);
-  completion->release();
-  return rc;
+  return rados::cls::lock::aio_unlock(this, oid, name, cookie, c);
 }
 
 int librados::IoCtx::break_lock(const std::string &oid, const std::string &name,
