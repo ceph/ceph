@@ -881,7 +881,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
   while (getline(in, str)) {
     // remove newline
     int l = str.length();
-    if (l && str[l] == '\n')
+    if (l && str[l - 1] == '\n')
       str.erase(l-1, 1);
 
     line_val[line] = str;
