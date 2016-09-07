@@ -83,6 +83,7 @@ ExclusiveArch:  x86_64 aarch64
 #################################################################################
 Requires:       ceph-osd = %{epoch}:%{version}-%{release}
 Requires:       ceph-mds = %{epoch}:%{version}-%{release}
+Requires:       ceph-mgr = %{epoch}:%{version}-%{release}
 Requires:       ceph-mon = %{epoch}:%{version}-%{release}
 Requires(post):	binutils
 %if 0%{with cephfs_java}
@@ -95,7 +96,9 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 BuildRequires:	boost-devel
+%if ! 0%{?suse_version}
 BuildRequires:	boost-python
+%endif
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
@@ -289,6 +292,18 @@ ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
 parliament cluster that provides extremely reliable and durable storage
 of cluster membership, configuration, and state.
+
+%package mgr
+Summary:        Ceph Manager Daemon
+License:        LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-with-autoconf-exception and BSD-3-Clause and MIT
+Group:          System Environment/Base
+Requires:       ceph-base = %{version}-%{release}
+
+%description mgr
+ceph-mgr enables python modules that provide services (such as the REST
+module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
+the cluster maps, the daemon metadata, and performance counters, and
+exposes all these to the python modules.
 
 %package fuse
 Summary:	Ceph fuse-based client
@@ -768,6 +783,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/tmp
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mon
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mds
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/radosgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
@@ -1012,6 +1028,55 @@ if [ $FIRST_ARG -ge 1 ] ; then
   fi
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
     /usr/bin/systemctl try-restart ceph-mds@\*.service > /dev/null 2>&1 || :
+  fi
+fi
+
+%files mgr
+%{_bindir}/ceph-mgr
+%{_libdir}/ceph/mgr
+%{_unitdir}/ceph-mgr@.service
+%{_unitdir}/ceph-mgr.target
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
+
+%post mgr
+%if 0%{?suse_version}
+if [ $1 -eq 1 ] ; then
+  /usr/bin/systemctl preset ceph-mgr@\*.service ceph-mgr.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-mgr@\*.service ceph-mgr.target
+%endif
+if [ $1 -eq 1 ] ; then
+/usr/bin/systemctl start ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%preun mgr
+%if 0%{?suse_version}
+%service_del_preun ceph-mgr@\*.service ceph-mgr.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-mgr@\*.service ceph-mgr.target
+%endif
+
+%postun mgr
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-mgr@\*.service ceph-mgr.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-mgr@\*.service ceph-mgr.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr@\*.service > /dev/null 2>&1 || :
   fi
 fi
 
