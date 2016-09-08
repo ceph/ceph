@@ -998,10 +998,14 @@ bool BlueFS::_should_compact_log()
   float ratio = (float)current / (float)expected;
   dout(10) << __func__ << " current 0x" << std::hex << current
 	   << " expected " << expected << std::dec
-	   << " ratio " << ratio << dendl;
-  if (current < g_conf->bluefs_log_compact_min_size ||
-      ratio < g_conf->bluefs_log_compact_min_ratio)
+	   << " ratio " << ratio
+	   << (log_flushing ? " (async compaction in progress)" : "")
+	   << dendl;
+  if (log_flushing ||
+      current < g_conf->bluefs_log_compact_min_size ||
+      ratio < g_conf->bluefs_log_compact_min_ratio) {
     return false;
+  }
   return true;
 }
 
