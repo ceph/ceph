@@ -173,6 +173,38 @@ Context *ResizeRequest<I>::handle_trim_image(int *result) {
 }
 
 template <typename I>
+void ResizeRequest<I>::send_flush_cache() {
+  I &image_ctx = this->m_image_ctx;
+  if (image_ctx.object_cacher == nullptr) {
+    send_trim_image();
+    return;
+  }
+
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+
+  RWLock::RLocker owner_locker(image_ctx.owner_lock);
+  image_ctx.flush_cache(create_async_context_callback(
+    image_ctx, create_context_callback<
+      ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this)));
+}
+
+template <typename I>
+Context *ResizeRequest<I>::handle_flush_cache(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to flush cache: " << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
+  }
+
+  send_invalidate_cache();
+  return nullptr;
+}
+
+template <typename I>
 void ResizeRequest<I>::send_invalidate_cache() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -192,7 +224,10 @@ Context *ResizeRequest<I>::handle_invalidate_cache(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  // ignore busy error -- writeback was successfully flushed so we might be
+  // wasting some cache space for trimmed objects, but they will get purged
+  // eventually. Most likely cause of the issue was a in-flight cache read
+  if (*result < 0 && *result != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(*result)
                << dendl;
     return this->create_context_finisher(*result);
@@ -215,7 +250,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   if (m_original_size == m_new_size) {
     return this->create_context_finisher(0);
   } else if (m_new_size < m_original_size) {
-    send_invalidate_cache();
+    send_flush_cache();
     return nullptr;
   }
 

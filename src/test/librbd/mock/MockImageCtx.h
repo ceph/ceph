@@ -157,6 +157,7 @@ struct MockImageCtx {
   MOCK_METHOD1(flush_async_operations, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
+  MOCK_METHOD1(flush_cache, void(Context *));
   MOCK_METHOD1(invalidate_cache, void(Context *));
   MOCK_METHOD1(shut_down_cache, void(Context *));
 
