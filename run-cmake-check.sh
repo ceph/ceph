@@ -47,7 +47,6 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
-    $DRY_RUN ./autogen.sh || return 1
     $DRY_RUN mkdir build
     $DRY_RUN cd build
     $DRY_RUN cmake "$@" ../
