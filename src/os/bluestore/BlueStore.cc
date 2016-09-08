@@ -68,18 +68,15 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 /*
  * object name key structure
  *
- * 2 chars: shard (-- for none, or hex digit, so that we sort properly)
+ * encoded u8: shard + 2^7 (so that it sorts properly)
  * encoded u64: poolid + 2^63 (so that it sorts properly)
  * encoded u32: hash (bit reversed)
  *
- * 1 char: '.'
- *
  * escaped string: namespace
  *
+ * escaped string: key or object name
  * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
- *         we are followed just by the key.  otherwise, we are followed by
- *         the key and then the object name.
- * escaped string: key
+ *         we are done.  otherwise, we are followed by the object name.
  * escaped string: object name (unless '=' above)
  *
  * encoded u64: snap
@@ -197,30 +194,12 @@ static string pretty_binary_string(const string& in)
 
 static void _key_encode_shard(shard_id_t shard, string *key)
 {
-  // make field ordering match with ghobject_t compare operations
-  if (shard == shard_id_t::NO_SHARD) {
-    // otherwise ff will sort *after* 0, not before.
-    key->append("--");
-  } else {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%02x", (int)shard);
-    key->append(buf);
-  }
+  key->push_back((char)((uint8_t)shard + (uint8_t)0x80));
 }
 static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
 {
-  if (key[0] == '-') {
-    *pshard = shard_id_t::NO_SHARD;
-  } else {
-    unsigned shard;
-    int r = sscanf(key, "%x", &shard);
-    if (r < 1) {
-      assert(0 == "invalid shard of key");
-      return NULL;
-    }
-    *pshard = shard_id_t(shard);
-  }
-  return key + 2;
+  pshard->id = (uint8_t)*key - (uint8_t)0x80;
+  return key + 1;
 }
 
 static void get_coll_key_range(const coll_t& cid, int bits,
@@ -243,8 +222,6 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_start);
     _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), start);
     _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), temp_start);
-    start->append(".");
-    temp_start->append(".");
 
     _key_encode_u64(pgid.pool() + 0x8000000000000000ull, end);
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_end);
@@ -254,22 +231,16 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     if (end_hash <= 0xffffffffull) {
       _key_encode_u32(end_hash, end);
       _key_encode_u32(end_hash, temp_end);
-      end->append(".");
-      temp_end->append(".");
     } else {
       _key_encode_u32(0xffffffff, end);
       _key_encode_u32(0xffffffff, temp_end);
-      end->append(":");
-      temp_end->append(":");
     }
   } else {
     _key_encode_shard(shard_id_t::NO_SHARD, start);
     _key_encode_u64(-1ull + 0x8000000000000000ull, start);
     *end = *start;
     _key_encode_u32(0, start);
-    start->append(".");
     _key_encode_u32(0xffffffff, end);
-    end->append(":");
 
     // no separate temp section
     *temp_start = *end;
@@ -301,30 +272,27 @@ static void get_object_key(const ghobject_t& oid, string *key)
   _key_encode_shard(oid.shard_id, key);
   _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
   _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
-  key->append(".");
 
   append_escaped(oid.hobj.nspace, key);
 
   if (oid.hobj.get_key().length()) {
     // is a key... could be < = or >.
+    append_escaped(oid.hobj.get_key(), key);
     // (ASCII chars < = and > sort in that order, yay)
     if (oid.hobj.get_key() < oid.hobj.oid.name) {
       key->append("<");
-      append_escaped(oid.hobj.get_key(), key);
       append_escaped(oid.hobj.oid.name, key);
     } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
       key->append(">");
-      append_escaped(oid.hobj.get_key(), key);
       append_escaped(oid.hobj.oid.name, key);
     } else {
       // same as no key
       key->append("=");
-      append_escaped(oid.hobj.oid.name, key);
     }
   } else {
     // no key
-    key->append("=");
     append_escaped(oid.hobj.oid.name, key);
+    key->append("=");
   }
 
   _key_encode_u64(oid.hobj.snap, key);
@@ -361,46 +329,40 @@ static int get_key_object(const string& key, ghobject_t *oid)
   p = _key_decode_u32(p, &hash);
 
   oid->hobj.set_bitwise_key_u32(hash);
-  if (*p != '.')
-    return -2;
-  ++p;
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
-    return -3;
+    return -2;
   p += r + 1;
 
+  string k;
+  r = decode_escaped(p, &k);
+  if (r < 0)
+    return -3;
+  p += r + 1;
   if (*p == '=') {
     // no key
     ++p;
-    r = decode_escaped(p, &oid->hobj.oid.name);
-    if (r < 0)
-      return -4;
-    p += r + 1;
+    oid->hobj.oid.name = k;
   } else if (*p == '<' || *p == '>') {
     // key + name
     ++p;
-    string okey;
-    r = decode_escaped(p, &okey);
+    r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
       return -5;
     p += r + 1;
-    r = decode_escaped(p, &oid->hobj.oid.name);
-    if (r < 0)
-      return -6;
-    p += r + 1;
-    oid->hobj.set_key(okey);
+    oid->hobj.set_key(k);
   } else {
     // malformed
-    return -7;
+    return -6;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
   p = _key_decode_u64(p, &oid->generation);
   if (*p) {
-    // if we get something other than a null terminator here, 
+    // if we get something other than a null terminator here,
     // something goes wrong.
-    return -8;
+    return -7;
   }
 
   return 0;
@@ -5386,7 +5348,6 @@ int BlueStore::omap_get(
 	decode_omap_key(it->key(), &user_key);
 	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
-	assert(it->key() < tail);
 	(*out)[user_key] = it->value();
       }
       it->next();
@@ -5494,7 +5455,6 @@ int BlueStore::omap_get_keys(
       decode_omap_key(it->key(), &user_key);
       dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
-      assert(it->key() < tail);
       keys->insert(user_key);
       it->next();
     }
@@ -7580,6 +7540,9 @@ int BlueStore::_do_truncate(
 	   << " 0x" << std::hex << offset << std::dec << dendl;
   _dump_onode(o, 30);
 
+  if (offset == o->onode.size)
+    return 0;
+
   if (offset < o->onode.size) {
     // ensure any wal IO has completed before we truncate off any extents
     // they may touch.
@@ -8029,7 +7992,6 @@ int BlueStore::_clone(TransContext *txc,
       } else {
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
-	assert(it->key() < tail);
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
