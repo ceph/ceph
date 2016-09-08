@@ -2,7 +2,13 @@ include(Distutils)
 
 set(CYTHON_MODULE_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules)
 
-foreach(python_version 3 2)  # Keep the default version last
+# Keep the default version last
+if(WITH_PYTHON3)
+  set(py_vers 3)
+endif()
+list(APPEND py_vers 2)
+
+foreach(python_version ${py_vers})
   if(${python_version} EQUAL 2)
     set(PYTHON_VERSION "")
   else(${python_version} EQUAL 2)
