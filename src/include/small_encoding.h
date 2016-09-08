@@ -66,35 +66,25 @@ inline void small_decode_signed_varint(T& v, bufferlist::iterator& p)
 // first(low) 2 bits = how many low zero bits (nibbles)
 // high bit of each byte = another byte follows
 // (so, 5 bits data in first byte, 7 bits data thereafter)
-template<typename T>
-inline void small_encode_varint_lowz(T v, bufferlist& bl) {
-  int lowz = v ? (ctz(v) / 4) : 0;
-  uint8_t byte = std::min(lowz, 3);
-  v >>= byte * 4;
-  byte |= (((uint8_t)v << 2) & 0x7c);
-  v >>= 5;
-  while (v) {
-    byte |= 0x80;
-    ::encode(byte, bl);
-    byte = (v & 0x7f);
-    v >>= 7;
-  }
-  ::encode(byte, bl);
+inline void small_encode_varint_lowz(uint64_t v, bufferlist& bl) {
+  int lowznib = v ? (ctz(v) / 4) : 0;
+  if (lowznib > 3)
+    lowznib = 3;
+  v >>= lowznib * 4;
+  v <<= 2;
+  v |= lowznib;
+  small_encode_varint(v, bl);
 }
 
 template<typename T>
 inline void small_decode_varint_lowz(T& v, bufferlist::iterator& p)
 {
-  uint8_t byte;
-  ::decode(byte, p);
-  int shift = (byte & 3) * 4;
-  v = ((byte >> 2) & 0x1f) << shift;
-  shift += 5;
-  while (byte & 0x80) {
-    ::decode(byte, p);
-    v |= (T)(byte & 0x7f) << shift;
-    shift += 7;
-  }
+  uint64_t i;
+  small_decode_varint(i, p);
+  int lowznib = (i & 3);
+  i >>= 2;
+  i <<= lowznib * 4;
+  v = i;
 }
 
 // signed varint + lowz encoding
@@ -103,44 +93,36 @@ inline void small_decode_varint_lowz(T& v, bufferlist::iterator& p)
 // next 2 bits = how many low zero bits (nibbles)
 // high bit of each byte = another byte follows
 // (so, 4 bits data in first byte, 7 bits data thereafter)
-template<typename T>
-inline void small_encode_signed_varint_lowz(T v, bufferlist& bl) {
-  uint8_t byte = 0;
+inline void small_encode_signed_varint_lowz(int64_t v, bufferlist& bl) {
+  bool negative = false;
   if (v < 0) {
     v = -v;
-    byte = 1;
+    negative = true;
   }
-  int lowz = v ? (ctz(v) / 4) : 0;
-  lowz = std::min(lowz, 3);
-  byte |= lowz << 1;
-  v >>= lowz * 4;
-  byte |= (((uint8_t)v << 3) & 0x78);
-  v >>= 4;
-  while (v) {
-    byte |= 0x80;
-    ::encode(byte, bl);
-    byte = (v & 0x7f);
-    v >>= 7;
-  }
-  ::encode(byte, bl);
+  int lowznib = v ? (ctz(v) / 4) : 0;
+  if (lowznib > 3)
+    lowznib = 3;
+  v >>= lowznib * 4;
+  v <<= 3;
+  v |= lowznib << 1;
+  v |= (int)negative;
+  small_encode_varint(v, bl);
 }
 
 template<typename T>
 inline void small_decode_signed_varint_lowz(T& v, bufferlist::iterator& p)
 {
-  uint8_t byte;
-  ::decode(byte, p);
-  bool negative = byte & 1;
-  int shift = (byte & 6) * 2;
-  v = ((byte >> 3) & 0xf) << shift;
-  shift += 4;
-  while (byte & 0x80) {
-    ::decode(byte, p);
-    v |= (T)(byte & 0x7f) << shift;
-    shift += 7;
-  }
-  if (negative) {
-    v = -v;
+  int64_t i;
+  small_decode_varint(i, p);
+  int lowznib = (i & 6) >> 1;
+  if (i & 1) {
+    i >>= 3;
+    i <<= lowznib * 4;
+    v = -i;
+  } else {
+    i >>= 3;
+    i <<= lowznib * 4;
+    v = i;
   }
 }
 
