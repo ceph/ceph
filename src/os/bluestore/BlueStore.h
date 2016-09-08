@@ -473,6 +473,9 @@ public:
 
     void encode(bufferlist& bl) const {
       if (dirty) {
+	// manage blob_bl memory carefully
+	blob_bl.clear();
+	blob_bl.reserve(blob.estimate_encoded_size());
 	::encode(blob, blob_bl);
 	dirty = false;
       } else {
@@ -532,8 +535,6 @@ public:
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
-    bool faulted = false;    ///< for debug only
-
     struct Shard {
       string key;            ///< kv key
       uint32_t offset;       ///< starting logical offset
@@ -546,7 +547,7 @@ public:
     bool inline_dirty = false;
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
-    ExtentMap(Onode *o) : onode(o) {}
+    ExtentMap(Onode *o);
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
@@ -587,6 +588,8 @@ public:
     /// ensure a range of the map is marked dirty
     void dirty_range(KeyValueDB::Transaction t,
 		     uint32_t offset, uint32_t length);
+
+    extent_map_t::iterator find(uint64_t offset);
 
     /// find a lextent that includes offset
     extent_map_t::iterator find_lextent(uint64_t offset);
