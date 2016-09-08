@@ -1330,7 +1330,7 @@ bool BlueStore::Blob::put_ref(
 
   // search from logical releases
   for (auto le : logical) {
-    uint64_t r_off = le.offset;
+    uint64_t r_off;
     auto p = ref_map.ref_map.lower_bound(le.offset);
     if (p != ref_map.ref_map.begin()) {
       --p;
@@ -1427,6 +1427,13 @@ ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.extentmap(" << this << ") "
+
+BlueStore::ExtentMap::ExtentMap(Onode *o)
+  : onode(o),
+    inline_bl(
+      g_conf ? g_conf->bluestore_extent_map_inline_shard_prealloc_size : 4096) {
+}
+
 
 bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 				  bool force)
@@ -1794,7 +1801,6 @@ void BlueStore::ExtentMap::fault_range(
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  faulted = true;
   auto p = seek_shard(offset);
   auto last = seek_shard(offset + length);
   while (p != shards.end()) {
@@ -1829,7 +1835,6 @@ void BlueStore::ExtentMap::dirty_range(
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  assert(faulted);
   if (shards.empty()) {
     dout(20) << __func__ << " mark inline shard dirty" << dendl;
     inline_bl.clear();
@@ -1855,10 +1860,16 @@ void BlueStore::ExtentMap::dirty_range(
   }
 }
 
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find(
+  uint64_t offset)
+{
+  Extent dummy(offset);
+  return extent_map.find(dummy);
+}
+
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(
   uint64_t offset)
 {
-  assert(faulted);
   Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
@@ -1875,7 +1886,6 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   uint64_t offset)
 {
-  assert(faulted);
   Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
@@ -1889,7 +1899,6 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
 
 bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
 {
-  assert(faulted);
   Extent dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
