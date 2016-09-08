@@ -46,6 +46,9 @@ public:
       messenger(NULL),
       cct(cct_)
   {
+    if (cct_ != nullptr) {
+      cct->get();
+    }
   }
 
   ~ceph_mount_info()
