@@ -7,8 +7,6 @@ include_directories(jerasure/jerasure/include)
 include_directories(jerasure/gf-complete/include)
 include_directories(jerasure)
 
-include(SIMDExt)
-
 if(TRUE)
   list(APPEND jerasure_flavors generic)
 endif()
