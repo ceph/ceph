@@ -13,7 +13,6 @@
 #include "rocksdb/db.h"
 #include "rocksdb/table.h"
 #include "rocksdb/env.h"
-#include "rocksdb/write_batch.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
@@ -323,7 +322,18 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
     static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.disableWAL = disableWAL;
+  lgeneric_subdout(cct, rocksdb, 30) << __func__;
+  RocksWBHandler bat_txc;
+  _t->bat->Iterate(&bat_txc);
+  *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
+  
   rocksdb::Status s = db->Write(woptions, _t->bat);
+  if (!s.ok()) {
+    RocksWBHandler rocks_txc;
+    _t->bat->Iterate(&rocks_txc);
+    derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
+         << " Rocksdb transaction: " << rocks_txc.seen << dendl;
+  }
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
   logger->tinc(l_rocksdb_submit_latency, lat);
@@ -338,7 +348,18 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   rocksdb::WriteOptions woptions;
   woptions.sync = true;
   woptions.disableWAL = disableWAL;
+  lgeneric_subdout(cct, rocksdb, 30) << __func__;
+  RocksWBHandler bat_txc;
+  _t->bat->Iterate(&bat_txc);
+  *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
+
   rocksdb::Status s = db->Write(woptions, _t->bat);
+  if (!s.ok()) {
+    RocksWBHandler rocks_txc;
+    _t->bat->Iterate(&rocks_txc);
+    derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
+         << " Rocksdb transaction: " << rocks_txc.seen << dendl;
+  }
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_txns);
   logger->tinc(l_rocksdb_submit_sync_latency, lat);
