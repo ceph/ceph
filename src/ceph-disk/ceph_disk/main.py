@@ -18,6 +18,8 @@
 # GNU Library Public License for more details.
 #
 
+from __future__ import print_function
+
 import argparse
 import base64
 import errno
@@ -36,7 +38,6 @@ import time
 import shlex
 import pwd
 import grp
-import types
 import textwrap
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
@@ -243,19 +244,20 @@ CEPH_PREF_USER = None
 CEPH_PREF_GROUP = None
 
 
-class filelock(object):
+class FileLock(object):
     def __init__(self, fn):
         self.fn = fn
         self.fd = None
 
-    def acquire(self):
+    def __enter__(self):
         assert not self.fd
-        self.fd = file(self.fn, 'w')
+        self.fd = os.open(self.fn, os.O_WRONLY | os.O_CREAT)
         fcntl.lockf(self.fd, fcntl.LOCK_EX)
 
-    def release(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
         self.fd = None
 
 
@@ -265,8 +267,8 @@ class Error(Exception):
     """
 
     def __str__(self):
-        doc = self.__doc__.strip()
-        return ': '.join([doc] + [str(a) for a in self.args])
+        doc = _bytes2str(self.__doc__.strip())
+        return ': '.join([doc] + [_bytes2str(a) for a in self.args])
 
 
 class MountError(Error):
@@ -324,11 +326,8 @@ def is_systemd():
     """
     Detect whether systemd is running
     """
-    with file('/proc/1/comm', 'rb') as i:
-        for line in i:
-            if 'systemd' in line:
-                return True
-    return False
+    with open('/proc/1/comm', 'r') as f:
+        return 'systemd' in f.read()
 
 
 def is_upstart():
@@ -336,9 +335,7 @@ def is_upstart():
     Detect whether upstart is running
     """
     (out, err, _) = command(['init', '--version'])
-    if 'upstart' in out:
-        return True
-    return False
+    return 'upstart' in out
 
 
 def maybe_mkdir(*a, **kw):
@@ -352,7 +349,7 @@ def maybe_mkdir(*a, **kw):
         os.unlink(*a)
     try:
         os.mkdir(*a, **kw)
-    except OSError, e:
+    except OSError as e:
         if e.errno == errno.EEXIST:
             pass
         else:
@@ -361,10 +358,7 @@ def maybe_mkdir(*a, **kw):
 
 def which(executable):
     """find the location of an executable"""
-    if 'PATH' in os.environ:
-        envpath = os.environ['PATH']
-    else:
-        envpath = os.defpath
+    envpath = os.environ.get('PATH') or os.defpath
     PATH = envpath.split(os.pathsep)
 
     locations = PATH + [
@@ -388,7 +382,7 @@ def _get_command_executable(arguments):
     Return the full path for an executable, raise if the executable is not
     found. If the executable has already a full path do not perform any checks.
     """
-    if arguments[0].startswith('/'):  # an absolute path
+    if os.path.isabs(arguments[0]):  # an absolute path
         return arguments
     executable = which(arguments[0])
     if not executable:
@@ -414,7 +408,9 @@ def command(arguments, **kwargs):
     This returns the output of the command and the return code of the
     process in a tuple: (output, returncode).
     """
-    arguments = _get_command_executable(arguments)
+
+    arguments = list(map(_bytes2str, _get_command_executable(arguments)))
+
     LOG.info('Running command: %s' % ' '.join(arguments))
     process = subprocess.Popen(
         arguments,
@@ -422,7 +418,12 @@ def command(arguments, **kwargs):
         stderr=subprocess.PIPE,
         **kwargs)
     out, err = process.communicate()
-    return out, err, process.returncode
+
+    return _bytes2str(out), _bytes2str(err), process.returncode
+
+
+def _bytes2str(string):
+    return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
 def command_check_call(arguments):
@@ -584,7 +585,7 @@ def get_dev_size(dev, size='megabytes'):
     try:
         device_size = os.lseek(fd, 0, os.SEEK_END)
         divider = dividers.get(size, 1024 * 1024)  # default to megabytes
-        return device_size / divider
+        return device_size // divider
     except Exception as error:
         LOG.warning('failed to get size of %s: %s' % (dev, str(error)))
     finally:
@@ -744,17 +745,17 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts', 'rb') as proc_mounts:
+    with open('/proc/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
                 continue
             mounts_dev = fields[0]
             path = fields[1]
-            if mounts_dev.startswith('/') and os.path.exists(mounts_dev):
+            if os.path.isabs(mounts_dev) and os.path.exists(mounts_dev):
                 mounts_dev = os.path.realpath(mounts_dev)
                 if mounts_dev == dev:
-                    return path
+                    return _bytes2str(path)
     return None
 
 
@@ -819,6 +820,8 @@ def must_be_one_line(line):
     :raises: TruncatedLineError or TooManyLinesError
     :return: Content of the line, or None if line isn't valid.
     """
+    line = _bytes2str(line)
+
     if line[-1:] != '\n':
         raise TruncatedLineError(line)
     line = line[:-1]
@@ -837,7 +840,7 @@ def read_one_line(parent, name):
     """
     path = os.path.join(parent, name)
     try:
-        line = file(path, 'rb').read()
+        line = open(path, 'rb').read()
     except IOError as e:
         if e.errno == errno.ENOENT:
             return None
@@ -864,8 +867,8 @@ def write_one_line(parent, name, text):
     """
     path = os.path.join(parent, name)
     tmp = '{path}.{pid}.tmp'.format(path=path, pid=os.getpid())
-    with file(tmp, 'wb') as tmp_file:
-        tmp_file.write(text + '\n')
+    with open(tmp, 'wb') as tmp_file:
+        tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
     path_set_context(tmp)
     os.rename(tmp, path)
@@ -957,7 +960,7 @@ def get_ceph_user():
             pwd.getpwnam(CEPH_PREF_USER)
             return CEPH_PREF_USER
         except KeyError:
-            print "No such user: " + CEPH_PREF_USER
+            print("No such user:", CEPH_PREF_USER)
             sys.exit(2)
     else:
         try:
@@ -975,7 +978,7 @@ def get_ceph_group():
             grp.getgrnam(CEPH_PREF_GROUP)
             return CEPH_PREF_GROUP
         except KeyError:
-            print "No such group: " + CEPH_PREF_GROUP
+            print("No such group:", CEPH_PREF_GROUP)
             sys.exit(2)
     else:
         try:
@@ -1002,7 +1005,7 @@ def _check_output(args=None, **kwargs):
         error = subprocess.CalledProcessError(ret, cmd)
         error.output = out + err
         raise error
-    return out
+    return _bytes2str(out)
 
 
 def get_conf(cluster, variable):
@@ -1145,7 +1148,7 @@ def _dmcrypt_map(
     if dev:
         return dev
 
-    if isinstance(key, types.TupleType):
+    if isinstance(key, tuple):
         # legacy, before lockbox
         assert os.path.exists(key[0])
         keypath = key[0]
@@ -1397,7 +1400,7 @@ def update_partition(dev, description):
     partprobe_ok = False
     error = 'unknown error'
     partprobe = _get_command_executable(['partprobe'])[0]
-    for i in (1, 2, 3, 4, 5):
+    for i in range(5):
         command_check_call(['udevadm', 'settle', '--timeout=600'])
         try:
             _check_output(['flock', '-s', dev, partprobe, dev])
@@ -1431,9 +1434,9 @@ def zap(dev):
         # isn't too thorough.
         lba_size = 4096
         size = 33 * lba_size
-        with file(dev, 'wb') as dev_file:
+        with open(dev, 'wb') as dev_file:
             dev_file.seek(-size, os.SEEK_END)
-            dev_file.write(size * '\0')
+            dev_file.write(size * b'\0')
 
         command_check_call(
             [
@@ -1760,9 +1763,8 @@ class Prepare(object):
         return parser
 
     def prepare(self):
-        prepare_lock.acquire()
-        self.prepare_locked()
-        prepare_lock.release()
+        with prepare_lock:
+            self.prepare_locked()
 
     @staticmethod
     def factory(args):
@@ -1972,21 +1974,22 @@ class PrepareSpace(object):
             raise Error('unexpected type ', self.type)
 
     def prepare_file(self):
-        if not os.path.exists(getattr(self.args, self.name)):
+        space_filename = getattr(self.args, self.name)
+        if not os.path.exists(space_filename):
             LOG.debug('Creating %s file %s with size 0'
                       ' (ceph-osd will resize and allocate)',
                       self.name,
-                      getattr(self.args, self.name))
-            with file(getattr(self.args, self.name), 'wb') as space_file:
-                pass
+                      space_filename)
+            space_file = open(space_filename, 'wb')
+            space_file.close()
 
         LOG.debug('%s is file %s',
                   self.name.capitalize(),
-                  getattr(self.args, self.name))
+                  space_filename)
         LOG.warning('OSD will not be hot-swappable if %s is '
                     'not the same device as the osd data' %
                     self.name)
-        self.space_symlink = space_file
+        self.space_symlink = space_filename
 
     def prepare_device(self):
         reusing_partition = False
@@ -3124,7 +3127,7 @@ def mount_activate(
                 fstype=fstype,
                 mount_options=mount_options,
             )
-        return (cluster, osd_id)
+        return cluster, osd_id
 
     except:
         LOG.error('Failed to activate')
@@ -3174,7 +3177,7 @@ def activate_dir(
                     raise Error('unable to create symlink %s -> %s'
                                 % (canonical, path))
 
-    return (cluster, osd_id)
+    return cluster, osd_id
 
 
 def find_cluster_by_uuid(_uuid):
@@ -3193,7 +3196,7 @@ def find_cluster_by_uuid(_uuid):
         try:
             fsid = get_fsid(cluster)
         except Error as e:
-            if e.message != 'getting cluster uuid from configuration failed':
+            if 'getting cluster uuid from configuration failed' not in str(e):
                 raise e
             no_fsid.append(cluster)
         else:
@@ -3268,7 +3271,7 @@ def activate(
 
         LOG.debug('Marking with init system %s', init)
         init_path = os.path.join(path, init)
-        with file(init_path, 'w'):
+        with open(init_path, 'w'):
             path_set_context(init_path)
 
     # remove markers for others, just in case.
@@ -3304,8 +3307,7 @@ def main_activate(args):
         LOG.info('suppressed activate request on %s', args.path)
         return
 
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         mode = os.stat(args.path).st_mode
         if stat.S_ISBLK(mode):
             if (is_partition(args.path) and
@@ -3361,16 +3363,10 @@ def main_activate(args):
                 osd_id=osd_id,
             )
 
-    finally:
-        activate_lock.release()  # noqa
-
 
 def main_activate_lockbox(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_activate_lockbox_protected(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_activate_lockbox_protected(args):
@@ -3459,11 +3455,8 @@ def _remove_osd_directory_files(mounted_path, cluster):
 
 
 def main_deactivate(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_deactivate_locked(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_deactivate_locked(args):
@@ -3586,7 +3579,7 @@ def _remove_lockbox(uuid):
     command(['umount', canonical])
     for name in os.listdir(lockbox):
         path = os.path.join(lockbox, name)
-        if (os.path.islink(path) and os.readlink(path) == canonical):
+        if os.path.islink(path) and os.readlink(path) == canonical:
             os.unlink(path)
 
 
@@ -3616,16 +3609,13 @@ def destroy_lookup_device(args, predicate, description):
             else:
                 dmcrypt = False
             if predicate(partition):
-                return (dmcrypt, partition)
+                return dmcrypt, partition
     raise Error('found no device matching ', description)
 
 
 def main_destroy(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_destroy_locked(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_destroy_locked(args):
@@ -3727,8 +3717,7 @@ def main_activate_space(name, args):
     osd_id = None
     osd_uuid = None
     dev = None
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         if args.dmcrypt:
             dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
         else:
@@ -3764,9 +3753,6 @@ def main_activate_space(name, args):
             osd_id=osd_id,
         )
 
-    finally:
-        activate_lock.release()  # noqa
-
 
 ###########################
 
@@ -3794,30 +3780,29 @@ def main_activate_all(args):
                 continue
 
             LOG.info('Activating %s', path)
-            activate_lock.acquire()  # noqa
-            try:
-                # never map dmcrypt cyphertext devices
-                (cluster, osd_id) = mount_activate(
-                    dev=path,
-                    activate_key_template=args.activate_key_template,
-                    init=args.mark_init,
-                    dmcrypt=False,
-                    dmcrypt_key_dir='',
-                )
-                start_daemon(
-                    cluster=cluster,
-                    osd_id=osd_id,
-                )
+            with activate_lock:
+                try:
+                    # never map dmcrypt cyphertext devices
+                    (cluster, osd_id) = mount_activate(
+                        dev=path,
+                        activate_key_template=args.activate_key_template,
+                        init=args.mark_init,
+                        dmcrypt=False,
+                        dmcrypt_key_dir='',
+                    )
+                    start_daemon(
+                        cluster=cluster,
+                        osd_id=osd_id,
+                    )
 
-            except Exception as e:
-                print >> sys.stderr, '{prog}: {msg}'.format(
-                    prog=args.prog,
-                    msg=e,
-                )
-                err = True
+                except Exception as e:
+                    print(
+                        '{prog}: {msg}'.format(prog=args.prog, msg=e),
+                        file=sys.stderr
+                    )
 
-            finally:
-                activate_lock.release()  # noqa
+                    err = True
+
     if err:
         raise Error('One or more partitions failed to activate')
 
@@ -3826,13 +3811,13 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with file('/proc/swaps', 'rb') as proc_swaps:
+    with open('/proc/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:
                 continue
             swaps_dev = fields[0]
-            if swaps_dev.startswith('/') and os.path.exists(swaps_dev):
+            if os.path.isabs(swaps_dev) and os.path.exists(swaps_dev):
                 swaps_dev = os.path.realpath(swaps_dev)
                 if swaps_dev == dev:
                     return True
@@ -3842,8 +3827,8 @@ def is_swap(dev):
 def get_oneliner(base, name):
     path = os.path.join(base, name)
     if os.path.isfile(path):
-        with open(path, 'r') as _file:
-            return _file.readline().rstrip()
+        with open(path, 'rb') as _file:
+            return _bytes2str(_file.readline().rstrip())
     return None
 
 
@@ -3871,7 +3856,7 @@ def split_dev_base_partnum(dev):
         b = block_path(dev)
         partnum = open(os.path.join(b, 'partition')).read().strip()
         base = get_partition_base(dev)
-    return (base, partnum)
+    return base, partnum
 
 
 def get_partition_type(part):
@@ -4133,7 +4118,7 @@ def list_devices():
 
     uuid_map = {}
     space_map = {}
-    for base, parts in sorted(partmap.iteritems()):
+    for base, parts in sorted(partmap.items()):
         for p in parts:
             dev = get_dev_path(p)
             part_uuid = get_partition_uuid(dev)
@@ -4172,7 +4157,7 @@ def list_devices():
               str(uuid_map) + ", space_map = " + str(space_map))
 
     devices = []
-    for base, parts in sorted(partmap.iteritems()):
+    for base, parts in sorted(partmap.items()):
         if parts:
             disk = {'path': get_dev_path(base)}
             partitions = []
@@ -4191,11 +4176,8 @@ def list_devices():
 
 
 def main_list(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_list_protected(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_list_protected(args):
@@ -4215,11 +4197,11 @@ def main_list_protected(args):
     else:
         selected_devices = devices
     if args.format == 'json':
-        print json.dumps(selected_devices)
+        print(json.dumps(selected_devices))
     else:
         output = list_format_plain(selected_devices)
         if output:
-            print output
+            print(output)
 
 
 ###########################
@@ -4257,7 +4239,7 @@ def set_suppress(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
-    with file(SUPPRESS_PREFIX + base, 'w') as f:  # noqa
+    with open(SUPPRESS_PREFIX + base, 'w') as f:  # noqa
         pass
     LOG.info('set suppress flag on %s', base)
 
@@ -4435,10 +4417,10 @@ def setup_statedir(dir):
         os.mkdir(STATEDIR + "/tmp")
 
     global prepare_lock
-    prepare_lock = filelock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
+    prepare_lock = FileLock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
 
     global activate_lock
-    activate_lock = filelock(STATEDIR + '/tmp/ceph-disk.activate.lock')
+    activate_lock = FileLock(STATEDIR + '/tmp/ceph-disk.activate.lock')
 
     global SUPPRESS_PREFIX
     SUPPRESS_PREFIX = STATEDIR + '/tmp/suppress-activate.'
@@ -4560,7 +4542,7 @@ def make_trigger_parser(subparsers):
     trigger_parser.add_argument(
         '--sync',
         action='store_true', default=None,
-        help=('do operation synchronously; do not trigger systemd'),
+        help='do operation synchronously; do not trigger systemd',
     )
     trigger_parser.set_defaults(
         func=main_trigger,
