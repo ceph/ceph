@@ -203,8 +203,8 @@ TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_invalidate_cache(mock_image_ctx, 0);
+  expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_update_header(mock_image_ctx, 0);
   expect_shrink_object_map(mock_image_ctx);
@@ -264,6 +264,7 @@ TEST_F(TestMockOperationResizeRequest, TrimError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
+  expect_invalidate_cache(mock_image_ctx, 0);
   expect_trim(mock_image_ctx, mock_trim_request, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));
@@ -286,7 +287,6 @@ TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
-  expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_invalidate_cache(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0, false));

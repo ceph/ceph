@@ -80,10 +80,10 @@ private:
    *    |           STATE_UPDATE_HEADER ----------------------------\
    *    |                                                           |
    *    | (shrink)                                                  |
-   *    |\--------> STATE_TRIM_IMAGE                                |
+   *    |\--------> STATE_INVALIDATE_CACHE                          |
    *    |                 |                                         |
    *    |                 v                                         |
-   *    |           STATE_INVALIDATE_CACHE                          |
+   *    |           STATE_TRIM_IMAGE                                |
    *    |                 |                                         |
    *    |                 v                                         |
    *    |           STATE_POST_BLOCK_WRITES                         |
