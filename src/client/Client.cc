@@ -1538,7 +1538,7 @@ int Client::verify_reply_trace(int r,
     *pcreated = got_created_ino;
 
   if (request->target) {
-    ptarget->swap(request->target);
+    *ptarget = request->target;
     ldout(cct, 20) << "make_request target is " << *ptarget->get() << dendl;
   } else {
     if (got_created_ino && (p = inode_map.find(vinodeno_t(created_ino, CEPH_NOSNAP))) != inode_map.end()) {
@@ -2113,6 +2113,8 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   }
   if (request->got_unsafe) {
     r->set_replayed_op();
+    if (request->target)
+      r->head.ino = request->target->ino;
   } else {
     encode_cap_releases(request, mds);
     if (drop_cap_releases) // we haven't send cap reconnect yet, drop cap releases
