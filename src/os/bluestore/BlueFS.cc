@@ -1688,7 +1688,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len, vector<bluefs_extent_t> *ev)
   }
   for (int i = 0; i < count; i++) {
     bluefs_extent_t e = bluefs_extent_t(id, extents[i].offset, extents[i].length);
-    if (!ev->empty() && ev->back().end() == (uint64_t) e.offset) {
+    if (!ev->empty() &&
+	ev->back().bdev == e.bdev &&
+	ev->back().end() == (uint64_t) e.offset) {
       ev->back().length += e.length;
     } else {
       ev->push_back(e);
