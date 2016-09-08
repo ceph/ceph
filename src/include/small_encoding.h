@@ -40,39 +40,24 @@ inline void small_decode_varint(T& v, bufferlist::iterator& p)
 //
 // low bit = 1 = negative, 0 = positive
 // high bit of every byte indicates whether another byte follows.
-template<typename T>
-inline void small_encode_signed_varint(T v, bufferlist& bl) {
-  uint8_t byte = 0;
+inline void small_encode_signed_varint(int64_t v, bufferlist& bl) {
   if (v < 0) {
-    v = -v;
-    byte = 1;
+    v = (-v << 1) | 1;
+  } else {
+    v <<= 1;
   }
-  byte |= (v & 0x3f) << 1;
-  v >>= 6;
-  while (v) {
-    byte |= 0x80;
-    ::encode(byte, bl);
-    byte = (v & 0x7f);
-    v >>= 7;
-  }
-  ::encode(byte, bl);
+  small_encode_varint(v, bl);
 }
 
 template<typename T>
 inline void small_decode_signed_varint(T& v, bufferlist::iterator& p)
 {
-  uint8_t byte;
-  ::decode(byte, p);
-  bool negative = byte & 1;
-  v = (byte & 0x7e) >> 1;
-  int shift = 6;
-  while (byte & 0x80) {
-    ::decode(byte, p);
-    v |= (T)(byte & 0x7f) << shift;
-    shift += 7;
-  }
-  if (negative) {
-    v = -v;
+  int64_t i;
+  small_decode_varint(i, p);
+  if (i & 1) {
+    v = -(i >> 1);
+  } else {
+    v = i >> 1;
   }
 }
 
