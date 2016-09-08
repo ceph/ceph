@@ -168,7 +168,7 @@ Context *ResizeRequest<I>::handle_trim_image(int *result) {
     return this->create_context_finisher(*result);
   }
 
-  send_invalidate_cache();
+  send_post_block_writes();
   return nullptr;
 }
 
@@ -198,7 +198,7 @@ Context *ResizeRequest<I>::handle_invalidate_cache(int *result) {
     return this->create_context_finisher(*result);
   }
 
-  send_post_block_writes();
+  send_trim_image();
   return nullptr;
 }
 
@@ -215,7 +215,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   if (m_original_size == m_new_size) {
     return this->create_context_finisher(0);
   } else if (m_new_size < m_original_size) {
-    send_trim_image();
+    send_invalidate_cache();
     return nullptr;
   }
 
