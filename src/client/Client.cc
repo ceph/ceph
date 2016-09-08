@@ -5059,8 +5059,14 @@ out:
   return r;
 }
 
+ostream& operator<<(ostream &out, const UserPerm& perm) {
+  out << "UserPerm(uid: " << perm.uid() << ", gid: " << perm.gid() << ")";
+  return out;
+}
+
 int Client::may_setattr(Inode *in, struct stat *st, int mask, const UserPerm& perms)
 {
+  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -5115,6 +5121,7 @@ out:
 
 int Client::may_open(Inode *in, int flags, const UserPerm& perms)
 {
+  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
   unsigned want = 0;
 
   if ((flags & O_ACCMODE) == O_WRONLY)
@@ -5151,6 +5158,7 @@ out:
 
 int Client::may_lookup(Inode *dir, const UserPerm& perms)
 {
+  ldout(cct, 20) << __func__ << *dir << "; " << perms << dendl;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -5163,6 +5171,7 @@ out:
 
 int Client::may_create(Inode *dir, const UserPerm& perms)
 {
+  ldout(cct, 20) << __func__ << *dir << "; " << perms << dendl;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -5175,6 +5184,7 @@ out:
 
 int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
 {
+  ldout(cct, 20) << __func__ << *dir << "; " << "; name " << name << "; " << perms << dendl;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -5199,6 +5209,7 @@ out:
 
 int Client::may_hardlink(Inode *in, const UserPerm& perms)
 {
+  ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;

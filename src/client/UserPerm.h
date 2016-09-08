@@ -77,5 +77,4 @@ public:
   void take_gids() { alloced_gids = true; }
 };
 
-
 #endif
