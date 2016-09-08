@@ -1870,14 +1870,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find_lextent(
   uint64_t offset)
 {
-  Extent dummy(offset);
-  auto fp = extent_map.lower_bound(dummy);
-  if (fp != extent_map.begin()) {
-    --fp;
-    if (fp->logical_offset + fp->length <= offset) {
-      ++fp;
-    }
-  }
+  auto fp = seek_lextent(offset);
   if (fp != extent_map.end() && fp->logical_offset > offset)
     return extent_map.end();  // extent is past offset
   return fp;
@@ -1899,14 +1892,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
 
 bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
 {
-  Extent dummy(offset);
-  auto fp = extent_map.lower_bound(dummy);
-  if (fp != extent_map.begin()) {
-    --fp;
-    if (fp->logical_offset + fp->length <= offset) {
-      ++fp;
-    }
-  }
+  auto fp = seek_lextent(offset);
   if (fp == extent_map.end() || fp->logical_offset >= offset + length) {
     return false;
   }
