@@ -6657,9 +6657,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  no = c->get_onode(noid, false);
 	}
 	r = _rename(txc, c, o, no, noid);
-	if (r == -ENOENT && op->op == Transaction::OP_TRY_RENAME)
-	  r = 0;
-      }
+    }
       break;
 
     case Transaction::OP_OMAP_CLEAR:
@@ -6729,15 +6727,13 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
 	if (r == -ENOENT && (op->op == Transaction::OP_CLONERANGE ||
 			     op->op == Transaction::OP_CLONE ||
-			     op->op == Transaction::OP_CLONERANGE2))
+			     op->op == Transaction::OP_CLONERANGE2)) {
 	  msg = "ENOENT on clone suggests osd bug";
-
-	if (r == -ENOSPC)
+	} else if (r == -ENOSPC) {
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
 	  msg = "ENOSPC handling not implemented";
-
-	if (r == -ENOTEMPTY) {
+	} else if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	}
 
