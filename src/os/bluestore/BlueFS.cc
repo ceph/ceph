@@ -1375,6 +1375,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   assert(!h->file->deleted);
   assert(h->file->num_readers.load() == 0);
 
+  bool buffered;
+  if (h->file->fnode.ino == 1 || h->writer_type == WRITER_WAL)
+    buffered = false;
+  else
+    buffered = g_conf->bluefs_buffered_io;
+
   if (offset + length <= h->pos)
     return 0;
   if (offset < h->pos) {
@@ -1506,8 +1512,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       h->tail_block.substr_of(bl, bl.length() - tail, tail);
       t.append_zero(super.block_size - tail);
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev],
-			     g_conf->bluefs_buffered_io);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
     bloff += x_len;
     length -= x_len;
     ++p;
