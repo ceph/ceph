@@ -247,7 +247,7 @@ class TestPackaging(object):
         remote.os.package_type = "rpm"
         packaging.get_package_version(remote, "httpd")
         args, kwargs = remote.run.call_args
-        expected_args = ['rpm', '-q', 'httpd', '--qf', '%{VERSION}']
+        expected_args = ['rpm', '-q', 'httpd', '--qf', '%{VERSION}-%{RELEASE}']
         assert expected_args == kwargs['args']
 
     def test_get_package_version_not_found(self):

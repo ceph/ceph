@@ -350,7 +350,7 @@ def get_package_version(remote, package):
     else:
         proc = remote.run(
             args=[
-                'rpm', '-q', package, '--qf', '%{VERSION}'
+                'rpm', '-q', package, '--qf', '%{VERSION}-%{RELEASE}'
             ],
             stdout=StringIO(),
         )
