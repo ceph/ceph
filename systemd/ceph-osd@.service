@@ -11,6 +11,7 @@ EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecStartPre=/usr/lib/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+ExecStopPost=/usr/bin/ceph-osd -f --cluster ${CLUSTERD} --id %i --setuser ceph --setgroup ceph --flush-journal
 ExecReload=/bin/kill -HUP $MAINPID
 ProtectHome=true
 ProtectSystem=full
