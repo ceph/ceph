@@ -847,8 +847,8 @@ public:
 
           // if client drops we may not have a session to draw information from.
           if (s) {
-            ss << "from='" << s->inst << "' "
-              << "entity='" << s->entity_name << "' ";
+            ss << "from='" << s->con->get_peer_addr() << "' "
+	       << "entity='" << s->entity_name << "' ";
           } else {
             ss << "session dropped for command ";
           }
@@ -900,6 +900,8 @@ public:
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key);
+  int ms_handle_authentication(Connection *con) override;
+  friend AuthMonitor;  // FIXME: for ms_handle_authentication and msgr1
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 

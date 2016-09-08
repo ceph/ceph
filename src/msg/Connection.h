@@ -25,6 +25,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 
+#include "auth/Auth.h"
 #include "common/RefCountedObj.h"
 
 #include "common/debug.h"
@@ -52,6 +53,14 @@ public:
 
   int rx_buffers_version;
   map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
+
+  // authentication state
+  // FIXME make these private after ms_handle_authorizer is removed
+public:
+  AuthCapsInfo peer_caps_info;
+  EntityName peer_name;
+  uint64_t peer_global_id = 0;
+  uint64_t peer_auid = CEPH_AUTH_UID_DEFAULT;
 
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
@@ -117,6 +126,7 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m) = 0;
+
   /**
    * Send a "keepalive" ping along the given Connection, if it's working.
    * If the underlying connection has broken, this function does nothing.
@@ -124,6 +134,17 @@ public:
    * @return 0, or implementation-defined error numbers.
    */
   virtual void send_keepalive() = 0;
+
+  /**
+   * send an auth frame (msgr2)
+   */
+  virtual void send_auth(bufferlist &bl) { }
+
+  /**
+   * send an auth done frame (msgr2)
+   */
+  virtual void send_auth_done(uint64_t flags, bufferlist& sigbl) { }
+
   /**
    * Mark down the given Connection.
    *
@@ -150,6 +171,18 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  AuthCapsInfo& get_peer_caps_info() {
+    return peer_caps_info;
+  }
+  const EntityName& get_peer_entity_name() {
+    return peer_name;
+  }
+  uint64_t get_peer_global_id() {
+    return peer_global_id;
+  }
+  uint64_t get_peer_auid() {
+    return peer_auid;
+  }
 
   int get_peer_type() const { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }

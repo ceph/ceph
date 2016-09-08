@@ -39,7 +39,6 @@ struct Subscription {
 
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
-  entity_inst_t inst;
   utime_t session_timeout;
   utime_t time_established;
   bool closed;
@@ -47,10 +46,11 @@ struct MonSession : public RefCountedObject {
   set<uint64_t> routed_request_tids;
   MonCap caps;
   uint64_t auid;
-  uint64_t global_id;
 
   map<string, Subscription*> sub_map;
   epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
+
+  int osd = -1;   ///< osd id (if known to be an osd)
 
   AuthServiceHandler *auth_handler;
   EntityName entity_name;
@@ -58,11 +58,10 @@ struct MonSession : public RefCountedObject {
   ConnectionRef proxy_con;
   uint64_t proxy_tid;
 
-  MonSession(const entity_inst_t& i, Connection *c) :
+  MonSession(Connection *c) :
     RefCountedObject(g_ceph_context),
-    con(c), inst(i), closed(false), item(this),
+    con(c), closed(false), item(this),
     auid(0),
-    global_id(0),
     osd_epoch(0),
     auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
@@ -112,9 +111,9 @@ struct MonSessionMap {
     }
     s->sub_map.clear();
     s->item.remove_myself();
-    if (s->inst.name.is_osd()) {
-      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->inst.name.num());
-	   p->first == s->inst.name.num();
+    if (s->osd >= 0) {
+      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->osd);
+	   p->first == s->osd;
 	   ++p)
 	if (p->second == s) {
 	  by_osd.erase(p);
@@ -125,14 +124,17 @@ struct MonSessionMap {
     s->put();
   }
 
-  MonSession *new_session(const entity_inst_t& i, Connection *c) {
-    MonSession *s = new MonSession(i, c);
+  MonSession *new_session(Connection *c) {
+    MonSession *s = new MonSession(c);
     assert(s);
     sessions.push_back(&s->item);
-    if (i.name.is_osd())
-      by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
     s->get();  // caller gets a ref
     return s;
+  }
+
+  void register_as_osd(MonSession *s, int id) {
+    s->osd = id;
+    by_osd.insert(pair<int,MonSession*>(id, s));
   }
 
   MonSession *get_random_osd_session(OSDMap *osdmap) {
@@ -206,8 +208,9 @@ struct MonSessionMap {
 
 inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession(" << s.inst << " is "
-      << (s.closed ? "closed" : "open");
+  out << "MonSession(" << s.con->get_peer_addr() << " "
+      << s.con->get_peer_entity_name()
+      << (s.closed ? " closed" : " open");
   out << s.caps << ")";
   return out;
 }

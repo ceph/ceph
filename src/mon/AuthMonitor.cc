@@ -364,7 +364,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
   int ret = 0;
-  AuthCapsInfo caps_info;
   MAuthReply *reply;
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();
@@ -381,7 +380,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       ::decode(struct_v, indata);
       ::decode(supported, indata);
       ::decode(entity_name, indata);
-      ::decode(s->global_id, indata);
+      ::decode(s->con->peer_global_id, indata);
     } catch (const buffer::error &e) {
       dout(10) << "failed to decode initial auth message" << dendl;
       ret = -EINVAL;
@@ -438,9 +437,9 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   /* assign a new global_id? we assume this should only happen on the first
      request. If a client tries to send it later, it'll screw up its auth
      session */
-  if (!s->global_id) {
-    s->global_id = assign_global_id(op, paxos_writable);
-    if (!s->global_id) {
+  if (!s->con->peer_global_id) {
+    s->con->peer_global_id = assign_global_id(op, paxos_writable);
+    if (!s->con->peer_global_id) {
 
       delete s->auth_handler;
       s->auth_handler = NULL;
@@ -467,7 +466,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
   try {
-    uint64_t auid = 0;
     if (start) {
       // new session
 
@@ -475,37 +473,31 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       if (m->monmap_epoch < mon->monmap->get_epoch())
 	mon->send_latest_monmap(m->get_connection().get());
 
-      proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
+      proto = s->auth_handler->start_session(entity_name, indata, response_bl,
+					     s->con->peer_caps_info);
       ret = 0;
-      if (caps_info.allow_all)
+      if (s->con->peer_caps_info.allow_all)
 	s->caps.set_allow_all();
     } else {
       // request
-      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
+      ret = s->auth_handler->handle_request(
+	indata, response_bl,
+	s->con->peer_global_id,
+	s->con->peer_caps_info,
+	&s->con->peer_auid);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
       goto done;
     }
-    if (caps_info.caps.length()) {
-      bufferlist::iterator p = caps_info.caps.begin();
-      string str;
-      try {
-	::decode(str, p);
-      } catch (const buffer::error &err) {
-	derr << "corrupt cap data for " << entity_name << " in auth db" << dendl;
-	str.clear();
-      }
-      s->caps.parse(str, NULL);
-      s->auid = auid;
-    }
+    mon->ms_handle_authentication(s->con.get());
   } catch (const buffer::error &err) {
     ret = -EINVAL;
     dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
   }
 
 reply:
-  reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
+  reply = new MAuthReply(proto, &response_bl, ret, s->con->peer_global_id);
   mon->send_reply(op, reply);
 done:
   return true;

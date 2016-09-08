@@ -2744,7 +2744,7 @@ void Monitor::handle_command(MonOpRequestRef op)
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->inst << "' "
+      << "from='" << session->con->get_peer_addr() << "' "
       << "entity='" << session->entity_name << "' "
       << "cmd=" << m->cmd << ":  access denied";
     reply_command(op, -EACCES, "access denied", 0);
@@ -2752,7 +2752,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-    << "from='" << session->inst << "' "
+    << "from='" << session->con->get_peer_addr() << "' "
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
 
@@ -3202,8 +3202,7 @@ void Monitor::handle_forward(MonOpRequestRef op)
     assert(req != NULL);
 
     ConnectionRef c(new AnonConnection(cct));
-    MonSession *s = new MonSession(req->get_source_inst(),
-				   static_cast<Connection*>(c.get()));
+    MonSession *s = new MonSession(static_cast<Connection*>(c.get()));
     c->set_priv(s->get());
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
@@ -3405,7 +3404,7 @@ void Monitor::resend_routed_requests()
 
 void Monitor::remove_session(MonSession *s)
 {
-  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  dout(10) << "remove_session " << s << " " << *s << dendl;
   assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
@@ -3510,7 +3509,7 @@ void Monitor::_ms_dispatch(Message *m)
     }
 
     ConnectionRef con = m->get_connection();
-    s = session_map.new_session(m->get_source_inst(), con.get());
+    s = session_map.new_session(con.get());
     assert(s);
     con->set_priv(s->get());
     dout(10) << __func__ << " new session " << s << " " << *s << dendl;
@@ -3527,11 +3526,14 @@ void Monitor::_ms_dispatch(Message *m)
     }
     s->put();
   } else {
-    dout(20) << __func__ << " existing session " << s << " for " << s->inst
-	     << dendl;
+    dout(20) << __func__ << " existing session " << s << " " << *s << dendl;
   }
 
   assert(s);
+
+  if (m->get_source().is_osd() && s->osd < 0) {
+    session_map.register_as_osd(s, m->get_source().num());
+  }
 
   s->session_timeout = ceph_clock_now(NULL);
   s->session_timeout += g_conf->mon_session_timeout;
@@ -3542,7 +3544,7 @@ void Monitor::_ms_dispatch(Message *m)
   dout(20) << " caps " << s->caps.get_str() << dendl;
 
   if ((is_synchronizing() ||
-       (s->global_id == 0 && !exited_quorum.is_zero())) &&
+       (s->con->peer_global_id == 0 && !exited_quorum.is_zero())) &&
       !src_is_mon &&
       m->get_type() != CEPH_MSG_PING) {
     waitlist_or_zap_client(op);
@@ -4391,7 +4393,7 @@ bool Monitor::ms_handle_reset(Connection *con)
 
   Mutex::Locker l(lock);
 
-  dout(10) << "reset/close on session " << s->inst << dendl;
+  dout(10) << "reset/close on session " << *s << dendl;
   if (!s->closed)
     remove_session(s);
   s->put();
@@ -4852,7 +4854,7 @@ void Monitor::tick()
     ++p;
     
     // don't trim monitors
-    if (s->inst.name.is_mon())
+    if (s->con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
       continue;
 
     if (s->session_timeout < now && s->con) {
@@ -4861,13 +4863,13 @@ void Monitor::tick()
       s->session_timeout += g_conf->mon_session_timeout;
     }
     if (s->session_timeout < now) {
-      dout(10) << " trimming session " << s->con << " " << s->inst
+      dout(10) << " trimming session " << s << " " << *s
 	       << " (timeout " << s->session_timeout
 	       << " < now " << now << ")" << dendl;
     } else if (out_for_too_long) {
       // boot the client Session because we've taken too long getting back in
-      dout(10) << " trimming session " << s->con << " " << s->inst
-        << " because we've been out of quorum too long" << dendl;
+      dout(10) << " trimming session " << s << " " << *s
+	       << " because we've been out of quorum too long" << dendl;
     } else {
       continue;
     }
@@ -5182,4 +5184,42 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     isvalid = true;
   }
   return true;
+}
+
+int Monitor::ms_handle_authentication(Connection *con)
+{
+  MonSession *s = static_cast<MonSession*>(con->get_priv());
+  if (!s) {
+    // must be msgr2, otherwise dispatch would have set up the session.
+    s = session_map.new_session(con);
+    assert(s);
+    con->set_priv(s->get());
+    logger->set(l_mon_num_sessions, session_map.get_size());
+    logger->inc(l_mon_session_add);
+  }
+  dout(10) << __func__ << " session " << s << " con " << con
+	   << " addr " << s->con->get_peer_addr()
+	   << " " << *s << dendl;
+
+  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  if (caps_info.allow_all) {
+    s->caps.set_allow_all();
+  }
+  int ret = 1;
+  if (caps_info.caps.length()) {
+    bufferlist::iterator p = caps_info.caps.begin();
+    string str;
+    try {
+      ::decode(str, p);
+    } catch (const buffer::error &err) {
+      derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
+	   << " in auth db" << dendl;
+      str.clear();
+      ret = -EPERM;
+    }
+    s->caps.parse(str, NULL);
+    s->auid = con->get_peer_auid();
+  }
+
+  return ret;
 }
