@@ -1973,6 +1973,16 @@ public:
   virtual bool exists(CollectionHandle& c, const ghobject_t& oid) {
     return exists(c->get_cid(), oid);
   }
+  /**
+   * set_collection_opts -- set pool options for a collectioninformation for an object
+   *
+   * @param cid collection
+   * @param opts new collection options
+   * @returns 0 on success, negative error code on failure.
+   */
+  virtual int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts) = 0;
 
   /**
    * stat -- get information for an object
@@ -2326,6 +2336,7 @@ public:
   * - num objects - total (including witeouts) object count to measure used space for.
   */
   virtual uint64_t estimate_objects_overhead(uint64_t num_objects) = 0;
+
 
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}

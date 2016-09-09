@@ -4822,6 +4822,21 @@ int BlueStore::stat(
   }
   return r;
 }
+int BlueStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  CollectionHandle ch = _get_collection(cid);
+  if (!ch)
+    return -ENOENT;
+  Collection *c = static_cast<Collection*>(ch.get());
+  dout(15) << __func__ << " " << cid << " "
+    << " options " << opts << dendl;
+  RWLock::WLocker l(c->lock);
+
+  c->pool_opts = opts;
+  return 0;
+}
 
 int BlueStore::read(
   const coll_t& cid,
@@ -8810,5 +8825,8 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }
+
+
+
 
 // ===========================================

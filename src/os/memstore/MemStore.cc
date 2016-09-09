@@ -302,6 +302,13 @@ int MemStore::stat(
   return 0;
 }
 
+int MemStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
+}
+
 int MemStore::read(
     const coll_t& cid,
     const ghobject_t& oid,

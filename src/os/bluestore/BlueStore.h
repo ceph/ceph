@@ -1017,6 +1017,9 @@ public:
     // contention.
     OnodeSpace onode_map;
 
+    //pool options
+    pool_opts_t pool_opts;
+
     OnodeRef get_onode(const ghobject_t& oid, bool create);
 
     // the terminology is confusing here, sorry!
@@ -1621,6 +1624,9 @@ public:
 
   bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
+  int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts) override;
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,

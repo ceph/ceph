@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include "KStore.h"
+#include "osd/osd_types.h"
 #include "kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -1153,6 +1154,13 @@ int KStore::stat(
   st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_nlink = 1;
   return 0;
+}
+
+int KStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
 }
 
 int KStore::read(
