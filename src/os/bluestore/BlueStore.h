@@ -840,7 +840,8 @@ public:
     void add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid,
-		const ghobject_t& new_oid);
+		const ghobject_t& new_oid,
+		const string& new_okey);
     void clear();
 
     /// return true if f true for any item
