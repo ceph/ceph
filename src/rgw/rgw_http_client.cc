@@ -344,6 +344,16 @@ RGWHTTPClient::~RGWHTTPClient()
 }
 
 
+static int clear_signal(int fd)
+{
+  uint32_t buf;
+  int ret = ::read(fd, (void *)&buf, sizeof(buf));
+  if (ret < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
 #if HAVE_CURL_MULTI_WAIT
 
 static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
@@ -362,10 +372,8 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   }
 
   if (wait_fd.revents > 0) {
-    uint32_t buf;
-    ret = read(signal_fd, (void *)&buf, sizeof(buf));
+    ret = clear_signal(signal_fd);
     if (ret < 0) {
-      ret = -errno;
       ldout(cct, 0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
       return ret;
     }
@@ -417,10 +425,8 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   }
 
   if (signal_fd > 0 && FD_ISSET(signal_fd, &fdread)) {
-    uint32_t buf;
-    ret = read(signal_fd, (void *)&buf, sizeof(buf));
+    ret = clear_signal(signal_fd);
     if (ret < 0) {
-      ret = -errno;
       ldout(cct, 0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
       return ret;
     }
