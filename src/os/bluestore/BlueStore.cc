@@ -6919,7 +6919,7 @@ void BlueStore::_do_write_small(
   if (ep != o->extent_map.extent_map.begin()) {
     --ep;
     b = ep->blob;
-    if (ep->logical_offset + b->get_blob().get_ondisk_length() <= offset) {
+    if ((ep->logical_offset - ep->blob_offset) + b->get_blob().get_ondisk_length() <= offset) {
       ++ep;
     }
   }
