@@ -89,7 +89,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
 
     remote.run(
         args=[
-            'echo', 'deb', builder.base_url, builder.distro, 'main',
+            'echo', 'deb', builder.base_url, builder.codename, 'main',
             run.Raw('|'),
             'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
                 proj=config.get('project', 'ceph')),
@@ -725,8 +725,6 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         )
 
     builder = _get_builder_project(ctx, remote, config)
-    # get distro name and arch
-    dist = builder.distro
     base_url = builder.base_url
     log.info('Pulling from %s', base_url)
 
@@ -735,7 +733,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
 
     remote.run(
         args=[
-            'echo', 'deb', base_url, dist, 'main',
+            'echo', 'deb', base_url, builder.codename, 'main',
             run.Raw('|'),
             'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
                 proj=config.get('project', 'ceph')),
