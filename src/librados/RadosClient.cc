@@ -72,6 +72,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     instance_id(0),
     objecter(NULL),
     lock("librados::RadosClient::lock"),
+    shutdown_lock("librados::RadosClient::shutdown_lock"),
     timer(cct, lock),
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
@@ -324,6 +325,7 @@ int librados::RadosClient::connect()
 
 void librados::RadosClient::shutdown()
 {
+  Mutex::Locker l(shutdown_lock);
   lock.Lock();
   if (state == DISCONNECTED) {
     lock.Unlock();
@@ -338,7 +340,9 @@ void librados::RadosClient::shutdown()
   if (state == CONNECTED) {
     if (need_objecter) {
       // make sure watch callbacks are flushed
+      lock.Unlock();
       watch_flush();
+      lock.Lock();
     }
     finisher.wait_for_empty();
     finisher.stop();
