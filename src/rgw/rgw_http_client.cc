@@ -357,7 +357,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
 
   int ret = curl_multi_wait(handle, &wait_fd, 1, cct->_conf->rgw_curl_wait_timeout_ms, &num_fds);
   if (ret) {
-    dout(0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
+    ldout(cct, 0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
     return -EIO;
   }
 
@@ -366,7 +366,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     ret = read(signal_fd, (void *)&buf, sizeof(buf));
     if (ret < 0) {
       ret = -errno;
-      dout(0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
       return ret;
     }
   }
@@ -389,7 +389,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   /* get file descriptors from the transfers */ 
   int ret = curl_multi_fdset(handle, &fdread, &fdwrite, &fdexcep, &maxfd);
   if (ret) {
-    generic_dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
+    ldout(cct, 0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
     return -EIO;
   }
 
@@ -412,7 +412,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   ret = select(maxfd+1, &fdread, &fdwrite, &fdexcep, &timeout);
   if (ret < 0) {
     ret = -errno;
-    dout(0) << "ERROR: select returned " << ret << dendl;
+    ldout(cct, 0) << "ERROR: select returned " << ret << dendl;
     return ret;
   }
 
@@ -421,7 +421,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     ret = read(signal_fd, (void *)&buf, sizeof(buf));
     if (ret < 0) {
       ret = -errno;
-      dout(0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): read() returned " << ret << dendl;
       return ret;
     }
   }
