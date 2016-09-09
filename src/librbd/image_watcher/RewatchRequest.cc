@@ -56,6 +56,7 @@ void RewatchRequest<I>::handle_unwatch(int r) {
   if (r == -EBLACKLISTED) {
     lderr(cct) << "client blacklisted" << dendl;
     finish(r);
+    return;
   } else if (r < 0) {
     lderr(cct) << "failed to unwatch: " << cpp_strerror(r) << dendl;
   }
