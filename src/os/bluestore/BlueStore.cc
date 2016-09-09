@@ -1105,7 +1105,8 @@ void BlueStore::OnodeSpace::clear()
 
 void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 				     const ghobject_t& old_oid,
-				     const ghobject_t& new_oid)
+				     const ghobject_t& new_oid,
+				     const string& new_okey)
 {
   std::lock_guard<std::mutex> l(cache->lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
@@ -1131,7 +1132,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   onode_map.insert(make_pair(new_oid, o));
   cache->_touch_onode(o);
   o->oid = new_oid;
-  get_object_key(new_oid, &o->key);
+  o->key = new_okey;
 }
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
@@ -8053,6 +8054,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
+  string new_okey;
 
   if (newo) {
     if (newo->exists) {
@@ -8066,9 +8068,10 @@ int BlueStore::_rename(TransContext *txc,
 
   // rewrite shards
   oldo->extent_map.fault_range(db, 0, oldo->onode.size);
+  get_object_key(new_oid, &new_okey);
   for (auto &s : oldo->extent_map.shards) {
     txc->t->rmkey(PREFIX_OBJ, s.key);
-    get_extent_shard_key(newo->key, s.offset, &s.key);
+    get_extent_shard_key(new_okey, s.offset, &s.key);
     s.dirty = true;
   }
 
@@ -8077,7 +8080,7 @@ int BlueStore::_rename(TransContext *txc,
 
   // this adjusts oldo->{oid,key}, and reset oldo to a fresh empty
   // Onode in the old slot
-  c->onode_map.rename(oldo, old_oid, new_oid);
+  c->onode_map.rename(oldo, old_oid, new_oid, new_okey);
   r = 0;
 
  out:
