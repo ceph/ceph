@@ -389,6 +389,14 @@ fi
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_OUT_DIR/\$name.\$pid.asok
+[percentile]
+	percentiles = 0.9, 0.99, 0.999
+	object_sizes = 4196 ,65536,1048576,4194304,8388608
+	start = 0
+	end = 1000
+	inc = 2
+	reset = 3600
+	update = 30
 
 [mds]
 $DAEMONOPTS

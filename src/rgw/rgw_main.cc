@@ -1100,6 +1100,12 @@ int main(int argc, const char **argv)
   }
   r = rgw_perf_start(g_ceph_context);
 
+  r = percentile_perf_start(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: failed starting percentile perf" << dendl;
+    return -r;
+  }
+
   rgw_rest_init(g_ceph_context, store->region);
 
   mutex.Lock();
@@ -1277,6 +1283,7 @@ int main(int argc, const char **argv)
   curl_global_cleanup();
 
   rgw_perf_stop(g_ceph_context);
+  percentile_perf_stop(g_ceph_context);
 
   dout(1) << "final shutdown" << dendl;
   g_ceph_context->put();

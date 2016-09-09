@@ -16,17 +16,31 @@
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "common/centile.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
 
 #include <sstream>
+#include "common/Timer.h"
 
 #define dout_subsys ceph_subsys_rgw
 
+void setup_perf_timers(CephContext *cct, int update, int reset);
+void update_percentile_perf(CephContext *cct);
+
 PerfCounters *perfcounter = NULL;
+PerfCounters *percentile_perfcounter = NULL;
+int percentile_get_first, percentile_put_first;
+vector<double> percentiles;
+vector<unsigned int> object_sizes;
+Mutex *lat_reset_lock, *lat_perf_update_lock;
+SafeTimer *lat_reset_timer, *lat_perf_update_timer;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
+
+centile::CentileCollection *get_lat_centile;
+centile::CentileCollection *put_lat_centile;
 
 int rgw_perf_start(CephContext *cct)
 {
@@ -69,6 +83,169 @@ void rgw_perf_stop(CephContext *cct)
   cct->get_perfcounters_collection()->remove(perfcounter);
   delete perfcounter;
 }
+
+
+int percentile_perf_start(CephContext *cct)
+{
+  int p_starti, p_endi, p_inci, p_updatei, p_reseti, index = 1;
+  percentile_get_first = 16000;
+
+  vector<string> sections;
+  sections.push_back("percentile");
+  string percentiles_conf_val, object_sizes_conf_val, p_start, p_end, p_inc, p_update, p_reset;
+  cct->_conf->get_val_from_conf_file(sections, "percentiles", percentiles_conf_val, false);
+  cct->_conf->get_val_from_conf_file(sections, "object_sizes", object_sizes_conf_val, false);
+  cct->_conf->get_val_from_conf_file(sections, "start", p_start, false);
+  cct->_conf->get_val_from_conf_file(sections, "end", p_end, false);
+  cct->_conf->get_val_from_conf_file(sections, "inc", p_inc, false);
+  cct->_conf->get_val_from_conf_file(sections, "update", p_update, false);
+  cct->_conf->get_val_from_conf_file(sections, "reset", p_reset, false);
+
+  stringstream ss;
+  string item;
+
+  if(percentiles_conf_val.size() > 0) {
+    ss.str(percentiles_conf_val);
+    while (getline(ss, item, ',')) {
+      percentiles.push_back(std::atof(item.c_str()));
+    }
+  }
+  if(object_sizes_conf_val.size() > 0) {
+    ss.clear();
+    ss.str("");
+    item = "";
+    ss.str(object_sizes_conf_val);
+    while (getline(ss, item, ',')) {
+      object_sizes.push_back(std::atoi(item.c_str()));
+    }
+  }
+
+  if(percentiles.empty()) {
+    percentiles.push_back(0.99);
+  }
+  if(object_sizes.empty()) {
+    object_sizes.push_back(1);
+  }
+  if(p_start.size() > 0) {
+    p_starti = atoi(p_start.c_str());
+  } else {
+    p_starti = 0;
+  }
+  if(p_end.size() > 0) {
+    p_endi = atoi(p_end.c_str());
+  } else {
+    p_endi = 1000;
+  }
+  if(p_inc.size() > 0) {
+    p_inci = atoi(p_inc.c_str());
+  } else {
+    p_inci = 2;
+  }
+  if(p_update.size() > 0) {
+    p_updatei = atoi(p_update.c_str());
+  } else {
+    p_updatei = 60;
+  }
+  if(p_reset.size() > 0) {
+    p_reseti = atoi(p_reset.c_str());
+  } else {
+    p_reseti = 60 * 60;
+  }
+
+  percentile_put_first = percentile_get_first + (percentiles.size() * object_sizes.size());
+  int percentile_last = percentile_get_first + (2 * (percentiles.size() * object_sizes.size())) + 1;
+  PerfCountersBuilder plb(cct, "percentiles", percentile_get_first, percentile_last);
+
+  get_lat_centile = new centile::CentileCollection(p_starti, p_endi, p_inci, object_sizes);
+  put_lat_centile = new centile::CentileCollection(p_starti, p_endi, p_inci, object_sizes);
+
+  for(vector<unsigned int>::iterator object_size_it = object_sizes.begin(); object_size_it != object_sizes.end(); object_size_it++) {
+    for(vector<double>::iterator percentile_it = percentiles.begin(); percentile_it != percentiles.end(); percentile_it++) {
+      std::ostringstream ostr;
+      ostr << *object_size_it;
+      std::string object_size = ostr.str();
+      ostr.clear();
+      ostr.str("");
+      ostr << *percentile_it;
+      std::string percentile = ostr.str();
+      string str = string("Get_ObjectSize_") + object_size + "_Percentile_" + percentile;
+      char * cstrget = new char [str.length()+1];
+      strcpy (cstrget, str.c_str());
+      plb.add_u64_counter(percentile_get_first + index, cstrget);
+
+      str = string("Put_ObjectSize_") + object_size + "_Percentile_" + percentile;
+      char * cstrput = new char [str.length()+1];
+      strcpy (cstrput, str.c_str());
+      plb.add_u64_counter(percentile_put_first + index, cstrput);
+      index++;
+    }
+  }
+
+  percentile_perfcounter = plb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(percentile_perfcounter);
+  setup_perf_timers(cct, p_updatei, p_reseti);
+  return 0;
+}
+
+void percentile_perf_stop(CephContext *cct)
+{
+  assert(percentile_perfcounter);
+  cct->get_perfcounters_collection()->remove(percentile_perfcounter);
+  delete percentile_perfcounter;
+  delete get_lat_centile;
+  delete put_lat_centile;
+}
+
+/* Updating all the percentiles for all the object sizes*/
+void update_percentile_perf(CephContext *cct) {
+  int index = 1;
+  for(vector<unsigned int>::iterator object_size_it = object_sizes.begin(); object_size_it != object_sizes.end(); object_size_it++) {
+    for(vector<double>::iterator percentile_it = percentiles.begin(); percentile_it != percentiles.end(); percentile_it++) {
+      percentile_perfcounter->set(percentile_get_first + index, get_lat_centile->get_percentile(cct, *object_size_it, *percentile_it));
+      percentile_perfcounter->set(percentile_put_first + index, put_lat_centile->get_percentile(cct, *object_size_it, *percentile_it));
+      index++;
+    }
+  }
+}
+
+class C_lat_perf_update_timeout : public Context {
+public:
+  C_lat_perf_update_timeout(CephContext *cct_) : cct(cct_) {}
+  void finish(int r) {
+    update_percentile_perf(cct);
+    lat_perf_update_timer->add_event_after(20, new C_lat_perf_update_timeout(cct));
+  }
+private:
+  CephContext *cct;
+};
+
+class C_lat_reset_timeout : public Context {
+public:
+  C_lat_reset_timeout() {}
+  void finish(int r) {
+    get_lat_centile->reset();
+    put_lat_centile->reset();
+    lat_reset_timer->add_event_after(60, new C_lat_reset_timeout);
+  }
+};
+
+/* Starting the update and reset percentile counters.*/
+void setup_perf_timers(CephContext *cct, int update, int reset) {
+  lat_perf_update_lock = new Mutex("lat_perf_update_lock");
+  lat_perf_update_timer = new SafeTimer(cct, *lat_perf_update_lock);
+  lat_perf_update_timer->init();
+  lat_perf_update_lock->Lock();
+  lat_perf_update_timer->add_event_after(update, new C_lat_perf_update_timeout(cct));
+  lat_perf_update_lock->Unlock();
+
+  lat_reset_lock = new Mutex("lat_reset_lock");
+  lat_reset_timer = new SafeTimer(cct, *lat_reset_lock);
+  lat_reset_timer->init();
+  lat_reset_lock->Lock();
+  lat_reset_timer->add_event_after(reset, new C_lat_reset_timeout);
+  lat_reset_lock->Unlock();
+}
+
 
 using namespace ceph::crypto;
 
