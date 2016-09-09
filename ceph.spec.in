@@ -655,7 +655,12 @@ python-cephfs instead.
 # common
 #################################################################################
 %prep
+%if 0%{?rhel}
 %autosetup -p1 -n @TARBALL_BASENAME@
+%endif
+%if ! 0%{?rhel}
+%autosetup -p1
+%endif
 
 %build
 %if 0%{with cephfs_java}
