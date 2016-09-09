@@ -393,7 +393,9 @@ int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 {
   assert(key.size() > sizeof(uint32_t) + 1);
   assert(key[key.size() - 1] == EXTENT_SHARD_KEY_SUFFIX);
-  const char *p = key.data() + key.size() - sizeof(uint32_t) - 1;
+  int okey_len = key.size() - sizeof(uint32_t) - 1;
+  *onode_key = key.substr(0, okey_len);
+  const char *p = key.data() + okey_len;
   p = _key_decode_u32(p, offset);
   return 0;
 }
