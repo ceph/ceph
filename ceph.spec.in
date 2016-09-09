@@ -227,7 +227,6 @@ Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
 Requires:      util-linux
-Requires:      hdparm
 Requires:      cryptsetup
 Requires:      findutils
 Requires:      which
@@ -357,6 +356,7 @@ managers such as Pacemaker.
 Summary:	Ceph Object Storage Daemon
 Group:		System Environment/Base
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
+Requires:	hdparm
 # for sgdisk, used by ceph-disk
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	gdisk
