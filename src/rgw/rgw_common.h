@@ -165,8 +165,8 @@ extern PerfCounters *perfcounter;
 extern int rgw_perf_start(CephContext *cct);
 extern void rgw_perf_stop(CephContext *cct);
 
-extern int percentile_perf_start(CephContext *cct);
-extern void percentile_perf_stop(CephContext *cct);
+int percentile_perf_start(CephContext *cct);
+void percentile_perf_stop(CephContext *cct);
 
 extern centile::CentileCollection *get_lat_centile;
 extern centile::CentileCollection *put_lat_centile;

@@ -1060,6 +1060,12 @@ OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for ea
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
 OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user
 
+OPTION(rgw_latency_bucket_duration_start, OPT_INT, 0) // starting point of percentile
+OPTION(rgw_latency_bucket_duration_count, OPT_INT, 500) // no. of percentile buckets
+OPTION(rgw_latency_bucket_duration_increment, OPT_INT, 2) // size of a percentile bucket
+OPTION(rgw_latency_bucket_reset, OPT_INT, 3600) // sec time for next reset
+OPTION(rgw_latency_bucket_update, OPT_INT, 30) // sec time for next update
+
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 

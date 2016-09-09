@@ -389,14 +389,13 @@ fi
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_OUT_DIR/\$name.\$pid.asok
-[percentile]
-	percentiles = 0.9, 0.99, 0.999
-	object_sizes = 4196 ,65536,1048576,4194304,8388608
-	start = 0
-	end = 1000
-	inc = 2
-	reset = 3600
-	update = 30
+	rgw percentile buckets = 0.9, 0.99, 0.999
+	rgw object size buckets = 4196 ,65536,1048576,4194304,8388608
+	rgw latency bucket duration start = 0
+	rgw latency bucket duration count = 1000
+	rgw latency bucket duration increment = 2
+	rgw latency bucket reset = 3600
+	rgw latency bucket update = 30
 
 [mds]
 $DAEMONOPTS

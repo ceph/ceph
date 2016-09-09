@@ -74,7 +74,7 @@ int rgw_perf_start(CephContext *cct)
 
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
-  return 0;
+  return percentile_perf_start(cct);
 }
 
 void rgw_perf_stop(CephContext *cct)
@@ -82,6 +82,7 @@ void rgw_perf_stop(CephContext *cct)
   assert(perfcounter);
   cct->get_perfcounters_collection()->remove(perfcounter);
   delete perfcounter;
+  percentile_perf_stop(cct);
 }
 
 
@@ -91,15 +92,17 @@ int percentile_perf_start(CephContext *cct)
   percentile_get_first = 16000;
 
   vector<string> sections;
-  sections.push_back("percentile");
+  cct->_conf->get_my_sections(sections);
+
   string percentiles_conf_val, object_sizes_conf_val, p_start, p_end, p_inc, p_update, p_reset;
-  cct->_conf->get_val_from_conf_file(sections, "percentiles", percentiles_conf_val, false);
-  cct->_conf->get_val_from_conf_file(sections, "object_sizes", object_sizes_conf_val, false);
-  cct->_conf->get_val_from_conf_file(sections, "start", p_start, false);
-  cct->_conf->get_val_from_conf_file(sections, "end", p_end, false);
-  cct->_conf->get_val_from_conf_file(sections, "inc", p_inc, false);
-  cct->_conf->get_val_from_conf_file(sections, "update", p_update, false);
-  cct->_conf->get_val_from_conf_file(sections, "reset", p_reset, false);
+
+  cct->_conf->get_val_from_conf_file(sections, "rgw percentile buckets", percentiles_conf_val, false);
+  cct->_conf->get_val_from_conf_file(sections, "rgw object size buckets", object_sizes_conf_val, false);
+  cct->_conf->get_val_from_conf_file(sections, "rgw latency bucket duration start", p_start, false);
+  cct->_conf->get_val_from_conf_file(sections, "rgw latency bucket duration count", p_end, false);
+  cct->_conf->get_val_from_conf_file(sections, "rgw latency bucket duration increment", p_inc, false);
+  cct->_conf->get_val_from_conf_file(sections, "rgw latency bucket update", p_update, false);
+  cct->_conf->get_val_from_conf_file(sections, "rgw latency bucket reset", p_reset, false);
 
   stringstream ss;
   string item;
@@ -129,27 +132,27 @@ int percentile_perf_start(CephContext *cct)
   if(p_start.size() > 0) {
     p_starti = atoi(p_start.c_str());
   } else {
-    p_starti = 0;
+    p_starti = cct->_conf->rgw_latency_bucket_duration_start;
   }
   if(p_end.size() > 0) {
-    p_endi = atoi(p_end.c_str());
+    p_endi = atoi(p_end.c_str()) * atoi(p_inc.c_str());
   } else {
-    p_endi = 1000;
+    p_endi = cct->_conf->rgw_latency_bucket_duration_count * cct->_conf->rgw_latency_bucket_duration_increment;
   }
   if(p_inc.size() > 0) {
     p_inci = atoi(p_inc.c_str());
   } else {
-    p_inci = 2;
+    p_inci = cct->_conf->rgw_latency_bucket_duration_increment;
   }
   if(p_update.size() > 0) {
     p_updatei = atoi(p_update.c_str());
   } else {
-    p_updatei = 60;
+    p_updatei = cct->_conf->rgw_latency_bucket_update;
   }
   if(p_reset.size() > 0) {
     p_reseti = atoi(p_reset.c_str());
   } else {
-    p_reseti = 60 * 60;
+    p_reseti = cct->_conf->rgw_latency_bucket_reset;
   }
 
   percentile_put_first = percentile_get_first + (percentiles.size() * object_sizes.size());
@@ -168,12 +171,12 @@ int percentile_perf_start(CephContext *cct)
       ostr.str("");
       ostr << *percentile_it;
       std::string percentile = ostr.str();
-      string str = string("Get_ObjectSize_") + object_size + "_Percentile_" + percentile;
+      string str = string("get_objectSize_") + object_size + "_percentile_" + percentile;
       char * cstrget = new char [str.length()+1];
       strcpy (cstrget, str.c_str());
       plb.add_u64_counter(percentile_get_first + index, cstrget);
 
-      str = string("Put_ObjectSize_") + object_size + "_Percentile_" + percentile;
+      str = string("put_objectsize_") + object_size + "_percentile_" + percentile;
       char * cstrput = new char [str.length()+1];
       strcpy (cstrput, str.c_str());
       plb.add_u64_counter(percentile_put_first + index, cstrput);
