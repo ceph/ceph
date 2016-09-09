@@ -457,6 +457,7 @@ class GitbuilderProject(object):
         self.arch = self.remote.arch
         self.os_type = self.remote.os.name
         self.os_version = self.remote.os.version
+        self.codename = self.remote.os.codename
         self.pkg_type = self.remote.system_type
         self.distro = self._get_distro(
             distro=self.remote.os.name,
