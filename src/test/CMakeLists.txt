@@ -680,6 +680,14 @@ add_executable(unittest_enc_dec
 add_ceph_unittest(unittest_enc_dec ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_enc_dec)
 target_link_libraries(unittest_enc_dec global)
 
+# unittest_fast_containers
+add_executable(unittest_fast_containers
+  test_fast_containers.cc
+  )
+add_ceph_unittest(unittest_fast_containers ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_fast_containers)
+target_link_libraries(unittest_fast_containers global)
+
+
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc
