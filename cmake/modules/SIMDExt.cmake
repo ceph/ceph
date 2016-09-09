@@ -17,7 +17,7 @@
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
   CHECK_C_COMPILER_FLAG(-march=armv8-a+crc HAVE_ARMV8_CRC)
   if(HAVE_ARMV8_CRC)
-    set(ARM_NEON_FLAGS "-march=armv8-a+crc -DARCH_AARCH64")
+    set(ARM_CRC_FLAGS "-march=armv8-a+crc -DARCH_AARCH64")
   endif()
   CHECK_C_COMPILER_FLAG(-march=armv8-a+simd HAVE_NEON)
   if(HAVE_NEON)
