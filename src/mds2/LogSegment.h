@@ -64,7 +64,7 @@ class LogSegment {
   map<int, ceph_tid_t> last_client_tids;
 
   // potentially dirty sessions
-//  std::set<entity_name_t> touched_sessions;
+  std::set<entity_name_t> touched_sessions;
 
   // table version
   version_t inotablev;

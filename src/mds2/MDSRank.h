@@ -186,7 +186,6 @@ public:
 
   void bcast_mds_map();  // to mounted clients
 
-public:
   Session *get_session(Message *m);
 
   MDSMap *get_mds_map() { return mdsmap; }
@@ -228,6 +227,7 @@ protected:
   void rejoin_done();
   void recovery_done(int oldstate);
   void clientreplay_start();
+  void clientreplay_done();
   void active_start();
   void stopping_start();
   // <<<
@@ -236,6 +236,33 @@ protected:
   void handle_mds_recovery(mds_rank_t who);
   void handle_mds_failure(mds_rank_t who);
   // <<<
+
+protected:
+  list<MDSContextBase*> waiting_for_active, waiting_for_clientreplay, waiting_for_reconnect;
+  list<Message*> replay_request_queue;
+  Mutex waiter_list_lock;
+public:
+  void wait_for_active(MDSContextBase *c) {
+    assert(c->is_async());
+    Mutex::Locker l(waiter_list_lock);
+    waiting_for_active.push_back(c);
+  }
+  void wait_for_clientreplay(MDSContextBase *c) {
+    assert(c->is_async());
+    Mutex::Locker l(waiter_list_lock);
+    waiting_for_clientreplay.push_back(c);
+  }
+  void wait_for_reconnect(MDSContextBase *c) {
+    assert(c->is_async());
+    Mutex::Locker l(waiter_list_lock);
+    waiting_for_reconnect.push_back(c);
+  }
+  void queue_replay_request(Message *req) {
+    Mutex::Locker l(waiter_list_lock);
+    replay_request_queue.push_back(req);
+  }
+  bool replay_next_request();
+
 
 protected:
   ThreadPool op_tp;
@@ -332,18 +359,20 @@ public:
     }
   } msg_wq;
 
+  void retry_dispatch(Message *m);
   void retry_dispatch(const MDRequestRef &mdr);
 };
 
 class C_MDS_RetryMessage : public MDSContext {
-  protected:
-    Message *msg;
-  public:
-    C_MDS_RetryMessage(MDSRank *mds, Message *m)
-      : MDSContext(mds) , msg(m) {}
-    virtual void finish(int r) {
-//      mds->retry_dispatch(m);
-    }
+protected:
+  Message *msg;
+public:
+  C_MDS_RetryMessage(MDSRank *mds, Message *m)
+    : MDSContext(mds) , msg(m) {}
+  bool is_async() const { return true; }
+  virtual void finish(int r) {
+    mds->retry_dispatch(msg);
+  }
 };
 
 class C_MDS_RetryRequest : public MDSContext {

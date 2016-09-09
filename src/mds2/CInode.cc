@@ -1329,6 +1329,62 @@ void CInode::remove_client_cap(Session *session)
 */
 }
 
+Capability *CInode::reconnect_cap(const cap_reconnect_t& icr, Session *session)
+{
+  mutex_assert_locked_by_me();
+  Capability *cap = get_client_cap(session->get_client());
+  if (cap) {
+    // FIXME?
+    cap->merge(icr.capinfo.wanted, icr.capinfo.issued);
+  } else {
+    cap = add_client_cap(session);
+    cap->set_cap_id(icr.capinfo.cap_id);
+    cap->set_wanted(icr.capinfo.wanted);
+    cap->issue_norevoke(icr.capinfo.issued);
+    cap->reset_seq();
+  }
+  cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+  return cap;
+}
+
+void CInode::choose_lock_state(SimpleLock *lock, int allissued)
+{
+  int shift = lock->get_cap_shift();
+  int issued = (allissued >> shift) & lock->get_cap_mask();
+  if (is_auth()) {
+    if (lock->is_xlocked()) {
+      // do nothing here
+    } else if (lock->get_state() != LOCK_MIX) {
+      if (issued & (CEPH_CAP_GEXCL | CEPH_CAP_GBUFFER))
+        lock->set_state(LOCK_EXCL);
+      else if (issued & CEPH_CAP_GWR)
+        lock->set_state(LOCK_MIX);
+      else if (lock->is_dirty())
+	lock->set_state(LOCK_LOCK);
+      else
+        lock->set_state(LOCK_SYNC);
+    }
+  } else {
+    // our states have already been chosen during rejoin.
+    if (lock->is_xlocked())
+      assert(lock->get_state() == LOCK_LOCK);
+  }
+}
+
+void CInode::choose_lock_states(int dirty_caps)
+{
+  int issued = get_caps_issued() | dirty_caps;
+  if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
+      choose_ideal_loner() >= 0)
+    try_set_loner();
+  choose_lock_state(&filelock, issued);
+  choose_lock_state(&nestlock, issued);
+  choose_lock_state(&dirfragtreelock, issued);
+  choose_lock_state(&authlock, issued);
+  choose_lock_state(&xattrlock, issued);
+  choose_lock_state(&linklock, issued);
+}
+
 void CInode::clone(const CInode *other)
 {
   inode = other->inode;

@@ -44,7 +44,6 @@ public:
   void find_idle_sessions();
   void trim_client_leases();
 protected:
-  void handle_client_reconnect(MClientReconnect *m);
 
   friend class C_MDS_session_finish;
   void __session_logged(Session *session, uint64_t state_seq, bool open,
@@ -108,6 +107,17 @@ protected:
   friend class C_MDS_unlink_finish;
   friend class C_MDS_link_finish;
   friend class C_MDS_rename_finish;
+
+protected:
+  utime_t reconnect_start;
+  set<client_t> client_reconnect_gather;
+  MDSContextBase *reconnect_done;
+
+  void handle_client_reconnect(MClientReconnect *m);
+  void reconnect_gather_finish(int failed=0);
+public:
+  void reconnect_clients(MDSContextBase *c);
+  void reconnect_tick();
 };
 
 #endif

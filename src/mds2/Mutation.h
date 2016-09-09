@@ -172,6 +172,7 @@ struct MDRequestImpl : public MutationImpl {
   bool killed;
   bool hold_rename_dir_mutex;
   bool did_early_reply;
+  bool replaying;
 
   int getattr_mask;
   int retries;
@@ -193,6 +194,7 @@ struct MDRequestImpl : public MutationImpl {
     completed(false), killed(false),
     hold_rename_dir_mutex(false),
     did_early_reply(false),
+    replaying(false),
     getattr_mask(0), retries(0) { }
   ~MDRequestImpl();
   

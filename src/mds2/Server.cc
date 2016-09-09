@@ -36,16 +36,86 @@ public:
 };
 
 Server::Server(MDSRank *_mds) :
-  mds(_mds), mdcache(_mds->mdcache), locker(_mds->locker)
+  mds(_mds), mdcache(_mds->mdcache), locker(_mds->locker),
+  reconnect_done(NULL)
 {
 }
 
 void Server::dispatch(Message *m)
 {
-  switch (m->get_type()) {
-    case CEPH_MSG_CLIENT_RECONNECT:
-      handle_client_reconnect(static_cast<MClientReconnect*>(m));
+  if (m->get_type() == CEPH_MSG_CLIENT_RECONNECT) {
+    handle_client_reconnect(static_cast<MClientReconnect*>(m));
+    return;
+  }
+
+  // active?
+  if (!mds->is_active()) {
+    if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
+      MClientRequest *req = static_cast<MClientRequest*>(m);
+      Session *session = mds->get_session(req);
+
+      session->mutex_lock();
+      if (session->is_closed()) {
+	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
+	session->mutex_unlock();
+	req->put();
+	return;
+      }
+
+      bool queue_replay = false;
+      if (req->is_replay()) {
+	dout(3) << "queuing replayed op" << dendl;
+	queue_replay = true;
+      } else if (req->get_retry_attempt()) {
+	// process completed request in clientreplay stage. The completed request
+	// might have created new file/directorie. This guarantees MDS sends a reply
+	// to client before other request modifies the new file/directorie.
+	if (session->have_completed_request(req->get_reqid().tid, NULL)) {
+	  dout(3) << "queuing completed op" << dendl;
+	  queue_replay = true;
+	}
+	// this request was created before the cap reconnect message, drop any embedded
+	// cap releases.
+	req->releases.clear();
+      }
+      session->mutex_unlock();
+
+      if (queue_replay) {
+	mds->queue_replay_request(req);
+	return;
+      }
+    }
+
+    bool wait_for_active = true;
+    if (mds->is_clientreplay()) {
+      // session open requests need to be handled during replay,
+      // close requests need to be delayed
+      if ((m->get_type() == CEPH_MSG_CLIENT_SESSION &&
+          (static_cast<MClientSession*>(m))->get_op() != CEPH_SESSION_REQUEST_CLOSE)) {
+        wait_for_active = false;
+      } else if (m->get_type() == CEPH_MSG_CLIENT_REQUEST) {
+        MClientRequest *req = static_cast<MClientRequest*>(m);
+        if (req->is_replay()) {
+          wait_for_active = false;
+        } else if (req->get_retry_attempt()) {
+          Session *session = mds->get_session(req);
+	  session->mutex_lock();
+          if (session->have_completed_request(req->get_reqid().tid, NULL))
+            wait_for_active = false;
+	  session->mutex_unlock();
+        }
+      }
+    }
+
+    if (wait_for_active) {
+      dout(3) << "not active yet, waiting" << dendl;
+      mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
       return;
+    }
+  }
+
+  switch (m->get_type()) {
     case CEPH_MSG_CLIENT_SESSION:
       handle_client_session(static_cast<MClientSession*>(m));
       return;
@@ -58,17 +128,6 @@ void Server::dispatch(Message *m)
   }
 }
 
-/* This function DOES put the passed message before returning*/
-void Server::handle_client_reconnect(MClientReconnect *m)
-{
-  dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
-  Session *session = mds->get_session(m);
-  assert(session);
-
-  m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
-  m->put();
-  return;
-}
 
 class C_MDS_session_finish : public ServerContext {
   Session *session;
@@ -83,10 +142,13 @@ public:
     ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
 		       interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+    ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) {
+      session->get();
+    }
   void finish(int r) {
     assert(r == 0);
     server->__session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    session->put();
     if (fin) {
       fin->complete(r);
     }
@@ -96,9 +158,10 @@ public:
 void Server::__session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
 			      interval_set<inodeno_t>& inos, version_t piv)
 {
-  dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
+  dout(10) << "_session_logged " << session->get_source() << " state_seq " << state_seq << " " << (open ? "open":"close")
     << " " << pv << dendl;
 
+  session->mutex_lock();
   mds->sessionmap->mutex_lock();
 
   mds->sessionmap->mark_dirty(session);
@@ -147,43 +210,42 @@ void Server::__session_logged(Session *session, uint64_t state_seq, bool open, v
 
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
-      mds->sessionmap->set_state(session, Session::STATE_CLOSED);
-      session->clear();
-      mds->sessionmap->remove_session(session);
     } else if (session->is_killing()) {
       // destroy session, close connection
       if (session->connection != NULL) {
 	session->connection->mark_down();
       }
-      mds->sessionmap->remove_session(session);
     } else {
       assert(0);
     }
+    mds->sessionmap->set_state(session, Session::STATE_CLOSED);
+    session->clear();
+    mds->sessionmap->remove_session(session);
     mds->sessionmap->mutex_unlock();
-    /*
-    if (client_reconnect_gather.count(session->info.get_client())) {
-      dout(20) << " removing client from reconnect set" << dendl;
-      client_reconnect_gather.erase(session->info.get_client());
-
-      if (client_reconnect_gather.empty()) {
-	dout(7) << " client " << session->info.inst << " was last reconnect, finishing" << dendl;
-	reconnect_gather_finish();
-      }
-    }
-    */
   } else {
     mds->sessionmap->mutex_unlock();
     assert(0);
   }
+  session->mutex_unlock();
 }
 
 void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
   session->mutex_assert_locked_by_me();
+  client_t client = session->get_client();
 
   mds->sessionmap->mutex_lock();
   uint64_t sseq = mds->sessionmap->set_state(session, state);
   mds->sessionmap->mutex_unlock();
+
+  mdcache->lock_client_reconnect();
+  if (client_reconnect_gather.count(client)) {
+    client_reconnect_gather.erase(client);
+    if (client_reconnect_gather.empty()) {
+      reconnect_gather_finish();
+    }
+  }
+  mdcache->unlock_client_reconnect();
 
   // clean up requests, too
   if (!session->requests.empty()) {
@@ -204,7 +266,6 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
     session->mutex_lock();
   }
 
-  client_t client = session->get_client();
   while (!session->caps.empty()) {
     Capability *cap = session->caps.front();
     CInodeRef in = cap->get_inode();
@@ -575,6 +636,48 @@ void Server::handle_client_request(MClientRequest *req)
     }
   }
 
+  bool completed = false;
+  if (req->is_replay() || req->get_retry_attempt()) {
+    assert(session);
+    inodeno_t created;
+    if (session->have_completed_request(req->get_reqid().tid, &created)) {
+      completed = true;
+      // Don't send traceless reply if the completed request has created
+      // new inode. Treat the request as lookup request instead.
+      if (req->is_replay() ||
+	  (created == inodeno_t() &&
+	   req->get_op() != CEPH_MDS_OP_OPEN &&
+	   req->get_op() != CEPH_MDS_OP_CREATE)) {
+	session->mutex_unlock();
+
+	dout(5) << "already completed " << req->get_reqid() << dendl;
+	MClientReply *reply = new MClientReply(req, 0);
+	if (created != inodeno_t()) {
+	  bufferlist extra;
+	  ::encode(created, extra);
+	  reply->set_extra_bl(extra);
+	}
+	req->get_connection()->send_message(reply);
+	req->put();
+	
+	mds->replay_next_request();
+	return;
+      }
+      if (req->get_op() != CEPH_MDS_OP_OPEN &&
+	  req->get_op() != CEPH_MDS_OP_CREATE) {
+	dout(10) << " completed request which created new inode " << created
+	  << ", convert it to lookup request" << dendl;
+	req->head.op = req->get_dentry_wanted() ? CEPH_MDS_OP_LOOKUP : CEPH_MDS_OP_GETATTR;
+	req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
+      }
+    }
+    if (mds->is_clientreplay()) {
+      assert(req->is_replay() || completed);
+    } else {
+      assert(!req->is_replay() && !completed);
+    }
+  }
+
   MDRequestRef mdr = mdcache->request_start(req);
 
   if (session) {
@@ -582,7 +685,16 @@ void Server::handle_client_request(MClientRequest *req)
       session->requests.push_back(&mdr->item_session_request);
       mdr->session = session;
     }
+    mdr->completed = completed;
+    mdr->replaying = mds->is_clientreplay();
     session->mutex_unlock();
+  }
+
+  if (req->get_oldest_client_tid() > 0) {
+    dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
+    assert(session);
+    session->trim_completed_requests(req->get_oldest_client_tid());
+    //FIXME warn if client does not trim completed request
   }
 
   if (!mdr)
@@ -715,7 +827,23 @@ void Server::respond_to_request(const MDRequestRef& mdr, int r)
   }
 
   mdr->apply();
+
+  if (mdr->client_request && mdr->is_committing() && !mdr->killed) {
+    assert(mdr->session);
+    inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
+    mdr->session->add_completed_request(mdr->reqid.tid, created);
+    if (mdr->ls) {
+      mdcache->lock_log_segments();
+      mdr->ls->touched_sessions.insert(mdr->session->get_source());
+      mdcache->unlock_log_segments();
+    }
+  }
+
+  bool replay_next = mdr->completed && mdr->replaying;
   mdcache->request_finish(mdr);
+
+  if (replay_next)
+    mds->replay_next_request();
 }
 
 void Server::early_reply(const MDRequestRef& mdr)
@@ -729,7 +857,11 @@ void Server::early_reply(const MDRequestRef& mdr)
   }
 
   MClientRequest *req = mdr->client_request;
-  Session *session = mds->get_session(req); 
+  if (req->is_replay()) {
+    dout(10) << " no early reply on replay op" << dendl;
+    mds->mdlog->flush();
+    return;
+  }
 
   locker->set_xlocks_done(mdr, req->get_op() == CEPH_MDS_OP_RENAME);
 
@@ -748,7 +880,7 @@ void Server::early_reply(const MDRequestRef& mdr)
       assert(mdr->is_object_locked(dn->get_dir_inode()));
     }
 
-    set_trace_dist(session, reply, in, dn, mdr);
+    set_trace_dist(mdr->session, reply, in, dn, mdr);
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -760,10 +892,14 @@ void Server::early_reply(const MDRequestRef& mdr)
 void Server::reply_client_request(const MDRequestRef& mdr, MClientReply *reply)
 {
   MClientRequest *req = mdr->client_request;
-  Session *session = mds->get_session(req); 
 
-  if (!mdr->did_early_reply) {
-
+  if (req->is_replay()) {
+    if (mdr->tracei >= 0) {
+	CInodeRef& in = mdr->in[mdr->tracei];
+	assert(mdr->is_object_locked(in.get()));
+	mdcache->try_reconnect_cap(in.get(), mdr->session);
+    }
+  } else if (!mdr->did_early_reply) {
     if (mdr->tracei >= 0 || mdr->tracedn >= 0) {
       set<CObject*> objs;
 
@@ -784,7 +920,7 @@ void Server::reply_client_request(const MDRequestRef& mdr, MClientReply *reply)
       // drop non-rdlocks before replying, so that we can issue leases
       locker->drop_non_rdlocks(mdr, objs);
 
-      set_trace_dist(session, reply, in, dn, mdr);
+      set_trace_dist(mdr->session, reply, in, dn, mdr);
     }
 
     reply->set_extra_bl(mdr->reply_extra_bl);
@@ -938,11 +1074,18 @@ void Server::journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
   early_reply(mdr);
 
   mdr->unlock_all_objects();
-
-  if (mdr->did_early_reply)
+  if (mdr->did_early_reply) {
     locker->drop_rdlocks(mdr);
-  else
+  } else if (mdr->replaying) {
+    if (mds->replay_next_request()) {
+      dout(10) << " replay next client request" << dendl;
+    } else {
+      dout(10) << " journaled last replay op, flushing" << dendl;
+      mds->mdlog->flush();
+    }
+  } else {
     mds->mdlog->flush();
+  }
 
   mdr->start_committing();
 }
@@ -2460,4 +2603,169 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
 
   mdr->in[0] = newi;
   journal_and_reply(mdr, 0, 0, le, new C_MDS_mknod_finish(this, mdr));
+}
+
+
+/* This function DOES put the passed message before returning*/
+void Server::handle_client_reconnect(MClientReconnect *m)
+{
+
+  dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
+  client_t from = m->get_source().num();
+  Session *session = mds->get_session(m);
+  assert(session);
+
+  if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
+    dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
+    mds->wait_for_reconnect(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
+  utime_t delay = ceph_clock_now(g_ceph_context);
+  delay -= reconnect_start;
+  dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
+
+  bool deny = false;
+  if (!mds->is_reconnect()) {
+    // XXX maybe in the future we can do better than this?
+    dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+    mds->clog->info() << "denied reconnect attempt (mds is "
+		      << ceph_mds_state_name(mds->get_state()) << ") from "
+		      << m->get_source_inst() << " after " << delay << " (allowed interval "
+		      << g_conf->mds_reconnect_timeout << ")\n";
+    deny = true;
+  } else {
+    session->mutex_lock();
+    if (session->is_closed()) {
+      dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
+      mds->clog->info() << "denied reconnect attempt (mds is "
+			<< ceph_mds_state_name(mds->get_state())
+			<< ") from " << m->get_source_inst() << " (session is closed)\n";
+      deny = true;
+    }
+    session->mutex_unlock();
+  }
+
+  if (deny) {
+    m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
+    m->put();
+    return;
+  }
+  
+  m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
+  mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay << "\n";
+
+  // snaprealms
+  for (auto p = m->realms.begin(); p != m->realms.end(); ++p) {
+  }
+
+  // caps
+  for (auto p = m->caps.begin(); p != m->caps.end(); ++p) {
+    mdcache->note_client_cap_id(p->second.capinfo.cap_id);
+
+    CInodeRef in = mdcache->get_inode(p->first);
+
+//    if (in && in->state_test(CInode::STATE_PURGING))
+//      continue;
+
+    if (in) {
+      // we recovered it, and it's ours.  take note.
+      dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
+               << " on " << *in << dendl;
+      in->mutex_lock();
+      in->reconnect_cap(p->second, session);
+      in->mutex_unlock();
+      mdcache->add_reconnected_cap(from, p->first, p->second);
+//      recover_filelocks(in, p->second.flockbl, m->get_orig_source().num());
+    } else {
+      // don't know if the inode is mine
+      dout(10) << "missing ino " << p->first << ", will load later" << dendl;
+      p->second.path.clear(); // we don't need path
+      mdcache->add_cap_reconnect(p->first, from, p->second);
+    }
+  }
+
+  // remove from gather set
+  mdcache->lock_client_reconnect();
+  client_reconnect_gather.erase(from);
+  if (client_reconnect_gather.empty())
+    reconnect_gather_finish();
+  mdcache->unlock_client_reconnect();
+
+  m->put();
+}
+
+void Server::reconnect_clients(MDSContextBase *c)
+{
+  set<client_t> clients;
+  mds->sessionmap->mutex_lock();
+  mds->sessionmap->get_client_set(clients);
+  mds->sessionmap->mutex_unlock();
+
+  mdcache->lock_client_reconnect();
+  client_reconnect_gather.swap(clients);
+  reconnect_done = c;
+
+  if (client_reconnect_gather.empty()) {
+    dout(7) << "reconnect_clients -- no sessions, doing nothing." << dendl;
+    reconnect_gather_finish();
+  } else {
+
+    // clients will get the mdsmap and discover we're reconnecting via the monitor.
+    reconnect_start = ceph_clock_now(g_ceph_context);
+    dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
+    //  mds->sessionmap.dump();
+  }
+
+  mdcache->unlock_client_reconnect();
+}
+
+void Server::reconnect_gather_finish(int failed)
+{
+  dout(7) << "reconnect_gather_finish.  failed on " << failed << " clients" << dendl;
+  assert(reconnect_done);
+  mds->queue_context(reconnect_done);
+  reconnect_done = NULL;
+}
+
+void Server::reconnect_tick()
+{
+  mdcache->lock_client_reconnect();
+  if (!reconnect_done) {
+    mdcache->unlock_client_reconnect();
+    return;
+  }
+
+  utime_t reconnect_end = reconnect_start;
+  reconnect_end += g_conf->mds_reconnect_timeout;
+
+  if (ceph_clock_now(g_ceph_context) >= reconnect_end &&
+      !client_reconnect_gather.empty()) {
+
+    dout(10) << "reconnect timed out" << dendl;
+    int failed_reconnects = 0;
+    while (!client_reconnect_gather.empty()) {
+      client_t client = *client_reconnect_gather.begin();
+      mdcache->unlock_client_reconnect();
+
+      mds->sessionmap->mutex_lock();
+      Session *session = mds->sessionmap->get_session(entity_name_t::CLIENT(client.v));
+      if (session)
+	session->get();
+      mds->sessionmap->mutex_unlock();
+
+      if (session) {
+	session->mutex_lock();
+	dout(1) << "reconnect gave up on " << session->get_source() << dendl;
+	kill_session(session, NULL);
+	failed_reconnects++;
+	session->mutex_unlock();
+	session->put();
+      }
+
+      mdcache->lock_client_reconnect();
+    }
+    reconnect_gather_finish(failed_reconnects);
+  }
+  mdcache->unlock_client_reconnect();
 }

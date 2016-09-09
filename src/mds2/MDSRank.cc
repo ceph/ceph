@@ -69,6 +69,7 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
+    waiter_list_lock("MDSRank::waiter_list_lock"),
     op_tp(msgr->cct, "MDSRank::op_tp", "tp_op",  g_conf->osd_op_threads * 2, "mds_op_threads"),
     msg_tp(msgr->cct, "MDSRank::msg_tp", "tp_msg",  g_conf->osd_op_threads, "mds_msg_threads"),
     ctx_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
@@ -168,6 +169,12 @@ void MDSRankDispatcher::tick()
     mds_lock.Unlock();
     server->find_idle_sessions();
     locker->tick();
+    mds_lock.Lock();
+  }
+
+  if (is_reconnect()) {
+    mds_lock.Unlock();
+    server->reconnect_tick();
     mds_lock.Lock();
   }
 }
@@ -570,8 +577,22 @@ void MDSRank::resolve_done()
 void MDSRank::reconnect_start()
 {
   dout(1) << "reconnect_start" << dendl;
-  reconnect_done();
+
+  /* FIXME
+  if (last_state == MDSMap::STATE_REPLAY) {
+    reopen_log();
+  }
+  */
+
+  list<MDSContextBase*> ls;
+  waiter_list_lock.Lock();
+  ls.swap(waiting_for_reconnect);
+  waiter_list_lock.Unlock();
+
+  server->reconnect_clients(new C_MDS_VoidFn(this, &MDSRank::reconnect_done));
+  finish_contexts(g_ceph_context, ls);
 }
+
 void MDSRank::reconnect_done()
 {
   dout(1) << "reconnect_done" << dendl;
@@ -581,23 +602,58 @@ void MDSRank::reconnect_done()
 void MDSRank::rejoin_start()
 {
   dout(1) << "rejoin_start" << dendl;
-  rejoin_done();
+  mdcache->rejoin_start(new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
 }
+
 void MDSRank::rejoin_done()
 {
   dout(1) << "rejoin_done" << dendl;
-  request_state(MDSMap::STATE_ACTIVE);
+
+  MDSMap::DaemonState next;
+  waiter_list_lock.Lock();
+  if (replay_request_queue.empty())
+    next = MDSMap::STATE_ACTIVE;
+  else
+    next = MDSMap::STATE_CLIENTREPLAY;
+  waiter_list_lock.Unlock();
+
+  request_state(next);
 }
 
 void MDSRank::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
-  assert(0);
+
+  list<MDSContextBase*> ls;
+  waiter_list_lock.Lock();
+  ls.swap(waiting_for_clientreplay);
+  waiter_list_lock.Unlock();
+
+  finish_contexts(g_ceph_context, ls);  // kick waiters
+  replay_next_request();
+}
+
+void MDSRank::clientreplay_done()
+{
+  dout(1) << "clientreplay_done" << dendl;
+  request_state(MDSMap::STATE_ACTIVE);
 }
 
 void MDSRank::active_start()
 {
   dout(1) << "active_start" << dendl;
+
+  list<MDSContextBase*> ls;
+  waiter_list_lock.Lock();
+  ls.swap(waiting_for_clientreplay);
+  waiter_list_lock.Unlock();
+  finish_contexts(g_ceph_context, ls);  // kick waiters
+  ls.clear();
+
+  waiter_list_lock.Lock();
+  ls.swap(waiting_for_active);
+  waiter_list_lock.Unlock();
+  finish_contexts(g_ceph_context, ls);  // kick waiters
 }
 
 void MDSRank::recovery_done(int oldstate)
@@ -671,8 +727,12 @@ void MDSRankDispatcher::handle_mds_map(
 
   MDSMap::DaemonState oldstate = state;
   mds_gid_t mds_gid = mds_gid_t(monc->get_global_id());
-  state = mdsmap->get_state_gid(mds_gid);
-  if (state != oldstate) {
+  MDSMap::DaemonState newstate = mdsmap->get_state_gid(mds_gid);
+
+  if (oldstate != newstate) {
+    msg_tp.pause();
+
+    state = newstate;
     last_state = oldstate;
     incarnation = mdsmap->get_inc_gid(mds_gid);
   }
@@ -754,6 +814,27 @@ void MDSRankDispatcher::handle_mds_map(
 
   if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
     dout(1) << "cluster recovered." << dendl;
+
+  if (oldstate != newstate)
+    msg_tp.unpause();
+}
+
+bool MDSRank::replay_next_request()
+{
+  Message *req = NULL;
+  waiter_list_lock.Lock();
+  if (!replay_request_queue.empty()) {
+    req = replay_request_queue.front();
+    replay_request_queue.pop_front();
+  }
+  waiter_list_lock.Unlock();
+  if (req) {
+    retry_dispatch(req);
+    return true;
+  } else {
+    queue_context(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
+    return false;
+  }
 }
 
 void MDSRank::dump_status(Formatter *f) const
@@ -774,16 +855,13 @@ MDSRank::ReqWQ::ReqWQ(MDSRank *m, time_t ti, ThreadPool *tp)
 
 void MDSRank::ReqWQ::_enqueue(const MDRequestRef& mdr)
 {
-  if (mdr->retries > 0)
-    pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_HIGH, mdr);
-  else
-    pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
+  pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT, mdr);
 }
 
 void MDSRank::ReqWQ::_enqueue_front(const MDRequestRef& mdr)
 {
-  assert(0);
-
+  pqueue.enqueue_strict(mdr->reqid.name, CEPH_MSG_PRIO_HIGH, mdr);
+/*
   MDRequestRef other;
   {
     Mutex::Locker l(qlock);
@@ -796,6 +874,7 @@ void MDSRank::ReqWQ::_enqueue_front(const MDRequestRef& mdr)
   }
   pqueue.enqueue_strict_front(mdr->reqid.name, CEPH_MSG_PRIO_DEFAULT,
 			      other ? other : mdr);
+*/
 }
 
 entity_name_t MDSRank::ReqWQ::_dequeue()
@@ -837,16 +916,13 @@ MDSRank::MsgWQ::MsgWQ(MDSRank *m, time_t ti, ThreadPool *tp)
 
 void MDSRank::MsgWQ::_enqueue(Message *m)
 { 
-  unsigned priority = m->get_priority();
-  unsigned cost = m->get_cost();
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    pqueue.enqueue_strict(m->get_source_inst(), priority, m);
-  else
-    pqueue.enqueue(m->get_source_inst(), priority, cost, m);
+  pqueue.enqueue_strict(m->get_source_inst(), CEPH_MSG_PRIO_DEFAULT, m);
 }
 
 void MDSRank::MsgWQ::_enqueue_front(Message *m)
 {
+  pqueue.enqueue_strict(m->get_source_inst(), CEPH_MSG_PRIO_HIGH, m);
+  /*
   entity_inst_t inst = m->get_source_inst();
   {
     Mutex::Locker l(qlock);
@@ -863,6 +939,7 @@ void MDSRank::MsgWQ::_enqueue_front(Message *m)
     pqueue.enqueue_strict_front(inst, priority, m);
   else
     pqueue.enqueue_front(inst, priority, cost, m);
+  */
 }
 
 entity_inst_t MDSRank::MsgWQ::_dequeue()
@@ -918,10 +995,13 @@ void MDSRank::MsgWQ::_process(entity_inst_t inst, ThreadPool::TPHandle &handle)
 void MDSRank::retry_dispatch(const MDRequestRef &mdr)
 {
   mdr->retries++;
-  req_wq.queue(mdr);
+  req_wq.queue_front(mdr);
 }
 
-
+void MDSRank::retry_dispatch(Message *m)
+{
+  msg_wq.queue_front(m);
+}
 
 // --- MDSRankDispatcher ---
 bool MDSRankDispatcher::handle_asok_command(

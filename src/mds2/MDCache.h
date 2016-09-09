@@ -15,6 +15,7 @@ class filepath;
 class LogSegment;
 class EMetaBlob;
 class ESubtreeMap;
+class Session;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -159,10 +160,80 @@ public:
   void open_remote_dentry(inodeno_t ino, uint8_t d_type, MDSContextBase *fin=NULL);
 
 protected:
-  ceph::atomic64_t last_cap_id;
+  std::atomic<uint64_t> last_cap_id;
 public:
-  uint64_t get_new_cap_id() { return last_cap_id.inc(); }
+  uint64_t get_new_cap_id() { return std::atomic_fetch_add(&last_cap_id, (uint64_t)1) + 1; }
+  void note_client_cap_id(uint64_t id) {
+    uint64_t old = std::atomic_load(&last_cap_id);
+    while (id > old && !std::atomic_compare_exchange_weak(&last_cap_id, &old, id));
+  }
   float get_lease_duration() const { return 30.0; }
+
+protected:
+  struct reconnected_cap_info_t {
+    inodeno_t realm_ino;
+    snapid_t snap_follows;
+    int dirty_caps;
+    reconnected_cap_info_t() :
+      realm_ino(0), snap_follows(0), dirty_caps(0) {}
+  };
+  map<inodeno_t,map<client_t,reconnected_cap_info_t> >  reconnected_caps;
+
+  map<inodeno_t,map<client_t,cap_reconnect_t> > reconnecting_caps; 
+
+  Mutex reconnect_lock;
+public:
+  void lock_client_reconnect() { reconnect_lock.Lock(); }
+  void unlock_client_reconnect() { reconnect_lock.Unlock(); }
+
+  void add_reconnected_cap(client_t client, inodeno_t ino, const cap_reconnect_t& icr) {
+    Mutex::Locker l(reconnect_lock);
+    reconnected_cap_info_t &info = reconnected_caps[ino][client];
+    info.realm_ino = inodeno_t(icr.capinfo.snaprealm);
+    info.snap_follows = icr.snap_follows;
+  }
+  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty) {
+    Mutex::Locker l(reconnect_lock);
+    reconnected_cap_info_t &info = reconnected_caps[ino][client];
+    info.dirty_caps |= dirty;
+  }
+
+  void add_cap_reconnect(inodeno_t ino, client_t client, const cap_reconnect_t& icr) {
+    Mutex::Locker l(reconnect_lock);
+    reconnecting_caps[ino][client] = icr;
+  }
+  const cap_reconnect_t *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
+    Mutex::Locker l(reconnect_lock);
+    auto p = reconnecting_caps.find(ino);
+    if (p != reconnecting_caps.end()) {
+      auto q = p->second.find(client);
+      if (q != p->second.end())
+	return &q->second;
+    }
+    return NULL;
+  }
+  void remove_replay_cap_reconnect(inodeno_t ino, client_t client) {
+    Mutex::Locker l(reconnect_lock);
+    auto p = reconnecting_caps.find(ino);
+    assert(p != reconnecting_caps.end());
+    assert(p->second.size() == 1);
+    reconnecting_caps.erase(p);
+  }
+
+protected:
+  MDSContextBase *rejoin_done;
+  set<inodeno_t> rejoin_missing_inodes;
+  int rejoin_num_opening_inodes;
+  void rejoin_open_inode_finish(inodeno_t ino, int ret);
+  friend class C_MDC_RejoinOpenInodeFinish;
+
+  void process_reconnecting_caps();
+  void choose_inodes_lock_states();
+  void identify_files_to_recover();
+public:
+  void rejoin_start(MDSContextBase *c);
+  void try_reconnect_cap(CInode *in, Session *session);
+public:
 
   MDCache(MDSRank *_mds);
   void dispatch(Message *m) { assert(0); } // does not support cache message yet

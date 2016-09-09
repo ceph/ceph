@@ -37,6 +37,7 @@ struct MDRequestImpl;
 class CInode;
 class Message;
 class MDSContextBase;
+class SessionMap;
 
 /* 
  * session
@@ -44,12 +45,14 @@ class MDSContextBase;
 
 class Session : public RefCountedObject {
 private:
-  Mutex mutex;
+  mutable Mutex mutex;
+  mutable Mutex data_lock;
 public:
   void mutex_lock() { mutex.Lock(); }
   void mutex_unlock() { mutex.Unlock(); }
   bool mutex_trylock() { return mutex.TryLock(); }
   void mutex_assert_locked_by_me() { assert(mutex.is_locked_by_me()); }
+
   // -- state etc --
 public:
   /*
@@ -91,6 +94,7 @@ private:
   ceph::atomic64_t state_seq;
   int importing_count;
   friend class SessionMap;
+  friend class SessionMapStore;
 
   // Human (friendly) name is soft state generated from client metadata
   void _update_human_name();
@@ -136,6 +140,7 @@ public:
   uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
   uint32_t recall_release_count;  // How many caps have I actually revoked?
 
+  // proctected by either sessionmap mutex or data_lock
   session_info_t info;                         ///< durable bits
 
   MDSAuthCaps auth_caps;
@@ -248,11 +253,22 @@ private:
   unsigned num_trim_flushes_warnings;
   unsigned num_trim_requests_warnings;
 public:
+  bool has_dirty_completed_requests() const
+  {
+    return completed_requests_dirty;
+  }
+  void clear_dirty_completed_requests()
+  {
+    completed_requests_dirty = false;
+  }
+
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
+    Mutex::Locker l(data_lock);
     info.completed_requests[t] = created;
     completed_requests_dirty = true;
   }
   bool trim_completed_requests(ceph_tid_t mintid) {
+    Mutex::Locker l(data_lock);
     // trim
     bool erased_any = false;
     while (!info.completed_requests.empty() && 
@@ -260,13 +276,13 @@ public:
       info.completed_requests.erase(info.completed_requests.begin());
       erased_any = true;
     }
-
     if (erased_any) {
       completed_requests_dirty = true;
     }
     return erased_any;
   }
   bool have_completed_request(ceph_tid_t tid, inodeno_t *pcreated) const {
+    Mutex::Locker l(data_lock);
     map<ceph_tid_t,inodeno_t>::const_iterator p = info.completed_requests.find(tid);
     if (p == info.completed_requests.end())
       return false;
@@ -276,9 +292,12 @@ public:
   }
 
   void add_completed_flush(ceph_tid_t tid) {
+    Mutex::Locker l(data_lock);
     info.completed_flushes.insert(tid);
+    completed_requests_dirty = true;
   }
   bool trim_completed_flushes(ceph_tid_t mintid) {
+    Mutex::Locker l(data_lock);
     bool erased_any = false;
     while (!info.completed_flushes.empty() &&
 	(mintid == 0 || *info.completed_flushes.begin() < mintid)) {
@@ -291,6 +310,7 @@ public:
     return erased_any;
   }
   bool have_completed_flush(ceph_tid_t tid) const {
+    Mutex::Locker l(data_lock);
     return info.completed_flushes.count(tid);
   }
 
@@ -304,22 +324,13 @@ public:
   void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
   void reset_num_trim_requests_warnings() { num_trim_requests_warnings = 0; }
 
-  bool has_dirty_completed_requests() const
-  {
-    return completed_requests_dirty;
-  }
-
-  void clear_dirty_completed_requests()
-  {
-    completed_requests_dirty = false;
-  }
-
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   int new_uid, int new_gid);
 
 
   Session() : 
     mutex("Session::mutex"),
+    data_lock("Session::data_lock"),
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     recalled_at(), recall_count(0), recall_release_count(0),
     auth_caps(g_ceph_context),
@@ -608,7 +619,7 @@ public:
   void load_legacy();
   void _load_legacy_finish(int r, bufferlist &bl);
 
-  void save(MDSContextBase *onsave, version_t needv=0);
+  void save(MDSContextBase *onsave, version_t needv=0, bool force=false);
   void _save_finish(version_t v);
 
 protected:
@@ -616,8 +627,8 @@ protected:
   std::set<entity_name_t> null_sessions;
   bool loaded_legacy;
   void _mark_dirty(Session *session);
+  friend class Session;
 public:
-
   /**
    * Advance the version, and mark this session
    * as dirty within the new version.
@@ -654,16 +665,11 @@ public:
    */
   void replay_advance_version();
 
-#if 0
   /**
    * For these session IDs, if a session exists with this ID, and it has
-   * dirty completed_requests, then persist it immediately
-   * (ahead of usual project/dirty versioned writes
-   *  of the map).
+   * dirty completed_requests
    */
-  void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
-                     MDSGatherBuilder *gather_bld);
-#endif
+  bool touch_sessions(const std::set<entity_name_t> &tgt_sessions);
 };
 
 

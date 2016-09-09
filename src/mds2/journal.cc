@@ -259,12 +259,16 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   // sessionmap
   mds->sessionmap->mutex_lock();
-  if (sessionmapv > mds->sessionmap->get_committed()) {
+  bool force = false;
+  if (!touched_sessions.empty())
+    force = mds->sessionmap->touch_sessions(touched_sessions);
+
+  if (sessionmapv > mds->sessionmap->get_committed() || force) {
     dout(10) << "try_to_expire saving sessionmap, need " << sessionmapv 
 	      << ", committed is " << mds->sessionmap->get_committed()
 	      << " (" << mds->sessionmap->get_committing() << ")"
 	      << dendl;
-    mds->sessionmap->save(gather_bld.new_sub(), sessionmapv);
+    mds->sessionmap->save(gather_bld.new_sub(), sessionmapv, force);
   }
 
   // updates to sessions for completed_requests
@@ -310,6 +314,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
+#endif
   
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
@@ -318,7 +323,6 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     assert(g_conf->mds_kill_journal_expire_at != 5);
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
-#endif
 }
 
 #undef DOUT_COND
@@ -1419,7 +1423,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     mds->sessionmap->mutex_unlock();
   }
 
-  /*
+#if 0
   // truncating inodes
   for (list<inodeno_t>::iterator p = truncate_start.begin();
        p != truncate_start.end();
@@ -1451,6 +1455,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
     }
   }
+#endif
 
   // client requests
   for (list<pair<metareqid_t, uint64_t> >::iterator p = client_reqs.begin();
@@ -1462,11 +1467,15 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       // if we allocated an inode, there should be exactly one client request id.
       assert(created == inodeno_t() || client_reqs.size() == 1);
 
-      Session *session = mds->sessionmap.get_session(p->first.name);
+      mds->sessionmap->mutex_lock();
+      Session *session = mds->sessionmap->get_session(p->first.name);
+      mds->sessionmap->mutex_unlock();
       if (session) {
 	session->add_completed_request(p->first.tid, created);
 	if (p->second)
 	  session->trim_completed_requests(p->second);
+	logseg->touched_sessions.insert(session->get_source());
+
       }
     }
   }
@@ -1477,15 +1486,17 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
        ++p) {
     if (p->first.name.is_client()) {
       dout(10) << "EMetaBlob.replay flush " << p->first << " trim_to " << p->second << dendl;
-      Session *session = mds->sessionmap.get_session(p->first.name);
+      mds->sessionmap->mutex_lock();
+      Session *session = mds->sessionmap->get_session(p->first.name);
+      mds->sessionmap->mutex_unlock();
       if (session) {
 	session->add_completed_flush(p->first.tid);
 	if (p->second)
 	  session->trim_completed_flushes(p->second);
+	logseg->touched_sessions.insert(session->get_source());
       }
     }
   }
-  */
 
   // update segment
   update_segment(logseg);

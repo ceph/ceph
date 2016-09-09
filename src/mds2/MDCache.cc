@@ -32,7 +32,11 @@ MDCache::MDCache(MDSRank *_mds) :
   log_segments_lock("MDCache::log_segments_lock"),
   request_map_lock("MDCache::request_map_lock"),
   rename_dir_mutex("MDCache::rename_dir_mutex"),
-  open_inode_mutex("MDCache::open_inode_mutex")
+  open_inode_mutex("MDCache::open_inode_mutex"),
+  last_cap_id(ATOMIC_VAR_INIT(0)),
+  reconnect_lock("MDCache::reconnect_lock"),
+  rejoin_done(NULL),
+  rejoin_num_opening_inodes(0)
 {
   dentry_lru.lru_set_max(g_conf->mds_cache_size);
   dentry_lru.lru_set_midpoint(g_conf->mds_cache_mid);
@@ -1343,6 +1347,158 @@ ESubtreeMap *MDCache::create_subtree_map()
   ESubtreeMap *le = new ESubtreeMap();
   mds->mdlog->_start_entry(le);
   return le;
+}
+
+void MDCache::rejoin_start(MDSContextBase *c)
+{
+  rejoin_done = c;
+  process_reconnecting_caps();
+}
+
+class C_MDC_RejoinOpenInodeFinish : public MDSContextBase {
+  MDCache *mdcache;
+  inodeno_t ino;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  C_MDC_RejoinOpenInodeFinish(MDCache *c, inodeno_t i) : mdcache(c), ino(i) {}
+  void finish(int r) {
+    mdcache->rejoin_open_inode_finish(ino, r);
+  }
+};
+
+void MDCache::rejoin_open_inode_finish(inodeno_t ino, int ret)
+{
+  dout(10) << "open_caps_inode_finish ino " << ino << " ret " << ret << dendl;
+
+  reconnect_lock.Lock();
+  if (ret < 0)
+    rejoin_missing_inodes.insert(ino);
+
+  rejoin_num_opening_inodes--;
+  int num_opening = rejoin_num_opening_inodes;
+  reconnect_lock.Unlock();
+
+  if (num_opening == 0)
+    process_reconnecting_caps();
+}
+
+void MDCache::choose_inodes_lock_states()
+{
+  for (auto p = inode_map.begin(); p != inode_map.end(); ++p) {
+    CInode* in = p->second;
+    if (in->last != CEPH_NOSNAP)
+      continue;
+    /*
+    if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
+      in->mark_dirty_rstat();
+    */
+
+    auto q = reconnected_caps.find(in->ino());
+    int dirty_caps = 0;
+    if (q != reconnected_caps.end()) {
+      for (const auto &r : q->second)
+	dirty_caps |= r.second.dirty_caps;
+    }
+    in->mutex_lock();
+    in->choose_lock_states(dirty_caps);
+    dout(15) << " chose lock states on " << *in << dendl;
+    in->mutex_unlock();
+  }
+}
+
+void MDCache::identify_files_to_recover()
+{
+// FIXME
+}
+
+void MDCache::process_reconnecting_caps()
+{
+  reconnect_lock.Lock();
+  assert(rejoin_num_opening_inodes == 0);
+  rejoin_num_opening_inodes = 1;
+  reconnect_lock.Unlock();
+
+  for (auto p = reconnecting_caps.begin(); p != reconnecting_caps.end(); ++p) {
+    CInodeRef in = get_inode(p->first);
+    if (in) {
+      rejoin_missing_inodes.erase(p->first);
+      continue;
+    }
+    if (rejoin_missing_inodes.count(p->first) > 0)
+      continue;
+
+    reconnect_lock.Lock();
+    rejoin_num_opening_inodes++;
+    reconnect_lock.Unlock();
+    dout(10) << "  opening missing ino " << p->first << dendl;
+    open_inode(p->first, (int64_t)-1, new C_MDC_RejoinOpenInodeFinish(this, p->first));
+  }
+
+  reconnect_lock.Lock();
+  rejoin_num_opening_inodes--;
+  int num_opening = rejoin_num_opening_inodes;
+  reconnect_lock.Unlock();
+  if (num_opening > 0)
+    return;
+
+  for (auto p = reconnecting_caps.begin(); p != reconnecting_caps.end(); ) {
+    CInodeRef in = get_inode(p->first);
+    if (!in) {
+      dout(10) << " still missing ino " << p->first
+	       << ", will try again after replayed client requests" << dendl;
+      ++p;
+      continue;
+    }
+    
+    for (auto q = p->second.begin(); q != p->second.end(); ++q) {
+      mds->sessionmap->mutex_lock();
+      Session *session = mds->sessionmap->get_session(entity_name_t::CLIENT(q->first.v));
+      if (session)
+	session->get();
+      mds->sessionmap->mutex_unlock();
+
+      in->mutex_lock();
+      in->reconnect_cap(q->second, session);
+      in->mutex_unlock();
+      add_reconnected_cap(q->first, p->first, q->second);
+      
+      session->put();
+    }
+    reconnecting_caps.erase(p++);
+  }
+
+  choose_inodes_lock_states();
+
+  identify_files_to_recover();
+
+  mds->queue_context(rejoin_done);
+  rejoin_done = NULL;
+}
+
+void MDCache::try_reconnect_cap(CInode *in, Session *session)
+{
+  client_t client = session->info.get_client();
+  const cap_reconnect_t *rc = get_replay_cap_reconnect(in->ino(), client);
+  if (rc) {
+    int dirty_caps = 0;
+    auto p = reconnected_caps.find(in->ino());
+    if (p != reconnected_caps.end()) {
+      auto q = p->second.find(client);
+      if (q != p->second.end())
+	dirty_caps = q->second.dirty_caps;
+    }
+
+    in->reconnect_cap(*rc, session);
+    dout(10) << "try_reconnect_cap client." << client
+	     << " reconnect wanted " << ccap_string(rc->capinfo.wanted)
+	     << " issue " << ccap_string(rc->capinfo.issued)
+	     << " on " << *in << dendl;
+
+    in->choose_lock_states(dirty_caps);
+    dout(15) << " chose lock states on " << *in << dendl;
+
+    remove_replay_cap_reconnect(in->ino(), client);
+  }
 }
 
 void MDCache::dump_cache(const char *fn, Formatter *f)

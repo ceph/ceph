@@ -16,6 +16,7 @@ class EMetaBlob;
 class Session;
 class MDCache;
 class MClientCaps;
+class cap_reconnect_t;
 
 typedef std::map<string, bufferptr> xattr_map_t;
 
@@ -263,6 +264,7 @@ protected:
   client_t loner_cap, want_loner_cap;
   uint64_t want_max_size;
 
+  void choose_lock_state(SimpleLock *lock, int allissued);
 public:
   bool is_any_caps() { return !client_caps.empty(); }
 
@@ -287,6 +289,9 @@ public:
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
   bool is_any_caps_wanted() const;
   bool issued_caps_need_gather(SimpleLock *lock);
+
+  Capability *reconnect_cap(const cap_reconnect_t& icr, Session *session);
+  void choose_lock_states(int dirty_caps);
 
   // caps allowed
   int get_caps_liked() const;
