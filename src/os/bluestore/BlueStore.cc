@@ -380,6 +380,15 @@ static void get_extent_shard_key(const string& onode_key, uint32_t offset,
   key->push_back(EXTENT_SHARD_KEY_SUFFIX);
 }
 
+static void rewrite_extent_shard_key(uint32_t offset, string *key)
+{
+  assert(key->size() > sizeof(uint32_t) + 1);
+  assert(*key->rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+  string offstr;
+  _key_encode_u32(offset, &offstr);
+  key->replace(key->size() - sizeof(uint32_t) - 1, sizeof(uint32_t), offstr);
+}
+
 int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 {
   assert(key.size() > sizeof(uint32_t) + 1);
@@ -1766,10 +1775,15 @@ void BlueStore::ExtentMap::fault_range(
 	   << std::dec << dendl;
   auto p = seek_shard(offset);
   auto last = seek_shard(offset + length);
+  bool first_key = true;
+  string key;
   while (p != shards.end()) {
     if (!p->loaded) {
-      string key;
-      get_extent_shard_key(onode->key, p->offset, &key);
+      if (first_key) {
+        get_extent_shard_key(onode->key, p->offset, &key);
+        first_key = false;
+      } else
+        rewrite_extent_shard_key(p->offset, &key);
       bufferlist v;
       int r = db->get(PREFIX_OBJ, key, &v);
       if (r < 0) {
