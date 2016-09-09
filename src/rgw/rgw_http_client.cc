@@ -346,10 +346,13 @@ RGWHTTPClient::~RGWHTTPClient()
 
 static int clear_signal(int fd)
 {
-  uint32_t buf;
-  int ret = ::read(fd, (void *)&buf, sizeof(buf));
+  // since we're in non-blocking mode, we can try to read a lot more than
+  // one signal from signal_thread() to avoid later wakeups
+  std::array<char, 256> buf;
+  int ret = ::read(fd, (void *)buf.data(), buf.size());
   if (ret < 0) {
-    return -errno;
+    ret = -errno;
+    return ret == -EAGAIN ? 0 : ret; // clear EAGAIN
   }
   return 0;
 }
@@ -720,6 +723,16 @@ int RGWHTTPManager::set_threaded()
   if (r < 0) {
     r = -errno;
     ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
+    return r;
+  }
+
+  // enable non-blocking reads
+  r = ::fcntl(thread_pipe[0], F_SETFL, O_NONBLOCK);
+  if (r < 0) {
+    r = -errno;
+    ldout(cct, 0) << "ERROR: fcntl() returned errno=" << r << dendl;
+    TEMP_FAILURE_RETRY(::close(thread_pipe[0]));
+    TEMP_FAILURE_RETRY(::close(thread_pipe[1]));
     return r;
   }
 
