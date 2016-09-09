@@ -1276,7 +1276,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->is_dirty()) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay added (full) " << *dn << dendl;
       } else {
 	dn->set_version(p->dnv);
 	if (p->is_dirty()) dn->_mark_dirty(logseg);
@@ -1302,6 +1302,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    mds->clog->warn(ss);
 	  }
 	  dir->unlink_inode(dn);
+          mds->mdcache->touch_dentry_bottom(dn);
 	}
 	if (unlinked.count(in))
 	  linked.insert(in);
@@ -1313,7 +1314,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
+          CDentry *unlinked_dn = in->get_parent_dn();
 	  in->get_parent_dir()->unlink_inode(in->get_parent_dn());
+          mds->mdcache->touch_dentry_bottom(unlinked_dn);
 	}
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
@@ -1326,6 +1329,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	      mds->clog->warn(ss);
 	    }
 	    dir->unlink_inode(dn);
+            mds->mdcache->touch_dentry_bottom(dn);
 	  }
 	  if (unlinked.count(in))
 	    linked.insert(in);
@@ -1371,6 +1375,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    dout(0) << ss.str() << dendl;
 	  }
 	  dir->unlink_inode(dn);
+          mds->mdcache->touch_dentry_bottom(dn);
 	}
 	dir->link_remote_inode(dn, p->ino, p->d_type);
 	dn->set_version(p->dnv);
@@ -1392,7 +1397,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
-	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
+	dout(10) << "EMetaBlob.replay added (nullbit) " << *dn << dendl;
       } else {
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
@@ -1405,6 +1410,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    if (dn->get_linkage()->is_primary())
 	      unlinked[in] = dir;
 	    dir->unlink_inode(dn);
+            mds->mdcache->touch_dentry_bottom(dn);
 	  }
 	}
 	dn->set_version(p->dnv);
@@ -1415,6 +1421,10 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       olddir = dir;
       if (lump.is_importing())
 	dn->state_set(CDentry::STATE_AUTH);
+
+      // Make null dentries the first things we trim
+      dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
+      mds->mdcache->touch_dentry_bottom(dn);
     }
   }
 
@@ -1622,7 +1632,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     CInode *in = mds->mdcache->get_inode(*p);
     if (in) {
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", dropping " << *in << dendl;
+      CDentry *parent = in->get_parent_dn();
       mds->mdcache->remove_inode(in);
+      if (parent) {
+        dout(10) << "EMetaBlob.replay unlinked from dentry " << *parent << dendl;
+        assert(parent->get_linkage()->is_null());
+        mds->mdcache->touch_dentry_bottom(parent);
+      }
     } else {
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
     }
