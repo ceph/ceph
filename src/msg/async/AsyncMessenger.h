@@ -388,7 +388,7 @@ public:
    * a peer protocol (if it matches our own), the protocol version for the
    * peer (if we're connecting), or our protocol version (if we're accepting).
    */
-  int get_proto_version(int peer_type, bool connect);
+  int get_proto_version(int peer_type, bool connect) const;
 
   /**
    * Fill in the address and peer type for the local connection, which
