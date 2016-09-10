@@ -1582,7 +1582,15 @@ private:
   int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
-
+  template <typename T, typename F>
+  T select_option(const std::string& opt_name, T val1, F f) {
+    //NB: opt_name reserved for future use
+    boost::optional<T> val2 = f();
+    if (val2) {
+      return *val2;
+    }
+    return val1;
+  }
 public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
@@ -1876,6 +1884,7 @@ private:
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
+    CollectionRef c,
     WriteContext *wctx);
   void _wctx_finish(
     TransContext *txc,
