@@ -12,10 +12,10 @@ namespace centile {
     this->end = end;
     this->inc = inc;
 
-    numBuckets = (end-start)/inc + 1;
+    numBuckets = (end-start) / inc + 1;
     buckets = new atomic64_t[numBuckets];
-    firstBucket = start/inc;
-    lastBucket = end/inc;
+    firstBucket = start / inc;
+    lastBucket = end / inc;
   }
 
   Centile::~Centile() {
@@ -27,9 +27,12 @@ namespace centile {
   }
 
   void Centile::insert(unsigned int value) {
-    unsigned int index = int(value/inc);
+    unsigned int index = int(value / inc);
     if(index >= firstBucket && index <= lastBucket) {
       buckets[index - firstBucket].inc();
+      sample_count.inc();
+    } else if(index >= firstBucket){
+      buckets[numBuckets - 1].inc();
       sample_count.inc();
     }
   }
@@ -40,16 +43,18 @@ namespace centile {
       buckets[index].set(0);
     }
   }
+  /* quantile must be between 0 and 1 */
   unsigned int Centile::get_percentile(double quantile) {
-    unsigned int percentile_value=start, sum=0;
-    unsigned int position = sample_count.read() * quantile;
+    unsigned int percentile_value=start;
+    uint64_t sum=0;
+    uint64_t position = sample_count.read() * quantile;
 
     for(unsigned int index = 0 ; index < numBuckets; index++) {
-      sum += buckets[index].read();
-      percentile_value += inc;
       if(sum >= position) {
         break;
       }
+      sum += buckets[index].read();
+      percentile_value += inc;
     }
     return percentile_value;
   }

@@ -23,6 +23,7 @@ using namespace std;
 namespace centile {
   class Centile {
     public:
+      /* inc should be > 0 and not > end -start */
       Centile(unsigned int start, unsigned int end, unsigned int inc);
       void insert(unsigned int);
       atomic64_t& get_sample_count();
