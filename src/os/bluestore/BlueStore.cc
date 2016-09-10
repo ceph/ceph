@@ -1702,6 +1702,8 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
     ++n;
     extent_map.insert(*le);
   }
+
+  assert(n == num);
 }
 
 void BlueStore::ExtentMap::encode_spanning_blobs(bufferlist& bl)
