@@ -172,13 +172,13 @@ int percentile_perf_start(CephContext *cct)
       ostr << *percentile_it;
       std::string percentile = ostr.str();
       string str = string("get_objectSize_") + object_size + "_percentile_" + percentile;
-      char * cstrget = new char [str.length()+1];
-      strcpy (cstrget, str.c_str());
+      char *cstrget = new char[str.length()+1];
+      strcpy(cstrget, str.c_str());
       plb.add_u64_counter(percentile_get_first + index, cstrget);
 
       str = string("put_objectsize_") + object_size + "_percentile_" + percentile;
-      char * cstrput = new char [str.length()+1];
-      strcpy (cstrput, str.c_str());
+      char *cstrput = new char[str.length()+1];
+      strcpy(cstrput, str.c_str());
       plb.add_u64_counter(percentile_put_first + index, cstrput);
       index++;
     }
