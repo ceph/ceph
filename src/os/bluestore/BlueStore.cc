@@ -1219,7 +1219,7 @@ BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid)
 ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 {
   out << "Blob(" << &b;
-  if (b.id >= 0) {
+  if (b.is_spanning()) {
     out << " spanning " << b.id;
   }
   out << " " << b.get_blob() << " " << b.ref_map
