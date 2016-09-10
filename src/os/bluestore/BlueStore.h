@@ -378,6 +378,7 @@ public:
     }
 
     bool empty() {
+      std::lock_guard<std::mutex> l(lock);
       return uset.empty();
     }
   };
