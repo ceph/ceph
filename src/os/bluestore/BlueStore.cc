@@ -7570,6 +7570,7 @@ void BlueStore::_do_write_big(
 
 int BlueStore::_do_alloc_write(
   TransContext *txc,
+  CollectionRef coll,
   WriteContext *wctx)
 {
   dout(20) << __func__ << " txc " << txc
@@ -7588,7 +7589,24 @@ int BlueStore::_do_alloc_write(
   }
 
   uint64_t hint = 0;
-  CompressorRef c = compressor;
+  CompressorRef c;
+  if (wctx->compress) {
+    c = select_option(
+    "compression_algorithm",
+    compressor,
+    [&]() {
+      string val;
+      if (coll->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
+        CompressorRef cp = compressor;
+        if (!cp || cp->get_type_name() != val) {
+          cp = Compressor::create(cct, val);
+        }
+        return boost::optional<CompressorRef>(cp);
+      }
+      return boost::optional<CompressorRef>();
+    });
+  }
+
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
     bluestore_blob_t& dblob = b->dirty_blob();
@@ -7599,7 +7617,7 @@ int BlueStore::_do_alloc_write(
     unsigned csum_order = block_size_order;
     bufferlist compressed_bl;
     bool compressed = false;
-    if (c && wctx->compress && wi.blob_length > min_alloc_size) {
+    if(c && wi.blob_length > min_alloc_size) {
 
       utime_t start = ceph_clock_now(g_ceph_context);
 
@@ -7619,8 +7637,19 @@ int BlueStore::_do_alloc_write(
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
       uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-      uint64_t want_len_raw = final_length *
-        g_conf->bluestore_compression_required_ratio;
+
+      auto crr = select_option(
+	"compression_required_ratio",
+	g_conf->bluestore_compression_required_ratio,
+	[&]() {
+	  double val;
+	  if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
+	    return boost::optional<double>(val);
+	  }
+	  return boost::optional<double>();
+	}
+      );
+      uint64_t want_len_raw = final_length * crr;
       uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
       if (newlen <= want_len && newlen < final_length) {
         // Cool. We compressed at least as much as we were hoping to.
@@ -7685,13 +7714,26 @@ int BlueStore::_do_alloc_write(
       dblob.extents.push_back(e);
     }
 
+    // checksum
+    int csum = csum_type.load();
+    csum = select_option(
+      "csum_type",
+      csum, 
+      [&]() {
+        int val;
+        if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+  	  return  boost::optional<int>(val);
+        }
+        return boost::optional<int>();
+      }
+    );
+
     dout(20) << __func__ << " blob " << *b
+	     << " csum_type " << Checksummer::get_csum_type_string(csum)
 	     << " csum_order " << csum_order
 	     << " csum_length 0x" << std::hex << csum_length << std::dec
 	     << dendl;
 
-    // checksum
-    int csum = csum_type.load();
     if (csum) {
       dblob.init_csum(csum, csum_order, csum_length);
       dblob.calc_csum(b_off, *l);
@@ -7874,12 +7916,22 @@ int BlueStore::_do_write(
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
-  int comp = comp_mode.load();
+  auto cm = select_option(
+    "compression_mode",
+    comp_mode.load(), 
+    [&]() {
+      string val;
+      if(c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
+	return  boost::optional<Compressor::CompressionMode>(Compressor::get_comp_mode_type(val));
+      }
+      return boost::optional<Compressor::CompressionMode>();
+    }
+  );
   wctx.compress =
-    (comp == Compressor::COMP_FORCE) ||
-    (comp == Compressor::COMP_AGGRESSIVE &&
+    (cm == Compressor::COMP_FORCE) ||
+    (cm == Compressor::COMP_AGGRESSIVE &&
      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
-    (comp == Compressor::COMP_PASSIVE &&
+    (cm == Compressor::COMP_PASSIVE &&
      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
@@ -7890,11 +7942,31 @@ int BlueStore::_do_write(
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
     wctx.csum_order = min_alloc_size_order;
     if (wctx.compress) {
-      wctx.target_blob_size = comp_max_blob_size.load();
+      wctx.target_blob_size = select_option(
+        "compression_max_blob_size",
+        comp_max_blob_size.load(), 
+        [&]() {
+          uint64_t val;
+          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
+   	    return boost::optional<uint64_t>(val);
+          }
+          return boost::optional<uint64_t>();
+        }
+      );
     }
   } else {
     if (wctx.compress) {
-      wctx.target_blob_size = comp_min_blob_size.load();
+      wctx.target_blob_size = select_option(
+        "compression_min_blob_size",
+        comp_min_blob_size.load(), 
+        [&]() {
+          uint64_t val;
+          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
+   	    return boost::optional<uint64_t>(val);
+          }
+          return boost::optional<uint64_t>();
+        }
+      );
     }
   }
   if (wctx.target_blob_size == 0 ||
@@ -7959,7 +8031,7 @@ int BlueStore::_do_write(
   o->extent_map.fault_range(db, offset, length);
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
 
-  r = _do_alloc_write(txc, &wctx);
+  r = _do_alloc_write(txc, c, &wctx);
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
 	 << dendl;
