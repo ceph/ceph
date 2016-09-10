@@ -54,7 +54,9 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERANGE, 416, "InvalidRange" },
     { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
     { ERR_LOCKED, 423, "Locked" },
+    { ERR_TOO_MANY_REQUESTS, 429, "TooManyRequestsException" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
+    { ERR_SLOW_DOWN, 503, "SlowDown" },
 };
 
 const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
@@ -107,7 +109,9 @@ const static struct rgw_http_status_code http_codes[] = {
   { 416, "Requested Range Not Satisfiable" },
   { 417, "Expectation Failed" },
   { 422, "Unprocessable Entity" },
+  { 429, "Too Many Requests" },
   { 500, "Internal Server Error" },
+  { 503, "Slow Down" },
   { 0, NULL },
 };
 
