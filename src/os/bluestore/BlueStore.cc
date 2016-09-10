@@ -392,7 +392,7 @@ static void rewrite_extent_shard_key(uint32_t offset, string *key)
 int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 {
   assert(key.size() > sizeof(uint32_t) + 1);
-  assert(key[key.size() - 1] == EXTENT_SHARD_KEY_SUFFIX);
+  assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
   int okey_len = key.size() - sizeof(uint32_t) - 1;
   *onode_key = key.substr(0, okey_len);
   const char *p = key.data() + okey_len;
@@ -402,7 +402,7 @@ int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 
 static bool is_extent_shard_key(const string& key)
 {
-  return key[key.size()-1] == EXTENT_SHARD_KEY_SUFFIX;
+  return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
 }
 
 // '-' < '.' < '~'
