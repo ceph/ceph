@@ -172,7 +172,6 @@ public:
    * can associate itself with the correct copy operation.
    */
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
-  class CopyCallback;
 
   friend class CopyFromCallback;
   friend class PromoteCallback;
