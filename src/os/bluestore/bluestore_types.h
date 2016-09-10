@@ -590,12 +590,6 @@ WRITE_CLASS_ENCODER(bluestore_shared_blob_t)
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
 
-
-
-/// blob id: positive = local, negative = shared bnode
-typedef int64_t bluestore_blob_id_t;
-
-
 /// onode: per-object metadata
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
