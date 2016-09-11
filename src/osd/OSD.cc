@@ -3988,22 +3988,24 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::PING:
     {
       if (cct->_conf->osd_debug_drop_ping_probability > 0) {
-	if (debug_heartbeat_drops_remaining.count(from)) {
-	  if (debug_heartbeat_drops_remaining[from] == 0) {
-	    debug_heartbeat_drops_remaining.erase(from);
+	auto heartbeat_drop = debug_heartbeat_drops_remaining.find(from);
+	if (heartbeat_drop != debug_heartbeat_drops_remaining.end()) {
+	  if (heartbeat_drop->second == 0) {
+	    debug_heartbeat_drops_remaining.erase(heartbeat_drop);
 	  } else {
-	    debug_heartbeat_drops_remaining[from]--;
+	    --heartbeat_drop->second;
 	    dout(5) << "Dropping heartbeat from " << from
-		    << ", " << debug_heartbeat_drops_remaining[from]
+		    << ", " << heartbeat_drop->second
 		    << " remaining to drop" << dendl;
 	    break;
 	  }
 	} else if (cct->_conf->osd_debug_drop_ping_probability >
 	           ((((double)(rand()%100))/100.0))) {
-	  debug_heartbeat_drops_remaining[from] =
-	    cct->_conf->osd_debug_drop_ping_duration;
+	  heartbeat_drop =
+	    debug_heartbeat_drops_remaining.insert(std::make_pair(from,
+	                     cct->_conf->osd_debug_drop_ping_duration)).first;
 	  dout(5) << "Dropping heartbeat from " << from
-		  << ", " << debug_heartbeat_drops_remaining[from]
+		  << ", " << heartbeat_drop->second
 		  << " remaining to drop" << dendl;
 	  break;
 	}
