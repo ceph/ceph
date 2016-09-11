@@ -160,6 +160,9 @@ public:
     CollectionIndex* dest
     );
 
+  /// @see CollectionIndex
+  virtual int apply_layout_settings();
+
 protected:
   int _init();
 
@@ -432,6 +435,9 @@ private:
   /// Create the given levels of sub directories from the given root.
   /// The contents of *path* is not changed after calling this function.
   int recursive_create_path(vector<string>& path, int level);
+
+  /// split each dir below the given path
+  int split_dirs(const vector<string> &path);
 };
 
 #endif

@@ -27,6 +27,7 @@
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileJournal.h"
+#include "os/filestore/FileStore.h"
 #ifdef HAVE_LIBFUSE
 #include "os/FuseStore.h"
 #endif
@@ -2259,9 +2260,73 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
   return r;
 }
 
+int apply_layout_settings(ObjectStore *os, const OSDSuperblock &superblock,
+			  const string &pool_name, const spg_t &pgid, bool dry_run)
+{
+  int r = 0;
+
+  FileStore *fs = dynamic_cast<FileStore*>(os);
+  if (!fs) {
+    cerr << "Nothing to do for non-filestore backend" << std::endl;
+    return 0; // making this return success makes testing easier
+  }
+
+  OSDMap curmap;
+  bufferlist bl;
+  r = get_osdmap(os, superblock.current_epoch, curmap, bl);
+  if (r) {
+    cerr << "Can't find local OSDMap: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  int64_t poolid = -1;
+  if (pool_name.length()) {
+    poolid = curmap.lookup_pg_pool_name(pool_name);
+    if (poolid < 0) {
+      cerr << "Couldn't find pool " << pool_name << ": " << cpp_strerror(poolid)
+	   << std::endl;
+      return poolid;
+    }
+  }
+
+  vector<coll_t> collections, filtered_colls;
+  r = os->list_collections(collections);
+  if (r < 0) {
+    cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  for (auto const &coll : collections) {
+    spg_t coll_pgid;
+    if (coll.is_pg(&coll_pgid) &&
+	((poolid >= 0 && coll_pgid.pool() == (uint64_t)poolid) ||
+	 coll_pgid == pgid)) {
+      filtered_colls.push_back(coll);
+    }
+  }
+
+  size_t done = 0, total = filtered_colls.size();
+  for (auto const &coll : filtered_colls) {
+    if (dry_run) {
+      cerr << "Would apply layout settings to " << coll << std::endl;
+    } else {
+      cerr << "Finished " << done << "/" << total << " collections" << "\r";
+      r = fs->apply_layout_settings(coll);
+      if (r < 0) {
+	cerr << "Error applying layout settings to " << coll << std::endl;
+	return r;
+      }
+    }
+    ++done;
+  }
+
+  cerr << "Finished " << total << "/" << total << " collections" << "\r" << std::endl;
+  return r;
+}
+
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format, argnspace;
+  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format, argnspace, pool;
   boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
@@ -2281,10 +2346,12 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
+     "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
+    ("pool", po::value<string>(&pool),
+     "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, fuse, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -2406,6 +2473,12 @@ int main(int argc, char **argv)
   if (op != "list" &&
       vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op == "apply-layout-settings" && !(vm.count("pool") ^ vm.count("pgid"))) {
+    cerr << "apply-layout-settings requires either --pool or --pgid"
+	 << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -2598,6 +2671,11 @@ int main(int argc, char **argv)
     cerr << "On-disk OSD incompatible features set "
       << unsupported << std::endl;
     ret = -EINVAL;
+    goto out;
+  }
+
+  if (op == "apply-layout-settings") {
+    ret = apply_layout_settings(fs, superblock, pool, pgid, dry_run);
     goto out;
   }
 
