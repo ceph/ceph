@@ -4069,18 +4069,20 @@ void OSD::handle_osd_ping(MOSDPing *m)
         cutoff -= cct->_conf->osd_heartbeat_grace;
         if (i->second.is_healthy(cutoff)) {
           // Cancel false reports
-          if (failure_queue.count(from)) {
+	  auto failure_queue_entry = failure_queue.find(from);
+	  if (failure_queue_entry != failure_queue.end()) {
             dout(10) << "handle_osd_ping canceling queued "
                      << "failure report for osd." << from << dendl;
-            failure_queue.erase(from);
+            failure_queue.erase(failure_queue_entry);
           }
 
-          if (failure_pending.count(from)) {
+	  auto failure_pending_entry = failure_pending.find(from);
+	  if (failure_pending_entry != failure_pending.end()) {
             dout(10) << "handle_osd_ping canceling in-flight "
                      << "failure report for osd." << from << dendl;
             send_still_alive(curmap->get_epoch(),
-              failure_pending[from].second);
-            failure_pending.erase(from);
+			     failure_pending_entry->second.second);
+            failure_pending.erase(failure_pending_entry);
           }
         }
       }
