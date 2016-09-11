@@ -430,6 +430,39 @@ TEST_F(TestMockExclusiveLockAcquireRequest, RefreshError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+TEST_F(TestMockExclusiveLockAcquireRequest, RefreshLockDisabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockRefreshRequest mock_refresh_request;
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
+  expect_flush_notifies(mock_image_ctx);
+  expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, true);
+  expect_refresh(mock_image_ctx, mock_refresh_request, -ERESTART);
+
+  MockObjectMap mock_object_map;
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
+                       mock_image_ctx.snap_lock, false);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
+
+  C_SaferCond acquire_ctx;
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(0, acquire_ctx.wait());
+  ASSERT_EQ(0, ctx.wait());
+}
+
 TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
