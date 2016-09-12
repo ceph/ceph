@@ -4411,7 +4411,6 @@ void OSD::check_ops_in_flight()
       clog->warn() << *i;
     }
   }
-  return;
 }
 
 // Usage:
@@ -4571,7 +4570,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     return;
   }
   ss << "Internal error - command=" << command;
-  return;
 }
 
 // =========================================
