@@ -58,8 +58,7 @@ public:
     deep_copy(*this, o);
     return *this;
   }
-  // FIXME: stop doing a deep-copy all the time. We need it on stuff
-  // that lasts longer than a single "syscall", but not for MetaRequests et al
+
   uid_t uid() const { return m_uid; }
   gid_t gid() const { return m_gid; }
   bool gid_in_groups(gid_t gid) const {
@@ -75,6 +74,13 @@ public:
     gid_count = count;
   }
   void take_gids() { alloced_gids = true; }
+  void shallow_copy(const UserPerm& o) {
+    m_uid = o.m_uid;
+    m_gid = o.m_gid;
+    gid_count = o.gid_count;
+    gids = o.gids;
+    alloced_gids = false;
+  }
 };
 
 #endif
