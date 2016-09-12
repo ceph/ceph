@@ -4681,14 +4681,17 @@ bool FileStore::collection_exists(const coll_t& c)
   return ret;
 }
 
-bool FileStore::collection_empty(const coll_t& c)
+int FileStore::collection_empty(const coll_t& c, bool *empty)
 {
   tracepoint(objectstore, collection_empty_enter, c.c_str());
   dout(15) << "collection_empty " << c << dendl;
   Index index;
   int r = get_index(c, &index);
-  if (r < 0)
-    return false;
+  if (r < 0) {
+    derr << __func__ << " get_index returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
 
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
@@ -4697,12 +4700,14 @@ bool FileStore::collection_empty(const coll_t& c)
   r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
 				     1, &ls, NULL);
   if (r < 0) {
+    derr << __func__ << " collection_list_partial returned: "
+         << cpp_strerror(r) << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
-    return false;
+    return r;
   }
-  bool ret = ls.empty();
-  tracepoint(objectstore, collection_empty_exit, ret);
-  return ret;
+  *empty = ls.empty();
+  tracepoint(objectstore, collection_empty_exit, *empty);
+  return 0;
 }
 int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
 			       bool sort_bitwise, int max,
@@ -4963,13 +4968,16 @@ int FileStore::_collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_n
   dout(15) << __func__ << " collection: " << c << " pg number: "
      << pg_num << " expected number of objects: " << expected_num_objs << dendl;
 
-  if (!collection_empty(c) && !replaying) {
+  bool empty;
+  int ret = collection_empty(c, &empty);
+  if (ret < 0)
+    return ret;
+  if (!empty && !replaying) {
     dout(0) << "Failed to give an expected number of objects hint to collection : "
       << c << ", only empty collection can take such type of hint. " << dendl;
     return 0;
   }
 
-  int ret;
   Index index;
   ret = get_index(c, &index);
   if (ret < 0)
