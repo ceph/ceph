@@ -172,7 +172,7 @@ public:
   void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_perms(const UserPerm& _perms) {
-    perms = _perms;
+    perms.shallow_copy(_perms);
     head.caller_uid = perms.uid();
     head.caller_gid = perms.gid();
   }
