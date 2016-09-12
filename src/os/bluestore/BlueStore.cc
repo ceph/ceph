@@ -1714,6 +1714,8 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
     ++n;
     extent_map.insert(*le);
   }
+
+  assert(n == num);
 }
 
 void BlueStore::ExtentMap::encode_spanning_blobs(bufferlist& bl)
@@ -4162,7 +4164,7 @@ int BlueStore::fsck()
 	for (auto &r : shared_blob.ref_map.ref_map) {
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
-	_fsck_check_extents(p->second.oids.front(),
+	errors += _fsck_check_extents(p->second.oids.front(),
 			    extents,
 			    p->second.compressed,
 			    used_blocks, expected_statfs);
