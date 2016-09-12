@@ -56,7 +56,7 @@ private:
 
 public:
   explicit FDCache(CephContext *cct) : cct(cct),
-  registry_shards(cct->_conf->filestore_fd_cache_shards) {
+  registry_shards(MAX(cct->_conf->filestore_fd_cache_shards, 1)) {
     assert(cct);
     cct->_conf->add_observer(this);
     registry = new SharedLRU<ghobject_t, FD, ghobject_t::BitwiseComparator>[registry_shards];
