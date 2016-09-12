@@ -705,9 +705,6 @@ public:
 };
 
 class RGWPostObj : public RGWOp {
-
-  friend class RGWPutObjProcessor;
-
 protected:
   off_t min_len;
   off_t max_len;
@@ -724,9 +721,14 @@ protected:
   ceph::real_time delete_at;
 
 public:
-  RGWPostObj() : min_len(0), max_len(LLONG_MAX), len(0), ofs(0),
-		 supplied_md5_b64(NULL), supplied_etag(NULL),
-		 data_pending(false) {}
+  RGWPostObj() : min_len(0),
+                 max_len(LLONG_MAX),
+                 len(0),
+                 ofs(0),
+                 supplied_md5_b64(nullptr),
+                 supplied_etag(nullptr),
+                 data_pending(false) {
+  }
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
@@ -740,9 +742,6 @@ public:
   int verify_permission();
   void pre_exec();
   void execute();
-
-  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
-  void dispose_processor(RGWPutObjProcessor *processor);
 
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
