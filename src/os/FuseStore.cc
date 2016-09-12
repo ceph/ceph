@@ -1001,9 +1001,15 @@ static int os_unlink(const char *path)
     break;
 
   case FN_COLLECTION:
-    if (!fs->store->collection_empty(cid))
-      return -ENOTEMPTY;
-    t.remove_collection(cid);
+    {
+      bool empty;
+      int r = fs->store->collection_empty(cid, &empty);
+      if (r < 0)
+        return r;
+      if (!empty)
+        return -ENOTEMPTY;
+      t.remove_collection(cid);
+    }
     break;
 
   case FN_OBJECT_DATA:
