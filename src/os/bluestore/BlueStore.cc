@@ -380,18 +380,29 @@ static void get_extent_shard_key(const string& onode_key, uint32_t offset,
   key->push_back(EXTENT_SHARD_KEY_SUFFIX);
 }
 
+static void rewrite_extent_shard_key(uint32_t offset, string *key)
+{
+  assert(key->size() > sizeof(uint32_t) + 1);
+  assert(*key->rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+  string offstr;
+  _key_encode_u32(offset, &offstr);
+  key->replace(key->size() - sizeof(uint32_t) - 1, sizeof(uint32_t), offstr);
+}
+
 int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 {
   assert(key.size() > sizeof(uint32_t) + 1);
-  assert(key[key.size() - 1] == EXTENT_SHARD_KEY_SUFFIX);
-  const char *p = key.data() + key.size() - sizeof(uint32_t) - 1;
+  assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+  int okey_len = key.size() - sizeof(uint32_t) - 1;
+  *onode_key = key.substr(0, okey_len);
+  const char *p = key.data() + okey_len;
   p = _key_decode_u32(p, offset);
   return 0;
 }
 
 static bool is_extent_shard_key(const string& key)
 {
-  return key[key.size()-1] == EXTENT_SHARD_KEY_SUFFIX;
+  return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
 }
 
 // '-' < '.' < '~'
@@ -1105,7 +1116,8 @@ void BlueStore::OnodeSpace::clear()
 
 void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 				     const ghobject_t& old_oid,
-				     const ghobject_t& new_oid)
+				     const ghobject_t& new_oid,
+				     const string& new_okey)
 {
   std::lock_guard<std::mutex> l(cache->lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
@@ -1131,7 +1143,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   onode_map.insert(make_pair(new_oid, o));
   cache->_touch_onode(o);
   o->oid = new_oid;
-  get_object_key(new_oid, &o->key);
+  o->key = new_okey;
 }
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
@@ -1207,7 +1219,7 @@ BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid)
 ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 {
   out << "Blob(" << &b;
-  if (b.id >= 0) {
+  if (b.is_spanning()) {
     out << " spanning " << b.id;
   }
   out << " " << b.get_blob() << " " << b.ref_map
@@ -1765,10 +1777,15 @@ void BlueStore::ExtentMap::fault_range(
 	   << std::dec << dendl;
   auto p = seek_shard(offset);
   auto last = seek_shard(offset + length);
+  bool first_key = true;
+  string key;
   while (p != shards.end()) {
     if (!p->loaded) {
-      string key;
-      get_extent_shard_key(onode->key, p->offset, &key);
+      if (first_key) {
+        get_extent_shard_key(onode->key, p->offset, &key);
+        first_key = false;
+      } else
+        rewrite_extent_shard_key(p->offset, &key);
       bufferlist v;
       int r = db->get(PREFIX_OBJ, key, &v);
       if (r < 0) {
@@ -8053,6 +8070,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
+  string new_okey;
 
   if (newo) {
     if (newo->exists) {
@@ -8066,9 +8084,10 @@ int BlueStore::_rename(TransContext *txc,
 
   // rewrite shards
   oldo->extent_map.fault_range(db, 0, oldo->onode.size);
+  get_object_key(new_oid, &new_okey);
   for (auto &s : oldo->extent_map.shards) {
     txc->t->rmkey(PREFIX_OBJ, s.key);
-    get_extent_shard_key(newo->key, s.offset, &s.key);
+    get_extent_shard_key(new_okey, s.offset, &s.key);
     s.dirty = true;
   }
 
@@ -8077,7 +8096,7 @@ int BlueStore::_rename(TransContext *txc,
 
   // this adjusts oldo->{oid,key}, and reset oldo to a fresh empty
   // Onode in the old slot
-  c->onode_map.rename(oldo, old_oid, new_oid);
+  c->onode_map.rename(oldo, old_oid, new_oid, new_okey);
   r = 0;
 
  out:
