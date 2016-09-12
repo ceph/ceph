@@ -137,24 +137,19 @@ int check_mon_data_empty()
     cerr << "opendir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
     return -errno;
   }
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-
   int code = 0;
-  struct dirent *de;
+  struct dirent *de = nullptr;
   errno = 0;
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      if (errno) {
-	cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
-	code = -errno;
-      }
-      break;
-    }
+  while ((de = ::readdir(dir))) {
     if (string(".") != de->d_name &&
 	string("..") != de->d_name) {
       code = -ENOTEMPTY;
       break;
     }
+  }
+  if (!de && errno) {
+    cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
+    code = -errno;
   }
 
   ::closedir(dir);
