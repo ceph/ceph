@@ -2157,7 +2157,13 @@ int OSD::init()
   clear_temp_objects();
 
   // load up pgs (as they previously existed)
-  load_pgs();
+  try {
+    load_pgs();
+  } catch (OSD::corrupt_map e) {
+    derr << "OSD::init detected corrupt osdmap at epoch " << e.epoch << dendl;
+    r = -EIO; // 'fd in bad state' - not too far from the truth-ish
+    goto out;
+  }
 
   dout(2) << "superblock: I am osd." << superblock.whoami << dendl;
   dout(0) << "using " << op_queue << " op queue with priority op cut off at " <<
@@ -3296,7 +3302,14 @@ void OSD::load_pgs()
 
     PG *pg = NULL;
     if (map_epoch > 0) {
-      OSDMapRef pgosdmap = service.try_get_map(map_epoch);
+      OSDMapRef pgosdmap;
+      try {
+        pgosdmap = service.try_get_map(map_epoch);
+      } catch (ceph::buffer::end_of_buffer e) {
+        throw OSD::corrupt_map(map_epoch);
+      } catch (ceph::buffer::malformed_input e) {
+        throw OSD::corrupt_map(map_epoch);
+      }
       if (!pgosdmap) {
 	if (!osdmap->have_pg_pool(pgid.pool())) {
 	  derr << __func__ << ": could not find map for epoch " << map_epoch
@@ -9389,4 +9402,8 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
         }
   }
   in_use.insert(got.begin(), got.end());
+}
+
+const char *OSD::corrupt_map::what() const throw() {
+  return "OSD::corrupt_map";
 }

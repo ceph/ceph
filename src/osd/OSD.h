@@ -2495,6 +2495,12 @@ public:
 public:
   OSDService service;
   friend class OSDService;
+
+  struct corrupt_map : public std::exception {
+    epoch_t epoch;
+    explicit corrupt_map(epoch_t e) : epoch(e) { }
+    const char *what() const throw();
+  };
 };
 
 //compatibility of the executable
