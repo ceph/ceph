@@ -38,7 +38,8 @@ struct ceph_mount_info
 {
 public:
   explicit ceph_mount_info(CephContext *cct_)
-    : mounted(false),
+    : default_perms(),
+      mounted(false),
       inited(false),
       client(NULL),
       monclient(NULL),
@@ -95,6 +96,7 @@ public:
     if (ret)
       goto fail;
 
+    default_perms = Client::pick_my_perms(cct);
     inited = true;
     return 0;
 
@@ -240,6 +242,7 @@ public:
     return cct;
   }
 
+  UserPerm default_perms;
 private:
   bool mounted;
   bool inited;
@@ -427,8 +430,7 @@ extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
   std::string mount_root;
   if (root)
     mount_root = root;
-  UserPerm perms = Client::pick_my_perms(cmount->get_ceph_context());
-  return cmount->mount(mount_root, perms);
+  return cmount->mount(mount_root, cmount->default_perms);
 }
 
 extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)
@@ -441,8 +443,7 @@ extern "C" int ceph_statfs(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->statfs(path, stbuf, perms);
+  return cmount->get_client()->statfs(path, stbuf, cmount->default_perms);
 }
 
 extern "C" int ceph_get_local_osd(struct ceph_mount_info *cmount)
@@ -454,16 +455,14 @@ extern "C" int ceph_get_local_osd(struct ceph_mount_info *cmount)
 
 extern "C" const char* ceph_getcwd(struct ceph_mount_info *cmount)
 {
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_cwd(perms);
+  return cmount->get_cwd(cmount->default_perms);
 }
 
 extern "C" int ceph_chdir (struct ceph_mount_info *cmount, const char *s)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->chdir(s, perms);
+  return cmount->chdir(s, cmount->default_perms);
 }
 
 extern "C" int ceph_opendir(struct ceph_mount_info *cmount,
@@ -471,8 +470,7 @@ extern "C" int ceph_opendir(struct ceph_mount_info *cmount,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->opendir(name, (dir_result_t **)dirpp, perms);
+  return cmount->get_client()->opendir(name, (dir_result_t **)dirpp, cmount->default_perms);
 }
 
 extern "C" int ceph_closedir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
@@ -549,16 +547,14 @@ extern "C" int ceph_link (struct ceph_mount_info *cmount, const char *existing,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->link(existing, newname, perms);
+  return cmount->get_client()->link(existing, newname, cmount->default_perms);
 }
 
 extern "C" int ceph_unlink(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->unlink(path, perms);
+  return cmount->get_client()->unlink(path, cmount->default_perms);
 }
 
 extern "C" int ceph_rename(struct ceph_mount_info *cmount, const char *from,
@@ -566,8 +562,7 @@ extern "C" int ceph_rename(struct ceph_mount_info *cmount, const char *from,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->rename(from, to, perms);
+  return cmount->get_client()->rename(from, to, cmount->default_perms);
 }
 
 // dirs
@@ -575,24 +570,21 @@ extern "C" int ceph_mkdir(struct ceph_mount_info *cmount, const char *path, mode
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->mkdir(path, mode, perms);
+  return cmount->get_client()->mkdir(path, mode, cmount->default_perms);
 }
 
 extern "C" int ceph_mkdirs(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();  
-  return cmount->get_client()->mkdirs(path, mode, perms);
+  return cmount->get_client()->mkdirs(path, mode, cmount->default_perms);
 }
 
 extern "C" int ceph_rmdir(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->rmdir(path, perms);
+  return cmount->get_client()->rmdir(path, cmount->default_perms);
 }
 
 // symlinks
@@ -601,8 +593,7 @@ extern "C" int ceph_readlink(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->readlink(path, buf, size, perms);
+  return cmount->get_client()->readlink(path, buf, size, cmount->default_perms);
 }
 
 extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing,
@@ -610,8 +601,7 @@ extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->symlink(existing, newname, perms);
+  return cmount->get_client()->symlink(existing, newname, cmount->default_perms);
 }
 
 // inode stuff
@@ -620,8 +610,7 @@ extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->stat(path, stbuf, perms);
+  return cmount->get_client()->stat(path, stbuf, cmount->default_perms);
 }
 
 extern "C" int ceph_lstat(struct ceph_mount_info *cmount, const char *path,
@@ -629,8 +618,7 @@ extern "C" int ceph_lstat(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->lstat(path, stbuf, perms);
+  return cmount->get_client()->lstat(path, stbuf, cmount->default_perms);
 }
 
 extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
@@ -638,8 +626,7 @@ extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->setattr(relpath, attr, mask, perms);
+  return cmount->get_client()->setattr(relpath, attr, mask, cmount->default_perms);
 }
 
 // *xattr() calls supporting samba/vfs
@@ -648,24 +635,21 @@ extern "C" int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, c
   if (!cmount->is_mounted())
     return -ENOTCONN;
 
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->getxattr(path, name, value, size, perms);
+  return cmount->get_client()->getxattr(path, name, value, size, cmount->default_perms);
 }
 
 extern "C" int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->lgetxattr(path, name, value, size, perms);
+  return cmount->get_client()->lgetxattr(path, name, value, size, cmount->default_perms);
 }
 
 extern "C" int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->fgetxattr(fd, name, value, size, perms);
+  return cmount->get_client()->fgetxattr(fd, name, value, size, cmount->default_perms);
 }
 
 
@@ -673,72 +657,63 @@ extern "C" int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, 
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->listxattr(path, list, size, perms);
+  return cmount->get_client()->listxattr(path, list, size, cmount->default_perms);
 }
 
 extern "C" int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->llistxattr(path, list, size, perms);
+  return cmount->get_client()->llistxattr(path, list, size, cmount->default_perms);
 }
 
 extern "C" int ceph_flistxattr(struct ceph_mount_info *cmount, int fd, char *list, size_t size)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->flistxattr(fd, list, size, perms);
+  return cmount->get_client()->flistxattr(fd, list, size, cmount->default_perms);
 }
 
 extern "C" int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->removexattr(path, name, perms);
+  return cmount->get_client()->removexattr(path, name, cmount->default_perms);
 }
 
 extern "C" int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->lremovexattr(path, name, perms);
+  return cmount->get_client()->lremovexattr(path, name, cmount->default_perms);
 }
 
 extern "C" int ceph_fremovexattr(struct ceph_mount_info *cmount, int fd, const char *name)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->fremovexattr(fd, name, perms);
+  return cmount->get_client()->fremovexattr(fd, name, cmount->default_perms);
 }
 
 extern "C" int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->setxattr(path, name, value, size, flags, perms);
+  return cmount->get_client()->setxattr(path, name, value, size, flags, cmount->default_perms);
 }
 
 extern "C" int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->lsetxattr(path, name, value, size, flags, perms);
+  return cmount->get_client()->lsetxattr(path, name, value, size, flags, cmount->default_perms);
 }
 
 extern "C" int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->fsetxattr(fd, name, value, size, flags, perms);
+  return cmount->get_client()->fsetxattr(fd, name, value, size, flags, cmount->default_perms);
 }
 /* end xattr support */
 
@@ -746,39 +721,34 @@ extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->chmod(path, mode, perms);
+  return cmount->get_client()->chmod(path, mode, cmount->default_perms);
 }
 extern "C" int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->fchmod(fd, mode, perms);
+  return cmount->get_client()->fchmod(fd, mode, cmount->default_perms);
 }
 extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 			  int uid, int gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->chown(path, uid, gid, perms);
+  return cmount->get_client()->chown(path, uid, gid, cmount->default_perms);
 }
 extern "C" int ceph_fchown(struct ceph_mount_info *cmount, int fd,
 			   int uid, int gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->fchown(fd, uid, gid, perms);
+  return cmount->get_client()->fchown(fd, uid, gid, cmount->default_perms);
 }
 extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
 			   int uid, int gid)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->lchown(path, uid, gid, perms);
+  return cmount->get_client()->lchown(path, uid, gid, cmount->default_perms);
 }
 
 
@@ -787,8 +757,7 @@ extern "C" int ceph_utime(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->utime(path, buf, perms);
+  return cmount->get_client()->utime(path, buf, cmount->default_perms);
 }
 
 extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
@@ -804,8 +773,7 @@ extern "C" int ceph_truncate(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->truncate(path, size, perms);
+  return cmount->get_client()->truncate(path, size, cmount->default_perms);
 }
 
 // file ops
@@ -814,8 +782,7 @@ extern "C" int ceph_mknod(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->mknod(path, mode, perms, rdev);
+  return cmount->get_client()->mknod(path, mode, cmount->default_perms, rdev);
 }
 
 extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
@@ -823,8 +790,7 @@ extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->open(path, flags, perms, mode);
+  return cmount->get_client()->open(path, flags, cmount->default_perms, mode);
 }
 
 extern "C" int ceph_open_layout(struct ceph_mount_info *cmount, const char *path, int flags,
@@ -832,9 +798,9 @@ extern "C" int ceph_open_layout(struct ceph_mount_info *cmount, const char *path
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->open(path, flags, perms, mode, stripe_unit,
-      stripe_count, object_size, data_pool);
+  return cmount->get_client()->open(path, flags, cmount->default_perms, mode,
+				    stripe_unit, stripe_count,
+				    object_size, data_pool);
 }
 
 extern "C" int ceph_close(struct ceph_mount_info *cmount, int fd)
@@ -849,8 +815,7 @@ extern "C" int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->lseek(fd, offset, whence, perms);
+  return cmount->get_client()->lseek(fd, offset, whence, cmount->default_perms);
 }
 
 extern "C" int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf,
@@ -889,8 +854,7 @@ extern "C" int ceph_ftruncate(struct ceph_mount_info *cmount, int fd, int64_t si
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->ftruncate(fd, size, perms);
+  return cmount->get_client()->ftruncate(fd, size, cmount->default_perms);
 }
 
 extern "C" int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly)
@@ -912,8 +876,7 @@ extern "C" int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *s
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->fstat(fd, stbuf, perms);
+  return cmount->get_client()->fstat(fd, stbuf, cmount->default_perms);
 }
 
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
@@ -944,8 +907,7 @@ extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   return l.stripe_unit;
@@ -971,8 +933,7 @@ extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const 
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   return l.stripe_count;
@@ -998,8 +959,7 @@ extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   return l.object_size;
@@ -1025,8 +985,7 @@ extern "C" int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *pa
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   return l.pool_id;
@@ -1071,8 +1030,7 @@ extern "C" int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const cha
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   string name = cmount->get_client()->get_pool_name(l.pool_id);
@@ -1112,8 +1070,7 @@ extern "C" int ceph_get_path_layout(struct ceph_mount_info *cmount, const char *
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   if (stripe_unit)
@@ -1148,8 +1105,7 @@ extern "C" int ceph_get_path_replication(struct ceph_mount_info *cmount, const c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  r = cmount->get_client()->describe_layout(path, &l, perms);
+  r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
     return r;
   int rep = cmount->get_client()->get_pool_replication(l.pool_id);
@@ -1326,8 +1282,7 @@ extern "C" int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const ch
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return cmount->get_client()->get_caps_issued(path, perms);
+  return cmount->get_client()->get_caps_issued(path, cmount->default_perms);
 }
 
 extern "C" int ceph_get_stripe_unit_granularity(struct ceph_mount_info *cmount)
@@ -1388,8 +1343,7 @@ extern "C" int ceph_ll_lookup_inode(
     struct inodeno_t ino,
     Inode **inode)
 {
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  int r = (cmount->get_client())->lookup_ino(ino, perms, inode);
+  int r = (cmount->get_client())->lookup_ino(ino, cmount->default_perms, inode);
   if (r) {
     return r;
   }
@@ -1399,7 +1353,7 @@ extern "C" int ceph_ll_lookup_inode(
 
   // Request the parent inode, so that we can look up the name
   Inode *parent;
-  r = (cmount->get_client())->lookup_parent(*inode, perms, &parent);
+  r = (cmount->get_client())->lookup_parent(*inode, cmount->default_perms, &parent);
   if (r && r != -EINVAL) {
     // Unexpected error
     (cmount->get_client())->ll_forget(*inode, 1);
@@ -1414,7 +1368,7 @@ extern "C" int ceph_ll_lookup_inode(
   assert(parent != NULL);
 
   // Finally, get the name (dentry) of the requested inode
-  r = (cmount->get_client())->lookup_name(*inode, parent, perms);
+  r = (cmount->get_client())->lookup_name(*inode, parent, cmount->default_perms);
   if (r) {
     // Unexpected error
     (cmount->get_client())->ll_forget(parent, 1);
@@ -1450,8 +1404,7 @@ extern "C" int ceph_ll_walk(class ceph_mount_info *cmount, const char *name,
 			    struct Inode **i,
 			    struct stat *attr)
 {
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return (cmount->get_client()->ll_walk(name, i, attr, perms));
+  return (cmount->get_client()->ll_walk(name, i, attr, cmount->default_perms));
 }
 
 extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
@@ -1535,8 +1488,7 @@ extern "C" int ceph_ll_fsync(class ceph_mount_info *cmount,
 extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
 				Fh *fh, off_t offset, int whence)
 {
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return (cmount->get_client()->ll_lseek(fh, offset, whence, perms));
+  return (cmount->get_client()->ll_lseek(fh, offset, whence, cmount->default_perms));
 }
 
 extern "C" int ceph_ll_write(class ceph_mount_info *cmount,
@@ -1652,8 +1604,7 @@ extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_statfs(class ceph_mount_info *cmount,
 			      Inode *in, struct statvfs *stbuf)
 {
-  UserPerm perms = cmount->get_client()->pick_my_perms();
-  return (cmount->get_client()->ll_statfs(in, stbuf, perms));
+  return (cmount->get_client()->ll_statfs(in, stbuf, cmount->default_perms));
 }
 
 extern "C" int ceph_ll_readlink(class ceph_mount_info *cmount,
