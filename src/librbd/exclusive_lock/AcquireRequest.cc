@@ -184,7 +184,11 @@ Context *AcquireRequest<I>::handle_refresh(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  if (*ret_val < 0) {
+  if (*ret_val == -ERESTART) {
+    // next issued IO or op will (re)-refresh the image and shut down lock
+    ldout(cct, 5) << ": exclusive lock dynamically disabled" << dendl;
+    *ret_val = 0;
+  } else if (*ret_val < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(*ret_val)
                << dendl;
     m_error_result = *ret_val;

@@ -698,6 +698,7 @@ cmake .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DWITH_MANPAGE=ON \
+    -DWITH_PYTHON3=ON \
     -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
@@ -1309,7 +1310,6 @@ fi
 
 %files resource-agents
 %defattr(0755,root,root,-)
-# N.B. src/ocf/Makefile.am uses $(prefix)/lib
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
@@ -1434,6 +1434,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
+%{_includedir}/cephfs/ceph_statx.h
 %{_libdir}/libcephfs.so
 
 %files -n python-cephfs

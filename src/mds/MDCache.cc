@@ -355,9 +355,11 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   in->inode.mode = 0500 | mode;
   in->inode.size = 0;
   in->inode.ctime = 
-    in->inode.mtime = ceph_clock_now(g_ceph_context);
+    in->inode.mtime =
+    in->inode.btime = ceph_clock_now(g_ceph_context);
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
+  in->inode.change_attr = 0;
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
@@ -2151,6 +2153,8 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
+	pf->fragstat.change_attr++;
+	dout(10) << "predirty_journal_parents bumping change_attr to " << pf->fragstat.change_attr << " on " << parent << dendl;
 	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
 	  pf->rstat.rctime = pf->fragstat.mtime;
@@ -2275,11 +2279,13 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     if (do_parent_mtime || linkunlink) {
       dout(20) << "predirty_journal_parents add_delta " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
-      bool touched_mtime = false;
-      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      bool touched_mtime = false, touched_chattr = false;
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime, &touched_chattr);
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      if (touched_chattr)
+	pi->change_attr = pi->dirstat.change_attr;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
@@ -6350,10 +6356,22 @@ bool MDCache::trim(int max, int count)
   bool is_standby_replay = mds->is_standby_replay();
   int unexpirable = 0;
   list<CDentry*> unexpirables;
-  // trim dentries from the LRU
-  while (lru.lru_get_size() + unexpirable > (unsigned)max) {
+
+  // trim dentries from the LRU: only enough to satisfy `max`,
+  // unless we see null dentries at the bottom of the LRU,
+  // in which case trim all those.
+  bool trimming_nulls = true;
+  while (trimming_nulls || lru.lru_get_size() + unexpirable > (unsigned)max) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
-    if (!dn) break;
+    if (!dn) {
+      break;
+    }
+    if (!dn->get_linkage()->is_null()) {
+      trimming_nulls = false;
+      if (lru.lru_get_size() + unexpirable <= (unsigned)max) {
+        break;
+      }
+    }
     if ((is_standby_replay && dn->get_linkage()->inode &&
         dn->get_linkage()->inode->item_open_file.is_on_list()) ||
 	trim_dentry(dn, expiremap)) {
@@ -11995,6 +12013,8 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   if (!good_fragstat) {
     if (pf->fragstat.mtime > frag_info.mtime)
       frag_info.mtime = pf->fragstat.mtime;
+    if (pf->fragstat.change_attr > frag_info.change_attr)
+      frag_info.change_attr = pf->fragstat.change_attr;
     pf->fragstat = frag_info;
     mds->locker->mark_updated_scatterlock(&diri->filelock);
     mdr->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);

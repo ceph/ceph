@@ -620,7 +620,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
   lock.Unlock();
 }
 
-int AsyncMessenger::get_proto_version(int peer_type, bool connect)
+int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
 {
   int my_type = my_inst.name.type();
 

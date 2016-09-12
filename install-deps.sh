@@ -55,8 +55,8 @@ if [ x`uname`x = xFreeBSDx ]; then
 
     exit
 else
-    DISTRO=$(grep  "^ID=" /etc/os-release | sed "s/ID=//")
-    case $DISTRO in
+    source /etc/os-release
+    case $ID in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
@@ -118,7 +118,8 @@ else
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
-        echo "$DISTRO is unknown, dependencies will have to be installed manually."
+        echo "$ID is unknown, dependencies will have to be installed manually."
+	exit 1
         ;;
     esac
 fi

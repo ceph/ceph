@@ -252,6 +252,15 @@ void ImageReplayer<I>::BootstrapProgressContext::update_progress(
 }
 
 template <typename I>
+void ImageReplayer<I>::RemoteJournalerListener::handle_update(
+  ::journal::JournalMetadata *) {
+  FunctionContext *ctx = new FunctionContext([this](int r) {
+      replayer->handle_remote_journal_metadata_updated();
+    });
+  replayer->m_threads->work_queue->queue(ctx, 0);
+}
+
+template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads *threads,
                              shared_ptr<ImageDeleter> image_deleter,
                              ImageSyncThrottlerRef<I> image_sync_throttler,
@@ -277,7 +286,8 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
   m_lock("rbd::mirror::ImageReplayer " + stringify(remote_pool_id) + " " +
 	 remote_image_id),
   m_progress_cxt(this),
-  m_resync_listener(new ResyncListener<I>(this))
+  m_resync_listener(new ResyncListener<I>(this)),
+  m_remote_listener(this)
 {
   // Register asok commands using a temporary "remote_pool_name/global_image_id"
   // name.  When the image name becomes known on start the asok commands will be
@@ -455,7 +465,14 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
     if (do_resync) {
       Context *on_finish = m_on_start_finish;
+      m_stopping_for_resync = true;
       FunctionContext *ctx = new FunctionContext([this, on_finish](int r) {
+	  if (r < 0) {
+	    if (on_finish) {
+	      on_finish->complete(r);
+	    }
+	    return;
+	  }
           resync_image(on_finish);
         });
       m_on_start_finish = ctx;
@@ -499,6 +516,27 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
     on_start_fail(r, "error initializing remote journal");
     return;
   } else if (on_start_interrupted()) {
+    return;
+  }
+
+  m_remote_journaler->add_listener(&m_remote_listener);
+
+  cls::journal::Client client;
+  r = m_remote_journaler->get_cached_client(m_local_mirror_uuid, &client);
+  if (r < 0) {
+    derr << "error retrieving remote journal client: " << cpp_strerror(r)
+	 << dendl;
+    on_start_fail(r, "error retrieving remote journal client");
+    return;
+  }
+
+  if (client.state != cls::journal::CLIENT_STATE_CONNECTED) {
+    dout(5) << "client flagged disconnected, stopping image replay" << dendl;
+    if (m_local_image_ctx->mirroring_resync_after_disconnect) {
+      Mutex::Locker locker(m_lock);
+      m_stopping_for_resync = true;
+    }
+    on_start_fail(-ENOTCONN, "disconnected");
     return;
   }
 
@@ -630,15 +668,18 @@ bool ImageReplayer<I>::on_start_interrupted()
 }
 
 template <typename I>
-void ImageReplayer<I>::stop(Context *on_finish, bool manual)
+void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
+			    const std::string& desc)
 {
-  dout(20) << "on_finish=" << on_finish << dendl;
+  dout(20) << "on_finish=" << on_finish << ", manual=" << manual
+	   << ", desc=" << desc << dendl;
 
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
   bool running = true;
   {
     Mutex::Locker locker(m_lock);
+
     if (!is_running_()) {
       running = false;
     } else {
@@ -677,14 +718,14 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
   }
 
   if (shut_down_replay) {
-    on_stop_journal_replay();
+    on_stop_journal_replay(r, desc);
   } else if (on_finish != nullptr) {
     on_finish->complete(0);
   }
 }
 
 template <typename I>
-void ImageReplayer<I>::on_stop_journal_replay()
+void ImageReplayer<I>::on_stop_journal_replay(int r, const std::string &desc)
 {
   dout(20) << "enter" << dendl;
 
@@ -698,7 +739,7 @@ void ImageReplayer<I>::on_stop_journal_replay()
     m_state = STATE_STOPPING;
   }
 
-  set_state_description(0, "");
+  set_state_description(r, desc);
   update_mirror_image_status(false, boost::none);
   reschedule_update_status_task(-1);
   shut_down(0);
@@ -1336,6 +1377,7 @@ void ImageReplayer<I>::shut_down(int r) {
         ctx->complete(0);
       });
     ctx = new FunctionContext([this, ctx](int r) {
+	m_remote_journaler->remove_listener(&m_remote_listener);
         m_remote_journaler->shut_down(ctx);
       });
     if (m_stopping_for_resync) {
@@ -1433,6 +1475,30 @@ void ImageReplayer<I>::handle_shut_down(int r) {
   if (on_stop != nullptr) {
     dout(20) << "on stop finish complete, r=" << r << dendl;
     on_stop->complete(r);
+  }
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_remote_journal_metadata_updated() {
+  dout(20) << dendl;
+
+  cls::journal::Client client;
+  {
+    Mutex::Locker locker(m_lock);
+    if (!is_running_()) {
+      return;
+    }
+
+    int r = m_remote_journaler->get_cached_client(m_local_mirror_uuid, &client);
+    if (r < 0) {
+      derr << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+      return;
+    }
+  }
+
+  if (client.state != cls::journal::CLIENT_STATE_CONNECTED) {
+    dout(0) << "client flagged disconnected, stopping image replay" << dendl;
+    stop(nullptr, false, -ENOTCONN, "disconnected");
   }
 }
 

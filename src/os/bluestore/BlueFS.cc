@@ -998,10 +998,14 @@ bool BlueFS::_should_compact_log()
   float ratio = (float)current / (float)expected;
   dout(10) << __func__ << " current 0x" << std::hex << current
 	   << " expected " << expected << std::dec
-	   << " ratio " << ratio << dendl;
-  if (current < g_conf->bluefs_log_compact_min_size ||
-      ratio < g_conf->bluefs_log_compact_min_ratio)
+	   << " ratio " << ratio
+	   << (log_flushing ? " (async compaction in progress)" : "")
+	   << dendl;
+  if (log_flushing ||
+      current < g_conf->bluefs_log_compact_min_size ||
+      ratio < g_conf->bluefs_log_compact_min_ratio) {
     return false;
+  }
   return true;
 }
 
@@ -1141,16 +1145,15 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   bluefs_transaction_t t;
   _compact_log_dump_metadata(&t);
 
+  // conservative estimate for final encoded size
+  new_log_jump_to = ROUND_UP_TO(t.op_bl.length() + super.block_size * 2,
+                                g_conf->bluefs_alloc_size);
+  t.op_jump(log_seq, new_log_jump_to);
+
   bufferlist bl;
   ::encode(t, bl);
   _pad_bl(bl);
 
-  new_log_jump_to = ROUND_UP_TO(bl.length() + super.block_size,
-                                g_conf->bluefs_alloc_size);
-  bluefs_transaction_t t2;
-  t2.op_jump(log_seq, new_log_jump_to);
-  ::encode(t2, bl);
-  _pad_bl(bl);
   dout(10) << __func__ << " new_log_jump_to 0x" << std::hex << new_log_jump_to
 	   << std::dec << dendl;
 
@@ -1284,8 +1287,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   assert(!log_t.empty());
 
   // allocate some more space (before we run out)?
-  uint64_t runway = log_writer->file->fnode.get_allocated() - log_writer->pos;
-  if (runway < g_conf->bluefs_min_log_runway) {
+  int64_t runway = log_writer->file->fnode.get_allocated() -
+    log_writer->get_effective_write_pos();
+  if (runway < (int64_t)g_conf->bluefs_min_log_runway) {
     dout(10) << __func__ << " allocating more log runway (0x"
 	     << std::hex << runway << std::dec  << " remaining)" << dendl;
     while (new_log_writer) {
@@ -1374,6 +1378,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " to " << h->file->fnode << dendl;
   assert(!h->file->deleted);
   assert(h->file->num_readers.load() == 0);
+
+  bool buffered;
+  if (h->file->fnode.ino == 1 || h->writer_type == WRITER_WAL)
+    buffered = false;
+  else
+    buffered = g_conf->bluefs_buffered_io;
 
   if (offset + length <= h->pos)
     return 0;
@@ -1506,8 +1516,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       h->tail_block.substr_of(bl, bl.length() - tail, tail);
       t.append_zero(super.block_size - tail);
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev],
-			     g_conf->bluefs_buffered_io);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1679,7 +1688,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len, vector<bluefs_extent_t> *ev)
   }
   for (int i = 0; i < count; i++) {
     bluefs_extent_t e = bluefs_extent_t(id, extents[i].offset, extents[i].length);
-    if (!ev->empty() && ev->back().end() == (uint64_t) e.offset) {
+    if (!ev->empty() &&
+	ev->back().bdev == e.bdev &&
+	ev->back().end() == (uint64_t) e.offset) {
       ev->back().length += e.length;
     } else {
       ev->push_back(e);

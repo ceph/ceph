@@ -200,8 +200,20 @@ endif()
 # Python stuff
 find_package(PythonInterp 2 REQUIRED)
 find_package(PythonLibs 2 REQUIRED)
-find_package(Python3Interp 3 REQUIRED)
-find_package(Python3Libs 3 REQUIRED)
+
+option(WITH_PYTHON3 "build python3 bindings" "CHECK")
+if(WITH_PYTHON3 MATCHES "check|CHECK")
+  find_package(Python3Interp 3 QUIET)
+  find_package(Python3Libs 3 QUIET)
+  if(PYTHON3INTERP_FOUND AND PYTHON3LIBS_FOUND)
+    set(WITH_PYTHON3 ON)
+  else()
+    set(WITH_PYTHON3 OFF)
+  endif()
+elseif(WITH_PYTHON3)
+  find_package(Python3Interp 3 REQUIRED)
+  find_package(Python3Libs 3 REQUIRED)
+endif()
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
@@ -458,7 +470,7 @@ endif(ENABLE_SHARED)
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common json_spirit erasure_code rt resolv
+target_link_libraries(common json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
   ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
@@ -467,6 +479,7 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
+include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
@@ -704,9 +717,11 @@ install(PROGRAMS
 
 add_subdirectory(bash_completion)
 
-set(parse_secret_files
-  common/secret.c)
-add_library(parse_secret_objs OBJECT ${parse_secret_files})
+if(KEYUTILS_FOUND)
+  set(parse_secret_files
+    common/secret.c)
+  add_library(parse_secret_objs OBJECT ${parse_secret_files})
+endif()
 
 if(WITH_LIBCEPHFS)
   add_subdirectory(client)
@@ -758,7 +773,9 @@ endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
 
-add_library(krbd_objs OBJECT krbd.cc)
+if(LINUX)
+  add_library(krbd_objs OBJECT krbd.cc)
+endif()
 
 if(${WITH_RBD})
   add_subdirectory(librbd)

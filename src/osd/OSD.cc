@@ -3988,22 +3988,24 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::PING:
     {
       if (cct->_conf->osd_debug_drop_ping_probability > 0) {
-	if (debug_heartbeat_drops_remaining.count(from)) {
-	  if (debug_heartbeat_drops_remaining[from] == 0) {
-	    debug_heartbeat_drops_remaining.erase(from);
+	auto heartbeat_drop = debug_heartbeat_drops_remaining.find(from);
+	if (heartbeat_drop != debug_heartbeat_drops_remaining.end()) {
+	  if (heartbeat_drop->second == 0) {
+	    debug_heartbeat_drops_remaining.erase(heartbeat_drop);
 	  } else {
-	    debug_heartbeat_drops_remaining[from]--;
+	    --heartbeat_drop->second;
 	    dout(5) << "Dropping heartbeat from " << from
-		    << ", " << debug_heartbeat_drops_remaining[from]
+		    << ", " << heartbeat_drop->second
 		    << " remaining to drop" << dendl;
 	    break;
 	  }
 	} else if (cct->_conf->osd_debug_drop_ping_probability >
 	           ((((double)(rand()%100))/100.0))) {
-	  debug_heartbeat_drops_remaining[from] =
-	    cct->_conf->osd_debug_drop_ping_duration;
+	  heartbeat_drop =
+	    debug_heartbeat_drops_remaining.insert(std::make_pair(from,
+	                     cct->_conf->osd_debug_drop_ping_duration)).first;
 	  dout(5) << "Dropping heartbeat from " << from
-		  << ", " << debug_heartbeat_drops_remaining[from]
+		  << ", " << heartbeat_drop->second
 		  << " remaining to drop" << dendl;
 	  break;
 	}
@@ -4069,18 +4071,20 @@ void OSD::handle_osd_ping(MOSDPing *m)
         cutoff -= cct->_conf->osd_heartbeat_grace;
         if (i->second.is_healthy(cutoff)) {
           // Cancel false reports
-          if (failure_queue.count(from)) {
+	  auto failure_queue_entry = failure_queue.find(from);
+	  if (failure_queue_entry != failure_queue.end()) {
             dout(10) << "handle_osd_ping canceling queued "
                      << "failure report for osd." << from << dendl;
-            failure_queue.erase(from);
+            failure_queue.erase(failure_queue_entry);
           }
 
-          if (failure_pending.count(from)) {
+	  auto failure_pending_entry = failure_pending.find(from);
+	  if (failure_pending_entry != failure_pending.end()) {
             dout(10) << "handle_osd_ping canceling in-flight "
                      << "failure report for osd." << from << dendl;
             send_still_alive(curmap->get_epoch(),
-              failure_pending[from].second);
-            failure_pending.erase(from);
+			     failure_pending_entry->second.second);
+            failure_pending.erase(failure_pending_entry);
           }
         }
       }
@@ -4407,7 +4411,6 @@ void OSD::check_ops_in_flight()
       clog->warn() << *i;
     }
   }
-  return;
 }
 
 // Usage:
@@ -4567,7 +4570,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     return;
   }
   ss << "Internal error - command=" << command;
-  return;
 }
 
 // =========================================

@@ -530,7 +530,6 @@ OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 OPTION(mds_wipe_sessions, OPT_BOOL, 0)
 OPTION(mds_wipe_ino_prealloc, OPT_BOOL, 0)
 OPTION(mds_skip_ino, OPT_INT, 0)
-OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_for_fscid, OPT_INT, -1)
@@ -977,9 +976,14 @@ OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
  * And ask for compressing at least 12.5%(1/8) off, by default.
  */
 OPTION(bluestore_compression_required_ratio, OPT_DOUBLE, .875)
+OPTION(bluestore_extent_map_shard_max_size, OPT_U32, 1200)
+OPTION(bluestore_extent_map_shard_target_size, OPT_U32, 500)
+OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
+OPTION(bluestore_extent_map_inline_shard_prealloc_size, OPT_U32, 256)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
 OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
+OPTION(bluestore_shared_blob_hash_table_size_ratio, OPT_FLOAT, 2)  // multiple of onode_cache_size
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
@@ -1001,6 +1005,7 @@ OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_wal_max_ops, OPT_U64, 512)
 OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_blobid_prealloc, OPT_U64, 10240)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
@@ -1212,6 +1217,7 @@ OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be 
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
 OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether to automatically acquire/release exclusive lock until it is explicitly requested, i.e. before we know the user of librbd is properly using the lock API
+OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1250,6 +1256,7 @@ OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending 
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 OPTION(rbd_journal_max_payload_bytes, OPT_U32, 16384) // maximum journal payload size before splitting
+OPTION(rbd_journal_max_concurrent_object_sets, OPT_INT, 0) // maximum number of object sets a journal client can be behind before it is automatically unregistered
 
 /**
  * RBD Mirror options
