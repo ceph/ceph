@@ -956,23 +956,37 @@ namespace librbd {
 
     /******************** rbd_directory object methods ********************/
 
-    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
-		   const std::string &name, std::string *id)
-    {
-      bufferlist in, out;
-      ::encode(name, in);
-      int r = ioctx->exec(oid, "rbd", "dir_get_id", in, out);
-      if (r < 0)
-	return r;
+    void dir_get_id_start(librados::ObjectReadOperation *op,
+                          const std::string &image_name) {
+      bufferlist bl;
+      ::encode(image_name, bl);
 
-      bufferlist::iterator iter = out.begin();
+      op->exec("rbd", "dir_get_id", bl);
+    }
+
+    int dir_get_id_finish(bufferlist::iterator *iter, std::string *image_id) {
       try {
-	::decode(*id, iter);
+        ::decode(*image_id, *iter);
       } catch (const buffer::error &err) {
-	return -EBADMSG;
+        return -EBADMSG;
       }
 
       return 0;
+    }
+
+    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
+                   const std::string &name, std::string *id) {
+      librados::ObjectReadOperation op;
+      dir_get_id_start(&op, name);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      return dir_get_id_finish(&iter, id);
     }
 
     void dir_get_name_start(librados::ObjectReadOperation *op,
