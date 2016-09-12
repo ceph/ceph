@@ -2353,7 +2353,7 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
   MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_req());
 
   PushOp pop;
-  pop.soid = m->recovery_info.soid;
+  pop.soid = m->poid;
   pop.version = m->version;
   m->claim_data(pop.data);
   pop.data_included.swap(m->data_included);
