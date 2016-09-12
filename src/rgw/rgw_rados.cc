@@ -1492,7 +1492,9 @@ int RGWZoneParams::fix_pool_names()
   }
 
   domain_root = fix_zone_pool_name(pool_names, name, ".rgw.data.root", domain_root.name);
-  metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+  if (!metadata_heap.name.empty()) {
+    metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+  }
   control_pool = fix_zone_pool_name(pool_names, name, ".rgw.control", control_pool.name);
   gc_pool = fix_zone_pool_name(pool_names, name ,".rgw.gc", gc_pool.name);
   lc_pool = fix_zone_pool_name(pool_names, name ,".rgw.lc", lc_pool.name);
@@ -3375,11 +3377,6 @@ int RGWRados::replace_region_with_zonegroup()
       ldout(cct, 0) << __func__ << ": error initializing default zone params: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    /* default zone is missing meta_heap */
-    if (ret != -ENOENT && zoneparams.metadata_heap.name.empty()) {
-      zoneparams.metadata_heap = ".rgw.meta";
-      return zoneparams.update();
-    }
     /* update master zone */
     RGWZoneGroup default_zg(default_zonegroup_name);
     ret = default_zg.init(cct, this);
@@ -3491,9 +3488,6 @@ int RGWRados::replace_region_with_zonegroup()
       if (ret < 0) {
         ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
-      }
-      if (zoneparams.metadata_heap.name.empty()) {
-	zoneparams.metadata_heap = ".rgw.meta";
       }
       zonegroup.realm_id = realm.get_id();
       ret = zoneparams.update();

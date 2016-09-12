@@ -830,6 +830,10 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
 
   rgw_bucket heap_pool(store->get_zone_params().metadata_heap);
 
+  if (heap_pool.name.empty()) {
+    return 0;
+  }
+
   RGWObjVersionTracker otracker;
   otracker.write_version = objv_tracker->write_version;
   string oid = heap_oid(handler, key, objv_tracker->write_version);
@@ -851,6 +855,10 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
   }
 
   rgw_bucket heap_pool(store->get_zone_params().metadata_heap);
+
+  if (heap_pool.name.empty()) {
+    return 0;
+  }
 
   string oid = heap_oid(handler, key, objv_tracker->write_version);
   rgw_obj obj(heap_pool, oid);
@@ -886,6 +894,7 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key
   ret = rgw_put_system_obj(store, bucket, oid,
                            bl.c_str(), bl.length(), exclusive,
                            objv_tracker, mtime, pattrs);
+
   if (ret < 0) {
     int r = remove_from_heap(handler, key, objv_tracker);
     if (r < 0) {
