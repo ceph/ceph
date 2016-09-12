@@ -7946,9 +7946,9 @@ int BlueStore::_do_write(
         "compression_max_blob_size",
         comp_max_blob_size.load(), 
         [&]() {
-          uint64_t val;
+          int val;
           if(c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
-   	    return boost::optional<uint64_t>(val);
+   	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
         }
@@ -7960,9 +7960,9 @@ int BlueStore::_do_write(
         "compression_min_blob_size",
         comp_min_blob_size.load(), 
         [&]() {
-          uint64_t val;
+          int val;
           if(c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
-   	    return boost::optional<uint64_t>(val);
+   	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
         }
