@@ -1380,7 +1380,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   assert(h->file->num_readers.load() == 0);
 
   bool buffered;
-  if (h->file->fnode.ino == 1 || h->writer_type == WRITER_WAL)
+  if (h->file->fnode.ino == 1)
     buffered = false;
   else
     buffered = g_conf->bluefs_buffered_io;
