@@ -698,6 +698,14 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
 void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
   Mutex::Locker l(mdr->dispatch_mutex);
+  if (mdr->is_committing()) {
+    // queued by Server::respond_to_request() for safe reply
+    if (!mdr->killed)
+      server->send_safe_reply(mdr);
+    request_finish(mdr);
+    return;
+  }
+
   if (mdr->killed) {
     dout(10) << "request " << *mdr << " was killed" << dendl;
     return;
@@ -740,7 +748,7 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
 
 void MDCache::request_kill(const MDRequestRef& mdr)
 {
-  mdr->dispatch_mutex.Lock();
+  Mutex::Locker l(mdr->dispatch_mutex);
   mdr->killed = true;
   if (mdr->is_committing()) {
     dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
@@ -748,7 +756,6 @@ void MDCache::request_kill(const MDRequestRef& mdr)
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
   }
-  mdr->dispatch_mutex.Unlock();
 }
 
 void MDCache::lock_parents_for_linkunlink(const MDRequestRef& mdr, CInode *in,

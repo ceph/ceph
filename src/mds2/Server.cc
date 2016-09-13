@@ -130,7 +130,7 @@ void Server::dispatch(Message *m)
 
 
 class C_MDS_session_finish : public ServerContext {
-  Session *session;
+  SessionRef session;
   uint64_t state_seq;
   bool open;
   version_t cmapv;
@@ -142,13 +142,10 @@ public:
     ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
 		       interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) {
-      session->get();
-    }
+    ServerContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
   void finish(int r) {
     assert(r == 0);
-    server->__session_logged(session, state_seq, open, cmapv, inos, inotablev);
-    session->put();
+    server->__session_logged(session.get(), state_seq, open, cmapv, inos, inotablev);
     if (fin) {
       fin->complete(r);
     }
@@ -459,11 +456,10 @@ void Server::find_idle_sessions()
 
   mds->sessionmap->mutex_lock();
   while (1) {
-    Session *session = mds->sessionmap->get_oldest_session(Session::STATE_OPEN);
+    SessionRef session = mds->sessionmap->get_oldest_session(Session::STATE_OPEN);
     if (!session)
       break;
 
-    session->get();
     if (!session->mutex_trylock()) {
       mds->sessionmap->mutex_unlock();
       session->mutex_lock();
@@ -471,7 +467,6 @@ void Server::find_idle_sessions()
 
       if (!session->is_open()) {
 	session->mutex_unlock();
-	session->put();
 	continue;
       }
     }
@@ -481,24 +476,22 @@ void Server::find_idle_sessions()
       dout(20) << "laggiest active session is " << session->info.inst << " and sufficiently new ("
 	       << session->last_cap_renew << ")" << dendl;
       session->mutex_unlock();
-      session->put();
       break;
     }
 
     dout(10) << "new stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
-    uint64_t sseq = mds->sessionmap->set_state(session, Session::STATE_STALE);
-    mds->send_message_client(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()), session);
+    uint64_t sseq = mds->sessionmap->set_state(session.get(), Session::STATE_STALE);
+    mds->send_message_client(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()), session.get());
 
     mds->sessionmap->mutex_unlock();
 
     ceph_seq_t lseq = session->lease_seq;
 
-    mds->locker->revoke_stale_caps(session, sseq);
-    mds->locker->remove_stale_leases(session, lseq);
+    mds->locker->revoke_stale_caps(session.get(), sseq);
+    mds->locker->remove_stale_leases(session.get(), lseq);
 
     // finish_flush_session(session, session->get_push_seq());
     session->mutex_unlock();
-    session->put();
     mds->sessionmap->mutex_lock();
   }
   mds->sessionmap->mutex_unlock();
@@ -516,11 +509,10 @@ void Server::find_idle_sessions()
 
   mds->sessionmap->mutex_lock();
   while (1) {
-    Session *session = mds->sessionmap->get_oldest_session(Session::STATE_STALE);
+    SessionRef session = mds->sessionmap->get_oldest_session(Session::STATE_STALE);
     if (!session)
       break;
 
-    session->get();
     if (!session->mutex_trylock()) {
       mds->sessionmap->mutex_unlock();
       session->mutex_lock();
@@ -528,7 +520,6 @@ void Server::find_idle_sessions()
 
       if (!session->is_stale()) {
 	session->mutex_unlock();
-	session->put();
 	continue;
       }
     }
@@ -544,7 +535,6 @@ void Server::find_idle_sessions()
       dout(20) << "oldest stale session is " << session->info.inst << " and sufficiently new ("
 	       << session->last_cap_renew << ")" << dendl;
       session->mutex_unlock();
-      session->put();
       break;
     }
     mds->sessionmap->mutex_unlock();
@@ -554,10 +544,9 @@ void Server::find_idle_sessions()
     mds->clog->info() << "closing stale session " << session->info.inst
 		      << " after " << age << "\n";
     dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
-    kill_session(session, NULL);
+    kill_session(session.get(), NULL);
 
     session->mutex_unlock();
-    session->put();
     mds->sessionmap->mutex_lock();
   }
   mds->sessionmap->mutex_unlock();
@@ -818,15 +807,18 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
 void Server::respond_to_request(const MDRequestRef& mdr, int r)
 {
+  bool queue_safe_reply = false;
   if (mdr->killed) {
     //
   } else if (mdr->client_request) {
-    reply_client_request(mdr, new MClientReply(mdr->client_request, r));
+    if (!reply_client_request(mdr, r))
+      queue_safe_reply = true;
   } else {
     assert(0); 
   }
 
   mdr->apply();
+  locker->drop_locks(mdr);
 
   if (mdr->client_request && mdr->is_committing() && !mdr->killed) {
     assert(mdr->session);
@@ -840,7 +832,10 @@ void Server::respond_to_request(const MDRequestRef& mdr, int r)
   }
 
   bool replay_next = mdr->completed && mdr->replaying;
-  mdcache->request_finish(mdr);
+  if (queue_safe_reply)
+    mds->req_wq.queue_front(mdr);
+  else
+    mdcache->request_finish(mdr);
 
   if (replay_next)
     mds->replay_next_request();
@@ -884,22 +879,36 @@ void Server::early_reply(const MDRequestRef& mdr)
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
+  reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   req->get_connection()->send_message(reply);
 
   mdr->did_early_reply = true;
 }
 
-void Server::reply_client_request(const MDRequestRef& mdr, MClientReply *reply)
+void Server::send_safe_reply(const MDRequestRef& mdr)
+{
+  assert(mdr->did_early_reply);
+  MClientRequest *req = mdr->client_request;
+  MClientReply *reply = new MClientReply(req, 0);
+  req->get_connection()->send_message(reply);
+}
+
+bool Server::reply_client_request(const MDRequestRef& mdr, int r)
 {
   MClientRequest *req = mdr->client_request;
+  MClientReply *reply = NULL;
 
   if (req->is_replay()) {
+    reply = new MClientReply(mdr->client_request, r);
+
     if (mdr->tracei >= 0) {
 	CInodeRef& in = mdr->in[mdr->tracei];
 	assert(mdr->is_object_locked(in.get()));
 	mdcache->try_reconnect_cap(in.get(), mdr->session);
     }
   } else if (!mdr->did_early_reply) {
+    reply = new MClientReply(mdr->client_request, r);
+
     if (mdr->tracei >= 0 || mdr->tracedn >= 0) {
       set<CObject*> objs;
 
@@ -924,10 +933,16 @@ void Server::reply_client_request(const MDRequestRef& mdr, MClientReply *reply)
     }
 
     reply->set_extra_bl(mdr->reply_extra_bl);
+  } else {
+    assert(r == 0);
   }
+
+  if (!reply)
+    return false;
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
   req->get_connection()->send_message(reply);
+  return true;
 }
 
 int Server::rdlock_path_pin_ref(const MDRequestRef& mdr, int n,
@@ -2728,6 +2743,8 @@ void Server::reconnect_gather_finish(int failed)
   reconnect_done = NULL;
 }
 
+
+// FIXME:: this can race with in-processing reconnect
 void Server::reconnect_tick()
 {
   mdcache->lock_client_reconnect();
@@ -2749,23 +2766,22 @@ void Server::reconnect_tick()
       mdcache->unlock_client_reconnect();
 
       mds->sessionmap->mutex_lock();
-      Session *session = mds->sessionmap->get_session(entity_name_t::CLIENT(client.v));
-      if (session)
-	session->get();
+      SessionRef session = mds->sessionmap->get_session(entity_name_t::CLIENT(client.v));
       mds->sessionmap->mutex_unlock();
 
       if (session) {
 	session->mutex_lock();
 	dout(1) << "reconnect gave up on " << session->get_source() << dendl;
-	kill_session(session, NULL);
+	kill_session(session.get(), NULL);
 	failed_reconnects++;
 	session->mutex_unlock();
-	session->put();
       }
 
       mdcache->lock_client_reconnect();
     }
-    reconnect_gather_finish(failed_reconnects);
+
+    if (reconnect_done)
+      reconnect_gather_finish(failed_reconnects);
   }
   mdcache->unlock_client_reconnect();
 }

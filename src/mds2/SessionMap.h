@@ -16,6 +16,8 @@
 #define CEPH_MDS_SESSIONMAP_H
 
 #include <set>
+#include <boost/intrusive_ptr.hpp>
+
 using std::set;
 
 #include "include/unordered_map.h"
@@ -358,6 +360,16 @@ public:
 
   }
 };
+
+typedef boost::intrusive_ptr<Session> SessionRef;
+static inline void intrusive_ptr_add_ref(Session *s)
+{
+  s->get();
+}
+static inline void intrusive_ptr_release(Session *s)
+{
+  s->put();
+}
 
 class SessionFilter
 {

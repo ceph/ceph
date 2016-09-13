@@ -43,6 +43,7 @@ public:
 
   void find_idle_sessions();
   void trim_client_leases();
+  void send_safe_reply(const MDRequestRef& mdr);
 protected:
 
   friend class C_MDS_session_finish;
@@ -60,7 +61,7 @@ protected:
   void set_trace_dist(Session *session, MClientReply *reply,
 		      CInode *in, CDentry *dn, const MDRequestRef& mdr);
   void respond_to_request(const MDRequestRef& mdr, int r);
-  void reply_client_request(const MDRequestRef& mdr, MClientReply *reply);
+  bool reply_client_request(const MDRequestRef& mdr, int r);
   void early_reply(const MDRequestRef& mdr);
 
   void journal_and_reply(const MDRequestRef& mdr, int tracei, int tracedn,
