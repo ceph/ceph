@@ -2040,10 +2040,11 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   do {
     struct post_form_part part;
     int r = read_form_part_header(&part, &done);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
-    bufferlist part_data;
+    ceph::bufferlist part_data;
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
     r = read_data(part.data, chunk_size, &boundary, &done);
@@ -2051,7 +2052,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
       return -EINVAL;
     }
 
-    parts[part.name] = part;
+    /* Just reading the data but not storing any results of that. */
   } while (!done);
 
   return 0;
@@ -2062,18 +2063,21 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
   bool boundary;
   bool done;
 
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  const uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
   int r = read_data(bl, chunk_size, &boundary, &done);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
   if (boundary) {
     data_pending = false;
 
-    if (!done) {  /* reached end of data, let's drain the rest of the params */
+    if (!done) {
+      /* Reached end of data, let's drain the rest of the params */
       r = complete_get_params();
-      if (r < 0)
-	return r;
+      if (r < 0) {
+       return r;
+      }
     }
   }
 
