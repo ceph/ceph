@@ -14,6 +14,7 @@ set(librbd_internal_srcs
   CopyupRequest.cc
   DiffIterate.cc
   ExclusiveLock.cc
+  Group.cc
   ImageCtx.cc
   ImageState.cc
   ImageWatcher.cc
