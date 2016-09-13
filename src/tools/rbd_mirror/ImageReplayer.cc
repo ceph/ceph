@@ -225,19 +225,6 @@ private:
   Commands commands;
 };
 
-template <typename I>
-struct ResyncListener : public librbd::journal::ResyncListener {
-  ImageReplayer<I> *img_replayer;
-
-  ResyncListener(ImageReplayer<I> *img_replayer)
-    : img_replayer(img_replayer) {
-  }
-
-  virtual void handle_resync() {
-    img_replayer->resync_image();
-  }
-};
-
 } // anonymous namespace
 
 template <typename I>
@@ -286,7 +273,7 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
   m_lock("rbd::mirror::ImageReplayer " + stringify(remote_pool_id) + " " +
 	 remote_image_id),
   m_progress_cxt(this),
-  m_resync_listener(new ResyncListener<I>(this)),
+  m_journal_listener(new JournalListener(this)),
   m_remote_listener(this)
 {
   // Register asok commands using a temporary "remote_pool_name/global_image_id"
@@ -320,7 +307,7 @@ ImageReplayer<I>::~ImageReplayer()
   assert(m_bootstrap_request == nullptr);
   assert(m_in_flight_status_updates == 0);
 
-  delete m_resync_listener;
+  delete m_journal_listener;
   delete m_asok_hook;
 }
 
@@ -428,7 +415,6 @@ void ImageReplayer<I>::bootstrap() {
 template <typename I>
 void ImageReplayer<I>::handle_bootstrap(int r) {
   dout(20) << "r=" << r << dendl;
-
   {
     Mutex::Locker locker(m_lock);
     m_bootstrap_request->put();
@@ -450,15 +436,25 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     return;
   }
 
+
+  assert(m_local_journal == nullptr);
+  {
+    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+    if (m_local_image_ctx->journal != nullptr) {
+      m_local_journal = m_local_image_ctx->journal;
+      m_local_journal->add_listener(m_journal_listener);
+    }
+  }
+
+  if (m_local_journal == nullptr) {
+    on_start_fail(-EINVAL, "error accessing local journal");
+    return;
+  }
+
   {
     Mutex::Locker locker(m_lock);
-
-    m_local_image_ctx->journal->add_listener(
-                                    librbd::journal::ListenerType::RESYNC,
-                                    m_resync_listener);
-
     bool do_resync = false;
-    r = m_local_image_ctx->journal->check_resync_requested(&do_resync);
+    r = m_local_image_ctx->journal->is_resync_requested(&do_resync);
     if (r < 0) {
       derr << "failed to check if a resync was requested" << dendl;
     }
@@ -479,7 +475,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     }
 
     std::string name = m_local_ioctx.get_pool_name() + "/" +
-      m_local_image_ctx->name;
+                       m_local_image_ctx->name;
     if (m_name != name) {
       m_name = name;
       if (m_asok_hook) {
@@ -547,23 +543,9 @@ template <typename I>
 void ImageReplayer<I>::start_replay() {
   dout(20) << dendl;
 
-  assert(m_local_journal == nullptr);
-  {
-    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
-    if (m_local_image_ctx->journal != nullptr) {
-      m_local_journal = m_local_image_ctx->journal;
-
-      Context *start_ctx = create_context_callback<
-        ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
-      Context *stop_ctx = create_context_callback<
-        ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
-      m_local_journal->start_external_replay(&m_local_replay, start_ctx,
-                                             stop_ctx);
-      return;
-    }
-  }
-
-  on_start_fail(-EINVAL, "error starting journal replay");
+  Context *start_ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
+  m_local_journal->start_external_replay(&m_local_replay, start_ctx);
 }
 
 template <typename I>
@@ -571,7 +553,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
-    m_local_journal = nullptr;
+    assert(m_local_replay == nullptr);
     derr << "error starting external replay on local image "
 	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
     on_start_fail(r, "error starting replay on local image");
@@ -616,19 +598,6 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
   }
 
-}
-
-template <typename I>
-void ImageReplayer<I>::handle_stop_replay_request(int r) {
-  if (r < 0) {
-    // error starting or we requested the stop -- ignore
-    return;
-  }
-
-  // journal close has been requested, stop replay so the journal
-  // can be closed (since it will wait on replay to finish)
-  dout(20) << dendl;
-  on_stop_journal_replay();
 }
 
 template <typename I>
@@ -931,9 +900,7 @@ void ImageReplayer<I>::replay_flush() {
         return;
       }
 
-      Context *stop_ctx = create_context_callback<
-        ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
-      m_local_journal->start_external_replay(&m_local_replay, ctx, stop_ctx);
+      m_local_journal->start_external_replay(&m_local_replay, ctx);
     });
   m_local_replay->shut_down(false, ctx);
 }
@@ -1385,25 +1352,35 @@ void ImageReplayer<I>::shut_down(int r) {
         });
     }
   }
-  if (m_local_replay != nullptr) {
+  if (m_local_journal != nullptr) {
+    ctx = new FunctionContext([this, ctx](int r) {
+        m_local_journal = nullptr;
+        ctx->complete(0);
+      });
+    if (m_local_replay != nullptr) {
+      ctx = new FunctionContext([this, ctx](int r) {
+          m_local_journal->stop_external_replay();
+          m_local_replay = nullptr;
+
+          delete m_event_preprocessor;
+          m_event_preprocessor = nullptr;
+          ctx->complete(0);
+        });
+    }
     ctx = new FunctionContext([this, ctx](int r) {
         if (r < 0) {
           derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
         }
-        m_local_journal->stop_external_replay();
-        m_local_journal = nullptr;
-        m_local_replay = nullptr;
 
-        delete m_event_preprocessor;
-        m_event_preprocessor = nullptr;
-
+        // blocks if listener notification is in-progress
+        m_local_journal->remove_listener(m_journal_listener);
         ctx->complete(0);
       });
-    ctx = new FunctionContext([this, ctx](int r) {
-        m_local_journal->remove_listener(
-            librbd::journal::ListenerType::RESYNC, m_resync_listener);
-        m_local_replay->shut_down(true, ctx);
-      });
+    if (m_local_replay != nullptr) {
+      ctx = new FunctionContext([this, ctx](int r) {
+          m_local_replay->shut_down(true, ctx);
+        });
+    }
   }
   if (m_replay_handler != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
