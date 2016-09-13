@@ -20,7 +20,7 @@
 
 #define RATE_LIMIT_CONFIG_FILE "/etc/ceph/rgw-rate-limit.yml"
 
-enum Period { UNDEF=0, SECOND=1, MINUTE=2 };
+enum Period { UNDEF=0, SECOND=1, MINUTE=2, HOUR=3 };
 
 
 // Globals
@@ -48,6 +48,8 @@ static Period parse_period_str(const string period_str)
     retval = SECOND;
   } else if ( period_str == "min" ) {
     retval = MINUTE;
+  } else if ( period_str == "hour" ) {
+    retval = HOUR;
   }
   return retval;
 }
@@ -59,6 +61,8 @@ static string get_period_str(const Period period)
     retval = "sec";
   } else if ( period == MINUTE ) {
     retval = "min";
+  } else if ( period == HOUR ) {
+    retval = "hour";
   }
   return retval;
 }
@@ -218,9 +222,10 @@ static int load_limit_config_file(bool init)
 
 #define ONE_SEC 1
 #define ONE_MIN 60
+#define ONE_HOUR (60 * 60)
 
-Mutex *sec_timer_lock, *min_timer_lock;
-SafeTimer *rate_ctr_timer_sec, *rate_ctr_timer_min;
+Mutex *sec_timer_lock, *min_timer_lock, *hour_timer_lock;
+SafeTimer *rate_ctr_timer_sec, *rate_ctr_timer_min, *rate_ctr_timer_hour;
 
 static void reset_ctrs(RGW_api_ctr_t *ctrs, Period period)
 {
@@ -253,6 +258,16 @@ public:
   }
 };
 
+class C_RateCtrHourTimeout : public Context {
+public:
+  C_RateCtrHourTimeout() {}
+  void finish(int r) {
+    reset_ctrs(rgw_get_ctrs, HOUR);
+    reset_ctrs(rgw_put_ctrs, HOUR);
+    rate_ctr_timer_hour->add_event_after(ONE_HOUR, new C_RateCtrHourTimeout);
+  }
+};
+
 static void setup_timers()
 {
   sec_timer_lock = new Mutex("timer_sec");
@@ -268,6 +283,13 @@ static void setup_timers()
   min_timer_lock->Lock();
   rate_ctr_timer_min->add_event_after(ONE_MIN, new C_RateCtrMinTimeout);
   min_timer_lock->Unlock();
+
+  hour_timer_lock = new Mutex("timer_hour");
+  rate_ctr_timer_hour = new SafeTimer(g_ceph_context, *hour_timer_lock);
+  rate_ctr_timer_hour->init();
+  hour_timer_lock->Lock();
+  rate_ctr_timer_hour->add_event_after(ONE_HOUR, new C_RateCtrHourTimeout);
+  hour_timer_lock->Unlock();
 }
 
 
