@@ -55,6 +55,8 @@
 # include <assert.h>
 #endif
 
+#include "include/inline_memory.h"
+
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
 #else
@@ -381,6 +383,100 @@ namespace buffer CEPH_BUFFER_API {
 	return bl != rhs.bl || off != rhs.off;
       }
     };
+
+    class contiguous_appender {
+      bufferlist *pbl;
+      char *pos;
+      ptr bp;
+
+      /// running count of bytes appended that are not reflected by @pos
+      size_t out_of_band_offset = 0;
+
+      contiguous_appender(bufferlist *l, size_t len) : pbl(l) {
+	size_t unused = pbl->append_buffer.unused_tail_length();
+	if (len > unused) {
+	  // note: if len < the normal append_buffer size it *might*
+	  // be better to allocate a normal-sized append_buffer and
+	  // use part of it.  however, that optimizes for the case of
+	  // old-style types including new-style types.  and in most
+	  // such cases, this won't be the very first thing encoded to
+	  // the list, so append_buffer will already be allocated.
+	  // OTOH if everything is new-style, we *should* allocate
+	  // only what we need and conserve memory.
+	  bp = buffer::create(len);
+	  pos = bp.c_str();
+	} else {
+	  pos = pbl->append_buffer.end_c_str();
+	}
+      }
+
+      void flush_and_continue() {
+	if (bp.have_raw()) {
+	  // we allocated a new buffer
+	  size_t l = pos - bp.c_str();
+	  pbl->append(bufferptr(bp, 0, l));
+	  bp.set_length(bp.length() - l);
+	  bp.set_offset(bp.offset() + l);
+	} else {
+	  // we are using pbl's append_buffer
+	  size_t l = pos - pbl->append_buffer.end_c_str();
+	  if (l) {
+	    pbl->append_buffer.set_length(pbl->append_buffer.length() + l);
+	    pbl->append(pbl->append_buffer, pbl->append_buffer.end() - l, l);
+	    pos = pbl->append_buffer.end_c_str();
+	  }
+	}
+      }
+
+      friend class list;
+
+    public:
+      ~contiguous_appender() {
+	if (bp.have_raw()) {
+	  // we allocated a new buffer
+	  bp.set_length(pos - bp.c_str());
+	  pbl->append(std::move(bp));
+	} else {
+	  // we are using pbl's append_buffer
+	  size_t l = pos - pbl->append_buffer.end_c_str();
+	  if (l) {
+	    pbl->append_buffer.set_length(pbl->append_buffer.length() + l);
+	    pbl->append(pbl->append_buffer, pbl->append_buffer.end() - l, l);
+	  }
+	}
+      }
+
+      size_t get_out_of_band_offset() const {
+	return out_of_band_offset;
+      }
+      void append(const char *p, size_t l) {
+	maybe_inline_memcpy(pos, p, l, 16);
+	pos += l;
+      }
+      char *get_ptr_add(size_t len) {
+	char *r = pos;
+	pos += len;
+	return r;
+      }
+      char *get_ptr() {
+	return pos;
+      }
+
+      void append(const bufferptr& p) {
+	flush_and_continue();
+	pbl->append(p);
+	out_of_band_offset += p.length();
+      }
+      void append(const bufferlist& l) {
+	flush_and_continue();
+	pbl->append(l);
+	out_of_band_offset += l.length();
+      }
+    };
+
+    contiguous_appender get_contiguous_appender(size_t len) {
+      return contiguous_appender(this, len);
+    }
 
   private:
     mutable iterator last_p;
