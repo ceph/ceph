@@ -549,6 +549,9 @@ public:
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
     ExtentMap(Onode *o);
+    ~ExtentMap() {
+      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+    }
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
