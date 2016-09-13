@@ -170,12 +170,16 @@ public:
   }
 
   void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler, int r) {
-
     journal::ImageClientMeta image_client_meta;
     image_client_meta.tag_class = 0;
+    expect_get_journaler_cached_client(mock_journaler, image_client_meta, r);
+  }
 
+  void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler,
+                                          const journal::ImageClientMeta &client_meta,
+                                          int r) {
     journal::ClientData client_data;
-    client_data.client_meta = image_client_meta;
+    client_data.client_meta = client_meta;
 
     cls::journal::Client client;
     ::encode(client_data, client.data);
@@ -197,7 +201,8 @@ public:
     EXPECT_CALL(mock_journaler, get_tags(0, _, _))
                   .WillOnce(DoAll(SetArgPointee<1>(tags),
                                   WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
-    EXPECT_CALL(mock_journaler, add_listener(_));
+    EXPECT_CALL(mock_journaler, add_listener(_))
+                  .WillOnce(SaveArg<0>(&m_listener));
   }
 
   void expect_start_replay(MockJournalImageCtx &mock_image_ctx,
@@ -393,6 +398,7 @@ public:
   }
 
   ::journal::ReplayHandler *m_replay_handler = nullptr;
+  ::journal::JournalMetadataListener *m_listener = nullptr;
 };
 
 TEST_F(TestMockJournal, StateTransitions) {
@@ -1078,15 +1084,12 @@ TEST_F(TestMockJournal, ExternalReplay) {
   expect_shut_down_journaler(mock_journaler);
 
   C_SaferCond start_ctx;
-  C_SaferCond close_request_ctx;
 
   journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
-  mock_journal.start_external_replay(&journal_replay, &start_ctx,
-                                     &close_request_ctx);
+  mock_journal.start_external_replay(&journal_replay, &start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
 
   mock_journal.stop_external_replay();
-  ASSERT_EQ(-ECANCELED, close_request_ctx.wait());
 }
 
 TEST_F(TestMockJournal, ExternalReplayFailure) {
@@ -1109,45 +1112,10 @@ TEST_F(TestMockJournal, ExternalReplayFailure) {
   expect_shut_down_journaler(mock_journaler);
 
   C_SaferCond start_ctx;
-  C_SaferCond close_request_ctx;
 
   journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
-  mock_journal.start_external_replay(&journal_replay, &start_ctx,
-                                     &close_request_ctx);
+  mock_journal.start_external_replay(&journal_replay, &start_ctx);
   ASSERT_EQ(-EINVAL, start_ctx.wait());
-  ASSERT_EQ(-EINVAL, close_request_ctx.wait());
-}
-
-TEST_F(TestMockJournal, ExternalReplayCloseRequest) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockJournalImageCtx mock_image_ctx(*ictx);
-  MockJournal mock_journal(mock_image_ctx);
-  ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
-
-  InSequence seq;
-  expect_stop_append(mock_journaler, 0);
-  expect_shut_down_journaler(mock_journaler);
-
-  C_SaferCond start_ctx;
-  C_SaferCond close_request_ctx;
-
-  journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
-  mock_journal.start_external_replay(&journal_replay, &start_ctx,
-                                     &close_request_ctx);
-  ASSERT_EQ(0, start_ctx.wait());
-
-  C_SaferCond close_ctx;
-  mock_journal.close(&close_ctx);
-
-  ASSERT_EQ(0, close_request_ctx.wait());
-  mock_journal.stop_external_replay();
-
-  ASSERT_EQ(0, close_ctx.wait());
 }
 
 TEST_F(TestMockJournal, AppendDisabled) {
@@ -1178,6 +1146,79 @@ TEST_F(TestMockJournal, AppendDisabled) {
   ASSERT_FALSE(mock_journal.is_journal_appending());
 
   expect_shut_down_journaler(mock_journaler);
+}
+
+TEST_F(TestMockJournal, CloseListenerEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+
+  struct Listener : public journal::Listener {
+    C_SaferCond ctx;
+    virtual void handle_close() {
+      ctx.complete(0);
+    }
+    virtual void handle_resync() {
+      ADD_FAILURE() << "unexpected resync request";
+    }
+    virtual void handle_promoted() {
+      ADD_FAILURE() << "unexpected promotion event";
+    }
+  } listener;
+  mock_journal.add_listener(&listener);
+
+  expect_shut_down_journaler(mock_journaler);
+  close_journal(mock_journal, mock_journaler);
+
+  ASSERT_EQ(0, listener.ctx.wait());
+  mock_journal.remove_listener(&listener);
+}
+
+TEST_F(TestMockJournal, ResyncRequested) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+
+  struct Listener : public journal::Listener {
+    C_SaferCond ctx;
+    virtual void handle_close() {
+      ADD_FAILURE() << "unexpected close action";
+    }
+    virtual void handle_resync() {
+      ctx.complete(0);
+    }
+    virtual void handle_promoted() {
+      ADD_FAILURE() << "unexpected promotion event";
+    }
+  } listener;
+  mock_journal.add_listener(&listener);
+
+  BOOST_SCOPE_EXIT_ALL(&) {
+    mock_journal.remove_listener(&listener);
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+  journal::ImageClientMeta image_client_meta;
+  image_client_meta.tag_class = 0;
+  image_client_meta.resync_requested = true;
+  expect_get_journaler_cached_client(mock_journaler, image_client_meta, 0);
+  expect_shut_down_journaler(mock_journaler);
+
+  m_listener->handle_update(nullptr);
+  ASSERT_EQ(0, listener.ctx.wait());
 }
 
 } // namespace librbd

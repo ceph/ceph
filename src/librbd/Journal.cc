@@ -335,7 +335,6 @@ Journal<I>::~Journal() {
   assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   assert(m_journaler == NULL);
   assert(m_journal_replay == NULL);
-  assert(m_on_replay_close_request == nullptr);
   assert(m_wait_for_state_contexts.empty());
 }
 
@@ -632,6 +631,12 @@ bool Journal<I>::is_journal_ready() const {
 template <typename I>
 bool Journal<I>::is_journal_replaying() const {
   Mutex::Locker locker(m_lock);
+  return is_journal_replaying(m_lock);
+}
+
+template <typename I>
+bool Journal<I>::is_journal_replaying(const Mutex &) const {
+  assert(m_lock.is_locked());
   return (m_state == STATE_REPLAYING ||
           m_state == STATE_FLUSHING_REPLAY ||
           m_state == STATE_FLUSHING_RESTART ||
@@ -679,6 +684,21 @@ void Journal<I>::close(Context *on_finish) {
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   Mutex::Locker locker(m_lock);
+  while (m_listener_notify) {
+    m_listener_cond.Wait(m_lock);
+  }
+
+  Listeners listeners(m_listeners);
+  m_listener_notify = true;
+  m_lock.Unlock();
+  for (auto listener : listeners) {
+    listener->handle_close();
+  }
+
+  m_lock.Lock();
+  m_listener_notify = false;
+  m_listener_cond.Signal();
+
   assert(m_state != STATE_UNINITIALIZED);
   if (m_state == STATE_CLOSED) {
     on_finish->complete(m_error_result);
@@ -687,12 +707,6 @@ void Journal<I>::close(Context *on_finish) {
 
   if (m_state == STATE_READY) {
     stop_recording();
-  }
-
-  // interrupt external replay if active
-  if (m_on_replay_close_request != nullptr) {
-    m_on_replay_close_request->complete(0);
-    m_on_replay_close_request = nullptr;
   }
 
   m_close_pending = true;
@@ -1127,16 +1141,13 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
 
 template <typename I>
 void Journal<I>::start_external_replay(journal::Replay<I> **journal_replay,
-                                       Context *on_start,
-                                       Context *on_close_request) {
+                                       Context *on_start) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_READY);
   assert(m_journal_replay == nullptr);
-  assert(m_on_replay_close_request == nullptr);
-  m_on_replay_close_request = on_close_request;
 
   on_start = util::create_async_context_callback(m_image_ctx, on_start);
   on_start = new FunctionContext(
@@ -1165,11 +1176,6 @@ void Journal<I>::handle_start_external_replay(int r,
                << "failed to stop recording: " << cpp_strerror(r) << dendl;
     *journal_replay = nullptr;
 
-    if (m_on_replay_close_request != nullptr) {
-      m_on_replay_close_request->complete(r);
-      m_on_replay_close_request = nullptr;
-    }
-
     // get back to a sane-state
     start_append();
     on_finish->complete(r);
@@ -1184,14 +1190,12 @@ void Journal<I>::handle_start_external_replay(int r,
 
 template <typename I>
 void Journal<I>::stop_external_replay() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
   Mutex::Locker locker(m_lock);
   assert(m_journal_replay != nullptr);
   assert(m_state == STATE_REPLAYING);
-
-  if (m_on_replay_close_request != nullptr) {
-    m_on_replay_close_request->complete(-ECANCELED);
-    m_on_replay_close_request = nullptr;
-  }
 
   delete m_journal_replay;
   m_journal_replay = nullptr;
@@ -1762,13 +1766,13 @@ void Journal<I>::wait_for_steady_state(Context *on_state) {
 }
 
 template <typename I>
-int Journal<I>::check_resync_requested(bool *do_resync) {
+int Journal<I>::is_resync_requested(bool *do_resync) {
   Mutex::Locker l(m_lock);
-  return check_resync_requested_internal(do_resync);
+  return check_resync_requested(do_resync);
 }
 
 template <typename I>
-int Journal<I>::check_resync_requested_internal(bool *do_resync) {
+int Journal<I>::check_resync_requested(bool *do_resync) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -1811,51 +1815,51 @@ void Journal<I>::handle_metadata_updated() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  std::list<journal::ResyncListener *> resync_private_list;
+  Mutex::Locker locker(m_lock);
+  if (m_state != STATE_READY && !is_journal_replaying(m_lock)) {
+    return;
+  }
 
-  {
-    Mutex::Locker l(m_lock);
+  while (m_listener_notify) {
+    m_listener_cond.Wait(m_lock);
+  }
 
-    if (m_state == STATE_CLOSING || m_state == STATE_CLOSED ||
-        m_state == STATE_UNINITIALIZED || m_state == STATE_STOPPING) {
-      return;
-    }
+  bool resync_requested = false;
+  int r = check_resync_requested(&resync_requested);
+  if (r < 0) {
+    lderr(cct) << this << " " << __func__ << ": "
+               << "failed to check if a resync was requested" << dendl;
+    return;
+  }
 
-    bool do_resync = false;
-    int r = check_resync_requested_internal(&do_resync);
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to check if a resync was requested" << dendl;
-      return;
-    }
+  Listeners listeners(m_listeners);
+  m_listener_notify = true;
+  m_lock.Unlock();
 
-    if (do_resync) {
-      for (const auto& listener :
-                              m_listener_map[journal::ListenerType::RESYNC]) {
-        journal::ResyncListener *rsync_listener =
-                        boost::get<journal::ResyncListener *>(listener);
-        resync_private_list.push_back(rsync_listener);
-      }
+  if (resync_requested) {
+    for (auto listener : listeners) {
+      listener->handle_resync();
     }
   }
 
-  for (const auto& listener : resync_private_list) {
-    listener->handle_resync();
+  m_lock.Lock();
+  m_listener_notify = false;
+  m_listener_cond.Signal();
+}
+
+template <typename I>
+void Journal<I>::add_listener(journal::Listener *listener) {
+  Mutex::Locker locker(m_lock);
+  m_listeners.insert(listener);
+}
+
+template <typename I>
+void Journal<I>::remove_listener(journal::Listener *listener) {
+  Mutex::Locker locker(m_lock);
+  while (m_listener_notify) {
+    m_listener_cond.Wait(m_lock);
   }
-}
-
-template <typename I>
-void Journal<I>::add_listener(journal::ListenerType type,
-                              journal::JournalListenerPtr listener) {
-  Mutex::Locker l(m_lock);
-  m_listener_map[type].push_back(listener);
-}
-
-template <typename I>
-void Journal<I>::remove_listener(journal::ListenerType type,
-                                 journal::JournalListenerPtr listener) {
-  Mutex::Locker l(m_lock);
-  m_listener_map[type].remove(listener);
+  m_listeners.erase(listener);
 }
 
 } // namespace librbd
