@@ -3481,7 +3481,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  assert(list_context->current_pg <= pg_num);
+  assert(list_context->current_pg < pg_num);
 
   ObjectOperation op;
   op.pg_nls(list_context->max_entries, list_context->filter,
@@ -3637,7 +3637,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  assert(list_context->current_pg <= pg_num);
+  assert(list_context->current_pg < pg_num);
 
   ObjectOperation op;
   op.pg_ls(list_context->max_entries, list_context->filter,
@@ -4728,7 +4728,14 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
       return RECALC_OP_TARGET_POOL_DNE;
     }
     vector<int> acting;
-    osdmap->pg_to_acting_osds(c->target_pg, &acting, &c->osd);
+    int acting_primary;
+    osdmap->pg_to_acting_osds(c->target_pg, &acting, &acting_primary);
+    if (acting_primary == -1) {
+      c->map_check_error = -ENXIO;
+      c->map_check_error_str = "osd down";
+      return RECALC_OP_TARGET_OSD_DOWN;
+    }
+    c->osd = acting_primary;
   }
 
   OSDSession *s;
@@ -4873,7 +4880,7 @@ void Objecter::set_epoch_barrier(epoch_t epoch)
   ldout(cct, 7) << __func__ << ": barrier " << epoch << " (was "
 		<< epoch_barrier << ") current epoch " << osdmap->get_epoch()
 		<< dendl;
-  if (epoch >= epoch_barrier) {
+  if (epoch > epoch_barrier) {
     epoch_barrier = epoch;
     _maybe_request_map();
   }
@@ -5101,8 +5108,15 @@ namespace {
 			       int *rval)
       : interval(interval), snapsets(snapsets), rval(rval) {}
     void finish(int r) override {
-      if (r < 0 && r != -EAGAIN)
+      if (r < 0 && r != -EAGAIN) {
+        if (rval)
+          *rval = r;
 	return;
+      }
+
+      if (rval)
+        *rval = 0;
+
       try {
 	decode();
       } catch (buffer::error&) {
