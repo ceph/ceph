@@ -991,8 +991,9 @@ TEST(LibCephFS, BadFileDesc) {
 
   struct sockaddr_storage addr;
   ASSERT_EQ(ceph_get_file_stripe_address(cmount, -1, 0, &addr, 1), -EBADF);
-
-  ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
+  
+  uint32_t stripe_unit;
+  ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1, &stripe_unit), -EBADF);
   ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
 
@@ -1177,7 +1178,9 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_fsync(cmount, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_fstat(cmount, 0, &st));
   EXPECT_EQ(-ENOTCONN, ceph_sync_fs(cmount));
-  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0));
+  
+  uint32_t stripe_unit;
+  EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0, &stripe_unit));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_pool(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_pool_name(cmount, 0, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_replication(cmount, 0));
