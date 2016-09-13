@@ -1189,6 +1189,8 @@ void BlueStore::SharedBlob::put()
 	dout(20) << __func__ << " " << this
 		 << " lost race to remove myself from set" << dendl;
       }
+    } else {
+      delete this;
     }
   }
 }
