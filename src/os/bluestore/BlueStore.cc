@@ -1926,10 +1926,10 @@ void BlueStore::ExtentMap::punch_hole(
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
 	  *new Extent(offset, p->blob_offset + front, length, p->blob));
-	extent_map.insert(*new Extent(end,
-				      p->blob_offset + front + length,
-				      p->length - front - length,
-				      p->blob));
+	add(end,
+	    p->blob_offset + front + length,
+	    p->length - front - length,
+	    p->blob);
 	p->length = front;
 	break;
       } else {
@@ -1954,8 +1954,7 @@ void BlueStore::ExtentMap::punch_hole(
     uint64_t keep = (p->logical_offset + p->length) - end;
     old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				    p->length - keep, p->blob));
-    extent_map.insert(*new Extent(end, p->blob_offset + p->length - keep, keep,
-				  p->blob));
+    add(end, p->blob_offset + p->length - keep, keep, p->blob);
     rm(p);
     break;
   }
@@ -8005,9 +8004,7 @@ int BlueStore::_clone(TransContext *txc,
 	}
       }
       // dup extent
-      newo->extent_map.extent_map.insert(*new Extent(e.logical_offset,
-						     e.blob_offset,
-						     e.length, cb));
+      newo->extent_map.add(e.logical_offset, e.blob_offset, e.length, cb);
       txc->statfs_delta.stored() += e.length;
       if (e.blob->get_blob().is_compressed()) {
 	txc->statfs_delta.compressed_original() -= e.length;

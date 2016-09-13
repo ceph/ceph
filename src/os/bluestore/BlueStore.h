@@ -598,6 +598,11 @@ public:
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
 
+    /// add a new Extent
+    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
+      extent_map.insert(*new Extent(lo, o, l, b));
+    }
+
     /// remove (and delete) an Extent
     void rm(extent_map_t::iterator p) {
       Extent *e = &*p;
