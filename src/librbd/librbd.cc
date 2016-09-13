@@ -23,6 +23,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/Group.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
