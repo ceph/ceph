@@ -169,6 +169,73 @@ namespace buffer CEPH_BUFFER_API {
     void release();
 
   public:
+    class iterator {
+      const ptr *bp;     ///< parent ptr
+      const char *start; ///< starting pointer into bp->c_str()
+      const char *pos;   ///< pointer into bp->c_str()
+      const char *end_ptr;   ///< pointer to bp->end_c_str()
+      bool deep;         ///< if true, no not allow shallow ptr copies
+
+      iterator(const ptr *p, size_t offset, bool d)
+	: bp(p),
+	  start(p->c_str() + offset),
+	  pos(start),
+	  end_ptr(p->end_c_str()),
+	  deep(d) {}
+
+      friend class ptr;
+
+    public:
+      const char *c_str_add(size_t n) {
+	const char *r = pos;
+	pos += n;
+	if (pos > end_ptr)
+	  throw end_of_buffer();
+	return r;
+      }
+
+      ptr get_ptr(size_t len) {
+	if (deep) {
+	  return buffer::copy(c_str_add(len), len);
+	} else {
+	  size_t off = pos - bp->c_str();
+	  pos += len;
+	  if (pos > end_ptr)
+	    throw end_of_buffer();
+	  return ptr(*bp, off, len);
+	}
+      }
+      ptr get_preceding_ptr(size_t len) {
+	if (deep) {
+	  return buffer::copy(c_str() - len, len);
+	} else {
+	  size_t off = pos - bp->c_str();
+	  return ptr(*bp, off - len, len);
+	}
+      }
+
+      void advance(size_t len) {
+	pos += len;
+	if (pos > end_ptr)
+	  throw end_of_buffer();
+      }
+
+      const char *c_str() {
+	return pos;
+      }
+      const char *end_c_str() {
+	return end_ptr;
+      }
+
+      size_t get_offset() {
+	return pos - start;
+      }
+
+      bool end() const {
+	return pos == end_ptr;
+      }
+    };
+
     ptr() : _raw(0), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
@@ -189,6 +256,13 @@ namespace buffer CEPH_BUFFER_API {
     raw *clone();
     void swap(ptr& other);
     ptr& make_shareable();
+
+    iterator begin(size_t offset=0) const {
+      return iterator(this, offset, false);
+    }
+    iterator begin_deep(size_t offset=0) const {
+      return iterator(this, offset, true);
+    }
 
     // misc
     bool at_buffer_head() const { return _off == 0; }
