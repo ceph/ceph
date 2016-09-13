@@ -71,7 +71,8 @@ public:
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
                     Tag *tag, Context *on_finish);
   void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
-  void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
+  void get_tags(uint64_t start_after_tag_tid,
+                const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 
   inline const Settings &get_settings() const {
