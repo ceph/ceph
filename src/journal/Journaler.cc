@@ -313,7 +313,12 @@ void Journaler::get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish) {
 }
 
 void Journaler::get_tags(uint64_t tag_class, Tags *tags, Context *on_finish) {
-  m_metadata->get_tags(tag_class, tags, on_finish);
+  m_metadata->get_tags(0, tag_class, tags, on_finish);
+}
+
+void Journaler::get_tags(uint64_t start_after_tag_tid, uint64_t tag_class,
+                         Tags *tags, Context *on_finish) {
+  m_metadata->get_tags(start_after_tag_tid, tag_class, tags, on_finish);
 }
 
 void Journaler::start_replay(ReplayHandler *replay_handler) {

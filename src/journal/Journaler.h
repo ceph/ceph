@@ -96,6 +96,8 @@ public:
                     cls::journal::Tag *tag, Context *on_finish);
   void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
   void get_tags(uint64_t tag_class, Tags *tags, Context *on_finish);
+  void get_tags(uint64_t start_after_tag_tid, uint64_t tag_class, Tags *tags,
+                Context *on_finish);
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);
