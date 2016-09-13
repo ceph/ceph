@@ -598,6 +598,13 @@ public:
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
 
+    /// remove (and delete) an Extent
+    void rm(extent_map_t::iterator p) {
+      Extent *e = &*p;
+      extent_map.erase(p);
+      delete e;
+    }
+
     bool has_any_lextents(uint64_t offset, uint64_t length);
 
     /// consolidate adjacent lextents in extent_map

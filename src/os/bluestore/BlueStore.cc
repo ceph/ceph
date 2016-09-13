@@ -1899,7 +1899,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
 	   p->blob == n->blob &&
 	   p->blob_offset + p->length == n->blob_offset) {
       p->length += n->length;
-      extent_map.erase(n++);
+      rm(n++);
       ++removed;
     }
     if (n == extent_map.end()) {
@@ -1947,7 +1947,7 @@ void BlueStore::ExtentMap::punch_hole(
       // deref whole lextent
       old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				      p->length, p->blob));
-      extent_map.erase(p++);
+      rm(p++);
       continue;
     }
     // deref head
@@ -1956,7 +1956,7 @@ void BlueStore::ExtentMap::punch_hole(
 				    p->length - keep, p->blob));
     extent_map.insert(*new Extent(end, p->blob_offset + p->length - keep, keep,
 				  p->blob));
-    extent_map.erase(p);
+    rm(p);
     break;
   }
 }
