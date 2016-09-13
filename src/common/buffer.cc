@@ -900,6 +900,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       buffer_c_str_accesses.inc();
     return _raw->get_data() + _off;
   }
+  const char *buffer::ptr::end_c_str() const {
+    assert(_raw);
+    if (buffer_track_c_str)
+      buffer_c_str_accesses.inc();
+    return _raw->get_data() + _off + _len;
+  }
+  char *buffer::ptr::end_c_str() {
+    assert(_raw);
+    if (buffer_track_c_str)
+      buffer_c_str_accesses.inc();
+    return _raw->get_data() + _off + _len;
+  }
 
   unsigned buffer::ptr::unused_tail_length() const
   {

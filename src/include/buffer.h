@@ -209,6 +209,8 @@ namespace buffer CEPH_BUFFER_API {
     raw *get_raw() const { return _raw; }
     const char *c_str() const;
     char *c_str();
+    const char *end_c_str() const;
+    char *end_c_str();
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
     unsigned start() const { return _off; }
