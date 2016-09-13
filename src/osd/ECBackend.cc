@@ -1113,7 +1113,7 @@ void ECBackend::handle_sub_read_reply(
 	  // If we don't have enough copies and we haven't sent reads for all shards
 	  // we can send the rest of the reads, if any.
 	  if (!rop.do_redundant_reads) {
-	    int r = objects_remaining_read_async(iter->first, rop);
+	    int r = send_all_remaining_reads(iter->first, rop);
 	    if (r == 0) {
 	      // We added to in_progress and not incrementing is_complete
 	      continue;
@@ -1532,72 +1532,12 @@ void ECBackend::start_read_op(
   op.do_redundant_reads = do_redundant_reads;
   op.for_recovery = for_recovery;
   dout(10) << __func__ << ": starting " << op << dendl;
-
-  map<pg_shard_t, ECSubRead> messages;
-  for (map<hobject_t, read_request_t, hobject_t::BitwiseComparator>::iterator i = op.to_read.begin();
-       i != op.to_read.end();
-       ++i) {
-    list<boost::tuple<
-      uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > &reslist =
-      op.complete[i->first].returned;
-    bool need_attrs = i->second.want_attrs;
-    for (set<pg_shard_t>::const_iterator j = i->second.need.begin();
-	 j != i->second.need.end();
-	 ++j) {
-      if (need_attrs) {
-	messages[*j].attrs_to_read.insert(i->first);
-	need_attrs = false;
-      }
-      op.obj_to_source[i->first].insert(*j);
-      op.source_to_obj[*j].insert(i->first);
-    }
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator j =
-	   i->second.to_read.begin();
-	 j != i->second.to_read.end();
-	 ++j) {
-      reslist.push_back(
-	boost::make_tuple(
-	  j->get<0>(),
-	  j->get<1>(),
-	  map<pg_shard_t, bufferlist>()));
-      pair<uint64_t, uint64_t> chunk_off_len =
-	sinfo.aligned_offset_len_to_chunk(make_pair(j->get<0>(), j->get<1>()));
-      for (set<pg_shard_t>::const_iterator k = i->second.need.begin();
-	   k != i->second.need.end();
-	   ++k) {
-	messages[*k].to_read[i->first].push_back(boost::make_tuple(chunk_off_len.first,
-								    chunk_off_len.second,
-								    j->get<2>()));
-      }
-      assert(!need_attrs);
-    }
-  }
-
-  for (map<pg_shard_t, ECSubRead>::iterator i = messages.begin();
-       i != messages.end();
-       ++i) {
-    op.in_progress.insert(i->first);
-    shard_to_read_map[i->first].insert(op.tid);
-    i->second.tid = tid;
-    MOSDECSubOpRead *msg = new MOSDECSubOpRead;
-    msg->set_priority(priority);
-    msg->pgid = spg_t(
-      get_parent()->whoami_spg_t().pgid,
-      i->first.shard);
-    msg->map_epoch = get_parent()->get_epoch();
-    msg->op = i->second;
-    msg->op.from = get_parent()->whoami_shard();
-    msg->op.tid = tid;
-    get_parent()->send_message_osd_cluster(
-      i->first.osd,
-      msg,
-      get_parent()->get_epoch());
-  }
-  dout(10) << __func__ << ": started " << op << dendl;
+  do_read_op(
+    op,
+    to_read);
 }
 
-// This is based on start_read_op(), maybe this should be refactored
-void ECBackend::start_remaining_read_op(
+void ECBackend::do_read_op(
   ReadOp &op,
   map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read)
 {
@@ -1951,7 +1891,7 @@ void ECBackend::objects_read_async(
 }
 
 
-int ECBackend::objects_remaining_read_async(
+int ECBackend::send_all_remaining_reads(
   const hobject_t &hoid,
   ReadOp &rop)
 {
@@ -1983,7 +1923,7 @@ int ECBackend::objects_remaining_read_async(
 	false,
 	c)));
 
-  start_remaining_read_op(rop, for_read_op);
+  do_read_op(rop, for_read_op);
   return 0;
 }
 
