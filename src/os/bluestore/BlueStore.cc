@@ -7353,7 +7353,10 @@ void BlueStore::_wctx_finish(
   WriteContext *wctx)
 {
   set<pair<bool, BlobRef> > blobs2remove;
-  for (auto &lo : wctx->old_extents) {
+  auto oep = wctx->old_extents.begin();
+  while (oep != wctx->old_extents.end()) {
+    auto &lo = *oep;
+    oep = wctx->old_extents.erase(oep);
     dout(20) << __func__ << " lex_old " << lo << dendl;
     BlobRef b = lo.blob;
     const bluestore_blob_t& blob = b->get_blob();
@@ -7401,6 +7404,7 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
+    delete &lo;
   }
 }
 
