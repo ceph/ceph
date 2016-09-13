@@ -20,6 +20,10 @@
 
 #include "byteorder.h"
 #include "buffer.h"
+
+// pull in the new-style encoding so that we get the denc_traits<> definition.
+#include "denc.h"
+
 #include "assert.h"
 
 using namespace ceph;
@@ -349,37 +353,48 @@ inline void decode(boost::tuple<A, B, C> &t, bufferlist::iterator &bp)
   decode(boost::get<2>(t), bp);
 }
 
-// pair
-template<class A, class B>
-inline void encode(const std::pair<A,B> &p, bufferlist &bl, uint64_t features)
+// std::pair<A,B>
+template<class A, class B,
+	 typename a_traits=denc_traits<A>, typename b_traits=denc_traits<B>>
+inline typename std::enable_if<!a_traits::supported ||
+			       !b_traits::supported>::type
+  encode(const std::pair<A,B> &p, bufferlist &bl, uint64_t features)
 {
   encode(p.first, bl, features);
   encode(p.second, bl, features);
 }
-template<class A, class B>
-inline void encode(const std::pair<A,B> &p, bufferlist &bl)
+template<class A, class B,
+	 typename a_traits=denc_traits<A>, typename b_traits=denc_traits<B>>
+inline typename std::enable_if<!a_traits::supported ||
+			       !b_traits::supported>::type
+  encode(const std::pair<A,B> &p, bufferlist &bl)
 {
   encode(p.first, bl);
   encode(p.second, bl);
 }
-template<class A, class B>
-inline void decode(std::pair<A,B> &pa, bufferlist::iterator &p)
+template<class A, class B,
+	 typename a_traits=denc_traits<A>, typename b_traits=denc_traits<B>>
+inline typename std::enable_if<!a_traits::supported ||
+			       !b_traits::supported>::type
+  decode(std::pair<A,B> &pa, bufferlist::iterator &p)
 {
   decode(pa.first, p);
   decode(pa.second, p);
 }
 
-// list
-template<class T>
-inline void encode(const std::list<T>& ls, bufferlist& bl)
+// std::list<T>
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  encode(const std::list<T>& ls, bufferlist& bl)
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
   for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
     encode(*p, bl);
 }
-template<class T>
-inline void encode(const std::list<T>& ls, bufferlist& bl, uint64_t features)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  encode(const std::list<T>& ls, bufferlist& bl, uint64_t features)
 {
   // should i pre- or post- count?
   if (!ls.empty()) {
@@ -400,8 +415,9 @@ inline void encode(const std::list<T>& ls, bufferlist& bl, uint64_t features)
       encode(*p, bl, features);
   }
 }
-template<class T>
-inline void decode(std::list<T>& ls, bufferlist::iterator& p)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  decode(std::list<T>& ls, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -413,6 +429,7 @@ inline void decode(std::list<T>& ls, bufferlist::iterator& p)
   }
 }
 
+// std::list<ceph::shared_ptr<T>>
 template<class T>
 inline void encode(const std::list<ceph::shared_ptr<T> >& ls, bufferlist& bl)
 {
@@ -442,17 +459,19 @@ inline void decode(std::list<ceph::shared_ptr<T> >& ls, bufferlist::iterator& p)
   }
 }
 
-// set
-template<class T>
-inline void encode(const std::set<T>& s, bufferlist& bl)
+// std::set<T>
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  encode(const std::set<T>& s, bufferlist& bl)
 {
   __u32 n = (__u32)(s.size());
   encode(n, bl);
   for (typename std::set<T>::const_iterator p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
 }
-template<class T>
-inline void decode(std::set<T>& s, bufferlist::iterator& p)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  decode(std::set<T>& s, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -464,16 +483,18 @@ inline void decode(std::set<T>& s, bufferlist::iterator& p)
   }
 }
 
-template<class T, class C>
-inline void encode(const std::set<T, C>& s, bufferlist& bl)
+template<class T, class C, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  encode(const std::set<T, C>& s, bufferlist& bl)
 {
   __u32 n = (__u32)(s.size());
   encode(n, bl);
   for (typename std::set<T, C>::const_iterator p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
 }
-template<class T, class C>
-inline void decode(std::set<T, C>& s, bufferlist::iterator& p)
+template<class T, class C, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+  decode(std::set<T, C>& s, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -542,25 +563,28 @@ inline void decode(std::vector<T*>& v, bufferlist::iterator& p)
     v[i] = new T(p);
 }
 */
-// vector
-template<class T>
-inline void encode(const std::vector<T>& v, bufferlist& bl, uint64_t features)
+// std::vector<T>
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ encode(const std::vector<T>& v, bufferlist& bl, uint64_t features)
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
   for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
     encode(*p, bl, features);
 }
-template<class T>
-inline void encode(const std::vector<T>& v, bufferlist& bl)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ encode(const std::vector<T>& v, bufferlist& bl)
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
   for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
     encode(*p, bl);
 }
-template<class T>
-inline void decode(std::vector<T>& v, bufferlist::iterator& p)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ decode(std::vector<T>& v, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -645,8 +669,11 @@ inline void decode(std::map<T,U*>& m, bufferlist::iterator& p)
   }*/
 
 // map
-template<class T, class U>
-inline void encode(const std::map<T,U>& m, bufferlist& bl)
+template<class T, class U,
+	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
+inline typename std::enable_if<!t_traits::supported ||
+				 !u_traits::supported>::type
+  encode(const std::map<T,U>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
@@ -665,8 +692,11 @@ inline void encode(const std::map<T,U,C>& m, bufferlist& bl)
     encode(p->second, bl);
   }
 }
-template<class T, class U>
-inline void encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
+template<class T, class U,
+	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
+inline typename std::enable_if<!t_traits::supported ||
+				 !u_traits::supported>::type
+ encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
@@ -675,8 +705,11 @@ inline void encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
     encode(p->second, bl, features);
   }
 }
-template<class T, class U>
-inline void decode(std::map<T,U>& m, bufferlist::iterator& p)
+template<class T, class U,
+	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
+inline typename std::enable_if<!t_traits::supported ||
+				 !u_traits::supported>::type
+  decode(std::map<T,U>& m, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);

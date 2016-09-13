@@ -186,7 +186,7 @@ namespace buffer CEPH_BUFFER_API {
       friend class ptr;
 
     public:
-      const char *c_str_add(size_t n) {
+      const char *get_pos_add(size_t n) {
 	const char *r = pos;
 	pos += n;
 	if (pos > end_ptr)
@@ -196,7 +196,7 @@ namespace buffer CEPH_BUFFER_API {
 
       ptr get_ptr(size_t len) {
 	if (deep) {
-	  return buffer::copy(c_str_add(len), len);
+	  return buffer::copy(get_pos_add(len), len);
 	} else {
 	  size_t off = pos - bp->c_str();
 	  pos += len;
@@ -207,7 +207,7 @@ namespace buffer CEPH_BUFFER_API {
       }
       ptr get_preceding_ptr(size_t len) {
 	if (deep) {
-	  return buffer::copy(c_str() - len, len);
+	  return buffer::copy(get_pos() - len, len);
 	} else {
 	  size_t off = pos - bp->c_str();
 	  return ptr(*bp, off - len, len);
@@ -220,10 +220,10 @@ namespace buffer CEPH_BUFFER_API {
 	  throw end_of_buffer();
       }
 
-      const char *c_str() {
+      const char *get_pos() {
 	return pos;
       }
-      const char *end_c_str() {
+      const char *get_end() {
 	return end_ptr;
       }
 
@@ -527,12 +527,12 @@ namespace buffer CEPH_BUFFER_API {
 	maybe_inline_memcpy(pos, p, l, 16);
 	pos += l;
       }
-      char *get_ptr_add(size_t len) {
+      char *get_pos_add(size_t len) {
 	char *r = pos;
 	pos += len;
 	return r;
       }
-      char *get_ptr() {
+      char *get_pos() {
 	return pos;
       }
 
