@@ -168,10 +168,6 @@ If you start your cluster and an OSD won't start, check the following:
   
 
 
-If you cannot resolve the issue and the email list isn't helpful, you may
-contact `Inktank`_ for support.
-
-
 An OSD Failed
 -------------
 
@@ -479,6 +475,5 @@ from eventually being marked ``out`` (regardless of what the current value for
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
 .. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
-.. _Inktank: http://inktank.com
 .. _OS recommendations: ../../../install/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org

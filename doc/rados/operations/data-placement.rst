@@ -30,10 +30,8 @@ placement planning.  The main data placement planning concepts in Ceph include:
   
 When you initially set up a test cluster, you can use the default values. Once
 you begin planning for a large Ceph cluster, refer to pools, placement groups
-and CRUSH for data placement operations. If you find some aspects challenging,
-`Inktank`_ provides excellent  premium support for Ceph.
+and CRUSH for data placement operations.
 
 .. _Pools: ../pools
 .. _Placement Groups: ../placement-groups
 .. _CRUSH Maps: ../crush-map
-.. _Inktank: http://www.inktank.com
