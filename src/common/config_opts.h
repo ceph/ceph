@@ -540,7 +540,7 @@ OPTION(mds_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a snapshot
-OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
+OPTION(mds_snap_max_uid, OPT_U32, 4294967294) // The maximum UID allowed to create a snapshot
 OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 // detect clients which aren't trimming completed requests
