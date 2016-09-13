@@ -320,9 +320,9 @@ public:
     OpRequestRef op,
     bool do_redundant_reads, bool for_recovery);
 
-  void start_remaining_read_op(ReadOp &rop,
+  void do_read_op(ReadOp &rop,
     map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read);
-  int objects_remaining_read_async(
+  int send_all_remaining_reads(
     const hobject_t &hoid,
     ReadOp &rop);
 
