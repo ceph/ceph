@@ -243,7 +243,6 @@ struct RecoveryMessages {
       make_pair(
 	hoid,
 	ECBackend::read_request_t(
-	  hoid,
 	  to_read,
 	  need,
 	  attrs,
@@ -1876,7 +1875,6 @@ void ECBackend::objects_read_async(
     make_pair(
       hoid,
       read_request_t(
-	hoid,
 	offsets,
 	shards,
 	false,
@@ -1917,7 +1915,6 @@ int ECBackend::send_all_remaining_reads(
     make_pair(
       hoid,
       read_request_t(
-	hoid,
 	offsets,
 	shards,
 	false,
