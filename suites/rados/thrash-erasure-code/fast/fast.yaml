@@ -1,0 +1,5 @@
+override:
+  ceph:
+    conf:
+      global:
+        mon osd pool ec fast read: true
