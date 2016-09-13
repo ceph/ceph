@@ -487,6 +487,21 @@ test_status_in_pool_dir()
     grep "description: .*${description_pattern}" ${status_log}
 }
 
+wait_for_status_in_pool_dir()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local state_pattern=$4
+    local description_pattern=$5
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+	sleep ${s}
+	test_status_in_pool_dir ${cluster} ${pool} ${image} ${state_pattern} ${description_pattern} && return 0
+    done
+    return 1
+}
+
 create_image()
 {
     local cluster=$1 ; shift
@@ -692,8 +707,9 @@ promote_image()
     local cluster=$1
     local pool=$2
     local image=$3
+    local force=$4
 
-    rbd --cluster=${cluster} mirror image promote ${pool}/${image}
+    rbd --cluster=${cluster} mirror image promote ${pool}/${image} ${force}
 }
 
 set_pool_mirror_mode()
