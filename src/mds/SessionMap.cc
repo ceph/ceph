@@ -862,6 +862,7 @@ void Session::decode(bufferlist::iterator &p)
 
 int Session::check_access(CInode *in, unsigned mask,
 			  int caller_uid, int caller_gid,
+			  const vector<uint64_t> *caller_gid_list,
 			  int new_uid, int new_gid)
 {
   string path;
@@ -887,7 +888,7 @@ int Session::check_access(CInode *in, unsigned mask,
   }
 
   if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			    caller_uid, caller_gid, mask,
+			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid)) {
     return -EACCES;
   }

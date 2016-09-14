@@ -93,7 +93,8 @@ struct MDSCapMatch {
   // check whether this grant matches against a given file and caller uid:gid
   bool match(const std::string &target_path,
 	     const int caller_uid,
-	     const int caller_gid) const;
+	     const int caller_gid,
+	     const vector<uint64_t> *caller_gid_list) const;
 
   /**
    * Check whether this path *might* be accessible (actual permission
@@ -132,8 +133,8 @@ public:
   bool allow_all() const;
   bool is_capable(const std::string &inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
-		  uid_t uid, gid_t gid, unsigned mask,
-		  uid_t new_uid, gid_t new_gid) const;
+		  uid_t uid, gid_t gid, const vector<uint64_t> *caller_gid_list,
+		  unsigned mask, uid_t new_uid, gid_t new_gid) const;
   bool path_capable(const std::string &inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
