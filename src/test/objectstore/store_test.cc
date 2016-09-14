@@ -738,6 +738,7 @@ void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
     cerr << "CompressibleData (4xAU) Write" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
+
     r = store->read(cid, hoid, 0, data.size() , newdata);
 
     ASSERT_EQ(r, (int)data.size());
@@ -761,6 +762,15 @@ void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
       bufferlist expected;
       expected.append(data.substr(0xf00f));
       ASSERT_TRUE(bl_eq(expected, newdata));
+    }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ((unsigned)data.size(), statfs.stored);
+      ASSERT_LE(statfs.compressed, 0x10000);
+      ASSERT_EQ((unsigned)data.size(), statfs.compressed_original);
+      ASSERT_EQ(0x10000, statfs.compressed_allocated);
     }
   }
   std::string data2;
