@@ -34,7 +34,8 @@ class TestRun(object):
     @patch('teuthology.suite.run.util.git_ls_remote')
     @patch('teuthology.suite.run.Run.choose_ceph_version')
     @patch('teuthology.suite.run.util.git_validate_sha1')
-    def test_email_addr(self, m_git_validate_sha1, m_choose_ceph_version, m_git_ls_remote):
+    def test_email_addr(self, m_git_validate_sha1, m_choose_ceph_version,
+                        m_git_ls_remote):
         # neuter choose_X_branch
         m_git_validate_sha1.return_value = self.args_dict['ceph_sha1']
         m_choose_ceph_version.return_value = self.args_dict['ceph_sha1']
@@ -240,9 +241,9 @@ class TestScheduleSuite(object):
         )
         frags = (frag1_read_output, frag2_read_output)
         expected_job = dict(
-            yaml = yaml.load('\n'.join(frags)),
-            sha1 = 'ceph_sha1',
-            args = [
+            yaml=yaml.load('\n'.join(frags)),
+            sha1='ceph_sha1',
+            args=[
                 '--description',
                 os.path.join(self.args.suite, build_matrix_desc),
                 '--',
@@ -256,7 +257,6 @@ class TestScheduleSuite(object):
         m_schedule_jobs.assert_has_calls(
             [call([], [expected_job], runobj.name)],
         )
-
 
     @patch('teuthology.suite.util.find_git_parent')
     @patch('teuthology.suite.run.Run.schedule_jobs')
