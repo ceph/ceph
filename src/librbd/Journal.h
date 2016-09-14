@@ -14,6 +14,7 @@
 #include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <algorithm>
@@ -297,6 +298,8 @@ private:
 
   journal::Replay<ImageCtxT> *m_journal_replay;
 
+  util::AsyncOpTracker m_async_journal_op_tracker;
+
   struct MetadataListener : public ::journal::JournalMetadataListener {
     Journal<ImageCtxT> *journal;
 
@@ -315,7 +318,10 @@ private:
   Cond m_listener_cond;
   bool m_listener_notify = false;
 
+  uint64_t m_refresh_sequence = 0;
+
   bool is_journal_replaying(const Mutex &) const;
+  bool is_tag_owner(const Mutex &) const;
 
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
@@ -364,6 +370,9 @@ private:
   int check_resync_requested(bool *do_resync);
 
   void handle_metadata_updated();
+  void handle_refresh_metadata(uint64_t refresh_sequence, uint64_t tag_tid,
+                               journal::TagData tag_data, int r);
+
 };
 
 } // namespace librbd

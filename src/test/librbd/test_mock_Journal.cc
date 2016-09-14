@@ -191,8 +191,11 @@ public:
 
   void expect_get_journaler_tags(MockImageCtx &mock_image_ctx,
                                  ::journal::MockJournaler &mock_journaler,
-                                 int r) {
+                                 bool primary, int r) {
     journal::TagData tag_data;
+    if (!primary) {
+      tag_data.mirror_uuid = "remote mirror uuid";
+    }
 
     bufferlist tag_data_bl;
     ::encode(tag_data, tag_data_bl);
@@ -203,6 +206,15 @@ public:
                                   WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
     EXPECT_CALL(mock_journaler, add_listener(_))
                   .WillOnce(SaveArg<0>(&m_listener));
+  }
+
+  void expect_get_journaler_tags(MockImageCtx &mock_image_ctx,
+                                 ::journal::MockJournaler &mock_journaler,
+                                 uint64_t start_after_tag_tid,
+                                 ::journal::Journaler::Tags &&tags, int r) {
+    EXPECT_CALL(mock_journaler, get_tags(start_after_tag_tid, 0, _, _))
+                  .WillOnce(DoAll(SetArgPointee<2>(tags),
+                                  WithArg<3>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
   }
 
   void expect_start_replay(MockJournalImageCtx &mock_image_ctx,
@@ -362,7 +374,8 @@ public:
 
   void open_journal(MockJournalImageCtx &mock_image_ctx,
                     MockJournal &mock_journal,
-                    ::journal::MockJournaler &mock_journaler) {
+                    ::journal::MockJournaler &mock_journaler,
+                    bool primary = true) {
     expect_op_work_queue(mock_image_ctx);
 
     InSequence seq;
@@ -370,7 +383,7 @@ public:
     expect_init_journaler(mock_journaler, 0);
     expect_get_max_append_size(mock_journaler, 1 << 16);
     expect_get_journaler_cached_client(mock_journaler, 0);
-    expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+    expect_get_journaler_tags(mock_image_ctx, mock_journaler, primary, 0);
     expect_start_replay(
       mock_image_ctx, mock_journaler,
       std::bind(&invoke_replay_complete, _1, 0));
@@ -418,7 +431,7 @@ TEST_F(TestMockJournal, StateTransitions) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_ready, _1));
@@ -506,7 +519,7 @@ TEST_F(TestMockJournal, GetTagsError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, -EBADMSG);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, -EBADMSG);
   expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(-EBADMSG, when_open(mock_journal));
 }
@@ -528,7 +541,7 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_complete, _1, -EINVAL));
@@ -543,7 +556,7 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_complete, _1, 0));
@@ -575,7 +588,7 @@ TEST_F(TestMockJournal, FlushReplayError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_ready, _1));
@@ -595,7 +608,7 @@ TEST_F(TestMockJournal, FlushReplayError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_complete, _1, 0));
@@ -627,7 +640,7 @@ TEST_F(TestMockJournal, CorruptEntry) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_ready, _1));
@@ -645,7 +658,7 @@ TEST_F(TestMockJournal, CorruptEntry) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_complete, _1, 0));
@@ -676,7 +689,7 @@ TEST_F(TestMockJournal, StopError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_complete, _1, 0));
@@ -708,7 +721,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
 
   expect_start_replay(
     mock_image_ctx, mock_journaler,
@@ -736,7 +749,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler, {
       std::bind(&invoke_replay_complete, _1, 0)
@@ -790,7 +803,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_ready, _1));
@@ -814,7 +827,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
-  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, true, 0);
   expect_start_replay(
     mock_image_ctx, mock_journaler,
     std::bind(&invoke_replay_complete, _1, 0));
@@ -1189,7 +1202,7 @@ TEST_F(TestMockJournal, ResyncRequested) {
   MockJournalImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal(mock_image_ctx);
   ::journal::MockJournaler mock_journaler;
-  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, false);
 
   struct Listener : public journal::Listener {
     C_SaferCond ctx;
@@ -1211,9 +1224,67 @@ TEST_F(TestMockJournal, ResyncRequested) {
   };
 
   InSequence seq;
+
+  journal::TagData tag_data;
+  tag_data.mirror_uuid == Journal<>::LOCAL_MIRROR_UUID;
+
+  bufferlist tag_data_bl;
+  ::encode(tag_data, tag_data_bl);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0,
+                            {{0, 0, tag_data_bl}}, 0);
+
   journal::ImageClientMeta image_client_meta;
   image_client_meta.tag_class = 0;
   image_client_meta.resync_requested = true;
+  expect_get_journaler_cached_client(mock_journaler, image_client_meta, 0);
+  expect_shut_down_journaler(mock_journaler);
+
+  m_listener->handle_update(nullptr);
+  ASSERT_EQ(0, listener.ctx.wait());
+}
+
+TEST_F(TestMockJournal, ForcePromoted) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler, false);
+
+  struct Listener : public journal::Listener {
+    C_SaferCond ctx;
+    virtual void handle_close() {
+      ADD_FAILURE() << "unexpected close action";
+    }
+    virtual void handle_resync() {
+      ADD_FAILURE() << "unexpected resync event";
+    }
+    virtual void handle_promoted() {
+      ctx.complete(0);
+    }
+  } listener;
+  mock_journal.add_listener(&listener);
+
+  BOOST_SCOPE_EXIT_ALL(&) {
+    mock_journal.remove_listener(&listener);
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+
+  journal::TagData tag_data;
+  tag_data.mirror_uuid == Journal<>::LOCAL_MIRROR_UUID;
+
+  bufferlist tag_data_bl;
+  ::encode(tag_data, tag_data_bl);
+  expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0,
+                            {{100, 0, tag_data_bl}}, 0);
+
+  journal::ImageClientMeta image_client_meta;
+  image_client_meta.tag_class = 0;
   expect_get_journaler_cached_client(mock_journaler, image_client_meta, 0);
   expect_shut_down_journaler(mock_journaler);
 
