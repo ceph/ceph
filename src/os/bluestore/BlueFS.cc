@@ -1029,6 +1029,7 @@ void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t)
     if (p.first == 1)
       continue;
     dout(20) << __func__ << " op_file_update " << p.second->fnode << dendl;
+    assert(p.first > 1);
     t->op_file_update(p.second->fnode);
   }
   for (auto& p : dir_map) {
@@ -1427,6 +1428,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   if (must_dirty) {
     h->file->fnode.mtime = ceph_clock_now(NULL);
+    assert(h->file->fnode.ino >= 1);
     log_t.op_file_update(h->file->fnode);
     if (h->file->dirty_seq == 0) {
       h->file->dirty_seq = log_seq + 1;
@@ -1581,6 +1583,10 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
     dout(10) << __func__ << "  deleted, no-op" << dendl;
     return 0;
   }
+
+  // we never truncate internal log files
+  assert(h->file->fnode.ino > 1);
+
   // truncate off unflushed data?
   if (h->pos < offset &&
       h->pos + h->buffer.length() > offset) {
@@ -1708,6 +1714,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
     dout(10) << __func__ << "  deleted, no-op" << dendl;
     return 0;
   }
+  assert(f->fnode.ino > 1);
   uint64_t allocated = f->fnode.get_allocated();
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
@@ -1806,6 +1813,7 @@ int BlueFS::open_for_write(
       file->fnode.extents.clear();
     }
   }
+  assert(file->fnode.ino > 1);
 
   file->fnode.mtime = ceph_clock_now(NULL);
   file->fnode.prefer_bdev = BlueFS::BDEV_DB;
