@@ -329,7 +329,7 @@ typedef boost::variant<AioDiscardEvent,
                        FlattenEvent,
                        DemoteEvent,
 		       SnapLimitEvent,
-		       UpdateFeaturesEvent,
+                       UpdateFeaturesEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {

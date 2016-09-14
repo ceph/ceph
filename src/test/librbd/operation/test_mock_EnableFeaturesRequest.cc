@@ -6,6 +6,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AioCompletion.h"
+#include "librbd/Operations.h"
 #include "librbd/internal.h"
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -193,7 +194,7 @@ public:
     if (!features_to_disable) {
       return;
     }
-    ASSERT_EQ(0, librbd::update_features(ictx, features_to_disable, false));
+    ASSERT_EQ(0, ictx->operations->update_features(features_to_disable, false));
     ASSERT_EQ(0, librbd::get_features(ictx, &features));
     ASSERT_EQ(0U, features & features_to_disable);
   }

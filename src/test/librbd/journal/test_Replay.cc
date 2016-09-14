@@ -643,6 +643,43 @@ TEST_F(TestJournalReplay, Flatten) {
   ASSERT_EQ(-EINVAL, ictx2->operations->flatten(no_op));
 }
 
+TEST_F(TestJournalReplay, UpdateFeatures) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  uint64_t features = RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF;
+  bool enabled = !ictx->test_features(features);
+
+  // get current commit position
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
+
+  // inject update_features op into journal
+  inject_into_journal(ictx, librbd::journal::UpdateFeaturesEvent(1, features,
+                                                                 enabled));
+  close_image(ictx);
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(0, current_entry);
+
+  ASSERT_EQ(enabled, ictx->test_features(features));
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->update_features(features, !enabled));
+}
+
 TEST_F(TestJournalReplay, ObjectPosition) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
