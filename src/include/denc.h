@@ -796,6 +796,33 @@ struct denc_traits<
       denc(s[i], p);
     }
   }
+
+  // nohead
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+                                 !traits::featured>::type
+  encode_nohead(const std::vector<T>& s, buffer::list::contiguous_appender& p) {
+    for (const T& e : s) {
+      denc(e, p);
+    }
+  }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+                                 traits::featured>::type
+  encode_nohead(const std::vector<T>& s, buffer::list::contiguous_appender& p,
+	   uint64_t f) {
+    for (const T& e : s) {
+      denc(e, p, f);
+    }
+  }
+  static void decode_nohead(size_t num, std::vector<T>& s,
+			    buffer::ptr::iterator& p) {
+    s.resize(num);
+    for (unsigned i=0; i<num; ++i) {
+      denc(s[i], p);
+    }
+  }
+
 };
 
 //
@@ -879,6 +906,35 @@ struct denc_traits<
       s.insert(temp);
     }
   }
+
+  // nohead
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+                                 !traits::featured>::type
+  encode_nohead(const std::set<T>& s, buffer::list::contiguous_appender& p) {
+    for (const T& e : s) {
+      denc(e, p);
+    }
+  }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+                                 traits::featured>::type
+  encode_nohead(const std::set<T>& s, buffer::list::contiguous_appender& p,
+		uint64_t f) {
+    for (const T& e : s) {
+      denc(e, p, f);
+    }
+  }
+  static void decode_nohead(size_t num, std::set<T>& s,
+			    buffer::ptr::iterator& p) {
+    s.clear();
+    while (num--) {
+      T temp;
+      denc(temp, p);
+      s.insert(temp);
+    }
+  }
+
 };
 
 //
@@ -967,6 +1023,36 @@ struct denc_traits<
     v.clear();
     uint32_t num;
     denc(num, p);
+    A key;
+    while (num--) {
+      denc(key, p);
+      denc(v[key], p);
+    }
+  }
+
+  // nohead variants
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 !featured>::type
+  encode_nohead(const std::map<A,B>& v, bufferlist::contiguous_appender& p) {
+    for (const auto& i : v) {
+      denc(i.first, p);
+      denc(i.second, p);
+    }
+  }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) &&
+				 featured, void>::type
+  encode_nohead(const std::map<A,B>& v, bufferlist::contiguous_appender& p,
+		uint64_t f) {
+    for (const auto& i : v) {
+      denc(i.first, p, f);
+      denc(i.second, p, f);
+    }
+  }
+  static void decode_nohead(size_t num, std::map<A,B>& v,
+			    buffer::ptr::iterator& p) {
+    v.clear();
     A key;
     while (num--) {
       denc(key, p);
@@ -1087,6 +1173,39 @@ inline typename std::enable_if<traits::supported == 1 &&
   traits::decode(o, cp);
   p.advance((ssize_t)cp.get_offset());
 }
+
+// nohead variants
+template<typename T, typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported == 1 &&
+			       !traits::featured>::type encode_nohead(
+  const T& o,
+  bufferlist& bl)
+{
+  size_t len = 0;
+  traits::bound_encode(o, len);
+  auto a = bl.get_contiguous_appender(len);
+  traits::encode_nohead(o, a);
+}
+
+template<typename T, typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported == 1 &&
+			       !traits::featured>::type decode_nohead(
+  size_t num,
+  T& o,
+  bufferlist::iterator& p)
+{
+  if (!num)
+    return;
+  if (p.end())
+    throw buffer::end_of_buffer();
+  bufferptr tmp;
+  bufferlist::iterator t = p;
+  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+  auto cp = tmp.begin();
+  traits::decode_nohead(num, o, cp);
+  p.advance((ssize_t)cp.get_offset());
+}
+
 
 
 // ----------------------------------------------------------------

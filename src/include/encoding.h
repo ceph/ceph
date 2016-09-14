@@ -506,14 +506,16 @@ inline typename std::enable_if<!traits::supported>::type
   }
 }
 
-template<class T>
-inline void encode_nohead(const std::set<T>& s, bufferlist& bl)
+template<class T, class C, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ encode_nohead(const std::set<T>& s, bufferlist& bl)
 {
   for (typename std::set<T>::const_iterator p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
 }
-template<class T>
-inline void decode_nohead(int len, std::set<T>& s, bufferlist::iterator& p)
+template<class T, class C, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ decode_nohead(int len, std::set<T>& s, bufferlist::iterator& p)
 {
   for (int i=0; i<len; i++) {
     T v;
@@ -593,14 +595,16 @@ inline typename std::enable_if<!traits::supported>::type
     decode(v[i], p);
 }
 
-template<class T>
-inline void encode_nohead(const std::vector<T>& v, bufferlist& bl)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ encode_nohead(const std::vector<T>& v, bufferlist& bl)
 {
   for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
     encode(*p, bl);
 }
-template<class T>
-inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
+template<class T, typename traits=denc_traits<T>>
+inline typename std::enable_if<!traits::supported>::type
+ decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
 {
   v.resize(len);
   for (__u32 i=0; i<v.size(); i++) 
@@ -754,24 +758,33 @@ inline void decode_noclear(std::map<T,U>& m, bufferlist::iterator& p)
     decode(m[k], p);
   }
 }
-template<class T, class U>
-inline void encode_nohead(const std::map<T,U>& m, bufferlist& bl)
+template<class T, class U,
+	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
+inline typename std::enable_if<!t_traits::supported ||
+				 !u_traits::supported>::type
+ encode_nohead(const std::map<T,U>& m, bufferlist& bl)
 {
   for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
 }
-template<class T, class U>
-inline void encode_nohead(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
+template<class T, class U,
+	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
+inline typename std::enable_if<!t_traits::supported ||
+				 !u_traits::supported>::type
+ encode_nohead(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
 {
   for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
     encode(p->second, bl, features);
   }
 }
-template<class T, class U>
-inline void decode_nohead(int n, std::map<T,U>& m, bufferlist::iterator& p)
+template<class T, class U,
+	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
+inline typename std::enable_if<!t_traits::supported ||
+				 !u_traits::supported>::type
+ decode_nohead(int n, std::map<T,U>& m, bufferlist::iterator& p)
 {
   m.clear();
   while (n--) {
