@@ -695,16 +695,11 @@ TEST_P(StoreTest, BufferCacheReadTest) {
   }
 }
 
-TEST_P(StoreTest, CompressionTest) {
+void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
+{
   ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
-  if (string(GetParam()) != "bluestore")
-    return;
-
-  g_conf->set_val("bluestore_compression", "force");
-  g_ceph_context->_conf->apply_changes(NULL);
-
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   {
     bufferlist in;
@@ -743,8 +738,8 @@ TEST_P(StoreTest, CompressionTest) {
     cerr << "CompressibleData (4xAU) Write" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
-
     r = store->read(cid, hoid, 0, data.size() , newdata);
+
     ASSERT_EQ(r, (int)data.size());
     {
       bufferlist expected;
@@ -904,6 +899,24 @@ TEST_P(StoreTest, CompressionTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
+
+TEST_P(StoreTest, CompressionTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf->set_val("bluestore_compression_algorithm", "snappy");
+  g_conf->set_val("bluestore_compression", "force");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  doCompressionTest(store);
+
+  g_conf->set_val("bluestore_compression_algorithm", "zlib");
+  g_conf->set_val("bluestore_compression", "force");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  doCompressionTest(store);
+
   g_conf->set_val("bluestore_compression", "none");
   g_ceph_context->_conf->apply_changes(NULL);
 }
