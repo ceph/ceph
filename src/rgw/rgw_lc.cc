@@ -87,6 +87,11 @@ void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
     snprintf(buf, 32, ".%d", i);
     obj_names[i].append(buf);
   }
+
+#define COOKIE_LEN 16
+  char cookie_buf[COOKIE_LEN + 1];
+  gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
+  cookie = cookie_buf;
 }
 
 void RGWLC::finalize()
@@ -324,6 +329,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head
                                                               pair<string, int >& entry, int& result)
 {
   rados::cls::lock::Lock l(lc_index_lock_name);
+  l.set_cookie(cookie);
   do {
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
