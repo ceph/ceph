@@ -6850,16 +6850,14 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
     mask = ~0;
 
   /* These are always considered to be available */
-  stx->stx_dev_major = in->snapid >> 32;
-  stx->stx_dev_minor = (uint32_t)in->snapid;
+  stx->stx_dev = in->snapid;
   stx->stx_blksize = MAX(in->layout.stripe_unit, 4096);
 
   if (use_faked_inos())
    stx->stx_ino = in->faked_ino;
   else
     stx->stx_ino = in->ino;
-  stx->stx_rdev_minor = MINOR(in->rdev);
-  stx->stx_rdev_major = MAJOR(in->rdev);
+  stx->stx_rdev = in->rdev;
   stx->stx_mask |= (CEPH_STATX_INO|CEPH_STATX_RDEV);
 
   if (mask & CEPH_CAP_AUTH_SHARED) {
