@@ -535,6 +535,7 @@ remove_image()
     local pool=$2
     local image=$3
 
+    rbd --cluster=${cluster} -p ${pool} snap purge ${image}
     rbd --cluster=${cluster} -p ${pool} rm ${image}
 }
 
