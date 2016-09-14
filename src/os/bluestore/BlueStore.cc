@@ -516,7 +516,7 @@ void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
 
 void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard<std::recursive_mutex> l(lock);
 
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_size << " / " << buffer_max
@@ -709,7 +709,7 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
 
 void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard<std::recursive_mutex> l(lock);
 
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_bytes << " / " << buffer_max
@@ -986,7 +986,7 @@ void BlueStore::BufferSpace::read(
   BlueStore::ready_regions_t& res,
   interval_set<uint64_t>& res_intervals)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   res.clear();
   res_intervals.clear();
   uint64_t want_bytes = length;
@@ -1044,7 +1044,7 @@ void BlueStore::BufferSpace::read(
 
 void BlueStore::BufferSpace::finish_write(uint64_t seq)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
 
   auto i = writing_map.begin();
   while (i != writing_map.end()) {
@@ -1081,7 +1081,7 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
 
 void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
@@ -1090,7 +1090,7 @@ void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(30) << __func__ << dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
   if (p == onode_map.end()) {
@@ -1106,7 +1106,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
 void BlueStore::OnodeSpace::clear()
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(10) << __func__ << dendl;
   for (auto &p : onode_map) {
     cache->_rm_onode(p.second);
@@ -1119,7 +1119,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 				     const ghobject_t& new_oid,
 				     const string& new_okey)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
   po = onode_map.find(old_oid);
@@ -1148,7 +1148,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(20) << __func__ << dendl;
   for (auto& i : onode_map) {
     if (f(i.second)) {
@@ -1177,6 +1177,21 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   return out << ")";
 }
 
+BlueStore::SharedBlob::SharedBlob(uint64_t i, const string& k, Cache *c)
+  : sbid(i),
+    key(k),
+    bc(c)
+{
+}
+
+BlueStore::SharedBlob::~SharedBlob()
+{
+  if (bc.cache) {   // the dummy instances have a nullptr
+    std::lock_guard<std::recursive_mutex> l(bc.cache->lock);
+    bc._clear();
+  }
+}
+
 void BlueStore::SharedBlob::put()
 {
   if (--nref == 0) {
@@ -1189,6 +1204,8 @@ void BlueStore::SharedBlob::put()
 	dout(20) << __func__ << " " << this
 		 << " lost race to remove myself from set" << dendl;
       }
+    } else {
+      delete this;
     }
   }
 }
@@ -1899,7 +1916,7 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
 	   p->blob == n->blob &&
 	   p->blob_offset + p->length == n->blob_offset) {
       p->length += n->length;
-      extent_map.erase(n++);
+      rm(n++);
       ++removed;
     }
     if (n == extent_map.end()) {
@@ -1926,10 +1943,10 @@ void BlueStore::ExtentMap::punch_hole(
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
 	  *new Extent(offset, p->blob_offset + front, length, p->blob));
-	extent_map.insert(*new Extent(end,
-				      p->blob_offset + front + length,
-				      p->length - front - length,
-				      p->blob));
+	add(end,
+	    p->blob_offset + front + length,
+	    p->length - front - length,
+	    p->blob);
 	p->length = front;
 	break;
       } else {
@@ -1947,16 +1964,15 @@ void BlueStore::ExtentMap::punch_hole(
       // deref whole lextent
       old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				      p->length, p->blob));
-      extent_map.erase(p++);
+      rm(p++);
       continue;
     }
     // deref head
     uint64_t keep = (p->logical_offset + p->length) - end;
     old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
 				    p->length - keep, p->blob));
-    extent_map.insert(*new Extent(end, p->blob_offset + p->length - keep, keep,
-				  p->blob));
-    extent_map.erase(p);
+    add(end, p->blob_offset + p->length - keep, keep, p->blob);
+    rm(p);
     break;
   }
 }
@@ -6881,7 +6897,7 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
       dout(log_level) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
-    std::lock_guard<std::mutex> l(e.blob->shared_blob->bc.cache->lock);
+    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->bc.cache->lock);
     if (!e.blob->shared_blob->bc.empty()) {
       for (auto& i : e.blob->shared_blob->bc.buffer_map) {
 	dout(log_level) << __func__ << "       0x" << std::hex << i.first
@@ -7353,7 +7369,10 @@ void BlueStore::_wctx_finish(
   WriteContext *wctx)
 {
   set<pair<bool, BlobRef> > blobs2remove;
-  for (auto &lo : wctx->old_extents) {
+  auto oep = wctx->old_extents.begin();
+  while (oep != wctx->old_extents.end()) {
+    auto &lo = *oep;
+    oep = wctx->old_extents.erase(oep);
     dout(20) << __func__ << " lex_old " << lo << dendl;
     BlobRef b = lo.blob;
     const bluestore_blob_t& blob = b->get_blob();
@@ -7401,6 +7420,7 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
+    delete &lo;
   }
 }
 
@@ -8001,9 +8021,7 @@ int BlueStore::_clone(TransContext *txc,
 	}
       }
       // dup extent
-      newo->extent_map.extent_map.insert(*new Extent(e.logical_offset,
-						     e.blob_offset,
-						     e.length, cb));
+      newo->extent_map.add(e.logical_offset, e.blob_offset, e.length, cb);
       txc->statfs_delta.stored() += e.length;
       if (e.blob->get_blob().is_compressed()) {
 	txc->statfs_delta.compressed_original() -= e.length;
