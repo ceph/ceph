@@ -103,7 +103,6 @@ BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
-BuildRequires:	hdparm
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
@@ -227,7 +226,6 @@ Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
 Requires:      util-linux
-Requires:      hdparm
 Requires:      cryptsetup
 Requires:      findutils
 Requires:      which
