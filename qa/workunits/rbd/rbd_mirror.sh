@@ -211,7 +211,7 @@ for i in ${image3} ${image5}; do
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
   # workaround #16555: before removing make sure it is not still bootstrapped
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
-  remove_image ${CLUSTER2} ${POOL} ${i}
+  remove_image_retry ${CLUSTER2} ${POOL} ${i}
 done
 
 for i in ${image2} ${image3} ${image4} ${image5}; do
