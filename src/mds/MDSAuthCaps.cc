@@ -110,12 +110,24 @@ void MDSCapMatch::normalize_path()
 
 bool MDSCapMatch::match(const std::string &target_path,
 			const int caller_uid,
-			const int caller_gid) const
+			const int caller_gid,
+			const vector<uint64_t> *caller_gid_list) const
 {
   if (uid != MDS_AUTH_UID_ANY) {
     if (uid != caller_uid)
       return false;
-    if (std::find(gids.begin(), gids.end(), caller_gid) == gids.end())
+    bool gid_matched = false;
+    if (std::find(gids.begin(), gids.end(), caller_gid) != gids.end())
+      gid_matched = true;
+    if (caller_gid_list) {
+      for (auto i = caller_gid_list->begin(); i != caller_gid_list->end(); ++i) {
+	if (std::find(gids.begin(), gids.end(), *i) != gids.end()) {
+	  gid_matched = true;
+	  break;
+	}
+      }
+    }
+    if (!gid_matched)
       return false;
   }
 
@@ -168,6 +180,7 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 			     uid_t inode_uid, gid_t inode_gid,
 			     unsigned inode_mode,
 			     uid_t caller_uid, gid_t caller_gid,
+			     const vector<uint64_t> *caller_gid_list,
 			     unsigned mask,
 			     uid_t new_uid, gid_t new_gid) const
 {
@@ -176,6 +189,7 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 		   << " owner " << inode_uid << ":" << inode_gid
 		   << " mode 0" << std::oct << inode_mode << std::dec
 		   << ") by caller " << caller_uid << ":" << caller_gid
+// << "[" << caller_gid_list << "]";
 		   << " mask " << mask
 		   << " new " << new_uid << ":" << new_gid
 		   << " cap: " << *this << dendl;
@@ -184,7 +198,7 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
        i != grants.end();
        ++i) {
 
-    if (i->match.match(inode_path, caller_uid, caller_gid) &&
+    if (i->match.match(inode_path, caller_uid, caller_gid, caller_gid_list) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
 
       // Spec is non-allowing if caller asked for set pool but spec forbids it
