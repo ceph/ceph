@@ -1418,7 +1418,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(auid, bl);
 
     ::encode_nohead(snaps, bl, features);
-    removed_snaps.encode_nohead(bl);
+    ::encode_nohead(removed_snaps, bl);
     return;
   }
 
@@ -1574,7 +1574,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(m, bl);
     ::decode(auid, bl);
     ::decode_nohead(n, snaps, bl);
-    removed_snaps.decode_nohead(m, bl);
+    ::decode_nohead(m, removed_snaps, bl);
   }
 
   if (struct_v >= 4) {
