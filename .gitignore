@@ -15,6 +15,7 @@
 *.tmp
 *.orig
 *.patch
+*.pyc
 ceph.spec
 cscope.*
 gmon.out
