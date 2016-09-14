@@ -2365,24 +2365,7 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
 {
   *again = false;
-
   *phandle = NULL;
-
-  if (extra_data_len) {
-    size_t extra_len = bl.length();
-    if (extra_len > extra_data_len)
-      extra_len = extra_data_len;
-
-    bufferlist extra;
-    bl.splice(0, extra_len, &extra);
-    extra_data_bl.append(extra);
-
-    extra_data_len -= extra_len;
-    if (bl.length() == 0) {
-      return 0;
-    }
-  }
-
   uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
@@ -6662,17 +6645,33 @@ class RGWRadosPutObj : public RGWGetDataCB
   RGWOpStateSingleOp *opstate;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
+  bufferlist extra_data_bl;
+  uint64_t extra_data_len;
 public:
   RGWRadosPutObj(RGWPutObjProcessor_Atomic *p, RGWOpStateSingleOp *_ops,
                  void (*_progress_cb)(off_t, void *), void *_progress_data) : processor(p), opstate(_ops),
                                                                        progress_cb(_progress_cb),
-                                                                       progress_data(_progress_data) {}
+                                                                       progress_data(_progress_data),
+                                                                       extra_data_len(0) {}
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
     if (progress_cb) {
       progress_cb(ofs, progress_data);
     }
+    if (extra_data_len) {
+      size_t extra_len = bl.length();
+      if (extra_len > extra_data_len)
+        extra_len = extra_data_len;
 
-    bool again;
+      bufferlist extra;
+      bl.splice(0, extra_len, &extra);
+      extra_data_bl.append(extra);
+
+      extra_data_len -= extra_len;
+      if (bl.length() == 0) {
+        return 0;
+      }
+    }
+    bool again = false;
 
     bool need_opstate = true;
 
@@ -6709,9 +6708,10 @@ public:
     return 0;
   }
 
+  bufferlist& get_extra_data() { return extra_data_bl; }
+
   void set_extra_data_len(uint64_t len) {
-    RGWGetDataCB::set_extra_data_len(len);
-    processor->set_extra_data_len(len);
+    extra_data_len = len;
   }
 
   int complete(string& etag, real_time *mtime, real_time set_mtime, map<string, bufferlist>& attrs, real_time delete_at) {
@@ -7102,7 +7102,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   { /* opening scope so that we can do goto, sorry */
-    bufferlist& extra_data_bl = processor.get_extra_data();
+    bufferlist& extra_data_bl = cb.get_extra_data();
     if (extra_data_bl.length()) {
       JSONParser jp;
       if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
