@@ -40,14 +40,12 @@ struct ceph_statx {
 	uint64_t	stx_size;
 	uint64_t	stx_blocks;
 	uint64_t	stx_version;
+	dev_t		stx_dev;
+	dev_t		stx_rdev;
 	struct timespec	stx_atime;
 	struct timespec	stx_btime;
 	struct timespec	stx_ctime;
 	struct timespec	stx_mtime;
-	uint32_t	stx_rdev_major;
-	uint32_t	stx_rdev_minor;
-	uint32_t	stx_dev_major;
-	uint32_t	stx_dev_minor;
 };
 
 #define CEPH_STATX_MODE		0x00000001U     /* Want/got stx_mode */
