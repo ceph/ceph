@@ -2724,7 +2724,7 @@ int BlueStore::_open_alloc()
   assert(bdev->get_size());
   alloc = Allocator::create(g_conf->bluestore_allocator,
                             bdev->get_size(),
-                            block_size);
+                            min_min_alloc_size);
   uint64_t num = 0, bytes = 0;
 
   // initialize from freelist
@@ -3544,6 +3544,8 @@ int BlueStore::mkfs()
   r = _open_fm(true);
   if (r < 0)
     goto out_close_db;
+
+  _save_min_min_alloc_size(min_alloc_size);
 
   r = _open_alloc();
   if (r < 0)
@@ -5622,9 +5624,38 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
 }
 
-
 // -----------------
 // write helpers
+void BlueStore::_save_min_min_alloc_size(uint64_t new_val)
+{
+  assert(new_val > 0);
+  if (new_val == min_min_alloc_size && min_min_alloc_size > 0) {
+    return;
+  }
+
+  if (new_val > min_min_alloc_size && min_min_alloc_size > 0) {
+    derr << "warning: bluestore_min_alloc_size "
+         << new_val << " > min_min_alloc_size " << min_min_alloc_size << ","
+         << " may impact performance." << dendl;
+    return;
+  }
+
+  if (new_val < min_min_alloc_size && min_min_alloc_size > 0) {
+    derr << "warning: bluestore_min_alloc_size value decreased from "
+         << min_min_alloc_size << " to " << new_val << "."
+         << " Decreased value could have performance impact." << dendl;
+  }
+
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  {
+    bufferlist bl;
+    encode(new_val, bl);
+    t->set(PREFIX_SUPER, "min_min_alloc_size", bl);
+    db->submit_transaction_sync(t);
+  }
+  min_min_alloc_size = new_val;
+}
 
 int BlueStore::_open_super_meta()
 {
@@ -5668,6 +5699,21 @@ int BlueStore::_open_super_meta()
       dout(10) << __func__ << " freelist_type " << freelist_type
 	       << " (legacy bluestore instance)" << dendl;
     }
+  }
+
+  // Min min_alloc_size
+  {
+    bufferlist bl;
+    min_min_alloc_size = 0;
+    db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
+    bufferlist::iterator p = bl.begin();
+    try {
+      ::decode(min_min_alloc_size, p);
+    } catch (buffer::error& e) {
+    }
+
+    _save_min_min_alloc_size(min_alloc_size);
+    dout(10) << __func__ << " min_min_alloc_size " << min_min_alloc_size << dendl;
   }
 
   // bluefs alloc

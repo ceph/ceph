@@ -435,7 +435,7 @@ TEST(BitAllocator, test_bmap_alloc)
 
     for (int64_t iter = 0; iter < max_iter; iter++) {
       for (int64_t i = 0; i < total_blocks; i++) {
-        debug_assert(alloc->reserve_blocks(1));
+        alloc_assert(alloc->reserve_blocks(1));
         allocated = alloc->alloc_blocks_res(1, 0, &start_block);
         bmap_test_assert(allocated == 1);
         bmap_test_assert(start_block == i);
@@ -448,7 +448,7 @@ TEST(BitAllocator, test_bmap_alloc)
 
     for (int64_t iter = 0; iter < max_iter; iter++) {
       for (int64_t i = 0; i < total_blocks / zone_size; i++) {
-        debug_assert(alloc->reserve_blocks(zone_size));
+        alloc_assert(alloc->reserve_blocks(zone_size));
         allocated = alloc->alloc_blocks_res(zone_size, 0, &start_block);
         bmap_test_assert(allocated == zone_size);
         bmap_test_assert(start_block == i * zone_size);
@@ -646,7 +646,7 @@ do_work(BitAllocator *alloc)
 
   while (num_iters--) {
     printf("Allocating in tid %d.\n", my_tid);
-    debug_assert(alloc->reserve_blocks(num_blocks));
+    alloc_assert(alloc->reserve_blocks(num_blocks));
     for (int i = 0; i < num_blocks; i++) {
       alloced = alloc->alloc_blocks_res(1, 0, &start_block);
       bmap_test_assert(alloced == 1);
@@ -676,11 +676,11 @@ do_work_dis(BitAllocator *alloc)
   ExtentList *block_list = new ExtentList(&extents, 4096);
 
   while (num_iters--) {
-      debug_assert(alloc->reserve_blocks(num_blocks));
+      alloc_assert(alloc->reserve_blocks(num_blocks));
       alloced = alloc->alloc_blocks_dis_res(num_blocks, 0, block_list);
-      debug_assert(alloced == num_blocks);
+      alloc_assert(alloced == num_blocks);
 
-      debug_assert(alloc->is_allocated_dis(block_list, num_blocks));
+      alloc_assert(alloc->is_allocated_dis(block_list, num_blocks));
       alloc->free_blocks_dis(num_blocks, block_list);
       block_list->reset();
   }
