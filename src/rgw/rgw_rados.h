@@ -3415,8 +3415,6 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   int cur_part_id;
   off_t data_ofs;
 
-  uint64_t extra_data_len;
-  bufferlist extra_data_bl;
   bufferlist pending_data_bl;
   uint64_t max_chunk_size;
 
@@ -3456,7 +3454,6 @@ public:
                                 next_part_ofs(_p),
                                 cur_part_id(0),
                                 data_ofs(0),
-                                extra_data_len(0),
                                 max_chunk_size(0),
                                 versioned_object(versioned),
                                 olh_epoch(0),
@@ -3465,11 +3462,7 @@ public:
                                 unique_tag(_t) {}
   int prepare(RGWRados *store, string *oid_rand);
   virtual bool immutable_head() { return false; }
-  void set_extra_data_len(uint64_t len) {
-    extra_data_len = len;
-  }
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again);
-  bufferlist& get_extra_data() { return extra_data_bl; }
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;
