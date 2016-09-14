@@ -195,23 +195,8 @@ public:
                          bufferlist* manifest_bl) override;
 };
 
-struct post_part_field {
-  string val;
-  map<string, string> params;
-};
-
-struct post_form_part {
-  string name;
-  string content_type;
-  map<string, struct post_part_field, ltstr_nocase> fields;
-  bufferlist data;
-};
-
 class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
-  string boundary;
   string filename;
-  bufferlist in_data;
-  map<string, post_form_part, const ltstr_nocase> parts;  
   RGWPolicyEnv env;
   RGWPolicy post_policy;
   string err_msg;
