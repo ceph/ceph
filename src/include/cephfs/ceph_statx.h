@@ -36,7 +36,6 @@ struct ceph_statx {
 	uint32_t	stx_uid;
 	uint32_t	stx_gid;
 	uint16_t	stx_mode;
-	uint16_t	__spare0[1];
 	uint64_t	stx_ino;
 	uint64_t	stx_size;
 	uint64_t	stx_blocks;
@@ -53,7 +52,6 @@ struct ceph_statx {
 	uint32_t	stx_rdev_minor;
 	uint32_t	stx_dev_major;
 	uint32_t	stx_dev_minor;
-	uint64_t	__spare1[16];
 };
 
 #define CEPH_STATX_MODE		0x00000001U     /* Want/got stx_mode */
