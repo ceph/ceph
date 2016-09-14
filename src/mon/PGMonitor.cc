@@ -772,14 +772,14 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
     return false;
   }
 
-  last_osd_report[from] = ceph_clock_now();
-
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd." << dendl;
     return false;
   }
+      
+  last_osd_report[from] = ceph_clock_now();
 
   if (!pg_stats_have_changed(from, stats)) {
     dout(10) << " message contains no new osd|pg stats" << dendl;
