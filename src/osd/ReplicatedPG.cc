@@ -1629,7 +1629,7 @@ void ReplicatedPG::do_request(
     break;
 
   case MSG_OSD_REP_SCRUB:
-    replica_scrub(op, handle);
+    do_build_scrub_map(op, handle);
     break;
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
@@ -8542,24 +8542,14 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
   assert(applied_version > last_update_applied);
   assert(applied_version <= info.last_update);
   last_update_applied = applied_version;
-  if (is_primary()) {
-    if (scrubber.active) {
-      if (last_update_applied == scrubber.subset_last_update) {
-        requeue_scrub();
-      }
-    } else {
-      assert(scrubber.start == scrubber.end);
-    }
-  } else {
-    if (scrubber.active_rep_scrub) {
-      if (last_update_applied == static_cast<MOSDRepScrub*>(
+  if (scrubber.active_rep_scrub) {
+    if (last_update_applied == static_cast<MOSDRepScrub*>(
 	    scrubber.active_rep_scrub->get_req())->scrub_to) {
-	osd->op_wq.queue(
+      osd->op_wq.queue(
 	  make_pair(
 	    this,
 	    scrubber.active_rep_scrub));
 	scrubber.active_rep_scrub = OpRequestRef();
-      }
     }
   }
 }
@@ -9760,9 +9750,14 @@ void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (!deleting && active_pushes == 0
+  if (!deleting && active_pushes == 0 &&
+      scrubber.active_rep_scrub
       && scrubber.is_chunky_scrub_active()) {
-    requeue_scrub();
+      osd->op_wq.queue(
+        make_pair(
+	  this,
+	  scrubber.active_rep_scrub));
+    scrubber.active_rep_scrub = OpRequestRef();
   }
 
   unlock();

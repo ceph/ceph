@@ -583,8 +583,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;
+   void be_deep_scan_list(
+     ScrubMap &map, vector<hobject_t> &ls, uint32_t seed,
+     ThreadPool::TPHandle &handle);
    void be_scan_list(
-     ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
+     ScrubMap &map, const vector<hobject_t> &ls, uint32_t seed,
      ThreadPool::TPHandle &handle);
    enum scrub_error_type be_compare_scrub_objects(
      pg_shard_t auth_shard,

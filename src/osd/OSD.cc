@@ -175,6 +175,10 @@ void PGQueueable::RunVis::operator()(const PGRecovery &op) {
   return osd->do_recovery(pg.get(), op.epoch_queued, op.reserved_pushes, handle);
 }
 
+void PGQueueable::RunVis::operator()(const PGBuildScrubMap &op) {
+  return pg->replica_scrub(op.epoch_queued, handle);
+}
+
 //Initial features in new superblock.
 //Features here are also automatically upgraded
 CompatSet OSD::get_osd_initial_compat_set() {
