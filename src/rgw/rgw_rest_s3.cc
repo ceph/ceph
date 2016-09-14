@@ -1768,6 +1768,11 @@ void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
   key = new_key;
 }
 
+std::string RGWPostObj_ObjStore_S3::get_current_filename() const
+{
+  return s->object.name;
+}
+
 int RGWPostObj_ObjStore_S3::get_params()
 {
   // get the part boundary

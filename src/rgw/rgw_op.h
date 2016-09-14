@@ -1020,6 +1020,11 @@ protected:
   map<string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
 
+  /* Must be called after get_data() or the result is undefined. */
+  virtual std::string get_current_filename() const = 0;
+  virtual bool is_next_file_to_upload() {
+     return false;
+  }
 public:
   RGWPostObj() : min_len(0),
                  max_len(LLONG_MAX),

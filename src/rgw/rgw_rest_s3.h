@@ -235,6 +235,8 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
 
   int get_policy();
   void rebuild_key(string& key);
+
+  std::string get_current_filename() const override;
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
