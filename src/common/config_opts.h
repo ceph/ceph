@@ -398,6 +398,7 @@ OPTION(cephx_sign_messages, OPT_BOOL, true)  // Default to signing session messa
 OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(auth_debug, OPT_BOOL, false)          // if true, assert when weird things happen
+OPTION(mon_client_hunt_parallel, OPT_U32, 2)   // how many mons to try to connect to in parallel during hunt
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_ping_timeout, OPT_DOUBLE, 30.0)   // fail if we don't hear back
