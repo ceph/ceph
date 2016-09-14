@@ -314,7 +314,7 @@ void BlueFS::_init_alloc()
       continue;
     }
     assert(bdev[id]->get_size());
-    alloc[id] = Allocator::create(g_conf->bluestore_allocator,
+    alloc[id] = Allocator::create(g_conf->bluefs_allocator,
                                   bdev[id]->get_size(),
                                   g_conf->bluefs_alloc_size);
     interval_set<uint64_t>& p = block_all[id];
