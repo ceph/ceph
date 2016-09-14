@@ -256,13 +256,13 @@ public:
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
     int discard(uint64_t offset, uint64_t length) {
-      std::lock_guard<std::mutex> l(cache->lock);
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
       return _discard(offset, length);
     }
     int _discard(uint64_t offset, uint64_t length);
 
     void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
-      std::lock_guard<std::mutex> l(cache->lock);
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
       b->cache_private = _discard(offset, bl.length());
@@ -270,7 +270,7 @@ public:
     }
     void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {
-      std::lock_guard<std::mutex> l(cache->lock);
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(offset, bl.length());
       _add_buffer(b, 1, nullptr);
@@ -285,7 +285,7 @@ public:
     }
 
     void dump(Formatter *f) const {
-      std::lock_guard<std::mutex> l(cache->lock);
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
@@ -676,7 +676,7 @@ public:
   /// a cache (shard) of onodes and buffers
   struct Cache {
     PerfCounters *logger;
-    std::mutex lock;                ///< protect lru and other structures
+    std::recursive_mutex lock;          ///< protect lru and other structures
 
     static Cache *create(string type, PerfCounters *logger);
 
