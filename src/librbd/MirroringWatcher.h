@@ -29,6 +29,11 @@ public:
                                   cls::rbd::MirrorImageState mirror_image_state,
                                   const std::string &image_id,
                                   const std::string &global_image_id);
+  static int notify_image_updated(librados::IoCtx &io_ctx,
+                                  cls::rbd::MirrorImageState mirror_image_state,
+                                  const std::string &image_id,
+                                  const std::string &global_image_id,
+                                  Context *on_finish);
 
   virtual void handle_mode_updated(cls::rbd::MirrorMode mirror_mode,
                                    Context *on_ack) = 0;

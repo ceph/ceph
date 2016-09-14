@@ -197,6 +197,13 @@ public:
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
+  void expect_update_features(MockReplayImageCtx &mock_image_ctx, Context **on_finish,
+                              uint64_t features, bool enabled, uint64_t op_tid) {
+      EXPECT_CALL(*mock_image_ctx.operations, execute_update_features(features, enabled, _, op_tid))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
+                                  NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
+  }
+
   void expect_refresh_image(MockReplayImageCtx &mock_image_ctx, bool required,
                             int r) {
     EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
@@ -1237,6 +1244,47 @@ TEST_F(TestMockJournalReplay, FlattenEventInvalid) {
                &on_finish_ready, &on_finish_safe);
 
   wait_for_op_invoked(&on_finish, -EINVAL);
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, UpdateFeaturesEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  uint64_t features = RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF;
+  bool enabled = !ictx->test_features(features);
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_update_features(mock_image_ctx, &on_finish, features, enabled, 123);
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay,
+               EventEntry{UpdateFeaturesEvent(123, features, enabled)},
+               &on_start_ready, &on_start_safe);
+
+  C_SaferCond on_resume;
+  when_replay_op_ready(mock_journal_replay, 123, &on_resume);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  ASSERT_EQ(0, on_resume.wait());
+  wait_for_op_invoked(&on_finish, 0);
+
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());

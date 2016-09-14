@@ -70,6 +70,10 @@ public:
   int snap_set_limit(uint64_t limit);
   void execute_snap_set_limit(uint64_t limit, Context *on_finish);
 
+  int update_features(uint64_t features, bool enabled);
+  void execute_update_features(uint64_t features, bool enabled,
+                               Context *on_finish, uint64_t journal_op_tid);
+
   int prepare_image_update();
 
 private:

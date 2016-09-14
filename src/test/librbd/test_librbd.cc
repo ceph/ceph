@@ -3782,26 +3782,45 @@ TEST_F(TestLibRBD, UpdateFeatures)
     ASSERT_EQ(0, image.update_features(disable_features, false));
   }
 
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(0U, features & disable_features);
+
   // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_JOURNALING, true));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, true));
 
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_NE(0U, features & RBD_FEATURE_EXCLUSIVE_LOCK);
+
   // cannot enable fast diff w/o object map
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, true));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_NE(0U, features & RBD_FEATURE_OBJECT_MAP);
+
+  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+  uint64_t flags;
+  ASSERT_EQ(0, image.get_flags(&flags));
+  ASSERT_EQ(expected_flags, flags);
+
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(0U, features & RBD_FEATURE_OBJECT_MAP);
+
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
                                      RBD_FEATURE_FAST_DIFF |
                                      RBD_FEATURE_JOURNALING, true));
 
-  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID |
-                            RBD_FLAG_FAST_DIFF_INVALID;
-  uint64_t flags;
+  expected_flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
   ASSERT_EQ(0, image.get_flags(&flags));
   ASSERT_EQ(expected_flags, flags);
 
   // cannot disable object map w/ fast diff
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_FAST_DIFF, false));
+  ASSERT_EQ(0, image.features(&features));
+  ASSERT_EQ(0U, features & RBD_FEATURE_FAST_DIFF);
 
   expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
   ASSERT_EQ(0, image.get_flags(&flags));
@@ -3820,6 +3839,7 @@ TEST_F(TestLibRBD, UpdateFeatures)
 
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
 
+  ASSERT_EQ(0, image.features(&features));
   if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0) {
     ASSERT_EQ(0, image.update_features(RBD_FEATURE_DEEP_FLATTEN, false));
   }
