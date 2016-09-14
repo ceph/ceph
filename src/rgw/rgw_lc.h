@@ -180,6 +180,7 @@ class RGWLC {
   int max_objs;
   string *obj_names;
   atomic_t down_flag;
+  string cookie;
 
   class LCWorker : public Thread {
     CephContext *cct;
