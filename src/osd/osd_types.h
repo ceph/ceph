@@ -3481,7 +3481,6 @@ inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
 
 // -------
 
-WRITE_CLASS_ENCODER(interval_set<uint64_t>)
 
 
 
