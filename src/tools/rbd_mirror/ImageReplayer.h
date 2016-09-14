@@ -217,7 +217,7 @@ private:
     }
 
     virtual void handle_promoted() {
-      // TODO
+      img_replayer->on_stop_journal_replay(0, "force promoted");
     }
 
     virtual void handle_resync() {
