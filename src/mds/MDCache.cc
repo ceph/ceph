@@ -9073,12 +9073,6 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
   // remove from map
   active_requests.erase(mdr->reqid);
 
-  // fail-safe!
-  if (was_replay && active_requests.empty()) {
-    dout(10) << " fail-safe queueing next replay op" << dendl;
-    mds->queue_one_replay();
-  }
-
   if (mds->logger)
     log_stat();
 
