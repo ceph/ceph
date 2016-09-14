@@ -7197,7 +7197,8 @@ int BlueStore::_do_alloc_write(
       // FIXME: memory alignment here is bad
       bufferlist t;
 
-      c->compress(*l, t);
+      r = c->compress(*l, t);
+      assert(r == 0);
 
       chdr.length = t.length();
       ::encode(chdr, compressed_bl);
