@@ -213,6 +213,7 @@ class Run(object):
             exc = BranchNotFoundError(suite_branch, 'ceph-qa-suite.git')
             util.schedule_fail(message=str(exc), name=self.name)
         log.info("ceph-qa-suite branch: %s %s", suite_branch, suite_hash)
+        return suite_hash
 
     def build_base_config(self):
         conf_dict = substitute_placeholders(dict_templ, self.config_input)
