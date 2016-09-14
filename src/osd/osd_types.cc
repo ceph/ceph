@@ -161,24 +161,6 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
 }
 
 // -- osd_reqid_t --
-void osd_reqid_t::encode(bufferlist &bl) const
-{
-  ENCODE_START(2, 2, bl);
-  ::encode(name, bl);
-  ::encode(tid, bl);
-  ::encode(inc, bl);
-  ENCODE_FINISH(bl);
-}
-
-void osd_reqid_t::decode(bufferlist::iterator &bl)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(name, bl);
-  ::decode(tid, bl);
-  ::decode(inc, bl);
-  DECODE_FINISH(bl);
-}
-
 void osd_reqid_t::dump(Formatter *f) const
 {
   f->dump_stream("name") << name;
