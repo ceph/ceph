@@ -216,8 +216,39 @@ public:
   int get_padding_last_aws4_chunk_encoded(bufferlist &bl, uint64_t chunk_size);
 };
 
+struct post_part_field {
+  string val;
+  map<string, string> params;
+};
+
+struct post_form_part {
+  string name;
+  string content_type;
+  map<string, struct post_part_field, ltstr_nocase> fields;
+  bufferlist data;
+};
+
 class RGWPostObj_ObjStore : public RGWPostObj
 {
+protected:
+  bufferlist in_data;
+  map<string, post_form_part, const ltstr_nocase> parts;
+
+  int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
+                         bool *reached_boundary,
+			 bool *done);
+
+  int read_line(bufferlist& bl, uint64_t max,
+                bool *reached_boundary, bool *done);
+
+  int read_data(bufferlist& bl, uint64_t max, bool *reached_boundary, bool *done);
+  string boundary;
+
+  int read_form_part_header(struct post_form_part *part,
+                            bool *done);
+  bool part_str(const string& name, string *val);
+  bool part_bl(const string& name, bufferlist *pbl);
+
 public:
   RGWPostObj_ObjStore() {}
   ~RGWPostObj_ObjStore() override {}
