@@ -1181,6 +1181,12 @@ public:
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   /** OSD **/
+  Mutex osd_lock;			// global lock
+  SafeTimer tick_timer;    // safe timer (osd_lock)
+
+  // Tick timer for those stuff that do not need osd_lock
+  Mutex tick_timer_lock;
+  SafeTimer tick_timer_without_osd_lock;
 public:
   // config observer bits
   virtual const char** get_tracked_conf_keys() const;
@@ -1190,12 +1196,6 @@ public:
   void check_config();
 
 protected:
-  Mutex osd_lock;			// global lock
-  SafeTimer tick_timer;    // safe timer (osd_lock)
-
-  // Tick timer for those stuff that do not need osd_lock
-  Mutex tick_timer_lock;
-  SafeTimer tick_timer_without_osd_lock;
 
   static const double OSD_TICK_INTERVAL; // tick interval for tick_timer and tick_timer_without_osd_lock
 
