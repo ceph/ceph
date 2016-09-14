@@ -1177,6 +1177,21 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   return out << ")";
 }
 
+BlueStore::SharedBlob::SharedBlob(uint64_t i, const string& k, Cache *c)
+  : sbid(i),
+    key(k),
+    bc(c)
+{
+}
+
+BlueStore::SharedBlob::~SharedBlob()
+{
+  if (bc.cache) {   // the dummy instances have a nullptr
+    std::lock_guard<std::recursive_mutex> l(bc.cache->lock);
+    bc._clear();
+  }
+}
+
 void BlueStore::SharedBlob::put()
 {
   if (--nref == 0) {

@@ -314,10 +314,8 @@ public:
 
     BufferSpace bc;             ///< buffer cache
 
-    SharedBlob(uint64_t i, const string& k, Cache *c) : sbid(i), key(k), bc(c) {}
-    ~SharedBlob() {
-      assert(bc.empty());
-    }
+    SharedBlob(uint64_t i, const string& k, Cache *c);
+    ~SharedBlob();
 
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
     friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
