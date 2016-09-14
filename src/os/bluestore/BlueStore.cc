@@ -516,7 +516,7 @@ void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
 
 void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard<std::recursive_mutex> l(lock);
 
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_size << " / " << buffer_max
@@ -709,7 +709,7 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
 
 void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard<std::recursive_mutex> l(lock);
 
   dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
 	   << " buffers " << buffer_bytes << " / " << buffer_max
@@ -986,7 +986,7 @@ void BlueStore::BufferSpace::read(
   BlueStore::ready_regions_t& res,
   interval_set<uint64_t>& res_intervals)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   res.clear();
   res_intervals.clear();
   uint64_t want_bytes = length;
@@ -1044,7 +1044,7 @@ void BlueStore::BufferSpace::read(
 
 void BlueStore::BufferSpace::finish_write(uint64_t seq)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
 
   auto i = writing_map.begin();
   while (i != writing_map.end()) {
@@ -1081,7 +1081,7 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
 
 void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
@@ -1090,7 +1090,7 @@ void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(30) << __func__ << dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
   if (p == onode_map.end()) {
@@ -1106,7 +1106,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
 void BlueStore::OnodeSpace::clear()
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(10) << __func__ << dendl;
   for (auto &p : onode_map) {
     cache->_rm_onode(p.second);
@@ -1119,7 +1119,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 				     const ghobject_t& new_oid,
 				     const string& new_okey)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(30) << __func__ << " " << old_oid << " -> " << new_oid << dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
   po = onode_map.find(old_oid);
@@ -1148,7 +1148,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock);
   dout(20) << __func__ << dendl;
   for (auto& i : onode_map) {
     if (f(i.second)) {
@@ -6882,7 +6882,7 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
       dout(log_level) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
-    std::lock_guard<std::mutex> l(e.blob->shared_blob->bc.cache->lock);
+    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->bc.cache->lock);
     if (!e.blob->shared_blob->bc.empty()) {
       for (auto& i : e.blob->shared_blob->bc.buffer_map) {
 	dout(log_level) << __func__ << "       0x" << std::hex << i.first
