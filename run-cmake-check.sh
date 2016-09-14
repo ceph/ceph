@@ -48,10 +48,10 @@ function run() {
 	$DRY_RUN ./install-deps.sh || return 1
     fi
     git submodule update --init --recursive
-    $DRY_RUN mkdir build
+    $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
-    $DRY_RUN cmake "$@" ../
-    $DRY_RUN make $BUILD_MAKEOPTS || return 1
+    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+    $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
 }
 
 function main() {
