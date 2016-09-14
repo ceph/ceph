@@ -33,7 +33,4 @@ else
 fi
 
 source ${CEPH_DETECT_INIT_VIRTUALENV}/bin/activate
-tox -c ${TOX_PATH} > ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out 2>&1
-status=$?
-grep -v InterpreterNotFound < ${CEPH_DETECT_INIT_VIRTUALENV}/tox.out
-exit $status
+tox -c ${TOX_PATH}
