@@ -236,6 +236,7 @@ class TestScheduleSuite(object):
         runobj.base_args = list()
         count = runobj.schedule_suite()
         assert(count == 1)
+        assert runobj.base_config['suite_sha1'] == 'suite_hash'
         m_has_packages_for_distro.assert_has_calls(
             [call('ceph_sha1', 'ubuntu', '14.04', 'basic', {})],
         )
