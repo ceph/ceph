@@ -38,7 +38,7 @@ function run() {
     type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
     type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
     if [ -n "$install_cmd" ]; then
-        sudo $install_cmd ccache jq
+        $DRY_RUN sudo $install_cmd ccache jq
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
