@@ -36,7 +36,7 @@ _prefix(std::ostream* _dout)
 }
 // -----------------------------------------------------------------------------
 
-const long unsigned int max_len = 2048;
+#define MAX_LEN (CEPH_PAGE_SIZE)
 
 int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
 {
@@ -69,11 +69,10 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
     int flush = i != in.buffers().end() ? Z_NO_FLUSH : Z_FINISH;
 
     strm.next_in = c_in;
-
     do {
-      bufferptr ptr = buffer::create_page_aligned(max_len);
+      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
-      strm.avail_out = max_len - begin;
+      strm.avail_out = MAX_LEN - begin;
       if (begin) {
         ptr.c_str()[0] = 0;
         begin = 0;
@@ -85,7 +84,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
          deflateEnd(&strm);
          return -1;
       }
-      have = max_len - strm.avail_out;
+      have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
@@ -126,9 +125,9 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
     strm.next_in = c_in;
 
     do {
-      bufferptr ptr = buffer::create_page_aligned(max_len);
+      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
-      strm.avail_out = max_len - begin;
+      strm.avail_out = MAX_LEN - begin;
       if (begin) {
         ptr.c_str()[0] = 1;
         begin = 0;
@@ -139,7 +138,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
               << ret << ")" << dendl;
          return -1;
       }
-      have = max_len - strm.avail_out;
+      have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
@@ -198,8 +197,8 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
     begin = 0;
 
     do {
-      strm.avail_out = max_len;
-      bufferptr ptr = buffer::create_page_aligned(max_len);
+      strm.avail_out = MAX_LEN;
+      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str();
       ret = inflate(&strm, Z_NO_FLUSH);
       if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {
@@ -208,7 +207,7 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
        inflateEnd(&strm);
        return -1;
       }
-      have = max_len - strm.avail_out;
+      have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
   }
