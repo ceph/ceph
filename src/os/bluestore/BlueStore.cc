@@ -6714,7 +6714,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_MOVE_RENAME:
     case Transaction::OP_TRY_RENAME:
-    {
+      {
 	assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
@@ -6722,8 +6722,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  no = c->get_onode(noid, false);
 	}
 	r = _rename(txc, c, o, no, noid);
-	if (r == -ENOENT && op->op == Transaction::OP_TRY_RENAME)
-	  r = 0;
       }
       break;
 
@@ -7243,7 +7241,8 @@ int BlueStore::_do_alloc_write(
       // FIXME: memory alignment here is bad
       bufferlist t;
 
-      c->compress(*l, t);
+      r = c->compress(*l, t);
+      assert(r == 0);
 
       chdr.length = t.length();
       ::encode(chdr, compressed_bl);
