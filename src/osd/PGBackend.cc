@@ -405,6 +405,14 @@ void PGBackend::be_deep_scan_list(
 {
   dout(10) << __func__ << " deep scanning: " << ls.size() << " objects left" << dendl;
 
+  if (g_conf->osd_rep_deep_scrub_sleep > 0) {
+    handle.suspend_tp_timeout();
+    utime_t t;
+    t.set_from_double(g_conf->osd_rep_deep_scrub_sleep);
+    t.sleep();
+    dout(20) << __func__ << " slept for " << t << dendl;
+  }
+
   for (int i = 0; i < g_conf->osd_deep_map_chunk_max && !ls.empty() ; ++i) {
     handle.reset_tp_timeout();
     hobject_t poid = ls.back();
