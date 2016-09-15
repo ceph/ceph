@@ -653,6 +653,8 @@ protected:
   const char *supplied_etag;
   const char *if_match;
   const char *if_nomatch;
+  const char *copy_source;
+  const char *copy_source_range;
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
@@ -662,6 +664,7 @@ protected:
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
+  bufferlist bl_aux;
 
   ceph::real_time delete_at;
 
@@ -671,6 +674,8 @@ public:
                 supplied_etag(NULL),
                 if_match(NULL),
                 if_nomatch(NULL),
+                copy_source(NULL),
+                copy_source_range(NULL),
                 chunked_upload(0),
                 dlo_manifest(NULL),
                 slo_info(NULL),
@@ -695,6 +700,9 @@ public:
   int verify_permission();
   void pre_exec();
   void execute();
+
+  int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
+  int get_data(string bucket_name, string object_name, off_t fst, off_t lst, bufferlist& bl);
 
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;

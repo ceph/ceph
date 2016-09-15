@@ -70,7 +70,7 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Copy Object**                 | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
-| **Multipart Uploads**           | Supported       | (missing Copy Part)                    |
+| **Multipart Uploads**           | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 
 Unsupported Header Fields

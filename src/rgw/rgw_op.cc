@@ -2606,6 +2606,66 @@ void RGWPutObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+class RGWPutObj_CB : public RGWGetDataCB
+{
+  RGWPutObj *op;
+public:
+  RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
+  virtual ~RGWPutObj_CB() {}
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+};
+
+int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+{
+  bufferlist bl_tmp;
+  bl.copy(bl_ofs, bl_len, bl_tmp);
+
+  bl_aux.append(bl_tmp);
+
+  return bl_len;
+}
+
+int RGWPutObj::get_data(string bucket_name, string object_name, off_t fst, off_t lst, bufferlist& bl)
+{
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> src_attrs;
+  RGWPutObj_CB cb(this);
+  int ret = 0;
+
+  ret = store->get_bucket_info(obj_ctx, s->src_tenant_name, bucket_name, bucket_info, NULL, &src_attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  int64_t new_ofs, new_end;
+
+  new_ofs = fst;
+  new_end = lst;
+
+  rgw_obj_key obj_key(object_name);
+  rgw_obj obj(bucket_info.bucket, obj_key);
+
+  RGWRados::Object op_target(store, bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  ret = read_op.prepare(&new_ofs, &new_end);
+  if (ret < 0)
+    return ret;
+
+  ret = read_op.iterate(new_ofs, new_end, &cb);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bl_aux.copy(0, bl_aux.length(), bl);
+
+  return ret;
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -2620,6 +2680,13 @@ void RGWPutObj::execute()
   bool multipart;
   
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
+
+  string bucket;
+  string object;
+  size_t pos;
+  off_t fst;
+  off_t lst;
+  int ret;
 
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;
@@ -2697,9 +2764,60 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  /* handle x-amz-copy-source */
+
+  if (copy_source) {
+    bucket = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+    pos = bucket.find("/");
+    if (pos == std::string::npos) {
+      ret = -EINVAL;
+      ldout(s->cct, 0) << "x-amz-copy-source bad format" << dendl;
+      goto done;
+    }
+    object = bucket.substr(pos + 1, bucket.size());
+    bucket = bucket.substr(0, pos);
+  }
+
+  /* handle x-amz-copy-source-range */
+
+  fst = 0;
+  lst = 0;
+
+  if (copy_source_range) {
+    string range = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE");
+    pos = range.find("=");
+    if (pos == std::string::npos) {
+      ret = -EINVAL;
+      ldout(s->cct, 0) << "x-amz-copy-source-range bad format" << dendl;
+      goto done;
+    }
+    range = range.substr(pos + 1, range.size());
+    pos = range.find("-");
+    if (pos == std::string::npos) {
+      ret = -EINVAL;
+      ldout(s->cct, 0) << "x-amz-copy-source-range bad format" << dendl;
+      goto done;
+    }
+    string first = range.substr(0, pos);
+    string last = range.substr(pos + 1, range.size());
+    fst = strtoull(first.c_str(), NULL, 10);
+    lst = strtoull(last.c_str(), NULL, 10);
+  }
+
   do {
     bufferlist data_in;
-    len = get_data(data_in);
+    if (fst > lst)
+      break;
+    if (!copy_source) {
+      len = get_data(data_in);
+    } else {
+      ret = get_data(bucket, object, fst, lst, data_in);
+      if (ret < 0)
+        goto done;
+      len = data_in.length();
+      s->content_length += len;
+      fst += len;
+    }
     if (len < 0) {
       op_ret = len;
       goto done;
