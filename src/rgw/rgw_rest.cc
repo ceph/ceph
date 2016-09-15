@@ -1511,6 +1511,7 @@ bool RGWPostObj_ObjStore::part_bl(const std::string& name,
   *pbl = iter->second.data;
   return true;
 }
+
 int RGWPostObj_ObjStore::verify_params()
 {
   /*  check that we have enough memory to store the object
@@ -1526,6 +1527,51 @@ int RGWPostObj_ObjStore::verify_params()
 
   return 0;
 }
+
+int RGWPostObj_ObjStore::get_params()
+{
+  if (s->expect_cont) {
+    /* OK, here it really gets ugly. With POST, the params are embedded in the
+     * request body, so we need to continue before being able to actually look
+     * at them. This diverts from the usual request flow. */
+    dump_continue(s);
+    s->expect_cont = false;
+  }
+
+  std::string req_content_type_str = s->info.env->get("CONTENT_TYPE", "");
+  std::string req_content_type;
+  std::map<std::string, std::string> params;
+  parse_params(req_content_type_str, req_content_type, params);
+
+  if (req_content_type.compare("multipart/form-data") != 0) {
+    err_msg = "Request Content-Type is not multipart/form-data";
+    return -EINVAL;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    ldout(s->cct, 20) << "request content_type_str="
+		      << req_content_type_str << dendl;
+    ldout(s->cct, 20) << "request content_type params:" << dendl;
+
+    for (const auto& pair : params) {
+      ldout(s->cct, 20) << " " << pair.first << " -> " << pair.second
+			<< dendl;
+    }
+  }
+
+  const auto iter = params.find("boundary");
+  if (std::end(params) == iter) {
+    err_msg = "Missing multipart boundary specification";
+    return -EINVAL;
+  }
+
+  /* Create the boundary. */
+  boundary = "--";
+  boundary.append(iter->second);
+
+  return 0;
+}
+
 
 int RGWPutACLs_ObjStore::get_params()
 {

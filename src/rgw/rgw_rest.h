@@ -234,6 +234,7 @@ public:
   };
 
 protected:
+  std::string err_msg;
   ceph::bufferlist in_data;
   std::map<std::string, post_form_part, const ltstr_nocase> parts;
 
@@ -261,6 +262,9 @@ protected:
   static int parse_part_field(const std::string& line,
                               std::string& field_name, /* out */
                               post_part_field& field); /* out */
+
+  int get_params() override;
+
 public:
   RGWPostObj_ObjStore() {}
   ~RGWPostObj_ObjStore() override {}
