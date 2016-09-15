@@ -167,6 +167,11 @@ Orphans Search Options
 
 	Number of shards to use for keeping the temporary scan info
 
+.. option:: --orphan-stale-secs
+
+        Number of seconds to wait before declaring an object to be an orphan.
+        Default is 86400 (24 hours).
+
 
 Examples
 ========
