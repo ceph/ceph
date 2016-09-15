@@ -1090,11 +1090,10 @@ public:
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
-    int scratch[maxout * 3];
-    char work[crush->working_size];
+    char work[crush_work_size(crush, maxout)];
     crush_init_workspace(crush, work);
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
-			       weight.size(), work, scratch);
+			       weight.size(), work);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
