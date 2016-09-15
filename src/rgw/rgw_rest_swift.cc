@@ -1710,7 +1710,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_index_op()
   }
 
   auto getop = new RGWGetObj_ObjStore_SWIFT;
-  getop->set_get_data(boost::string_ref("GET") == s->info.method);
+  getop->set_get_data(boost::algorithm::equals("GET", s->info.method));
 
   return getop;
 }
