@@ -4080,10 +4080,13 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           unsigned loop = 0;
           while (!boundary_found) {
             vector<hobject_t> objects;
+	    // If we need to exceed osd_scrub_chunk_max by calling this again,
+	    // use osd_scrub_chunk_min as maximum because the boundary checking
+	    // finds the largest possible list of objects on a boundary.
             ret = get_pgbackend()->objects_list_partial(
 	      start,
 	      cct->_conf->osd_scrub_chunk_min,
-	      cct->_conf->osd_scrub_chunk_max,
+	      loop == 0 ? cct->_conf->osd_scrub_chunk_max : cct->_conf->osd_scrub_chunk_min,
 	      &objects,
 	      &candidate_end);
             assert(ret >= 0);
