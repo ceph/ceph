@@ -1704,6 +1704,8 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
   uint32_t end = offset + length;
 
   unsigned n = 0;
+  size_t bound = 0;
+  denc_varint(0, bound);
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
        ++p, ++n) {
@@ -1714,70 +1716,91 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       return true;
     }
-  }
-  small_encode_varint(n, bl);
-  if (pn) {
-    *pn = n;
+    denc_varint(0, bound); // blobid
+    denc_varint(0, bound); // logical_offset
+    denc_varint(0, bound); // len
+    denc_varint(0, bound); // blob_offset
+    p->blob->bound_encode(bound);
   }
 
-  n = 0;
-  uint64_t pos = 0;
-  uint64_t prev_len = 0;
-  for (auto p = start;
-       p != extent_map.end() && p->logical_offset < end;
-       ++p, ++n) {
-    unsigned blobid;
-    bool include_blob = false;
-    if (p->blob->id >= 0) {
-      blobid = p->blob->id << BLOBID_SHIFT_BITS;
-      blobid |= BLOBID_FLAG_SPANNING;
-    } else if (p->blob->last_encoded_id < 0) {
-      p->blob->last_encoded_id = n + 1;  // so it is always non-zero
-      include_blob = true;
-      blobid = 0;  // the decoder will infer the id from n
-    } else {
-      blobid = p->blob->last_encoded_id << BLOBID_SHIFT_BITS;
+  {
+    auto app = bl.get_contiguous_appender(bound);
+    denc_varint(n, app);
+    if (pn) {
+      *pn = n;
     }
-    if (p->logical_offset == pos) {
-      blobid |= BLOBID_FLAG_CONTIGUOUS;
-    }
-    if (p->blob_offset == 0) {
-      blobid |= BLOBID_FLAG_ZEROOFFSET;
-    }
-    if (p->length == prev_len) {
-      blobid |= BLOBID_FLAG_SAMELENGTH;
-    } else {
-      prev_len = p->length;
-    }
-    if (p->blob_depth != 1) {
-      blobid |= BLOBID_FLAG_DEPTH;
-    }
-    small_encode_varint(blobid, bl);
-    if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
-      small_encode_varint_lowz(p->logical_offset - pos, bl);
-    }
-    if ((blobid & BLOBID_FLAG_ZEROOFFSET) == 0) {
-      small_encode_varint_lowz(p->blob_offset, bl);
-    }
-    if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
-      small_encode_varint_lowz(p->length, bl);
-    }
-    pos = p->logical_offset + p->length;
-    if (blobid & BLOBID_FLAG_DEPTH) {
-      ::encode(p->blob_depth, bl);
-    }
-    if (include_blob) {
-      p->blob->encode(bl);
+
+    n = 0;
+    uint64_t pos = 0;
+    uint64_t prev_len = 0;
+    for (auto p = start;
+	 p != extent_map.end() && p->logical_offset < end;
+	 ++p, ++n) {
+      unsigned blobid;
+      bool include_blob = false;
+      if (p->blob->id >= 0) {
+	blobid = p->blob->id << BLOBID_SHIFT_BITS;
+	blobid |= BLOBID_FLAG_SPANNING;
+      } else if (p->blob->last_encoded_id < 0) {
+	p->blob->last_encoded_id = n + 1;  // so it is always non-zero
+	include_blob = true;
+	blobid = 0;  // the decoder will infer the id from n
+      } else {
+	blobid = p->blob->last_encoded_id << BLOBID_SHIFT_BITS;
+      }
+      if (p->logical_offset == pos) {
+	blobid |= BLOBID_FLAG_CONTIGUOUS;
+      }
+      if (p->blob_offset == 0) {
+	blobid |= BLOBID_FLAG_ZEROOFFSET;
+      }
+      if (p->length == prev_len) {
+	blobid |= BLOBID_FLAG_SAMELENGTH;
+      } else {
+	prev_len = p->length;
+      }
+      if (p->blob_depth != 1) {
+	blobid |= BLOBID_FLAG_DEPTH;
+      }
+      denc_varint(blobid, app);
+      if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
+	denc_varint_lowz(p->logical_offset - pos, app);
+      }
+      if ((blobid & BLOBID_FLAG_ZEROOFFSET) == 0) {
+	denc_varint_lowz(p->blob_offset, app);
+      }
+      if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
+	denc_varint_lowz(p->length, app);
+      }
+      if (blobid & BLOBID_FLAG_DEPTH) {
+	denc(p->blob_depth, app);
+      }
+      pos = p->logical_offset + p->length;
+      if (include_blob) {
+	p->blob->encode(app);
+      }
     }
   }
+  /*derr << __func__ << bl << dendl;
+  derr << __func__ << ":";
+  bl.hexdump(*_dout);
+  *_dout << dendl;
+  */
   return false;
 }
 
 void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 {
-  bufferlist::iterator p = bl.begin();
+  /*
+  derr << __func__ << ":";
+  bl.hexdump(*_dout);
+  *_dout << dendl;
+  */
+
+  assert(bl.get_num_buffers() <= 1);
+  auto p = bl.front().begin_deep();
   uint32_t num;
-  small_decode_varint(num, p);
+  denc_varint(num, p);
   vector<BlobRef> blobs(num);
   uint64_t pos = 0;
   uint64_t prev_len = 0;
@@ -1785,25 +1808,25 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   while (!p.end()) {
     Extent *le = new Extent();
     uint64_t blobid;
-    small_decode_varint(blobid, p);
+    denc_varint(blobid, p);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
       uint64_t gap;
-      small_decode_varint_lowz(gap, p);
+      denc_varint_lowz(gap, p);
       pos += gap;
     }
     le->logical_offset = pos;
     if ((blobid & BLOBID_FLAG_ZEROOFFSET) == 0) {
-      small_decode_varint_lowz(le->blob_offset, p);
+      denc_varint_lowz(le->blob_offset, p);
     } else {
       le->blob_offset = 0;
     }
     if ((blobid & BLOBID_FLAG_SAMELENGTH) == 0) {
-      small_decode_varint_lowz(prev_len, p);
+      denc_varint_lowz(prev_len, p);
     }
     le->length = prev_len;
 
     if (blobid & BLOBID_FLAG_DEPTH) {
-      ::decode(le->blob_depth, p);
+      denc(le->blob_depth, p);
     } else {
       le->blob_depth = 1;
     }
@@ -1832,26 +1855,38 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   assert(n == num);
 }
 
-void BlueStore::ExtentMap::encode_spanning_blobs(bufferlist& bl)
+void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
 {
-  unsigned n = spanning_blob_map.size();
-  small_encode_varint(n, bl);
+  denc_varint((uint32_t)0, p);
+  size_t key_size = 0;
+  denc_varint((uint32_t)0, key_size);
+  p += spanning_blob_map.size() * key_size;
+  for (const auto& i : spanning_blob_map) {
+    i.second->bound_encode(p);
+    i.second->ref_map.bound_encode(p);
+  }
+}
+
+void BlueStore::ExtentMap::encode_spanning_blobs(
+  bufferlist::contiguous_appender& p)
+{
+  denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
-    small_encode_varint(i.second->id, bl);
-    i.second->encode(bl);
-    i.second->ref_map.encode(bl);
+    denc_varint(i.second->id, p);
+    i.second->encode(p);
+    i.second->ref_map.encode(p);
   }
 }
 
 void BlueStore::ExtentMap::decode_spanning_blobs(
   Collection *c,
-  bufferlist::iterator& p)
+  bufferptr::iterator& p)
 {
   unsigned n;
-  small_decode_varint(n, p);
+  denc_varint(n, p);
   while (n--) {
     BlobRef b(new Blob());
-    small_decode_varint(b->id, p);
+    denc_varint(b->id, p);
     spanning_blob_map[b->id] = b;
     b->decode(p);
     b->ref_map.decode(p);
@@ -2368,13 +2403,13 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     assert(r >= 0);
     on = new Onode(&onode_map, this, oid, key);
     on->exists = true;
-    bufferlist::iterator p = v.begin();
-    ::decode(on->onode, p);
+    bufferptr::iterator p = v.front().begin();
+    on->onode.decode(p);
 
     // initialize extent_map
     on->extent_map.decode_spanning_blobs(this, p);
     if (on->onode.extent_map_shards.empty()) {
-      ::decode(on->extent_map.inline_bl, p);
+      denc(on->extent_map.inline_bl, p);
       on->extent_map.decode_some(on->extent_map.inline_bl);
     } else {
       on->extent_map.init_shards(on, false, false);
@@ -4441,7 +4476,7 @@ int BlueStore::fsck()
 	bluestore_shared_blob_t shared_blob;
 	bufferlist bl = it->value();
 	bufferlist::iterator blp = bl.begin();
-	shared_blob.decode(blp);
+	::decode(shared_blob, blp);
 	dout(20) << __func__ << "  " << *sbi.sb << " " << shared_blob << dendl;
 	if (shared_blob.ref_map != sbi.ref_map) {
 	  derr << __func__ << " shared blob 0x" << std::hex << sbid << std::dec
@@ -6260,20 +6295,32 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
       logger->inc(l_bluestore_onode_reshard);
     }
 
-    bufferlist bl;
-    ::encode(o->onode, bl);
-    unsigned onode_part = bl.length();
-    o->extent_map.encode_spanning_blobs(bl);
-    unsigned blob_part = bl.length() - onode_part;
+    // bound encode
+    size_t bound = 0;
+    denc(o->onode, bound);
+    o->extent_map.bound_encode_spanning_blobs(bound);
     if (o->onode.extent_map_shards.empty()) {
-      ::encode(o->extent_map.inline_bl, bl);
+      denc(o->extent_map.inline_bl, bound);
     }
-    unsigned extent_part = bl.length() - onode_part - blob_part;
+
+    // encode
+    bufferlist bl;
+    {
+      auto p = bl.get_contiguous_appender(bound);
+      denc(o->onode, p);
+      //unsigned onode_part = bl.length();
+      o->extent_map.encode_spanning_blobs(p);
+      //unsigned blob_part = bl.length() - onode_part;
+      if (o->onode.extent_map_shards.empty()) {
+	denc(o->extent_map.inline_bl, p);
+      }
+      //unsigned extent_part = bl.length() - onode_part - blob_part;
+    }
 
     dout(20) << "  onode " << o->oid << " is " << bl.length()
-	     << " (" << onode_part << " bytes onode + "
-	     << blob_part << " bytes spanning blobs + "
-	     << extent_part << " bytes inline extents)"
+      //<< " (" << onode_part << " bytes onode + "
+      //<< blob_part << " bytes spanning blobs + "
+      //<< extent_part << " bytes inline extents)"
 	     << dendl;
     t->set(PREFIX_OBJ, o->key, bl);
 
@@ -6289,7 +6336,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
       t->rmkey(PREFIX_SHARED_BLOB, sb->key);
     } else {
       bufferlist bl;
-      sb->shared_blob.encode(bl);
+      ::encode(sb->shared_blob, bl);
       dout(20) << "  shared_blob 0x" << std::hex << sb->sbid << std::dec
 	       << " is " << bl.length() << dendl;
       t->set(PREFIX_SHARED_BLOB, sb->key, bl);
