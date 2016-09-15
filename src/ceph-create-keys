@@ -92,24 +92,41 @@ def get_key(cluster, mon_id):
                 os.fchmod(f.fileno(), 0600)
                 os.fchown(f.fileno(), get_ceph_uid(), get_ceph_gid())
                 LOG.info('Talking to monitor...')
-                returncode = subprocess.call(
-                    args=[
-                        'ceph',
+
+                args_prefix = [
+                        "ceph",
                         '--cluster={cluster}'.format(cluster=cluster),
                         '--name=mon.',
                         '--keyring=/var/lib/ceph/mon/{cluster}-{mon_id}/keyring'.format(
                             cluster=cluster,
                             mon_id=mon_id,
                             ),
+                        ]
+
+                # First try getting the key if it already exists, to handle
+                # the case where it exists but doesn't match the caps
+                # we would pass into get-or-create.
+                returncode = subprocess.call(
+                    args=args_prefix + [
                         'auth',
-                        'get-or-create',
+                        'get'
                         'client.admin',
-                        'mon', 'allow *',
-                        'osd', 'allow *',
-                        'mds', 'allow *',
                         ],
                     stdout=f,
                     )
+                if returncode == errno.ENOENT:
+                    returncode = subprocess.call(
+                        args=args_prefix + [
+                            'auth',
+                            'get-or-create',
+                            'client.admin',
+                            'mon', 'allow *',
+                            'osd', 'allow *',
+                            'mds', 'allow *',
+                            ],
+                        stdout=f,
+                        )
+
             if returncode != 0:
                 if returncode == errno.EPERM or returncode == errno.EACCES:
                     LOG.info('Cannot get or create admin key, permission denied')
