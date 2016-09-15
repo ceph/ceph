@@ -446,9 +446,6 @@ public:
       }
       return blob;
     }
-    size_t get_encoded_length() const {
-      return blob_bl.length();
-    }
     bool is_dirty() const {
       return dirty;
     }
@@ -477,24 +474,45 @@ public:
 	delete this;
     }
 
-    void encode(bufferlist& bl) const {
+//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
+
+#ifdef CACHE_BLOB_BL
+    void _encode() const {
       if (dirty) {
-	// manage blob_bl memory carefully
 	blob_bl.clear();
-	blob_bl.reserve(blob.estimate_encoded_size());
 	::encode(blob, blob_bl);
 	dirty = false;
       } else {
 	assert(blob_bl.length());
       }
-      bl.append(blob_bl);
     }
-    void decode(bufferlist::iterator& p) {
-      bufferlist::iterator s = p;
-      ::decode(blob, p);
-      s.copy(p.get_off() - s.get_off(), blob_bl);
+    void bound_encode(size_t& p) const {
+      _encode();
+      p += blob_bl.length();
+    }
+    void encode(bufferlist::contiguous_appender& p) const {
+      _encode();
+      p.append(blob_bl);
+    }
+    void decode(bufferptr::iterator& p) {
+      const char *start = p.get_pos();
+      denc(blob, p);
+      const char *end = p.get_pos();
+      blob_bl.clear();
+      blob_bl.append(start, end - start);
       dirty = false;
     }
+#else
+    void bound_encode(size_t& p) const {
+      denc(blob, p);
+    }
+    void encode(bufferlist::contiguous_appender& p) const {
+      denc(blob, p);
+    }
+    void decode(bufferptr::iterator& p) {
+      denc(blob, p);
+    }
+#endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
   typedef std::map<int,BlobRef> blob_map_t;
@@ -590,8 +608,9 @@ public:
 		     unsigned *pn);
     void decode_some(bufferlist& bl);
 
-    void encode_spanning_blobs(bufferlist& bl);
-    void decode_spanning_blobs(Collection *c, bufferlist::iterator& p);
+    void bound_encode_spanning_blobs(size_t& p);
+    void encode_spanning_blobs(bufferlist::contiguous_appender& p);
+    void decode_spanning_blobs(Collection *c, bufferptr::iterator& p);
 
     BlobRef get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
