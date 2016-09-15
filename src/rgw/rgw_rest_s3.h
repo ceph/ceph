@@ -199,7 +199,6 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   string filename;
   RGWPolicyEnv env;
   RGWPolicy post_policy;
-  string err_msg;
   map<string, string> crypt_http_responses;
 
   const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
