@@ -5182,7 +5182,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     ++p;
 
     if (ack->pg_stat.count(pg->info.pgid.pgid)) {
-      pair<version_t,epoch_t> acked = ack->pg_stat[pg->info.pgid.pgid];
+      const pair<version_t,epoch_t> &acked = ack->pg_stat[pg->info.pgid.pgid];
       pg->pg_stats_publish_lock.Lock();
       if (acked.first == pg->pg_stats_publish.reported_seq &&
 	  acked.second == pg->pg_stats_publish.reported_epoch) {
