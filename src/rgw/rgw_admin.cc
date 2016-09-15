@@ -183,6 +183,7 @@ void _usage()
   cerr << "\nOrphans search options:\n";
   cerr << "   --pool                    data pool to scan for leaked rados objects in\n";
   cerr << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cerr << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cerr << "   --job-id                  set the job id (for orphans find)\n";
   cerr << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cerr << "\n";
