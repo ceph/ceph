@@ -1051,7 +1051,6 @@ void ImageReplayer<I>::process_entry() {
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
   Context *on_commit = new C_ReplayCommitted(this, std::move(m_replay_entry));
   m_local_replay->process(m_event_entry, on_ready, on_commit);
-  m_event_entry = {};
 }
 
 template <typename I>
