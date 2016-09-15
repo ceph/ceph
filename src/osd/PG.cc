@@ -2070,7 +2070,6 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
-  scrubber.must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   if (scrubber.must_deep_scrub) {
     state_set(PG_STATE_DEEP_SCRUB);
@@ -2081,6 +2080,7 @@ bool PG::queue_scrub()
     scrubber.must_repair = false;
   }
   requeue_scrub();
+  scrubber.must_scrub = false;
   return true;
 }
 
@@ -2090,6 +2090,14 @@ unsigned PG::get_scrub_priority()
   int pool_scrub_priority = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_PRIORITY, &pool_scrub_priority);
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
+}
+
+unsigned PG::get_requested_scrub_priority()
+{
+  int pool_requested_scrub_priority = 0;
+  pool.info.opts.get(pool_opts_t::REQUESTED_SCRUB_PRIORITY, &pool_requested_scrub_priority);
+  return pool_requested_scrub_priority > 0 ?
+    pool_requested_scrub_priority : cct->_conf->osd_requested_scrub_priority;
 }
 
 struct C_PG_FinishRecovery : public Context {
