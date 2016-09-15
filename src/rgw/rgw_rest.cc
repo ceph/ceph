@@ -1272,8 +1272,9 @@ static void parse_params(const string& params_str, string& first,
   }
 }
 
-static int parse_part_field(const string& line, string& field_name,
-			    struct post_part_field& field)
+int RGWPostObj_ObjStore::parse_part_field(const std::string& line,
+                                          std::string& field_name,  /* out */
+                                          post_part_field& field)   /* out */
 {
   size_t pos = line.find(':');
   if (pos == string::npos)
@@ -1288,7 +1289,7 @@ static int parse_part_field(const string& line, string& field_name,
   return 0;
 }
 
-bool is_crlf(const char *s)
+static bool is_crlf(const char *s)
 {
   return (*s == '\r' && *(s + 1) == '\n');
 }
@@ -1344,10 +1345,11 @@ static int index_of(bufferlist& bl, int max_len, const string& str,
   return -1;
 }
 
-int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max,
-					       bool check_crlf,
-					       bool *reached_boundary,
-					       bool *done)
+int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
+                                            uint64_t max,
+                                            const bool check_crlf,
+                                            bool* const reached_boundary,
+                                            bool* const done)
 {
   uint64_t cl = max + 2 + boundary.size();
 
@@ -1364,15 +1366,17 @@ int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max,
   int skip;
   int index = index_of(in_data, cl, boundary, check_crlf, reached_boundary,
 		       &skip);
-  if (index >= 0)
+  if (index >= 0) {
     max = index;
+  }
 
-  if (max > in_data.length())
+  if (max > in_data.length()) {
     max = in_data.length();
+  }
 
   bl.substr_of(in_data, 0, max);
 
-  bufferlist new_read_data;
+  ceph::bufferlist new_read_data;
 
   /*
    * now we need to skip boundary for next time, also skip any crlf, or
@@ -1407,28 +1411,33 @@ int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max,
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::read_line(bufferlist& bl, uint64_t max,
-				  bool *reached_boundary, bool *done)
+int RGWPostObj_ObjStore::read_line(ceph::bufferlist& bl,
+                                   const uint64_t max,
+                                   bool* const reached_boundary,
+                                   bool* const done)
 {
   return read_with_boundary(bl, max, true, reached_boundary, done);
 }
 
-int RGWPostObj_ObjStore_S3::read_data(bufferlist& bl, uint64_t max,
-				  bool *reached_boundary, bool *done)
+int RGWPostObj_ObjStore::read_data(ceph::bufferlist& bl,
+                                   const uint64_t max,
+                                   bool* const reached_boundary,
+                                   bool* const done)
 {
   return read_with_boundary(bl, max, false, reached_boundary, done);
 }
 
 
-int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
-						  bool *done)
+int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part,
+                                               bool* const done)
 {
   bufferlist bl;
   bool reached_boundary;
   uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
   int r = read_line(bl, chunk_size, &reached_boundary, done);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
   if (*done) {
     return 0;
@@ -1436,27 +1445,30 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
 
   if (reached_boundary) { // skip the first boundary
     r = read_line(bl, chunk_size, &reached_boundary, done);
-    if (r < 0)
+    if (r < 0) {
       return r;
-    if (*done)
+    } else if (*done) {
       return 0;
+    }
   }
 
   while (true) {
   /*
    * iterate through fields
    */
-    string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
+    std::string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
 
-    if (line.empty())
+    if (line.empty()) {
       break;
+    }
 
     struct post_part_field field;
 
     string field_name;
     r = parse_part_field(line, field_name, field);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     part->fields[field_name] = field;
 
@@ -1464,8 +1476,9 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
       part->name = field.params["name"];
     }
 
-    if (reached_boundary)
+    if (reached_boundary) {
       break;
+    }
 
     r = read_line(bl, chunk_size, &reached_boundary, done);
   }
@@ -1473,25 +1486,27 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
   return 0;
 }
 
-bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
+bool RGWPostObj_ObjStore::part_str(const std::string& name,
+                                   std::string* val)
 {
-  map<string, struct post_form_part, ltstr_nocase>::iterator iter
-    = parts.find(name);
-  if (iter == parts.end())
+  const auto iter = parts.find(name);
+  if (std::end(parts) == iter) {
     return false;
+  }
 
-  bufferlist& data = iter->second.data;
-  string str = string(data.c_str(), data.length());
+  ceph::bufferlist& data = iter->second.data;
+  std::string str = string(data.c_str(), data.length());
   *val = rgw_trim_whitespace(str);
   return true;
 }
 
-bool RGWPostObj_ObjStore_S3::part_bl(const string& name, bufferlist *pbl)
+bool RGWPostObj_ObjStore::part_bl(const std::string& name,
+                                  ceph::bufferlist* pbl)
 {
-  map<string, struct post_form_part, ltstr_nocase>::iterator iter =
-    parts.find(name);
-  if (iter == parts.end())
+  const auto iter = parts.find(name);
+  if (std::end(parts) == iter) {
     return false;
+  }
 
   *pbl = iter->second.data;
   return true;
