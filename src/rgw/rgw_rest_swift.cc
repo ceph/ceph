@@ -1749,7 +1749,12 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
                              ws_conf.listing_css_doc);
 
       for (const auto& pair : common_prefixes) {
-        const std::string& subdir_name = pair.first;
+        std::string subdir_name = pair.first;
+        if (! subdir_name.empty()) {
+          /* To be compliant with Swift we need to remove the trailing
+           * slash. */
+          subdir_name.pop_back();
+        }
 
         htmler.dump_subdir(subdir_name);
       }
@@ -1779,7 +1784,8 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
 
 bool RGWSwiftWebsiteHandler::is_web_dir() const
 {
-  std::string subdir_name = s->object.name;
+  std::string subdir_name;
+  url_decode(s->object.name, subdir_name);
 
   /* Remove character from the subdir name if it is "/". */
   if (subdir_name.empty()) {
@@ -1844,7 +1850,7 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_index_doc();
 
-    if (s->info.request_uri.back() != '/') {
+    if (s->decoded_uri.back() != '/') {
       op_override = get_ws_redirect_op();
     } else if (! index.empty() && is_index_present(index)) {
       op_override = get_ws_index_op();
@@ -1878,7 +1884,7 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_index_doc();
 
-    if (s->info.request_uri.back() != '/') {
+    if (s->decoded_uri.back() != '/') {
       op_override = get_ws_redirect_op();
     } else if (! index.empty() && is_index_present(index)) {
       op_override = get_ws_index_op();
