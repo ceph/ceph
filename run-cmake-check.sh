@@ -47,6 +47,7 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
+    git submodule update --init --recursive
     $DRY_RUN mkdir build
     $DRY_RUN cd build
     $DRY_RUN cmake "$@" ../
