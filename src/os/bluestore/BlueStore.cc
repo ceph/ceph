@@ -2518,7 +2518,7 @@ const char **BlueStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "bluestore_csum_type",
-    "bluestore_compression",
+    "bluestore_compression_mode",
     "bluestore_compression_algorithm",
     "bluestore_compression_min_blob_size",
     "bluestore_compression_max_blob_size",
@@ -2533,7 +2533,7 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("bluestore_csum_type")) {
     _set_csum();
   }
-  if (changed.count("bluestore_compression") ||
+  if (changed.count("bluestore_compression_mode") ||
       changed.count("bluestore_compression_algorithm") ||
       changed.count("bluestore_compression_min_blob_size") ||
       changed.count("bluestore_compression_max_blob_size")) {
@@ -2546,13 +2546,13 @@ void BlueStore::_set_compression()
   comp_min_blob_size = g_conf->bluestore_compression_min_blob_size;
   comp_max_blob_size = g_conf->bluestore_compression_max_blob_size;
 
-  auto m = Compressor::get_comp_mode_type(g_conf->bluestore_compression);
+  auto m = Compressor::get_comp_mode_type(g_conf->bluestore_compression_mode);
   if (m) {
     comp_mode = *m;
   } else {
     derr << __func__ << " unrecognized value '"
-         << g_conf->bluestore_compression
-         << "' for bluestore_compression, reverting to 'none'"
+         << g_conf->bluestore_compression_mode
+         << "' for bluestore_compression_mode, reverting to 'none'"
          << dendl;
     comp_mode = Compressor::COMP_NONE;
   }
