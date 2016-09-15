@@ -767,10 +767,10 @@ void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
       ASSERT_EQ(r, 0);
-      ASSERT_EQ((unsigned)data.size(), statfs.stored);
-      ASSERT_LE(statfs.compressed, 0x10000);
-      ASSERT_EQ((unsigned)data.size(), statfs.compressed_original);
-      ASSERT_EQ(0x10000, statfs.compressed_allocated);
+      ASSERT_EQ(statfs.stored, (unsigned)data.size());
+      ASSERT_LE(statfs.compressed, (unsigned)data.size());
+      ASSERT_EQ(statfs.compressed_original, (unsigned)data.size());
+      ASSERT_LE(statfs.compressed_allocated, (unsigned)data.size());
     }
   }
   std::string data2;
