@@ -999,9 +999,9 @@ bool BlueFS::_should_compact_log()
   dout(10) << __func__ << " current 0x" << std::hex << current
 	   << " expected " << expected << std::dec
 	   << " ratio " << ratio
-	   << (log_flushing ? " (async compaction in progress)" : "")
+	   << (new_log ? " (async compaction in progress)" : "")
 	   << dendl;
-  if (log_flushing ||
+  if (new_log ||
       current < g_conf->bluefs_log_compact_min_size ||
       ratio < g_conf->bluefs_log_compact_min_ratio) {
     return false;
@@ -1122,6 +1122,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 {
   dout(10) << __func__ << dendl;
   File *log_file = log_writer->file.get();
+  assert(!new_log);
+  assert(!new_log_writer);
 
   // 1. allocate new log space and jump to it.
   old_log_jump_to = log_file->fnode.get_allocated();
@@ -1186,6 +1188,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   uint64_t discarded = 0;
   vector<bluefs_extent_t> old_extents;
   while (discarded < old_log_jump_to) {
+    assert(!log_file->fnode.extents.empty());
     bluefs_extent_t& e = log_file->fnode.extents.front();
     bluefs_extent_t temp = e;
     if (discarded + e.length <= old_log_jump_to) {
