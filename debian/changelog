@@ -1,4 +1,18 @@
 
+ceph (0.94.2-1~bpo70+1.fk5) stable; urgency=low
+
+  * Flipkart incremental upstream release
+    - rgw rate limits: added support for hourly rate limits
+
+ -- root <root@dev-d42-osd-a-0001-423611>  Tue, 13 Sep 2016 13:14:50 +0530
+
+ceph (0.94.2-1~bpo70+1.fk4) stable; urgency=low
+
+  * Flipkart New upstream release
+    - rgw: basic rate limiting for per-account GET/PUT
+    - online quantile computation, currently used for rgw ops quantiles
+
+ -- root <root@dev-d42-osd-a-0001-423611>  Sat, 10 Sep 2016 15:08:09 +0000
 
 ceph (0.94.2-1~bpo70+1.fk3) stable; urgency=low
 
