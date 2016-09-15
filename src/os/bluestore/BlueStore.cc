@@ -2558,18 +2558,13 @@ void BlueStore::_set_compression()
   }
 
   compressor = nullptr;
-  if (comp_mode.load() != Compressor::COMP_NONE) {    
 
-    auto& alg_name = g_conf->bluestore_compression_algorithm;
-
-    if (!alg_name.empty()) {
-      compressor = Compressor::create(cct, alg_name);
-      if (!compressor) {
-        derr << __func__ << " unable to initialize " << alg_name << " compressor"
-             << ", reverting compression mode to 'none'" 
-	     << dendl;
-        comp_mode = Compressor::COMP_NONE;
-      }
+  auto& alg_name = g_conf->bluestore_compression_algorithm;
+  if (!alg_name.empty()) {
+    compressor = Compressor::create(cct, alg_name);
+    if (!compressor) {
+      derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
+           << dendl;
     }
   }
  
