@@ -1338,6 +1338,11 @@ public:
      * The data portion of the destination object receives a copy of a
      * portion of the data from the source object. None of the other
      * three parts of an object is copied from the source.
+     *
+     * The destination object size may be extended to the dstoff + len.
+     *
+     * The source range *must* overlap with the source object data. If it does
+     * not the result is undefined.
      */
     void clone_range(const coll_t& cid, const ghobject_t& oid, ghobject_t noid,
 		     uint64_t srcoff, uint64_t srclen, uint64_t dstoff) {
