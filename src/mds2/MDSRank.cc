@@ -89,6 +89,7 @@ MDSRank::MDSRank(
   inotable = new InoTable(this);
 
   log_finisher = new Finisher(msgr->cct);
+  filer_finisher = new Finisher(msgr->cct);
 }
 
 MDSRank::~MDSRank()
@@ -106,6 +107,10 @@ MDSRank::~MDSRank()
 
   delete log_finisher;
   log_finisher = NULL;
+
+  delete filer_finisher;
+  filer_finisher = NULL;
+
 
   delete suicide_hook;
   suicide_hook = NULL;
@@ -139,6 +144,7 @@ void MDSRankDispatcher::init()
   op_tp.start();
   msg_tp.start();
   log_finisher->start();
+  filer_finisher->start();
 }
 
 void MDSRankDispatcher::tick()
@@ -207,6 +213,7 @@ void MDSRankDispatcher::shutdown()
   op_tp.stop();
   msg_tp.stop();
   log_finisher->stop();
+  filer_finisher->stop();
 
   // shut down messenger
   messenger->shutdown();
@@ -663,6 +670,8 @@ void MDSRank::recovery_done(int oldstate)
 
   if (oldstate == MDSMap::STATE_CREATING)
     return;
+
+  mdcache->start_recovered_truncates();
 
   mdcache->open_root_and_mydir();
 }

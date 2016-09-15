@@ -269,8 +269,10 @@ protected:
   ThreadPool msg_tp;
   // finish log contexts in same order of log entires
   Finisher *log_finisher;
+  Finisher *filer_finisher;
 public:
   Finisher *get_log_finisher() { return log_finisher; }
+  Finisher *get_filer_finisher() { return filer_finisher; }
 
   class CtxWQ: public ThreadPool::WorkQueueVal<pair<MDSContextBase*,int> > {
   public:

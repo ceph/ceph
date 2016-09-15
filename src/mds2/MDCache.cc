@@ -10,12 +10,15 @@
 
 #include "MDLog.h"
 #include "SessionMap.h"
+
+#include "events/EUpdate.h"
 #include "events/ESubtreeMap.h"
 
 #include "include/filepath.h"
 #include "messages/MClientRequest.h"
 
 #include "osdc/Objecter.h"
+#include "osdc/Filer.h"
 #include "common/safe_io.h"
 #include "common/errno.h"
 
@@ -38,8 +41,15 @@ MDCache::MDCache(MDSRank *_mds) :
   rejoin_done(NULL),
   rejoin_num_opening_inodes(0)
 {
+  filer = new Filer(mds->objecter, mds->get_filer_finisher());
   dentry_lru.lru_set_max(g_conf->mds_cache_size);
   dentry_lru.lru_set_midpoint(g_conf->mds_cache_mid);
+}
+
+MDCache::~MDCache()
+{
+  delete filer;
+  filer = NULL;
 }
 
 void MDCache::add_inode(CInode *in)
@@ -1122,6 +1132,165 @@ void MDCache::journal_dirty_inode(const MutationRef& mut, EMetaBlob *metablob, C
     assert(mut->is_object_locked(dn->get_dir_inode()));
     metablob->add_primary_dentry(dn, in, true);
   }
+}
+
+
+// ----------------------------
+// truncate
+
+void MDCache::truncate_inode(CInodeRef& in, LogSegment *ls)
+{ 
+  in->mutex_assert_locked_by_me();
+  const inode_t *pi = in->get_inode();
+  dout(10) << "truncate_inode " << pi->truncate_from << " -> " << pi->truncate_size
+           << " on " << *in << dendl;
+
+  in->get(CInode::PIN_TRUNCATING);
+  
+  lock_log_segments();
+  ls->truncating_inodes.insert(in.get());
+  unlock_log_segments();
+  
+  _truncate_inode(in.get(), ls);
+}
+
+class C_MDC_TruncateFinish : public MDSAsyncContextBase {
+  MDCache *mdcache;
+  CInode *in;
+  LogSegment *ls;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  C_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
+    mdcache(c), in(i), ls(l) {}
+  void finish(int r) {
+    assert(r == 0 || r == -ENOENT);
+    mdcache->truncate_inode_finish(in, ls);
+  }
+};
+
+void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
+{
+  const inode_t *pi = in->get_inode();
+  dout(10) << "_truncate_inode "
+           << pi->truncate_from << " -> " << pi->truncate_size
+           << " on " << *in << dendl;
+
+  assert(pi->is_truncating());
+  assert(pi->truncate_size < (1ULL << 63));
+  assert(pi->truncate_from < (1ULL << 63));
+  assert(pi->truncate_size < pi->truncate_from);
+
+  SnapContext nullsnap;
+  file_layout_t layout = pi->layout;
+  filer->truncate(in->ino(), &layout, nullsnap,
+		  pi->truncate_size, pi->truncate_from - pi->truncate_size,
+		  pi->truncate_seq, ceph::real_time::min(), 0,
+		  0, new C_MDC_TruncateFinish(this, in, ls));
+}
+
+struct C_MDC_TruncateLogged : public MDSLogContextBase {
+  MDCache *mdcache;
+  CInode *in;
+  MutationRef mut;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  C_MDC_TruncateLogged(MDCache *c, CInode *i, const MutationRef& m) :
+    mdcache(c), in(i), mut(m) {}
+  void finish(int r) {
+    mdcache->truncate_inode_logged(in, mut);
+  }
+};
+
+void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
+{ 
+  dout(10) << "truncate_inode_finish " << *in << dendl;
+
+  lock_log_segments();
+  set<CInode*>::iterator p = ls->truncating_inodes.find(in);
+  assert(p != ls->truncating_inodes.end());
+  ls->truncating_inodes.erase(p);
+  unlock_log_segments();
+
+  MutationRef mut(new MutationImpl);
+
+  lock_objects_for_update(mut, in, false);
+
+  // update
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  pi->truncate_from = 0;
+  pi->truncate_pending--;
+
+  mut->add_projected_inode(in, false);
+
+  EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
+  le->metablob.add_truncate_finish(in->ino(), ls->seq);
+
+  journal_dirty_inode(mut, &le->metablob, in);
+  mut->pin(in);
+
+  // flush immediately if there are readers/writers waiting
+  bool flush = (in->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR));
+
+  mds->mdlog->start_entry(le);
+  mut->ls = mds->mdlog->get_current_segment();
+  mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut), flush);
+
+  list<MDSContextBase*> finished;
+  in->take_waiting(CInode::WAIT_TRUNC, finished);
+  in->put(CInode::PIN_TRUNCATING);
+ 
+  mut->unlock_all_objects();
+  mut->start_committing();
+
+  mds->queue_contexts(finished);
+}
+
+void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
+{
+  mut->wait_committing();
+  dout(10) << "truncate_inode_logged " << *in << dendl;
+
+  mut->apply();
+  mut->cleanup();
+}
+
+void MDCache::add_recovered_truncate(CInodeRef& in, LogSegment *ls)
+{
+  dout(20) << "add_recovered_truncate " << *in << " in log segment "
+           << ls->seq << "/" << ls->offset << dendl;
+  in->get(CInode::PIN_TRUNCATING);
+  lock_log_segments();
+  ls->truncating_inodes.insert(in.get());
+  recovered_truncating_inodes[in.get()] = ls;
+  unlock_log_segments();
+}
+
+void MDCache::remove_recovered_truncate(CInodeRef& in, LogSegment *ls)
+{
+  dout(20) << "remove_recovered_truncate " << *in << " in log segment "
+           << ls->seq << "/" << ls->offset << dendl;
+  // if we have the logseg the truncate started in, it must be in our list.
+  lock_log_segments();
+
+  auto p = ls->truncating_inodes.find(in.get());
+  assert(p != ls->truncating_inodes.end());
+  ls->truncating_inodes.erase(p);
+
+  auto q = recovered_truncating_inodes.find(in.get());
+  assert(q != recovered_truncating_inodes.end());
+  recovered_truncating_inodes.erase(q);
+
+  unlock_log_segments();
+  in->put(CInode::PIN_TRUNCATING);
+}
+
+void MDCache::start_recovered_truncates()
+{
+  dout(10) << "start_recovered_truncating_inodes" << dendl;
+  for (auto& p : recovered_truncating_inodes)
+    _truncate_inode(p.first, p.second);
+  recovered_truncating_inodes.clear();
 }
 
 // -------------------------------------------------------------------------------

@@ -22,14 +22,15 @@ typedef std::map<string, bufferptr> xattr_map_t;
 
 class CInode : public CObject {
 public:
-  // pins
+  // -- pins --
   static const int PIN_DIRFRAG =		-1;
   static const int PIN_CAPS =			2;  // client caps
+  static const int PIN_TRUNCATING =		18;
   static const int PIN_STRAY =			19; 
   static const int PIN_DIRTYRSTAT =		21;
   static const int PIN_DIRTYPARENT =		23;
 
-  // states
+  // -- states --
   static const unsigned STATE_FREEING =		(1<<0);
   static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
   static const unsigned STATE_DIRTYPARENT =	(1<<2);
@@ -37,6 +38,9 @@ public:
   static const unsigned STATE_DIRTYRSTAT =	(1<<15);
   static const unsigned STATE_STRAYPINNED =	(1<<16);
   static const unsigned STATE_REPLAYUNDEF =	(1<<17);
+
+  // -- waiters --
+  static const uint64_t WAIT_TRUNC       = (1<<2);
 
   MDCache* const mdcache;
 protected:

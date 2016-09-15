@@ -16,6 +16,7 @@ class LogSegment;
 class EMetaBlob;
 class ESubtreeMap;
 class Session;
+class Filer;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -136,6 +137,21 @@ public:
   void journal_dirty_inode(const MutationRef& mut, EMetaBlob *metablob, CInode *in);
 
 protected:
+  Filer *filer;
+  map<CInode*, LogSegment*> recovered_truncating_inodes;
+
+  void _truncate_inode(CInode *in, LogSegment *ls);
+  void truncate_inode_finish(CInode *in, LogSegment *ls);
+  void truncate_inode_logged(CInode *in, MutationRef& mut);
+  friend class C_MDC_TruncateFinish;
+  friend class C_MDC_TruncateLogged;
+public:
+  void truncate_inode(CInodeRef& in, LogSegment *ls);
+  void add_recovered_truncate(CInodeRef& in, LogSegment *ls);
+  void remove_recovered_truncate(CInodeRef& in, LogSegment *ls);
+  void start_recovered_truncates();
+
+protected:
   Mutex open_inode_mutex;
   struct open_inode_info_t {
     int64_t pool;
@@ -236,6 +252,7 @@ public:
 public:
 
   MDCache(MDSRank *_mds);
+  ~MDCache();
   void dispatch(Message *m) { assert(0); } // does not support cache message yet
   void shutdown() {}
 public:

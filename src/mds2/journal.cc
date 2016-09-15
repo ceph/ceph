@@ -307,14 +307,25 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  // truncating
-  for (set<CInode*>::iterator p = truncating_inodes.begin();
-       p != truncating_inodes.end();
-       ++p) {
-    dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
-    (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
-  }
 #endif
+
+  // truncating
+  list<CInodeRef> truncating_list;
+  mds->mdcache->lock_log_segments();
+  for (auto p = truncating_inodes.begin(); p != truncating_inodes.end(); ++p) {
+    dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
+    truncating_list.push_back(*p);
+  }
+  mds->mdcache->unlock_log_segments();
+
+  for (auto p = truncating_list.begin(); p != truncating_list.end(); ++p) {
+    CInodeRef& in = *p;
+    in->mutex_lock();
+    if (in->get_projected_inode()->is_truncating())
+      in->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
+    in->mutex_unlock();
+  }
+  truncating_list.clear();
   
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
@@ -1423,12 +1434,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     mds->sessionmap->mutex_unlock();
   }
 
-#if 0
   // truncating inodes
   for (list<inodeno_t>::iterator p = truncate_start.begin();
        p != truncate_start.end();
        ++p) {
-    CInode *in = mds->mdcache->get_inode(*p);
+    CInodeRef in = mds->mdcache->get_inode(*p);
     assert(in);
     mds->mdcache->add_recovered_truncate(in, logseg);
   }
@@ -1437,11 +1447,12 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
        ++p) {
     LogSegment *ls = mds->mdlog->get_segment(p->second);
     if (ls) {
-      CInode *in = mds->mdcache->get_inode(p->first);
+      CInodeRef in = mds->mdcache->get_inode(p->first);
       assert(in);
       mds->mdcache->remove_recovered_truncate(in, ls);
     }
   }
+#if 0
 
   // destroyed inodes
   for (vector<inodeno_t>::iterator p = destroyed_inodes.begin();

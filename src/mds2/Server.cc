@@ -1328,9 +1328,9 @@ void Server::__inode_update_finish(const MDRequestRef& mdr, bool truncate_smalle
   mdcache->lock_objects_for_update(mdr, in.get(), true);
   mdr->early_apply();
 
-  if (truncate_smaller /* && in->get_inode()->is_truncating() */) { // FIXME
-    mds->locker->issue_truncate(in.get());
-    // mds->mdcache->truncate_inode(in, mdr->ls);
+  if (truncate_smaller && in->get_inode()->is_truncating()) {
+    locker->issue_truncate(in.get());
+    mdcache->truncate_inode(in, mdr->ls);
   }
 
   respond_to_request(mdr, 0);
@@ -1375,6 +1375,19 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     return;
   }
 
+  if (mask & CEPH_SETATTR_SIZE) {
+    in->mutex_lock();
+    const inode_t *pi = in->get_projected_inode();
+    uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
+    if (req->head.args.setattr.size < old_size && pi->is_truncating()) {
+      in->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mds, mdr));
+      in->mutex_unlock();
+      locker->drop_locks(mdr);
+      return;
+    }
+    in->mutex_unlock();
+  }
+
   EUpdate *le = new EUpdate(NULL, "setattr");
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
 
@@ -1403,13 +1416,10 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   if (mask & CEPH_SETATTR_SIZE) {
     uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
     if (req->head.args.setattr.size < old_size) {
+      assert(!pi->is_truncating());
       pi->truncate(old_size, req->head.args.setattr.size);
       truncate_smaller = true;
-      // FIXME: 
-      // le->metablob.add_truncate_start(in->ino());
-      pi->truncate_from = 0;
-      pi->truncate_pending--;
-
+      le->metablob.add_truncate_start(in->ino());
     } else {
       pi->size = req->head.args.setattr.size;
       pi->rstat.rbytes = pi->size;
@@ -2407,9 +2417,6 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
 
   CInodeRef& in = mdr->in[0];
 
-  EUpdate *le = new EUpdate(NULL, "open_truncate");
-  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-
   int tracedn = -1;
   if (req->get_dentry_wanted()) {
     assert(!mdr->dn[0].empty());
@@ -2421,6 +2428,9 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
     mdcache->lock_objects_for_update(mdr, in.get(), false);
   }
 
+  EUpdate *le = new EUpdate(NULL, "open_truncate");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
   locker->issue_new_caps(in.get(), cmode, mdr->session, req->is_replay());
 
   mdr->add_projected_inode(in.get(), true);
@@ -2428,12 +2438,11 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
 
+  assert(!pi->is_truncating());
   uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
   if (old_size > 0) {
     pi->truncate(old_size, 0);
-    // FIXME: 
-    pi->truncate_from = 0;
-    pi->truncate_pending--;
+    le->metablob.add_truncate_start(in->ino());
   }
 
   // adjust client's max_size?
@@ -2512,7 +2521,15 @@ void Server::handle_client_open(const MDRequestRef& mdr)
   }
 
   if ((flags & O_TRUNC) && !mdr->completed)  {
-    do_open_truncate(mdr, cmode);
+    in->mutex_lock();
+    if (in->get_projected_inode()->is_truncating()) {
+      in->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mds, mdr));
+      in->mutex_unlock();
+      locker->drop_locks(mdr);
+    } else {
+      in->mutex_unlock();
+      do_open_truncate(mdr, cmode);
+    }
     return;
   }
 
