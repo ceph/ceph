@@ -8100,15 +8100,19 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
-
   bufferlist bl;
+
+  if (srcoff + length > oldo->onode.size) {
+    r = -EINVAL;
+    goto out;
+  }
+
   newo->exists = true;
   _assign_nid(txc, newo);
 
   r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
   if (r < 0)
     goto out;
-
   r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
   if (r < 0)
     goto out;
