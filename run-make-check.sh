@@ -67,7 +67,7 @@ function run() {
     export TMPDIR=$(mktemp -d --tmpdir ceph.XXX)
     if test -x ./do_cmake.sh ; then
         $DRY_RUN ./do_cmake.sh $@ || return 1
-        cd build
+        $DRY_RUN cd build
         $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
         $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
     else
