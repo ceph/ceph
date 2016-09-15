@@ -29,23 +29,21 @@ extern "C" {
  */
 struct ceph_statx {
 	uint32_t	stx_mask;
-	uint32_t	stx_information;
 	uint32_t	stx_blksize;
 	uint32_t	stx_nlink;
-	uint32_t	stx_gen;
 	uint32_t	stx_uid;
 	uint32_t	stx_gid;
 	uint16_t	stx_mode;
 	uint64_t	stx_ino;
 	uint64_t	stx_size;
 	uint64_t	stx_blocks;
-	uint64_t	stx_version;
 	dev_t		stx_dev;
 	dev_t		stx_rdev;
 	struct timespec	stx_atime;
-	struct timespec	stx_btime;
 	struct timespec	stx_ctime;
 	struct timespec	stx_mtime;
+	struct timespec	stx_btime;
+	uint64_t	stx_version;
 };
 
 #define CEPH_STATX_MODE		0x00000001U     /* Want/got stx_mode */
@@ -62,8 +60,7 @@ struct ceph_statx {
 #define CEPH_STATX_BASIC_STATS	0x000007ffU     /* The stuff in the normal stat struct */
 #define CEPH_STATX_BTIME	0x00000800U     /* Want/got stx_btime */
 #define CEPH_STATX_VERSION	0x00001000U     /* Want/got stx_version */
-#define CEPH_STATX_GEN		0x00002000U     /* Want/got stx_gen */
-#define CEPH_STATX_ALL_STATS	0x00003fffU     /* All supported stats */
+#define CEPH_STATX_ALL_STATS	0x00001fffU     /* All supported stats */
 
 /* statx request flags. Callers can set these in the "flags" field */
 #ifndef AT_NO_ATTR_SYNC
