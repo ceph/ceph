@@ -2273,11 +2273,10 @@ out:
 
 void OSD::final_init()
 {
-  int r;
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
-  r = admin_socket->register_command("status", "status", asok_hook,
-				     "high-level status of OSD");
+  int r = admin_socket->register_command("status", "status", asok_hook,
+					 "high-level status of OSD");
   assert(r == 0);
   r = admin_socket->register_command("flush_journal", "flush_journal",
                                      asok_hook,
