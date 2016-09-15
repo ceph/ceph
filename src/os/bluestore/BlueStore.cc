@@ -6574,13 +6574,17 @@ int BlueStore::_do_write(
   if (blobs_need_garbage_collection(o, offset, end, &wctx.le_depth,
                             &gc_start_offset, &gc_end_offset) == true) {
     // we need garbage collection of blobs.
-
     if (offset > gc_start_offset) {
       bufferlist head_bl;
       size_t read_len = offset - gc_start_offset;
       int r = _do_read(c.get(), o, gc_start_offset, read_len, head_bl, 0);
-      assert(r >= 0 && r <= (int)read_len);
-      _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, &wctx);
+      assert(r == (int)read_len);
+      if (g_conf->bluestore_merge_gc_data == true) {
+        head_bl.claim_append(bl);
+        bl.swap(head_bl);
+      } else {
+        _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, &wctx);
+      }
       logger->inc(l_bluestore_gc_bytes, read_len);
     }
 
@@ -6588,8 +6592,12 @@ int BlueStore::_do_write(
       bufferlist tail_bl;
       size_t read_len = gc_end_offset - end;
       int r = _do_read(c.get(), o, end, read_len, tail_bl, 0);
-      assert(r >= 0 && r <= (int)read_len);
-      _do_write_data(txc, c, o, end, read_len, tail_bl, &wctx);
+      assert(r == (int)read_len);
+      if (g_conf->bluestore_merge_gc_data == true) {
+        bl.claim_append(tail_bl);
+      } else {
+        _do_write_data(txc, c, o, end, read_len, tail_bl, &wctx);
+      }
       logger->inc(l_bluestore_gc_bytes, read_len);
     }
   }

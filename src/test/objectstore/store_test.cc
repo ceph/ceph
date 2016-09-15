@@ -906,13 +906,14 @@ TEST_P(StoreTest, CompressionTest) {
 TEST_P(StoreTest, garbageCollection) {
   ObjectStore::Sequencer osr("test");
   int r;
+  int64_t waste1, waste2;
   coll_t cid;
   int buf_len = 256 * 1024;
-  int64_t waste1, waste2;
   if (string(GetParam()) != "bluestore")
     return;
 
   g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_merge_gc_data", "true"); 
   g_ceph_context->_conf->apply_changes(NULL);
 
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
@@ -1119,7 +1120,6 @@ TEST_P(StoreTest, garbageCollection) {
       r = apply_transaction(store, &osr, std::move(t));
       ASSERT_EQ(r, 0);
     }
-
     {
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
