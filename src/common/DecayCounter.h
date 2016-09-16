@@ -130,6 +130,11 @@ inline void encode(const DecayCounter &c, bufferlist &bl) { c.encode(bl); }
 inline void decode(DecayCounter &c, const utime_t &t, bufferlist::iterator &p) {
   c.decode(t, p);
 }
+// for dencoder
+inline void decode(DecayCounter &c, bufferlist::iterator &p) {
+  utime_t t;
+  c.decode(t, p);
+}
 
 
 #endif

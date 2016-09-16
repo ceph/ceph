@@ -26,5 +26,6 @@ class real_time_wrapper {
     ls.push_back(new real_time_wrapper(ceph::real_clock::from_time_t(t)));
   }
 };
+WRITE_CLASS_ENCODER(real_time_wrapper)
 
 #endif
