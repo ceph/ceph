@@ -136,8 +136,8 @@ TYPE(ghobject_t)
 TYPE(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
-TYPE(PGMap::Incremental)
-TYPE_NONDETERMINISTIC(PGMap)
+TYPE_FEATUREFUL(PGMap::Incremental)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
