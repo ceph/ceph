@@ -94,41 +94,31 @@ namespace ceph {
 
     inline void enqueue_strict(Client cl,
 			       unsigned priority,
-			       Request item) override final {
-      queue.enqueue_strict(get_inner_client(cl, item), 0, item);
-    }
+			       Request item) override final;
 
     // Enqueue op in the front of the strict queue
     inline void enqueue_strict_front(Client cl,
 				     unsigned priority,
-				     Request item) override final {
-      queue.enqueue_strict_front(get_inner_client(cl, item), priority, item);
-    }
+				     Request item) override final;
 
     // Enqueue op in the back of the regular queue
     inline void enqueue(Client cl,
 			unsigned priority,
 			unsigned cost,
-			Request item) override final {
-      queue.enqueue(get_inner_client(cl, item), priority, cost, item);
-    }
+			Request item) override final;
 
     // Enqueue the op in the front of the regular queue
     inline void enqueue_front(Client cl,
 			      unsigned priority,
 			      unsigned cost,
-			      Request item) override final {
-      queue.enqueue_front(get_inner_client(cl, item), priority, cost, item);
-    }
+			      Request item) override final;
+
+    // Return an op to be dispatch
+    inline Request dequeue() override final;
 
     // Returns if the queue is empty
     inline bool empty() const override final {
       return queue.empty();
-    }
-
-    // Return an op to be dispatch
-    inline Request dequeue() override final {
-      return queue.dequeue();
     }
 
     // Formatted output of the queue
