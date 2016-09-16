@@ -218,7 +218,7 @@ function test_kill_daemon() {
         # kill the mon and verify it cannot be reached
         #
         kill_daemon $pidfile TERM || return 1
-        ! ceph --connect-timeout 60 status || return 1
+        ! timeout 60 ceph --connect-timeout 60 status || return 1
     done
 
     teardown $dir || return 1
@@ -294,7 +294,7 @@ function test_kill_daemons() {
     # kill the mon and verify it cannot be reached
     #
     kill_daemons $dir TERM || return 1
-    ! ceph --connect-timeout 60 status || return 1
+    ! timeout 60 ceph --connect-timeout 60 status || return 1
     teardown $dir || return 1
 }
 
