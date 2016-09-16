@@ -57,4 +57,6 @@ tasks:
       max-entries: 10
       src: client.0
       dest: client.1
+- sleep:
+    duration: 30
 - radosgw-admin:
