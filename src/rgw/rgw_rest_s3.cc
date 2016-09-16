@@ -4332,11 +4332,13 @@ RGWRemoteAuthApplier::acl_strategy_t RGWLDAPAuthEngine::get_acl_strategy() const
 RGWRemoteAuthApplier::AuthInfo
 RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
 {
+  using acct_privilege_t = RGWRemoteAuthApplier::AuthInfo::acct_privilege_t;
+
   return RGWRemoteAuthApplier::AuthInfo {
     rgw_user(token.id),
     token.id,
     RGW_PERM_FULL_CONTROL,
-    true,
+    acct_privilege_t::IS_PLAIN_ACCT,
     TYPE_LDAP
   };
 }
