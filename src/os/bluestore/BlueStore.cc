@@ -1487,6 +1487,7 @@ void BlueStore::ExtentMap::reshard(Onode *o)
   while (p != spanning_blob_map.end()) {
     auto n = spanning_blob_map.erase(p);
     p->id = -1;
+    dout(30) << __func__ << " un-spanning " << *p << dendl;
     p->put();
     p = n;
   }
@@ -1521,6 +1522,7 @@ void BlueStore::ExtentMap::reshard(Onode *o)
   vector<bluestore_onode_t::shard_info> new_shard_info;
   while (ep != extent_map.end()) {
     dout(30) << " ep " << *ep << dendl;
+    assert(!ep->blob->is_spanning());
     if (shard_end == 0 ||
 	ep->logical_offset >= shard_end) {
       if (sp == esp) {

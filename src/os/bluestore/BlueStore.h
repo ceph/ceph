@@ -424,7 +424,6 @@ public:
     }
 
     void dup(Blob& o) {
-      o.id = id;
       o.shared_blob = shared_blob;
       o.blob = blob;
       o.dirty = dirty;
