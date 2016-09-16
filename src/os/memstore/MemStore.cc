@@ -1684,34 +1684,78 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
   PageSet::page_vector dst_pages;
 
   while (len) {
-    const auto count = std::min(len, (uint64_t)src_page_size * 16);
+    // limit to 16 pages at a time so tls_pages doesn't balloon in size
+    auto count = std::min(len, (uint64_t)src_page_size * 16);
     src_data.get_range(srcoff, count, tls_pages);
+
+    // allocate the destination range
+    // TODO: avoid allocating pages for holes in the source range
+    dst_data.alloc_range(srcoff + delta, count, dst_pages);
+    auto dst_iter = dst_pages.begin();
 
     for (auto &src_page : tls_pages) {
       auto sbegin = std::max(srcoff, src_page->offset);
       auto send = std::min(srcoff + count, src_page->offset + src_page_size);
-      dst_data.alloc_range(sbegin + delta, send - sbegin, dst_pages);
+
+      // zero-fill holes before src_page
+      if (srcoff < sbegin) {
+        while (dst_iter != dst_pages.end()) {
+          auto &dst_page = *dst_iter;
+          auto dbegin = std::max(srcoff + delta, dst_page->offset);
+          auto dend = std::min(sbegin + delta, dst_page->offset + dst_page_size);
+          std::fill(dst_page->data + dbegin - dst_page->offset,
+                    dst_page->data + dend - dst_page->offset, 0);
+          if (dend < dst_page->offset + dst_page_size)
+            break;
+          ++dst_iter;
+        }
+        const auto c = sbegin - srcoff;
+        count -= c;
+        len -= c;
+      }
 
       // copy data from src page to dst pages
-      for (auto &dst_page : dst_pages) {
+      while (dst_iter != dst_pages.end()) {
+        auto &dst_page = *dst_iter;
         auto dbegin = std::max(sbegin + delta, dst_page->offset);
         auto dend = std::min(send + delta, dst_page->offset + dst_page_size);
 
         std::copy(src_page->data + (dbegin - delta) - src_page->offset,
                   src_page->data + (dend - delta) - src_page->offset,
                   dst_page->data + dbegin - dst_page->offset);
+        if (dend < dst_page->offset + dst_page_size)
+          break;
+        ++dst_iter;
       }
-      dst_pages.clear(); // drop page refs
+
+      const auto c = send - sbegin;
+      count -= c;
+      len -= c;
+      srcoff = send;
+      dstoff = send + delta;
     }
-    srcoff += count;
-    dstoff += count;
-    len -= count;
     tls_pages.clear(); // drop page refs
+
+    // zero-fill holes after the last src_page
+    if (count > 0) {
+      while (dst_iter != dst_pages.end()) {
+        auto &dst_page = *dst_iter;
+        auto dbegin = std::max(dstoff, dst_page->offset);
+        auto dend = std::min(dstoff + count, dst_page->offset + dst_page_size);
+        std::fill(dst_page->data + dbegin - dst_page->offset,
+                  dst_page->data + dend - dst_page->offset, 0);
+        ++dst_iter;
+      }
+      srcoff += count;
+      dstoff += count;
+      len -= count;
+    }
+    dst_pages.clear(); // drop page refs
   }
 
   // update object size
-  if (data_len < dstoff + len)
-    data_len = dstoff + len;
+  if (data_len < dstoff)
+    data_len = dstoff;
   return 0;
 }
 
