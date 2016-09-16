@@ -424,9 +424,7 @@ public:
     }
 
     void dup(Blob& o) {
-      o.id = id;
       o.shared_blob = shared_blob;
-      o.ref_map = ref_map;
       o.blob = blob;
       o.dirty = dirty;
       o.blob_bl = blob_bl;
@@ -1814,6 +1812,11 @@ private:
     uint64_t expected_object_size,
     uint64_t expected_write_size,
     uint32_t flags);
+  int _do_clone_range(TransContext *txc,
+		      CollectionRef& c,
+		      OnodeRef& oldo,
+		      OnodeRef& newo,
+		      uint64_t srcoff, uint64_t length, uint64_t dstoff);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& oldo,
