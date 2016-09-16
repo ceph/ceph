@@ -1826,7 +1826,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
     if (subdomain.empty()
         && (domain.empty() || domain != info.host)
         && !looks_like_ip_address(info.host.c_str())
-        && RGWHandler_REST::validate_bucket_name(info.host) == 0) {
+        && RGWHandler_REST::validate_bucket_name(info.host)) {
       subdomain.append(info.host);
       in_hosted_domain = 1;
     }
