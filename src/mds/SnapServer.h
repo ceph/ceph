@@ -89,5 +89,6 @@ public:
 
   void check_osd_map(bool force);
 };
+WRITE_CLASS_ENCODER(SnapServer)
 
 #endif
