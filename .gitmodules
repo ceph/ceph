@@ -47,3 +47,7 @@
 [submodule "src/dpdk"]
 	path = src/dpdk
 	url = https://github.com/ceph/dpdk
+[submodule "src/zs"]
+	path = src/zs
+	url = https://github.com/ceph/zetascale.git
+    ignore = dirty
