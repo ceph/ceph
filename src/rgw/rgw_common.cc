@@ -213,23 +213,26 @@ void update_percentile_perf(CephContext *cct) {
 
 class C_lat_perf_update_timeout : public Context {
 public:
-  C_lat_perf_update_timeout(CephContext *cct_) : cct(cct_) {}
+  C_lat_perf_update_timeout(CephContext *cct_, int time_in_sec_) : cct(cct_), time_in_sec(time_in_sec_) {}
   void finish(int r) {
     update_percentile_perf(cct);
-    lat_perf_update_timer->add_event_after(20, new C_lat_perf_update_timeout(cct));
+    lat_perf_update_timer->add_event_after(time_in_sec, new C_lat_perf_update_timeout(cct, time_in_sec));
   }
 private:
   CephContext *cct;
+  int time_in_sec;
 };
 
 class C_lat_reset_timeout : public Context {
 public:
-  C_lat_reset_timeout() {}
+  C_lat_reset_timeout(int time_in_sec_) : time_in_sec(time_in_sec_) {}
   void finish(int r) {
     get_lat_centile->reset();
     put_lat_centile->reset();
-    lat_reset_timer->add_event_after(60, new C_lat_reset_timeout);
+    lat_reset_timer->add_event_after(time_in_sec, new C_lat_reset_timeout(time_in_sec));
   }
+private:
+  int time_in_sec;
 };
 
 /* Starting the update and reset percentile counters.*/
@@ -238,14 +241,14 @@ void setup_perf_timers(CephContext *cct, int update, int reset) {
   lat_perf_update_timer = new SafeTimer(cct, *lat_perf_update_lock);
   lat_perf_update_timer->init();
   lat_perf_update_lock->Lock();
-  lat_perf_update_timer->add_event_after(update, new C_lat_perf_update_timeout(cct));
+  lat_perf_update_timer->add_event_after(update, new C_lat_perf_update_timeout(cct, update));
   lat_perf_update_lock->Unlock();
 
   lat_reset_lock = new Mutex("lat_reset_lock");
   lat_reset_timer = new SafeTimer(cct, *lat_reset_lock);
   lat_reset_timer->init();
   lat_reset_lock->Lock();
-  lat_reset_timer->add_event_after(reset, new C_lat_reset_timeout);
+  lat_reset_timer->add_event_after(reset, new C_lat_reset_timeout(reset));
   lat_reset_lock->Unlock();
 }
 
