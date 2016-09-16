@@ -1487,6 +1487,7 @@ void BlueStore::ExtentMap::reshard(Onode *o)
   while (p != spanning_blob_map.end()) {
     auto n = spanning_blob_map.erase(p);
     p->id = -1;
+    dout(30) << __func__ << " un-spanning " << *p << dendl;
     p->put();
     p = n;
   }
@@ -1521,6 +1522,7 @@ void BlueStore::ExtentMap::reshard(Onode *o)
   vector<bluestore_onode_t::shard_info> new_shard_info;
   while (ep != extent_map.end()) {
     dout(30) << " ep " << *ep << dendl;
+    assert(!ep->blob->is_spanning());
     if (shard_end == 0 ||
 	ep->logical_offset >= shard_end) {
       if (sp == esp) {
@@ -6596,7 +6598,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     bool create = false;
     if (op->op == Transaction::OP_TOUCH ||
 	op->op == Transaction::OP_WRITE ||
-	op->op == Transaction::OP_ZERO) {
+	op->op == Transaction::OP_ZERO ||
+	op->op == Transaction::OP_CLONE) {
       create = true;
     }
 
@@ -7956,99 +7959,28 @@ int BlueStore::_clone(TransContext *txc,
 	 << " and " << newo->oid << dendl;
     return -EINVAL;
   }
-  oldo->extent_map.fault_range(db, 0, oldo->onode.size);
-  _dump_onode(oldo);
-
-  newo->extent_map.fault_range(db, 0, newo->onode.size);
 
   bufferlist bl;
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  // data
+  // clone data
   oldo->flush();
-
   r = _do_truncate(txc, c, newo, 0);
   if (r < 0)
     goto out;
-
   if (g_conf->bluestore_clone_cow) {
-    // hmm, this could go into an ExtentMap::dup() method.
-    vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
-    for (auto &e : oldo->extent_map.extent_map) {
-      e.blob->last_encoded_id = -1;
-    }
-    int n = 0;
-    bool dirtied_oldo = false;
-    for (auto &e : oldo->extent_map.extent_map) {
-      BlobRef cb;  // clone blob
-      if (e.blob->last_encoded_id >= 0) {
-	// blob is already duped
-	cb = id_to_blob[e.blob->last_encoded_id];
-      } else {
-	// we need to dup the blob.
-	// make sure it is shared
-	const bluestore_blob_t& blob = e.blob->get_blob();
-	if (!blob.is_shared()) {
-	  e.blob->dirty_blob().sbid = _assign_blobid(txc);
-	  c->make_blob_shared(e.blob);
-	  dirtied_oldo = true;  // fixme: overkill
-	} else if (!e.blob->shared_blob->loaded) {
-	  c->load_shared_blob(e.blob->shared_blob);
-	}
-	cb = new Blob;
-	e.blob->last_encoded_id = n;
-	id_to_blob[n] = cb;
-	e.blob->dup(*cb);
-	if (cb->id >= 0) {
-	  newo->extent_map.spanning_blob_map.insert(*cb);
-	  cb->get();
-	}
-	// bump the extent refs on the copied blob's extents
-	for (auto p : blob.extents) {
-	  if (p.is_valid()) {
-	    e.blob->shared_blob->shared_blob.ref_map.get(p.offset, p.length);
-	  }
-	}
-	txc->write_shared_blob(e.blob->shared_blob);
-	// ugly: duplicate deferred csum work, if any.
-	for (auto& dc : txc->deferred_csum) {
-	  if (dc.blob == e.blob) {
-	    dout(20) << __func__ << "  duplicating deferred csum for blob "
-		     << *e.blob << dendl;
-	    txc->add_deferred_csum(cb, dc.b_off, dc.data);
-	  }
-	}
-      }
-      // dup extent
-      newo->extent_map.add(e.logical_offset, e.blob_offset, e.length, cb);
-      txc->statfs_delta.stored() += e.length;
-      if (e.blob->get_blob().is_compressed()) {
-	txc->statfs_delta.compressed_original() -= e.length;
-      }
-      ++n;
-    }
-    if (dirtied_oldo) {
-      oldo->extent_map.dirty_range(txc->t, 0, oldo->onode.size); // overkill
-      txc->write_onode(oldo);
-    }
-    newo->onode.size = oldo->onode.size;
-    newo->extent_map.dirty_range(txc->t, 0, newo->onode.size);
-    txc->write_onode(newo);
-    _dump_onode(oldo);
-    _dump_onode(newo);
+    _do_clone_range(txc, c, oldo, newo, 0, oldo->onode.size, 0);
   } else {
-    // read + write
     r = _do_read(c.get(), oldo, 0, oldo->onode.size, bl, 0);
     if (r < 0)
       goto out;
-
     r = _do_write(txc, c, newo, 0, oldo->onode.size, bl, 0);
     if (r < 0)
       goto out;
   }
 
-  // attrs
+  // clone attrs
   newo->onode.attrs = oldo->onode.attrs;
 
   // clone omap
@@ -8090,6 +8022,118 @@ int BlueStore::_clone(TransContext *txc,
   return r;
 }
 
+int BlueStore::_do_clone_range(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& oldo,
+  OnodeRef& newo,
+  uint64_t srcoff, uint64_t length, uint64_t dstoff)
+{
+  dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+	   << newo->oid
+	   << " 0x" << std::hex << srcoff << "~" << length << " -> "
+	   << " 0x" << dstoff << "~" << length << std::dec << dendl;
+  oldo->extent_map.fault_range(db, srcoff, length);
+  newo->extent_map.fault_range(db, dstoff, length);
+  _dump_onode(oldo);
+  _dump_onode(newo);
+
+  // hmm, this could go into an ExtentMap::dup() method.
+  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
+  for (auto &e : oldo->extent_map.extent_map) {
+    e.blob->last_encoded_id = -1;
+  }
+  int n = 0;
+  bool dirtied_oldo = false;
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+       ep != oldo->extent_map.extent_map.end();
+       ++ep) {
+    auto& e = *ep;
+    if (e.logical_offset >= srcoff + length) {
+      break;
+    }
+    dout(20) << __func__ << "  src " << e << dendl;
+    BlobRef cb;
+    if (e.blob->last_encoded_id >= 0) {
+      // blob is already duped
+      cb = id_to_blob[e.blob->last_encoded_id];
+    } else {
+      // dup the blob
+      const bluestore_blob_t& blob = e.blob->get_blob();
+      // make sure it is shared
+      if (!blob.is_shared()) {
+	e.blob->dirty_blob().sbid = _assign_blobid(txc);
+	c->make_blob_shared(e.blob);
+	dirtied_oldo = true;  // fixme: overkill
+      } else if (!e.blob->shared_blob->loaded) {
+	c->load_shared_blob(e.blob->shared_blob);
+      }
+      cb = new Blob;
+      e.blob->last_encoded_id = n;
+      id_to_blob[n] = cb;
+      e.blob->dup(*cb);
+      if (cb->id >= 0) {
+	newo->extent_map.spanning_blob_map.insert(*cb);
+	cb->get();
+      }
+      // bump the extent refs on the copied blob's extents
+      for (auto p : blob.extents) {
+	if (p.is_valid()) {
+	  e.blob->shared_blob->shared_blob.ref_map.get(p.offset, p.length);
+	}
+      }
+      txc->write_shared_blob(e.blob->shared_blob);
+      // ugly: duplicate deferred csum work, if any.
+      for (auto& dc : txc->deferred_csum) {
+	if (dc.blob == e.blob) {
+	  dout(20) << __func__ << "  duplicating deferred csum for blob "
+		   << *e.blob << dendl;
+	  txc->add_deferred_csum(cb, dc.b_off, dc.data);
+	}
+      }
+      dout(20) << __func__ << "    new " << *cb << dendl;
+    }
+    // dup extent
+    int skip_front, skip_back;
+    if (e.logical_offset < srcoff) {
+      skip_front = srcoff - e.logical_offset;
+    } else {
+      skip_front = 0;
+    }
+    if (e.logical_offset + e.length > srcoff + length) {
+      skip_back = e.logical_offset + e.length - (srcoff + length);
+    } else {
+      skip_back = 0;
+    }
+    Extent *ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+			    e.blob_offset + skip_front,
+			    e.length - skip_front - skip_back, cb);
+    newo->extent_map.extent_map.insert(*ne);
+    ne->blob->ref_map.get(ne->blob_offset, ne->length);
+    // fixme: we may leave parts of new blob unreferenced that could
+    // be freed (relative to the shared_blob).
+    txc->statfs_delta.stored() += ne->length;
+    if (e.blob->get_blob().is_compressed()) {
+      txc->statfs_delta.compressed_original() -= ne->length;
+    }
+    dout(20) << __func__ << "  dst " << *ne << dendl;
+    ++n;
+  }
+  if (dirtied_oldo) {
+    oldo->extent_map.dirty_range(txc->t, srcoff, length); // overkill
+    txc->write_onode(oldo);
+  }
+  txc->write_onode(newo);
+
+  if (dstoff + length > newo->onode.size) {
+    newo->onode.size = dstoff + length;
+  }
+  newo->extent_map.dirty_range(txc->t, dstoff, length);
+  _dump_onode(oldo);
+  _dump_onode(newo);
+  return 0;
+}
+
 int BlueStore::_clone_range(TransContext *txc,
 			    CollectionRef& c,
 			    OnodeRef& oldo,
@@ -8100,21 +8144,29 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
-
   bufferlist bl;
+
+  if (srcoff + length > oldo->onode.size) {
+    r = -EINVAL;
+    goto out;
+  }
+
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
-  if (r < 0)
-    goto out;
-
-  r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
-  if (r < 0)
-    goto out;
+  if (g_conf->bluestore_clone_cow) {
+    _do_zero(txc, c, newo, dstoff, length);
+    _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
+  } else {
+    r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
+    if (r < 0)
+      goto out;
+    r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+    if (r < 0)
+      goto out;
+  }
 
   txc->write_onode(newo);
-
   r = 0;
 
  out:
