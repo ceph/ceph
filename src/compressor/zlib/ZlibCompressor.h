@@ -20,12 +20,16 @@
 #include "compressor/Compressor.h"
 
 class ZlibCompressor : public Compressor {
+  bool isal_enabled;
 public:
-  ZlibCompressor() : Compressor("zlib") {}
+  ZlibCompressor(bool isal) : Compressor("zlib"), isal_enabled(isal) {}
 
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
   int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override;
+private:
+  int zlib_compress(const bufferlist &in, bufferlist &out);
+  int isal_compress(const bufferlist &in, bufferlist &out);
  };
 
 

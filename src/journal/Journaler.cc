@@ -16,6 +16,7 @@
 #include "journal/ReplayHandler.h"
 #include "cls/journal/cls_journal_client.h"
 #include "cls/journal/cls_journal_types.h"
+#include "Utils.h"
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
@@ -31,6 +32,7 @@ static const std::string JOURNAL_OBJECT_PREFIX = "journal_data.";
 } // anonymous namespace
 
 using namespace cls::journal;
+using utils::rados_ctx_callback;
 
 std::string Journaler::header_oid(const std::string &journal_id) {
   return JOURNAL_HEADER_PREFIX + journal_id;
@@ -113,14 +115,15 @@ Journaler::~Journaler() {
   delete m_threads;
 }
 
-int Journaler::exists(bool *header_exists) const {
-  int r = m_header_ioctx.stat(m_header_oid, NULL, NULL);
-  if (r < 0 && r != -ENOENT) {
-    return r;
-  }
+void Journaler::exists(Context *on_finish) const {
+  librados::ObjectReadOperation op;
+  op.stat(NULL, NULL, NULL);
 
-  *header_exists = (r == 0);
-  return 0;
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(on_finish, nullptr, rados_ctx_callback);
+  int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op, NULL);
+  assert(r == 0);
+  comp->release();
 }
 
 void Journaler::init(Context *on_init) {
@@ -200,45 +203,45 @@ void Journaler::get_mutable_metadata(uint64_t *minimum_set,
   m_metadata->get_mutable_metadata(minimum_set, active_set, clients, on_finish);
 }
 
-int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
+void Journaler::create(uint8_t order, uint8_t splay_width,
+                      int64_t pool_id, Context *on_finish) {
   if (order > 64 || order < 12) {
     lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
-    return -EDOM;
+    on_finish->complete(-EDOM);
+    return;
   }
   if (splay_width == 0) {
-    return -EINVAL;
+    on_finish->complete(-EINVAL);
+    return;
   }
 
   ldout(m_cct, 5) << "creating new journal: " << m_header_oid << dendl;
-  int r = client::create(m_header_ioctx, m_header_oid, order, splay_width,
-			 pool_id);
-  if (r < 0) {
-    lderr(m_cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+
+  librados::ObjectWriteOperation op;
+  client::create(&op, order, splay_width, pool_id);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(on_finish, nullptr, rados_ctx_callback);
+  int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
-int Journaler::remove(bool force) {
-  C_SaferCond ctx;
-  m_metadata->shut_down(&ctx);
-  ctx.wait();
+void Journaler::remove(bool force, Context *on_finish) {
+  // chain journal removal (reverse order)
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+        on_finish, nullptr, utils::rados_ctx_callback);
+      r = m_header_ioctx.aio_remove(m_header_oid, comp);
+      assert(r == 0);
+      comp->release();
+    });
 
-  ldout(m_cct, 5) << "removing journal: " << m_header_oid << dendl;
-  int r = m_trimmer->remove_objects(force);
-  if (r < 0) {
-    lderr(m_cct) << "failed to remove journal objects: " << cpp_strerror(r)
-                 << dendl;
-    return r;
-  }
+  on_finish = new FunctionContext([this, force, on_finish](int r) {
+      m_trimmer->remove_objects(force, on_finish);
+    });
 
-  r = m_header_ioctx.remove(m_header_oid);
-  if (r < 0) {
-    lderr(m_cct) << "failed to remove journal header: " << cpp_strerror(r)
-                 << dendl;
-    return r;
-  }
-  return 0;
+  m_metadata->shut_down(on_finish);
 }
 
 void Journaler::flush_commit_position(Context *on_safe) {

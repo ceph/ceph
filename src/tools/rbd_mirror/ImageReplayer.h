@@ -199,8 +199,6 @@ protected:
 
   bool on_replay_interrupted();
 
-  void close_local_image(Context *on_finish); // for tests
-
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
@@ -295,7 +293,8 @@ private:
     return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
   }
   bool is_replaying_() const {
-    return m_state == STATE_REPLAYING;
+    return (m_state == STATE_REPLAYING ||
+            m_state == STATE_REPLAY_FLUSHING);
   }
 
   bool update_mirror_image_status(bool force, const OptionalState &state);
@@ -306,8 +305,8 @@ private:
   void handle_mirror_status_update(int r);
   void reschedule_update_status_task(int new_interval = 0);
 
-  void shut_down(int r, Context *on_start);
-  void handle_shut_down(int r, Context *on_start);
+  void shut_down(int r);
+  void handle_shut_down(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);

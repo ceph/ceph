@@ -72,7 +72,7 @@ struct MonClientPinger : public Dispatcher {
     int ret = 0;
     while (!done) {
       ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == -ETIMEDOUT)
+      if (ret == ETIMEDOUT)
         break;
     }
     return ret;
@@ -403,17 +403,6 @@ private:
     {}
   };
   map<uint64_t,MonCommand*> mon_commands;
-
-  class C_CancelMonCommand : public Context
-  {
-    uint64_t tid;
-    MonClient *monc;
-  public:
-    C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
-    void finish(int r) {
-      monc->_cancel_mon_command(tid, -ETIMEDOUT);
-    }
-  };
 
   void _send_command(MonCommand *r);
   void _resend_mon_commands();

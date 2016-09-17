@@ -28,7 +28,6 @@
 
 #define CEPH_INO_ROOT   1
 #define CEPH_INO_CEPH   2       /* hidden .ceph dir */
-#define CEPH_INO_DOTDOT 3	/* used by ceph fuse for parent (..) */
 #define CEPH_INO_LOST_AND_FOUND 4	/* reserved ino for use in recovery */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
@@ -580,9 +579,6 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_SLINK      4
 #define CEPH_CAP_SXATTR     6
 #define CEPH_CAP_SFILE      8
-#define CEPH_CAP_SFLOCK    20
-
-#define CEPH_CAP_BITS      22
 
 /* composed values */
 #define CEPH_CAP_AUTH_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SAUTH)
@@ -600,9 +596,6 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_FILE_BUFFER   (CEPH_CAP_GBUFFER   << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_WREXTEND (CEPH_CAP_GWREXTEND << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_LAZYIO   (CEPH_CAP_GLAZYIO   << CEPH_CAP_SFILE)
-#define CEPH_CAP_FLOCK_SHARED  (CEPH_CAP_GSHARED   << CEPH_CAP_SFLOCK)
-#define CEPH_CAP_FLOCK_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SFLOCK)
-
 
 /* cap masks (for getattr) */
 #define CEPH_STAT_CAP_INODE    CEPH_CAP_PIN

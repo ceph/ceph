@@ -955,7 +955,7 @@ public:
 	 i != awaiting_throttle.end();
       ) {
       if (i->second.get() == pg) {
-	awaiting_throttle.erase(i++);
+	awaiting_throttle.erase(i);
 	return;
       } else {
 	++i;
@@ -1234,7 +1234,7 @@ protected:
   bool asok_command(string command, cmdmap_t& cmdmap, string format, ostream& ss);
 
 public:
-  ClassHandler  *class_handler;
+  ClassHandler  *class_handler = nullptr;
   int get_nodeid() { return whoami; }
   
   static ghobject_t get_osdmap_pobject_name(epoch_t epoch) {
@@ -1892,7 +1892,7 @@ private:
   } op_shardedwq;
 
 
-  void enqueue_op(PG *pg, OpRequestRef& op);
+  void enqueue_op(PGRef pg, OpRequestRef& op);
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
@@ -2025,11 +2025,9 @@ protected:
 
   PGPool _get_pool(int id, OSDMapRef createmap);
 
-  PG *get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op);
-  bool  _have_pg(spg_t pgid);
+  PGRef get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op);
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
-  PG   *_lookup_pg(spg_t pgid);
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      spg_t pg, bool no_lockdep_check=false);
   enum res_result {

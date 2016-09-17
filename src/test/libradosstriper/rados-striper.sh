@@ -65,6 +65,7 @@ function run() {
     diff -w $dir/stat $dir/reftrunc || return 1
     
     # test xattrs
+
     rados --pool rbd --striper setxattr toyfile somexattr somevalue || return 1
     rados --pool rbd --striper getxattr toyfile somexattr > $dir/xattrvalue || return 1 
     rados --pool rbd getxattr toyfile.0000000000000000 somexattr > $dir/xattrvalue2 || return 1 
@@ -77,17 +78,21 @@ function run() {
     rados --pool rbd listxattr toyfile.0000000000000000 | grep -v striper > $dir/xattrlist2 || return 1
     diff -w $dir/xattrlist2 $dir/reflist || return 1    
     rados --pool rbd --striper rmxattr toyfile somexattr || return 1
-    rados --pool rbd --striper getxattr toyfile somexattr >& $dir/rmxattrerror
-    grep -q 'No data available' $dir/rmxattrerror || return 1
-    rados --pool rbd getxattr toyfile.0000000000000000 somexattr >& $dir/rmxattrerror2
-    grep -q 'No data available' $dir/rmxattrerror2 || return 1
+
+    local attr_not_found_str="No data available"
+    [ `uname` = FreeBSD ] && \
+        attr_not_found_str="Attribute not found"
+    expect_failure $dir "$attr_not_found_str"  \
+        rados --pool rbd --striper getxattr toyfile somexattr || return 1
+    expect_failure $dir "$attr_not_found_str"  \
+        rados --pool rbd getxattr toyfile.0000000000000000 somexattr || return 1
     
     # test rm
     rados --pool rbd --striper rm toyfile || return 1
-    rados --pool rbd --striper stat toyfile >& $dir/staterror2
-    grep -q 'No such file or directory' $dir/staterror2 || return 1
-    rados --pool rbd stat toyfile.0000000000000000 >& $dir/staterror3
-    grep -q 'No such file or directory' $dir/staterror3 || return 1
+    expect_failure $dir 'No such file or directory' \
+        rados --pool rbd --striper stat toyfile  || return 1
+    expect_failure $dir 'No such file or directory' \
+        rados --pool rbd stat toyfile.0000000000000000 || return 1
 
     # cleanup
     teardown $dir || return 1

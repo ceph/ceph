@@ -541,7 +541,14 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
       continue;
     }
 
-    if ((info.standby_for_rank == role.rank && info.standby_for_fscid == role.fscid)
+    // The mds_info_t may or may not tell us exactly which filesystem
+    // the standby_for_rank refers to: lookup via legacy_client_fscid
+    mds_role_t target_role = {
+      info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
+        legacy_client_fscid : info.standby_for_fscid,
+      info.standby_for_rank};
+
+    if ((target_role.rank == role.rank && target_role.fscid == role.fscid)
         || (name.length() && info.standby_for_name == name)) {
       // It's a named standby for *me*, use it.
       return gid;
@@ -794,7 +801,7 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
   standby_epochs[new_info.global_id] = epoch;
 }
 
-void FSMap::stop(mds_gid_t who)
+std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
 {
   assert(mds_roles.at(who) != FS_CLUSTER_ID_NONE);
   auto fs = filesystems.at(mds_roles.at(who));
@@ -803,10 +810,24 @@ void FSMap::stop(mds_gid_t who)
   fs->mds_map.in.erase(info.rank);
   fs->mds_map.stopped.insert(info.rank);
 
+  // Also drop any standby replays that were following this rank
+  std::list<mds_gid_t> standbys;
+  for (const auto &i : fs->mds_map.mds_info) {
+    const auto &other_gid = i.first;
+    const auto &other_info = i.second;
+    if (other_info.rank == info.rank
+        && other_info.state == MDSMap::STATE_STANDBY_REPLAY) {
+      standbys.push_back(other_gid);
+      erase(other_gid, 0);
+    }
+  }
+
   fs->mds_map.mds_info.erase(who);
   mds_roles.erase(who);
 
   fs->mds_map.epoch = epoch;
+
+  return standbys;
 }
 
 

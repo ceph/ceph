@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <sstream>
 
@@ -1971,7 +1972,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv,
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
-  ldout(s->cct, 0) << "sending create_bucket request to master zonegroup" << dendl;
+  ldout(s->cct, 0) << "sending request to master zonegroup" << dendl;
   bufferlist response;
   string uid_str = s->user->user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
@@ -4516,6 +4517,8 @@ void RGWCompleteMultipart::execute()
 
     total_parts += obj_parts.size();
     if (!truncated && total_parts != (int)parts->parts.size()) {
+      ldout(s->cct, 0) << "NOTICE: total parts mismatch: have: " << total_parts
+		       << " expected: " << parts->parts.size() << dendl;
       op_ret = -ERR_INVALID_PART;
       return;
     }
@@ -4810,6 +4813,16 @@ void RGWListBucketMultiparts::execute()
       uploads.push_back(entry);
     }
     next_marker = entry;
+  }
+}
+
+void RGWGetHealthCheck::execute()
+{
+  if (! g_conf->rgw_healthcheck_disabling_path.empty() &&
+      ::access(g_conf->rgw_healthcheck_disabling_path.c_str(), F_OK )) {
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+  } else {
+    op_ret = 0; /* 200 OK */
   }
 }
 

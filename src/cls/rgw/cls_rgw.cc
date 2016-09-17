@@ -436,8 +436,6 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return rc;
   }
 
-  bufferlist bl;
-
   map<string, bufferlist> keys;
   std::map<string, bufferlist>::iterator kiter;
   string start_key;
@@ -476,7 +474,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       decode_list_index_key(kiter->first, &key, &ver);
 
       start_key = kiter->first;
-      CLS_LOG(20, "start_key=%s len=%lu", start_key.c_str(), start_key.size());
+      CLS_LOG(20, "start_key=%s len=%zu", start_key.c_str(), start_key.size());
 
       if (!entry.is_valid()) {
         CLS_LOG(20, "entry %s[%s] is not valid\n", key.name.c_str(), key.instance.c_str());
@@ -513,8 +511,6 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
 
   calc_header->tag_timeout = existing_header->tag_timeout;
   calc_header->ver = existing_header->ver;
-
-  bufferlist bl;
 
   map<string, bufferlist> keys;
   string start_obj;
@@ -592,7 +588,6 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
 
 int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist bl;
   bufferlist::iterator iter;
 
   bufferlist header_bl;
@@ -2958,7 +2953,6 @@ static int gc_omap_remove(cls_method_context_t hctx, int type, const string& key
   string index = gc_index_prefixes[type];
   index.append(key);
 
-  bufferlist bl;
   int ret = cls_cxx_map_remove_key(hctx, index);
   if (ret < 0)
     return ret;

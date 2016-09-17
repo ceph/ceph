@@ -12,7 +12,7 @@
 
 #include "BitMapAllocator.h"
 #include "bluestore_types.h"
-#include "BlueStore.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
@@ -303,13 +303,20 @@ void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
            << " length 0x" << length << std::dec
            << dendl;
 
-  assert(!(offset % m_block_size));
-  assert(!(length % m_block_size));
+  // we use the same adjustment/alignment that init_add_free does
+  // above so that we can yank back some of the space.
+  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t length_adj = ((length - (offset_adj - offset)) /
+                         m_block_size) * m_block_size;
 
-  int64_t first_blk = offset / m_block_size;
-  int64_t count = length / m_block_size;
+  assert(!(offset_adj % m_block_size));
+  assert(!(length_adj % m_block_size));
 
-  m_bit_alloc->set_blocks_used(first_blk, count);
+  int64_t first_blk = offset_adj / m_block_size;
+  int64_t count = length_adj / m_block_size;
+
+  if (count)
+    m_bit_alloc->set_blocks_used(first_blk, count);
 }
 
 

@@ -574,11 +574,10 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     if (iter == scheduled_stacks.end()) {
       iter = scheduled_stacks.begin();
     }
-
-    ret = 0;
   }
 
   lock.get_write();
+  assert(context_stacks.empty() || going_down.read()); // assert on deadlock
   for (auto stack : context_stacks) {
     ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
     stack->put();

@@ -5,6 +5,7 @@
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockJournalPolicy.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
@@ -14,6 +15,8 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "gmock/gmock.h"
@@ -88,6 +91,69 @@ public:
 
 MockReplay *MockReplay::s_instance = nullptr;
 
+struct MockRemove {
+  static MockRemove *s_instance;
+  static MockRemove &get_instance() {
+    assert(s_instance != nullptr);
+    return *s_instance;
+  }
+
+  MockRemove() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+template <>
+class RemoveRequest<MockJournalImageCtx> {
+public:
+  static RemoveRequest *create(IoCtx &ioctx, const std::string &imageid,
+                                      const std::string &client_id,
+                                      ContextWQ *op_work_queue, Context *on_finish) {
+    return new RemoveRequest();
+  }
+
+  void send() {
+    MockRemove::get_instance().send();
+  }
+};
+
+MockRemove *MockRemove::s_instance = nullptr;
+
+struct MockCreate {
+  static MockCreate *s_instance;
+  static MockCreate &get_instance() {
+    assert(s_instance != nullptr);
+    return *s_instance;
+  }
+
+  MockCreate() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+template<>
+class CreateRequest<MockJournalImageCtx> {
+public:
+  static CreateRequest *create(IoCtx &ioctx, const std::string &imageid,
+                                      uint8_t order, uint8_t splay_width,
+                                      const std::string &object_pool,
+                                      uint64_t tag_class, TagData &tag_data,
+                                      const std::string &client_id,
+                                      ContextWQ *op_work_queue, Context *on_finish) {
+    return new CreateRequest();
+  }
+
+  void send() {
+    MockCreate::get_instance().send();
+  }
+};
+
+MockCreate *MockCreate::s_instance = nullptr;
+
 } // namespace journal
 } // namespace librbd
 
@@ -158,6 +224,7 @@ public:
   }
 
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, remove_listener(_));
     EXPECT_CALL(mock_journaler, shut_down(_))
                   .WillOnce(CompleteContext(0, NULL));
   }
@@ -196,6 +263,7 @@ public:
     EXPECT_CALL(mock_journaler, get_tags(0, _, _))
                   .WillOnce(DoAll(SetArgPointee<1>(tags),
                                   WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
+    EXPECT_CALL(mock_journaler, add_listener(_));
   }
 
   void expect_start_replay(MockJournalImageCtx &mock_image_ctx,
@@ -305,7 +373,7 @@ public:
 
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
                                 MockJournal &mock_journal,
-                                AioObjectRequest *object_request = nullptr) {
+                                AioObjectRequest<> *object_request = nullptr) {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     MockJournal::AioObjectRequests object_requests;
     if (object_request != nullptr) {
@@ -714,6 +782,8 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   MockJournalReplay mock_journal_replay;
   expect_try_pop_front(mock_journaler, true, mock_replay_entry);
 
+  EXPECT_CALL(mock_journal_replay, decode(_, _))
+                .WillOnce(Return(0));
   Context *on_ready;
   EXPECT_CALL(mock_journal_replay, process(_, _, _))
                 .WillOnce(DoAll(SaveArg<1>(&on_ready),
@@ -1151,5 +1221,34 @@ TEST_F(TestMockJournal, ExternalReplayCloseRequest) {
   ASSERT_EQ(0, close_ctx.wait());
 }
 
+TEST_F(TestMockJournal, AppendDisabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  MockJournalPolicy mock_journal_policy;
+
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+  RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
+  EXPECT_CALL(mock_image_ctx, get_journal_policy()).WillOnce(
+    Return(ictx->get_journal_policy()));
+  ASSERT_TRUE(mock_journal.is_journal_appending());
+
+  EXPECT_CALL(mock_image_ctx, get_journal_policy()).WillOnce(
+    Return(&mock_journal_policy));
+  EXPECT_CALL(mock_journal_policy, append_disabled()).WillOnce(Return(true));
+  ASSERT_FALSE(mock_journal.is_journal_appending());
+
+  expect_shut_down_journaler(mock_journaler);
+}
 
 } // namespace librbd

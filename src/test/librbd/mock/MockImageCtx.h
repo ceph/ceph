@@ -22,6 +22,7 @@
 
 namespace librbd {
 
+namespace cache { class MockImageCache; }
 namespace operation {
 template <typename> class ResizeRequest;
 }
@@ -35,10 +36,10 @@ struct MockImageCtx {
     assert(s_instance != nullptr);
     return s_instance;
   }
-
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
+      perfcounter(image_ctx.perfcounter),
       snap_name(image_ctx.snap_name),
       snap_id(image_ctx.snap_id),
       snap_exists(image_ctx.snap_exists),
@@ -47,18 +48,19 @@ struct MockImageCtx {
       snap_info(image_ctx.snap_info),
       snap_ids(image_ctx.snap_ids),
       object_cacher(image_ctx.object_cacher),
+      object_set(image_ctx.object_set),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
-      owner_lock("owner_lock"),
-      md_lock("md_lock"),
-      cache_lock("cache_lock"),
-      snap_lock("snap_lock"),
-      parent_lock("parent_lock"),
-      object_map_lock("object_map_lock"),
-      async_ops_lock("async_ops_lock"),
+      owner_lock(image_ctx.owner_lock),
+      md_lock(image_ctx.md_lock),
+      cache_lock(image_ctx.cache_lock),
+      snap_lock(image_ctx.snap_lock),
+      parent_lock(image_ctx.parent_lock),
+      object_map_lock(image_ctx.object_map_lock),
+      async_ops_lock(image_ctx.async_ops_lock),
       order(image_ctx.order),
       size(image_ctx.size),
       features(image_ctx.features),
@@ -70,9 +72,12 @@ struct MockImageCtx {
       id(image_ctx.id),
       name(image_ctx.name),
       parent_md(image_ctx.parent_md),
+      format_string(image_ctx.format_string),
+      group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
+      readahead_max_bytes(image_ctx.readahead_max_bytes),
       parent(NULL), operations(new MockOperations()),
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
@@ -144,7 +149,9 @@ struct MockImageCtx {
                               uint8_t protection_status, uint64_t flags));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
+  MOCK_METHOD0(user_flushed, void());
   MOCK_METHOD1(flush, void(Context *));
+  MOCK_METHOD1(flush_async_operations, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
   MOCK_METHOD1(invalidate_cache, void(Context *));
@@ -165,8 +172,14 @@ struct MockImageCtx {
 
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
 
+  MOCK_METHOD7(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
+                                         size_t, uint64_t, Context *, int));
+  MOCK_METHOD7(write_to_cache, void(object_t, const bufferlist&, size_t,
+                                    uint64_t, Context *, int, uint64_t));
+
   ImageCtx *image_ctx;
   CephContext *cct;
+  PerfCounters *perfcounter;
 
   std::string snap_name;
   uint64_t snap_id;
@@ -178,6 +191,7 @@ struct MockImageCtx {
   std::map<std::string, librados::snap_t> snap_ids;
 
   ObjectCacher *object_cacher;
+  ObjectCacher::ObjectSet *object_set;
 
   bool old_format;
   bool read_only;
@@ -190,13 +204,13 @@ struct MockImageCtx {
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;
 
-  RWLock owner_lock;
-  RWLock md_lock;
-  Mutex cache_lock;
-  RWLock snap_lock;
-  RWLock parent_lock;
-  RWLock object_map_lock;
-  Mutex async_ops_lock;
+  RWLock &owner_lock;
+  RWLock &md_lock;
+  Mutex &cache_lock;
+  RWLock &snap_lock;
+  RWLock &parent_lock;
+  RWLock &object_map_lock;
+  Mutex &async_ops_lock;
 
   uint8_t order;
   uint64_t size;
@@ -209,6 +223,8 @@ struct MockImageCtx {
   std::string id;
   std::string name;
   parent_info parent_md;
+  char *format_string;
+  cls::rbd::GroupSpec group_spec;
 
   file_layout_t layout;
 
@@ -216,11 +232,13 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 
-
   MockAioImageRequestWQ *aio_work_queue;
   MockContextWQ *op_work_queue;
 
+  cache::MockImageCache *image_cache = nullptr;
+
   MockReadahead readahead;
+  uint64_t readahead_max_bytes;
 
   MockImageCtx *parent;
   MockOperations *operations;

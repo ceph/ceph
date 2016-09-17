@@ -92,6 +92,8 @@ struct C_AsyncCallback : public Context {
 
 } // namespace detail
 
+std::string generate_image_id(librados::IoCtx &ioctx);
+
 const std::string group_header_name(const std::string &group_id);
 const std::string id_obj_name(const std::string &name);
 const std::string header_name(const std::string &image_id);
@@ -154,6 +156,7 @@ Context *create_async_context_callback(I &image_ctx, Context *on_finish) {
       image_ctx.op_work_queue, on_finish);
 }
 
+// TODO: temporary until AioCompletion supports templated ImageCtx
 inline ImageCtx *get_image_ctx(ImageCtx *image_ctx) {
   return image_ctx;
 }

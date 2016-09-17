@@ -111,6 +111,7 @@ struct C_InvokeAsyncRequest : public Context {
   boost::function<void(Context*)> remote;
   std::set<int> filter_error_codes;
   Context *on_finish;
+  bool request_lock = false;
 
   C_InvokeAsyncRequest(I &image_ctx, const std::string& request_type,
                        bool permit_snapshot,
@@ -194,7 +195,15 @@ struct C_InvokeAsyncRequest : public Context {
       C_InvokeAsyncRequest<I>,
       &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
         this);
-    image_ctx.exclusive_lock->try_lock(ctx);
+
+    if (request_lock) {
+      // current lock owner doesn't support op -- try to perform
+      // the action locally
+      request_lock = false;
+      image_ctx.exclusive_lock->request_lock(ctx);
+    } else {
+      image_ctx.exclusive_lock->try_lock(ctx);
+    }
     owner_lock.put_read();
   }
 
@@ -236,7 +245,13 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
-    if (r != -ETIMEDOUT && r != -ERESTART) {
+    if (r == -EOPNOTSUPP) {
+      ldout(cct, 5) << request_type << " not supported by current lock owner"
+                    << dendl;
+      request_lock = true;
+      send_refresh_image();
+      return;
+    } else if (r != -ETIMEDOUT && r != -ERESTART) {
       image_ctx.state->handle_update_notification();
 
       complete(r);
@@ -325,7 +340,7 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
   r = invoke_async_request("flatten", false,
                            boost::bind(&Operations<I>::execute_flatten, this,
                                        boost::ref(prog_ctx), _1),
-                           boost::bind(&ImageWatcher::notify_flatten,
+                           boost::bind(&ImageWatcher<I>::notify_flatten,
                                        m_image_ctx.image_watcher, request_id,
                                        boost::ref(prog_ctx), _1));
 
@@ -405,7 +420,7 @@ int Operations<I>::rebuild_object_map(ProgressContext &prog_ctx) {
   r = invoke_async_request("rebuild object map", true,
                            boost::bind(&Operations<I>::execute_rebuild_object_map,
                                        this, boost::ref(prog_ctx), _1),
-                           boost::bind(&ImageWatcher::notify_rebuild_object_map,
+                           boost::bind(&ImageWatcher<I>::notify_rebuild_object_map,
                                        m_image_ctx.image_watcher, request_id,
                                        boost::ref(prog_ctx), _1));
 
@@ -505,7 +520,7 @@ int Operations<I>::rename(const char *dstname) {
     r = invoke_async_request("rename", true,
                              boost::bind(&Operations<I>::execute_rename, this,
                                          dstname, _1),
-                             boost::bind(&ImageWatcher::notify_rename,
+                             boost::bind(&ImageWatcher<I>::notify_rename,
                                          m_image_ctx.image_watcher, dstname,
                                          _1));
     if (r < 0 && r != -EEXIST) {
@@ -591,7 +606,7 @@ int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& pro
   r = invoke_async_request("resize", false,
                            boost::bind(&Operations<I>::execute_resize, this,
                                        size, allow_shrink, boost::ref(prog_ctx), _1, 0),
-                           boost::bind(&ImageWatcher::notify_resize,
+                           boost::bind(&ImageWatcher<I>::notify_resize,
                                        m_image_ctx.image_watcher, request_id,
                                        size, allow_shrink, boost::ref(prog_ctx), _1));
 
@@ -679,7 +694,7 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
     m_image_ctx, "snap_create", true,
     boost::bind(&Operations<I>::execute_snap_create, this, snap_name, _1, 0,
                 false),
-    boost::bind(&ImageWatcher::notify_snap_create, m_image_ctx.image_watcher,
+    boost::bind(&ImageWatcher<I>::notify_snap_create, m_image_ctx.image_watcher,
                 snap_name, _1),
     {-EEXIST}, on_finish);
   req->send();
@@ -842,7 +857,7 @@ void Operations<I>::snap_remove(const char *snap_name, Context *on_finish) {
     C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
       m_image_ctx, "snap_remove", true,
       boost::bind(&Operations<I>::execute_snap_remove, this, snap_name, _1),
-      boost::bind(&ImageWatcher::notify_snap_remove, m_image_ctx.image_watcher,
+      boost::bind(&ImageWatcher<I>::notify_snap_remove, m_image_ctx.image_watcher,
                   snap_name, _1),
       {-ENOENT}, on_finish);
     req->send();
@@ -928,7 +943,7 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
     r = invoke_async_request("snap_rename", true,
                              boost::bind(&Operations<I>::execute_snap_rename,
                                          this, snap_id, dstname, _1),
-                             boost::bind(&ImageWatcher::notify_snap_rename,
+                             boost::bind(&ImageWatcher<I>::notify_snap_rename,
                                          m_image_ctx.image_watcher, snap_id,
                                          dstname, _1));
     if (r < 0 && r != -EEXIST) {
@@ -1012,7 +1027,7 @@ int Operations<I>::snap_protect(const char *snap_name) {
     r = invoke_async_request("snap_protect", true,
                              boost::bind(&Operations<I>::execute_snap_protect,
                                          this, snap_name, _1),
-                             boost::bind(&ImageWatcher::notify_snap_protect,
+                             boost::bind(&ImageWatcher<I>::notify_snap_protect,
                                          m_image_ctx.image_watcher, snap_name,
                                          _1));
     if (r < 0 && r != -EBUSY) {
@@ -1098,7 +1113,7 @@ int Operations<I>::snap_unprotect(const char *snap_name) {
     r = invoke_async_request("snap_unprotect", true,
                              boost::bind(&Operations<I>::execute_snap_unprotect,
                                          this, snap_name, _1),
-                             boost::bind(&ImageWatcher::notify_snap_unprotect,
+                             boost::bind(&ImageWatcher<I>::notify_snap_unprotect,
                                          m_image_ctx.image_watcher, snap_name,
                                          _1));
     if (r < 0 && r != -EINVAL) {

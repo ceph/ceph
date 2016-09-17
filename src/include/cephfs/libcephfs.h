@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <fcntl.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -1494,6 +1495,11 @@ int ceph_ll_write_block(struct ceph_mount_info *cmount,
 int ceph_ll_commit_blocks(struct ceph_mount_info *cmount,
 			  struct Inode *in, uint64_t offset, uint64_t range);
 
+
+int ceph_ll_getlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner);
+int ceph_ll_setlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
 #ifdef __cplusplus
 }

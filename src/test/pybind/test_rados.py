@@ -143,8 +143,10 @@ class TestRados(object):
         cmd = {'prefix': 'mon dump', 'format':'json'}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         for mon in json.loads(buf.decode('utf8'))['mons']:
-            buf = json.loads(self.rados.ping_monitor(mon['name']))
-            assert buf.get('health')
+            while True:
+                buf = json.loads(self.rados.ping_monitor(mon['name']))
+                if buf.get('health'):
+                    break
 
     def test_create(self):
         self.rados.create_pool('foo')

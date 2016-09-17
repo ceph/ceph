@@ -20,6 +20,9 @@ fi
 sudo ceph osd crush rm osd.0 || true
 sudo ceph osd crush rm osd.1 || true
 
+sudo cp $(dirname $0)/60-ceph-by-partuuid.rules /lib/udev/rules.d
+sudo udevadm control --reload
+
 perl -pi -e 's|pid file.*|pid file = /var/run/ceph/\$cluster-\$name.pid|' /etc/ceph/ceph.conf
 
 PATH=$(dirname $0):$(dirname $0)/..:$PATH
@@ -32,6 +35,7 @@ fi
 sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH py.test -s -v $(dirname $0)/ceph-disk-test.py
 result=$?
 
+sudo rm -f /lib/udev/rules.d/60-ceph-by-partuuid.rules
 # own whatever was created as a side effect of the py.test run
 # so that it can successfully be removed later on by a non privileged 
 # process

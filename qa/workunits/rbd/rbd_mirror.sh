@@ -75,13 +75,19 @@ wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror start
-wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
-
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
@@ -92,6 +98,19 @@ admin_daemon ${CLUSTER1} rbd mirror status
 
 testlog "TEST: failover and failback"
 start_mirror ${CLUSTER2}
+
+# demote and promote same cluster
+demote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+test_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+promote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+write_image ${CLUSTER2} ${POOL} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
 
 # failover
 demote_image ${CLUSTER2} ${POOL} ${image}

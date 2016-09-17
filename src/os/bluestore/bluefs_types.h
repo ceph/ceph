@@ -90,6 +90,7 @@ struct bluefs_transaction_t {
     OP_DIR_REMOVE,  ///< remove a dir (dirname)
     OP_FILE_UPDATE, ///< set/update file metadata (file)
     OP_FILE_REMOVE, ///< remove file (ino)
+    OP_JUMP,        ///< jump the seq # and offset
     OP_JUMP_SEQ,    ///< jump the seq #
   } op_t;
 
@@ -147,6 +148,11 @@ struct bluefs_transaction_t {
   void op_file_remove(uint64_t ino) {
     ::encode((__u8)OP_FILE_REMOVE, op_bl);
     ::encode(ino, op_bl);
+  }
+  void op_jump(uint64_t next_seq, uint64_t offset) {
+    ::encode((__u8)OP_JUMP, op_bl);
+    ::encode(next_seq, op_bl);
+    ::encode(offset, op_bl);
   }
   void op_jump_seq(uint64_t next_seq) {
     ::encode((__u8)OP_JUMP_SEQ, op_bl);

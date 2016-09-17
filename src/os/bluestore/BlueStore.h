@@ -58,10 +58,22 @@ enum {
   l_bluestore_state_wal_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_compress_lat,
+  l_bluestore_decompress_lat,
+  l_bluestore_compress_success_count,
   l_bluestore_write_pad_bytes,
   l_bluestore_wal_write_ops,
   l_bluestore_wal_write_bytes,
   l_bluestore_write_penalty_read_ops,
+  l_bluestore_allocated,
+  l_bluestore_stored,
+  l_bluestore_compressed,
+  l_bluestore_compressed_allocated,
+  l_bluestore_compressed_original,
+  l_bluestore_onode_hits,
+  l_bluestore_onode_misses,
+  l_bluestore_buffer_hit_bytes,
+  l_bluestore_buffer_miss_bytes,
   l_bluestore_last
 };
 
@@ -80,31 +92,7 @@ public:
   void _set_compression();
 
   class TransContext;
-  class Blob;
 
-  // --------------------------------------------------------
-  // intermediate data structures used while reading
-  struct region_t {
-    uint64_t logical_offset;
-    uint64_t blob_xoffset;   //region offset within the blob
-    uint64_t length;
-
-    region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
-      : logical_offset(offset),
-      blob_xoffset(b_offs),
-      length(len) {}
-    region_t(const region_t& from)
-      : logical_offset(from.logical_offset),
-      blob_xoffset(from.blob_xoffset),
-      length(from.length) {}
-
-    friend ostream& operator<<(ostream& out, const region_t& r) {
-      return out << "0x" << std::hex << r.logical_offset << ":"
-		 << r.blob_xoffset << "~" << r.length << std::dec;
-    }
-  };
-  typedef list<region_t> regions2read_t;
-  typedef map<Blob*, regions2read_t> blobs2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
@@ -302,14 +290,24 @@ public:
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob : public boost::intrusive::set_base_hook<> {
+    std::atomic_int nref;  ///< reference count
     int64_t id = 0;          ///< id
-    bluestore_blob_t blob;   ///< blob metadata
     BufferSpace bc;          ///< buffer cache
 
-    Blob(int64_t i, Cache *c) : id(i), bc(c) {}
+  private:
+    mutable bluestore_blob_t blob;  ///< decoded blob metadata
+    mutable bool undecoded = false; ///< true if blob_bl is newer than blob
+    mutable bool dirty = true;      ///< true if blob is newer than blob_bl
+    mutable bufferlist blob_bl;     ///< cached encoded blob
+
+  public:
+    Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
     ~Blob() {
       assert(bc.empty());
     }
+
+    friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
+    friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
     // comparators for intrusive_set
     friend bool operator<(const Blob &a, const Blob &b) {
@@ -323,12 +321,66 @@ public:
     }
 
     friend ostream& operator<<(ostream& out, const Blob &b) {
-      return out << b.id << ":" << b.blob;
+      return out << b.id << ":" << b.get_blob();
+    }
+
+    const bluestore_blob_t& get_blob() const {
+      if (undecoded) {
+	bufferlist::iterator p = blob_bl.begin();
+	::decode(blob, p);
+	undecoded = false;
+      }
+      return blob;
+    }
+    bluestore_blob_t& dirty_blob() {
+      if (undecoded) {
+	bufferlist::iterator p = blob_bl.begin();
+	::decode(blob, p);
+	undecoded = false;
+      }
+      if (!dirty) {
+	dirty = true;
+	blob_bl.clear();
+      }
+      return blob;
+    }
+    size_t get_encoded_length() const {
+      return blob_bl.length();
+    }
+    bool is_dirty() const {
+      return dirty;
+    }
+    bool is_undecoded() const {
+      return undecoded;
     }
 
     /// discard buffers for unallocated regions
     void discard_unallocated();
+
+    void get() {
+      ++nref;
+    }
+    void put() {
+      if (--nref == 0)
+	delete this;
+    }
+
+    void encode(bufferlist& bl) const {
+      if (dirty) {
+	::encode(blob, blob_bl);
+	dirty = false;
+      } else {
+	assert(blob_bl.length());
+      }
+      ::encode(blob_bl, bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      ::decode(blob_bl, p);
+      undecoded = true;
+      dirty = false;
+    }
   };
+  typedef boost::intrusive_ptr<Blob> BlobRef;
 
   /// a map of blobs, indexed by int64_t
   struct BlobMap {
@@ -343,7 +395,7 @@ public:
       return blob_map.empty();
     }
 
-    Blob *get(int64_t id) {
+    BlobRef get(int64_t id) {
       Blob dummy(id, nullptr);
       auto p = blob_map.find(dummy);
       if (p != blob_map.end()) {
@@ -352,22 +404,25 @@ public:
       return nullptr;
     }
 
-    Blob *new_blob(Cache *c) {
+    BlobRef new_blob(Cache *c) {
       int64_t id = get_new_id();
       Blob *b = new Blob(id, c);
+      b->get();
       blob_map.insert(*b);
       return b;
     }
 
-    void claim(Blob *b) {
+    void claim(BlobRef b) {
       assert(b->id == 0);
       b->id = get_new_id();
+      b->get();
       blob_map.insert(*b);
     }
 
-    void erase(Blob *b) {
+    void erase(BlobRef b) {
       blob_map.erase(*b);
       b->id = 0;
+      b->put();
     }
 
     int64_t get_new_id() {
@@ -380,7 +435,6 @@ public:
 	Blob *b = &*blob_map.begin();
 	b->bc._clear();
 	erase(b);
-	delete b;
       }
     }
 
@@ -390,7 +444,7 @@ public:
 	if (p != m.blob_map.begin()) {
 	  out << ',';
 	}
-	out << p->id << '=' << p->blob;
+	out << p->id << '=' << p->get_blob();
       }
       return out << '}';
     }
@@ -498,7 +552,7 @@ public:
 	exists(false) {
     }
 
-    Blob *get_blob(int64_t id) {
+    BlobRef get_blob(int64_t id) {
       if (id < 0) {
 	assert(bnode);
 	return bnode->blob_map.get(-id);
@@ -519,9 +573,10 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
+    PerfCounters *logger;
     std::mutex lock;                ///< protect lru and other structures
 
-    static Cache *create(string type);
+    static Cache *create(string type, PerfCounters *logger);
 
     virtual ~Cache() {}
 
@@ -726,7 +781,7 @@ public:
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     BnodeRef get_bnode(uint32_t hash);
 
-    Blob *get_blob(OnodeRef& o, int64_t blob) {
+    BlobRef get_blob(OnodeRef& o, int64_t blob) {
       if (blob < 0) {
 	if (!o->bnode) {
 	  o->bnode = get_bnode(o->oid.hobj.get_hash());
@@ -829,6 +884,8 @@ public:
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
+    set<BlobRef> blobs;       ///< these blobs need to be updated on io completion
+
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
@@ -1139,7 +1196,8 @@ private:
   ThreadPool wal_tp;
   WALWQ wal_wq;
 
-  Finisher finisher;
+  int m_finisher_num;
+  vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
@@ -1192,6 +1250,7 @@ private:
 
   void _init_logger();
   void _shutdown_logger();
+  int _reload_logger();
 
   int _open_path();
   void _close_path();
@@ -1223,8 +1282,7 @@ private:
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
-				KeyValueDB::Transaction t);
+  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents);
   void _commit_bluefs_freespace(const vector<bluestore_pextent_t>& extents);
 
   CollectionRef _get_collection(const coll_t& cid);
@@ -1281,6 +1339,15 @@ private:
     boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);
 
+  void _buffer_cache_write(
+    TransContext *txc,
+    BlobRef b,
+    uint64_t offset,
+    bufferlist& bl,
+    unsigned flags) {
+    b->bc.write(txc->seq, offset, bl, flags);
+    txc->blobs.insert(b);
+  }
 public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
@@ -1507,18 +1574,18 @@ private:
     vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
 
     struct write_item {
-      Blob *b;
+      BlobRef b;
       uint64_t blob_length;
       uint64_t b_off;
       bufferlist bl;
       bool mark_unused;
 
-      write_item(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused)
+      write_item(BlobRef b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused)
        : b(b), blob_length(blob_len), b_off(o), bl(bl), mark_unused(_mark_unused) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
-    void write(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused) {
+    void write(BlobRef b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused) {
       writes.emplace_back(write_item(b, blob_len, o, bl, _mark_unused));
     }
   };

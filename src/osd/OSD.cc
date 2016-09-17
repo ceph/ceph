@@ -465,7 +465,6 @@ void OSDService::start_shutdown()
 {
   {
     Mutex::Locker l(agent_timer_lock);
-    agent_timer.cancel_all_events();
     agent_timer.shutdown();
   }
 }
@@ -507,7 +506,7 @@ void OSDService::init()
 
 void OSDService::final_init()
 {
-  objecter->start();
+  objecter->start(osdmap.get());
 }
 
 void OSDService::activate_map()
@@ -1116,6 +1115,7 @@ void OSDService::dec_scrubs_active()
   dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
 	   << " (max " << cct->_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
   --scrubs_active;
+  assert(scrubs_active >= 0);
   sched_scrub_lock.Unlock();
 }
 
@@ -2716,12 +2716,6 @@ int OSD::shutdown()
 	 << cpp_strerror(r) << dendl;
   }
 
-  dout(10) << "syncing store" << dendl;
-  enable_disable_fuse(true);
-  store->umount();
-  delete store;
-  store = 0;
-  dout(10) << "Store synced" << dendl;
 
   {
     Mutex::Locker l(pg_stat_queue_lock);
@@ -2756,6 +2750,13 @@ int OSD::shutdown()
   service.dump_live_pgids();
 #endif
   cct->_conf->remove_observer(this);
+
+  dout(10) << "syncing store" << dendl;
+  enable_disable_fuse(true);
+  store->umount();
+  delete store;
+  store = 0;
+  dout(10) << "Store synced" << dendl;
 
   monc->shutdown();
   osd_lock.Unlock();
@@ -2920,11 +2921,19 @@ void OSD::clear_temp_objects()
     }
     if (!temps.empty()) {
       ObjectStore::Transaction t;
+      int removed = 0;
       for (vector<ghobject_t>::iterator q = temps.begin(); q != temps.end(); ++q) {
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
+        if (++removed > cct->_conf->osd_target_transaction_size) {
+          store->apply_transaction(service.meta_osr.get(), std::move(t));
+          t = ObjectStore::Transaction();
+          removed = 0;
+        }
       }
-      store->apply_transaction(service.meta_osr.get(), std::move(t));
+      if (removed) {
+        store->apply_transaction(service.meta_osr.get(), std::move(t));
+      }
     }
   }
 }
@@ -2946,7 +2955,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
 			 INT_MAX, &objects, 0);
 
   // delete them.
-  unsigned removed = 0;
+  int removed = 0;
   for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
@@ -2955,7 +2964,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp
     if (r != 0 && r != -ENOENT)
       assert(0);
     t.remove(tmp, *p);
-    if (removed > 300) {
+    if (removed > g_conf->osd_target_transaction_size) {
       int r = store->apply_transaction(osr.get(), std::move(t));
       assert(r == 0);
       t = ObjectStore::Transaction();
@@ -3145,12 +3154,12 @@ PG *OSD::_create_lock_pg(
   return pg;
 }
 
-PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
+PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 {
   Session *session = static_cast<Session*>(
     op->get_req()->get_connection()->get_priv());
   if (!session)
-    return NULL;
+    return PGRef();
   // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
   // the session_dispatch_lock must already be held.
   assert(session->session_dispatch_lock.is_locked());
@@ -3171,13 +3180,7 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
     register_session_waiting_on_pg(session, pgid);
   }
   session->put();
-  return out;
-}
-
-bool OSD::_have_pg(spg_t pgid)
-{
-  RWLock::RLocker l(pg_map_lock);
-  return pg_map.count(pgid);
+  return PGRef(out);
 }
 
 PG *OSD::_lookup_lock_pg(spg_t pgid)
@@ -3187,16 +3190,6 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
     return NULL;
   PG *pg = pg_map[pgid];
   pg->lock();
-  return pg;
-}
-
-
-PG *OSD::_lookup_pg(spg_t pgid)
-{
-  RWLock::RLocker l(pg_map_lock);
-  if (!pg_map.count(pgid))
-    return NULL;
-  PG *pg = pg_map[pgid];
   return pg;
 }
 
@@ -3532,7 +3525,8 @@ void OSD::handle_pg_peering_evt(
     return;
   }
 
-  if (!_have_pg(pgid)) {
+  PG *pg = _lookup_lock_pg(pgid);
+  if (!pg) {
     // same primary?
     if (!osdmap->have_pg_pool(pgid.pool()))
       return;
@@ -3576,7 +3570,7 @@ void OSD::handle_pg_peering_evt(
       if (!pp->is_replicated() && role != pgid.shard)
 	role = -1;
 
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	get_map(epoch),
 	pgid, false, false,
 	role,
@@ -3606,7 +3600,7 @@ void OSD::handle_pg_peering_evt(
       pg_history_t old_history = old_pg_state->info.history;
       pg_interval_map_t old_past_intervals = old_pg_state->past_intervals;
       old_pg_state->unlock();
-      PG *pg = _create_lock_pg(
+      pg = _create_lock_pg(
 	old_osd_map,
 	resurrected,
 	false,
@@ -3674,7 +3668,6 @@ void OSD::handle_pg_peering_evt(
     }
   } else {
     // already had it.  did the mapping change?
-    PG *pg = _lookup_lock_pg(pgid);
     if (epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " get_or_create_pg acting changed in "
 	       << pg->info.history.same_interval_since
@@ -3741,7 +3734,7 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     // split?
     if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
 		      osdmap->get_pg_num(pgid.pool()),
-		      0)) {
+		      0) && e > h.same_interval_since) {
       h.same_interval_since = e;
     }
     // up set change?
@@ -4300,18 +4293,8 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(10) << "tick" << dendl;
 
-  logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
-  logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
-  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
-  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
-
   if (is_active() || is_waiting_for_healthy()) {
     maybe_update_heartbeat_peers();
-
-    heartbeat_lock.Lock();
-    heartbeat_check();
-    heartbeat_lock.Unlock();
   }
 
   if (is_waiting_for_healthy()) {
@@ -4319,20 +4302,10 @@ void OSD::tick()
   }
 
   if (is_active()) {
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
-
     check_replay_queue();
-
-    service.promote_throttle_recalibrate();
   }
 
   do_waiters();
-
-  check_ops_in_flight();
-
-  service.kick_recovery_queue();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
 }
@@ -4342,9 +4315,19 @@ void OSD::tick_without_osd_lock()
   assert(tick_timer_lock.is_locked());
   dout(10) << "tick_without_osd_lock" << dendl;
 
+  logger->set(l_osd_buf, buffer::get_total_alloc());
+  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
+  logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
+  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
+  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
+
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
   if (is_active() || is_waiting_for_healthy()) {
+    heartbeat_lock.Lock();
+    heartbeat_check();
+    heartbeat_lock.Unlock();
+
     map_lock.get_read();
     Mutex::Locker l(mon_report_lock);
 
@@ -4402,9 +4385,15 @@ void OSD::tick_without_osd_lock()
     map_lock.put_read();
   }
 
-  if (!scrub_random_backoff()) {
-    sched_scrub();
+  if (is_active()) {
+    if (!scrub_random_backoff()) {
+      sched_scrub();
+    }
+    service.promote_throttle_recalibrate();
   }
+
+  check_ops_in_flight();
+  service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
 
@@ -5481,10 +5470,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       r = -EINVAL;
     } else {
       spg_t pcand;
+      PG *pg = nullptr;
       if (osdmap->get_primary_shard(pgid, &pcand) &&
-	  _have_pg(pcand)) {
-	PG *pg = _lookup_lock_pg(pcand);
-	assert(pg);
+	  (pg = _lookup_lock_pg(pcand))) {
 	if (pg->is_primary()) {
 	  // simulate pg <pgid> cmd= for pg->do-command
 	  if (prefix != "pg")
@@ -6268,12 +6256,6 @@ void OSD::_dispatch(Message *m)
   assert(osd_lock.is_locked());
   dout(20) << "_dispatch " << m << " " << *m << dendl;
 
-  logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
-  logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
-  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
-  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
-
   switch (m->get_type()) {
 
     // -- don't need lock --
@@ -6323,11 +6305,6 @@ void OSD::_dispatch(Message *m)
       dispatch_op(op);
     }
   }
-
-  logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
-  logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
-
 }
 
 void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
@@ -6642,6 +6619,12 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
+  // Keep a ref in the list until we get the newly received map written
+  // onto disk. This is important because as long as the refs are alive,
+  // the OSDMaps will be pinned in the cache and we won't try to read it
+  // off of disk. Otherwise these maps will probably not stay in the cache,
+  // and reading those OSDMaps before they are actually written can result
+  // in a crash. 
   list<OSDMapRef> pinned_maps;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
@@ -6718,10 +6701,16 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   ObjectStore::Transaction t;
+  uint64_t txn_size = 0;
 
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = MAX(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
+    if (txn_size >= t.get_num_bytes()) {
+      derr << __func__ << " transaction size overflowed" << dendl;
+      assert(txn_size < t.get_num_bytes());
+    }
+    txn_size = t.get_num_bytes();
     map<epoch_t,bufferlist>::iterator p;
     p = m->maps.find(e);
     if (p != m->maps.end()) {
@@ -6900,9 +6889,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     }
 
     osdmap = newmap;
-
-    had_map_since = ceph_clock_now(cct);
-
     epoch_t up_epoch;
     epoch_t boot_epoch;
     service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
@@ -6918,6 +6904,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       service.set_epochs(&boot_epoch, &up_epoch, NULL);
     }
   }
+
+  had_map_since = ceph_clock_now(cct);
 
   epoch_t _bind_epoch = service.get_bind_epoch();
   if (osdmap->is_up(whoami) &&
@@ -8571,7 +8559,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  PG *pg = get_pg_or_queue_for_pg(pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg) {
     op->send_map_update = share_map.should_send;
     op->sent_epoch = m->get_map_epoch();
@@ -8659,7 +8647,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     peer_session->put();
   }
 
-  PG *pg = get_pg_or_queue_for_pg(m->pgid, op);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op);
   if (pg) {
     op->send_map_update = should_share_map;
     op->sent_epoch = m->map_epoch;
@@ -8684,7 +8672,7 @@ bool OSD::op_is_discardable(MOSDOp *op)
   return false;
 }
 
-void OSD::enqueue_op(PG *pg, OpRequestRef& op)
+void OSD::enqueue_op(PGRef pg, OpRequestRef& op)
 {
   utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
   dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()

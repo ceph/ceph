@@ -426,6 +426,9 @@ enum RGWOpType {
   RGW_OP_DELETE_MULTI_OBJ,
   RGW_OP_BULK_DELETE,
   RGW_OP_SET_ATTRS,
+  RGW_OP_GET_CROSS_DOMAIN_POLICY,
+  RGW_OP_GET_HEALTH_CHECK,
+  RGW_OP_GET_INFO,
 
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA
@@ -530,6 +533,14 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
 
 void decode_json_obj(obj_version& v, JSONObj *obj);
 
+enum RGWUserSourceType
+{
+  TYPE_NONE=0,
+  TYPE_RGW=1,
+  TYPE_KEYSTONE=2,
+  TYPE_LDAP=3
+};
+
 struct RGWUserInfo
 {
   uint64_t auid;
@@ -550,6 +561,7 @@ struct RGWUserInfo
   RGWQuotaInfo bucket_quota;
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
+  uint32_t type;
 
   RGWUserInfo()
     : auid(0),
@@ -557,7 +569,8 @@ struct RGWUserInfo
       max_buckets(RGW_DEFAULT_MAX_BUCKETS),
       op_mask(RGW_OP_TYPE_ALL),
       admin(0),
-      system(0) {
+      system(0),
+      type(TYPE_NONE) {
   }
 
   RGWAccessKey* get_key0() {
@@ -568,7 +581,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(18, 9, bl);
+     ENCODE_START(19, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -608,10 +621,11 @@ struct RGWUserInfo
      ::encode(user_quota, bl);
      ::encode(user_id.tenant, bl);
      ::encode(admin, bl);
+     ::encode(type, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(18, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(19, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -681,6 +695,9 @@ struct RGWUserInfo
     if (struct_v >= 18) {
       ::decode(admin, bl);
     }
+    if (struct_v >= 19) {
+      ::decode(type, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -730,7 +747,7 @@ struct rgw_bucket {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(8, 3, bl);
+     ENCODE_START(9, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
@@ -741,7 +758,7 @@ struct rgw_bucket {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {

@@ -143,14 +143,10 @@ bmap_t BmapEntry::atomic_fetch()
   return m_bits;
 }
 
-bool BmapEntry::is_allocated(int64_t start_bit, int64_t num_bits)
+bool BmapEntry::is_allocated(int64_t offset, int64_t num_bits)
 {
-  for (int i = start_bit; i < num_bits + start_bit; i++) {
-    if (!check_bit(i)) {
-      return false;
-    }
-  }
-  return true;
+  bmap_t bmask = BmapEntry::align_mask(num_bits) >> offset;
+  return ((m_bits & bmask) == bmask);
 }
 
 void BmapEntry::clear_bit(int bit)
@@ -1313,6 +1309,7 @@ BitAllocator::shutdown()
 {
   lock_excl();
   serial_lock();
+  unlock();
 }
 
 void BitAllocator::unreserve_blocks(int64_t unused)

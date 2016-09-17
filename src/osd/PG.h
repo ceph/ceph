@@ -543,7 +543,7 @@ public:
   pg_shard_t pg_whoami;
   pg_shard_t up_primary;
   vector<int> up, acting, want_acting;
-  set<pg_shard_t> actingbackfill, actingset;
+  set<pg_shard_t> actingbackfill, actingset, upset;
   map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -2140,7 +2140,15 @@ public:
 	    acting[i],
 	    pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
+    upset.clear();
     up = newup;
+    for (uint8_t i = 0; i < up.size(); ++i) {
+      if (up[i] != CRUSH_ITEM_NONE)
+	upset.insert(
+	  pg_shard_t(
+	    up[i],
+	    pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
     if (!pool.info.ec_pool()) {
       up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
       primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);

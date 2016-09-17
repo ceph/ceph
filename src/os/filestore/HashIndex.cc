@@ -550,7 +550,12 @@ int HashIndex::recursive_create_path(vector<string>& path, int level)
 }
 
 int HashIndex::recursive_remove(const vector<string> &path) {
+  return _recursive_remove(path, true);
+}
+
+int HashIndex::_recursive_remove(const vector<string> &path, bool top) {
   vector<string> subdirs;
+  dout(20) << __func__ << " path=" << path << dendl;
   int r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -565,12 +570,15 @@ int HashIndex::recursive_remove(const vector<string> &path) {
        i != subdirs.end();
        ++i) {
     subdir.push_back(*i);
-    r = recursive_remove(subdir);
+    r = _recursive_remove(subdir, false);
     if (r < 0)
       return r;
     subdir.pop_back();
   }
-  return remove_path(path);
+  if (top)
+    return 0;
+  else
+    return remove_path(path);
 }
 
 int HashIndex::start_col_split(const vector<string> &path) {

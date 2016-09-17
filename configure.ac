@@ -81,6 +81,14 @@ AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
 AM_CONDITIONAL(SOLARIS, test x"$solaris" = x"yes")
 AM_CONDITIONAL(AIX, test x"$aix" = x"yes")
 
+# Platform
+case "${host_cpu}" in
+i?86|x86_64)
+  intel="yes"
+  ;;
+esac
+AM_CONDITIONAL(INTEL, test x"$intel" = x"yes")
+
 # Checks for programs.
 AC_PROG_CXX
 if test "$CXX" = no || test "$CXX:$GXX" = "g++:"; then
@@ -637,7 +645,8 @@ AS_IF([test "$with_profiler" = yes -o \
       [AC_LANG_PUSH([C++])
        AC_CHECK_HEADERS([gperftools/heap-profiler.h \
                          gperftools/malloc_extension.h \
-                         gperftools/profiler.h])
+                         gperftools/profiler.h], [],
+                         [AC_MSG_FAILURE([gperftools headers not found (use --without-profiler or disable tcmalloc)])])
        AC_LANG_POP([C++])])
 
 # error out if --with-jemalloc and ! --without-tcmalloc
@@ -969,13 +978,23 @@ AC_CHECK_HEADER([boost/program_options/option.hpp], [],
 
 # If we have the boost system library installed, then we may want to link
 # with it.
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
+BOOST_SYSTEM_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_SYSTEM_LIBS)
 
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_iostreams-mt, main, [],
     [AC_CHECK_LIB(boost_iostreams, main, [],
         AC_MSG_FAILURE(["Boost iostreams library not found."]))])
+BOOST_IOSTREAMS_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_IOSTREAMS_LIBS)
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""

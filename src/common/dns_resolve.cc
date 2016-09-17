@@ -11,13 +11,14 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "dns_resolve.h"
 
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/nameser.h>
 #include <arpa/inet.h>
 #include <resolv.h>
+
+#include "dns_resolve.h"
 
 #include "acconfig.h"
 #include "common/debug.h"

@@ -14,6 +14,7 @@
  *
  */
 
+#include <atomic>
 #include <iostream>
 #include <unistd.h>
 #include <stdlib.h>
@@ -82,11 +83,10 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
 class FakeDispatcher : public Dispatcher {
  public:
   struct Session : public RefCountedObject {
-    Mutex lock;
-    uint64_t count;
+    atomic<uint64_t> count;
     ConnectionRef con;
 
-    explicit Session(ConnectionRef c): RefCountedObject(g_ceph_context), lock("FakeDispatcher::Session::lock"), count(0), con(c) {
+    explicit Session(ConnectionRef c): RefCountedObject(g_ceph_context), count(0), con(c) {
     }
     uint64_t get_count() { return count; }
   };
@@ -114,7 +114,7 @@ class FakeDispatcher : public Dispatcher {
 
   void ms_handle_fast_connect(Connection *con) {
     lock.Lock();
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(con);
@@ -127,7 +127,6 @@ class FakeDispatcher : public Dispatcher {
     lock.Unlock();
   }
   void ms_handle_fast_accept(Connection *con) {
-    Mutex::Locker l(lock);
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(con);
@@ -136,19 +135,18 @@ class FakeDispatcher : public Dispatcher {
     s->put();
   }
   bool ms_dispatch(Message *m) {
-    Mutex::Locker l(lock);
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
       s = new Session(m->get_connection());
       m->get_connection()->set_priv(s->get());
     }
     s->put();
-    Mutex::Locker l1(s->lock);
     s->count++;
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << dendl;
     if (is_server) {
       reply_message(m);
     }
+    Mutex::Locker l(lock);
     got_new = true;
     cond.Signal();
     m->put();
@@ -156,7 +154,7 @@ class FakeDispatcher : public Dispatcher {
   }
   bool ms_handle_reset(Connection *con) {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->con.reset(NULL);  // break con <-> session ref cycle
@@ -167,7 +165,7 @@ class FakeDispatcher : public Dispatcher {
   }
   void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->con.reset(NULL);  // break con <-> session ref cycle
@@ -175,16 +173,15 @@ class FakeDispatcher : public Dispatcher {
       s->put();
     }
     got_remote_reset = true;
+    cond.Signal();
   }
   void ms_fast_dispatch(Message *m) {
-    Mutex::Locker l(lock);
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
       s = new Session(m->get_connection());
       m->get_connection()->set_priv(s->get());
     }
     s->put();
-    Mutex::Locker l1(s->lock);
     s->count++;
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << dendl;
     if (is_server) {
@@ -195,9 +192,10 @@ class FakeDispatcher : public Dispatcher {
     } else if (loopback) {
       assert(m->get_source().is_client());
     }
+    m->put();
+    Mutex::Locker l(lock);
     got_new = true;
     cond.Signal();
-    m->put();
   }
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
@@ -450,6 +448,7 @@ TEST_P(MessengerTest, StatefulTest) {
   // don't lose state
   ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
 
+  srv_dispatcher.got_new = false;
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
@@ -461,14 +460,26 @@ TEST_P(MessengerTest, StatefulTest) {
   }
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   server_conn = server_msgr->get_connection(client_msgr->get_myinst());
-  ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
+  {
+    Mutex::Locker l(srv_dispatcher.lock);
+    while (!srv_dispatcher.got_remote_reset)
+      srv_dispatcher.cond.Wait(srv_dispatcher.lock);
+  }
 
   // 2. test for client reconnect
   ASSERT_FALSE(cli_dispatcher.got_remote_reset);
   cli_dispatcher.got_connect = false;
+  cli_dispatcher.got_new = false;
+  cli_dispatcher.got_remote_reset = false;
   server_conn->mark_down();
   ASSERT_FALSE(server_conn->is_connected());
   // ensure client detect server socket closed
+  {
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_remote_reset)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_remote_reset = false;
+  }
   {
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_connect)
@@ -477,6 +488,7 @@ TEST_P(MessengerTest, StatefulTest) {
   }
   CHECK_AND_WAIT_TRUE(conn->is_connected());
   ASSERT_TRUE(conn->is_connected());
+
   {
     m = new MPing();
     ASSERT_EQ(conn->send_message(m), 0);
@@ -487,10 +499,9 @@ TEST_P(MessengerTest, StatefulTest) {
     cli_dispatcher.got_new = false;
   }
   // resetcheck happen
-  ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
+  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv())->get_count());
   server_conn = server_msgr->get_connection(client_msgr->get_myinst());
-  ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
-  ASSERT_TRUE(cli_dispatcher.got_remote_reset);
+  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv())->get_count());
   cli_dispatcher.got_remote_reset = false;
 
   server_msgr->shutdown();
@@ -529,6 +540,7 @@ TEST_P(MessengerTest, StatelessTest) {
   conn->mark_down();
   ASSERT_FALSE(conn->is_connected());
 
+  srv_dispatcher.got_new = false;
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
@@ -541,7 +553,12 @@ TEST_P(MessengerTest, StatelessTest) {
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   ConnectionRef server_conn = server_msgr->get_connection(client_msgr->get_myinst());
   // server lose state
-  ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
+  {
+    Mutex::Locker l(srv_dispatcher.lock);
+    while (!srv_dispatcher.got_new)
+      srv_dispatcher.cond.Wait(srv_dispatcher.lock);
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv())->get_count());
 
   // 2. test for client lossy
   server_conn->mark_down();
@@ -815,7 +832,6 @@ class SyntheticDispatcher : public Dispatcher {
       return ;
     }
 
-    Mutex::Locker l(lock);
     uint64_t i;
     bool reply;
     assert(m->get_middle().length());
@@ -825,16 +841,23 @@ class SyntheticDispatcher : public Dispatcher {
     if (reply) {
       lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << " reply=" << reply << " i=" << i << dendl;
       reply_message(m, i);
-    } else if (sent.count(i)) {
-      lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << " reply=" << reply << " i=" << i << dendl;
-      ASSERT_EQ(conn_sent[m->get_connection()].front(), i);
-      ASSERT_TRUE(m->get_data().contents_equal(sent[i]));
-      conn_sent[m->get_connection()].pop_front();
-      sent.erase(i);
+      m->put();
+      Mutex::Locker l(lock);
+      got_new = true;
+      cond.Signal();
+    } else {
+      Mutex::Locker l(lock);
+      if (sent.count(i)) {
+	lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << " reply=" << reply << " i=" << i << dendl;
+	ASSERT_EQ(conn_sent[m->get_connection()].front(), i);
+	ASSERT_TRUE(m->get_data().contents_equal(sent[i]));
+	conn_sent[m->get_connection()].pop_front();
+	sent.erase(i);
+      }
+      m->put();
+      got_new = true;
+      cond.Signal();
     }
-    got_new = true;
-    cond.Signal();
-    m->put();
   }
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
@@ -1341,7 +1364,7 @@ class MarkdownDispatcher : public Dispatcher {
   }
 
   void ms_handle_fast_connect(Connection *con) {
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.insert(con);
   }
@@ -1354,8 +1377,10 @@ class MarkdownDispatcher : public Dispatcher {
     Mutex::Locker l(lock);
     count.inc();
     conns.insert(m->get_connection());
-    if (conns.size() < 2 && !last_mark)
+    if (conns.size() < 2 && !last_mark) {
+      m->put();
       return true;
+    }
 
     last_mark = true;
     usleep(rand() % 500);
@@ -1372,7 +1397,7 @@ class MarkdownDispatcher : public Dispatcher {
     return true;
   }
   bool ms_handle_reset(Connection *con) {
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.erase(con);
     usleep(rand() % 500);
@@ -1381,7 +1406,7 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
     conns.erase(con);
-    lderr(g_ceph_context) << __func__ << con << dendl;
+    lderr(g_ceph_context) << __func__ << " " << con << dendl;
   }
   void ms_fast_dispatch(Message *m) {
     assert(0);

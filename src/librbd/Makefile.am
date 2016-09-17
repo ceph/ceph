@@ -31,16 +31,24 @@ librbd_internal_la_SOURCES = \
 	librbd/ObjectWatcher.cc \
 	librbd/Operations.cc \
 	librbd/Utils.cc \
+	librbd/cache/ImageWriteback.cc \
+	librbd/cache/PassthroughImageCache.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
+	librbd/exclusive_lock/AutomaticPolicy.cc \
+	librbd/exclusive_lock/ReacquireRequest.cc \
 	librbd/exclusive_lock/ReleaseRequest.cc \
 	librbd/exclusive_lock/StandardPolicy.cc \
 	librbd/image/CloseRequest.cc \
+	librbd/image/CreateRequest.cc \
 	librbd/image/OpenRequest.cc \
 	librbd/image/RefreshParentRequest.cc \
 	librbd/image/RefreshRequest.cc \
 	librbd/image/SetSnapRequest.cc \
 	librbd/image_watcher/Notifier.cc \
 	librbd/image_watcher/NotifyLockOwner.cc \
+	librbd/image_watcher/RewatchRequest.cc \
+	librbd/journal/RemoveRequest.cc \
+	librbd/journal/CreateRequest.cc \
 	librbd/journal/Replay.cc \
 	librbd/journal/StandardPolicy.cc \
 	librbd/object_map/InvalidateRequest.cc \
@@ -118,18 +126,28 @@ noinst_HEADERS += \
 	librbd/TaskFinisher.h \
 	librbd/Utils.h \
 	librbd/WatchNotifyTypes.h \
+	librbd/cache/ImageCache.h \
+	librbd/cache/ImageWriteback.h \
+	librbd/cache/PassthroughImageCache.h \
 	librbd/exclusive_lock/AcquireRequest.h \
+	librbd/exclusive_lock/AutomaticPolicy.h \
 	librbd/exclusive_lock/Policy.h \
+	librbd/exclusive_lock/ReacquireRequest.h \
 	librbd/exclusive_lock/ReleaseRequest.h \
 	librbd/exclusive_lock/StandardPolicy.h \
 	librbd/image/CloseRequest.h \
+	librbd/image/CreateRequest.h \
 	librbd/image/OpenRequest.h \
 	librbd/image/RefreshParentRequest.h \
 	librbd/image/RefreshRequest.h \
 	librbd/image/SetSnapRequest.h \
 	librbd/image_watcher/Notifier.h \
 	librbd/image_watcher/NotifyLockOwner.h \
+	librbd/image_watcher/RewatchRequest.h \
+	librbd/journal/CreateRequest.h \
+	librbd/journal/DisabledPolicy.h \
 	librbd/journal/Policy.h \
+	librbd/journal/RemoveRequest.h \
 	librbd/journal/Replay.h \
 	librbd/journal/StandardPolicy.h \
 	librbd/journal/Types.h \

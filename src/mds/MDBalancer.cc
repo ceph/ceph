@@ -162,7 +162,9 @@ mds_load_t MDBalancer::get_load(utime_t now)
   ifstream cpu("/proc/loadavg");
   if (cpu.is_open())
     cpu >> load.cpu_load_avg;
-
+  else
+    derr << "input file '/proc/loadavg' not found" << dendl;
+  
   dout(15) << "get_load " << load << dendl;
   return load;
 }
@@ -456,7 +458,7 @@ void MDBalancer::prep_rebalance(int beat)
 	      << dendl;
     }
 
-    double total_load = 0;
+    double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
       map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
@@ -552,40 +554,36 @@ void MDBalancer::prep_rebalance(int beat)
       }
     }
 
-
-    if (1) {
-      if (beat % 2 == 1) {
-	// old way
-	dout(15) << "  matching big exporters to big importers" << dendl;
-	// big exporters to big importers
-	multimap<double,mds_rank_t>::reverse_iterator ex = exporters.rbegin();
-	multimap<double,mds_rank_t>::iterator im = importers.begin();
-	while (ex != exporters.rend() &&
-	       im != importers.end()) {
-	  double maxex = get_maxex(ex->second);
-	  double maxim = get_maxim(im->second);
-	  if (maxex < .001 || maxim < .001) break;
-	  try_match(ex->second, maxex,
-		    im->second, maxim);
-	  if (maxex <= .001) ++ex;
-	  if (maxim <= .001) ++im;
-	}
-      } else {
-	// new way
-	dout(15) << "  matching small exporters to big importers" << dendl;
-	// small exporters to big importers
-	multimap<double,mds_rank_t>::iterator ex = exporters.begin();
-	multimap<double,mds_rank_t>::iterator im = importers.begin();
-	while (ex != exporters.end() &&
-	       im != importers.end()) {
-	  double maxex = get_maxex(ex->second);
-	  double maxim = get_maxim(im->second);
-	  if (maxex < .001 || maxim < .001) break;
-	  try_match(ex->second, maxex,
-		    im->second, maxim);
-	  if (maxex <= .001) ++ex;
-	  if (maxim <= .001) ++im;
-	}
+    // old way
+    if (beat % 2 == 1) {
+      dout(15) << "  matching big exporters to big importers" << dendl;
+      // big exporters to big importers
+      multimap<double,mds_rank_t>::reverse_iterator ex = exporters.rbegin();
+      multimap<double,mds_rank_t>::iterator im = importers.begin();
+      while (ex != exporters.rend() &&
+	     im != importers.end()) {
+        double maxex = get_maxex(ex->second);
+	double maxim = get_maxim(im->second);
+	if (maxex < .001 || maxim < .001) break;
+	try_match(ex->second, maxex,
+		  im->second, maxim);
+	if (maxex <= .001) ++ex;
+	if (maxim <= .001) ++im;
+      }
+    } else { // new way
+      dout(15) << "  matching small exporters to big importers" << dendl;
+      // small exporters to big importers
+      multimap<double,mds_rank_t>::iterator ex = exporters.begin();
+      multimap<double,mds_rank_t>::iterator im = importers.begin();
+      while (ex != exporters.end() &&
+	     im != importers.end()) {
+        double maxex = get_maxex(ex->second);
+	double maxim = get_maxim(im->second);
+	if (maxex < .001 || maxim < .001) break;
+	try_match(ex->second, maxex,
+		  im->second, maxim);
+	if (maxex <= .001) ++ex;
+	if (maxim <= .001) ++im;
       }
     }
   }
@@ -653,7 +651,7 @@ void MDBalancer::try_rebalance()
       //<< " .. " << (*it).second << " * " << load_fac
 	    << " -> " << amount
 	    << dendl;//" .. fudge is " << fudge << dendl;
-    double have = 0;
+    double have = 0.0;
 
 
     show_imports();
@@ -936,42 +934,11 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
   if (in->get_parent_dn())
     hit_dir(now, in->get_parent_dn()->get_dir(), type, who);
 }
-/*
-  // hit me
-  in->popularity[MDS_POP_JUSTME].pop[type].hit(now);
-  in->popularity[MDS_POP_NESTED].pop[type].hit(now);
-  if (in->is_auth()) {
-    in->popularity[MDS_POP_CURDOM].pop[type].hit(now);
-    in->popularity[MDS_POP_ANYDOM].pop[type].hit(now);
-
-    dout(20) << "hit_inode " << type << " pop "
-	     << in->popularity[MDS_POP_JUSTME].pop[type].get(now) << " me, "
-	     << in->popularity[MDS_POP_NESTED].pop[type].get(now) << " nested, "
-	     << in->popularity[MDS_POP_CURDOM].pop[type].get(now) << " curdom, "
-	     << in->popularity[MDS_POP_CURDOM].pop[type].get(now) << " anydom"
-	     << " on " << *in
-	     << dendl;
-  } else {
-    dout(20) << "hit_inode " << type << " pop "
-	     << in->popularity[MDS_POP_JUSTME].pop[type].get(now) << " me, "
-	     << in->popularity[MDS_POP_NESTED].pop[type].get(now) << " nested, "
-      	     << " on " << *in
-	     << dendl;
-  }
-
-  // hit auth up to import
-  CDir *dir = in->get_parent_dir();
-  if (dir) hit_dir(now, dir, type);
-*/
-
 
 void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
 {
   // hit me
   double v = dir->pop_me.get(type).hit(now, amount);
-
-  //if (dir->ino() == inodeno_t(0x10000000000))
-  //dout(0) << "hit_dir " << type << " pop " << v << " in " << *dir << dendl;
 
   // split/merge
   if (g_conf->mds_bal_frag && g_conf->mds_bal_fragment_interval > 0 &&
@@ -1005,7 +972,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     dir->pop_spread.hit(now, mds->mdcache->decayrate, who);
   }
 
-  double rd_adj = 0;
+  double rd_adj = 0.0;
   if (type == META_POP_IRD &&
       dir->last_popularity_sample < last_sample) {
     double dir_pop = dir->pop_auth_subtree.get(type).get(now, mds->mdcache->decayrate);    // hmm??
@@ -1057,7 +1024,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   bool hit_subtree = dir->is_auth();         // current auth subtree (if any)
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
-  while (1) {
+  while (true) {
     dir->pop_nested.get(type).hit(now, amount);
     if (rd_adj != 0.0)
       dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);

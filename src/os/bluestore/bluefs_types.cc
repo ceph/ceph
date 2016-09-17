@@ -45,7 +45,8 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
 
 ostream& operator<<(ostream& out, bluefs_extent_t e)
 {
-  return out << e.bdev << ":" << e.offset << "+" << e.length;
+  return out << (int)e.bdev << ":0x" << std::hex << e.offset << "+" << e.length
+	     << std::dec;
 }
 
 // bluefs_super_t
@@ -94,9 +95,9 @@ ostream& operator<<(ostream& out, const bluefs_super_t& s)
   return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
 	     << " v " << s.version
-	     << " block_size " << s.block_size
-	     << " log_fnode " << s.log_fnode
-	     << ")";
+	     << " block_size 0x" << std::hex << s.block_size
+	     << " log_fnode 0x" << s.log_fnode
+	     << std::dec << ")";
 }
 
 // bluefs_fnode_t
@@ -165,7 +166,7 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
   return out << "file(ino " << file.ino
-	     << " size " << file.size
+	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " bdev " << (int)file.prefer_bdev
 	     << " extents " << file.extents
@@ -231,7 +232,7 @@ void bluefs_transaction_t::generate_test_instance(
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 {
   return out << "txn(seq " << t.seq
-	     << " len " << t.op_bl.length()
-	     << " crc " << t.op_bl.crc32c(-1)
-	     << ")";
+	     << " len 0x" << std::hex << t.op_bl.length()
+	     << " crc 0x" << t.op_bl.crc32c(-1)
+	     << std::dec << ")";
 }

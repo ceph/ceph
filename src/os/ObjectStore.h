@@ -179,10 +179,11 @@ public:
    */
   struct Sequencer {
     string name;
+    spg_t shard_hint;
     Sequencer_implRef p;
 
     explicit Sequencer(string n)
-      : name(n), p(NULL) {}
+      : name(n), shard_hint(spg_t()), p(NULL) {}
     ~Sequencer() {
     }
 
@@ -987,6 +988,9 @@ public:
         string s;
         ::decode(s, data_bl_p);
         return s;
+      }
+      void decode_bp(bufferptr& bp) {
+        ::decode(bp, data_bl_p);
       }
       void decode_bl(bufferlist& bl) {
         ::decode(bl, data_bl_p);

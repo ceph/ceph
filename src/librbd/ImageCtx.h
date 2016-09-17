@@ -32,6 +32,8 @@ class CephContext;
 class ContextWQ;
 class Finisher;
 class PerfCounters;
+class ThreadPool;
+class SafeTimer;
 
 namespace librbd {
 
@@ -42,13 +44,14 @@ namespace librbd {
   class CopyupRequest;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
-  class ImageWatcher;
+  template <typename> class ImageWatcher;
   template <typename> class Journal;
   class LibrbdAdminSocketHook;
   class ObjectMap;
   template <typename> class Operations;
   class LibrbdWriteback;
 
+  namespace cache { struct ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace journal { struct Policy; }
 
@@ -79,7 +82,7 @@ namespace librbd {
     std::string name;
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
-    ImageWatcher *image_watcher;
+    ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
 
     /**
@@ -119,11 +122,13 @@ namespace librbd {
     std::string id; // only used for new-format images
     parent_info parent_md;
     ImageCtx *parent;
+    cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
 
     file_layout_t layout;
 
+    cache::ImageCache *image_cache = nullptr;
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
@@ -300,6 +305,10 @@ namespace librbd {
 
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
+
+    static ThreadPool *get_thread_pool_instance(CephContext *cct);
+    static void get_timer_instance(CephContext *cct, SafeTimer **timer,
+                                   Mutex **timer_lock);
   };
 }
 

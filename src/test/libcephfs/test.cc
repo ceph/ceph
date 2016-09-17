@@ -1374,3 +1374,96 @@ TEST(LibCephFS, OpenNoClose) {
   // shutdown should force close opened file/dir
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, Nlink) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  Inode *root, *dir, *file;
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  char dirname[32], filename[32], linkname[32];
+  sprintf(dirname, "nlinkdir%x", getpid());
+  sprintf(filename, "nlinkorig%x", getpid());
+  sprintf(linkname, "nlinklink%x", getpid());
+
+  struct stat	st;
+  Fh *fh;
+
+  ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &st, &dir, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_create(cmount, dir, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
+			   &st, &file, &fh, getuid(), getgid()), 0);
+  ASSERT_EQ(st.st_nlink, (nlink_t)1);
+
+  ASSERT_EQ(ceph_ll_link(cmount, file, dir, linkname, &st, getuid(), getgid()), 0);
+  ASSERT_EQ(st.st_nlink, (nlink_t)2);
+
+  ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &st, &file, getuid(), getgid()), 0);
+  ASSERT_EQ(st.st_nlink, (nlink_t)1);
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SlashDotDot) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  struct stat	st;
+  ASSERT_EQ(ceph_stat(cmount, "/.", &st), 0);
+
+  ino_t ino = st.st_ino;
+  ASSERT_EQ(ceph_stat(cmount, "/..", &st), 0);
+
+  /* At root, "." and ".." should be the same inode */
+  ASSERT_EQ(ino, st.st_ino);
+
+  /* Test accessing the parent of an unlinked directory */
+  char dir1[32], dir2[32];
+  sprintf(dir1, "/sldotdot%x", getpid());
+  sprintf(dir2, "%s/sub%x", dir1, getpid());
+
+  ASSERT_EQ(ceph_mkdir(cmount, dir1, 0755), 0);
+  ASSERT_EQ(ceph_mkdir(cmount, dir2, 0755), 0);
+
+  ASSERT_EQ(ceph_chdir(cmount, dir2), 0);
+
+  /* Test behavior when unlinking cwd */
+  struct ceph_dir_result *rdir;
+  ASSERT_EQ(ceph_opendir(cmount, ".", &rdir), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, dir2), 0);
+
+  /* get "." entry */
+  struct dirent *result = ceph_readdir(cmount, rdir);
+  ino = result->d_ino;
+
+  /* get ".." entry */
+  result = ceph_readdir(cmount, rdir);
+  ASSERT_EQ(ino, result->d_ino);
+  ceph_closedir(cmount, rdir);
+
+  /* Make sure it works same way when mounting subtree */
+  ASSERT_EQ(ceph_unmount(cmount), 0);
+  ASSERT_EQ(ceph_mount(cmount, dir1), 0);
+  ASSERT_EQ(ceph_stat(cmount, "/..", &st), 0);
+
+  /* Test readdir behavior */
+  ASSERT_EQ(ceph_opendir(cmount, "/", &rdir), 0);
+  result = ceph_readdir(cmount, rdir);
+  ASSERT_TRUE(result != NULL);
+  ASSERT_STREQ(result->d_name, ".");
+  ino = result->d_ino;
+  result = ceph_readdir(cmount, rdir);
+  ASSERT_TRUE(result != NULL);
+  ASSERT_STREQ(result->d_name, "..");
+  ASSERT_EQ(ino, result->d_ino);
+
+  ceph_shutdown(cmount);
+}

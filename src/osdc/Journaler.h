@@ -228,17 +228,7 @@ private:
   SafeTimer *timer;
 
   class C_DelayFlush;
-  friend class C_DelayFlush;
-
-  class C_DelayFlush : public Context {
-    Journaler *journaler;
-    public:
-    C_DelayFlush(Journaler *j) : journaler(j) {}
-    void finish(int r) {
-      journaler->_do_delayed_flush();
-    }
-  } *delay_flush_event;
-
+  C_DelayFlush *delay_flush_event;
   /*
    * Do a flush as a result of a C_DelayFlush context.
    */

@@ -56,6 +56,8 @@ target_link_libraries(unittest_rbd_mirror
 add_executable(ceph_test_rbd_mirror
   test_main.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+  $<TARGET_OBJECTS:librados_api_obj>
+  $<TARGET_OBJECTS:librados_objs>
   )
 set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -69,7 +71,6 @@ target_link_libraries(ceph_test_rbd_mirror
   cls_lock_client
   cls_journal_client
   rbd_types
-  librados
   osdc
   global
   radostest
@@ -77,13 +78,11 @@ target_link_libraries(ceph_test_rbd_mirror
   )
 
 add_executable(ceph_test_rbd_mirror_random_write
-  random_write.cc
-  $<TARGET_OBJECTS:parse_secret_objs>)
+  random_write.cc)
 set_target_properties(ceph_test_rbd_mirror_random_write PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rbd_mirror_random_write
-  librbd librados global keyutils
-  )
+  librbd librados global)
 
 install(TARGETS
   ceph_test_rbd_mirror

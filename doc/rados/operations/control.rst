@@ -306,7 +306,7 @@ Enables debug messages. ::
 
 	ceph mds stat
 
-Displays the status of all metadata servers.
+Displays the status of all metadata servers. ::
 
 	ceph mds fail 0
 
@@ -329,7 +329,7 @@ The ``quorum`` list at the end lists monitor nodes that are part of the current 
 
 This is also available more directly::
 
-	$ ./ceph quorum_status
+	ceph quorum_status
 	
 	2011-12-14 10:44:20.417705 mon {- [quorum_status]
 	2011-12-14 10:44:20.431890 mon.0 -} 

@@ -911,7 +911,7 @@ exit code zero).
 
 This test can be run with::
 
-    $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml
+    $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
 Test descriptions 
 -----------------

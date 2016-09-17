@@ -109,9 +109,9 @@ public:
 	  OSDMap m;
 	  m.decode(inc.fullmap);
 	  inc.fullmap.clear();
-	  m.encode(inc.fullmap, features);
+	  m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
 	}
-	inc.encode(p->second, features);
+	inc.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
@@ -119,7 +119,7 @@ public:
 	OSDMap m;
 	m.decode(p->second);
 	p->second.clear();
-	m.encode(p->second, features);
+	m.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
     }
     ::encode(incremental_maps, payload);

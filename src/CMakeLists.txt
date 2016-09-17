@@ -17,11 +17,25 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 
 add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
-add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
+add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
 
-set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-set(CMAKE_ASM_FLAGS "-f elf64")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
+  set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -Wl,-export-dynamic -export-dynamic")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-inconsistent-missing-override")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-mismatched-tags -Wno-unused-function")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-local-typedef -Wno-inconsistent-missing-override")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-private-field -Wno-varargs")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-gnu-designator -Wno-mismatched-tags")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-parentheses -Wno-deprecated-register")
+endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
@@ -38,16 +52,21 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
 endif()
 
 include(CheckCCompilerFlag)
-CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-if(HAS_FORTIFY_SOURCE)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
-endif()
-endif()
-CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
-if (HAS_STACK_PROTECT)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
-endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
+  if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+    if(HAS_FORTIFY_SOURCE)
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
+    endif()
+  endif()
+  CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
+  if (HAS_STACK_PROTECT)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
+  endif()
+endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+
+set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+set(CMAKE_ASM_FLAGS "-f elf64")
 
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
@@ -61,7 +80,7 @@ else(no_yasm)
     COMMAND uname -m
     OUTPUT_VARIABLE arch
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(arch STREQUAL "x86_64")
+  if(arch MATCHES "amd64|x86_64")
     message(STATUS " we are x84_64")
     set(save_quiet ${CMAKE_REQUIRED_QUIET})
     set(CMAKE_REQUIRED_QUIET true)
@@ -89,13 +108,16 @@ else(no_yasm)
     else(not_arch_x32)
       message(STATUS " we are x32; no yasm for you")
     endif(not_arch_x32)
-  else(arch STREQUAL "x86_64")
+  else(arch MATCHES "amd64|x86_64")
     message(STATUS " we are not x86_64 && !x32")
-  endif(arch STREQUAL "x86_64")
+  endif(arch MATCHES "amd64|x86_64")
 endif(no_yasm)
 
-
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
+endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 # require c++11
 if(CMAKE_VERSION VERSION_LESS "3.1")
@@ -124,95 +146,17 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
 endif()
 
-
-## detect sse support
-
-# create a tmp file with an empty main()
-set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
-file(WRITE ${sse_srcs} "void main() {}")
-
-# try each -msse flag
-try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse")
-try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse2")
-try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse3")
-try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mssse3")
-try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.1")
-try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.2")
-try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mfpu=neon")
-try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-march=armv8-a+simd")
-try_compile(ARM_CRC ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-march=armv8-a+crc")
-
-# clean up tmp file
-file(REMOVE ${sse_srcs})
-
-if(ARM_CRC)
-  set(HAVE_ARMV8_CRC 1)
-  set(ARM_CRC_FLAGS "-march=armv8-a+crc -DARCH_AARCH64")
-endif(ARM_CRC)
-
-if(ARM_NEON OR ARM_NEON2)
-  set(HAVE_NEON 1)
-  if(ARM_NEON)
-    set(ARM_NEON_FLAGS "-mfpu=neon -DARM_NEON")
-  else(ARM_NEON)
-    set(ARM_NEON_FLAGS "-march=armv8-a+simd -DARCH_AARCH64 -DARM_NEON")
-  endif(ARM_NEON)
-else(ARM_NEON OR ARM_NEON2)
-  message(STATUS "Skipping target ec_jerasure_neon & ec_shec_neon: Architecture not ARM")
-endif(ARM_NEON OR ARM_NEON2)
-
-if(INTEL_SSE)
-  set(HAVE_SSE 1)
-  set(SSE3_FLAGS "-msse")
-  if (INTEL_SSE2)
-    set(HAVE_SSE2 1)
-    set(SSE3_FLAGS "${SSE3_FLAGS} -msse2")
-  endif (INTEL_SSE2)
-  if (INTEL_SSE3)
-    set(SSE3_FLAGS "${SSE3_FLAGS} -msse3")
-  endif (INTEL_SSE3)
-  if (INTEL_SSSE3)
-    set(SSE3_FLAGS "${SSE3_FLAGS} -mssse3")
-  endif (INTEL_SSSE3)
-else(INTEL_SSE)
-  message(STATUS "Skipping target ec_jerasure_sse3 & ec_shec_sse3: -msse not supported")
-endif(INTEL_SSE)
-
-if(INTEL_SSE4_1)
-  set(SSE4_FLAGS "${SSE3_FLAGS} -msse4.1")
-  if (INTEL_SSE4_2)
-    set(SSE4_FLAGS "${SSE4_FLAGS} -msse4.2")
-  endif (INTEL_SSE4_2)
-else(INTEL_SSE4_1)
-  message(STATUS "Skipping target ec_jerasure_sse4 & ec_shec_sse4: -msse4.1 not supported")
-endif(INTEL_SSE4_1)
-
-
 set(EXTRALIBS rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+if(LINUX)
+  set(LIB_RESOLV resolv)
+  list(APPEND EXTRALIBS ${LIB_RESOLV})
+endif(LINUX)
 
 option(WITH_PROFILER "build extra profiler binaries" OFF)
 if(WITH_PROFILER)
   find_package(gperftools REQUIRED)
   list(APPEND EXTRALIBS profiler)
 endif(WITH_PROFILER)
-
-if(WITH_PROFILER AND ALLOCATOR STREQUAL "tcmalloc")
-  find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h
-    PATHS ${GPERFTOOLS_INCLUDE_DIR})
-  find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h
-    PATHS ${GPERFTOOLS_INCLUDE_DIR})
-  find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h
-    PATHS ${GPERFTOOLS_INCLUDE_DIR})
-endif()
 
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
@@ -254,11 +198,10 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 # Python stuff
-find_package(PythonInterp 2 QUIET)
-if(NOT PYTHONINTERP_FOUND)
-  message(FATAL_ERROR "Python 2 interpreter not found.")
-endif(NOT PYTHONINTERP_FOUND)
-find_package(PythonLibs REQUIRED)
+find_package(PythonInterp 2 REQUIRED)
+find_package(PythonLibs 2 REQUIRED)
+find_package(Python3Interp 3 REQUIRED)
+find_package(Python3Libs 3 REQUIRED)
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
@@ -267,7 +210,7 @@ endif(HAVE_XIO)
 
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS tcmalloc)
+  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
@@ -422,8 +365,9 @@ set(libcommon_files
   msg/async/AsyncConnection.cc
   msg/async/AsyncMessenger.cc
   msg/async/Event.cc
-  msg/async/EventEpoll.cc
   msg/async/EventSelect.cc
+  msg/async/Stack.cc
+  msg/async/PosixStack.cc
   msg/async/net_handler.cc
   ${xio_common_srcs}
   msg/msg_types.cc
@@ -477,6 +421,14 @@ set(libcommon_files
   ${auth_files}
   $<TARGET_OBJECTS:compressor_objs>
   ${mds_files})
+if(LINUX)
+  list(APPEND libcommon_files msg/async/EventEpoll.cc)
+  message(STATUS " Using EventEpoll for events.")
+elseif(FREEBSD OR APPLE)
+  list(APPEND libcommon_files msg/async/EventKqueue.cc)
+  message(STATUS " Using EventKqueue for events.")
+endif(LINUX)
+
 set(mon_common_files
   auth/AuthSessionHandler.cc
   auth/cephx/CephxSessionHandler.cc
@@ -537,8 +489,6 @@ add_subdirectory(osdc)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
-add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
-
 add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(libradosstriper)
@@ -570,8 +520,6 @@ endif()
 
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
-  $<TARGET_OBJECTS:krbd_objs>
-  $<TARGET_OBJECTS:parse_secret_objs>
   $<TARGET_OBJECTS:common_texttable_obj>
   )
 if(${WITH_RADOSGW})
@@ -580,33 +528,31 @@ if(${WITH_RADOSGW})
   )
   set(DENCODER_EXTRALIBS
     rgw_a
-    cls_version_client
-    cls_log_client
-    cls_refcount_client
-    cls_user_client
-    cls_statelog_client
     cls_rgw_client
-    fcgi
-    ${CURL_LIBRARIES}
-    ${EXPAT_LIBRARIES}
   )
 endif(${WITH_RADOSGW})
-if(${WITH_RBD})
+if(WITH_RBD)
   set(DENCODER_EXTRALIBS
       ${DENCODER_EXTRALIBS}
       rbd_replay_types)
-endif(${WITH_RBD})
+  if(LINUX)
+    list(APPEND dencoder_srcs
+      $<TARGET_OBJECTS:krbd_objs>
+      $<TARGET_OBJECTS:parse_secret_objs>)
+    set(DENCODER_EXTRALIBS
+      ${DENCODER_EXTRALIBS}
+      keyutils
+      udev)
+  endif(LINUX)
+endif(WITH_RBD)
 
 add_executable(ceph-dencoder ${dencoder_srcs})
 target_link_libraries(ceph-dencoder
-  librados
-  librbd
   global
   os
   osd
   mds
   mon
-  osdc
   journal
   ${DENCODER_EXTRALIBS}
   cls_lock_client
@@ -618,10 +564,6 @@ target_link_libraries(ceph-dencoder
   cls_user_client
   cls_journal_client
   cls_timeindex_client
-  blkid
-  udev
-  keyutils
-  rbd_replay
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
@@ -736,8 +678,8 @@ install(PROGRAMS
   RENAME ceph)
 
 install(FILES
-  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com
-  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com.pub
+  ${CMAKE_SOURCE_DIR}/share/id_rsa_drop.ceph.com
+  ${CMAKE_SOURCE_DIR}/share/id_rsa_drop.ceph.com.pub
   ${CMAKE_SOURCE_DIR}/share/known_hosts_drop.ceph.com
   DESTINATION ${CMAKE_INSTALL_DATADIR}/ceph)
 
@@ -794,7 +736,7 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
-  if(HAVE_LIBFUSE)
+  if(WITH_FUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
@@ -803,7 +745,7 @@ if(WITH_LIBCEPHFS)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
-  endif(HAVE_LIBFUSE)
+  endif(WITH_FUSE)
 endif(WITH_LIBCEPHFS)
 
 add_subdirectory(journal)
@@ -829,7 +771,7 @@ if(WITH_KVS)
   add_subdirectory(key_value_store)
 endif(WITH_KVS)
 
-if(${WITH_RADOSGW})
+if(WITH_RADOSGW)
   set(civetweb_common_files civetweb/src/civetweb.c)
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
   target_include_directories(civetweb_common_objs PUBLIC
@@ -841,7 +783,7 @@ if(${WITH_RADOSGW})
       "${SSL_INCLUDE_DIR}")
   endif(HAVE_SSL)
   add_subdirectory(rgw)
-endif(${WITH_RADOSGW})
+endif(WITH_RADOSGW)
 
 install(FILES
   sample.ceph.conf

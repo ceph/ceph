@@ -50,6 +50,10 @@ int extract_spec(const std::string &spec, std::string *pool_name,
                  std::string *image_name, std::string *snap_name,
                  SpecValidation spec_validation);
 
+int extract_group_spec(const std::string &spec,
+		       std::string *pool_name,
+		       std::string *group_name);
+
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
@@ -62,6 +66,16 @@ int get_pool_image_snapshot_names(
     std::string *pool_name, std::string *image_name, std::string *snap_name,
     SnapshotPresence snapshot_presence, SpecValidation spec_validation,
     bool image_required = true);
+
+int get_special_pool_group_names(const boost::program_options::variables_map &vm,
+				 size_t *arg_index,
+				 std::string *group_pool_name,
+				 std::string *group_name);
+
+int get_special_pool_image_names(const boost::program_options::variables_map &vm,
+				 size_t *arg_index,
+				 std::string *image_pool_name,
+				 std::string *image_name);
 
 int get_pool_group_names(const boost::program_options::variables_map &vm,
 			 argument_types::ArgumentModifier mod,
