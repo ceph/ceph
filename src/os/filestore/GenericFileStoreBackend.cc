@@ -58,10 +58,11 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   FileStoreBackend(fs),
   ioctl_fiemap(false),
   seek_data_hole(false),
+  use_splice(false),
   m_filestore_fiemap(g_conf->filestore_fiemap),
   m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
   m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data),
-  m_filestore_splice(false) {}
+  m_filestore_splice(g_conf->filestore_splice) {}
 
 int GenericFileStoreBackend::detect_features()
 {
@@ -165,6 +166,9 @@ int GenericFileStoreBackend::detect_features()
   //splice detection
 #ifdef CEPH_HAVE_SPLICE
   if (!m_filestore_splice) {
+    dout(0) << __func__ << ": splice() is disabled via 'filestore splice' config option" << dendl;
+    use_splice = false;
+  } else {
     int pipefd[2];
     loff_t off_in = 0;
     int r;
@@ -174,7 +178,7 @@ int GenericFileStoreBackend::detect_features()
       lseek(fd, 0, SEEK_SET);
       r = splice(fd, &off_in, pipefd[1], NULL, 10, 0);
       if (!(r < 0 && errno == EINVAL)) {
-	m_filestore_splice = true;
+	use_splice = true;
 	dout(0) << "detect_features: splice is supported" << dendl;
       } else
 	dout(0) << "detect_features: splice is NOT supported" << dendl;
