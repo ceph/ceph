@@ -61,9 +61,10 @@ struct C_UnwatchAndFlush : public Context {
     // to completing the callback to avoid racing an explicit
     // librados shutdown
     Context *ctx = on_finish;
+    r = ret_val;
     delete this;
 
-    ctx->complete(ret_val);
+    ctx->complete(r);
   }
 
   virtual void finish(int r) override {
