@@ -2164,9 +2164,10 @@ public:
    * is a collection empty?
    *
    * @param c collection
-   * @returns true if empty, false otherwise
+   * @param empty true if the specified collection is empty, false otherwise
+   * @returns 0 on success, negative error code on failure.
    */
-  virtual bool collection_empty(const coll_t& c) = 0;
+  virtual int collection_empty(const coll_t& c, bool *empty) = 0;
 
   /**
    * return the number of significant bits of the coll_t::pgid.

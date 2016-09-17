@@ -2052,8 +2052,10 @@ TEST_P(StoreTest, SimpleAttrTest) {
     ASSERT_EQ(r, 0);
   }
   {
-    bool r = store->collection_empty(cid);
-    ASSERT_TRUE(r);
+    bool empty;
+    int r = store->collection_empty(cid, &empty);
+    ASSERT_EQ(0, r);
+    ASSERT_TRUE(empty);
   }
   {
     bufferptr bp;
@@ -2069,8 +2071,10 @@ TEST_P(StoreTest, SimpleAttrTest) {
     ASSERT_EQ(r, 0);
   }
   {
-    bool r = store->collection_empty(cid);
-    ASSERT_TRUE(!r);
+    bool empty;
+    int r = store->collection_empty(cid, &empty);
+    ASSERT_EQ(0, r);
+    ASSERT_TRUE(!empty);
   }
   {
     bufferptr bp;

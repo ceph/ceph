@@ -441,15 +441,15 @@ bool MemStore::collection_exists(const coll_t& cid)
   return coll_map.count(cid);
 }
 
-bool MemStore::collection_empty(const coll_t& cid)
+int MemStore::collection_empty(const coll_t& cid, bool *empty)
 {
   dout(10) << __func__ << " " << cid << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
-    return false;
+    return -ENOENT;
   RWLock::RLocker l(c->lock);
-
-  return c->object_map.empty();
+  *empty = c->object_map.empty();
+  return 0;
 }
 
 int MemStore::collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
