@@ -157,6 +157,16 @@ public:
   virtual void ms_handle_remote_reset(Connection *con) = 0;
   
   /**
+   * This indicates that the connection is both broken and further
+   * connection attempts are failing because other side refuses
+   * it.
+   *
+   * @param con The Connection which broke. You are not granted
+   * a reference to it.
+   */
+  virtual bool ms_handle_refused(Connection *con) = 0;
+
+  /**
    * @defgroup Authentication
    * @{
    */

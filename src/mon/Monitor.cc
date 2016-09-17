@@ -4398,6 +4398,13 @@ bool Monitor::ms_handle_reset(Connection *con)
   return true;
 }
 
+bool Monitor::ms_handle_refused(Connection *con)
+{
+  // just log for now...
+  dout(10) << "ms_handle_refused " << con << " " << con->get_peer_addr() << dendl;
+  return false;
+}
+
 void Monitor::check_subs()
 {
   string type = "monmap";

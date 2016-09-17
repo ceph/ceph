@@ -93,6 +93,7 @@ class ServerDispatcher : public Dispatcher {
   bool ms_dispatch(Message *m) { return true; }
   bool ms_handle_reset(Connection *con) { return true; }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) { return false; }
   void ms_fast_dispatch(Message *m) {
     usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;

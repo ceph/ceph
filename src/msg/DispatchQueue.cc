@@ -181,6 +181,9 @@ void DispatchQueue::entry()
 	case D_BAD_RESET:
 	  msgr->ms_deliver_handle_reset(qitem.get_connection());
 	  break;
+	case D_CONN_REFUSED:
+	  msgr->ms_deliver_handle_refused(qitem.get_connection());
+	  break;
 	default:
 	  assert(0);
 	}
