@@ -625,7 +625,7 @@ public:
   int list_collections(vector<coll_t>& ls, bool include_temp);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
   // omap (see ObjectStore.h for documentation)
   using ObjectStore::omap_get;

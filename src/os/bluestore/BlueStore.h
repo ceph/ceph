@@ -1556,7 +1556,7 @@ public:
   CollectionHandle open_collection(const coll_t &c) override;
 
   bool collection_exists(const coll_t& c) override;
-  bool collection_empty(const coll_t& c) override;
+  int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
