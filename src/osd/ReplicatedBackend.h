@@ -267,11 +267,11 @@ private:
 		    object_stat_sum_t *stat = 0,
                     bool cache_dont_need = true);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
-			ObjectRecoveryProgress &before_progress,
-			ObjectRecoveryProgress &after_progress,
 			bool first,
 			bool complete,
+			bool clear_omap,
 			bool cache_dont_need,
+			interval_set<uint64_t> &data_zeros,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
