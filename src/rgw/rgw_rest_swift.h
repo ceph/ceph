@@ -238,6 +238,26 @@ public:
 };
 
 
+class RGWFormPost : public RGWPostObj_ObjStore {
+  std::string get_current_filename() const override;
+  bool is_next_file_to_upload() override;
+
+  boost::optional<post_form_part> current_data_part;
+
+  bool stream_done = false;
+
+public:
+  RGWFormPost() = default;
+  ~RGWFormPost() = default;
+
+  int get_params() override;
+  int get_data(ceph::bufferlist& bl) override;
+  void send_response() override;
+
+  static bool is_formpost_req(req_state* const s);
+};
+
+
 class RGWSwiftWebsiteHandler {
   RGWRados* const store;
   req_state* const s;
