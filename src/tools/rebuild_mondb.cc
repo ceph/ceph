@@ -22,7 +22,7 @@ int update_mon_db(ObjectStore& fs, OSDSuperblock& sb,
   int r = ms.create_and_open(cerr);
   if (r < 0) {
     cerr << "unable to open mon store: " << store_path << std::endl;
-    return EINVAL;
+    return r;
   }
   if ((r = update_auth(keyring, sb, ms)) < 0) {
     goto out;
