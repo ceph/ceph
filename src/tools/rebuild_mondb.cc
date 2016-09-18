@@ -235,7 +235,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
        e <= sb.newest_map; e++) {
     static const coll_t META_COLL("meta");
     bool have_crc = false;
-    uint32_t crc;
+    uint32_t crc = -1;
     uint64_t features = 0;
     // add inc maps
     {
