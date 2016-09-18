@@ -109,7 +109,7 @@ def get_key(cluster, mon_id):
                 returncode = subprocess.call(
                     args=args_prefix + [
                         'auth',
-                        'get'
+                        'get',
                         'client.admin',
                         ],
                     stdout=f,
