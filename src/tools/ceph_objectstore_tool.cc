@@ -2874,6 +2874,7 @@ int main(int argc, char **argv)
   } else if (op == "update-mon-db") {
     if (!vm.count("mon-store-path")) {
       cerr << "Please specify the path to monitor db to update" << std::endl;
+      ret = -EINVAL;
     } else {
       ret = update_mon_db(*fs, superblock, dpath + "/keyring", mon_store_path);
     }
