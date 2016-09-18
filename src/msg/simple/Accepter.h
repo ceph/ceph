@@ -33,7 +33,7 @@ class Accepter : public Thread {
 public:
   Accepter(SimpleMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
     
-  void *entry();
+  void *entry() override;
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
