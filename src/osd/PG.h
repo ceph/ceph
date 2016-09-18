@@ -94,7 +94,7 @@ struct PGRecoveryStats {
     // cppcheck-suppress unreachableCode
     per_state_info() : enter(0), exit(0), events(0) {}
   };
-  map<const char *,per_state_info> info;
+  map<string, per_state_info> info;
   Mutex lock;
 
   PGRecoveryStats() : lock("PGRecoverStats::lock") {}
@@ -105,7 +105,7 @@ struct PGRecoveryStats {
   }
   void dump(ostream& out) {
     Mutex::Locker l(lock);
-    for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); ++p) {
+    for (map<string, per_state_info>::iterator p = info.begin(); p != info.end(); ++p) {
       per_state_info& i = p->second;
       out << i.enter << "\t" << i.exit << "\t"
 	  << i.events << "\t" << i.event_time << "\t"
@@ -118,7 +118,7 @@ struct PGRecoveryStats {
   void dump_formatted(Formatter *f) {
     Mutex::Locker l(lock);
     f->open_array_section("pg_recovery_stats");
-    for (map<const char *,per_state_info>::iterator p = info.begin();
+    for (map<string, per_state_info>::iterator p = info.begin();
 	 p != info.end(); ++p) {
       per_state_info& i = p->second;
       f->open_object_section("recovery_state");
