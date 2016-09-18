@@ -263,6 +263,9 @@ protected:
                               std::string& field_name, /* out */
                               post_part_field& field); /* out */
 
+  static void parse_boundary_params(const std::string& params_str,
+                                    std::string& first,
+                                    std::map<std::string, std::string>& params);
   int get_params() override;
 
 public:
