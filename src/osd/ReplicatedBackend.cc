@@ -1299,9 +1299,9 @@ void ReplicatedBackend::calc_head_subsets(
     const auto it = missing.get_items().find(head);
     assert(it != missing.get_items().end());
     data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
-      dout(10) << "calc_head_subsets " << head
-               << "  data_subset " << data_subset << dendl;
-      return;
+    dout(10) << "calc_head_subsets " << head
+             << "  data_subset " << data_subset << dendl;
+    return;
   }
 
   if (get_parent()->get_pool().allow_incomplete_clones()) {
@@ -1442,8 +1442,7 @@ void ReplicatedBackend::prepare_pull(
   ObjectContextRef headctx,
   RPGHandle *h)
 {
-  map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
-      get_parent()->get_local_missing().get_items().find(soid);
+  const auto missing_iter = get_parent()->get_local_missing().get_items().find(soid);
   assert(missing_iter != get_parent()->get_local_missing().get_items().end());
   eversion_t _v = missing_iter->second.need;
   assert(_v == v);
