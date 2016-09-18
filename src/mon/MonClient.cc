@@ -293,12 +293,14 @@ bool MonClient::ms_dispatch(Message *m)
       log_client->handle_log_ack(static_cast<MLogAck*>(m));
       m->put();
       if (more_log_pending) {
-	send_log();
+        send_log();
       }
     } else {
       m->put();
     }
     break;
+  default:
+    return false;
   }
   return true;
 }
