@@ -189,14 +189,14 @@ class ObjectCacher {
     void set_dontneed(bool v) {
       dontneed = v;
     }
-    bool get_dontneed() {
+    bool get_dontneed() const {
       return dontneed;
     }
 
     void set_nocache(bool v) {
       nocache = v;
     }
-    bool get_nocache() {
+    bool get_nocache() const {
       return nocache;
     }
 
