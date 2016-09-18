@@ -412,7 +412,7 @@ int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
     }
     if (struct_v < PG::cur_struct_v) {
       cerr << "incompatible pg_info: v" << struct_v << std::endl;
-      return r;
+      return -EINVAL;
     }
     version_t latest_epoch = 0;
     r = ms.get(prefix, stringify(pgid.pgid), bl);
