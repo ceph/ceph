@@ -1013,7 +1013,6 @@ protected:
   const char *supplied_md5_b64;
   const char *supplied_etag;
   string etag;
-  string boundary;
   bool data_pending;
   string content_type;
   RGWAccessControlPolicy policy;
