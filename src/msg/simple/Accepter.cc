@@ -18,6 +18,7 @@
 #include <limits.h>
 #include <poll.h>
 
+#include "msg/msg_types.h"
 #include "msg/Message.h"
 
 #include "Accepter.h"
