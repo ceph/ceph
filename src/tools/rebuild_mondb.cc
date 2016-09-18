@@ -235,7 +235,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   for (auto e = max(last_committed+1, sb.oldest_map);
        e <= sb.newest_map; e++) {
     bool have_crc = false;
-    uint32_t crc;
+    uint32_t crc = -1;
     uint64_t features = 0;
     // add inc maps
     {
