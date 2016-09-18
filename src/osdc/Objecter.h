@@ -1153,13 +1153,7 @@ private:
   void tick();
   void update_crush_location();
 
-  class RequestStateHook : public AdminSocketHook {
-    Objecter *m_objecter;
-  public:
-    explicit RequestStateHook(Objecter *objecter);
-    bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	      bufferlist& out);
-  };
+  class RequestStateHook;
 
   RequestStateHook *m_request_state_hook;
 
