@@ -22,7 +22,7 @@ int update_mon_db(ObjectStore& fs, OSDSuperblock& sb,
   int r = ms.create_and_open(cerr);
   if (r < 0) {
     cerr << "unable to open mon store: " << store_path << std::endl;
-    return EINVAL;
+    return r;
   }
   if ((r = update_auth(keyring, sb, ms)) < 0) {
     goto out;
@@ -235,7 +235,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   for (auto e = max(last_committed+1, sb.oldest_map);
        e <= sb.newest_map; e++) {
     bool have_crc = false;
-    uint32_t crc;
+    uint32_t crc = -1;
     uint64_t features = 0;
     // add inc maps
     {
@@ -410,7 +410,7 @@ int update_pgmap_pg(ObjectStore& fs, MonitorDBStore& ms)
     }
     if (struct_v < PG::cur_struct_v) {
       cerr << "incompatible pg_info: v" << struct_v << std::endl;
-      return r;
+      return -EINVAL;
     }
     version_t latest_epoch = 0;
     r = ms.get(prefix, stringify(pgid.pgid), bl);
