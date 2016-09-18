@@ -1131,10 +1131,10 @@ public:
   void set_state(int s) {
     state = s;
   }
-  bool is_stopping() {
+  bool is_stopping() const {
     return state == STOPPING;
   }
-  bool is_preparing_to_stop() {
+  bool is_preparing_to_stop() const {
     return state == PREPARING_TO_STOP;
   }
   bool prepare_to_stop();
@@ -1340,28 +1340,28 @@ private:
   std::atomic_int state{STATE_INITIALIZING};
 
 public:
-  int get_state() {
+  int get_state() const {
     return state;
   }
   void set_state(int s) {
     state = s;
   }
-  bool is_initializing() {
+  bool is_initializing() const {
     return state == STATE_INITIALIZING;
   }
-  bool is_preboot() {
+  bool is_preboot() const {
     return state == STATE_PREBOOT;
   }
-  bool is_booting() {
+  bool is_booting() const {
     return state == STATE_BOOTING;
   }
-  bool is_active() {
+  bool is_active() const {
     return state == STATE_ACTIVE;
   }
-  bool is_stopping() {
+  bool is_stopping() const {
     return state == STATE_STOPPING;
   }
-  bool is_waiting_for_healthy() {
+  bool is_waiting_for_healthy() const {
     return state == STATE_WAITING_FOR_HEALTHY;
   }
 
@@ -1606,7 +1606,7 @@ private:
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
 
-    bool is_unhealthy(utime_t cutoff) {
+    bool is_unhealthy(utime_t cutoff) const {
       return
 	! ((last_rx_front > cutoff ||
 	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
@@ -1615,7 +1615,7 @@ private:
 	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
 					   first_tx > cutoff))));
     }
-    bool is_healthy(utime_t cutoff) {
+    bool is_healthy(utime_t cutoff) const {
       return last_rx_front > cutoff && last_rx_back > cutoff;
     }
 
