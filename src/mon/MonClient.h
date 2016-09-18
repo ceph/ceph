@@ -216,7 +216,7 @@ private:
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-  bool _sub_want(string what, version_t start, unsigned flags) {
+  bool _sub_want(const string &what, version_t start, unsigned flags) {
     if ((sub_new.count(what) == 0 &&
 	 sub_sent.count(what) &&
 	 sub_sent[what].start == start &&
@@ -229,7 +229,7 @@ private:
     sub_new[what].flags = flags;
     return true;
   }
-  void _sub_got(string what, version_t got) {
+  void _sub_got(const string &what, version_t got) {
     if (sub_new.count(what)) {
       if (sub_new[what].start <= got) {
 	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
@@ -246,7 +246,7 @@ private:
       }
     }
   }
-  void _sub_unwant(string what) {
+  void _sub_unwant(const string &what) {
     sub_sent.erase(what);
     sub_new.erase(what);
   }
