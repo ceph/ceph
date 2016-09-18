@@ -2529,6 +2529,7 @@ class ObjectCleanRegions {
 private:
   interval_set<uint64_t> clean_offsets;
   bool clean_omap;
+  bool new_object;
   int32_t max_num_intervals;
 
   /**
@@ -2541,12 +2542,12 @@ private:
   void trim();
   friend ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
 public:
-  ObjectCleanRegions(int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) : max_num_intervals(max) {
+  ObjectCleanRegions(int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) : max_num_intervals(max), new_object(false) {
     clean_offsets.insert(0, (uint64_t)-1);
     clean_omap = true;
   }
   ObjectCleanRegions(uint64_t offset, uint64_t len, bool co, int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) 
-    : clean_omap(co), max_num_intervals(max) {
+    : clean_omap(co), max_num_intervals(max), new_object(false) {
     clean_offsets.insert(offset, len);
   }
   bool operator==(const ObjectCleanRegions &orc) const {
@@ -2556,9 +2557,11 @@ public:
   void merge(const ObjectCleanRegions &other);
   void mark_data_region_dirty(uint64_t offset, uint64_t len);
   void mark_omap_dirty();
+  void mark_object_new();
   void mark_fully_dirty();
   interval_set<uint64_t> get_dirty_regions() const;
   bool omap_is_dirty() const;
+  bool object_is_exist() const;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -2811,9 +2814,11 @@ struct pg_missing_item {
   ObjectCleanRegions clean_regions;
   pg_missing_item() {}
   explicit pg_missing_item(eversion_t n) : need(n) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h, bool old_style = false) : need(n), have(h) {
+  pg_missing_item(eversion_t n, eversion_t h, bool old_style = false, bool new_object = false) : need(n), have(h) {
     if (old_style)
       clean_regions.mark_fully_dirty();
+    if (new_object)
+      clean_regions.mark_object_new();
   }
 
   void encode(bufferlist& bl) const {
@@ -2985,9 +2990,11 @@ public:
 	  (missing_it->second).need = e.version;
 	  (missing_it->second).have = eversion_t();
 	  (missing_it->second).clean_regions.merge(e.clean_regions);
+	  (missing_it->second).clean_regions.mark_object_new();
 	} else {  // create new element in missing map
 	  missing[e.soid] = item(e.version, eversion_t());     // .have = nil
 	  missing[e.soid].clean_regions = e.clean_regions;
+	  missing[e.soid].clean_regions.mark_object_new();
 	}
       } else if (is_missing_divergent_item) {
 	// already missing (prior).
@@ -3035,7 +3042,7 @@ public:
   }
 
   void add(const hobject_t& oid, eversion_t need, eversion_t have, bool mark_dirty = true) {
-    missing[oid] = item(need, have, mark_dirty);
+    missing[oid] = item(need, have, mark_dirty, have == eversion_t());
     rmissing[need.version] = oid;
     tracker.changed(oid);
   }

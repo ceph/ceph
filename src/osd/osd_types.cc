@@ -3441,10 +3441,16 @@ void ObjectCleanRegions::mark_omap_dirty()
   clean_omap = false;
 }
 
+void ObjectCleanRegions::mark_object_new()
+{
+  new_object = true;
+}
+
 void ObjectCleanRegions::mark_fully_dirty()
 {
   mark_data_region_dirty(0, (uint64_t)-1);
   mark_omap_dirty();
+  mark_object_new();
 }
 
 interval_set<uint64_t> ObjectCleanRegions::get_dirty_regions() const
@@ -3460,16 +3466,23 @@ bool ObjectCleanRegions::omap_is_dirty() const
   return !clean_omap;
 }
 
+bool ObjectCleanRegions::object_is_exist() const
+{
+  return !new_object;
+}
+
 void ObjectCleanRegions::encode(bufferlist &bl) const
 {
   ::encode(clean_offsets, bl);
   ::encode(clean_omap, bl);
+  ::encode(new_object, bl);
 }
 
 void ObjectCleanRegions::decode(bufferlist::iterator &bl)
 {
   ::decode(clean_offsets, bl);
   ::decode(clean_omap, bl);
+  ::decode(new_object, bl);
 }
 
 void ObjectCleanRegions::dump(Formatter *f) const
@@ -3477,6 +3490,7 @@ void ObjectCleanRegions::dump(Formatter *f) const
   f->open_object_section("object_clean_regions");
   f->dump_stream("clean_offsets") << clean_offsets;
   f->dump_bool("clean_omap", clean_omap);
+  f->dump_bool("object_new", new_object);
   f->close_section();
 }
 
@@ -3486,12 +3500,14 @@ void ObjectCleanRegions::generate_test_instances(list<ObjectCleanRegions*>& o)
   o.push_back(new ObjectCleanRegions());
   o.back()->mark_data_region_dirty(4096, 40960);
   o.back()->mark_omap_dirty();
+  o.back()->mark_object_new();
 }
 
 ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
 {
   return out << "clean_offsets: " << ocr.clean_offsets
-	     << ", clean_omap: " << ocr.clean_omap;
+	     << ", clean_omap: " << ocr.clean_omap
+	     << ", object_new: " << ocr.new_object;
 }
 
 // -- pg_log_entry_t --
