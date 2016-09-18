@@ -294,6 +294,8 @@ public:
 
  public:
   explicit MonClient(CephContext *cct_);
+  MonClient(const MonClient &) = delete;
+  MonClient& operator=(const MonClient &) = delete;
   ~MonClient();
 
   int init();
@@ -445,8 +447,6 @@ private:
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 
-  MonClient(const MonClient &rhs);
-  MonClient& operator=(const MonClient &rhs);
 };
 
 #endif
