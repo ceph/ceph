@@ -1122,6 +1122,7 @@ public:
 	  if (i->is_error())
 	    continue;
 	  // merge clean_regions in pg_log_entry_t if needed
+	  // there is no need to merge the items before object is deleted
 	  if (!del.count(i->soid))
 	    missing.merge(*i);
 	  if (i->version <= info.last_complete) continue;
