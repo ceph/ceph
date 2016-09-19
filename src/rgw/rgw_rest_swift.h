@@ -243,12 +243,16 @@ class RGWFormPost : public RGWPostObj_ObjStore {
   bool is_next_file_to_upload() override;
 
   boost::optional<post_form_part> current_data_part;
-
+  std::string prefix;
   bool stream_done = false;
 
 public:
   RGWFormPost() = default;
   ~RGWFormPost() = default;
+
+  void init(RGWRados* store,
+            req_state* s,
+            RGWHandler* dialect_handler) override;
 
   int get_params() override;
   int get_data(ceph::bufferlist& bl) override;

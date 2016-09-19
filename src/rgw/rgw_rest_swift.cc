@@ -1714,6 +1714,16 @@ bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, CephContext*
 }
 
 
+void RGWFormPost::init(RGWRados* const store,
+                       req_state* const s,
+                       RGWHandler* const dialect_handler)
+{
+  prefix = std::move(s->object.name);
+  s->object = rgw_obj_key();
+
+  return RGWPostObj_ObjStore::init(store, s, dialect_handler);
+}
+
 int RGWFormPost::get_params()
 {
   /* The parentt class extracts boundary info from the Content-Type. */
@@ -1792,13 +1802,13 @@ std::string RGWFormPost::get_current_filename() const
     const auto iter = field.params.find("filename");
 
     if (std::end(field.params) != iter) {
-      return s->object.name + iter->second;
+      return prefix + iter->second;
     }
   } catch (std::out_of_range&) {
     /* NOP */;
   }
 
-  return s->object.name;
+  return prefix;
 }
 
 bool RGWFormPost::is_next_file_to_upload()
