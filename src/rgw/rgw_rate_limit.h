@@ -8,7 +8,7 @@
 
 using namespace std;
 
-int rgw_rate_limit_init();
+int rgw_rate_limit_init(CephContext *cct);
 bool rgw_rate_limit_ok(string& user, RGWOp *op);
 
 #endif

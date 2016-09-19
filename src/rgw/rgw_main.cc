@@ -1188,7 +1188,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGUSR1, handle_sigterm);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
-  if ( rgw_rate_limit_init() < 0 ) {
+  if ( rgw_rate_limit_init(g_ceph_context) < 0 ) {
     derr << "ERROR: Failed to init rate limiter" << dendl;
     exit(1);
   }
