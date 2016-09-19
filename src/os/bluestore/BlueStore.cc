@@ -7352,13 +7352,12 @@ int BlueStore::_do_alloc_write(
     }
     if (wi.mark_unused) {
       auto b_off = wi.b_off;
-      auto b_len = wi.bl.length();
+      auto b_end = b_off + wi.bl.length();
       if (b_off) {
         b->dirty_blob().add_unused(0, b_off);
       }
-      if (b_off + b_len < wi.blob_length) {
-        b->dirty_blob().add_unused(b_off + b_len,
-				   wi.blob_length - (b_off + b_len));
+      if (b_end < wi.blob_length) {
+        b->dirty_blob().add_unused(b_end, wi.blob_length - b_end);
       }
     }
 
