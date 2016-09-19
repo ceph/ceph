@@ -32,12 +32,14 @@ public:
 
   // -- states --
   static const unsigned STATE_FREEING =		(1<<0);
-  static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
-  static const unsigned STATE_DIRTYPARENT =	(1<<2);
-  static const unsigned STATE_DIRTYPOOL =	(1<<3);
-  static const unsigned STATE_DIRTYRSTAT =	(1<<15);
-  static const unsigned STATE_STRAYPINNED =	(1<<16);
-  static const unsigned STATE_REPLAYUNDEF =	(1<<17);
+  static const unsigned STATE_PURGING =		(1<<1);
+  static const unsigned STATE_CHECKINGMAXSIZE =	(1<<2);
+  static const unsigned STATE_DIRTYPARENT =	(1<<3);
+  static const unsigned STATE_DIRTYPOOL =	(1<<4);
+  static const unsigned STATE_DIRTYRSTAT =	(1<<5);
+  static const unsigned STATE_STRAYPINNED =	(1<<6);
+  static const unsigned STATE_REPLAYUNDEF =	(1<<7);
+  static const unsigned STATE_ORPHAN =		(1<<8);
 
   // -- waiters --
   static const uint64_t WAIT_TRUNC       = (1<<2);
@@ -182,6 +184,9 @@ public:
 protected:
   map<frag_t,CDir*> dirfrags;
 public:
+  bool has_dirfrags() const {
+    return !dirfrags.empty();
+  }
   frag_t pick_dirfrag(const string &dn) const {
     return frag_t();
   }
@@ -358,7 +363,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_nest;
 
 protected:
-  void first_get(bool locked);
+  void first_get();
   void last_put();
 
 public: // crap

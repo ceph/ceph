@@ -10,6 +10,7 @@
 
 #include "MDLog.h"
 #include "SessionMap.h"
+#include "StrayManager.h"
 
 #include "events/EUpdate.h"
 #include "events/ESubtreeMap.h"
@@ -30,6 +31,7 @@
 MDCache::MDCache(MDSRank *_mds) :
   mds(_mds), server(_mds->server), locker(_mds->locker),
   inode_map_lock("MDCache::inode_map_lock"),
+  stray_index(0),
   replay_undef_inodes(member_offset(CInode, item_dirty_parent)),
   metadata_pool(-1),
   log_segments_lock("MDCache::log_segments_lock"),
@@ -41,6 +43,7 @@ MDCache::MDCache(MDSRank *_mds) :
   rejoin_done(NULL),
   rejoin_num_opening_inodes(0)
 {
+  stray_manager = new StrayManager(mds);
   filer = new Filer(mds->objecter, mds->get_filer_finisher());
   dentry_lru.lru_set_max(g_conf->mds_cache_size);
   dentry_lru.lru_set_midpoint(g_conf->mds_cache_mid);
@@ -48,6 +51,8 @@ MDCache::MDCache(MDSRank *_mds) :
 
 MDCache::~MDCache()
 {
+  delete stray_manager;
+  stray_manager = NULL;
   delete filer;
   filer = NULL;
 }
@@ -90,11 +95,13 @@ void MDCache::remove_inode_recursive(CInode *in)
 {
   in->mutex_assert_locked_by_me();
   dout(10) << "remove_inode_recursive " << *in << dendl;
+  CInodeRef tmp = in;
+
   list<CDir*> ls;
   in->get_dirfrags(ls);
 
   while (!ls.empty()) {
-    CDirRef subdir = ls.front();
+    CDir* subdir = ls.front();
     ls.pop_front();
 
     dout(10) << " removing dirfrag " << *subdir << dendl;
@@ -109,13 +116,29 @@ void MDCache::remove_inode_recursive(CInode *in)
       } else if (dnl->is_remote()) {
 	subdir->unlink_inode(dn);
       }
+      if (dn->is_dirty())
+	dn->mark_clean();
       subdir->remove_dentry(dn);
     }
+    if (subdir->is_dirty())
+      subdir->mark_clean();
     in->close_dirfrag(subdir->get_frag());
   }
 
+
+  if (in->is_dirty())
+    in->mark_clean();
+  if (in->is_dirty_parent())
+    in->clear_dirty_parent();
+
+  locker->clear_dirty_scatterlock(&in->filelock);
+  locker->clear_dirty_scatterlock(&in->nestlock);
+//  in->dirfragtreelock.remove_dirty();
+
   in->state_set(CInode::STATE_FREEING);
-  in->mutex_lock();
+  in->mutex_unlock();
+
+  tmp.reset();
   remove_inode(in);
 }
 
@@ -134,13 +157,13 @@ CInodeRef MDCache::get_inode(const vinodeno_t &vino)
       ref = in;
       break;
     }
-    if (in->state_test(CInode::STATE_FREEING)) {
+    if (in->state_test(CInode::STATE_FREEING|CInode::STATE_PURGING)) {
       break;
     }
     if (!in->mutex_trylock()) {
       continue;
     }
-    if (!in->state_test(CInode::STATE_FREEING)) {
+    if (!in->state_test(CInode::STATE_FREEING|CInode::STATE_PURGING)) {
       in->get(CInode::PIN_INTRUSIVEPTR, true);
       ref = in;
     }
@@ -274,9 +297,11 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
 
 class C_MDS_OpenRootMydir : public MDSContextBase {
   MDCache *mdcache;
+  MDSContextBase *fin;
   MDSRank* get_mds() { return mdcache->mds; }
 public:
-  explicit C_MDS_OpenRootMydir(MDCache *c) : mdcache(c) {}
+  explicit C_MDS_OpenRootMydir(MDCache *c, MDSContextBase *f) :
+    mdcache(c), fin(f) {}
   void finish(int r) {
     if (r < 0) {
       // If we can't open root, something disastrous has happened: mark
@@ -287,11 +312,11 @@ public:
       assert(0);  // damaged should never return
       return;
     }
-    mdcache->open_root_and_mydir();
+    mdcache->open_root_and_mydir(fin);
   }
 };
 
-void MDCache::open_root_and_mydir()
+void MDCache::open_root_and_mydir(MDSContextBase *fin)
 {
   assert(root);
   assert(myin);
@@ -312,10 +337,12 @@ void MDCache::open_root_and_mydir()
   }
 
   if (gather.has_subs()) {
-    gather.set_finisher(new C_MDS_OpenRootMydir(this));
+    gather.set_finisher(new C_MDS_OpenRootMydir(this, fin));
     gather.activate();
   } else {
     dout(10) << "open_root_and_mydir done" << dendl;
+    if (fin)
+      mds->queue_context(fin);
   }
 }
 
@@ -392,7 +419,6 @@ void MDCache::populate_mydir(MDSGatherBuilder& gather)
   // okay!
   //dout(10) << "populate_mydir done" << dendl;
 }
-
 
 int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 			   vector<CDentryRef> *pdnvec, CInodeRef *pin)
@@ -483,12 +509,59 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
   return err;
 }
 
+class C_MDC_RetryScanStray : public MDSContextBase {
+  MDCache *mdcache;
+  dirfrag_t next;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) :
+    mdcache(c), next(n) { }
+  void finish(int r) {
+    mdcache->scan_stray_dir(next);
+  }
+};
+
+void MDCache::scan_stray_dir(dirfrag_t next)
+{
+  dout(10) << "scan_stray_dir " << next << dendl;
+
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    if (strays[i]->ino() < next.ino)
+      continue;
+  
+    CInodeRef& strayi = strays[i];
+    CObject::Locker l(strayi.get());
+
+    list<CDir*> ls;
+    strayi->get_dirfrags(ls);
+    for (auto p = ls.begin(); p != ls.end(); ++p) {
+      CDir *dir = *p;
+      if (dir->dirfrag() < next)
+	continue;
+      if (!dir->is_complete()) {
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+      for (auto q = dir->begin(); q != dir->end(); ++q) {
+	CDentryRef dn = q->second;
+	// stray_manager.notify_stray_created();
+	// CDentry::last_put() will do the job
+      }
+    }
+  }
+}
+
+void MDCache::scan_strays()
+{
+  mds->queue_context(new C_MDC_RetryScanStray(this, dirfrag_t()));
+}
+
 CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
 {
   string straydname;
   in->name_stray_dentry(straydname);
 
-  CInodeRef& strayi = strays[0]; 
+  CInodeRef& strayi = strays[stray_index];
   strayi->mutex_lock();
 
   frag_t fg = strayi->pick_dirfrag(straydname);
@@ -503,6 +576,11 @@ CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
 
   strayi->mutex_unlock();
   return straydn;
+}
+
+void MDCache::eval_stray(CDentry *dn)
+{
+  stray_manager->eval_stray(dn);
 }
 
 void MDCache::dentry_lru_insert(CDentry *dn)
@@ -549,23 +627,27 @@ void MDCache::trim(int max, int count)
   }
   dout(7) << "trim max=" << max << " cur=" << dentry_lru.lru_get_size() << dendl;
 
+  bool null_straydn = false;
   int unexpirable = 0;
   list<CDentry*> unexpirables;
 
-  while (dentry_lru.lru_get_size() + unexpirable > (unsigned)max) {
+  do {
     CDentry *dn = static_cast<CDentry*>(dentry_lru.lru_expire());
-    if (!dn) break;
-    if (!trim_dentry(dn)) {
+    if (!dn)
+      break;
+    if (!trim_dentry(dn, &null_straydn)) {
       unexpirables.push_back(dn);
       ++unexpirable;
     }
-  }
+  } while (null_straydn || dentry_lru.lru_get_size() + unexpirable > (unsigned)max);
 
   for (auto dn : unexpirables)
     dentry_lru_insert(dn);
+
+  stray_manager->advance_delayed();
 }
 
-bool MDCache::trim_dentry(CDentry *dn)
+bool MDCache::trim_dentry(CDentry *dn, bool *null_straydn)
 {
   assert(dn->get_dir()->get_num_ref() > 0);
 
@@ -573,28 +655,29 @@ bool MDCache::trim_dentry(CDentry *dn)
   CObject::Locker l(diri.get());
   CDir *dir = dn->get_dir();
 
+  const CDentry::linkage_t *dnl = dn->get_linkage();
+  bool was_null = dnl->is_null();
+  *null_straydn = was_null && (diri->is_stray() || diri->state_test(CInode::STATE_ORPHAN));
+
   if (dn->get_num_ref() > 0)
     return false;
 
-  bool clear_complete = true;
-  const CDentry::linkage_t *dnl = dn->get_linkage();
   CInode *in = dnl->get_inode();
   if (dnl->is_primary()) {
-    if (!trim_inode(dn, in)) {
+    if (!trim_inode(dn, in))
       return false;
-    }
   } else if (dnl->is_remote()) {
     dir->unlink_inode(dn);
-  } else {
-    clear_complete = false;
   }
 
-  if (clear_complete) {
+  if (!was_null) {
     dir->add_to_bloom(dn);
     dir->clear_complete();
   }
 
+  dn->mutex_lock();
   assert(dn->get_num_ref() == 0);
+  dn->mutex_unlock();
   dir->remove_dentry(dn);
 
   return true;
@@ -609,6 +692,13 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in)
   if (in->get_num_ref() > 0) {
     in->mutex_unlock();
     return false;
+  }
+
+  if (dn->state_test(CDentry::STATE_STRAY)) {
+    if (stray_manager->eval_stray(dn, in)) {
+      in->mutex_unlock();
+      return false;
+    }
   }
 
   in->state_set(CInode::STATE_FREEING);
@@ -1255,20 +1345,20 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
   mut->cleanup();
 }
 
-void MDCache::add_recovered_truncate(CInodeRef& in, LogSegment *ls)
+void MDCache::replay_start_truncate(CInodeRef& in, LogSegment *ls)
 {
-  dout(20) << "add_recovered_truncate " << *in << " in log segment "
+  dout(20) << "replay_start_truncate " << *in << " in log segment "
            << ls->seq << "/" << ls->offset << dendl;
   in->get(CInode::PIN_TRUNCATING);
   lock_log_segments();
   ls->truncating_inodes.insert(in.get());
-  recovered_truncating_inodes[in.get()] = ls;
+  replayed_truncates[in.get()] = ls;
   unlock_log_segments();
 }
 
-void MDCache::remove_recovered_truncate(CInodeRef& in, LogSegment *ls)
+void MDCache::replay_finish_truncate(CInodeRef& in, LogSegment *ls)
 {
-  dout(20) << "remove_recovered_truncate " << *in << " in log segment "
+  dout(20) << "replay_finish_truncate " << *in << " in log segment "
            << ls->seq << "/" << ls->offset << dendl;
   // if we have the logseg the truncate started in, it must be in our list.
   lock_log_segments();
@@ -1277,20 +1367,20 @@ void MDCache::remove_recovered_truncate(CInodeRef& in, LogSegment *ls)
   assert(p != ls->truncating_inodes.end());
   ls->truncating_inodes.erase(p);
 
-  auto q = recovered_truncating_inodes.find(in.get());
-  assert(q != recovered_truncating_inodes.end());
-  recovered_truncating_inodes.erase(q);
+  auto q = replayed_truncates.find(in.get());
+  assert(q != replayed_truncates.end());
+  replayed_truncates.erase(q);
 
   unlock_log_segments();
   in->put(CInode::PIN_TRUNCATING);
 }
 
-void MDCache::start_recovered_truncates()
+void MDCache::restart_replayed_truncates()
 {
-  dout(10) << "start_recovered_truncating_inodes" << dendl;
-  for (auto& p : recovered_truncating_inodes)
+  dout(10) << "restart_replayed_truncates" << dendl;
+  for (auto& p : replayed_truncates)
     _truncate_inode(p.first, p.second);
-  recovered_truncating_inodes.clear();
+  replayed_truncates.clear();
 }
 
 // -------------------------------------------------------------------------------

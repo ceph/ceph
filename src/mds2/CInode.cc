@@ -1690,19 +1690,16 @@ void CInode::_backtrace_stored(int r, version_t v, MDSContextBase *fin)
     fin->complete(0);
 }
 
-void CInode::first_get(bool locked)
+void CInode::first_get()
 {
-  if (!locked)
-    mutex_lock();
+  mutex_assert_locked_by_me();
   if (parent)
     parent->get(CDentry::PIN_INODEPIN);
-  if (!locked)
-    mutex_unlock();
 }
 
 void CInode::last_put()
 {
-  Mutex::Locker l(mutex);
+  mutex_assert_locked_by_me();
   if (parent)
     parent->put(CDentry::PIN_INODEPIN);
 }

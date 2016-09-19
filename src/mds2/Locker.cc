@@ -1561,6 +1561,16 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock, LogSegment *ls)
   }
 }
 
+void Locker::clear_dirty_scatterlock(ScatterLock *lock)
+{
+  lock->remove_dirty();
+  Mutex::Locker l(updated_scatterlocks_mutex);
+  if (lock->get_updated_item()->is_on_list()) {
+    lock->get_updated_item()->remove_myself();
+    lock->get_parent()->put(CObject::PIN_DIRTYSCATTERED);
+  }
+}
+
 /*
  * this is called by scatter_tick and LogSegment::try_to_trim() when
  * trying to flush dirty scattered data (i.e. updated fnode) back to
@@ -1929,8 +1939,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   // * -> excl?
   else if (lock->get_state() != LOCK_EXCL &&
 	   !lock->is_rdlocked() &&
-	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	   in->get_target_loner() >= 0)) {
+	   (wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
+	   in->get_target_loner() >= 0) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock, need_issue);

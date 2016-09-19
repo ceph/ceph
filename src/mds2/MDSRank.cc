@@ -80,6 +80,9 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_osdmap_full();
 
+  log_finisher = new Finisher(msgr->cct);
+  filer_finisher = new Finisher(msgr->cct);
+
   mdcache = new MDCache(this);
   server = new Server(this);
   locker = new Locker(this);
@@ -87,9 +90,6 @@ MDSRank::MDSRank(
   mdlog = new MDLog(this);
   sessionmap = new SessionMap(this);
   inotable = new InoTable(this);
-
-  log_finisher = new Finisher(msgr->cct);
-  filer_finisher = new Finisher(msgr->cct);
 }
 
 MDSRank::~MDSRank()
@@ -542,7 +542,7 @@ void MDSRank::starting_done()
   dout(3) << "starting_done" << dendl;
   assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
-  mdcache->open_root_and_mydir();
+  mdcache->open_root_and_mydir(NULL);
   mdlog->start_new_segment();
 }
 
@@ -609,7 +609,11 @@ void MDSRank::reconnect_done()
 void MDSRank::rejoin_start()
 {
   dout(1) << "rejoin_start" << dendl;
-  mdcache->rejoin_start(new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
+  MDSGatherBuilder gather(g_ceph_context, new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
+
+  mdcache->rejoin_start(gather.new_sub());
+  mdcache->open_root_and_mydir(gather.new_sub());
+  gather.activate();
 }
 
 void MDSRank::rejoin_done()
@@ -661,6 +665,8 @@ void MDSRank::active_start()
   ls.swap(waiting_for_active);
   waiter_list_lock.Unlock();
   finish_contexts(g_ceph_context, ls);  // kick waiters
+
+  mdcache->scan_strays();
 }
 
 void MDSRank::recovery_done(int oldstate)
@@ -671,9 +677,7 @@ void MDSRank::recovery_done(int oldstate)
   if (oldstate == MDSMap::STATE_CREATING)
     return;
 
-  mdcache->start_recovered_truncates();
-
-  mdcache->open_root_and_mydir();
+  mdcache->restart_replayed_truncates();
 }
 
 void MDSRank::creating_done()

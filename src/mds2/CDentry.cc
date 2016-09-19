@@ -311,13 +311,20 @@ void CDentry::remove_client_lease(Session *session)
     put(PIN_CLIENTLEASE);
 }
 
-void CDentry::first_get(bool locked)
+void CDentry::first_get()
 {
   lru_pin();
 }
 void CDentry::last_put()
 {
   lru_unpin();
+  CInode *diri = get_dir_inode();
+  if (get_linkage()->is_null() &&
+      (diri->is_stray() || diri->state_test(CInode::STATE_ORPHAN))) {
+    diri->mdcache->touch_dentry_bottom(this);
+  } else if (diri->is_stray()) {
+    diri->mdcache->eval_stray(this);
+  }
 }
 
 void intrusive_ptr_add_ref(CDentry *o)

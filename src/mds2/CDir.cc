@@ -231,6 +231,10 @@ CDentryRef CDir::add_null_dentry(const string& dname)
   dout(12) << "add_null_dentry " << dname << dendl;
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
+
+  if (inode->is_stray())
+    dn->state_set(CDentry::STATE_STRAY);
+
   mdcache->dentry_lru_insert(dn.get());
 
   if (items.empty())
@@ -248,6 +252,10 @@ CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in)
 {
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
+
+  if (inode->is_stray())
+    dn->state_set(CDentry::STATE_STRAY);
+
   mdcache->dentry_lru_insert(dn.get());
 
   if (items.empty()) 
@@ -266,6 +274,8 @@ CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d
 {
   inode->mutex_assert_locked_by_me();
   CDentryRef dn = new CDentry(this, dname);
+
+  assert(!inode->is_stray());
   mdcache->dentry_lru_insert(dn.get());
 
   if (items.empty()) 
@@ -298,6 +308,15 @@ void CDir::remove_dentry(CDentry *dn)
 
   mdcache->dentry_lru_remove(dn);
   delete dn;
+}
+
+void CDir::touch_dentries_bottom()
+{
+  inode->mutex_assert_locked_by_me();
+  dout(12) << "touch_dentries_bottom " << *this << dendl;
+
+  for (auto p = items.begin(); p != items.end(); ++p)
+    mdcache->touch_dentry_bottom(p->second);
 }
 
 CDentry* CDir::__lookup(const char *name, snapid_t snap)
@@ -536,7 +555,8 @@ void CDir::_omap_commit(int op_prio)
       op.priority = op_prio;
 
       // don't create new dirfrag blindly
-      if (!is_new())
+      if (!is_new() &&
+          !inode->state_test(CInode::STATE_ORPHAN)) // may partly purged
 	op.stat(NULL, (ceph::real_time*) NULL, NULL);
 
       if (!to_set.empty())
@@ -558,7 +578,8 @@ void CDir::_omap_commit(int op_prio)
   op.priority = op_prio;
 
   // don't create new dirfrag blindly
-  if (!is_new())
+  if (!is_new() &&
+      !inode->state_test(CInode::STATE_ORPHAN)) // may partly purged
     op.stat(NULL, (ceph::real_time*)NULL, NULL);
 
   /*
@@ -900,15 +921,14 @@ CDentryRef CDir::_load_dentry(const std::string &dname, const snapid_t last,
 	if (in->get_inode()->is_dirty_rstat())
 	  in->mark_dirty_rstat();
 
+	if (in->get_inode()->nlink == 0)
+	  in->state_set(CInode::STATE_ORPHAN);
+
 	in->mutex_unlock();
 
 	if (in.get() != newi)
 	  delete newi;
-	/*
-	if (inode->is_stray()) {
-	  cache->notify_stray_loaded(dn);
-	}
-	*/
+
 	dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
       } else {
 	LogChannelRef clog = mdcache->mds->clog;
@@ -980,14 +1000,13 @@ void CDir::_omap_fetched(int r, bufferlist& hdrbl, map<string, bufferlist>& omap
     assert(!is_projected());
     assert(!state_test(STATE_COMMITTING));
     fnode = got_fnode;
-    projected_version = committing_version = committed_version = got_fnode.version;
+    projected_version = committing_version = got_fnode.version;
   } else {
     assert(get_version() >= got_fnode.version);
     if (committed_version == 0 && is_dirty() &&
 	get_version() == got_fnode.version) {
       dout(10) << "_fetched version == get_version(), marking clean" << dendl;
       mark_clean();
-      committed_version = get_version();
     }
   }
 
@@ -1053,6 +1072,31 @@ void CDir::_omap_fetched(int r, bufferlist& hdrbl, map<string, bufferlist>& omap
     }
   }
 
+  if (committed_version == 0) {
+    bool stray = inode->is_stray();
+
+    for (auto p = dirty_dentries.begin(); !p.end(); ) {
+      CDentry *dn = *p;
+      ++p;
+
+      assert(dn->is_dirty());
+      if (dn->get_version() <= got_fnode.version) {
+	dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
+	dn->mark_clean();
+
+	// non-null dentries should have already been marked clean
+	assert(dn->get_linkage()->is_null());
+
+	// drop clean null stray dentries ASAP
+	if (stray && dn->get_num_ref() == 0)
+	  mdcache->touch_dentry_bottom(dn);
+      }
+    }
+  }
+
+  if (got_fnode.version > committed_version)
+    committed_version = got_fnode.version;
+
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
 
   std::list<MDSContextBase*> finished;
@@ -1104,7 +1148,7 @@ void CDir::remove_bloom()
   bloom = NULL;
 }
 
-void CDir::first_get(bool locked)
+void CDir::first_get()
 {
   inode->get(CInode::PIN_DIRFRAG);
 }

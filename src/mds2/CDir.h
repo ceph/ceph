@@ -113,6 +113,7 @@ public:
   CDentryRef add_primary_dentry(const string& dname, CInode *in);
   CDentryRef add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d_type);
   void remove_dentry(CDentry *dn);
+  void touch_dentries_bottom();
 
   CDentry* __lookup(const char *nanme, snapid_t snap=CEPH_NOSNAP);
   CDentryRef lookup(const char *name, snapid_t snap=CEPH_NOSNAP) {
@@ -170,7 +171,7 @@ public:
 public:
    elist<CDir*>::item item_dirty, item_new;
 protected:
-  void first_get(bool locked);
+  void first_get();
   void last_put();
 };
 

@@ -144,11 +144,11 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   for (auto p = dirty_locks.begin(); p != dirty_locks.end(); ++p) {
     CInode *in = p->first.get();
     in->mutex_lock();
-    if (p->second & CEPH_LOCK_IFILE) {
+    if ((p->second & CEPH_LOCK_IFILE) && in->filelock.is_dirty_or_flushing()) {
       dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
       mds->locker->scatter_nudge(&in->filelock, gather_bld.new_sub());
     }
-    if (p->second & CEPH_LOCK_INEST) {
+    if ((p->second & CEPH_LOCK_INEST) && in->nestlock.is_dirty_or_flushing()) {
       dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
       mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
     }
@@ -1245,6 +1245,16 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
       assert(g_conf->mds_kill_journal_replay_at != 2);
 
+      if (in->get_inode()->nlink == 0) {
+	in->state_set(CInode::STATE_ORPHAN);
+	if (in->has_dirfrags()) {
+	  list<CDir*> ls;
+	  in->get_dirfrags(ls);
+	  for (auto p = ls.begin(); p != ls.end(); ++p)
+	    (*p)->touch_dentries_bottom();
+	}
+      }
+
       in->mutex_unlock();
     }
 
@@ -1440,7 +1450,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
        ++p) {
     CInodeRef in = mds->mdcache->get_inode(*p);
     assert(in);
-    mds->mdcache->add_recovered_truncate(in, logseg);
+    mds->mdcache->replay_start_truncate(in, logseg);
   }
   for (map<inodeno_t,uint64_t>::iterator p = truncate_finish.begin();
        p != truncate_finish.end();
@@ -1449,7 +1459,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     if (ls) {
       CInodeRef in = mds->mdcache->get_inode(p->first);
       assert(in);
-      mds->mdcache->remove_recovered_truncate(in, ls);
+      mds->mdcache->replay_finish_truncate(in, ls);
     }
   }
 #if 0

@@ -17,6 +17,7 @@ class EMetaBlob;
 class ESubtreeMap;
 class Session;
 class Filer;
+class StrayManager;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -41,13 +42,14 @@ protected:
   CInodeRef root;
   CInodeRef myin;
   CInodeRef strays[NUM_STRAY]; 
+  int stray_index;
 
 public:
   CInodeRef create_system_inode(inodeno_t ino, int mode);
   void create_empty_hierarchy(MDSGather *gather);
   void create_mydir_hierarchy(MDSGather *gather);
 
-  void open_root_and_mydir();
+  void open_root_and_mydir(MDSContextBase *fin);
   void populate_mydir(MDSGatherBuilder& gather);
 
   void add_inode(CInode *in);
@@ -63,8 +65,16 @@ public:
   int path_traverse(const MDRequestRef& mdr,
 		    const filepath& path, vector<CDentryRef> *pdnvec, CInodeRef *pin);
 
-  void advance_stray() {}
+
+protected:
+  StrayManager *stray_manager;
+  void scan_stray_dir(dirfrag_t next=dirfrag_t());
+  friend struct C_MDC_RetryScanStray;
+public:
+  void advance_stray() { stray_index = (stray_index + 1) % NUM_STRAY; }
   CDentryRef get_or_create_stray_dentry(CInode *in);
+  void scan_strays();
+  void eval_stray(CDentry *dn);
 
 protected:
   LRU dentry_lru;
@@ -76,7 +86,7 @@ public:
   void touch_inode(CInode* in);
 
   void trim(int max=-1, int count=-1);
-  bool trim_dentry(CDentry *dn);
+  bool trim_dentry(CDentry *dn, bool *null_straydn);
   bool trim_inode(CDentry *dn, CInode *in);
   void trim_dirfrag(CInode *in, CDir *dir);
 
@@ -138,7 +148,7 @@ public:
 
 protected:
   Filer *filer;
-  map<CInode*, LogSegment*> recovered_truncating_inodes;
+  map<CInode*, LogSegment*> replayed_truncates;
 
   void _truncate_inode(CInode *in, LogSegment *ls);
   void truncate_inode_finish(CInode *in, LogSegment *ls);
@@ -146,10 +156,11 @@ protected:
   friend class C_MDC_TruncateFinish;
   friend class C_MDC_TruncateLogged;
 public:
+  Filer *get_filer() { return filer; }
   void truncate_inode(CInodeRef& in, LogSegment *ls);
-  void add_recovered_truncate(CInodeRef& in, LogSegment *ls);
-  void remove_recovered_truncate(CInodeRef& in, LogSegment *ls);
-  void start_recovered_truncates();
+  void replay_start_truncate(CInodeRef& in, LogSegment *ls);
+  void replay_finish_truncate(CInodeRef& in, LogSegment *ls);
+  void restart_replayed_truncates();
 
 protected:
   Mutex open_inode_mutex;

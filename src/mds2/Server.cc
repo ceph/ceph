@@ -1873,6 +1873,16 @@ void Server::__unlink_finish(const MDRequestRef& mdr, version_t dnpv)
   dn->mark_dirty(dnpv, mdr->ls);
   mdr->early_apply();
 
+  if (in->get_inode()->nlink == 0) {
+    in->state_set(CInode::STATE_ORPHAN);
+    if (in->has_dirfrags()) {
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (auto p = ls.begin(); p != ls.end(); ++p)
+	(*p)->touch_dentries_bottom();
+    }
+  }
+
   respond_to_request(mdr, 0);
 }
 
@@ -2177,6 +2187,17 @@ void Server::__rename_finish(const MDRequestRef& mdr, version_t srcdn_pv, versio
   }
 
   mdr->early_apply();
+
+  if (oldin && oldin->get_inode()->nlink == 0) {
+    oldin->state_set(CInode::STATE_ORPHAN);
+    if (oldin->has_dirfrags()) {
+      list<CDir*> ls;
+      oldin->get_dirfrags(ls);
+      for (auto p = ls.begin(); p != ls.end(); ++p)
+	(*p)->touch_dentries_bottom();
+    }
+  }
+
   respond_to_request(mdr, 0);
 }
 

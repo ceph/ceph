@@ -14,9 +14,14 @@ public:
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
   static const int PIN_CLIENTLEASE =  2;
+  static const int PIN_PURGING =      3;
 
   // -- states --
-  static const int STATE_NEW =          (1<<0);
+  static const unsigned STATE_NEW =		(1<<0);
+  static const unsigned STATE_STRAY =		(1<<1);
+  static const unsigned STATE_ORPHANINODE =	(1<<2);
+  static const unsigned STATE_PURGING =		(1<<3);
+  static const unsigned STATE_EVALUATINGSTRAY =	(1<<4);
 
   const std::string name;
 protected:
@@ -121,7 +126,7 @@ public:
   elist<CDentry*>::item item_dirty, item_dir_dirty;
 
 protected:
-  void first_get(bool locked);
+  void first_get();
   void last_put();
 public: // crap
   static snapid_t first, last;

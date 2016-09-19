@@ -17,6 +17,22 @@ class LogSegment;
 
 class CObject {
 protected:
+  mutable Mutex mutex;
+public:
+  void mutex_lock() const { mutex.Lock(); }
+  void mutex_unlock() const { mutex.Unlock(); }
+  bool mutex_trylock() const { return mutex.TryLock(); }
+  bool mutex_is_locked_by_me() const  { return mutex.is_locked_by_me(); }
+  void mutex_assert_locked_by_me() const { assert(mutex.is_locked_by_me()); }
+
+  class Locker {
+    CObject *o;
+  public:
+    Locker(CObject *_o) : o(_o) { if (o) o->mutex_lock(); }
+    ~Locker() { if(o) o->mutex_unlock(); }
+  };
+
+protected:
 #ifdef __MDS_REF_SET
   Mutex ref_map_lock;
   std::map<int,int> ref_map;
@@ -24,7 +40,7 @@ protected:
   std::atomic<int> ref;
 
   virtual void last_put() {}
-  virtual void first_get(bool locked) {}
+  virtual void first_get() {}
 public:
   // -- pins --
   const static int PIN_DIRTY		= 1001;
@@ -36,15 +52,6 @@ public:
   static const int PIN_PTRWAITER	= -1007;
 
 
-  void get(int by, bool locked=false) {
-    int old = std::atomic_fetch_add(&ref, 1);
-    if (old == 0)
-      first_get(locked);
-#ifdef __MDS_REF_SET
-    Mutex::Locker l(ref_map_lock);
-    ref_map[by]++;
-#endif
-  }
   bool get_unless_zero(int by) {
     int old = std::atomic_load(&ref);
     while (old != 0 && !std::atomic_compare_exchange_weak(&ref, &old, old + 1));
@@ -56,15 +63,47 @@ public:
 #endif
     return true;
   }
-  void put(int by) {
-    int old = std::atomic_fetch_sub(&ref, 1);
-    assert(old >= 1);
-    if (old == 1)
-      last_put();
+  void get(int by, bool locked=false) {
+    while (true) {
+      if (get_unless_zero(by))
+	return;
+      if (!locked && !mutex_trylock())
+	continue;
+      int old = std::atomic_fetch_add(&ref, 1);
+      if (old == 0)
+	first_get();
+      if (!locked)
+	mutex_unlock();
 #ifdef __MDS_REF_SET
-    Mutex::Locker l(ref_map_lock);
-    assert(--ref_map[by] >= 0);
+      Mutex::Locker l(ref_map_lock);
+      ref_map[by]++;
 #endif
+      return;
+    }
+  }
+  void put(int by) {
+#ifdef __MDS_REF_SET
+    {
+      Mutex::Locker l(ref_map_lock);
+      assert(--ref_map[by] >= 0);
+    }
+#endif
+    while (true) {
+      int old = std::atomic_load(&ref);
+      while (old != 1 && !std::atomic_compare_exchange_weak(&ref, &old, old - 1)) {
+	assert(old >= 1);
+      }
+      if (old > 1)
+	return;
+      if (!mutex_trylock())
+	continue;
+      old = std::atomic_fetch_sub(&ref, 1);
+      assert(old >= 1);
+      if (old == 1)
+	last_put();
+      mutex_unlock();
+      return;
+    }
   }
   int get_num_ref(int by=-1) const {
     return std::atomic_load(&ref);
@@ -95,22 +134,6 @@ public:
   bool is_auth() const { return true; }
   bool is_dirty() const { return state_test(STATE_DIRTY); }
   bool is_clean() const { return !is_dirty(); }
-
-protected:
-  mutable Mutex mutex;
-public:
-  void mutex_lock() const { mutex.Lock(); }
-  void mutex_unlock() const { mutex.Unlock(); }
-  bool mutex_trylock() const { return mutex.TryLock(); }
-  bool mutex_is_locked_by_me() const  { return mutex.is_locked_by_me(); }
-  void mutex_assert_locked_by_me() const { assert(mutex.is_locked_by_me()); }
-
-  class Locker {
-    CObject *o;
-  public:
-    Locker(CObject *_o) : o(_o) { if (o) o->mutex_lock(); }
-    ~Locker() { if(o) o->mutex_unlock(); }
-  };
 
 protected:
   compact_multimap<uint64_t, pair<uint64_t, MDSContextBase*> > waiting;
@@ -187,11 +210,11 @@ public:
   };
 
   CObject(const string &type_name) :
+    mutex(type_name + "::mutex"),
 #ifdef __MDS_REF_SET
     ref_map_lock("CObject::ref_map_lock"),
 #endif
     ref(ATOMIC_VAR_INIT(0)), state(ATOMIC_VAR_INIT(0)),
-    mutex(type_name + "::mutex"),
     last_wait_seq(0) {}
 
   virtual ~CObject() {}
