@@ -12,7 +12,7 @@
 
 #include "BitMapAllocator.h"
 #include "bluestore_types.h"
-#include "BlueStore.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
@@ -133,7 +133,7 @@ int BitMapAllocator::allocate(
   *offset = 0;
   *length = 0;
 
-  count = m_bit_alloc->alloc_blocks_res(nblks, &start_blk);
+  count = m_bit_alloc->alloc_blocks_res(nblks, hint / m_block_size, &start_blk);
   if (count == 0) {
     return -ENOSPC;
   }
@@ -164,9 +164,11 @@ int BitMapAllocator::alloc_extents(
      << dendl;
 
   if (alloc_unit > (uint64_t) m_block_size) {
-    return alloc_extents_cont(want_size, alloc_unit, max_alloc_size, hint, extents, count);     
+    return alloc_extents_cont(want_size, alloc_unit, 
+                              max_alloc_size, hint / m_block_size, extents, count);     
   } else {
-    return alloc_extents_dis(want_size, alloc_unit, max_alloc_size, hint, extents, count); 
+    return alloc_extents_dis(want_size, alloc_unit,
+                             max_alloc_size, hint / m_block_size, extents, count); 
   }
 }
 
@@ -192,7 +194,7 @@ int BitMapAllocator::alloc_extents_cont(
   while (need_blks > 0) {
     int64_t count = 0;
     count = m_bit_alloc->alloc_blocks_res(
-      (max_blks && need_blks > max_blks) ? max_blks : need_blks, &start_blk);
+      (max_blks && need_blks > max_blks) ? max_blks : need_blks, hint, &start_blk);
     if (count == 0) {
       break;
     }
@@ -220,7 +222,7 @@ int BitMapAllocator::alloc_extents_dis(
   int64_t num = 0;
   *count = 0;
 
-  num = m_bit_alloc->alloc_blocks_dis_res(nblks, &block_list);
+  num = m_bit_alloc->alloc_blocks_dis_res(nblks, hint, &block_list);
   if (num < nblks) {
     m_bit_alloc->free_blocks_dis(num, &block_list);
     return -ENOSPC;
@@ -303,13 +305,20 @@ void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
            << " length 0x" << length << std::dec
            << dendl;
 
-  assert(!(offset % m_block_size));
-  assert(!(length % m_block_size));
+  // we use the same adjustment/alignment that init_add_free does
+  // above so that we can yank back some of the space.
+  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t length_adj = ((length - (offset_adj - offset)) /
+                         m_block_size) * m_block_size;
 
-  int64_t first_blk = offset / m_block_size;
-  int64_t count = length / m_block_size;
+  assert(!(offset_adj % m_block_size));
+  assert(!(length_adj % m_block_size));
 
-  m_bit_alloc->set_blocks_used(first_blk, count);
+  int64_t first_blk = offset_adj / m_block_size;
+  int64_t count = length_adj / m_block_size;
+
+  if (count)
+    m_bit_alloc->set_blocks_used(first_blk, count);
 }
 
 

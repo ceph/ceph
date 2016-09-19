@@ -140,6 +140,9 @@ int KernelDevice::open(string p)
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
 
+  // round size down to an even block
+  size &= ~(block_size - 1);
+
   r = _aio_start();
   assert(r == 0);
 
@@ -506,6 +509,8 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
   if (r < 0) {
     r = -errno;
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec 
+      << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
   assert((uint64_t)r == aligned_len);
@@ -545,6 +550,8 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
       r = ::pread(fd_buffered, t, left, off);
       if (r < 0) {
 	r = -errno;
+        derr << __func__ << " 0x" << std::hex << off << "~" << left 
+          << std::dec << " error: " << cpp_strerror(r) << dendl;
 	goto out;
       }
       off += r;
@@ -556,6 +563,9 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
+      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex 
+        << off << "~" << left << std::dec << " error: " << cpp_strerror(r) 
+        << dendl;
       goto out;
     }
     assert((uint64_t)r == len);

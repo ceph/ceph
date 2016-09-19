@@ -22,6 +22,7 @@
 
 namespace librbd {
 
+namespace cache { class MockImageCache; }
 namespace operation {
 template <typename> class ResizeRequest;
 }
@@ -35,7 +36,6 @@ struct MockImageCtx {
     assert(s_instance != nullptr);
     return s_instance;
   }
-
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
@@ -73,6 +73,7 @@ struct MockImageCtx {
       name(image_ctx.name),
       parent_md(image_ctx.parent_md),
       format_string(image_ctx.format_string),
+      group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
@@ -91,7 +92,11 @@ struct MockImageCtx {
       journal_object_flush_bytes(image_ctx.journal_object_flush_bytes),
       journal_object_flush_age(image_ctx.journal_object_flush_age),
       journal_pool(image_ctx.journal_pool),
-      journal_max_payload_bytes(image_ctx.journal_max_payload_bytes)
+      journal_max_payload_bytes(image_ctx.journal_max_payload_bytes),
+      journal_max_concurrent_object_sets(
+          image_ctx.journal_max_concurrent_object_sets),
+      mirroring_resync_after_disconnect(
+          image_ctx.mirroring_resync_after_disconnect)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -148,10 +153,12 @@ struct MockImageCtx {
                               uint8_t protection_status, uint64_t flags));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
+  MOCK_METHOD0(user_flushed, void());
   MOCK_METHOD1(flush, void(Context *));
   MOCK_METHOD1(flush_async_operations, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
+  MOCK_METHOD1(flush_cache, void(Context *));
   MOCK_METHOD1(invalidate_cache, void(Context *));
   MOCK_METHOD1(shut_down_cache, void(Context *));
 
@@ -222,6 +229,7 @@ struct MockImageCtx {
   std::string name;
   parent_info parent_md;
   char *format_string;
+  cls::rbd::GroupSpec group_spec;
 
   file_layout_t layout;
 
@@ -229,9 +237,10 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 
-
   MockAioImageRequestWQ *aio_work_queue;
   MockContextWQ *op_work_queue;
+
+  cache::MockImageCache *image_cache = nullptr;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;
@@ -256,6 +265,8 @@ struct MockImageCtx {
   double journal_object_flush_age;
   std::string journal_pool;
   uint32_t journal_max_payload_bytes;
+  int journal_max_concurrent_object_sets;
+  bool mirroring_resync_after_disconnect;
 };
 
 } // namespace librbd

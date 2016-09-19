@@ -1,6 +1,7 @@
-#!/usr/bin/env python -B
+#!/usr/bin/env python
 
 import json
+import os
 import re
 import subprocess
 
@@ -13,8 +14,9 @@ for disk in disks:
             df = subprocess.check_output("df --output=used " + partition['path'], shell=True)
             used += int(re.findall('\d+', df)[0])
 
-open("/etc/rhsm/facts/ceph_usage.facts", 'w').write("""
+facts_file = os.environ.get("CEPH_FACTS_FILE", "/etc/rhsm/facts/ceph_usage.facts")
+open(facts_file, 'w').write("""\
 {
 "band.storage.usage": {used}
 }
-""".format(used=used/(1024*1024*1024)))
+""".replace('{used}', str(int(used/(1024*1024*1024)))))

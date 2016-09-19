@@ -183,7 +183,7 @@
      --replica-log-type        replica log type (metadata, data, bucket), required for
                                replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
-     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
+     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
      --reset-regions           reset regionmap when regionmap update
      --bypass-gc               when specified with bucket deletion, triggers
@@ -202,6 +202,7 @@
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   

@@ -610,6 +610,14 @@ extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path,
   return cmount->get_client()->stat(path, stbuf);
 }
 
+extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
+			  struct ceph_statx *stx, unsigned int want, unsigned int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->statx(path, stx, want, flags);
+}
+
 extern "C" int ceph_lstat(struct ceph_mount_info *cmount, const char *path,
 			  struct stat *stbuf)
 {
@@ -624,6 +632,14 @@ extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->setattr(relpath, attr, mask);
+}
+
+extern "C" int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath,
+			    struct ceph_statx *stx, int mask, int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->setattrx(relpath, stx, mask, flags);
 }
 
 // *xattr() calls supporting samba/vfs
@@ -872,6 +888,14 @@ extern "C" int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *s
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->fstat(fd, stbuf);
+}
+
+extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
+			    unsigned int want, unsigned int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fstatx(fd, stx, want, flags);
 }
 
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
@@ -1406,11 +1430,26 @@ extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_getattr(in, attr, uid, gid));
 }
 
+extern "C" int ceph_ll_getattrx(class ceph_mount_info *cmount,
+			        Inode *in, struct ceph_statx *stx,
+				unsigned int want, unsigned int flags,
+				int uid, int gid)
+{
+  return (cmount->get_client()->ll_getattrx(in, stx, want, flags, uid, gid));
+}
+
 extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,
 			       Inode *in, struct stat *st,
 			       int mask, int uid, int gid)
 {
   return (cmount->get_client()->ll_setattr(in, st, mask, uid, gid));
+}
+
+extern "C" int ceph_ll_setattrx(class ceph_mount_info *cmount,
+			       Inode *in, struct ceph_statx *stx,
+			       int mask, int uid, int gid)
+{
+  return (cmount->get_client()->ll_setattrx(in, stx, mask, uid, gid));
 }
 
 extern "C" int ceph_ll_open(class ceph_mount_info *cmount, Inode *in,

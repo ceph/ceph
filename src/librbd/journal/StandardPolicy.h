@@ -20,6 +20,9 @@ public:
   virtual bool append_disabled() const {
     return false;
   }
+  virtual bool journal_disabled() const {
+    return false;
+  }
   virtual void allocate_tag_on_lock(Context *on_finish);
 
 private:

@@ -740,6 +740,27 @@ bool PGMonitor::pg_stats_have_changed(int from, const MPGStats *stats) const
   return false;
 }
 
+struct PGMonitor::C_Stats : public C_MonOp {
+  PGMonitor *pgmon;
+  MonOpRequestRef stats_op_ack;
+  entity_inst_t who;
+  C_Stats(PGMonitor *p,
+          MonOpRequestRef op,
+          MonOpRequestRef op_ack)
+    : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
+  void _finish(int r) {
+    if (r >= 0) {
+      pgmon->_updated_stats(op, stats_op_ack);
+    } else if (r == -ECANCELED) {
+      return;
+    } else if (r == -EAGAIN) {
+      pgmon->dispatch(op);
+    } else {
+      assert(0 == "bad C_Stats return value");
+    }
+  }
+};
+
 bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
@@ -1350,7 +1371,7 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
                                      object_stat_sum_t &sum, uint64_t avail,
-                                     float raw_used_rate, bool verbose, const pg_pool_t *pool) const
+                                     float raw_used_rate, bool verbose, const pg_pool_t *pool)
 {
   float curr_object_copies_rate = 0.0;
   if (sum.num_object_copies > 0)
@@ -1373,10 +1394,13 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     }
   } else {
     tbl << stringify(si_t(sum.num_bytes));
-    int64_t kb_used = SHIFT_ROUND_UP(sum.num_bytes, 10);
     float used = 0.0;
-    if (pg_map.osd_sum.kb > 0)
-      used = (float)kb_used * raw_used_rate * curr_object_copies_rate / pg_map.osd_sum.kb;
+    if (avail) {
+      used = sum.num_bytes * curr_object_copies_rate;
+      used /= used + avail;
+    } else if (sum.num_bytes) {
+      used = 1.0;
+    }
     tbl << percentify(used*100);
     tbl << si_t(avail);
     tbl << sum.num_objects;
@@ -1678,11 +1702,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     if (what.empty())
       what.insert("all");
     if (f) {
-      vector<string> dumpcontents;
-      if (cmd_getval(g_ceph_context, cmdmap, "dumpcontents", dumpcontents)) {
-	copy(dumpcontents.begin(), dumpcontents.end(),
-	     inserter(what, what.end()));
-      }
       if (what.count("all")) {
 	f->open_object_section("pg_map");
 	pg_map.dump(f.get());
@@ -2061,6 +2080,9 @@ int PGMonitor::_warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
                                             list<pair<health_status_t,string> >& summary,
                                             list<pair<health_status_t,string> > *detail) const
 {
+  if (h.h.empty())
+    return 0;
+
   unsigned sum = 0;
   for (unsigned i = h.h.size() - 1; i > 0; --i) {
     float ub = (float)(1 << i) / 1000.0;
@@ -2106,6 +2128,10 @@ namespace {
 			    list<pair<health_status_t,string> > &summary,
 			    list<pair<health_status_t,string> > *detail,
 			    const CephContext* cct) {
+    if (cct->_conf->mon_warn_not_scrubbed == 0 &&
+      cct->_conf->mon_warn_not_deep_scrubbed == 0)
+      return;
+
     int pgs_count = 0;
     const utime_t now = ceph_clock_now(nullptr);
     for (const auto& pg_entry : pg_stats) {

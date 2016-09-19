@@ -1,22 +1,26 @@
 =================
  Troubleshooting
 =================
+
 Slow/stuck operations
-~~~~~~~~~~~~~~~~
+=====================
+
 If you are experiencing apparent hung operations, the first task is to identify
 where the problem is occurring: in the client, the MDS, or the network connecting
 them. Start by looking to see if either side has stuck operations
 (:ref:`slow_requests`, below), and narrow it down from there.
 
 RADOS Health
-~~~~~~~~~~~~
+============
+
 If part of the CephFS metadata or data pools is unavaible and CephFS isn't
 responding, it is probably because RADOS itself is unhealthy. Resolve those
 problems first (:doc:`/rados/troubleshooting`).
 
 The MDS
-~~~~~~~
-If an operation is hung inside the MDS, it will eventually show up in "ceph health",
+=======
+
+If an operation is hung inside the MDS, it will eventually show up in ``ceph health``,
 identifying "slow requests are blocked". It may also identify clients as
 "failing to respond" or misbehaving in other ways. If the MDS identifies
 specific clients as misbehaving, you should investigate why they are doing so.
@@ -31,11 +35,12 @@ Otherwise, you have probably discovered a new bug and should report it to
 the developers!
 
 .. _slow_requests:
+
 Slow requests (MDS)
 -------------------
-You can list current operations via the admin socket by running
-::
-   ceph daemon mds.<name> dump_ops_in_flight
+You can list current operations via the admin socket by running::
+
+  ceph daemon mds.<name> dump_ops_in_flight
 
 from the MDS host. Identify the stuck commands and examine why they are stuck.
 Usually the last "event" will have been an attempt to gather locks, or sending
@@ -53,13 +58,13 @@ that clients are misbehaving, either the client has a problem or its
 requests aren't reaching the MDS.
 
 ceph-fuse debugging
-~~~~~~~~~~~~~~~~~~~
+===================
 
 ceph-fuse also supports dump_ops_in_flight. See if it has any and where they are
 stuck.
 
 Debug output
-===================
+------------
 
 To get more debugging information from ceph-fuse, try running in the foreground
 with logging to the console (``-d``) and enabling client debug
@@ -71,9 +76,10 @@ If you suspect a potential monitor issue, enable monitor debugging as well
 
 
 Kernel mount debugging
-~~~~~~~~~~~~~
+======================
+
 Slow requests
-==============
+-------------
 
 Unfortunately the kernel client does not support the admin socket, but it has
 similar (if limited) interfaces if your kernel has debugfs enabled. There
@@ -108,8 +114,8 @@ At the moment, the kernel client will remount the FS, but outstanding filesystem
 IO may or may not be satisfied. In these cases, you may need to reboot your
 client system.
 
-You can identify you are in this situation if dmesg/kern.log report something like
-::
+You can identify you are in this situation if dmesg/kern.log report something like::
+
    Jul 20 08:14:38 teuthology kernel: [3677601.123718] ceph: mds0 closed our session
    Jul 20 08:14:38 teuthology kernel: [3677601.128019] ceph: mds0 reconnect start
    Jul 20 08:14:39 teuthology kernel: [3677602.093378] ceph: mds0 reconnect denied
@@ -140,11 +146,11 @@ Mount 12 Error
 
 A mount 12 error with ``cannot allocate memory`` usually occurs if you  have a
 version mismatch between the :term:`Ceph Client` version and the :term:`Ceph
-Storage Cluster` version. Check the versions using:: 
+Storage Cluster` version. Check the versions using::
 
 	ceph -v
 	
-If the Ceph Client is behind the Ceph cluster, try to upgrade it:: 
+If the Ceph Client is behind the Ceph cluster, try to upgrade it::
 
 	sudo apt-get update && sudo apt-get install ceph-common 
 

@@ -313,6 +313,18 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   return true;
 }
 
+struct LogMonitor::C_Log : public C_MonOp {
+  LogMonitor *logmon;
+  C_Log(LogMonitor *p, MonOpRequestRef o) :
+    C_MonOp(o), logmon(p) {}
+  void _finish(int r) {
+    if (r == -ECANCELED) {
+      return;
+    }
+    logmon->_updated_log(op);
+  }
+};
+
 bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
   op->mark_logmon_event("prepare_log");
@@ -749,9 +761,7 @@ void LogMonitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_cluster_log_file_level") ||
       changed.count("mon_cluster_log_to_graylog") ||
       changed.count("mon_cluster_log_to_graylog_host") ||
-      changed.count("mon_cluster_log_to_graylog_port") ||
-      changed.count("fsid") ||
-      changed.count("host")) {
+      changed.count("mon_cluster_log_to_graylog_port")) {
     update_log_channels();
   }
 }

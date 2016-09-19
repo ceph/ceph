@@ -17,6 +17,8 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
+#include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/CreateRequest.h"
 
 #include <boost/scope_exit.hpp>
 
@@ -155,26 +157,11 @@ public:
   }
 };
 
-class SafeTimerSingleton : public SafeTimer {
-public:
-  Mutex lock;
-
-  explicit SafeTimerSingleton(CephContext *cct)
-      : SafeTimer(cct, lock, true),
-        lock("librbd::Journal::SafeTimerSingleton::lock") {
-    init();
-  }
-  virtual ~SafeTimerSingleton() {
-    Mutex::Locker locker(lock);
-    shutdown();
-  }
-};
-
 template <typename J>
 int open_journaler(CephContext *cct, J *journaler,
                    cls::journal::Client *client,
                    journal::ImageClientMeta *client_meta,
-                   journal::TagData *tag_data) {
+                   uint64_t *tag_tid, journal::TagData *tag_data) {
   C_SaferCond init_ctx;
   journaler->init(&init_ctx);
   int r = init_ctx.wait();
@@ -204,9 +191,8 @@ int open_journaler(CephContext *cct, J *journaler,
 
   C_SaferCond get_tags_ctx;
   Mutex lock("lock");
-  uint64_t tag_tid;
   C_DecodeTags *tags_ctx = new C_DecodeTags(
-      cct, &lock, &tag_tid, tag_data, &get_tags_ctx);
+      cct, &lock, tag_tid, tag_data, &get_tags_ctx);
   journaler->get_tags(client_meta->tag_class, &tags_ctx->tags, tags_ctx);
 
   r = get_tags_ctx.wait();
@@ -220,18 +206,12 @@ template <typename J>
 int allocate_journaler_tag(CephContext *cct, J *journaler,
                            const cls::journal::Client &client,
                            uint64_t tag_class,
-                           const journal::TagData &prev_tag_data,
+                           const journal::TagPredecessor &predecessor,
                            const std::string &mirror_uuid,
                            cls::journal::Tag *new_tag) {
   journal::TagData tag_data;
-  if (!client.commit_position.object_positions.empty()) {
-    auto position = client.commit_position.object_positions.front();
-    tag_data.predecessor_commit_valid = true;
-    tag_data.predecessor_tag_tid = position.tag_tid;
-    tag_data.predecessor_entry_tid = position.entry_tid;
-  }
-  tag_data.predecessor_mirror_uuid = prev_tag_data.mirror_uuid;
   tag_data.mirror_uuid = mirror_uuid;
+  tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
   ::encode(tag_data, tag_bl);
@@ -324,12 +304,7 @@ Journal<I>::Journal(I &image_ctx)
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
                                cct->_conf->rbd_op_thread_timeout,
                                thread_pool_singleton);
-
-  SafeTimerSingleton *safe_timer_singleton;
-  cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-    safe_timer_singleton, "librbd::journal::safe_timer");
-  m_timer = safe_timer_singleton;
-  m_timer_lock = &safe_timer_singleton->lock;
+  ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 }
 
 template <typename I>
@@ -355,58 +330,25 @@ bool Journal<I>::is_journal_supported(I &image_ctx) {
 
 template <typename I>
 int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
-		       uint8_t order, uint8_t splay_width,
-		       const std::string &object_pool, bool non_primary,
-                       const std::string &primary_mirror_uuid) {
+                       uint8_t order, uint8_t splay_width,
+                       const std::string &object_pool) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  librados::Rados rados(io_ctx);
-  int64_t pool_id = -1;
-  if (!object_pool.empty()) {
-    IoCtx data_io_ctx;
-    int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
-    if (r != 0) {
-      lderr(cct) << __func__ << ": "
-                 << "failed to create journal: "
-		 << "error opening journal objects pool '" << object_pool
-		 << "': " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    pool_id = data_io_ctx.get_id();
-  }
+  C_SaferCond cond;
+  journal::TagData tag_data(LOCAL_MIRROR_UUID);
+  ContextWQ op_work_queue("librbd::op_work_queue",
+                          cct->_conf->rbd_op_thread_timeout,
+                          ImageCtx::get_thread_pool_instance(cct));
+  journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
+    io_ctx, image_id, order, splay_width, object_pool, cls::journal::Tag::TAG_CLASS_NEW,
+    tag_data, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+  req->send();
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
+  int r = cond.wait();
+  op_work_queue.drain();
 
-  int r = journaler.create(order, splay_width, pool_id);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  cls::journal::Client client;
-  cls::journal::Tag tag;
-  journal::TagData tag_data;
-
-  assert(non_primary ^ primary_mirror_uuid.empty());
-  std::string mirror_uuid = (non_primary ? primary_mirror_uuid :
-                                           LOCAL_MIRROR_UUID);
-  r = allocate_journaler_tag(cct, &journaler, client,
-                             cls::journal::Tag::TAG_CLASS_NEW,
-                             tag_data, mirror_uuid, &tag);
-
-  bufferlist client_data;
-  ::encode(journal::ClientData{journal::ImageClientMeta{tag.tag_class}},
-           client_data);
-
-  r = journaler.register_client(client_data);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to register client: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -414,40 +356,18 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
-
-  bool journal_exists;
-  int r = journaler.exists(&journal_exists);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to stat journal header: " << cpp_strerror(r) << dendl;
-    return r;
-  } else if (!journal_exists) {
-    return 0;
-  }
-
   C_SaferCond cond;
-  journaler.init(&cond);
-  BOOST_SCOPE_EXIT_ALL(&journaler) {
-    journaler.shut_down();
-  };
+  ContextWQ op_work_queue("librbd::op_work_queue",
+                          cct->_conf->rbd_op_thread_timeout,
+                          ImageCtx::get_thread_pool_instance(cct));
+  journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
+    io_ctx, image_id, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+  req->send();
 
-  r = cond.wait();
-  if (r == -ENOENT) {
-    return 0;
-  } else if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to initialize journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  int r = cond.wait();
+  op_work_queue.drain();
 
-  r = journaler.remove(true);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to remove journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -487,14 +407,16 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
     }
   }
 
-  r = journaler.remove(true);
+  C_SaferCond ctx1;
+  journaler.remove(true, &ctx1);
+  r = ctx1.wait();
   if (r < 0) {
     lderr(cct) << __func__ << ": "
                << "failed to reset journal: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  r = create(io_ctx, image_id, order, splay_width, pool_name, false, "");
+  r = create(io_ctx, image_id, order, splay_width, pool_name);
   if (r < 0) {
     lderr(cct) << __func__ << ": "
                << "failed to create journal: " << cpp_strerror(r) << dendl;
@@ -536,8 +458,10 @@ int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
   journal::TagData tag_data;
-  int r = open_journaler(cct, &journaler, &client, &client_meta, &tag_data);
+  int r = open_journaler(cct, &journaler, &client, &client_meta, &tag_tid,
+                         &tag_data);
   if (r >= 0) {
     *mirror_uuid = tag_data.mirror_uuid;
   }
@@ -555,9 +479,10 @@ int Journal<I>::request_resync(I *image_ctx) {
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
   journal::TagData tag_data;
   int r = open_journaler(image_ctx->cct, &journaler, &client, &client_meta,
-                         &tag_data);
+                         &tag_tid, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler) {
     journaler.shut_down();
   };
@@ -593,9 +518,10 @@ int Journal<I>::promote(I *image_ctx) {
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
   journal::TagData tag_data;
   int r = open_journaler(image_ctx->cct, &journaler, &client, &client_meta,
-                         &tag_data);
+                         &tag_tid, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler) {
     journaler.shut_down();
   };
@@ -604,9 +530,21 @@ int Journal<I>::promote(I *image_ctx) {
     return r;
   }
 
+  journal::TagPredecessor predecessor;
+  if (tag_data.mirror_uuid == ORPHAN_MIRROR_UUID) {
+    // orderly promotion -- demotion epoch will have a single entry
+    // so link to our predecessor (demotion) epoch
+    predecessor = journal::TagPredecessor{
+      ORPHAN_MIRROR_UUID, true, tag_tid, 1};
+  } else {
+    // forced promotion -- create an epoch no peers can link against
+    predecessor = journal::TagPredecessor{
+      LOCAL_MIRROR_UUID, true, tag_tid, 0};
+  }
+
   cls::journal::Tag new_tag;
   r = allocate_journaler_tag(cct, &journaler, client, client_meta.tag_class,
-                             tag_data, LOCAL_MIRROR_UUID, &new_tag);
+                             predecessor, LOCAL_MIRROR_UUID, &new_tag);
   if (r < 0) {
     return r;
   }
@@ -696,6 +634,11 @@ bool Journal<I>::is_tag_owner() const {
 }
 
 template <typename I>
+uint64_t Journal<I>::get_tag_tid() const {
+  return m_tag_tid;
+}
+
+template <typename I>
 journal::TagData Journal<I>::get_tag_data() const {
   return m_tag_data;
 }
@@ -716,9 +659,19 @@ int Journal<I>::demote() {
     return r;
   }
 
+  assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
+  journal::TagPredecessor predecessor;
+  predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
+  if (!client.commit_position.object_positions.empty()) {
+    auto position = client.commit_position.object_positions.front();
+    predecessor.commit_valid = true;
+    predecessor.tag_tid = position.tag_tid;
+    predecessor.entry_tid = position.entry_tid;
+  }
+
   cls::journal::Tag new_tag;
   r = allocate_journaler_tag(cct, m_journaler, client, m_tag_class,
-                             m_tag_data, ORPHAN_MIRROR_UUID, &new_tag);
+                             predecessor, ORPHAN_MIRROR_UUID, &new_tag);
   if (r < 0) {
     return r;
   }
@@ -768,9 +721,8 @@ void Journal<I>::allocate_local_tag(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  bool predecessor_commit_valid = false;
-  uint64_t predecessor_tag_tid = 0;
-  uint64_t predecessor_entry_tid = 0;
+  journal::TagPredecessor predecessor;
+  predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
   {
     Mutex::Locker locker(m_lock);
     assert(m_journaler != nullptr && is_tag_owner());
@@ -789,22 +741,18 @@ void Journal<I>::allocate_local_tag(Context *on_finish) {
     assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
     if (!client.commit_position.object_positions.empty()) {
       auto position = client.commit_position.object_positions.front();
-      predecessor_commit_valid = true;
-      predecessor_tag_tid = position.tag_tid;
-      predecessor_entry_tid = position.entry_tid;
+      predecessor.commit_valid = true;
+      predecessor.tag_tid = position.tag_tid;
+      predecessor.entry_tid = position.entry_tid;
     }
   }
 
-  allocate_tag(LOCAL_MIRROR_UUID, LOCAL_MIRROR_UUID, predecessor_commit_valid,
-               predecessor_tag_tid, predecessor_entry_tid, on_finish);
+  allocate_tag(LOCAL_MIRROR_UUID, predecessor, on_finish);
 }
 
 template <typename I>
 void Journal<I>::allocate_tag(const std::string &mirror_uuid,
-                              const std::string &predecessor_mirror_uuid,
-                              bool predecessor_commit_valid,
-                              uint64_t predecessor_tag_tid,
-                              uint64_t predecessor_entry_tid,
+                              const journal::TagPredecessor &predecessor,
                               Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ":  mirror_uuid=" << mirror_uuid
@@ -815,10 +763,7 @@ void Journal<I>::allocate_tag(const std::string &mirror_uuid,
 
   journal::TagData tag_data;
   tag_data.mirror_uuid = mirror_uuid;
-  tag_data.predecessor_mirror_uuid = predecessor_mirror_uuid;
-  tag_data.predecessor_commit_valid = predecessor_commit_valid;
-  tag_data.predecessor_tag_tid = predecessor_tag_tid;
-  tag_data.predecessor_entry_tid = predecessor_entry_tid;
+  tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
   ::encode(tag_data, tag_bl);
@@ -844,8 +789,6 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                         const bufferlist &bl,
                                         const AioObjectRequests &requests,
                                         bool flush_entry) {
-  assert(m_image_ctx.owner_lock.is_locked());
-
   assert(m_max_append_size > journal::AioWriteEvent::get_fixed_size());
   uint64_t max_write_data_size =
     m_max_append_size - journal::AioWriteEvent::get_fixed_size();
@@ -879,8 +822,6 @@ uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
                                      uint64_t offset, size_t length,
                                      bool flush_entry) {
-  assert(m_image_ctx.owner_lock.is_locked());
-
   bufferlist bl;
   ::encode(event_entry, bl);
   return append_io_events(event_entry.get_event_type(), {bl}, requests, offset,
@@ -893,7 +834,6 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const AioObjectRequests &requests,
                                       uint64_t offset, size_t length,
                                       bool flush_entry) {
-  assert(m_image_ctx.owner_lock.is_locked());
   assert(!bufferlists.empty());
 
   Futures futures;
@@ -1201,6 +1141,11 @@ void Journal<I>::create_journaler() {
   ::journal::Settings settings;
   settings.commit_interval = m_image_ctx.journal_commit_age;
   settings.max_payload_bytes = m_image_ctx.journal_max_payload_bytes;
+  settings.max_concurrent_object_sets =
+    m_image_ctx.journal_max_concurrent_object_sets;
+  // TODO: a configurable filter to exclude certain peers from being
+  // disconnected.
+  settings.whitelisted_laggy_clients = {IMAGE_CLIENT_ID};
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
@@ -1642,7 +1587,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
       (*it)->complete(r);
     } else {
       // send any waiting aio requests now that journal entry is safe
-      RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
       (*it)->send();
     }
   }

@@ -975,7 +975,7 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
-    ldout(cct, 0) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
+    ldout(cct, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
   }
   try {
@@ -1207,6 +1207,11 @@ int RGWPeriod::update()
       ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << " zone realm id " << zg.realm_id << ", not on our realm " << realm_id << dendl;
       continue;
     }
+
+    if (zg.master_zone.empty()) {
+      ldout(cct, 0) << "ERROR: zonegroup " << zg.get_name() << " should have a master zone " << dendl;
+      return -EINVAL;
+    }  
     
     if (zg.is_master_zonegroup()) {
       master_zonegroup = zg.get_id();
@@ -1916,7 +1921,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
 
   bucket = _b;
   manifest->set_tail_bucket(_b);
-  manifest->set_head(_h);
+  manifest->set_head(_h, 0);
   last_ofs = 0;
 
   if (manifest->get_prefix().empty()) {
@@ -1960,14 +1965,14 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
 
   uint64_t max_head_size = manifest->get_max_head_size();
 
-  if (ofs <= max_head_size) {
+  if (ofs < max_head_size) {
     manifest->set_head_size(ofs);
   }
 
   if (ofs >= max_head_size) {
     manifest->set_head_size(max_head_size);
     cur_stripe = (ofs - max_head_size) / rule.stripe_max_size;
-    cur_stripe_size =  rule.stripe_max_size;
+    cur_stripe_size = rule.stripe_max_size;
 
     if (cur_part_id == 0 && max_head_size > 0) {
       cur_stripe++;
@@ -3164,7 +3169,6 @@ void RGWRados::finalize()
     data_notifier->stop();
     delete data_notifier;
   }
-  delete meta_mgr;
   delete data_log;
   if (async_rados) {
     delete async_rados;
@@ -3201,6 +3205,7 @@ void RGWRados::finalize()
   if (cr_registry) {
     cr_registry->put();
   }
+  delete meta_mgr;
   delete binfo_cache;
   delete obj_tombstone_cache;
 }
@@ -3309,6 +3314,15 @@ int RGWRados::convert_regionmap()
 
   current_period.set_user_quota(zonegroupmap.user_quota);
   current_period.set_bucket_quota(zonegroupmap.bucket_quota);
+
+  // remove the region_map so we don't try to convert again
+  rgw_obj obj(pool, oid);
+  ret = delete_system_obj(obj);
+  if (ret < 0) {
+    ldout(cct, 0) << "Error could not remove " << obj
+        << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
 
   return 0;
 }
@@ -3699,7 +3713,7 @@ int RGWRados::init_complete()
       lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
       return -EINVAL;
     }
-    ldout(cct, 0) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
+    ldout(cct, 1) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
     ret = init_zg_from_local(&creating_defaults);
     if (ret < 0) {
       return ret;
@@ -5119,9 +5133,6 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                                   &selected_placement_rule_name, &rule_info);
     if (ret < 0)
       return ret;
-    bufferlist bl;
-    uint32_t nop = 0;
-    ::encode(nop, bl);
 
     if (!pmaster_bucket) {
       uint64_t iid = instance_id();
@@ -5158,7 +5169,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {
-      creation_time = ceph::real_clock::now(cct);
+      info.creation_time = ceph::real_clock::now(cct);
     } else {
       info.creation_time = creation_time;
     }
@@ -7148,8 +7159,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       goto done_ret;
     }
 
-    pmanifest->set_head(dest_obj);
-    pmanifest->set_head_size(first_chunk.length());
+    pmanifest->set_head(dest_obj, first_chunk.length());
+  } else {
+    pmanifest->set_head(dest_obj, 0);
   }
 
   write_op.meta.data = &first_chunk;
@@ -8099,6 +8111,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
     try {
       ::decode(s->manifest, miter);
       s->has_manifest = true;
+      s->manifest.set_head(obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
+                                             broken due to old bugs */
       s->size = s->manifest.get_obj_size();
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
@@ -8599,7 +8613,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     } else {
       int ret = index_op.cancel();
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
+        ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
       }
     }
   }
@@ -9382,7 +9396,7 @@ int RGWRados::flush_read_list(struct get_obj_data *d)
     bufferlist& bl = *iter;
     r = d->client_cb->handle_data(bl, 0, bl.length());
     if (r < 0) {
-      dout(0) << "ERROR: flush_read_list(): d->client_c->handle_data() returned " << r << dendl;
+      dout(0) << "ERROR: flush_read_list(): d->client_cb->handle_data() returned " << r << dendl;
       break;
     }
   }
@@ -10570,8 +10584,8 @@ void RGWRados::get_bucket_instance_obj(const rgw_bucket& bucket, rgw_obj& obj)
 int RGWRados::get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-  int pos = meta_key.find(':');
-  if (pos < 0) {
+  size_t pos = meta_key.find(':');
+  if (pos == string::npos) {
     return -EINVAL;
   }
   string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key;

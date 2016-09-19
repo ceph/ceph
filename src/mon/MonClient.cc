@@ -745,6 +745,14 @@ void MonClient::tick()
 
 void MonClient::schedule_tick()
 {
+  struct C_Tick : public Context {
+    MonClient *monc;
+    explicit C_Tick(MonClient *m) : monc(m) {}
+    void finish(int r) {
+      monc->tick();
+    }
+  };
+
   if (hunting)
     timer.add_event_after(cct->_conf->mon_client_hunt_interval
                           * reopen_interval_multiplier, new C_Tick(this));
@@ -773,7 +781,9 @@ void MonClient::_renew_subs()
     m->what = sub_new;
     _send_mon_message(m);
 
-    sub_sent.insert(sub_new.begin(), sub_new.end());
+    // update sub_sent with sub_new
+    sub_new.insert(sub_sent.begin(), sub_sent.end());
+    std::swap(sub_new, sub_sent);
     sub_new.clear();
   }
 }

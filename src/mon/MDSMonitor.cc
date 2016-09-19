@@ -90,7 +90,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
 {
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
-  fs->mds_map.max_mds = g_conf->max_mds;
+  fs->mds_map.max_mds = 1;
   fs->mds_map.data_pools.insert(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
@@ -480,6 +480,24 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
 }
 
 
+namespace {
+class C_Updated : public Context {
+  MDSMonitor *mm;
+  MonOpRequestRef op;
+public:
+  C_Updated(MDSMonitor *a, MonOpRequestRef c) :
+    mm(a), op(c) {}
+  void finish(int r) {
+    if (r >= 0)
+      mm->_updated(op);   // success
+    else if (r == -ECANCELED) {
+      mm->mon->no_reply(op);
+    } else {
+      mm->dispatch(op);        // try again
+    }
+  }
+};
+}
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 {
@@ -599,8 +617,16 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 	     << "  standby_for_rank=" << m->get_standby_for_rank()
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
-      pending_fsmap.stop(gid);
-      last_beacon.erase(gid);
+      auto erased = pending_fsmap.stop(gid);
+      erased.push_back(gid);
+
+      for (const auto &erased_gid : erased) {
+        last_beacon.erase(erased_gid);
+        if (pending_daemon_health.count(erased_gid)) {
+          pending_daemon_health.erase(erased_gid);
+          pending_daemon_health_rm.insert(erased_gid);
+        }
+      }
     } else if (state == MDSMap::STATE_DAMAGED) {
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DAMAGED from rank " << info.rank
@@ -1727,7 +1753,7 @@ int MDSMonitor::management_command(
     // Carry forward what makes sense
     new_fs->fscid = fs->fscid;
     new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
-    new_fs->mds_map.max_mds = g_conf->max_mds;
+    new_fs->mds_map.max_mds = 1;
     new_fs->mds_map.data_pools = fs->mds_map.data_pools;
     new_fs->mds_map.metadata_pool = fs->mds_map.metadata_pool;
     new_fs->mds_map.cas_pool = fs->mds_map.cas_pool;

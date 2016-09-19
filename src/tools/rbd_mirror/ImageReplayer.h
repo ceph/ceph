@@ -14,6 +14,7 @@
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
@@ -111,7 +112,8 @@ public:
   }
 
   void start(Context *on_finish = nullptr, bool manual = false);
-  void stop(Context *on_finish = nullptr, bool manual = false);
+  void stop(Context *on_finish = nullptr, bool manual = false,
+	    int r = 0, const std::string& desc = "");
   void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
 
@@ -190,7 +192,7 @@ protected:
   virtual void on_start_fail(int r, const std::string &desc = "");
   virtual bool on_start_interrupted();
 
-  virtual void on_stop_journal_replay();
+  virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
   virtual void on_flush_local_replay_flush_start(Context *on_flush);
   virtual void on_flush_local_replay_flush_finish(Context *on_flush, int r);
@@ -198,8 +200,6 @@ protected:
   virtual void on_flush_flush_commit_position_finish(Context *on_flush, int r);
 
   bool on_replay_interrupted();
-
-  void close_local_image(Context *on_finish); // for tests
 
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
@@ -270,6 +270,14 @@ private:
   librbd::journal::TagData m_replay_tag_data;
   librbd::journal::EventEntry m_event_entry;
 
+  struct RemoteJournalerListener : public ::journal::JournalMetadataListener {
+    ImageReplayer *replayer;
+
+    RemoteJournalerListener(ImageReplayer *replayer) : replayer(replayer) { }
+
+    void handle_update(::journal::JournalMetadata *);
+  } m_remote_listener;
+
   struct C_ReplayCommitted : public Context {
     ImageReplayer *replayer;
     ReplayEntry replay_entry;
@@ -295,7 +303,8 @@ private:
     return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
   }
   bool is_replaying_() const {
-    return m_state == STATE_REPLAYING;
+    return (m_state == STATE_REPLAYING ||
+            m_state == STATE_REPLAY_FLUSHING);
   }
 
   bool update_mirror_image_status(bool force, const OptionalState &state);
@@ -306,8 +315,9 @@ private:
   void handle_mirror_status_update(int r);
   void reschedule_update_status_task(int new_interval = 0);
 
-  void shut_down(int r, Context *on_start);
-  void handle_shut_down(int r, Context *on_start);
+  void shut_down(int r);
+  void handle_shut_down(int r);
+  void handle_remote_journal_metadata_updated();
 
   void bootstrap();
   void handle_bootstrap(int r);

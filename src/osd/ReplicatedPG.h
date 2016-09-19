@@ -172,21 +172,6 @@ public:
    * can associate itself with the correct copy operation.
    */
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
-  class CopyCallback : public GenContext<CopyCallbackResults> {
-  protected:
-    CopyCallback() {}
-    /**
-     * results.get<0>() is the return code: 0 for success; -ECANCELLED if
-     * the operation was cancelled by the local OSD; -errno for other issues.
-     * results.get<1>() is a pointer to a CopyResults object, which you are
-     * responsible for deleting.
-     */
-    virtual void finish(CopyCallbackResults results_) = 0;
-
-  public:
-    /// Provide the final size of the copied object to the CopyCallback
-    virtual ~CopyCallback() {}
-  };
 
   friend class CopyFromCallback;
   friend class PromoteCallback;
@@ -275,47 +260,12 @@ public:
   void failed_push(pg_shard_t from, const hobject_t &soid);
   void cancel_pull(const hobject_t &soid);
 
-  template <typename T>
-  class BlessedGenContext : public GenContext<T> {
-    ReplicatedPGRef pg;
-    GenContext<T> *c;
-    epoch_t e;
-  public:
-    BlessedGenContext(ReplicatedPG *pg, GenContext<T> *c, epoch_t e)
-      : pg(pg), c(c), e(e) {}
-    void finish(T t) {
-      pg->lock();
-      if (pg->pg_has_reset_since(e))
-	delete c;
-      else
-	c->complete(t);
-      pg->unlock();
-    }
-  };
-  class BlessedContext : public Context {
-    ReplicatedPGRef pg;
-    Context *c;
-    epoch_t e;
-  public:
-    BlessedContext(ReplicatedPG *pg, Context *c, epoch_t e)
-      : pg(pg), c(c), e(e) {}
-    void finish(int r) {
-      pg->lock();
-      if (pg->pg_has_reset_since(e))
-	delete c;
-      else
-	c->complete(r);
-      pg->unlock();
-    }
-  };
-  Context *bless_context(Context *c) {
-    return new BlessedContext(this, c, get_osdmap()->get_epoch());
-  }
+  template<class T> class BlessedGenContext;
+  class BlessedContext;
+  Context *bless_context(Context *c);
+
   GenContext<ThreadPool::TPHandle&> *bless_gencontext(
-    GenContext<ThreadPool::TPHandle&> *c) {
-    return new BlessedGenContext<ThreadPool::TPHandle&>(
-      this, c, get_osdmap()->get_epoch());
-  }
+    GenContext<ThreadPool::TPHandle&> *c);
     
   void send_message(int to_osd, Message *m) {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
@@ -695,7 +645,7 @@ public:
       if (op && op->get_req()) {
         return op->get_req()->get_connection()->get_features();
       }
-      return -1ll;
+      return -1ull;
     }
   };
   using OpContextUPtr = std::unique_ptr<OpContext>;
@@ -1028,15 +978,7 @@ protected:
 
   void context_registry_on_change();
   void object_context_destructor_callback(ObjectContext *obc);
-  struct C_PG_ObjectContext : public Context {
-    ReplicatedPGRef pg;
-    ObjectContext *obc;
-    C_PG_ObjectContext(ReplicatedPG *p, ObjectContext *o) :
-      pg(p), obc(o) {}
-    void finish(int r) {
-      pg->object_context_destructor_callback(obc);
-    }
-  };
+  class C_PG_ObjectContext;
 
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
@@ -1297,50 +1239,10 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
 
-  struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContextRef obc, obc2, obc3;
-    C_OSD_OndiskWriteUnlock(
-      ObjectContextRef o,
-      ObjectContextRef o2 = ObjectContextRef(),
-      ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
-    void finish(int r) {
-      obc->ondisk_write_unlock();
-      if (obc2)
-	obc2->ondisk_write_unlock();
-      if (obc3)
-	obc3->ondisk_write_unlock();
-    }
-  };
-  struct C_OSD_AppliedRecoveredObject : public Context {
-    ReplicatedPGRef pg;
-    ObjectContextRef obc;
-    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContextRef o) :
-      pg(p), obc(o) {}
-    void finish(int r) {
-      pg->_applied_recovered_object(obc);
-    }
-  };
-  struct C_OSD_CommittedPushedObject : public Context {
-    ReplicatedPGRef pg;
-    epoch_t epoch;
-    eversion_t last_complete;
-    C_OSD_CommittedPushedObject(
-      ReplicatedPG *p, epoch_t epoch, eversion_t lc) :
-      pg(p), epoch(epoch), last_complete(lc) {
-    }
-    void finish(int r) {
-      pg->_committed_pushed_object(epoch, last_complete);
-    }
-  };
-  struct C_OSD_AppliedRecoveredObjectReplica : public Context {
-    ReplicatedPGRef pg;
-    explicit C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
-      pg(p) {}
-    void finish(int r) {
-      pg->_applied_recovered_object_replica();
-    }
-  };
-
+  class C_OSD_OndiskWriteUnlock;
+  class C_OSD_AppliedRecoveredObject;
+  class C_OSD_CommittedPushedObject;
+  class C_OSD_AppliedRecoveredObjectReplica;
   void sub_op_remove(OpRequestRef op);
 
   void _applied_recovered_object(ObjectContextRef obc);

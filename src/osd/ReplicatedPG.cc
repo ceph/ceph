@@ -77,6 +77,103 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
+/**
+ * The CopyCallback class defines an interface for completions to the
+ * copy_start code. Users of the copy infrastructure must implement
+ * one and give an instance of the class to start_copy.
+ *
+ * The implementer is responsible for making sure that the CopyCallback
+ * can associate itself with the correct copy operation.
+ */
+class ReplicatedPG::CopyCallback : public GenContext<CopyCallbackResults> {
+protected:
+  CopyCallback() {}
+  /**
+   * results.get<0>() is the return code: 0 for success; -ECANCELED if
+   * the operation was cancelled by the local OSD; -errno for other issues.
+   * results.get<1>() is a pointer to a CopyResults object, which you are
+   * responsible for deleting.
+   */
+  virtual void finish(CopyCallbackResults results_) = 0;
+
+public:
+  /// Provide the final size of the copied object to the CopyCallback
+  virtual ~CopyCallback() {}
+};
+
+template <typename T>
+class ReplicatedPG::BlessedGenContext : public GenContext<T> {
+  ReplicatedPGRef pg;
+  GenContext<T> *c;
+  epoch_t e;
+public:
+  BlessedGenContext(ReplicatedPG *pg, GenContext<T> *c, epoch_t e)
+    : pg(pg), c(c), e(e) {}
+  void finish(T t) {
+    pg->lock();
+    if (pg->pg_has_reset_since(e))
+      delete c;
+    else
+      c->complete(t);
+    pg->unlock();
+  }
+};
+
+GenContext<ThreadPool::TPHandle&> *ReplicatedPG::bless_gencontext(
+  GenContext<ThreadPool::TPHandle&> *c) {
+  return new BlessedGenContext<ThreadPool::TPHandle&>(
+    this, c, get_osdmap()->get_epoch());
+}
+
+class ReplicatedPG::BlessedContext : public Context {
+  ReplicatedPGRef pg;
+  Context *c;
+  epoch_t e;
+public:
+  BlessedContext(ReplicatedPG *pg, Context *c, epoch_t e)
+    : pg(pg), c(c), e(e) {}
+  void finish(int r) {
+    pg->lock();
+    if (pg->pg_has_reset_since(e))
+      delete c;
+    else
+      c->complete(r);
+    pg->unlock();
+  }
+};
+
+
+Context *ReplicatedPG::bless_context(Context *c) {
+  return new BlessedContext(this, c, get_osdmap()->get_epoch());
+}
+
+class ReplicatedPG::C_PG_ObjectContext : public Context {
+  ReplicatedPGRef pg;
+  ObjectContext *obc;
+  public:
+  C_PG_ObjectContext(ReplicatedPG *p, ObjectContext *o) :
+    pg(p), obc(o) {}
+  void finish(int r) {
+    pg->object_context_destructor_callback(obc);
+  }
+};
+
+class ReplicatedPG::C_OSD_OndiskWriteUnlock : public Context {
+  ObjectContextRef obc, obc2, obc3;
+  public:
+  C_OSD_OndiskWriteUnlock(
+    ObjectContextRef o,
+    ObjectContextRef o2 = ObjectContextRef(),
+    ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
+  void finish(int r) {
+    obc->ondisk_write_unlock();
+    if (obc2)
+      obc2->ondisk_write_unlock();
+    if (obc3)
+      obc3->ondisk_write_unlock();
+  }
+};
+
 struct OnReadComplete : public Context {
   ReplicatedPG *pg;
   ReplicatedPG::OpContext *opcontext;
@@ -89,6 +186,41 @@ struct OnReadComplete : public Context {
     opcontext->finish_read(pg);
   }
   ~OnReadComplete() {}
+};
+
+class ReplicatedPG::C_OSD_AppliedRecoveredObject : public Context {
+  ReplicatedPGRef pg;
+  ObjectContextRef obc;
+  public:
+  C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContextRef o) :
+    pg(p), obc(o) {}
+  void finish(int r) {
+    pg->_applied_recovered_object(obc);
+  }
+};
+
+class ReplicatedPG::C_OSD_CommittedPushedObject : public Context {
+  ReplicatedPGRef pg;
+  epoch_t epoch;
+  eversion_t last_complete;
+  public:
+  C_OSD_CommittedPushedObject(
+    ReplicatedPG *p, epoch_t epoch, eversion_t lc) :
+    pg(p), epoch(epoch), last_complete(lc) {
+  }
+  void finish(int r) {
+    pg->_committed_pushed_object(epoch, last_complete);
+  }
+};
+
+class ReplicatedPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
+  ReplicatedPGRef pg;
+  public:
+  explicit C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
+    pg(p) {}
+  void finish(int r) {
+    pg->_applied_recovered_object_replica();
+  }
 };
 
 // OpContext
@@ -2139,13 +2271,12 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   execute_ctx(ctx);
   utime_t prepare_latency = ceph_clock_now(cct);
   prepare_latency -= op->get_dequeued_time();
+  osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
   if (op->may_read() && op->may_write()) {
-    osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
     osd->logger->tinc(l_osd_op_rw_prepare_lat, prepare_latency);
-  } else if (!ctx->pending_async_reads.empty() && op->may_read()) {
+  } else if (op->may_read()) {
     osd->logger->tinc(l_osd_op_r_prepare_lat, prepare_latency);
   } else if (op->may_write() || op->may_cache()) {
-    osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
     osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
   }
 }

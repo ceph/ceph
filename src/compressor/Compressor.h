@@ -22,8 +22,9 @@ class Compressor;
 typedef shared_ptr<Compressor> CompressorRef;
 
 class Compressor {
+protected:
   string type;
- public:
+public:
   Compressor(string t) : type(t) {}
   virtual ~Compressor() {}
   const string& get_type() const {

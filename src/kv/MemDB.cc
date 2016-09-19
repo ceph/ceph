@@ -231,7 +231,7 @@ void MemDB::MDBTransactionImpl::rmkey(const string &prefix,
   dtrace << __func__ << " " << prefix << " " << k << dendl;
   ops.push_back(make_pair(DELETE,
                           std::make_pair(std::make_pair(prefix, k),
-                          NULL)));
+                          bufferlist())));
 }
 
 void MemDB::MDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
@@ -270,7 +270,7 @@ int MemDB::_setkey(ms_op_t &op)
   }
 
   m_btree[key] = bufferptr((char *) bl.c_str(), bl.length());
-
+  iterator_seq_no++;
   return 0;
 }
 
@@ -284,6 +284,7 @@ int MemDB::_rmkey(ms_op_t &op)
     assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
   }
+  iterator_seq_no++;
   /*
    * Erase will call the destructor for bufferptr.
    */
@@ -341,6 +342,7 @@ int MemDB::_merge(ms_op_t &op)
 
   assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
   m_total_bytes += bytes_adjusted;
+  iterator_seq_no++;
   return 0;
 }
 
@@ -403,6 +405,18 @@ bool MemDB::MDBWholeSpaceIteratorImpl::valid()
   return true;
 }
 
+bool MemDB::MDBWholeSpaceIteratorImpl::iterator_validate() {
+  if (this_seq_no != *global_seq_no) {
+    auto key = m_key_value.first;
+    assert(!key.empty());
+    m_iter = m_btree_p->lower_bound(key);
+    if (m_iter == m_btree_p->end()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void
 MemDB::MDBWholeSpaceIteratorImpl::free_last()
 {
@@ -442,6 +456,10 @@ bufferlist MemDB::MDBWholeSpaceIteratorImpl::value()
 int MemDB::MDBWholeSpaceIteratorImpl::next()
 {
   std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  if (!iterator_validate()) {
+    free_last();
+    return -1;
+  }
   free_last();
   m_iter++;
   if (m_iter != m_btree_p->end()) {
@@ -455,9 +473,13 @@ int MemDB::MDBWholeSpaceIteratorImpl::next()
 int MemDB::MDBWholeSpaceIteratorImpl:: prev()
 {
   std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  if (!iterator_validate()) {
+    free_last();
+    return -1;
+  }
   free_last();
-  m_iter--;
-  if (m_iter != m_btree_p->end()) {
+  if (m_iter != m_btree_p->begin()) {
+    m_iter--;
     fill_current();
     return 0;
   } else {
@@ -477,17 +499,17 @@ int MemDB::MDBWholeSpaceIteratorImpl::seek_to_first(const std::string &k)
   } else {
     m_iter = m_btree_p->lower_bound(k);
   }
-
+  
   if (m_iter == m_btree_p->end()) {
     return -1;
   }
+  fill_current();
   return 0;
 }
 
 int MemDB::MDBWholeSpaceIteratorImpl::seek_to_last(const std::string &k)
 {
   std::lock_guard<std::mutex> l(*m_btree_lock_p);
-
   free_last();
   if (k.empty()) {
     m_iter = m_btree_p->end();
@@ -499,6 +521,7 @@ int MemDB::MDBWholeSpaceIteratorImpl::seek_to_last(const std::string &k)
   if (m_iter == m_btree_p->end()) {
     return -1;
   }
+  fill_current();
   return 0;
 }
 

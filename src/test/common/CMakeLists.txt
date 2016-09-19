@@ -12,12 +12,14 @@ target_link_libraries(get_command_descriptions
   ${CMAKE_DL_LIBS}
   )
 
+if(HAVE_BLKID)
 # unittest_blkdev
 add_executable(unittest_blkdev
   test_blkdev.cc
   )
 add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
 target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
+endif(HAVE_BLKID)
 
 # unittest_bloom_filter
 add_executable(unittest_bloom_filter
@@ -189,3 +191,12 @@ add_executable(unittest_shunique_lock
   )
 add_ceph_unittest(unittest_shunique_lock ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
+# unittest_global_doublefree
+if(WITH_CEPHFS)
+  add_executable(unittest_global_doublefree
+    test_global_doublefree.cc
+    )
+  add_ceph_unittest(unittest_global_doublefree ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_global_doublefree)
+  target_link_libraries(unittest_global_doublefree cephfs librados)
+endif(WITH_CEPHFS)

@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
+| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster-name*]
   [ -p | --pool *pool* ] [--size *size* ] [ --object-size *B/K/M* ] [ *command* ... ] 
 
 
@@ -35,7 +35,7 @@ Options
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
-.. option:: --cluster cluster name
+.. option:: --cluster cluster-name
 
    Use different cluster name as compared to default cluster name *ceph*.
 
@@ -54,7 +54,7 @@ Parameters
 
 .. option:: --image-format format-id
 
-   Specifies which object layout to use. The default is 1.
+   Specifies which object layout to use. The default is 2.
 
    * format 1 - (deprecated) Use the original format for a new rbd image. This
      format is understood by all versions of librbd and the kernel rbd module,
@@ -510,9 +510,9 @@ To map an image via the kernel with cephx enabled::
 
        rbd map mypool/myimage --id admin --keyfile secretfile
 
-To map an image via the kernel with different cluster name other than default *ceph*.
+To map an image via the kernel with different cluster name other than default *ceph*::
 
-       rbd map mypool/myimage --cluster *cluster name*
+       rbd map mypool/myimage --cluster cluster-name
 
 To unmap an image::
 

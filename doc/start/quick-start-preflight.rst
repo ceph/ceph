@@ -24,8 +24,8 @@ Ceph Deploy Setup
 Add Ceph repositories to the ``ceph-deploy`` admin node. Then, install
 ``ceph-deploy``.
 
-Advanced Package Tool (APT)
----------------------------
+Debian/Ubuntu
+-------------
 
 For Debian and Ubuntu distributions, perform the following steps:
 
@@ -37,7 +37,7 @@ For Debian and Ubuntu distributions, perform the following steps:
    with a stable Ceph release (e.g., ``hammer``, ``jewel``, etc.)
    For example::
 
-	echo deb http://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 #. Update your repository and install ``ceph-deploy``::
 
@@ -47,12 +47,12 @@ For Debian and Ubuntu distributions, perform the following steps:
    Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
 
 
-Red Hat Package Manager (RPM)
------------------------------
+RHEL/CentOS
+-----------
 
 For CentOS 7, perform the following steps:
 
-#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repoistory for package dependencies. For example::
+#. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repository for package dependencies. For example::
 
         sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
 
@@ -77,7 +77,7 @@ For CentOS 7, perform the following steps:
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -91,6 +91,29 @@ For CentOS 7, perform the following steps:
 
 .. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
    Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
+
+
+openSUSE
+--------
+
+The Ceph project does not currently publish release RPMs for openSUSE, but 
+a stable version of Ceph is included in the default update repository, so
+installing it is just a matter of::
+
+	sudo zypper install ceph
+	sudo zypper install ceph-deploy
+
+If the distro version is out-of-date, open a bug at
+https://bugzilla.opensuse.org/index.cgi and possibly try your luck with one of
+the following repositories:
+
+#. Hammer::
+
+        https://software.opensuse.org/download.html?project=filesystems%3Aceph%3Ahammer&package=ceph
+
+#. Jewel::
+
+        https://software.opensuse.org/download.html?project=filesystems%3Aceph%3Ajewel&package=ceph
 
 
 Ceph Node Setup

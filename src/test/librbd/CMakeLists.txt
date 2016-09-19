@@ -30,8 +30,10 @@ set(unittest_librbd_srcs
   test_mock_Journal.cc
   test_mock_ObjectWatcher.cc
   exclusive_lock/test_mock_AcquireRequest.cc
+  exclusive_lock/test_mock_ReacquireRequest.cc
   exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
+  image_watcher/test_mock_RewatchRequest.cc
   journal/test_mock_Replay.cc
   object_map/test_mock_InvalidateRequest.cc
   object_map/test_mock_LockRequest.cc
@@ -53,9 +55,7 @@ set(unittest_librbd_srcs
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
 set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -70,7 +70,6 @@ target_link_libraries(unittest_librbd
   cls_journal_client
   rados_test_stub
   librados
-  librados_api
   rbd_test
   rbd_test_mock
   rbd_api
@@ -79,18 +78,14 @@ target_link_libraries(unittest_librbd
   osdc
   global
   ${UNITTEST_LIBS}
-  radostest
-  keyutils
-  )
+  radostest)
 
 add_executable(ceph_test_librbd
   test_main.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:librados_api_obj>
   $<TARGET_OBJECTS:librados_objs>
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd
   rbd_test
   rbd_api
@@ -103,9 +98,7 @@ target_link_libraries(ceph_test_librbd
   osdc
   global
   ${UNITTEST_LIBS}
-  radostest
-  keyutils
-  )
+  radostest)
 set_target_properties(ceph_test_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
@@ -113,17 +106,13 @@ add_executable(ceph_test_librbd_api
   test_support.cc
   test_librbd.cc
   test_main.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd_api
   librbd
   librados
   common
   radostest
-  ${UNITTEST_LIBS}
-  keyutils
-  )
+  ${UNITTEST_LIBS})
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 

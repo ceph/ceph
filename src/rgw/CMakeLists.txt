@@ -1,3 +1,4 @@
+if(WITH_TESTS)
 add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
 target_link_libraries(ceph_rgw_jsonparser
@@ -14,6 +15,7 @@ install(TARGETS
   ceph_rgw_jsonparser
   ceph_rgw_multiparser
   DESTINATION bin)
+endif(WITH_TESTS)
 
 
 set(rgw_a_srcs
@@ -109,7 +111,7 @@ target_link_libraries(radosgw rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
-  global fcgi resolv
+  global fcgi ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 # radosgw depends on cls libraries at runtime, but not as link dependencies
@@ -126,7 +128,7 @@ target_link_libraries(radosgw-admin rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
-  global fcgi resolv
+  global fcgi ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
@@ -144,7 +146,7 @@ target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
   cls_version_client cls_replica_log_client cls_user_client
-  global fcgi resolv
+  global fcgi ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
@@ -165,9 +167,9 @@ target_link_libraries(rgw LINK_PRIVATE
   cls_replica_log_client
   cls_user_client
   global
-  resolv
+  ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES})
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
-  SOVERSION 1)
+  SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})

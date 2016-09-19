@@ -102,6 +102,7 @@ struct MockJournaler {
                                           Context*));
 
   MOCK_METHOD2(register_client, void(const bufferlist &, Context *));
+  MOCK_METHOD1(unregister_client, void(Context *));
   MOCK_METHOD3(get_client, void(const std::string &, cls::journal::Client *,
                                 Context *));
   MOCK_METHOD2(get_cached_client, int(const std::string&, cls::journal::Client*));
@@ -147,20 +148,17 @@ struct MockJournalerProxy {
     MockJournaler::get_instance().construct();
   }
 
-  int exists(bool *header_exists) const {
-    return -EINVAL;
+  void exists(Context *on_finish) const {
+    on_finish->complete(-EINVAL);
   }
-  int create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
-    return -EINVAL;
+  void create(uint8_t order, uint8_t splay_width, int64_t pool_id, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
-  int remove(bool force) {
-    return -EINVAL;
+  void remove(bool force, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
   int register_client(const bufferlist &data) {
     return -EINVAL;
-  }
-  void unregister_client(Context *ctx) {
-    ctx->complete(-EINVAL);
   }
 
   void allocate_tag(uint64_t, const bufferlist &,
@@ -194,6 +192,10 @@ struct MockJournalerProxy {
 
   void register_client(const bufferlist &data, Context *on_finish) {
     MockJournaler::get_instance().register_client(data, on_finish);
+  }
+
+  void unregister_client(Context *on_finish) {
+    MockJournaler::get_instance().unregister_client(on_finish);
   }
 
   void get_client(const std::string &client_id, cls::journal::Client *client,

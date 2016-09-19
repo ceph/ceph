@@ -9,7 +9,7 @@ This point release fixes several important bugs in RBD mirroring, RGW multi-site
 
 We recommend that all v10.2.x users upgrade.
 
-For more detailed information, see :download:`the complete changelog <changelog/v10.2.1.txt>`.
+For more detailed information, see :download:`the complete changelog <changelog/v10.2.2.txt>`.
 
 Notable Changes
 ---------------
@@ -5321,6 +5321,90 @@ Notable Changes
 * rgw: update to latest civetweb, enable config for IPv6 (#10965 Yehuda Sadeh)
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
+
+v0.94.9 Hammer
+==============
+
+This Hammer point release fixes a build issue present in 0.94.8 that prevented us
+from generating packages for Ubuntu Precise and CentOS 6.x.
+
+We recommend all users of v0.94.7 or older upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.9.txt>`.
+
+Notable Changes
+---------------
+
+* build/ops: revert: boost uuid makes valgrind complain (`pr#10913 <http://github.com/ceph/ceph/pull/10913>`_, Sage Weil)
+
+
+v0.94.8 Hammer
+==============
+
+This Hammer point release fixes several bugs.
+
+We recommend that all hammer v0.94.x users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.8.txt>`.
+
+Notable Changes
+---------------
+
+* build/ops: rocksdb do not link against tcmalloc if it's disabled (`issue#14799 <http://tracker.ceph.com/issues/14799`_, `pr#10750 <http://github.com/ceph/ceph/pull/10750>`_, Sage Weil, Kefu Chai)
+* build/ops: Add -D_LARGEFILE64_SOURCE to Linux build. (`issue#16611 <http://tracker.ceph.com/issues/16611>`_, `pr#10182 <http://github.com/ceph/ceph/pull/10182>`_, Ira Cooper)
+* build/ops: boost uuid makes valgrind complain (`issue#12736 <http://tracker.ceph.com/issues/12736>`_, `pr#9741 <http://github.com/ceph/ceph/pull/9741>`_, Sage Weil, Rohan Mars)
+* build/ops: ceph-disk s/by-parttype-uuid/by-parttypeuuid/ (`issue#15867 <http://tracker.ceph.com/issues/15867>`_, `pr#9107 <http://github.com/ceph/ceph/pull/9107>`_, Nathan Cutler)
+* common: add units to rados bench output and clean up formatting (`issue#12248 <http://tracker.ceph.com/issues/12248>`_, `pr#8960 <http://github.com/ceph/ceph/pull/8960>`_, Dmitry Yatsushkevich, Brad Hubbard, Gu Zhongyan)
+* common: config set with negative value results in "error setting 'filestore_merge_threshold' to '-40': (22) Invalid argument" (`issue#13829 <http://tracker.ceph.com/issues/13829>`_, `pr#10291 <http://github.com/ceph/ceph/pull/10291>`_, Brad Hubbard, Kefu Chai)
+* common: linking to -lrbd causes process startup times to balloon (`issue#15225 <http://tracker.ceph.com/issues/15225>`_, `pr#8538 <http://github.com/ceph/ceph/pull/8538>`_, Richard W.M. Jones)
+* doc: fix by-parttypeuuid in ceph-disk(8) nroff (`issue#15867 <http://tracker.ceph.com/issues/15867>`_, `pr#10699 <http://github.com/ceph/ceph/pull/10699>`_, Ken Dreyer)
+* fs: double decreased the count to trim caps which will cause failing to respond to cache pressure (`issue#14319 <http://tracker.ceph.com/issues/14319>`_, `pr#8804 <http://github.com/ceph/ceph/pull/8804>`_, Zhi Zhang)
+* log: do not repeat errors to stderr (`issue#14616 <http://tracker.ceph.com/issues/14616>`_, `pr#10227 <http://github.com/ceph/ceph/pull/10227>`_, Sage Weil)
+* mds: failing file operations on kernel based cephfs mount point leaves unaccessible file behind on hammer 0.94.7 (`issue#16013 <http://tracker.ceph.com/issues/16013>`_, `pr#10198 <http://github.com/ceph/ceph/pull/10198>`_, Yan, Zheng)
+* mds: fix stray purging in 'stripe_count > 1' case (`issue#15050 <http://tracker.ceph.com/issues/15050>`_, `pr#8042 <http://github.com/ceph/ceph/pull/8042>`_, Yan, Zheng)
+* mds: wrongly treat symlink inode as normal file/dir when symlink inode is stale on kcephfs (`issue#15702 <http://tracker.ceph.com/issues/15702>`_, `pr#9404 <http://github.com/ceph/ceph/pull/9404>`_, Zhi Zhang)
+* mon: LibRadosMiscConnectFailure.ConnectFailure (not so intermittent) failure in upgrade/hammer-x  (`issue#13992 <http://tracker.ceph.com/issues/13992>`_, `pr#8806 <http://github.com/ceph/ceph/pull/8806>`_, Sage Weil)
+* mon: Monitor: validate prefix on handle_command() (`issue#16297 <http://tracker.ceph.com/issues/16297>`_, `pr#10038 <http://github.com/ceph/ceph/pull/10038>`_, You Ji)
+* mon: drop pg temps from not the current primary in OSDMonitor (`issue#16127 <http://tracker.ceph.com/issues/16127>`_, `pr#9893 <http://github.com/ceph/ceph/pull/9893>`_, Samuel Just)
+* mon: fix calculation of %USED (`issue#15641 <http://tracker.ceph.com/issues/15641>`_, `pr#9125 <http://github.com/ceph/ceph/pull/9125>`_, Ruifeng Yang, David Zafman)
+* mon: improve reweight_by_utilization() logic (`issue#15686 <http://tracker.ceph.com/issues/15686>`_, `pr#9416 <http://github.com/ceph/ceph/pull/9416>`_, xie xingguo)
+* mon: pool quota alarm is not in effect  (`issue#15478 <http://tracker.ceph.com/issues/15478>`_, `pr#8593 <http://github.com/ceph/ceph/pull/8593>`_, Danny Al-Gaaf)
+* mon: wrong ceph get mdsmap assertion (`issue#14681 <http://tracker.ceph.com/issues/14681>`_, `pr#7542 <http://github.com/ceph/ceph/pull/7542>`_, Vicente Cheng)
+* msgr: ceph-osd valgrind invalid reads/writes (`issue#15870 <http://tracker.ceph.com/issues/15870>`_, `pr#9238 <http://github.com/ceph/ceph/pull/9238>`_, Samuel Just)
+* objecter: LibRadosWatchNotifyPPTests/LibRadosWatchNotifyPP.WatchNotify2Timeout/1 segv (`issue#15760 <http://tracker.ceph.com/issues/15760>`_, `pr#9400 <http://github.com/ceph/ceph/pull/9400>`_, Sage Weil)
+* osd: OSD reporting ENOTEMPTY and crashing (`issue#14766 <http://tracker.ceph.com/issues/14766>`_, `pr#9277 <http://github.com/ceph/ceph/pull/9277>`_, Samuel Just)
+* osd: When generating past intervals due to an import end at pg epoch and fix build_past_intervals_parallel (`issue#12387 <http://tracker.ceph.com/issues/12387>`_, `issue#14438 <http://tracker.ceph.com/issues/14438>`_, `pr#8464 <http://github.com/ceph/ceph/pull/8464>`_, David Zafman)
+* osd: acting_primary not updated on split (`issue#15523 <http://tracker.ceph.com/issues/15523>`_, `pr#9001 <http://github.com/ceph/ceph/pull/9001>`_, Sage Weil)
+* osd: assert(!actingbackfill.empty()): old watch timeout tries to queue repop on replica (`issue#15391 <http://tracker.ceph.com/issues/15391>`_, `pr#8665 <http://github.com/ceph/ceph/pull/8665>`_, Sage Weil)
+* osd: assert(rollback_info_trimmed_to == head) in PGLog (`issue#13965 <http://tracker.ceph.com/issues/13965>`_, `pr#8849 <http://github.com/ceph/ceph/pull/8849>`_, Samuel Just)
+* osd: delete one of the repeated op->mark_started in ReplicatedBackend::sub_op_modify_impl (`issue#16572 <http://tracker.ceph.com/issues/16572>`_, `pr#9977 <http://github.com/ceph/ceph/pull/9977>`_, shun-s)
+* osd: fix omap digest compare when scrub (`issue#16000 <http://tracker.ceph.com/issues/16000>`_, `pr#9271 <http://github.com/ceph/ceph/pull/9271>`_, Xinze Chi)
+* osd: is_split crash in handle_pg_create (`issue#15426 <http://tracker.ceph.com/issues/15426>`_, `pr#8805 <http://github.com/ceph/ceph/pull/8805>`_, Kefu Chai)
+* osd: objects unfound after repair (fixed by repeering the pg) (`issue#15006 <http://tracker.ceph.com/issues/15006>`_, `pr#7961 <http://github.com/ceph/ceph/pull/7961>`_, Jianpeng Ma, Loic Dachary, Kefu Chai)
+* osd: rados cppool omap to ec pool crashes osd (`issue#14695 <http://tracker.ceph.com/issues/14695>`_, `pr#8845 <http://github.com/ceph/ceph/pull/8845>`_, Jianpeng Ma)
+* osd: remove all stale osdmaps in handle_osd_map() (`issue#13990 <http://tracker.ceph.com/issues/13990>`_, `pr#9090 <http://github.com/ceph/ceph/pull/9090>`_, Kefu Chai)
+* osd: send write and read sub ops on behalf of client ops at normal priority in ECBackend (`issue#14313 <http://tracker.ceph.com/issues/14313>`_, `pr#8573 <http://github.com/ceph/ceph/pull/8573>`_, Samuel Just)
+* rbd: snap rollback: restore the link to parent (`issue#14512 <http://tracker.ceph.com/issues/14512>`_, `pr#8535 <http://github.com/ceph/ceph/pull/8535>`_, Alexey Sheplyakov)
+* rgw: S3: set EncodingType in ListBucketResult (`issue#15896 <http://tracker.ceph.com/issues/15896>`_, `pr#8987 <http://github.com/ceph/ceph/pull/8987>`_, Victor Makarov, Robin H. Johnson)
+* rgw: backport rgwx-copy-if-newer for radosgw-agent (`issue#16262 <http://tracker.ceph.com/issues/16262>`_, `pr#9671 <http://github.com/ceph/ceph/pull/9671>`_, Yehuda Sadeh)
+* rgw: bucket listing following object delete is partial (`issue#14826 <http://tracker.ceph.com/issues/14826>`_, `pr#10555 <http://github.com/ceph/ceph/pull/10555>`_, Orit Wasserman)
+* rgw: convert plain object to versioned (with null version) when removing (`issue#15243 <http://tracker.ceph.com/issues/15243>`_, `pr#8755 <http://github.com/ceph/ceph/pull/8755>`_, Yehuda Sadeh)
+* rgw: fix multi-delete query param parsing. (`issue#16618 <http://tracker.ceph.com/issues/16618>`_, `pr#10189 <http://github.com/ceph/ceph/pull/10189>`_, Robin H. Johnson)
+* rgw: have a flavor of bucket deletion to bypass GC and to trigger (`issue#15557 <http://tracker.ceph.com/issues/15557>`_, `pr#10509 <http://github.com/ceph/ceph/pull/10509>`_, Pavan Rallabhandi)
+* rgw: keep track of written_objs correctly (`issue#15886 <http://tracker.ceph.com/issues/15886>`_, `pr#9240 <http://github.com/ceph/ceph/pull/9240>`_, Yehuda Sadeh)
+* rgw: multipart ListPartsResult has missing quotes on ETag (`issue#15334 <http://tracker.ceph.com/issues/15334>`_, `pr#8475 <http://github.com/ceph/ceph/pull/8475>`_, xie xingguo, Robin H. Johnson)
+* rgw: no Last-Modified, Content-Size and X-Object-Manifest headers if no segments in DLO manifest (`issue#15812 <http://tracker.ceph.com/issues/15812>`_, `pr#9402 <http://github.com/ceph/ceph/pull/9402>`_, Radoslaw Zarzynski)
+* rgw: radosgw server abort when user passed bad parameters to set quota (`issue#14190 <http://tracker.ceph.com/issues/14190>`_, `issue#14191 <http://tracker.ceph.com/issues/14191>`_, `pr#8313 <http://github.com/ceph/ceph/pull/8313>`_, Dunrong Huang)
+* rgw: radosgw-admin region-map set is not reporting the bucket quota correctly (`issue#16815 <http://tracker.ceph.com/issues/16815>`_, `pr#10554 <http://github.com/ceph/ceph/pull/10554>`_, Yehuda Sadeh, Orit Wasserman)
+* rgw: refrain from sending Content-Type/Content-Length for 304 responses (`issue#16327 <http://tracker.ceph.com/issues/16327>`_, `issue#13582 <http://tracker.ceph.com/issues/13582>`_, `issue#15119 <http://tracker.ceph.com/issues/15119>`_, `issue#14005 <http://tracker.ceph.com/issues/14005>`_, `pr#8379 <http://github.com/ceph/ceph/pull/8379>`_, Yehuda Sadeh, Nathan Cutler, Wido den Hollander)
+* rgw: remove bucket index objects when deleting the bucket (`issue#16412 <http://tracker.ceph.com/issues/16412>`_, `pr#10530 <http://github.com/ceph/ceph/pull/10530>`_, Orit Wasserman)
+* rgw: set Access-Control-Allow-Origin to an asterisk if allowed in a rule (`issue#15348 <http://tracker.ceph.com/issues/15348>`_, `pr#8528 <http://github.com/ceph/ceph/pull/8528>`_, Wido den Hollander)
+* rgw: subset of uploaded objects via radosgw are unretrievable when using EC pool (`issue#15745 <http://tracker.ceph.com/issues/15745>`_, `pr#9407 <http://github.com/ceph/ceph/pull/9407>`_, Yehuda Sadeh)
+* rgw: subuser rm fails with status 125 (`issue#14375 <http://tracker.ceph.com/issues/14375>`_, `pr#9961 <http://github.com/ceph/ceph/pull/9961>`_, Orit Wasserman)
+* rgw: the swift key remains after removing a subuser (`issue#12890 <http://tracker.ceph.com/issues/12890>`_, `issue#14375 <http://tracker.ceph.com/issues/14375>`_, `pr#10718 <http://github.com/ceph/ceph/pull/10718>`_, Orit Wasserman, Sangdi Xu)
+* rgw: user quota may not adjust on bucket removal (`issue#14507 <http://tracker.ceph.com/issues/14507>`_, `pr#8113 <http://github.com/ceph/ceph/pull/8113>`_, Edward Yang)
+* tests: be more generous with test timeout (`issue#15403 <http://tracker.ceph.com/issues/15403>`_, `pr#8470 <http://github.com/ceph/ceph/pull/8470>`_, Loic Dachary)
+* tests: qa/workunits/rbd: respect RBD_CREATE_ARGS environment variable (`issue#16289 <http://tracker.ceph.com/issues/16289>`_, `pr#9722 <http://github.com/ceph/ceph/pull/9722>`_, Mykola Golub)
 
 v0.94.7 Hammer
 ==============

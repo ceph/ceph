@@ -179,10 +179,11 @@ public:
    */
   struct Sequencer {
     string name;
+    spg_t shard_hint;
     Sequencer_implRef p;
 
     explicit Sequencer(string n)
-      : name(n), p(NULL) {}
+      : name(n), shard_hint(spg_t()), p(NULL) {}
     ~Sequencer() {
     }
 
@@ -986,6 +987,9 @@ public:
         string s;
         ::decode(s, data_bl_p);
         return s;
+      }
+      void decode_bp(bufferptr& bp) {
+        ::decode(bp, data_bl_p);
       }
       void decode_bl(bufferlist& bl) {
         ::decode(bl, data_bl_p);
@@ -2159,9 +2163,10 @@ public:
    * is a collection empty?
    *
    * @param c collection
-   * @returns true if empty, false otherwise
+   * @param empty true if the specified collection is empty, false otherwise
+   * @returns 0 on success, negative error code on failure.
    */
-  virtual bool collection_empty(const coll_t& c) = 0;
+  virtual int collection_empty(const coll_t& c, bool *empty) = 0;
 
   /**
    * return the number of significant bits of the coll_t::pgid.

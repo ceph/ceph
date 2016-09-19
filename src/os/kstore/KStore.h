@@ -459,7 +459,7 @@ public:
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
   using ObjectStore::collection_list;
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,

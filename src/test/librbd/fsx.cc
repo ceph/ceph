@@ -725,8 +725,7 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 
 	uint64_t features = RBD_FEATURES_ALL;
 	if (krbd) {
-		features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK |
-		              RBD_FEATURE_OBJECT_MAP     |
+		features &= ~(RBD_FEATURE_OBJECT_MAP     |
                               RBD_FEATURE_FAST_DIFF      |
                               RBD_FEATURE_DEEP_FLATTEN   |
                               RBD_FEATURE_JOURNALING);
@@ -1586,8 +1585,9 @@ doread(unsigned offset, unsigned size)
 		((progressinterval && testcalls % progressinterval == 0)  ||
 		(debug &&
 		       (monitorstart == -1 ||
-			(offset + size > monitorstart &&
-			(monitorend == -1 || offset <= monitorend))))))
+			(static_cast<long>(offset + size) > monitorstart &&
+			 (monitorend == -1 ||
+			  static_cast<long>(offset) <= monitorend))))))
 		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
@@ -1686,8 +1686,9 @@ dowrite(unsigned offset, unsigned size)
 		((progressinterval && testcalls % progressinterval == 0) ||
 		       (debug &&
 		       (monitorstart == -1 ||
-			(offset + size > monitorstart &&
-			 (monitorend == -1 || (long)offset <= monitorend))))))
+			(static_cast<long>(offset + size) > monitorstart &&
+			 (monitorend == -1 ||
+			  static_cast<long>(offset) <= monitorend))))))
 		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 

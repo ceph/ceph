@@ -21,30 +21,35 @@ set(libos_srcs
   filestore/WBThrottle.cc
   filestore/ZFSFileStoreBackend.cc
   memstore/MemStore.cc
+  kstore/kv.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
-  bluestore/kv.cc
-  bluestore/Allocator.cc
-  bluestore/BitmapFreelistManager.cc
-  bluestore/BlockDevice.cc
-  bluestore/BlueFS.cc
-  bluestore/bluefs_types.cc
-  bluestore/BlueRocksEnv.cc
-  bluestore/BlueStore.cc
-  bluestore/bluestore_types.cc
-  bluestore/ExtentFreelistManager.cc
-  bluestore/FreelistManager.cc
-  bluestore/KernelDevice.cc
-  bluestore/StupidAllocator.cc
-  bluestore/BitMapAllocator.cc
-  bluestore/BitAllocator.cc
   fs/FS.cc
   ${libos_xfs_srcs})
+
+if(HAVE_LIBAIO)
+  list(APPEND libos_srcs
+    bluestore/Allocator.cc
+    bluestore/BitmapFreelistManager.cc
+    bluestore/BlockDevice.cc
+    bluestore/BlueFS.cc
+    bluestore/bluefs_types.cc
+    bluestore/BlueRocksEnv.cc
+    bluestore/BlueStore.cc
+    bluestore/bluestore_types.cc
+    bluestore/ExtentFreelistManager.cc
+    bluestore/FreelistManager.cc
+    bluestore/KernelDevice.cc
+    bluestore/StupidAllocator.cc
+    bluestore/BitMapAllocator.cc
+    bluestore/BitAllocator.cc
+  )
+endif(HAVE_LIBAIO)
 
 if(WITH_FUSE)
   list(APPEND libos_srcs
     FuseStore.cc)
-endif()
+endif(WITH_FUSE)
 
 if(WITH_SPDK)
   list(APPEND libos_srcs
@@ -55,9 +60,9 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})
-endif()
+endif(HAVE_LIBAIO)
 
-if(HAVE_LIBFUSE)
+if(WITH_FUSE)
   target_link_libraries(os ${FUSE_LIBRARIES})
 endif()
 
@@ -73,7 +78,7 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 if(WITH_LTTNG)
-  add_dependencies(os os-tp)
+  add_dependencies(os objectstore-tp)
 endif()
 
 target_link_libraries(os kv)

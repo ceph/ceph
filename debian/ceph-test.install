@@ -1,3 +1,4 @@
+usr/bin/ceph-client-debug
 usr/bin/ceph-coverage
 usr/bin/ceph_bench_log
 usr/bin/ceph_kvstorebench

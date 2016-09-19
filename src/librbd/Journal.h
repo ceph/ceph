@@ -94,9 +94,8 @@ public:
 
   static bool is_journal_supported(ImageCtxT &image_ctx);
   static int create(librados::IoCtx &io_ctx, const std::string &image_id,
-		    uint8_t order, uint8_t splay_width,
-		    const std::string &object_pool, bool non_primary,
-                    const std::string &primary_mirror_uuid);
+                    uint8_t order, uint8_t splay_width,
+                    const std::string &object_pool);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
@@ -119,14 +118,14 @@ public:
   void close(Context *on_finish);
 
   bool is_tag_owner() const;
+  uint64_t get_tag_tid() const;
   journal::TagData get_tag_data() const;
   int demote();
 
   void allocate_local_tag(Context *on_finish);
   void allocate_tag(const std::string &mirror_uuid,
-                    const std::string &predecessor_mirror_uuid,
-                    bool predecessor_commit_valid, uint64_t predecessor_tag_tid,
-                    uint64_t predecessor_entry_tid, Context *on_finish);
+                    const journal::TagPredecessor &predecessor,
+                    Context *on_finish);
 
   void flush_commit_position(Context *on_finish);
 

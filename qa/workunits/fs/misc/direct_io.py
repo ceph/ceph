@@ -1,9 +1,10 @@
 #!/usr/bin/python
 
-import os
-import mmap
-import subprocess
 import json
+import mmap
+import os
+import subprocess
+
 
 def get_data_pool():
     cmd = ['ceph', 'fs', 'ls', '--format=json-pretty']
@@ -11,19 +12,20 @@ def get_data_pool():
     out = proc.communicate()[0]
     return json.loads(out)[0]['data_pools'][0]
 
+
 def main():
-    fd = os.open("testfile", os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_DIRECT, 0644)
+    fd = os.open("testfile", os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_DIRECT, 0o644)
 
     ino = os.fstat(fd).st_ino
     obj_name = "{ino:x}.00000000".format(ino=ino)
     pool_name = get_data_pool()
 
-    buf = mmap.mmap(-1, 1);
-    buf.write('1');
-    os.write(fd, buf);
+    buf = mmap.mmap(-1, 1)
+    buf.write('1')
+    os.write(fd, buf)
 
     proc = subprocess.Popen(['rados', '-p', pool_name, 'get', obj_name, 'tmpfile'])
-    proc.wait();
+    proc.wait()
 
     with open('tmpfile', 'r') as tmpf:
         out = tmpf.read()
@@ -34,14 +36,15 @@ def main():
         tmpf.write('2')
 
     proc = subprocess.Popen(['rados', '-p', pool_name, 'put', obj_name, 'tmpfile'])
-    proc.wait();
+    proc.wait()
 
     os.lseek(fd, 0, os.SEEK_SET)
-    out = os.read(fd, 1);
+    out = os.read(fd, 1)
     if out != '2':
         raise RuntimeError("data were not directly read from object store")
 
-    os.close(fd);
-    print 'ok'
+    os.close(fd)
+    print('ok')
+
 
 main()

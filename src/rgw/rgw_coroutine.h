@@ -41,17 +41,7 @@ class RGWCompletionManager : public RefCountedObject {
 
   map<void *, void *> waiters;
 
-  class WaitContext : public Context {
-    RGWCompletionManager *manager;
-    void *opaque;
-  public:
-    WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
-    void finish(int r) {
-      manager->_wakeup(opaque);
-    }
-  };
-
-  friend class WaitContext;
+  class WaitContext;
 
 protected:
   void _wakeup(void *opaque);

@@ -9,6 +9,16 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+class RGWCompletionManager::WaitContext : public Context {
+  RGWCompletionManager *manager;
+  void *opaque;
+public:
+  WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
+  void finish(int r) {
+    manager->_wakeup(opaque);
+  }
+};
+
 RGWCompletionManager::RGWCompletionManager(CephContext *_cct) : cct(_cct), lock("RGWCompletionManager::lock"),
                                             timer(cct, lock)
 {
@@ -574,11 +584,10 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     if (iter == scheduled_stacks.end()) {
       iter = scheduled_stacks.begin();
     }
-
-    ret = 0;
   }
 
   lock.get_write();
+  assert(context_stacks.empty() || going_down.read()); // assert on deadlock
   for (auto stack : context_stacks) {
     ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
     stack->put();
