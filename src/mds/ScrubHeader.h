@@ -7,9 +7,6 @@ class CInode;
 /**
  * Externally input parameters for a scrub, associated with the root
  * of where we are doing a recursive scrub
- *
- * TODO: swallow up 'recurse' and 'children' settings here instead of
- * passing them down into every scrub_info structure
  */
 class ScrubHeader {
 public:
