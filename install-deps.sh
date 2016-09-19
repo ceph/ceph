@@ -85,11 +85,19 @@ else
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel)
-        echo "Using yum to install dependencies"
-        $SUDO yum install -y redhat-lsb-core
+        yumdnf="yum"
+        builddepcmd="yum-builddep -y"
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            yumdnf="dnf"
+            builddepcmd="dnf -y builddep --allowerasing"
+        fi
+        echo "Using $yumdnf to install dependencies"
+        $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
-                $SUDO yum install -y yum-utils
+                if test $yumdnf = yum; then
+                    $SUDO $yumdnf install -y yum-utils
+                fi
                 ;;
             CentOS|RedHatEnterpriseServer)
                 $SUDO yum install -y yum-utils
@@ -108,7 +116,7 @@ else
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
     opensuse|suse)
