@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2016 Red Hat Inc
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -39,15 +39,21 @@ class CommandOp
     return m;
   }
 
-  CommandOp(const ceph_tid_t t) : tid(t) {}
+  CommandOp(const ceph_tid_t t) : tid(t), on_finish(nullptr),
+                                  outbl(nullptr), outs(nullptr) {}
+  CommandOp() : tid(0), on_finish(nullptr), outbl(nullptr), outs(nullptr) {}
 };
 
+/**
+ * Hold client-side state for a collection of in-flight commands
+ * to a remote service.
+ */
 template<typename T>
 class CommandTable
 {
 protected:
   ceph_tid_t last_tid;
-  std::map<ceph_tid_t, T*> commands;
+  std::map<ceph_tid_t, T> commands;
 
 public:
 
@@ -55,34 +61,36 @@ public:
     : last_tid(0)
   {}
 
-  T* start_command()
+  ~CommandTable()
   {
-    ceph_tid_t tid = last_tid++;
-    auto cmd = new T(tid);
-    commands[tid] = cmd;
-    
-    return cmd;
+    assert(commands.empty());
   }
 
-  const std::map<ceph_tid_t, T*> &get_commands() const
+  T& start_command()
+  {
+    ceph_tid_t tid = last_tid++;
+    commands.insert(std::make_pair(tid, T(tid)) );
+
+    return commands.at(tid);
+  }
+
+  const std::map<ceph_tid_t, T> &get_commands() const
   {
     return commands;
   }
 
-  T* get_command(ceph_tid_t tid)
+  bool exists(ceph_tid_t tid) const
   {
-    auto result = commands.find(tid);
-    if (result == commands.end()) {
-      return nullptr;
-    } else {
-      return result->second;
-    }
+    return commands.count(tid) > 0;
+  }
+
+  T& get_command(ceph_tid_t tid)
+  {
+    return commands.at(tid);
   }
 
   void erase(ceph_tid_t tid)
   {
-    auto ptr = commands.at(tid);
-    delete ptr;
     commands.erase(tid);
   }
 };

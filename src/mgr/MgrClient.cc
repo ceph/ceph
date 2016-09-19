@@ -109,8 +109,8 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
       auto commands = command_table.get_commands();
       for (const auto &i : commands) {
         // FIXME be nicer, retarget command on new mgr?
-        if (i.second->on_finish != nullptr) {
-          i.second->on_finish->complete(-ETIMEDOUT);
+        if (i.second.on_finish != nullptr) {
+          i.second.on_finish->complete(-ETIMEDOUT);
         }
         erase_cmds.push_back(i.first);
       }
@@ -296,15 +296,15 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   assert(map.epoch > 0);
 
-  MgrCommand *op = command_table.start_command();
-  op->cmd = cmd;
-  op->inbl = inbl;
-  op->outbl = outbl;
-  op->outs = outs;
-  op->on_finish = onfinish;
+  auto &op = command_table.start_command();
+  op.cmd = cmd;
+  op.inbl = inbl;
+  op.outbl = outbl;
+  op.outs = outs;
+  op.on_finish = onfinish;
 
   // Leaving fsid argument null because it isn't used.
-  MCommand *m = op->get_message({});
+  MCommand *m = op.get_message({});
   assert(session);
   assert(session->con);
   session->con->send_message(m);
@@ -319,24 +319,24 @@ bool MgrClient::handle_command_reply(MCommandReply *m)
   ldout(cct, 20) << *m << dendl;
 
   const auto tid = m->get_tid();
-  const auto op = command_table.get_command(tid);
-  if (op == nullptr) {
+  if (!command_table.exists(tid)) {
     ldout(cct, 4) << "handle_command_reply tid " << m->get_tid()
             << " not found" << dendl;
     m->put();
     return true;
   }
 
-  if (op->outbl) {
-    op->outbl->claim(m->get_data());
+  auto &op = command_table.get_command(tid);
+  if (op.outbl) {
+    op.outbl->claim(m->get_data());
   }
 
-  if (op->outs) {
-    *(op->outs) = m->rs;
+  if (op.outs) {
+    *(op.outs) = m->rs;
   }
 
-  if (op->on_finish) {
-    op->on_finish->complete(m->r);
+  if (op.on_finish) {
+    op.on_finish->complete(m->r);
   }
 
   command_table.erase(tid);
