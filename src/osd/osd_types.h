@@ -2542,12 +2542,12 @@ private:
   void trim();
   friend ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
 public:
-  ObjectCleanRegions(int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) : max_num_intervals(max), new_object(false) {
+  ObjectCleanRegions(int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) : new_object(false), max_num_intervals(max) {
     clean_offsets.insert(0, (uint64_t)-1);
     clean_omap = true;
   }
   ObjectCleanRegions(uint64_t offset, uint64_t len, bool co, int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) 
-    : clean_omap(co), max_num_intervals(max), new_object(false) {
+    : clean_omap(co), new_object(false), max_num_intervals(max) {
     clean_offsets.insert(offset, len);
   }
   bool operator==(const ObjectCleanRegions &orc) const {
@@ -4391,8 +4391,9 @@ struct ObjectRecoveryInfo {
   SnapSet ss;
   interval_set<uint64_t> copy_subset;
   map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subset;
+  bool object_exist;
 
-  ObjectRecoveryInfo() : size(0) { }
+  ObjectRecoveryInfo() : size(0), object_exist(true) { }
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
   void encode(bufferlist &bl, uint64_t features) const;
