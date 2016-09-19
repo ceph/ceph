@@ -135,7 +135,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 
   const ScrubHeaderRefConst& header = in->scrub_info()->header;
 
-  if (header->recursive) {
+  if (header->get_recursive()) {
     list<frag_t> scrubbing_frags;
     list<CDir*> scrubbing_cdirs;
     in->scrub_dirfrags_scrubbing(&scrubbing_frags);
@@ -379,13 +379,13 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   MDSInternalContextBase *c = NULL;
   in->scrub_finished(&c);
 
-  if (!header->recursive && in == header->origin) {
+  if (!header->get_recursive() && in == header->get_origin()) {
     if (r >= 0) { // we got into the scrubbing dump it
-      result.dump(header->formatter);
+      result.dump(&(header->get_formatter()));
     } else { // we failed the lookup or something; dump ourselves
-      header->formatter->open_object_section("results");
-      header->formatter->dump_int("return_code", r);
-      header->formatter->close_section(); // results
+      header->get_formatter().open_object_section("results");
+      header->get_formatter().dump_int("return_code", r);
+      header->get_formatter().close_section(); // results
     }
   }
   if (c) {

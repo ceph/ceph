@@ -11845,7 +11845,7 @@ class C_MDS_EnqueueScrub : public Context
 public:
   ScrubHeaderRef header;
   C_MDS_EnqueueScrub(Formatter *f, Context *fin) :
-    formatter(f), on_finish(fin), header(new ScrubHeader()) {}
+    formatter(f), on_finish(fin), header(nullptr) {}
 
   Context *take_finisher() {
     Context *fin = on_finish;
@@ -11876,12 +11876,8 @@ void MDCache::enqueue_scrub(
   mdr->set_filepath(fp);
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
-  ScrubHeaderRef &header = cs->header;
-  header->tag = tag;
-  header->force = force;
-  header->recursive = recursive;
-  header->repair = repair;
-  header->formatter = f;
+  cs->header = std::make_shared<ScrubHeader>(
+      tag, force, recursive, repair, f);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
@@ -11912,11 +11908,11 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     in->scrub_info();
   }
 
-  header->origin = in;
+  header->set_origin(in);
 
   // only set completion context for non-recursive scrub, because we don't 
   // want to block asok caller on long running scrub
-  if (!header->recursive) {
+  if (!header->get_recursive()) {
     Context *fin = cs->take_finisher();
     mds->scrubstack->enqueue_inode_top(in, header,
 				       new MDSInternalContextWrapper(mds, fin));
