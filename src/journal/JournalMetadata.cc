@@ -561,6 +561,7 @@ void JournalMetadata::unregister_client(Context *on_finish) {
 
 void JournalMetadata::allocate_tag(uint64_t tag_class, const bufferlist &data,
                                    Tag *tag, Context *on_finish) {
+  on_finish = new C_NotifyUpdate(this, on_finish);
   C_AllocateTag *ctx = new C_AllocateTag(m_cct, m_ioctx, m_oid,
                                          m_async_op_tracker, tag_class,
                                          data, tag, on_finish);
