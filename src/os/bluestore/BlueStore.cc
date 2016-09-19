@@ -630,6 +630,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.insert(buffer_warm_in.iterator_to(*near), *b);
       break;
     case BUFFER_WARM_OUT:
+      assert(b->is_empty());
       buffer_warm_out.insert(buffer_warm_out.iterator_to(*near), *b);
       break;
     case BUFFER_HOT:
