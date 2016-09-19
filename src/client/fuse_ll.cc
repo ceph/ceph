@@ -658,7 +658,7 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i1 = cfuse->iget(parent), *i2;
   struct fuse_entry_param fe;
-  Fh *fh = NULL;
+  Fh *fh;
 
   memset(&fe, 0, sizeof(fe));
 
