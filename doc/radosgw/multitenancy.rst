@@ -88,7 +88,7 @@ Swift with Keystone
 -------------------
 
 TBD -- don't forget to explain the function of
-       rgw keystone make new tenants = true
+       rgw keystone implicit tenants = true
        in commit e9259486decab52a362443d3fd3dec33b0ec654f
 
 Notes and known issues
