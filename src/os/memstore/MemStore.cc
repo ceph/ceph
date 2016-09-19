@@ -1652,8 +1652,7 @@ int MemStore::PageSetObject::write(uint64_t offset, const bufferlist &src)
 
   auto page = tls_pages.begin();
 
-  // XXX: cast away the const because bufferlist doesn't have a const_iterator
-  auto p = const_cast<bufferlist&>(src).begin();
+  auto p = src.begin();
   while (len > 0) {
     unsigned page_offset = offset - (*page)->offset;
     unsigned pageoff = data.get_page_size() - page_offset;
