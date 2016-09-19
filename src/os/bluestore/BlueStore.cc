@@ -6464,10 +6464,16 @@ int BlueStore::queue_transactions(
     txc->t->set(PREFIX_WAL, key, bl);
   }
 
+  if (handle)
+    handle->suspend_tp_timeout();
+
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
   throttle_wal_ops.get(txc->ops);
   throttle_wal_bytes.get(txc->bytes);
+
+  if (handle)
+    handle->reset_tp_timeout();
 
   logger->inc(l_bluestore_txc);
 
