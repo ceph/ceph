@@ -1,20 +1,27 @@
 """
-Useful hack: override Filesystem and Mount interfaces to run a CephFSTestCase against a vstart
+vstart_runner: override Filesystem and Mount interfaces to run a CephFSTestCase against a vstart
 ceph instance instead of a packaged/installed cluster.  Use this to turn around test cases
 quickly during development.
 
-For example, if you have teuthology, ceph-qa-suite and ceph all in ~git, then you would:
+Usage (assuming teuthology, ceph, ceph-qa-suite checked out in ~/git):
 
     # Activate the teuthology virtualenv
     source ~/git/teuthology/virtualenv/bin/activate
-    # Go into your ceph source tree
-    cd ~/git/ceph/src
+    # Go into your ceph build directory
+    cd ~/git/ceph/build
     # Start a vstart cluster
-    MDS=2 MON=1 OSD=3 ./vstart.sh -n
+    MDS=2 MON=1 OSD=3 ../src/vstart.sh -n
     # Invoke a test using this script, with PYTHONPATH set appropriately
-    PYTHONPATH=~/git/teuthology/:~/git/ceph-qa-suite/ python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py
+    python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py
 
-If you built out of tree with CMake, then switch to your build directory before executing vstart_runner.
+    # Alternatively, if you use different paths, specify them as follows:
+    LD_LIBRARY_PATH=`pwd`/lib PYTHONPATH=~/git/teuthology:~/git/ceph-qa-suite:`pwd`/../src/pybind:`pwd`/lib/cython_modules/lib.2 python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py
+
+    # If you wish to drop to a python shell on failures, use --interactive:
+    python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py --interactive
+
+    # If you wish to run a named test case, pass it as an argument:
+    python ~/git/ceph-qa-suite/tasks/cephfs/vstart_runner.py tasks.cephfs.test_data_scan
 
 """
 
@@ -34,6 +41,7 @@ import sys
 import errno
 from unittest import suite
 import unittest
+import platform
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
@@ -49,6 +57,51 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 log.addHandler(handler)
 log.setLevel(logging.INFO)
+
+
+def respawn_in_path(lib_path, python_paths):
+    execv_cmd = ['python']
+    if platform.system() == "Darwin":
+        lib_path_var = "DYLD_LIBRARY_PATH"
+    else:
+        lib_path_var = "LD_LIBRARY_PATH"
+
+    py_binary = os.environ.get("PYTHON", "python")
+
+    if lib_path_var in os.environ:
+        if lib_path not in os.environ[lib_path_var]:
+            os.environ[lib_path_var] += ':' + lib_path
+            os.execvp(py_binary, execv_cmd + sys.argv)
+    else:
+        os.environ[lib_path_var] = lib_path
+        os.execvp(py_binary, execv_cmd + sys.argv)
+
+    for p in python_paths:
+        sys.path.insert(0, p)
+
+
+# Let's use some sensible defaults
+if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
+
+    # A list of candidate paths for each package we need
+    guesses = [
+        ["~/git/teuthology", "~/scm/teuthology", "~/teuthology"],
+        ["~/git/ceph-qa-suite", "~/scm/ceph-qa-suite", "~/ceph-qa-suite"],
+        ["lib/cython_modules/lib.2"],
+        ["../src/pybind"],
+    ]
+
+    python_paths = []
+    for package_guesses in guesses:
+        for g in package_guesses:
+            g_exp = os.path.abspath(os.path.expanduser(g))
+            if os.path.exists(g_exp):
+                python_paths.append(g_exp)
+
+    ld_path = os.path.join(os.getcwd(), "lib/")
+    print "Using guessed paths {0} {1}".format(ld_path, python_paths)
+    respawn_in_path(ld_path, python_paths)
+
 
 try:
     from teuthology.exceptions import CommandFailedError
