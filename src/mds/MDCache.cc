@@ -77,6 +77,8 @@
 #include "messages/MDentryLink.h"
 #include "messages/MDentryUnlink.h"
 
+#include "messages/MMDSScrubPath.h"
+
 #include "messages/MMDSFindIno.h"
 #include "messages/MMDSFindInoReply.h"
 
@@ -7714,6 +7716,10 @@ void MDCache::dispatch(Message *m)
   case MSG_MDS_OPENINOREPLY:
     handle_open_ino_reply(static_cast<MMDSOpenInoReply *>(m));
     break;
+
+  case MSG_MDS_SCRUBPATH:
+    handle_scrub_path(static_cast<MMDSScrubPath *>(m));
+    break;
     
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
@@ -8626,6 +8632,13 @@ void MDCache::handle_open_ino_reply(MMDSOpenInoReply *m)
     }
   }
   m->put();
+}
+
+void MDCache::handle_scrub_path(MMDSScrubPath *m)
+{
+  dout(10) << "handle_scrub_path " << *m << dendl;
+
+  enqueue_scrub(m->path, m->tag, m->force, true, m->repair, NULL, NULL);
 }
 
 void MDCache::kick_open_ino_peers(mds_rank_t who)
@@ -11889,12 +11902,9 @@ void MDCache::enqueue_scrub(
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (NULL == in)
     return;
-
-  // TODO: Remove this restriction
-  assert(in->is_auth());
 
   bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
   if (!locked)

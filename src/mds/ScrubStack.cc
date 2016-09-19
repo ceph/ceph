@@ -20,6 +20,8 @@
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
 
+#include "messages/MMDSScrubPath.h"
+
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, scrubstack->mdcache->mds)
@@ -146,6 +148,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 	++i) {
       // turn frags into CDir *
       CDir *dir = in->get_dirfrag(*i);
+
       if (dir) {
 	scrubbing_cdirs.push_back(dir);
 	dout(25) << __func__ << " got CDir " << *dir << " presently scrubbing" << dendl;
@@ -228,7 +231,7 @@ bool ScrubStack::get_next_cdir(CInode *in, CDir **new_dir)
     // we got a frag to scrub, otherwise it would be ENOENT
     dout(25) << "looking up new frag " << next_frag << dendl;
     CDir *next_dir = in->get_or_open_dirfrag(mdcache, next_frag);
-    if (!next_dir->is_complete()) {
+    if (!next_dir->is_complete() && next_dir->is_auth()) {
       scrubs_in_progress++;
       next_dir->fetch(&scrub_kick);
       dout(25) << "fetching frag from RADOS" << dendl;
@@ -299,6 +302,24 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
   *is_terminal = false;
   *done = false;
 
+  if (!dir->is_auth() && dir->is_subtree_root()) {
+    dout(20) << __func__ << " subtree boundary at " << *dir << dendl;
+    string path;
+    if (dir->inode->is_root()) {
+      path = "/";
+    } else {
+      dir->inode->make_path_string(path);
+    }
+    MMDSScrubPath *msg = new MMDSScrubPath(path, header);
+    dout(20) << __func__ << " sending to " << dir->get_dir_auth().first
+	     << dendl;
+    dir->scrub_initialize(header);
+    mdcache->mds->send_message_mds(msg, dir->get_dir_auth().first);
+    dir->scrub_finished();
+    *done = true;
+    *is_terminal = true;
+    return;
+  }
 
   if (!dir->scrub_info()->directory_scrubbing) {
     // Get the frag complete before calling
