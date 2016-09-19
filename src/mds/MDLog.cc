@@ -913,6 +913,10 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     int write_result = jp.save(mds->objecter);
     // Nothing graceful we can do for this
     assert(write_result >= 0);
+  } else if (read_result == -EBLACKLISTED) {
+    derr << "Blacklisted during JournalPointer read!  Respawning..." << dendl;
+    mds->respawn();
+    assert(0); // Should be unreachable because respawn calls execv
   } else if (read_result != 0) {
     mds->clog->error() << "failed to read JournalPointer: " << read_result
                        << " (" << cpp_strerror(read_result) << ")";
@@ -943,7 +947,11 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
     C_SaferCond recover_wait;
     back.recover(&recover_wait);
     int recovery_result = recover_wait.wait();
-    if (recovery_result != 0) {
+    if (recovery_result == -EBLACKLISTED) {
+      derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
+      mds->respawn();
+      assert(0); // Should be unreachable because respawn calls execv
+    } else if (recovery_result != 0) {
       // Journaler.recover succeeds if no journal objects are present: an error
       // means something worse like a corrupt header, which we can't handle here.
       mds->clog->error() << "Error recovering journal " << jp.front << ": "
@@ -986,7 +994,11 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   int recovery_result = recover_wait.wait();
   dout(4) << "Journal " << jp.front << " recovered." << dendl;
 
-  if (recovery_result != 0) {
+  if (recovery_result == -EBLACKLISTED) {
+    derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
+    mds->respawn();
+    assert(0); // Should be unreachable because respawn calls execv
+  } else if (recovery_result != 0) {
     mds->clog->error() << "Error recovering journal " << jp.front << ": "
       << cpp_strerror(recovery_result);
     mds->damaged_unlocked();
