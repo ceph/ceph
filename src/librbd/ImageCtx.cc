@@ -210,7 +210,7 @@ struct C_InvalidateCache : public Context {
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
     }
-    journal_policy = new journal::StandardPolicy(this);
+    journal_policy = new journal::StandardPolicy<ImageCtx>(this);
   }
 
   ImageCtx::~ImageCtx() {
