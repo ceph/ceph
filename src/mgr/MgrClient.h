@@ -44,6 +44,7 @@ class MgrCommand : public CommandOp
   public:
 
   MgrCommand(ceph_tid_t t) : CommandOp(t) {}
+  MgrCommand() : CommandOp() {}
 };
 
 class MgrClient : public Dispatcher

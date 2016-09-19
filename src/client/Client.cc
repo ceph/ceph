@@ -2545,21 +2545,21 @@ void Client::handle_mds_map(MMDSMap* m)
 
   // Cancel any commands for missing or laggy GIDs
   std::list<ceph_tid_t> cancel_ops;
-  auto commands = command_table.get_commands();
+  auto &commands = command_table.get_commands();
   for (const auto &i : commands) {
-    const MDSCommandOp *op = i.second;
-    const mds_gid_t op_mds_gid = op->mds_gid;
+    auto &op = i.second;
+    const mds_gid_t op_mds_gid = op.mds_gid;
     if (mdsmap->is_dne_gid(op_mds_gid) || mdsmap->is_laggy_gid(op_mds_gid)) {
       ldout(cct, 1) << __func__ << ": cancelling command op " << i.first << dendl;
       cancel_ops.push_back(i.first);
-      if (op->outs) {
+      if (op.outs) {
         std::ostringstream ss;
         ss << "MDS " << op_mds_gid << " went away";
-        *(op->outs) = ss.str();
+        *(op.outs) = ss.str();
       }
-      op->con->mark_down();
-      if (op->on_finish) {
-        op->on_finish->complete(-ETIMEDOUT);
+      op.con->mark_down();
+      if (op.on_finish) {
+        op.on_finish->complete(-ETIMEDOUT);
       }
     }
   }
@@ -5506,21 +5506,21 @@ int Client::mds_command(
     ConnectionRef conn = messenger->get_connection(inst);
 
     // Generate MDSCommandOp state
-    MDSCommandOp *op = command_table.start_command();
+    auto &op = command_table.start_command();
 
-    op->on_finish = gather.new_sub();
-    op->cmd = cmd;
-    op->outbl = outbl;
-    op->outs = outs;
-    op->inbl = inbl;
-    op->mds_gid = target_gid;
-    op->con = conn;
+    op.on_finish = gather.new_sub();
+    op.cmd = cmd;
+    op.outbl = outbl;
+    op.outs = outs;
+    op.inbl = inbl;
+    op.mds_gid = target_gid;
+    op.con = conn;
 
     ldout(cct, 4) << __func__ << ": new command op to " << target_gid
-      << " tid=" << op->tid << cmd << dendl;
+      << " tid=" << op.tid << cmd << dendl;
 
     // Construct and send MCommand
-    MCommand *m = op->get_message(monclient->get_fsid());
+    MCommand *m = op.get_message(monclient->get_fsid());
     conn->send_message(m);
   }
   gather.activate();
@@ -5534,22 +5534,22 @@ void Client::handle_command_reply(MCommandReply *m)
 
   ldout(cct, 10) << __func__ << ": tid=" << m->get_tid() << dendl;
 
-  MDSCommandOp *op = command_table.get_command(tid);
-  if (op == nullptr) {
+  if (!command_table.exists(tid)) {
     ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
     m->put();
     return;
   }
 
-  if (op->outbl) {
-    op->outbl->claim(m->get_data());
+  auto &op = command_table.get_command(tid);
+  if (op.outbl) {
+    op.outbl->claim(m->get_data());
   }
-  if (op->outs) {
-    *op->outs = m->rs;
+  if (op.outs) {
+    *op.outs = m->rs;
   }
 
-  if (op->on_finish) {
-    op->on_finish->complete(m->r);
+  if (op.on_finish) {
+    op.on_finish->complete(m->r);
   }
 
   command_table.erase(tid);
