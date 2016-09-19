@@ -1216,12 +1216,12 @@ TEST(BufferListIterator, copy) {
     EXPECT_EQ(0, ::memcmp(copy, expected, 3));
   }
   //
-  // void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
   //
   {
     bufferptr ptr;
     bufferlist::iterator i(&bl);
-    i.copy(2, ptr);
+    i.copy_deep(2, ptr);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('A', ptr[0]);
     EXPECT_EQ('B', ptr[1]);

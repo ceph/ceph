@@ -384,7 +384,7 @@ void CryptoKey::decode(bufferlist::iterator& bl)
   __u16 len;
   ::decode(len, bl);
   bufferptr tmp;
-  bl.copy(len, tmp);
+  bl.copy_deep(len, tmp);
   if (_set_secret(type, tmp) < 0)
     throw buffer::malformed_input("malformed secret");
 }
