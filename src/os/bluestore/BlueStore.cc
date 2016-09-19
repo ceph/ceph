@@ -317,7 +317,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
   int r;
   const char *p = key.c_str();
 
-  if (key.length() < 2 + 8 + 4)
+  if (key.length() < 1 + 8 + 4)
     return -1;
   p = _key_decode_shard(p, &oid->shard_id);
 
