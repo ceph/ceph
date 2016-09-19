@@ -59,6 +59,25 @@ static std::string decode_key(const std::string &k)
   return buf;
 }
 
+static std::string decode_data(const bufferlist &k)
+{
+  char buf[1024];
+
+  assert(k.length() * 2 + 1 <= sizeof(buf));
+
+  int pos = 0;
+  for (unsigned int i = 0; i < k.length(); i++) {
+    if (k[i] == '_' || (k[i] >= 'a' && k[i] <= 'z') ||
+	(k[i] >= 32 && k[i] <= 'Z'))
+      buf[pos++] = k[i];
+    else
+      pos += sprintf(&buf[pos], "%.2x", (int)(unsigned char)k[i]);
+  }
+
+  return buf;
+}
+
+
 std::string delete_logging_prefix(const std::string &key)
 {
   size_t pos = key.find_first_of('_', 2);
@@ -173,9 +192,9 @@ int ZSStore::_init(bool format)
   int fd = ::open(path.c_str(), O_RDONLY);
   off_t size = ::lseek(fd, 0, SEEK_END);
   ::close(fd);
-  if(size == (off_t)-1) {
-    derr << path << " failed to get" << path << " size:"
-      << strerror(errno) << dendl;
+  if (size == (off_t)-1) {
+    derr << path << " failed to get" << path << " size:" << strerror(errno)
+	 << dendl;
     return 1;
   }
 
@@ -215,9 +234,9 @@ int ZSStore::_init(bool format)
   fd = ::open(path.c_str(), O_RDONLY);
   size = ::lseek(fd, 0, SEEK_END);
   ::close(fd);
-  if(size == (off_t)-1) {
-    derr << path << " failed to get" << path << " size:"
-      << strerror(errno) << dendl;
+  if (size == (off_t)-1) {
+    derr << path << " failed to get" << path << " size:" << strerror(errno)
+	 << dendl;
     return 1;
   }
 
@@ -336,6 +355,8 @@ int ZSStore::do_open(ostream &out, int create)
 			  g_conf->bluestore_block_db_path.c_str())
 	 << dendl;
   assert(dev_data_fd >= 0);
+
+  fm.init(cguid_lc, cguid);
 
   return 0;
 }
@@ -507,8 +528,8 @@ bufferlist ZSStore::_merge(const std::string &key, const bufferlist &_base,
     assert(!r || r == -ENOENT);
   }
 
-  /* Use local, read from disk, value, when argument _base is empty
-   * Make _base contiguous if it's not */
+  /* 1. Use local, read from disk, value, when argument _base is empty
+   * 2. Make _base contiguous if it's not */
   const bufferlist &base =
       !_base.length() ? rbase
 		      : (_base.is_contiguous() ? _base : bufferlist(_base));
@@ -518,12 +539,13 @@ bufferlist ZSStore::_merge(const std::string &key, const bufferlist &_base,
       value.is_contiguous() && value.length() > 0 ? value : bufferlist(value);
 
   dtrace << " " << key << " " << base.length() << " " << value.length() << " "
-       << dendl;
+	 << dendl;
 
   for (auto &p : merge_ops) {
     if (!key_is_prefixed(p.first, key))
       continue;
 
+    dtrace << " base: " << base.length() << " v: " << v.length() << dendl;
     if (base.length())
       p.second->merge(base.front().c_str(), base.length(),
 		      v.buffers().front().c_str(), v.length(), &out);
@@ -573,7 +595,7 @@ static bool enqueue_obj(ZS_cguid_t cguid, ZS_obj_t *objs, uint32_t *i,
 
 int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
 {
-#define CHUNK_SIZE 1024
+#define CHUNK_SIZE (1024 * 1024)
   char *key;
   std::vector<std::string> keys;
   ZS_obj_t objs[WRITE_BATCH_SIZE], objs_lc[WRITE_BATCH_SIZE];
@@ -592,6 +614,11 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
     dtrace << " i=" << i << " l1=" << l1 << " " << decode_key(op.first) << "("
 	   << op.first.length() << ")"
 	   << " data_size=" << length << dendl;
+
+    if (op.first[0] == 'b') {
+      fm.write(op.first, op.second);
+      continue;
+    }
 
     bool lc = is_logging_prefixed(op.first);
 
@@ -653,6 +680,8 @@ int ZSStore::_batch_set(const ZSStore::ZSMultiMap &ops)
   if (status != ZS_SUCCESS)
     derr << "ZSMPut flush=" << ZSStrError(status) << dendl;
 
+  fm.flush();
+
   return status == ZS_SUCCESS ? 0 : -1;
 }
 
@@ -690,6 +719,12 @@ int ZSStore::_get(const string &key, bufferlist *out)
   out->clear();
 
   dtrace << "ZSReadObject: [" << decode_key(key) << "]" << dendl;
+
+  if (key[0] == 'b')  // bitmap freelist manager
+  {
+    fm.get(key, out);
+    return 0;
+  }
 
   if (is_logging_prefixed(key)) {
     uint64_t datalen = 0;
@@ -730,7 +765,7 @@ int ZSStore::_get(const string &key, bufferlist *out)
 
   dtrace << " key_start=" << decode_key(key) << "(" << key.length()
 	 << ") key_end=" << decode_key(key_end) << "(" << key_end.length()
-	 << ") status=" <<  status << " n_out=" << n_out << dendl;
+	 << ") status=" << status << " n_out=" << n_out << dendl;
 
   if (status == ZS_SUCCESS) {
     for (int i = 0; i < n_out; i++)
@@ -805,6 +840,8 @@ void ZSStore::ZSWholeSpaceIteratorImpl::finish()
 
     lc_it = NULL;
   }
+
+  store->fm.finish();
 }
 
 int ZSStore::ZSWholeSpaceIteratorImpl::seek(const char *key, uint32_t length,
@@ -829,6 +866,11 @@ int ZSStore::ZSWholeSpaceIteratorImpl::seek(const char *key, uint32_t length,
       derr << "ZSEnumeratePGObjects failed: " << ZSStrError(status) << dendl;
 
     dtrace << "start logging container enumeration" << dendl;
+  }
+
+  if (key[0] == 'b') {
+    store->fm.seek(key, inclusive);
+    return store->fm.next(cur_key, value_bl) ? 0 : -1;
   }
 
   memset(&meta, 0, sizeof(meta));
@@ -908,6 +950,9 @@ int ZSStore::ZSWholeSpaceIteratorImpl::_next()
 
     lc_it = NULL;
   }
+
+  if (store->fm.enumerating())
+    return store->fm.next(cur_key, value_bl);
 
   if (!cursor)
     return -1;
@@ -1053,3 +1098,256 @@ int ZSStore::ZSWholeSpaceIteratorImpl::lower_bound(const std::string &prefix,
   dtrace << "lower_bound " << decode_key(k) << dendl;
   return seek(k.c_str(), k.length(), true, true);
 }
+
+int deserialize(char *buf, int ptr, std::string &key)
+{
+  uint8_t len = *(uint8_t *)(buf + ptr++);
+  key.assign(buf + ptr, len);
+  return ptr + len;
+}
+
+int deserialize(char *buf, int ptr, bufferlist &data)
+{
+  uint8_t len = *(uint8_t *)(buf + ptr++);
+  data.clear();
+  data.append(buf + ptr, len);
+  return ptr + len;
+}
+
+void ZSFreeListManager::init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid)
+{
+#define RECOVERY_BATCH_SIZE 32
+  string key_end;
+  ZS_range_meta_t meta;
+  ZS_range_data_t values[RECOVERY_BATCH_SIZE];
+  struct ZS_cursor *cursor;
+  std::map<std::string, uint64_t> lsn_map;
+
+  cguid_lc = _cguid_lc;
+  cguid = _cguid;
+
+  dtrace << "fm recovery" << dendl;
+
+  memset(&meta, 0, sizeof(meta));
+
+  meta.key_start = (char *)"F";
+  meta.keylen_start = 2;
+  meta.key_end = (char *)"F18446744073709551615";
+  meta.keylen_end = 22;
+  meta.flags = (ZS_range_enums_t)(ZS_RANGE_START_GE | ZS_RANGE_END_LE);
+
+  ZS_status_t status =
+      ZSGetRange(_thd_state(), cguid, ZS_RANGE_PRIMARY_INDEX, &cursor, &meta);
+  if (status != ZS_SUCCESS)
+    abort();
+
+  int n_out;
+  while ((status = ZSGetNextRange(_thd_state(), cursor, RECOVERY_BATCH_SIZE,
+				  &n_out, values)) == ZS_SUCCESS) {
+    dtrace << " status=" << status << " n_out=" << n_out << dendl;
+    while (n_out--) {
+      char *data = values[n_out].data;
+      uint64_t plsn = *(uint64_t *)data;
+
+      dtrace << " apply lsn=" << plsn << dendl;
+
+      if (lsn < plsn)
+	lsn = plsn;
+
+      uint16_t log_size = *(uint16_t *)(data + 8);
+      data += 10;
+
+      dtrace << " apply log_size=" << log_size << dendl;
+
+      while (log_size) {
+	std::string key;
+
+	int ptr = deserialize(data, 0, key);
+
+	dtrace << " apply log rec key=" << decode_key(key)
+	       << " log_size=" << log_size << dendl;
+	dtrace << " ptr=" << ptr << dendl;
+
+	if (lsn_map[key] <= plsn) {
+	  ptr = deserialize(data, ptr, freelist[key]);
+	  lsn_map[key] = plsn;
+	} else
+	  ptr += *(uint8_t *)(data + ptr) + 1;
+
+	dtrace << " ptr=" << ptr << dendl;
+
+	data += ptr;
+	log_size -= ptr;
+      }
+
+      uint16_t data_size = *(uint16_t *)data;
+
+      dtrace << " apply data_size=" << data_size << dendl;
+
+      data += 2;
+      while (data_size) {
+	std::string key;
+
+	int ptr = deserialize(data, 0, key);
+
+	dtrace << " apply key=" << decode_key(key) << " data_size=" << data_size
+	       << dendl;
+
+	if (lsn_map[key] <= plsn) {
+	  ptr = deserialize(data, ptr, freelist[key]);
+	  lsn_map[key] = plsn;
+	} else
+	  ptr += *(uint8_t *)(data + ptr) + 1;
+
+	data += ptr;
+	data_size -= ptr;
+      }
+    }
+  }
+
+  ZS_status_t status1 = ZSGetRangeFinish(_thd_state(), cursor);
+  if (status1 != ZS_SUCCESS)
+    derr << "ZSGetRangeFinish failed: " << ZSStrError(status1) << dendl;
+
+  fl_it = freelist.begin();
+
+  dtrace << "fm recovery finish. freelist size=" << freelist.size() << dendl;
+}
+
+void ZSFreeListManager::get(const std::string &key, bufferlist *data)
+{
+  dtrace << "fm key: " << decode_key(key) << " " << decode_data(freelist[key])
+	 << dendl;
+
+  data->clear();
+  data->append(freelist[key]);
+}
+
+int serialize(char *buf, int ptr, const char *val, int len)
+{
+  assert(len < 256);
+  assert(ptr + len + 1 < 8192);
+  *(uint8_t *)(buf + ptr++) = len;
+  memcpy(buf + ptr, val, len);
+  return ptr + len;
+}
+
+void ZSFreeListManager::flush()
+{
+  ZS_status_t status;
+
+  if (!log_ptr)
+    return;
+
+  uint64_t bytes_per_key =
+      g_conf->bdev_block_size * g_conf->bluestore_freelist_blocks_per_key;
+
+  /* Update the size of the log part and LSN in the beginning of the page */
+  lsn++;
+  *(uint64_t *)page = lsn;
+  *(uint16_t *)(page + 8) = page_ptr - sizeof(uint16_t) - sizeof(uint64_t);
+
+  uint16_t page_head_ptr = page_ptr;
+  page_ptr += 2;
+
+  if (fl_it == freelist.end())
+    fl_it = freelist.begin();
+
+  uint64_t offset;
+  _key_decode_u64(fl_it->first.c_str() + 2, &offset);
+
+  uint64_t page_num = offset / bytes_per_key / n_recs_per_page;
+
+  dtrace << "write freelist chunk. offset=" << offset << "(" << decode_key(string((char*)&offset, 8)) << ") page_num=" << page_num << " lsn=" << lsn
+	 << " fm size:" << freelist.size()
+	 << " bytes per key: " << bytes_per_key << " n_recs_per_page: " << n_recs_per_page << dendl;
+
+  for (int i = 0; i < n_recs_per_page && fl_it != freelist.end(); i++) {
+    _key_decode_u64(fl_it->first.c_str() + 1, &offset);
+    if (offset / bytes_per_key / n_recs_per_page > page_num)
+      break;
+
+    page_ptr =
+	serialize(page, page_ptr, fl_it->first.c_str(), fl_it->first.length());
+    page_ptr = serialize(page, page_ptr, fl_it->second.c_str(),
+			 fl_it->second.length());
+
+    dtrace << "page_ptr: " << page_ptr
+	   << " data_part: " << page_ptr - page_head_ptr - 2 << " "
+	   << decode_key(fl_it->first) << dendl;
+    fl_it++;
+  }
+
+  /* Update the size of the data part in the page */
+  *(uint16_t *)(page + page_head_ptr) =
+      page_ptr - page_head_ptr - sizeof(uint16_t);
+
+  char key[32];
+  key[0] = 'F';
+  ritoa<uint64_t, 10, 20>(page_num, key + 21);
+  key[21] = 0;
+
+  dtrace << "fm chunk page key: " << key << " len=" << strlen(key)
+	 << " page_ptr: " << page_ptr << dendl;
+
+  status = ZSWriteObject(_thd_state(), cguid, key, 22, page, page_ptr, 0);
+  if (status != ZS_SUCCESS)
+    abort();
+
+  page_ptr = sizeof(uint16_t) + sizeof(uint64_t);
+  log_ptr = 0;
+}
+
+int ZSFreeListManager::write(const std::string &key, const bufferlist &data)
+{
+  dtrace << "fm write key: " << decode_key(key) << " " << decode_data(data)
+	 << " Len:" << data.length() << dendl;
+
+  freelist[key] = data;
+
+  if (log_ptr >= n_log_rec_per_page)
+    flush();
+
+  page_ptr = serialize(page, page_ptr, key.c_str(), key.length());
+  page_ptr = serialize(page, page_ptr, data.front().c_str(), data.length());
+
+  dtrace << "log rec size " << key.length() << " " << data.length()
+	 << " page_ptr: " << page_ptr << dendl;
+
+  log_ptr++;
+
+  return 0;
+}
+
+bool ZSFreeListManager::seek(const std::string &key, bool inclusive)
+{
+  if (inclusive)
+    seek_iter = freelist.lower_bound(key);
+  else
+    seek_iter = freelist.upper_bound(key);
+
+  dtrace << " fm seek " << decode_key(key) << " "
+	 << (seek_iter != freelist.end()) << dendl;
+
+  if (seek_iter != freelist.end()) {
+    return true;
+  }
+  return false;
+}
+
+bool ZSFreeListManager::next(std::string &key, bufferlist &data)
+{
+  if (seek_iter != freelist.end()) {
+    key = seek_iter->first;
+    data = seek_iter->second;
+    seek_iter++;
+
+    dtrace << "fm next: " << decode_key(key) << " " << decode_data(data)
+	   << dendl;
+
+    return true;
+  }
+  return false;
+}
+
+void ZSFreeListManager::finish() { seek_iter = freelist.end(); }
