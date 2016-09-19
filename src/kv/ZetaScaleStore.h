@@ -26,6 +26,39 @@ using std::string;
 
 #define ZS_MINIMUM_DB_SIZE (64L * 1024 * 1024 * 1024)
 
+class ZSFreeListManager
+{
+  std::map<std::string, bufferlist> freelist;
+  std::map<std::string, bufferlist>::iterator fl_it;
+  std::map<std::string, bufferlist>::iterator seek_iter;
+  constexpr static int page_size = 8192;
+  int log_rec_size = 30;
+  int rec_size = 30;
+  int n_log_rec_per_page = (page_size - 12) / 2 / log_rec_size;
+  int n_recs_per_page = (page_size - 12) / 2 / rec_size;
+  char page[page_size];
+  uint16_t log_ptr, page_ptr;
+  ZS_cguid_t cguid_lc, cguid;
+  uint64_t lsn;
+
+  public:
+  void init(ZS_cguid_t _cguid_lc, ZS_cguid_t _cguid);
+
+  ZSFreeListManager() : log_ptr(0), page_ptr(sizeof(uint16_t) + sizeof(uint64_t)), lsn(0)
+  {
+  }
+
+  void get(const std::string &key, bufferlist *data);
+  int write(const std::string &key, const bufferlist &data);
+  bool enumerating() { return seek_iter != freelist.end(); }
+  void finish();
+  bool seek(const std::string& key, bool inclusive);
+  bool next(std::string &key, bufferlist& data);
+  void flush();
+
+  ~ZSFreeListManager() {}
+};
+
 class ZSStore : public KeyValueDB
 {
   const char *default_cache_size = "1073741824";  // 1Gb
@@ -33,6 +66,7 @@ class ZSStore : public KeyValueDB
   CephContext *cct;
   void *priv;
 
+  ZSFreeListManager fm;
   string db_path;
   string options;
   int dev_log_fd, dev_data_fd;
