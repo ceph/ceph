@@ -366,15 +366,42 @@ void ScrubStack::scrub_file_inode(CInode *in)
 void ScrubStack::_validate_inode_done(CInode *in, int r,
 				      const CInode::validated_data &result)
 {
-  // FIXME: do something real with result!  DamageTable!  Spamming
-  // the cluster log for debugging purposes
   LogChannelRef clog = mdcache->mds->clog;
-  clog->info() << __func__ << " " << *in << " r=" << r;
-#if 0
-  assert(in->scrub_infop != NULL);
-  in->scrub_infop->inode_validated = true;
-#endif
   const ScrubHeaderRefConst header = in->scrub_info()->header;
+
+  if (result.backtrace.checked && !result.backtrace.passed) {
+    // Record backtrace fails as remote linkage damage, as
+    // we may not be able to resolve hard links to this inode
+    mdcache->mds->damage_table.notify_remote_damaged(in->inode.ino);
+  } else if (result.inode.checked && !result.inode.passed) {
+    // Record damaged inode structures as damaged dentries as
+    // that is where they are stored
+    auto parent = in->get_projected_parent_dn();
+    if (parent) {
+      auto dir = parent->get_dir();
+      mdcache->mds->damage_table.notify_dentry(
+          dir->inode->ino(), dir->frag, parent->last, parent->name);
+    }
+  }
+
+  // Inform the cluster log if we found an error
+  if (!result.passed_validation) {
+    std::string path;
+    in->make_path_string_projected(path);
+    clog->warn() << "Scrub error on inode " << *in
+                 << " (" << path << ") see " << g_conf->name
+                 << " log for details";
+
+    // Put the verbose JSON output into the MDS log for later inspection
+    JSONFormatter f;
+    result.dump(&f);
+    std::ostringstream out;
+    f.flush(out);
+    derr << __func__ << " scrub error on inode " << *in << ": " << out.str()
+         << dendl;
+  } else {
+    dout(10) << __func__ << " scrub passed on inode " << *in << dendl;
+  }
 
   MDSInternalContextBase *c = NULL;
   in->scrub_finished(&c);
