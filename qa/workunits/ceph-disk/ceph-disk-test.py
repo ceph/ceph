@@ -64,7 +64,7 @@ class CephDisk:
         self.conf = configobj.ConfigObj('/etc/ceph/ceph.conf')
 
     def save_conf(self):
-        self.conf.write(open('/etc/ceph/ceph.conf', 'w'))
+        self.conf.write(open('/etc/ceph/ceph.conf', 'wb'))
 
     @staticmethod
     def helper(command):
@@ -97,8 +97,7 @@ class CephDisk:
         return "".join(lines)
 
     def unused_disks(self, pattern='[vs]d.'):
-        names = filter(
-            lambda x: re.match(pattern, x), os.listdir("/sys/block"))
+        names = [x for x in os.listdir("/sys/block") if re.match(pattern, x)]
         if not names:
             return []
         disks = json.loads(
