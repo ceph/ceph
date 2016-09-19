@@ -17,7 +17,7 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodePluginLrc.h"
 #include "ErasureCodeLrc.h"
 
 // re-include our assert
@@ -27,9 +27,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-class ErasureCodePluginLrc : public ErasureCodePlugin {
-public:
-  virtual int factory(const std::string &directory,
+int ErasureCodePluginLrc::factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
@@ -42,7 +40,6 @@ public:
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
-  }
 };
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }

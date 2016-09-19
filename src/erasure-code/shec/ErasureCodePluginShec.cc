@@ -20,7 +20,7 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodePluginShec.h"
 #include "ErasureCodeShecTableCache.h"
 #include "ErasureCodeShec.h"
 #include "jerasure_init.h"
@@ -34,11 +34,7 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodePluginShec: ";
 }
 
-class ErasureCodePluginShec : public ErasureCodePlugin {
-public:
-  ErasureCodeShecTableCache tcache;
-
-  virtual int factory(const std::string &directory,
+int ErasureCodePluginShec::factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
@@ -68,8 +64,7 @@ public:
     dout(10) << "ErasureCodePluginShec: factory() completed" << dendl;
 
     return 0;
-  }
-};
+}
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
