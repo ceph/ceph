@@ -251,7 +251,7 @@ template<typename T>
 inline void small_decode_buf_lowz(T& bp, bufferlist::iterator& p) {
   size_t l;
   small_decode_varint_lowz(l, p);
-  p.copy(l, bp);
+  p.copy_deep(l, bp);
 }
 
 // STL containers

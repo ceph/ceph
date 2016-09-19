@@ -320,7 +320,7 @@ namespace buffer CEPH_BUFFER_API {
       // copy data out.
       // note that these all _append_ to dest!
       void copy(unsigned len, char *dest);
-      void copy(unsigned len, ptr &dest);
+      void copy_deep(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
@@ -360,7 +360,7 @@ namespace buffer CEPH_BUFFER_API {
 
       // copy data out
       void copy(unsigned len, char *dest);
-      void copy(unsigned len, ptr &dest);
+      void copy_deep(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);

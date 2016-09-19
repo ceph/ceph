@@ -1149,8 +1149,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::copy(unsigned len, ptr &dest)
+  void buffer::list::iterator_impl<is_const>::copy_deep(unsigned len, ptr &dest)
   {
+    if (p == ls->end())
+      throw end_of_buffer();
+    assert(p->length() > 0);
     dest = create(len);
     copy(len, dest.c_str());
   }
@@ -1298,9 +1301,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return buffer::list::iterator_impl<false>::copy(len, dest);
   }
 
-  void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
   {
-    buffer::list::iterator_impl<false>::copy(len, dest);
+    buffer::list::iterator_impl<false>::copy_deep(len, dest);
+  }
+
+  void buffer::list::iterator::copy_shallow(unsigned len, ptr &dest)
+  {
+    buffer::list::iterator_impl<false>::copy_shallow(len, dest);
   }
 
   void buffer::list::iterator::copy(unsigned len, list &dest)
