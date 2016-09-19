@@ -189,14 +189,14 @@ class ObjectCacher {
     void set_dontneed(bool v) {
       dontneed = v;
     }
-    bool get_dontneed() {
+    bool get_dontneed() const {
       return dontneed;
     }
 
     void set_nocache(bool v) {
       nocache = v;
     }
-    bool get_nocache() {
+    bool get_nocache() const {
       return nocache;
     }
 
@@ -332,7 +332,7 @@ class ObjectCacher {
 	put();
     }
 
-    bool is_empty() { return data.empty(); }
+    bool is_empty() const { return data.empty(); }
 
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
@@ -459,12 +459,12 @@ class ObjectCacher {
 
   void bh_stat_add(BufferHead *bh);
   void bh_stat_sub(BufferHead *bh);
-  loff_t get_stat_tx() { return stat_tx; }
-  loff_t get_stat_rx() { return stat_rx; }
-  loff_t get_stat_dirty() { return stat_dirty; }
-  loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
-  loff_t get_stat_clean() { return stat_clean; }
-  loff_t get_stat_zero() { return stat_zero; }
+  loff_t get_stat_tx() const { return stat_tx; }
+  loff_t get_stat_rx() const  { return stat_rx; }
+  loff_t get_stat_dirty() const { return stat_dirty; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  loff_t get_stat_clean() const { return stat_clean; }
+  loff_t get_stat_zero() const { return stat_zero; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
