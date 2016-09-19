@@ -455,8 +455,11 @@ int main(int argc, const char **argv)
 					    getpid(), CEPH_FEATURES_ALL,
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
-  Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
-					     entity_name_t::OSD(whoami), "hbclient",
+  Messenger *ms_hbclient_front = Messenger::create(g_ceph_context, g_conf->ms_type,
+					     entity_name_t::OSD(whoami), "hbclient_front",
+					     getpid(), 0, Messenger::HEARTBEAT);
+  Messenger *ms_hbclient_back = Messenger::create(g_ceph_context, g_conf->ms_type,
+					     entity_name_t::OSD(whoami), "hbclient_back",
 					     getpid(), 0, Messenger::HEARTBEAT);
   Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
@@ -467,10 +470,11 @@ int main(int argc, const char **argv)
   Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid());
-  if (!ms_public || !ms_cluster || !ms_hbclient || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
+  if (!ms_public || !ms_cluster || !ms_hbclient_front || !ms_hbclient_back || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
     exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  ms_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_hbclient_front->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_hbclient_back->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
@@ -522,7 +526,9 @@ int main(int argc, const char **argv)
   ms_cluster->set_policy(entity_name_t::TYPE_CLIENT,
 			 Messenger::Policy::stateless_server(0, 0));
 
-  ms_hbclient->set_policy(entity_name_t::TYPE_OSD,
+  ms_hbclient_front->set_policy(entity_name_t::TYPE_OSD,
+			  Messenger::Policy::lossy_client(0, 0));
+  ms_hbclient_back->set_policy(entity_name_t::TYPE_OSD,
 			  Messenger::Policy::lossy_client(0, 0));
   ms_hb_back_server->set_policy(entity_name_t::TYPE_OSD,
 				Messenger::Policy::stateless_server(0, 0));
@@ -539,7 +545,8 @@ int main(int argc, const char **argv)
     exit(1);
 
   if (g_conf->osd_heartbeat_use_min_delay_socket) {
-    ms_hbclient->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+    ms_hbclient_front->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+    ms_hbclient_back->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_front_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
   }
@@ -554,12 +561,18 @@ int main(int argc, const char **argv)
   r = ms_hb_back_server->bind(hb_back_addr);
   if (r < 0)
     exit(1);
+  r = ms_hbclient_back->client_bind(hb_back_addr);
+  if (r < 0)
+    exit(1);
 
   // hb front should bind to same ip as public_addr
   entity_addr_t hb_front_addr = g_conf->public_addr;
   if (hb_front_addr.is_ip())
     hb_front_addr.set_port(0);
   r = ms_hb_front_server->bind(hb_front_addr);
+  if (r < 0)
+    exit(1);
+  r = ms_hbclient_front->client_bind(hb_front_addr);
   if (r < 0)
     exit(1);
 
@@ -583,7 +596,8 @@ int main(int argc, const char **argv)
                 whoami,
                 ms_cluster,
                 ms_public,
-                ms_hbclient,
+                ms_hbclient_front,
+                ms_hbclient_back,
                 ms_hb_front_server,
                 ms_hb_back_server,
                 ms_objecter,
@@ -599,7 +613,8 @@ int main(int argc, const char **argv)
   }
 
   ms_public->start();
-  ms_hbclient->start();
+  ms_hbclient_front->start();
+  ms_hbclient_back->start();
   ms_hb_front_server->start();
   ms_hb_back_server->start();
   ms_cluster->start();
@@ -625,7 +640,8 @@ int main(int argc, const char **argv)
     kill(getpid(), SIGTERM);
 
   ms_public->wait();
-  ms_hbclient->wait();
+  ms_hbclient_front->wait();
+  ms_hbclient_back->wait();
   ms_hb_front_server->wait();
   ms_hb_back_server->wait();
   ms_cluster->wait();
@@ -639,7 +655,8 @@ int main(int argc, const char **argv)
   // done
   delete osd;
   delete ms_public;
-  delete ms_hbclient;
+  delete ms_hbclient_front;
+  delete ms_hbclient_back;
   delete ms_hb_front_server;
   delete ms_hb_back_server;
   delete ms_cluster;

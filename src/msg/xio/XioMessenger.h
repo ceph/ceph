@@ -111,6 +111,8 @@ public:
 
   virtual int rebind(const set<int>& avoid_ports);
 
+  virtual int client_bind(const entity_addr_t& addr);
+
   virtual int start();
 
   virtual void wait();

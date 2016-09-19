@@ -835,9 +835,9 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     release_map(next_map);
     return ret;
   }
-  ret.first = osd->hbclient_messenger->get_connection(next_map->get_hb_back_inst(peer));
+  ret.first = osd->hbclient_back_messenger->get_connection(next_map->get_hb_back_inst(peer));
   if (next_map->get_hb_front_addr(peer) != entity_addr_t())
-    ret.second = osd->hbclient_messenger->get_connection(next_map->get_hb_front_inst(peer));
+    ret.second = osd->hbclient_front_messenger->get_connection(next_map->get_hb_front_inst(peer));
   release_map(next_map);
   return ret;
 }
@@ -1622,7 +1622,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	 int id,
 	 Messenger *internal_messenger,
 	 Messenger *external_messenger,
-	 Messenger *hb_clientm,
+	 Messenger *hb_front_clientm,
+	 Messenger *hb_back_clientm,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
 	 Messenger *osdc_messenger,
@@ -1663,7 +1664,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_update_lock("OSD::heartbeat_update_lock"),
   heartbeat_need_update(true),
-  hbclient_messenger(hb_clientm),
+  hbclient_front_messenger(hb_front_clientm),
+  hbclient_back_messenger(hb_back_clientm),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
   heartbeat_thread(this),
@@ -2168,7 +2170,8 @@ int OSD::init()
   client_messenger->add_dispatcher_head(this);
   cluster_messenger->add_dispatcher_head(this);
 
-  hbclient_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hbclient_front_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hbclient_back_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
@@ -2768,7 +2771,8 @@ int OSD::shutdown()
   class_handler->shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
-  hbclient_messenger->shutdown();
+  hbclient_front_messenger->shutdown();
+  hbclient_back_messenger->shutdown();
   objecter_messenger->shutdown();
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
@@ -7055,7 +7059,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
           network_error = true;
         }
 
-	hbclient_messenger->mark_down_all();
+	hbclient_front_messenger->mark_down_all();
+	hbclient_back_messenger->mark_down_all();
 
 	reset_heartbeat_peers();
       }

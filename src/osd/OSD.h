@@ -1633,7 +1633,8 @@ private:
   bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbclient_messenger;
+  Messenger *hbclient_front_messenger;
+  Messenger *hbclient_back_messenger;
   Messenger *hb_front_server_messenger;
   Messenger *hb_back_server_messenger;
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
@@ -2430,7 +2431,8 @@ protected:
       int id,
       Messenger *internal,
       Messenger *external,
-      Messenger *hb_client,
+      Messenger *hb_front_client,
+      Messenger *hb_back_client,
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
