@@ -6852,6 +6852,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   /* These are always considered to be available */
   stx->stx_dev = in->snapid;
   stx->stx_blksize = MAX(in->layout.stripe_unit, 4096);
+  stx->stx_mode = S_IFMT & in->mode;
 
   if (use_faked_inos())
    stx->stx_ino = in->faked_ino;
