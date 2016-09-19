@@ -656,10 +656,10 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.push_front(*b);
       break;
     case BUFFER_WARM_OUT:
+      b->cache_private = BUFFER_HOT;
       // move to hot.  fall-thru
     case BUFFER_HOT:
       dout(20) << __func__ << " move to hot " << *b << dendl;
-      b->cache_private = BUFFER_HOT;
       buffer_hot.push_front(*b);
       break;
     default:
