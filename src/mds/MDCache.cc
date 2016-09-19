@@ -11905,9 +11905,11 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   ScrubHeaderRef &header = cs->header;
 
   // Cannot scrub same dentry twice at same time
-  if (in->scrub_info()->scrub_in_progress) {
+  if (in->scrub_infop && in->scrub_infop->scrub_in_progress) {
     mds->server->respond_to_request(mdr, -EBUSY);
     return;
+  } else {
+    in->scrub_info();
   }
 
   header->origin = in;

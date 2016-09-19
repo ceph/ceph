@@ -2932,6 +2932,7 @@ void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
 {
   dout(20) << __func__ << dendl;
   assert(is_complete());
+  assert(header != nullptr);
 
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
@@ -3019,7 +3020,7 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
     dns.erase(dnkey);
 
     if (dn->get_projected_version() < scrub_infop->last_recursive.version &&
-	!(scrub_infop->header && scrub_infop->header->force)) {
+	!(scrub_infop->header->force)) {
       dout(15) << " skip dentry " << dnkey.name
 	       << ", no change since last scrub" << dendl;
       continue;
@@ -3125,8 +3126,7 @@ bool CDir::scrub_local()
     scrub_infop->last_scrub_dirty = true;
   } else {
     scrub_infop->pending_scrub_error = true;
-    if (scrub_infop->header &&
-	scrub_infop->header->repair)
+    if (scrub_infop->header->repair)
       cache->repair_dirfrag_stats(this);
   }
   return rval;
