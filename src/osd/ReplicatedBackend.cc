@@ -1511,6 +1511,7 @@ void ReplicatedBackend::prepare_pull(
     if (parent->min_peer_features() & CEPH_OSD_PARTIAL_RECOVERY)
       recovery_info.copy_subset.intersection_of(missing_iter->second.clean_regions.get_dirty_regions());
     recovery_info.size = ((uint64_t)-1);
+    recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
   }
 
   h->pulls[fromshard].push_back(PullOp());
@@ -1638,6 +1639,7 @@ void ReplicatedBackend::prep_push(
   pi.recovery_info.soid = soid;
   pi.recovery_info.oi = obc->obs.oi;
   pi.recovery_info.version = version;
+  pi.recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
   pi.recovery_progress.first = true;
   pi.recovery_progress.data_recovered_to = 0;
   pi.recovery_progress.data_complete = 0;
@@ -1740,7 +1742,8 @@ void ReplicatedBackend::submit_push_data(
       //clone overlap content in local object
       struct stat st;
       int r = store->stat(coll, ghobject_t(recovery_info.soid), &st);
-      if (r == 0) {
+      if (recovery_info.object_exist) {
+	assert(r == 0);
         uint64_t local_size = MIN(recovery_info.size, (uint64_t)st.st_size);
         interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
         if (local_size) {
@@ -1756,13 +1759,6 @@ void ReplicatedBackend::submit_push_data(
           t->clone_range(coll, ghobject_t(recovery_info.soid), ghobject_t(target_oid),
              q.get_start(), q.get_len(), q.get_start());
         }
-      } else if (r == -ENOENT) {
-        dout(10) << " local object " << recovery_info.soid << " does not exist "
-           << " skip clone_range " << dendl;
-      } else {
-        get_parent()->clog_error() << get_info().pgid << " "
-                  << " tried to clone_range from local object " << recovery_info.soid
-                  << " but got " << cpp_strerror(-r) << "\n";
       }
     }
   }
@@ -2073,7 +2069,6 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     out_progress = &_new_progress;
   ObjectRecoveryProgress &new_progress = *out_progress;
   new_progress = progress;
-  bool is_first = progress.first;
 
   dout(7) << "send_push_op " << recovery_info.soid
 	  << " v " << recovery_info.version
