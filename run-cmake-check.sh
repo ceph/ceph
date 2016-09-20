@@ -49,12 +49,10 @@ function run() {
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
-    sudo /sbin/modprobe rbd
 
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
-    git submodule update --init --recursive
     $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
