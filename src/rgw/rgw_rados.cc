@@ -3788,9 +3788,9 @@ int RGWRados::init_complete()
     obj_expirer->start_processor();
   }
 
-  /* not point of running sync thread if there is a single zone or
-     we don't have a master zone configured or there is no rest_master_conn */
-  if (get_zonegroup().zones.size() < 2 || get_zonegroup().master_zone.empty() || !rest_master_conn) {
+  /* not point of running sync thread if  we don't have a master zone configured 
+    or there is no rest_master_conn */
+  if (get_zonegroup().master_zone.empty() || !rest_master_conn) {
     run_sync_thread = false;
   }
 
