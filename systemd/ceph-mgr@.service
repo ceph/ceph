@@ -1,8 +1,8 @@
 [Unit]
 Description=Ceph cluster manager daemon
-After=network-online.target local-fs.target time-sync.target
+After=network-online.target local-fs.target time-sync.target ceph-mon@%i.service
 Wants=network-online.target local-fs.target time-sync.target
-PartOf=ceph-mgr.target
+PartOf=ceph-mgr.target ceph-mon@%i.service
 
 [Service]
 LimitNOFILE=1048576
