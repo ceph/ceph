@@ -9,6 +9,15 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+# This ExecStartPre business is a hack to inject a key for the mgr daemon,
+# using whatever key already exists on the mon on this node to gain sufficient
+# permissions to create the mgr key.  Failure is ignored at every step (the
+# '-' prefix) in case someone has already used some other trick to set
+# everything up manually.
+ExecStartPre=-/usr/bin/mkdir -p /var/lib/ceph/mgr/${CLUSTER}-%i
+ExecStartPre=-/usr/bin/sh -c "[ -f /var/lib/ceph/mgr/${CLUSTER}-%i/keyring ] || /usr/bin/ceph-authtool --create-keyring --gen-key --name=mgr.%i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring"
+ExecStartPre=-/usr/bin/chown -R ceph.ceph /var/lib/ceph/mgr/${CLUSTER}-%i
+ExecStartPre=-/usr/bin/ceph -i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring auth add mgr.%i mon 'allow *' --keyring=/var/lib/ceph/mon/${CLUSTER}-%i/keyring --name=mon.
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
