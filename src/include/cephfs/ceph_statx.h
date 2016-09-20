@@ -40,14 +40,10 @@ struct ceph_statx {
 	uint64_t	stx_size;
 	uint64_t	stx_blocks;
 	uint64_t	stx_version;
-	int64_t		stx_atime;
-	int64_t		stx_btime;
-	int64_t		stx_ctime;
-	int64_t		stx_mtime;
-	int32_t		stx_atime_ns;
-	int32_t		stx_btime_ns;
-	int32_t		stx_ctime_ns;
-	int32_t		stx_mtime_ns;
+	struct timespec	stx_atime;
+	struct timespec	stx_btime;
+	struct timespec	stx_ctime;
+	struct timespec	stx_mtime;
 	uint32_t	stx_rdev_major;
 	uint32_t	stx_rdev_minor;
 	uint32_t	stx_dev_major;
