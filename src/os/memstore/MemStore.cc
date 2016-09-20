@@ -1496,8 +1496,10 @@ int BufferlistObject::write(uint64_t offset, const bufferlist &src)
   if (get_size() >= offset) {
     newdata.substr_of(data, 0, offset);
   } else {
-    newdata.substr_of(data, 0, get_size());
-    newdata.append(offset - get_size());
+    if (get_size()) {
+      newdata.substr_of(data, 0, get_size());
+    }
+    newdata.append_zero(offset - get_size());
   }
 
   newdata.append(src);
