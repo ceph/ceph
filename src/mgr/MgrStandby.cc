@@ -208,6 +208,12 @@ bool MgrStandby::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
   return *authorizer != NULL;
 }
 
+bool MgrStandby::ms_handle_refused(Connection *con)
+{
+  // do nothing for now
+  return false;
+}
+
 // A reference for use by the signal handler
 MgrStandby *signal_mgr = nullptr;
 

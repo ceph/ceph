@@ -117,6 +117,11 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
   return *authorizer != NULL;
 }
 
+bool DaemonServer::ms_handle_refused(Connection *con)
+{
+  // do nothing for now
+  return false;
+}
 
 bool DaemonServer::ms_dispatch(Message *m)
 {

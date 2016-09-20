@@ -170,6 +170,11 @@ bool MgrClient::ms_handle_reset(Connection *con)
 #endif
 }
 
+bool MgrClient::ms_handle_refused(Connection *con)
+{
+  // do nothing for now
+  return false;
+}
 
 void MgrClient::send_report()
 {
