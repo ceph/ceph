@@ -137,3 +137,7 @@ add_executable(unittest_transaction
 add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_transaction)
 target_link_libraries(unittest_transaction os common)
 
+# unittest_memstore_clone
+add_executable(unittest_memstore_clone test_memstore_clone.cc)
+add_ceph_unittest(unittest_memstore_clone ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_memstore_clone)
+target_link_libraries(unittest_memstore_clone os global)
