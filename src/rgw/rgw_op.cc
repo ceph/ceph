@@ -4688,7 +4688,7 @@ void RGWSetAttrs::execute()
   store->set_atomic(s->obj_ctx, obj);
 
   if (!s->object.empty()) {
-    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &attrs);
+    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, nullptr);
   } else {
     for (auto& iter : attrs) {
       s->bucket_attrs[iter.first] = std::move(iter.second);
