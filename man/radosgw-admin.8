@@ -227,6 +227,23 @@ Data pool to scan for leaked rados objects
 .B \-\-num\-shards
 Number of shards to use for keeping the temporary scan info
 .UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-orphan\-stale\-secs
+Number of seconds to wait before declaring an object to be an orphan.
+Default is 86400 (24 hours).
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-job\-id
+Set the job id (for orphans find)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-max\-concurrent\-ios
+Maximum concurrent ios for orphans find.
+Default is 32.
+.UNINDENT
 .SH EXAMPLES
 .sp
 Generate a new user:
