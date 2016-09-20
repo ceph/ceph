@@ -29,6 +29,7 @@ typedef struct {
   atomic64_t recvd;
   atomic64_t limit;
   Period period;
+  int accept_idx;
   int reject_idx;
 } api_counter_t;
 
@@ -294,53 +295,73 @@ static void setup_timers()
 }
 
 
-// Rejected API calls 'perf' counters
-// One reject call counter per GET / PUT API counter
-// Counter names: rgw_api_reject_get_<user>, rgw_api_reject_put_<user>
-#define RGW_API_REJECT_START_IDX   (17000)
+// API calls 'perf' counters
+// Per-account counters for accept + reject GET / PUT call
+// Counter names: rgw_api_{accept,reject}_{get,put}_<user>
+#define RGW_API_CTR_IDX   (17000)
+#define RGW_API_ACCEPT_CTR_NAME_PREFIX string("rgw_api_accept_")
 #define RGW_API_REJECT_CTR_NAME_PREFIX string("rgw_api_reject_")
 
-PerfCountersBuilder *rgw_api_reject_pcb;
-PerfCounters *rgw_api_reject_ctrs;
+PerfCountersBuilder *rgw_api_ctr_pcb;
+PerfCounters *rgw_api_ctrs;
 
-static void add_reject_ctr(int ctr_idx, string ctr_name)
+static void add_api_ctr(int ctr_idx, string ctr_name)
 {
-  ctr_name = RGW_API_REJECT_CTR_NAME_PREFIX + ctr_name;
   char *ctr_name_str = new char[ctr_name.length() + 1];
   strcpy(ctr_name_str, ctr_name.c_str());
-  rgw_api_reject_pcb->add_u64_counter(ctr_idx, ctr_name_str);
+  rgw_api_ctr_pcb->add_u64_counter(ctr_idx, ctr_name_str);
 }
 
-static void init_reject_ctrs(CephContext *cct)
+static void add_api_accept_ctr(int ctr_idx, string ctr_name)
 {
-  int num_reject_api_ctrs = rgw_get_ctrs->size() + rgw_put_ctrs->size();
+  ctr_name = RGW_API_ACCEPT_CTR_NAME_PREFIX + ctr_name;
+  add_api_ctr(ctr_idx, ctr_name);
+}
+
+static void add_api_reject_ctr(int ctr_idx, string ctr_name)
+{
+  ctr_name = RGW_API_REJECT_CTR_NAME_PREFIX + ctr_name;
+  add_api_ctr(ctr_idx, ctr_name);
+}
+
+static void rgw_init_api_ctrs(CephContext *cct)
+{
+  int num_rgw_api_ctrs = (rgw_get_ctrs->size() + rgw_put_ctrs->size()) * 2;
 
   // PerfCountersBuilder does a ()-style bounds check, hence the +1's
-  rgw_api_reject_pcb = new PerfCountersBuilder(cct, "rgw_api_rejects",
-	RGW_API_REJECT_START_IDX, RGW_API_REJECT_START_IDX + num_reject_api_ctrs + 1);
-  int next_ctr_idx = RGW_API_REJECT_START_IDX + 1;
+  rgw_api_ctr_pcb = new PerfCountersBuilder(cct, "rgw_api_counters",
+	RGW_API_CTR_IDX, RGW_API_CTR_IDX + num_rgw_api_ctrs + 1);
+  int next_ctr_idx = RGW_API_CTR_IDX + 1;
 
   for ( api_ctr_it iter = rgw_get_ctrs->begin();
 	iter != rgw_get_ctrs->end();
-	++iter, ++next_ctr_idx ) {
+	++iter ) {
     string user = iter->first;
     api_counter_t *ctr = iter->second;
     dout(20) << "Adding GET: " << user << " @ " << next_ctr_idx << dendl;
-    add_reject_ctr(next_ctr_idx, string("get_") + user);
+    add_api_accept_ctr(next_ctr_idx, string("get_") + user);
+    ctr->accept_idx = next_ctr_idx;
+    next_ctr_idx++;
+    add_api_reject_ctr(next_ctr_idx, string("get_") + user);
     ctr->reject_idx = next_ctr_idx;
+    next_ctr_idx++;
   }
   for ( api_ctr_cit iter = rgw_put_ctrs->begin();
 	iter != rgw_put_ctrs->end();
-	++iter, ++next_ctr_idx ) {
+	++iter ) {
     string user = iter->first;
     api_counter_t *ctr = iter->second;
     dout(20) << "Adding PUT: " << user << " @ " << next_ctr_idx << dendl;
-    add_reject_ctr(next_ctr_idx, string("put_") + user);
+    add_api_accept_ctr(next_ctr_idx, string("put_") + user);
+    ctr->accept_idx = next_ctr_idx;
+    next_ctr_idx++;
+    add_api_reject_ctr(next_ctr_idx, string("put_") + user);
     ctr->reject_idx = next_ctr_idx;
+    next_ctr_idx++;
   }
 
-  rgw_api_reject_ctrs = rgw_api_reject_pcb->create_perf_counters();
-  cct->get_perfcounters_collection()->add(rgw_api_reject_ctrs);
+  rgw_api_ctrs = rgw_api_ctr_pcb->create_perf_counters();
+  cct->get_perfcounters_collection()->add(rgw_api_ctrs);
 }
 
 
@@ -357,9 +378,10 @@ static bool rgw_op_rate_limit_ok(RGW_api_ctr_t *ctrs, string user)
     dout(20) << user << " : recvd = " << ctr->recvd.read() \
 	     << ", limit = " << ctr->limit.read() << dendl;
     if ( ctr->recvd.read() > ctr->limit.read() ) {
-      rgw_api_reject_ctrs->inc(ctr->reject_idx);
+      rgw_api_ctrs->inc(ctr->reject_idx);
       return false;
     }
+    rgw_api_ctrs->inc(ctr->accept_idx);
   }
   return true;
 }
@@ -440,7 +462,7 @@ int rgw_rate_limit_init(CephContext *cct)
     return -1;
   }
 
-  init_reject_ctrs(cct);
+  rgw_init_api_ctrs(cct);
 
   FileWatchThread *fwthd = new FileWatchThread();
   fwthd->create();
