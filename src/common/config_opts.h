@@ -972,6 +972,8 @@ OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
 OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
 OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
+OPTION(bluestore_gc_max_blob_depth, OPT_U32, 3)
+OPTION(bluestore_gc_merge_data, OPT_BOOL, true)
 /*
  * Require the net gain of compression at least to be at this ratio,
  * otherwise we don't compress.
