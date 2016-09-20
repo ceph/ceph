@@ -66,6 +66,7 @@ public:
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new);
   bool ms_verify_authorizer(Connection *con,
