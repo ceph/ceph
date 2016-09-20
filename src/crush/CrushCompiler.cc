@@ -730,8 +730,8 @@ int CrushCompiler::parse_crush(iter_t const& i)
 { 
   find_used_bucket_ids(i);
 
-  int r = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    int r = 0;
     switch (p->value.id().to_long()) {
     case crush_grammar::_tunable:
       r = parse_tunable(p);
@@ -751,10 +751,10 @@ int CrushCompiler::parse_crush(iter_t const& i)
     default:
       assert(0);
     }
+    if (r < 0) {
+      return r;
+    }
   }
-
-  if (r < 0)
-    return r;
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
   crush.finalize();
