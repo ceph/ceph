@@ -196,7 +196,8 @@ public:
 };
 
 class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
-  string filename;
+  parts_collection_t parts;
+  std::string filename;
   RGWPolicyEnv env;
   RGWPolicy post_policy;
   map<string, string> crypt_http_responses;

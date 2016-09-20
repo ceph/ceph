@@ -234,9 +234,11 @@ public:
   };
 
 protected:
+  using parts_collection_t = \
+    std::map<std::string, post_form_part, const ltstr_nocase>;
+
   std::string err_msg;
   ceph::bufferlist in_data;
-  std::map<std::string, post_form_part, const ltstr_nocase> parts;
 
   int read_with_boundary(ceph::bufferlist& bl,
                          uint64_t max,
@@ -256,8 +258,8 @@ protected:
 
   int read_form_part_header(struct post_form_part *part,
                             bool *done);
-  bool part_str(const string& name, string *val);
-  bool part_bl(const string& name, bufferlist *pbl);
+
+  int get_params() override;
 
   static int parse_part_field(const std::string& line,
                               std::string& field_name, /* out */
@@ -266,7 +268,14 @@ protected:
   static void parse_boundary_params(const std::string& params_str,
                                     std::string& first,
                                     std::map<std::string, std::string>& params);
-  int get_params() override;
+
+  static bool part_str(parts_collection_t& parts,
+                       const std::string& name,
+                       std::string *val);
+
+  static bool part_bl(parts_collection_t& parts,
+                      const std::string& name,
+                      ceph::bufferlist *pbl);
 
 public:
   RGWPostObj_ObjStore() {}

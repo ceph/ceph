@@ -1820,12 +1820,12 @@ int RGWFormPost::get_params()
         return -EINVAL;
       }
 
-      parts[part.name] = std::move(part);
+      ctrl_parts[part.name] = std::move(part);
     }
   } while (! stream_done);
 
   std::string expires;
-  if (part_str("expires", &expires) && is_expired(expires)) {
+  if (part_str(ctrl_parts, "expires", &expires) && is_expired(expires)) {
     err_msg = "FormPost: Form Expired";
     return -EACCES;
   }
