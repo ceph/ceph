@@ -873,7 +873,7 @@ public:
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
   void _ms_dispatch(Message *m);
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     lock.Lock();
     _ms_dispatch(m);
     lock.Unlock();
@@ -886,9 +886,9 @@ public:
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con);
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override;
 
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
@@ -915,9 +915,9 @@ public:
   static int check_features(MonitorDBStore *store);
 
   // config observer
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-                                  const std::set<std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set<std::string> &changed) override;
 
   void update_log_clients();
   int sanitize_options();
