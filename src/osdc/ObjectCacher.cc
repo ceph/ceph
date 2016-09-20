@@ -222,10 +222,10 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 /*
  * count bytes we have cached in given range
  */
-bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
+bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 {
   assert(oc->lock.is_locked());
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(cur);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(cur);
   while (left > 0) {
     if (p == data.end())
       return false;
@@ -281,7 +281,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
   loff_t cur = ex.offset;
   loff_t left = ex.length;
 
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex.offset);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(ex.offset);
   while (left > 0) {
     // at end?
     if (p == data.end()) {
@@ -407,7 +407,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
   loff_t cur = ex.offset;
   loff_t left = ex.length;
 
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex.offset);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(ex.offset);
   while (left > 0) {
     loff_t max = left;
 
@@ -564,7 +564,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     complete = false;
   }
 
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(off);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
     if (bh->start() >= off + len)
@@ -837,7 +837,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
     // apply to bh's!
     loff_t opos = start;
     while (true) {
-      map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(opos);
+      map<loff_t, BufferHead*>::const_iterator p = ob->data_lower_bound(opos);
       if (p == ob->data.end())
 	break;
       if (opos >= start+(loff_t)length) {
@@ -1116,7 +1116,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 
     list <BufferHead*> hit;
     // apply to bh's!
-    for (map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(start);
+    for (map<loff_t, BufferHead*>::const_iterator p = ob->data_lower_bound(start);
 	 p != ob->data.end();
 	 ++p) {
       BufferHead *bh = p->second;
@@ -1950,7 +1950,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
   list<BufferHead*> blist;
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
-  for (map<loff_t,BufferHead*>::iterator p = ob->data_lower_bound(offset);
+  for (map<loff_t,BufferHead*>::const_iterator p = ob->data_lower_bound(offset);
        p != ob->data.end();
        ++p) {
     BufferHead *bh = p->second;
@@ -2013,7 +2013,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 
   list<BufferHead*> blist;
   Object *last_ob = NULL;
-  set<BufferHead*, BufferHead::ptr_lt>::iterator it, p, q;
+  set<BufferHead*, BufferHead::ptr_lt>::const_iterator it, p, q;
 
   // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
   // order. But items in oset->objects are not sorted. So the iterator can
