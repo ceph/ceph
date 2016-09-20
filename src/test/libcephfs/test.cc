@@ -1469,6 +1469,12 @@ TEST(LibCephFS, SlashDotDot) {
   ceph_shutdown(cmount);
 }
 
+static inline bool
+timespec_eq(timespec const& lhs, timespec const& rhs)
+{
+  return lhs.tv_sec == rhs.tv_sec && lhs.tv_nsec == rhs.tv_nsec;
+}
+
 TEST(LibCephFS, Btime) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -1488,26 +1494,22 @@ TEST(LibCephFS, Btime) {
 
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
   ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
-  ASSERT_EQ(stx.stx_btime, stx.stx_ctime);
-  ASSERT_EQ(stx.stx_btime_ns, stx.stx_ctime_ns);
+  ASSERT_TRUE(timespec_eq(stx.stx_ctime, stx.stx_btime));
   ceph_close(cmount, fd);
 
   ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(timespec_eq(stx.stx_ctime, stx.stx_btime));
   ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
-  ASSERT_EQ(stx.stx_btime, stx.stx_ctime);
-  ASSERT_EQ(stx.stx_btime_ns, stx.stx_ctime_ns);
 
-  int64_t old_btime = stx.stx_btime;
-  int32_t old_btime_ns = stx.stx_btime_ns;
+  struct timespec old_btime = stx.stx_btime;
 
   /* Now sleep, do a chmod and verify that the ctime changed, but btime didn't */
   sleep(1);
   ASSERT_EQ(ceph_chmod(cmount, filename, 0644), 0);
-  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_BTIME, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_BTIME);
-  ASSERT_EQ(stx.stx_btime, old_btime);
-  ASSERT_EQ(stx.stx_btime_ns, old_btime_ns);
-  ASSERT_FALSE(old_btime == stx.stx_ctime && old_btime_ns == stx.stx_ctime_ns);
+  ASSERT_TRUE(timespec_eq(stx.stx_btime, old_btime));
+  ASSERT_FALSE(timespec_eq(stx.stx_ctime, stx.stx_btime));
 
   ceph_shutdown(cmount);
 }
@@ -1528,17 +1530,15 @@ TEST(LibCephFS, SetBtime) {
   ceph_close(cmount, fd);
 
   struct ceph_statx stx;
+  struct timespec old_btime = { 1, 2 };
 
-  stx.stx_btime = 1;
-  stx.stx_btime_ns = 2;
+  stx.stx_btime = old_btime;
 
   ASSERT_EQ(ceph_setattrx(cmount, filename, &stx, CEPH_SETATTR_BTIME, 0), 0);
 
   ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_BTIME, 0), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_BTIME);
-
-  ASSERT_EQ(stx.stx_btime, 1);
-  ASSERT_EQ(stx.stx_btime_ns, 2);
+  ASSERT_TRUE(timespec_eq(stx.stx_btime, old_btime));
 
   ceph_shutdown(cmount);
 }
@@ -1570,8 +1570,7 @@ TEST(LibCephFS, LazyStatx) {
   ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
   ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &st, &file2, getuid(), getgid()), 0);
 
-  int64_t old_ctime = stat_get_ctime_sec(&st);
-  int32_t old_ctime_ns = stat_get_ctime_nsec(&st);
+  struct timespec old_ctime = st.st_ctim;
 
   /*
    * Now sleep, do a chmod on the first client and the see whether we get a
@@ -1584,8 +1583,8 @@ TEST(LibCephFS, LazyStatx) {
   struct ceph_statx	stx;
   ASSERT_EQ(ceph_ll_getattrx(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, getuid(), getgid()), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
-  ASSERT_EQ(stx.stx_ctime, old_ctime);
-  ASSERT_EQ(stx.stx_ctime_ns, old_ctime_ns);
+  ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
+	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);
 
   ceph_shutdown(cmount1);
   ceph_shutdown(cmount2);
