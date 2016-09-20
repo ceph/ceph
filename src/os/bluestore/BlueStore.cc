@@ -5847,7 +5847,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       return;
     case TransContext::STATE_KV_QUEUED:
-      txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+      txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       txc->state = TransContext::STATE_KV_DONE;
       _txc_finish_kv(txc);
       // ** fall-thru **
@@ -6193,6 +6193,7 @@ void BlueStore::_kv_sync_thread()
 	  if (txc->last_blobid > high_blobid) {
 	    high_blobid = txc->last_blobid;
 	  }
+          txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
 	if (!kv_committing.empty()) {
 	  TransContext *first_txc = kv_committing.front();
