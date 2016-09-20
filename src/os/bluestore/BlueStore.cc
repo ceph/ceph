@@ -317,7 +317,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
   int r;
   const char *p = key.c_str();
 
-  if (key.length() < 2 + 8 + 4)
+  if (key.length() < 1 + 8 + 4)
     return -1;
   p = _key_decode_shard(p, &oid->shard_id);
 
@@ -630,6 +630,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.insert(buffer_warm_in.iterator_to(*near), *b);
       break;
     case BUFFER_WARM_OUT:
+      assert(b->is_empty());
       buffer_warm_out.insert(buffer_warm_out.iterator_to(*near), *b);
       break;
     case BUFFER_HOT:
@@ -656,10 +657,10 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.push_front(*b);
       break;
     case BUFFER_WARM_OUT:
+      b->cache_private = BUFFER_HOT;
       // move to hot.  fall-thru
     case BUFFER_HOT:
       dout(20) << __func__ << " move to hot " << *b << dendl;
-      b->cache_private = BUFFER_HOT;
       buffer_hot.push_front(*b);
       break;
     default:
@@ -6463,10 +6464,16 @@ int BlueStore::queue_transactions(
     txc->t->set(PREFIX_WAL, key, bl);
   }
 
+  if (handle)
+    handle->suspend_tp_timeout();
+
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
   throttle_wal_ops.get(txc->ops);
   throttle_wal_bytes.get(txc->bytes);
+
+  if (handle)
+    handle->reset_tp_timeout();
 
   logger->inc(l_bluestore_txc);
 
@@ -7345,13 +7352,12 @@ int BlueStore::_do_alloc_write(
     }
     if (wi.mark_unused) {
       auto b_off = wi.b_off;
-      auto b_len = wi.bl.length();
+      auto b_end = b_off + wi.bl.length();
       if (b_off) {
         b->dirty_blob().add_unused(0, b_off);
       }
-      if (b_off + b_len < wi.blob_length) {
-        b->dirty_blob().add_unused(b_off + b_len,
-				   wi.blob_length - (b_off + b_len));
+      if (b_end < wi.blob_length) {
+        b->dirty_blob().add_unused(b_end, wi.blob_length - b_end);
       }
     }
 
