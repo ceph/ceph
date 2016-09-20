@@ -47,7 +47,6 @@ struct CancelableContext;
  *
  * References are held by Watch and the timeout callback.
  */
-class NotifyTimeoutCB;
 class Notify {
   friend class NotifyTimeoutCB;
   friend class Watch;
