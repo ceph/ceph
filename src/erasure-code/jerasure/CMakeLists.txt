@@ -16,6 +16,7 @@ set(jerasure_srcs
   jerasure/src/jerasure.c
   jerasure/src/liberation.c
   jerasure/src/reed_sol.c
+  gf-complete/src/gf_cpu.c
   gf-complete/src/gf_wgen.c
   gf-complete/src/gf_method.c
   gf-complete/src/gf_w16.c

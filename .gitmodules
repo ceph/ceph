@@ -11,7 +11,7 @@
 [submodule "src/erasure-code/jerasure/gf-complete"]
 	path = src/erasure-code/jerasure/gf-complete
 	url = https://github.com/ceph/gf-complete.git
-	branch = v2-ceph
+	branch = v3-ceph
 [submodule "src/rocksdb"]
 	path = src/rocksdb
 	url = https://github.com/ceph/rocksdb
