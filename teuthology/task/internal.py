@@ -213,7 +213,11 @@ def check_lock(ctx, config, check_up=True):
     """
     Check lock status of remote machines.
     """
-    if not teuth_config.lock_server or ctx.config.get('check-locks') is False:
+    if (
+        not teuth_config.lock_server or
+        ctx.config.get('check-locks') is False or
+        'roles' not in ctx.config
+    ):
         log.info('Lock checking disabled.')
         return
     log.info('Checking locks...')
@@ -308,6 +312,10 @@ def add_remotes(ctx, config):
     """
     Create a ctx.cluster object populated with remotes mapped to roles
     """
+    ctx.cluster = cluster.Cluster()
+    # Allow jobs to run without using nodes, for self-testing
+    if 'roles' not in ctx.config:
+        return
     remotes = []
     machs = []
     for name in ctx.config['targets'].iterkeys():
@@ -321,7 +329,6 @@ def add_remotes(ctx, config):
             pass
         rem = remote.Remote(name=t, host_key=key, keep_alive=True)
         remotes.append(rem)
-    ctx.cluster = cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):
             assert all(isinstance(role, str) for role in roles), \
