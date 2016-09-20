@@ -3,7 +3,6 @@
 
 #include "librbd/object_map/SnapshotRollbackRequest.h"
 #include "common/dout.h"
-#include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/InvalidateRequest.h"

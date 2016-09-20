@@ -27,6 +27,7 @@
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 #include "include/assert.h"
 #include "include/unordered_map.h"
@@ -57,10 +58,33 @@ enum {
   l_bluestore_state_wal_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_compress_lat,
+  l_bluestore_decompress_lat,
+  l_bluestore_compress_success_count,
   l_bluestore_write_pad_bytes,
   l_bluestore_wal_write_ops,
   l_bluestore_wal_write_bytes,
   l_bluestore_write_penalty_read_ops,
+  l_bluestore_allocated,
+  l_bluestore_stored,
+  l_bluestore_compressed,
+  l_bluestore_compressed_allocated,
+  l_bluestore_compressed_original,
+  l_bluestore_onode_hits,
+  l_bluestore_onode_misses,
+  l_bluestore_buffer_hit_bytes,
+  l_bluestore_buffer_miss_bytes,
+  l_bluestore_write_big,
+  l_bluestore_write_big_bytes,
+  l_bluestore_write_big_blobs,
+  l_bluestore_write_small,
+  l_bluestore_write_small_bytes,
+  l_bluestore_write_small_unused,
+  l_bluestore_write_small_wal,
+  l_bluestore_write_small_pre_read,
+  l_bluestore_write_small_new,
+  l_bluestore_txc,
+  l_bluestore_onode_reshard,
   l_bluestore_last
 };
 
@@ -79,31 +103,7 @@ public:
   void _set_compression();
 
   class TransContext;
-  class Blob;
 
-  // --------------------------------------------------------
-  // intermediate data structures used while reading
-  struct region_t {
-    uint64_t logical_offset;
-    uint64_t blob_xoffset;   //region offset within the blob
-    uint64_t length;
-
-    region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
-      : logical_offset(offset),
-      blob_xoffset(b_offs),
-      length(len) {}
-    region_t(const region_t& from)
-      : logical_offset(from.logical_offset),
-      blob_xoffset(from.blob_xoffset),
-      length(from.length) {}
-
-    friend ostream& operator<<(ostream& out, const region_t& r) {
-      return out << "0x" << std::hex << r.logical_offset << ":"
-		 << r.blob_xoffset << "~" << r.length << std::dec;
-    }
-  };
-  typedef list<region_t> regions2read_t;
-  typedef map<Blob*, regions2read_t> blobs2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
@@ -111,17 +111,15 @@ public:
   /// cached buffer
   struct Buffer {
     enum {
-      STATE_UNDEF = 0,
-      STATE_CLEAN,
-      STATE_WRITING,
-      STATE_READING,
+      STATE_EMPTY,     ///< empty buffer -- used for cache history
+      STATE_CLEAN,     ///< clean data that is up to date
+      STATE_WRITING,   ///< data that is being written (io not yet complete)
     };
     static const char *get_state_name(int s) {
       switch (s) {
-      case STATE_UNDEF: return "undef";
+      case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
       case STATE_WRITING: return "writing";
-      case STATE_READING: return "reading";
       default: return "???";
       }
     }
@@ -137,8 +135,9 @@ public:
     }
 
     BufferSpace *space;
-    uint32_t state;            ///< STATE_*
-    uint32_t flags;            ///< FLAG_*
+    uint16_t state;             ///< STATE_*
+    uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
+    uint32_t flags;             ///< FLAG_*
     uint64_t seq;
     uint64_t offset, length;
     bufferlist data;
@@ -154,14 +153,14 @@ public:
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
 
+    bool is_empty() const {
+      return state == STATE_EMPTY;
+    }
     bool is_clean() const {
       return state == STATE_CLEAN;
     }
     bool is_writing() const {
       return state == STATE_WRITING;
-    }
-    bool is_reading() const {
-      return state == STATE_READING;
     }
 
     uint64_t end() const {
@@ -200,37 +199,41 @@ public:
 
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     Cache *cache;
-    state_list_t writing;
+    map<uint64_t, state_list_t> writing_map;
 
     BufferSpace(Cache *c) : cache(c) {}
     ~BufferSpace() {
       assert(buffer_map.empty());
-      assert(writing.empty());
+      assert(writing_map.empty());
     }
 
-    void _add_buffer(Buffer *b) {
-      cache->_audit_lru("_add_buffer start");
+    void _add_buffer(Buffer *b, int level, Buffer *near) {
+      cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
-      cache->buffer_lru.push_front(*b);
-      cache->buffer_size += b->length;
       if (b->is_writing()) {
-	writing.push_back(*b);
+        writing_map[b->seq].push_back(*b);
+      } else {
+	cache->_add_buffer(b, level, near);
       }
-      cache->_audit_lru("_add_buffer end");
+      cache->_audit("_add_buffer end");
     }
     void _rm_buffer(Buffer *b) {
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
-      cache->_audit_lru("_rm_buffer start");
-      assert(cache->buffer_size >= p->second->length);
-      cache->buffer_size -= p->second->length;
-      cache->buffer_lru.erase(cache->buffer_lru.iterator_to(*p->second));
+      cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
-	writing.erase(writing.iterator_to(*p->second));
+        uint64_t seq = (*p->second.get()).seq;
+        auto it = writing_map.find(seq);
+        assert(it != writing_map.end());
+        it->second.erase(it->second.iterator_to(*p->second));
+        if (it->second.empty())
+          writing_map.erase(it);
+      } else {
+	cache->_rm_buffer(p->second.get());
       }
       buffer_map.erase(p);
-      cache->_audit_lru("_rm_buffer end");
+      cache->_audit("_rm_buffer end");
     }
 
     map<uint64_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -251,23 +254,26 @@ public:
     // must be called under protection of the Cache lock
     void _clear();
 
-    void discard(uint64_t offset, uint64_t length) {
-      std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, length);
+    // return value is the highest cache_private of a trimmed buffer, or 0.
+    int discard(uint64_t offset, uint64_t length) {
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      return _discard(offset, length);
     }
-    void _discard(uint64_t offset, uint64_t length);
+    int _discard(uint64_t offset, uint64_t length);
 
     void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
-      std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags));
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+			     flags);
+      b->cache_private = _discard(offset, bl.length());
+      _add_buffer(b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
     }
     void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {
-      std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl));
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
+      b->cache_private = _discard(offset, bl.length());
+      _add_buffer(b, 1, nullptr);
     }
 
     void read(uint64_t offset, uint64_t length,
@@ -279,7 +285,7 @@ public:
     }
 
     void dump(Formatter *f) const {
-      std::lock_guard<std::mutex> l(cache->lock);
+      std::lock_guard<std::recursive_mutex> l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
@@ -291,18 +297,116 @@ public:
     }
   };
 
-  struct BnodeSet;
+  struct SharedBlobSet;
+
+  /// in-memory shared blob state (incl cached buffers)
+  struct SharedBlob : public boost::intrusive::unordered_set_base_hook<> {
+    std::atomic_int nref = {0}; ///< reference count
+
+    // these are defined/set if the blob is marked 'shared'
+    uint64_t sbid = 0;          ///< shared blob id
+    string key;                 ///< key in kv store
+    SharedBlobSet *parent_set = 0;  ///< containing SharedBlobSet
+
+    // these are defined/set if the shared_blob is 'loaded'
+    bluestore_shared_blob_t shared_blob; ///< the actual shared state
+    bool loaded = false;        ///< whether shared_blob_t is loaded
+
+    BufferSpace bc;             ///< buffer cache
+
+    SharedBlob(uint64_t i, const string& k, Cache *c);
+    ~SharedBlob();
+
+    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
+    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
+
+    friend ostream& operator<<(ostream& out, const SharedBlob& sb);
+
+    void get() {
+      ++nref;
+    }
+    void put();
+
+    friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
+      return l.sbid == r.sbid;
+    }
+    friend std::size_t hash_value(const SharedBlob &e) {
+      rjhash<uint32_t> h;
+      return h(e.sbid);
+    }
+  };
+  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
+
+  /// a lookup table of SharedBlobs
+  struct SharedBlobSet {
+    typedef boost::intrusive::unordered_set<SharedBlob>::bucket_type bucket_type;
+    typedef boost::intrusive::unordered_set<SharedBlob>::bucket_traits bucket_traits;
+
+    std::mutex lock;   ///< protect lookup, insertion, removal
+    int num_buckets;
+    vector<bucket_type> buckets;
+    boost::intrusive::unordered_set<SharedBlob> uset;
+
+    SharedBlob dummy;  ///< for lookups
+
+    explicit SharedBlobSet(unsigned n)
+      : num_buckets(n),
+	buckets(n),
+	uset(bucket_traits(buckets.data(), num_buckets)),
+	dummy(0, string(), nullptr) {
+      assert(n > 0);
+    }
+
+    SharedBlobRef lookup(uint64_t sbid);
+
+    void add(SharedBlob *sb) {
+      std::lock_guard<std::mutex> l(lock);
+      uset.insert(*sb);
+      sb->parent_set = this;
+    }
+
+    bool remove(SharedBlob *sb) {
+      std::lock_guard<std::mutex> l(lock);
+      if (sb->nref == 0) {
+	assert(sb->parent_set == this);
+	uset.erase(*sb);
+	return true;
+      }
+      return false;
+    }
+
+    bool empty() {
+      std::lock_guard<std::mutex> l(lock);
+      return uset.empty();
+    }
+  };
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob : public boost::intrusive::set_base_hook<> {
-    int64_t id = 0;          ///< id
-    bluestore_blob_t blob;   ///< blob metadata
-    BufferSpace bc;          ///< buffer cache
+    std::atomic_int nref = {0};     ///< reference count
+    int id = -1;                    ///< id, for spanning blobs only, >= 0
+    SharedBlobRef shared_blob;      ///< shared blob state (if any)
 
-    Blob(int64_t i, Cache *c) : id(i), bc(c) {}
+    /// refs from this shard.  ephemeral if id<0, persisted if spanning.
+    bluestore_extent_ref_map_t ref_map;
+
+
+    int last_encoded_id = -1;       ///< (ephemeral) used during encoding only
+
+  private:
+    mutable bluestore_blob_t blob;  ///< decoded blob metadata
+    mutable bool dirty = true;      ///< true if blob is newer than blob_bl
+    mutable bufferlist blob_bl;     ///< cached encoded blob
+
+  public:
+    Blob() {}
     ~Blob() {
-      assert(bc.empty());
     }
+
+    friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
+    friend void intrusive_ptr_release(Blob *b) { b->put(); }
+
+    friend ostream& operator<<(ostream& out, const Blob &b);
 
     // comparators for intrusive_set
     friend bool operator<(const Blob &a, const Blob &b) {
@@ -315,128 +419,211 @@ public:
       return a.id == b.id;
     }
 
-    friend ostream& operator<<(ostream& out, const Blob &b) {
-      return out << b.id << ":" << b.blob;
-    }
-  };
-
-  /// a map of blobs, indexed by int64_t
-  struct BlobMap {
-    typedef boost::intrusive::set<Blob> blob_map_t;
-
-    blob_map_t blob_map;
-
-    void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& p, Cache *c);
-
-    bool empty() const {
-      return blob_map.empty();
+    bool is_spanning() const {
+      return id >= 0;
     }
 
-    Blob *get(int64_t id) {
-      Blob dummy(id, nullptr);
-      auto p = blob_map.find(dummy);
-      if (p != blob_map.end()) {
-	return &*p;
+    void dup(Blob& o) {
+      o.shared_blob = shared_blob;
+      o.blob = blob;
+      o.dirty = dirty;
+      o.blob_bl = blob_bl;
+    }
+
+    const bluestore_blob_t& get_blob() const {
+      return blob;
+    }
+    bluestore_blob_t& dirty_blob() {
+      if (!dirty) {
+	dirty = true;
+	blob_bl.clear();
       }
-      return nullptr;
+      return blob;
+    }
+    size_t get_encoded_length() const {
+      return blob_bl.length();
+    }
+    bool is_dirty() const {
+      return dirty;
     }
 
-    Blob *new_blob(Cache *c) {
-      int64_t id = get_new_id();
-      Blob *b = new Blob(id, c);
-      blob_map.insert(*b);
-      return b;
+    bool is_unreferenced(uint64_t offset, uint64_t length) const {
+      return !ref_map.intersects(offset, length);
     }
 
-    void claim(Blob *b) {
-      assert(b->id == 0);
-      b->id = get_new_id();
-      blob_map.insert(*b);
-    }
+    /// discard buffers for unallocated regions
+    void discard_unallocated();
 
-    void erase(Blob *b) {
-      blob_map.erase(*b);
-      b->id = 0;
-    }
-
-    int64_t get_new_id() {
-      return blob_map.empty() ? 1 : blob_map.rbegin()->id + 1;
-    }
-
-    // must be called under protection of the Cache lock
-    void _clear() {
-      while (!blob_map.empty()) {
-	Blob *b = &*blob_map.begin();
-	b->bc._clear();
-	erase(b);
-	delete b;
-      }
-    }
-
-    friend ostream& operator<<(ostream& out, const BlobMap& m) {
-      out << '{';
-      for (auto p = m.blob_map.begin(); p != m.blob_map.end(); ++p) {
-	if (p != m.blob_map.begin()) {
-	  out << ',';
-	}
-	out << p->id << '=' << p->blob;
-      }
-      return out << '}';
-    }
-  };
-
-  /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
-  struct Bnode : public boost::intrusive::unordered_set_base_hook<> {
-    std::atomic_int nref;        ///< reference count
-    uint32_t hash;
-    string key;           ///< key under PREFIX_OBJ where we are stored
-    BnodeSet *bnode_set;  ///< reference to the containing set
-
-    BlobMap blob_map;
-
-    Bnode(uint32_t h, const string& k, BnodeSet *s)
-      : nref(0),
-	hash(h),
-	key(k),
-	bnode_set(s) {}
+    /// get logical references
+    void get_ref(uint64_t offset, uint64_t length);
+    /// put logical references, and get back any released extents
+    bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+		 vector<bluestore_pextent_t> *r);
 
     void get() {
       ++nref;
     }
-    void put();
-
-    friend void intrusive_ptr_add_ref(Bnode *e) { e->get(); }
-    friend void intrusive_ptr_release(Bnode *e) { e->put(); }
-
-    friend bool operator==(const Bnode &l, const Bnode &r) {
-      return l.hash == r.hash;
+    void put() {
+      if (--nref == 0)
+	delete this;
     }
-    friend std::size_t hash_value(const Bnode &e) {
-      return e.hash;
+
+    void encode(bufferlist& bl) const {
+      if (dirty) {
+	// manage blob_bl memory carefully
+	blob_bl.clear();
+	blob_bl.reserve(blob.estimate_encoded_size());
+	::encode(blob, blob_bl);
+	dirty = false;
+      } else {
+	assert(blob_bl.length());
+      }
+      bl.append(blob_bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      bufferlist::iterator s = p;
+      ::decode(blob, p);
+      s.copy(p.get_off() - s.get_off(), blob_bl);
+      dirty = false;
     }
   };
-  typedef boost::intrusive_ptr<Bnode> BnodeRef;
+  typedef boost::intrusive_ptr<Blob> BlobRef;
+  typedef boost::intrusive::set<Blob> blob_map_t;
 
-  /// hash of Bnodes, by (object) hash value
-  struct BnodeSet {
-    typedef boost::intrusive::unordered_set<Bnode>::bucket_type bucket_type;
-    typedef boost::intrusive::unordered_set<Bnode>::bucket_traits bucket_traits;
+  /// a logical extent, pointing to (some portion of) a blob
+  struct Extent : public boost::intrusive::set_base_hook<> {
+    uint32_t logical_offset = 0;      ///< logical offset
+    uint32_t blob_offset = 0;         ///< blob offset
+    uint32_t length = 0;              ///< length
+    BlobRef blob;                     ///< the blob with our data
 
-    unsigned num_buckets;
-    vector<bucket_type> buckets;
+    explicit Extent() {}
+    explicit Extent(uint32_t lo) : logical_offset(lo) {}
+    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+      : logical_offset(lo), blob_offset(o), length(l), blob(b) {}
 
-    boost::intrusive::unordered_set<Bnode> uset;
-
-    explicit BnodeSet(unsigned n)
-      : num_buckets(n),
-	buckets(n),
-	uset(bucket_traits(buckets.data(), num_buckets)) {
-      assert(n > 0);
+    // comparators for intrusive_set
+    friend bool operator<(const Extent &a, const Extent &b) {
+      return a.logical_offset < b.logical_offset;
     }
-    ~BnodeSet() {
-      assert(uset.empty());
+    friend bool operator>(const Extent &a, const Extent &b) {
+      return a.logical_offset > b.logical_offset;
     }
+    friend bool operator==(const Extent &a, const Extent &b) {
+      return a.logical_offset == b.logical_offset;
+    }
+
+    bool blob_escapes_range(uint32_t o, uint32_t l) {
+      uint32_t bstart = logical_offset - blob_offset;
+      return (bstart < o ||
+	      bstart + blob->get_blob().get_logical_length() > o + l);
+    }
+  };
+  typedef boost::intrusive::set<Extent> extent_map_t;
+
+  friend ostream& operator<<(ostream& out, const Extent& e);
+
+  struct Collection;
+  struct Onode;
+
+  /// a sharded extent map, mapping offsets to lextents to blobs
+  struct ExtentMap {
+    Onode *onode;
+    extent_map_t extent_map;        ///< map of Extents to Blobs
+    blob_map_t spanning_blob_map;   ///< blobs that span shards
+
+    struct Shard {
+      string key;            ///< kv key
+      uint32_t offset;       ///< starting logical offset
+      bluestore_onode_t::shard_info *shard_info;
+      bool loaded = false;   ///< true if shard is loaded
+      bool dirty = false;    ///< true if shard is dirty and needs reencoding
+    };
+    vector<Shard> shards;    ///< shards
+
+    bool inline_dirty = false;
+    bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
+
+    ExtentMap(Onode *o);
+    ~ExtentMap() {
+      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+    }
+
+    bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
+		     unsigned *pn);
+    void decode_some(bufferlist& bl);
+
+    void encode_spanning_blobs(bufferlist& bl);
+    void decode_spanning_blobs(Collection *c, bufferlist::iterator& p);
+
+    BlobRef get_spanning_blob(int id);
+
+    bool update(Onode *on, KeyValueDB::Transaction t, bool force);
+    void reshard(Onode *on);
+
+    /// initialize Shards from the onode
+    void init_shards(Onode *on, bool loaded, bool dirty);
+
+    /// return shard containing offset
+    vector<Shard>::iterator seek_shard(uint32_t offset) {
+      // fixme: we could do a binary search here
+      // we want the right-most shard that has an offset <= @offset.
+      vector<Shard>::iterator p = shards.begin();
+      while (p != shards.end() &&
+	     p->offset <= offset) {
+	++p;
+      }
+      if (p != shards.begin()) {
+	assert(p == shards.end() || p->offset > offset);
+	--p;
+	assert(p->offset <= offset);
+      }
+      return p;
+    }
+
+    /// ensure that a range of the map is loaded
+    void fault_range(KeyValueDB *db,
+		     uint32_t offset, uint32_t length);
+
+    /// ensure a range of the map is marked dirty
+    void dirty_range(KeyValueDB::Transaction t,
+		     uint32_t offset, uint32_t length);
+
+    extent_map_t::iterator find(uint64_t offset);
+
+    /// find a lextent that includes offset
+    extent_map_t::iterator find_lextent(uint64_t offset);
+
+    /// seek to the first lextent including or after offset
+    extent_map_t::iterator seek_lextent(uint64_t offset);
+
+    /// add a new Extent
+    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
+      extent_map.insert(*new Extent(lo, o, l, b));
+    }
+
+    /// remove (and delete) an Extent
+    void rm(extent_map_t::iterator p) {
+      Extent *e = &*p;
+      extent_map.erase(p);
+      delete e;
+    }
+
+    bool has_any_lextents(uint64_t offset, uint64_t length);
+
+    /// consolidate adjacent lextents in extent_map
+    int compress_extent_map(uint64_t offset, uint64_t length);
+
+    /// punch a logical hole.  add lextents to deref to target list.
+    void punch_hole(uint64_t offset, uint64_t length,
+		    extent_map_t *old_extents);
+
+    /// put new lextent into lextent_map overwriting existing ones if
+    /// any and update references accordingly
+    Extent *set_lextent(uint64_t logical_offset,
+			uint64_t offset, uint64_t length, BlobRef b,
+			extent_map_t *old_extents);
+
   };
 
   struct OnodeSpace;
@@ -444,6 +631,7 @@ public:
   /// an in-memory object
   struct Onode {
     std::atomic_int nref;  ///< reference count
+    Collection *c;
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
@@ -451,31 +639,23 @@ public:
     OnodeSpace *space;    ///< containing OnodeSpace
     boost::intrusive::list_member_hook<> lru_item;
 
-    BnodeRef bnode;  ///< ref to Bnode [optional]
-
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool exists;
+    bool exists;              ///< true if object logically exists
 
-    BlobMap blob_map;       ///< local blobs (this onode onode)
+    ExtentMap extent_map;
 
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    Onode(OnodeSpace *s, const ghobject_t& o, const string& k)
+    Onode(OnodeSpace *s, Collection *c, const ghobject_t& o, const string& k)
       : nref(0),
+	c(c),
 	oid(o),
 	key(k),
 	space(s),
-	exists(false) {
-    }
-
-    Blob *get_blob(int64_t id) {
-      if (id < 0) {
-	assert(bnode);
-	return bnode->blob_map.get(-id);
-      }
-      return blob_map.get(id);
+	exists(false),
+	extent_map(this) {
     }
 
     void flush();
@@ -491,39 +671,172 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_lru_list_t;
+    PerfCounters *logger;
+    std::recursive_mutex lock;          ///< protect lru and other structures
+
+    static Cache *create(string type, PerfCounters *logger);
+
+    virtual ~Cache() {}
+
+    virtual void _add_onode(OnodeRef& o, int level) = 0;
+    virtual void _rm_onode(OnodeRef& o) = 0;
+    virtual void _touch_onode(OnodeRef& o) = 0;
+
+    virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
+    virtual void _rm_buffer(Buffer *b) = 0;
+    virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
+    virtual void _touch_buffer(Buffer *b) = 0;
+
+    virtual void trim(uint64_t onode_max, uint64_t buffer_max) = 0;
+
+#ifdef DEBUG_CACHE
+    virtual void _audit(const char *s) = 0;
+#else
+    void _audit(const char *s) { /* no-op */ }
+#endif
+  };
+
+  /// simple LRU cache for onodes and buffers
+  struct LRUCache : public Cache {
+  private:
     typedef boost::intrusive::list<
       Onode,
       boost::intrusive::member_hook<
         Onode,
 	boost::intrusive::list_member_hook<>,
 	&Onode::lru_item> > onode_lru_list_t;
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+	Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::lru_item> > buffer_lru_list_t;
 
-    std::mutex lock;                ///< protect lru and other structures
-    buffer_lru_list_t buffer_lru;
-    uint64_t buffer_size = 0;
     onode_lru_list_t onode_lru;
 
-    void _touch_onode(OnodeRef& o);
+    buffer_lru_list_t buffer_lru;
+    uint64_t buffer_size = 0;
 
-    void _touch_buffer(Buffer *b) {
+  public:
+    void _add_onode(OnodeRef& o, int level) override {
+      if (level > 0)
+	onode_lru.push_front(*o);
+      else
+	onode_lru.push_back(*o);
+    }
+    void _rm_onode(OnodeRef& o) override {
+      auto q = onode_lru.iterator_to(*o);
+      onode_lru.erase(q);
+    }
+    void _touch_onode(OnodeRef& o) override;
+
+    void _add_buffer(Buffer *b, int level, Buffer *near) override {
+      if (near) {
+	auto q = buffer_lru.iterator_to(*near);
+	buffer_lru.insert(q, *b);
+      } else if (level > 0) {
+	buffer_lru.push_front(*b);
+      } else {
+	buffer_lru.push_back(*b);
+      }
+      buffer_size += b->length;
+    }
+    void _rm_buffer(Buffer *b) override {
+      assert(buffer_size >= b->length);
+      buffer_size -= b->length;
+      auto q = buffer_lru.iterator_to(*b);
+      buffer_lru.erase(q);
+    }
+    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
+      assert((int64_t)buffer_size + delta >= 0);
+      buffer_size += delta;
+    }
+    void _touch_buffer(Buffer *b) override {
       auto p = buffer_lru.iterator_to(*b);
       buffer_lru.erase(p);
       buffer_lru.push_front(*b);
-      _audit_lru("_touch_buffer end");
+      _audit("_touch_buffer end");
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max);
+    void trim(uint64_t onode_max, uint64_t buffer_max) override;
 
 #ifdef DEBUG_CACHE
-    void _audit_lru(const char *s);
-#else
-    void _audit_lru(const char *s) { /* no-op */ }
+    void _audit(const char *s) override;
+#endif
+  };
+
+  // 2Q cache for buffers, LRU for onodes
+  struct TwoQCache : public Cache {
+  private:
+    // stick with LRU for onodes for now (fixme?)
+    typedef boost::intrusive::list<
+      Onode,
+      boost::intrusive::member_hook<
+        Onode,
+	boost::intrusive::list_member_hook<>,
+	&Onode::lru_item> > onode_lru_list_t;
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+	Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::lru_item> > buffer_list_t;
+
+    onode_lru_list_t onode_lru;
+
+    buffer_list_t buffer_hot;      //< "Am" hot buffers
+    buffer_list_t buffer_warm_in;  //< "A1in" newly warm buffers
+    buffer_list_t buffer_warm_out; //< "A1out" empty buffers we've evicted
+    uint64_t buffer_bytes = 0;     //< bytes
+
+    enum {
+      BUFFER_NEW = 0,
+      BUFFER_WARM_IN,   ///< in buffer_warm_in
+      BUFFER_WARM_OUT,  ///< in buffer_warm_out
+      BUFFER_HOT,       ///< in buffer_hot
+      BUFFER_TYPE_MAX
+    };
+
+    uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
+
+  public:
+    void _add_onode(OnodeRef& o, int level) override {
+      if (level > 0)
+	onode_lru.push_front(*o);
+      else
+	onode_lru.push_back(*o);
+    }
+    void _rm_onode(OnodeRef& o) override {
+      auto q = onode_lru.iterator_to(*o);
+      onode_lru.erase(q);
+    }
+    void _touch_onode(OnodeRef& o) override;
+
+    void _add_buffer(Buffer *b, int level, Buffer *near) override;
+    void _rm_buffer(Buffer *b) override;
+    void _adjust_buffer_size(Buffer *b, int64_t delta) override;
+    void _touch_buffer(Buffer *b) override {
+      switch (b->cache_private) {
+      case BUFFER_WARM_IN:
+	// do nothing (somewhat counter-intuitively!)
+	break;
+      case BUFFER_WARM_OUT:
+	// move from warm_out to hot LRU
+	assert(0 == "this happens via discard hint");
+	break;
+      case BUFFER_HOT:
+	// move to front of hot LRU
+	buffer_hot.erase(buffer_hot.iterator_to(*b));
+	buffer_hot.push_front(*b);
+	break;
+      }
+      _audit("_touch_buffer end");
+    }
+
+    void trim(uint64_t onode_max, uint64_t buffer_max) override;
+
+#ifdef DEBUG_CACHE
+    void _audit(const char *s) override;
 #endif
   };
 
@@ -538,7 +851,9 @@ public:
 
     void add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
-    void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
+    void rename(OnodeRef& o, const ghobject_t& old_oid,
+		const ghobject_t& new_oid,
+		const string& new_okey);
     void clear();
 
     /// return true if f true for any item
@@ -556,23 +871,33 @@ public:
 
     bool exists;
 
-    BnodeSet bnode_set;      ///< open Bnodes
+    SharedBlobSet shared_blob_set;      ///< open SharedBlobs
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeSpace onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
-    BnodeRef get_bnode(uint32_t hash);
 
-    Blob *get_blob(OnodeRef& o, int64_t blob) {
-      if (blob < 0) {
-	if (!o->bnode) {
-	  o->bnode = get_bnode(o->oid.hobj.get_hash());
-	}
-	return o->bnode->blob_map.get(-blob);
-      }
-      return o->blob_map.get(blob);
+    // the terminology is confusing here, sorry!
+    //
+    //  blob_t     shared_blob_t
+    //  !shared    unused                -> open
+    //  shared     !loaded               -> open + shared
+    //  shared     loaded                -> open + shared + loaded
+    //
+    // i.e.,
+    //  open = SharedBlob is instantiated
+    //  shared = blob_t shared flag is set; SharedBlob is hashed.
+    //  loaded = SharedBlob::shared_blob_t is loaded from kv store
+    void open_shared_blob(BlobRef b);
+    void load_shared_blob(SharedBlobRef sb);
+    void make_blob_shared(BlobRef b);
+
+    BlobRef new_blob() {
+      BlobRef b = new Blob;
+      b->shared_blob = new SharedBlob(0, string(), cache);
+      return b;
     }
 
     const coll_t &get_cid() override {
@@ -666,8 +991,10 @@ public:
 
     uint64_t ops, bytes;
 
-    set<OnodeRef> onodes;     ///< these onodes need to be updated/written
-    set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
+    set<OnodeRef> onodes;     ///< these need to be updated/written
+    set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
+    set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
+
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
@@ -740,14 +1067,16 @@ public:
     uint64_t seq = 0;
     utime_t start;
 
+    uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
+    uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
+
     struct DeferredCsum {
-      OnodeRef onode;
-      int64_t blob;
+      BlobRef blob;
       uint64_t b_off;
       bufferlist data;
 
-      DeferredCsum(OnodeRef& o, int64_t b, uint64_t bo, bufferlist& bl)
-	: onode(o), blob(b), b_off(bo), data(bl) {}
+      DeferredCsum(BlobRef& b, uint64_t bo, bufferlist& bl)
+	: blob(b), b_off(bo), data(bl) {}
     };
 
     list<DeferredCsum> deferred_csum;
@@ -773,12 +1102,12 @@ public:
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
     }
-    void write_bnode(BnodeRef &e) {
-      bnodes.insert(e);
+    void write_shared_blob(SharedBlobRef &sb) {
+      shared_blobs.insert(sb);
     }
 
-    void add_deferred_csum(OnodeRef& o, int64_t b, uint64_t bo, bufferlist& bl) {
-      deferred_csum.emplace_back(TransContext::DeferredCsum(o, b, bo, bl));
+    void add_deferred_csum(BlobRef& b, uint64_t bo, bufferlist& bl) {
+      deferred_csum.emplace_back(TransContext::DeferredCsum(b, bo, bl));
     }
   };
 
@@ -964,9 +1293,11 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex nid_lock;
-  uint64_t nid_last;
-  uint64_t nid_max;
+  std::mutex id_lock;
+  std::atomic<uint64_t> nid_last = {0};
+  uint64_t nid_max = 0;
+  std::atomic<uint64_t> blobid_last = {0};
+  uint64_t blobid_max = 0;
 
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
@@ -978,7 +1309,8 @@ private:
   ThreadPool wal_tp;
   WALWQ wal_wq;
 
-  Finisher finisher;
+  int m_finisher_num;
+  vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
@@ -999,6 +1331,7 @@ private:
   size_t block_size_order; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
+  uint64_t min_min_alloc_size = 0; /// < minimum seen min_alloc_size
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
   uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
@@ -1031,6 +1364,7 @@ private:
 
   void _init_logger();
   void _shutdown_logger();
+  int _reload_logger();
 
   int _open_path();
   void _close_path();
@@ -1059,11 +1393,11 @@ private:
   int _check_or_set_bdev_label(string path, uint64_t size, string desc,
 			       bool create);
 
+  void _save_min_min_alloc_size(uint64_t new_val);
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
-				KeyValueDB::Transaction t);
+  int _balance_bluefs_freespace(vector<bluestore_pextent_t> *extents);
   void _commit_bluefs_freespace(const vector<bluestore_pextent_t>& extents);
 
   CollectionRef _get_collection(const coll_t& cid);
@@ -1071,11 +1405,10 @@ private:
   void _reap_collections();
 
   void _assign_nid(TransContext *txc, OnodeRef o);
+  uint64_t _assign_blobid(TransContext *txc);
 
   void _dump_onode(OnodeRef o, int log_level=30);
-  void _dump_bnode(BnodeRef b, int log_level=30);
-  void _dump_blob_map(BlobMap &bm, int log_level);
-
+  void _dump_extent_map(ExtentMap& em, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
@@ -1112,14 +1445,22 @@ private:
   int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo);
   int _wal_replay();
 
-  // for fsck
-  int _fsck_verify_blob_map(
-    string what,
-    const BlobMap& blob_map,
-    map<int64_t,bluestore_extent_ref_map_t>& v,
-    interval_set<uint64_t> &used_blocks,
+  int _fsck_check_extents(
+    const ghobject_t& oid,
+    const vector<bluestore_pextent_t>& extents,
+    bool compressed,
+    boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);
 
+  void _buffer_cache_write(
+    TransContext *txc,
+    BlobRef b,
+    uint64_t offset,
+    bufferlist& bl,
+    unsigned flags) {
+    b->shared_blob->bc.write(txc->seq, offset, bl, flags);
+    txc->shared_blobs_written.insert(b->shared_blob);
+  }
 public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
@@ -1215,7 +1556,7 @@ public:
   CollectionHandle open_collection(const coll_t &c) override;
 
   bool collection_exists(const coll_t& c) override;
-  bool collection_empty(const coll_t& c) override;
+  int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
   int collection_list(const coll_t& cid, ghobject_t start, ghobject_t end,
@@ -1343,21 +1684,22 @@ private:
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
 
-    vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
+    extent_map_t old_extents;       ///< must deref these blobs
 
     struct write_item {
-      Blob *b;
+      BlobRef b;
       uint64_t blob_length;
       uint64_t b_off;
       bufferlist bl;
+      bool mark_unused;
 
-      write_item(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl)
-	: b(b), blob_length(blob_len), b_off(o), bl(bl) {}
+      write_item(BlobRef b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused)
+       : b(b), blob_length(blob_len), b_off(o), bl(bl), mark_unused(_mark_unused) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
-    void write(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl) {
-      writes.emplace_back(write_item(b, blob_len, o, bl));
+    void write(BlobRef b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused) {
+      writes.emplace_back(write_item(b, blob_len, o, bl, _mark_unused));
     }
   };
 
@@ -1394,7 +1736,7 @@ private:
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
-  void _pad_zeros(bufferlist *bl, uint64_t *offset, uint64_t *length,
+  void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
   int _do_write(TransContext *txc,
 		CollectionRef &c,
@@ -1470,6 +1812,11 @@ private:
     uint64_t expected_object_size,
     uint64_t expected_write_size,
     uint32_t flags);
+  int _do_clone_range(TransContext *txc,
+		      CollectionRef& c,
+		      OnodeRef& oldo,
+		      OnodeRef& newo,
+		      uint64_t srcoff, uint64_t length, uint64_t dstoff);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& oldo,

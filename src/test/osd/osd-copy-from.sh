@@ -45,7 +45,7 @@ function TEST_copy_from() {
     run_osd $dir 1 || return 1
 
     # success
-    rados -p rbd put foo rados
+    rados -p rbd put foo $(which rados)
     rados -p rbd cp foo foo2
     rados -p rbd stat foo2
 

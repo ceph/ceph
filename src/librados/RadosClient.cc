@@ -246,7 +246,7 @@ int librados::RadosClient::connect()
 
   // require OSDREPLYMUX feature.  this means we will fail to talk to
   // old servers.  this is necessary because otherwise we won't know
-  // how to decompose the reply data into its consituent pieces.
+  // how to decompose the reply data into its constituent pieces.
   messenger->set_default_policy(Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
 
   ldout(cct, 1) << "starting msgr at " << messenger->get_myaddr() << dendl;
@@ -478,6 +478,10 @@ void librados::RadosClient::ms_handle_remote_reset(Connection *con)
 {
 }
 
+bool librados::RadosClient::ms_handle_refused(Connection *con)
+{
+  return false;
+}
 
 bool librados::RadosClient::_dispatch(Message *m)
 {
@@ -516,7 +520,7 @@ int librados::RadosClient::wait_for_osdmap()
   bool need_map = false;
   objecter->with_osdmap([&](const OSDMap& o) {
       if (o.get_epoch() == 0) {
-	need_map = true;
+        need_map = true;
       }
     });
 
@@ -527,25 +531,21 @@ int librados::RadosClient::wait_for_osdmap()
     if (cct->_conf->rados_mon_op_timeout > 0)
       timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
 
-    bool wait_forever = false;
-    if (timeout.is_zero()) {
-      // we'll going to wait forever, but wake up every 1 seconds,
-      // e.g., to avoid cpu burning.
-      wait_forever = true;
-      timeout = utime_t(1, 0);
-    }
-
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
       utime_t start = ceph_clock_now(cct);
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
-	cond.WaitInterval(cct, lock, timeout);
-	utime_t elapsed = ceph_clock_now(cct) - start;
-	if (!wait_forever && elapsed > timeout) {
-	  lderr(cct) << "timed out waiting for first osdmap from monitors"
-		     << dendl;
-	  return -ETIMEDOUT;
-	}
+        if (timeout.is_zero()) {
+          cond.Wait(lock);
+        } else {
+          cond.WaitInterval(cct, lock, timeout);
+          utime_t elapsed = ceph_clock_now(cct) - start;
+          if (elapsed > timeout) {
+            lderr(cct) << "timed out waiting for first osdmap from monitors"
+                       << dendl;
+            return -ETIMEDOUT;
+          }
+        }
       }
       ldout(cct, 10) << __func__ << " done waiting" << dendl;
     }

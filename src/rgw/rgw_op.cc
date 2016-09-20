@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <sstream>
 
@@ -27,14 +28,21 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
+#include "rgw_lc.h"
+#include "rgw_lc_s3.h"
 #include "rgw_client_io.h"
+#include "cls/lock/cls_lock_client.h"
+#include "cls/rgw/cls_rgw_client.h"
+
 
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using namespace librados;
 using ceph::crypto::MD5;
+
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
@@ -52,12 +60,12 @@ public:
     if (len < 6)
       return false;
 
-    int pos = name.find(MP_META_SUFFIX, len - 5);
-    if (pos <= 0)
+    size_t pos = name.find(MP_META_SUFFIX, len - 5);
+    if (pos == string::npos)
       return false;
 
     pos = name.rfind('.', pos - 1);
-    if (pos < 0)
+    if (pos == string::npos)
       return false;
 
     key = name.substr(0, pos);
@@ -77,8 +85,8 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
 
   *partial_content = false;
 
-  int pos = s.find("bytes=");
-  if (pos < 0) {
+  size_t pos = s.find("bytes=");
+  if (pos == string::npos) {
     pos = 0;
     while (isspace(s[pos]))
       pos++;
@@ -96,7 +104,7 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
     s = s.substr(pos + 6); /* size of("bytes=")  */
   }
   pos = s.find('-');
-  if (pos < 0)
+  if (pos == string::npos)
     goto done;
 
   *partial_content = true;
@@ -1019,8 +1027,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   ldout(s->cct, 2) << "RGWGetObj::handle_user_manifest() prefix=" << prefix << dendl;
 
   string prefix_str = prefix;
-  int pos = prefix_str.find('/');
-  if (pos < 0)
+  size_t pos = prefix_str.find('/');
+  if (pos == string::npos)
     return -EINVAL;
 
   string bucket_name_raw, bucket_name;
@@ -1234,6 +1242,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
     gc_invalidate_time = start_time;
     gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
   }
+
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
@@ -1332,6 +1341,35 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare(&new_ofs, &new_end);
   if (op_ret < 0)
     goto done_err;
+
+  // for range requests with obj size 0
+  if (range_str && !(s->obj_size)) {
+    total_len = 0;
+    op_ret = -ERANGE;
+    goto done_err;
+  }
+
+  /* start gettorrent */
+  if (torrent.get_flag())
+  {
+    torrent.init(s, store);
+    torrent.get_torrent_file(op_ret, read_op, total_len, bl, obj);
+    if (op_ret < 0)
+    {
+      ldout(s->cct, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
+                       << dendl;
+      goto done_err;
+    }
+    op_ret = send_response_data(bl, 0, total_len);
+    if (op_ret < 0)
+    {
+      ldout(s->cct, 0) << "ERROR: failed to send_response_data ret= " << op_ret 
+                       << dendl;
+      goto done_err;
+    }
+    return;
+  }
+  /* end gettorrent */
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
@@ -1651,20 +1689,17 @@ void RGWSetBucketVersioning::pre_exec()
 
 void RGWSetBucketVersioning::execute()
 {
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
   if (!store->is_meta_master()) {
-    bufferlist in_data;
-    JSONParser jp;
-    op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     }
     return;
   }
-  
-  op_ret = get_params();
-
-  if (op_ret < 0)
-    return;
 
   if (enable_versioning) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
@@ -1937,7 +1972,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv,
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
-  ldout(s->cct, 0) << "sending create_bucket request to master zonegroup" << dendl;
+  ldout(s->cct, 0) << "sending request to master zonegroup" << dendl;
   bufferlist response;
   string uid_str = s->user->user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
@@ -2583,7 +2618,7 @@ void RGWPutObj::execute()
   int len;
   map<string, string>::iterator iter;
   bool multipart;
-
+  
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
   perfcounter->inc(l_rgw_put);
@@ -2678,6 +2713,9 @@ void RGWPutObj::execute()
       data = s->aws4_auth->bl;
       len = data.length();
     }
+
+    /* save data for producing torrent data */
+    torrent.save_data(data_in);
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
@@ -2831,6 +2869,19 @@ void RGWPutObj::execute()
 
   op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
 			      if_match, if_nomatch);
+
+  /* produce torrent */
+  if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
+  {
+    torrent.init(s, store);
+    torrent.set_create_date(mtime);
+    op_ret =  torrent.handle_data();
+    if (0 != op_ret)
+    {
+      ldout(s->cct, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
+      goto done;
+    }
+  }
 
 done:
   dispose_processor(processor);
@@ -3377,8 +3428,8 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
   string name_str;
   string params_str;
 
-  int pos = url_src.find('?');
-  if (pos < 0) {
+  size_t pos = url_src.find('?');
+  if (pos == string::npos) {
     name_str = url_src;
   } else {
     name_str = url_src.substr(0, pos);
@@ -3395,7 +3446,7 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
   string str(src);
 
   pos = str.find('/');
-  if (pos <= 0)
+  if (pos ==string::npos)
     return false;
 
   bucket_name = str.substr(0, pos);
@@ -3651,8 +3702,6 @@ void RGWGetACLs::execute()
   acls = ss.str();
 }
 
-
-
 int RGWPutACLs::verify_permission()
 {
   bool perm;
@@ -3667,7 +3716,52 @@ int RGWPutACLs::verify_permission()
   return 0;
 }
 
+int RGWGetLC::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+int RGWPutLC::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+int RGWDeleteLC::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
 void RGWPutACLs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetLC::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutLC::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDeleteLC::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
 }
@@ -3761,6 +3855,153 @@ void RGWPutACLs::execute()
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   }
+}
+
+static void get_lc_oid(struct req_state *s, string& oid)
+{
+  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  int max_objs = (s->cct->_conf->rgw_lc_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_lc_max_objs;
+  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
+  oid = lc_oid_prefix;
+  char buf[32];
+  snprintf(buf, 32, ".%d", index);
+  oid.append(buf);
+  return;
+}
+
+void RGWPutLC::execute()
+{
+  bufferlist bl;
+  
+  RGWLifecycleConfiguration_S3 *config = NULL;
+  RGWLCXMLParser_S3 parser(s->cct);
+  RGWLifecycleConfiguration_S3 new_config(s->cct);
+  ret = 0;
+
+  if (!parser.init()) {
+    ret = -EINVAL;
+    return;
+  }
+
+  ret = get_params();
+  if (ret < 0)
+    return;
+
+  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+
+  if (!parser.parse(data, len, 1)) {
+    ret = -EACCES;
+    return;
+  }
+  config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));
+  if (!config) {
+    ret = -EINVAL;
+    return;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "Old LifecycleConfiguration";
+    config->to_xml(*_dout);
+    *_dout << dendl;
+  }
+
+  ret = config->rebuild(store, new_config);
+  if (ret < 0)
+    return;
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "New LifecycleConfiguration:";
+    new_config.to_xml(*_dout);
+    *_dout << dendl;
+  }
+  
+  new_config.encode(bl);
+  map<string, bufferlist> attrs;
+  attrs = s->bucket_attrs;
+  attrs[RGW_ATTR_LC] = bl;
+  ret =rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (ret < 0)
+    return;
+  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;  
+  string oid; 
+  get_lc_oid(s, oid);
+  pair<string, int> entry(shard_id, lc_uninitial);
+  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  rados::cls::lock::Lock l(lc_index_lock_name); 
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  do {
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret == -EBUSY) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << ret << dendl;
+      break;
+    }
+    ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << ret << dendl;     
+    }
+    break;
+  }while(1);
+  l.unlock(ctx, oid);
+  return;
+}
+
+void RGWDeleteLC::execute()
+{
+  bufferlist bl;
+  map<string, bufferlist> orig_attrs, attrs;
+  map<string, bufferlist>::iterator iter;
+  rgw_obj obj;
+  store->get_bucket_instance_obj(s->bucket, obj);
+  store->set_atomic(s->obj_ctx, obj);
+  ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+  if (op_ret < 0)
+    return;
+    
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+      const string& name = iter->first;
+      dout(10) << "DeleteLC : attr: " << name << dendl;
+      if (name.compare(0, (sizeof(RGW_ATTR_LC) - 1), RGW_ATTR_LC) != 0) {
+        if (attrs.find(name) == attrs.end()) {
+        attrs[name] = iter->second;
+        }
+      }
+    }
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  pair<string, int> entry(shard_id, lc_uninitial);
+  string oid; 
+  get_lc_oid(s, oid);
+  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  rados::cls::lock::Lock l(lc_index_lock_name);
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  do {
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret == -EBUSY) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << ret << dendl;
+      break;
+    }
+    ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << ret << dendl;     
+    }
+    break;
+  }while(1);
+  l.unlock(ctx, oid);
+  return;
 }
 
 int RGWGetCORS::verify_permission()
@@ -4276,6 +4517,8 @@ void RGWCompleteMultipart::execute()
 
     total_parts += obj_parts.size();
     if (!truncated && total_parts != (int)parts->parts.size()) {
+      ldout(s->cct, 0) << "NOTICE: total parts mismatch: have: " << total_parts
+		       << " expected: " << parts->parts.size() << dendl;
       op_ret = -ERR_INVALID_PART;
       return;
     }
@@ -4573,6 +4816,16 @@ void RGWListBucketMultiparts::execute()
   }
 }
 
+void RGWGetHealthCheck::execute()
+{
+  if (! g_conf->rgw_healthcheck_disabling_path.empty() &&
+      ::access(g_conf->rgw_healthcheck_disabling_path.c_str(), F_OK )) {
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+  } else {
+    op_ret = 0; /* 200 OK */
+  }
+}
+
 int RGWDeleteMultiObj::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_WRITE))
@@ -4836,6 +5089,46 @@ void RGWBulkDelete::execute()
   } while (!op_ret && is_truncated);
 
   return;
+}
+
+int RGWSetAttrs::verify_permission()
+{
+  bool perm;
+  if (!s->object.empty()) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE);
+  }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetAttrs::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  rgw_obj obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  if (!s->object.empty()) {
+    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &attrs);
+  } else {
+    for (auto& iter : attrs) {
+      s->bucket_attrs[iter.first] = std::move(iter.second);
+    }
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
+				  &s->bucket_info.objv_tracker);
+  }
 }
 
 RGWHandler::~RGWHandler()

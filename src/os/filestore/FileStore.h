@@ -52,13 +52,13 @@ using namespace std;
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-#define BTRFS_SUPER_MAGIC 0x9123683E
+#define BTRFS_SUPER_MAGIC 0x9123683EL
 # endif
 # ifndef XFS_SUPER_MAGIC
-#define XFS_SUPER_MAGIC 0x58465342
+#define XFS_SUPER_MAGIC 0x58465342L
 # endif
 # ifndef ZFS_SUPER_MAGIC
-#define ZFS_SUPER_MAGIC 0x2fc12fc1
+#define ZFS_SUPER_MAGIC 0x2fc12fc1L
 # endif
 #endif
 
@@ -625,7 +625,7 @@ public:
   int list_collections(vector<coll_t>& ls, bool include_temp);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c);
-  bool collection_empty(const coll_t& c);
+  int collection_empty(const coll_t& c, bool *empty);
 
   // omap (see ObjectStore.h for documentation)
   using ObjectStore::omap_get;
@@ -677,6 +677,8 @@ public:
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
+
+  virtual int apply_layout_settings(const coll_t &cid);
 
 private:
   void _inject_failure();

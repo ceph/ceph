@@ -265,7 +265,6 @@ and development clusters can run successfully with modest hardware.
 +==============+================+=========================================+
 | ``ceph-osd`` | Processor      | - 1x 64-bit AMD-64                      |
 |              |                | - 1x 32-bit ARM dual-core or better     |
-|              |                | - 1x i386 dual-core                     |
 |              +----------------+-----------------------------------------+
 |              | RAM            |  ~1GB for 1TB of storage per daemon     |
 |              +----------------+-----------------------------------------+
@@ -275,9 +274,8 @@ and development clusters can run successfully with modest hardware.
 |              +----------------+-----------------------------------------+
 |              | Network        |  2x 1GB Ethernet NICs                   |
 +--------------+----------------+-----------------------------------------+
-| ``ceph-mon`` | Processor      | - 1x 64-bit AMD-64/i386                 |
+| ``ceph-mon`` | Processor      | - 1x 64-bit AMD-64                      |
 |              |                | - 1x 32-bit ARM dual-core or better     |
-|              |                | - 1x i386 dual-core                     |
 |              +----------------+-----------------------------------------+
 |              | RAM            |  1 GB per daemon                        |
 |              +----------------+-----------------------------------------+
@@ -287,7 +285,6 @@ and development clusters can run successfully with modest hardware.
 +--------------+----------------+-----------------------------------------+
 | ``ceph-mds`` | Processor      | - 1x 64-bit AMD-64 quad-core            |
 |              |                | - 1x 32-bit ARM quad-core               |
-|              |                | - 1x i386 quad-core                     |
 |              +----------------+-----------------------------------------+
 |              | RAM            |  1 GB minimum per daemon                |
 |              +----------------+-----------------------------------------+

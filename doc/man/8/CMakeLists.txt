@@ -13,8 +13,11 @@ set(server_srcs
   ceph-run.rst
   mount.ceph.rst
   ceph-create-keys.rst
-  ceph-rest-api.rst
+  ceph-rest-api.rst)
+if(WITH_TESTS)
+list(APPEND server_srcs
   ceph-debugpack.rst)
+endif(WITH_TESTS)
 
 set(osd_srcs
   ceph-clsinfo.rst
@@ -32,17 +35,8 @@ list(APPEND man_srcs
   ${server_srcs}
   ${osd_srcs}
   ${mon_srcs}
+  ceph-mds.rst
   librados-config.rst)
-
-if(WITH_MDS)
-  list(APPEND man_srcs
-    ceph-mds.rst)
-endif()
-
-if(WITH_CEPHFS)
-  list(APPEND man_srcs
-    cephfs.rst)
-endif()
 
 if(HAVE_LIBFUSE)
   list(APPEND man_srcs
@@ -61,6 +55,7 @@ if(WITH_RBD)
 	ceph-rbdnamer.rst
 	rbd-mirror.rst
 	rbd-nbd.rst
+	rbd-replay-many.rst
 	rbd-replay-prep.rst
 	rbd-replay.rst
 	rbdmap.rst

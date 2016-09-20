@@ -167,7 +167,7 @@ directory, you will want to maintain those paths in your Ceph configuration
 file if you used something other than default paths.
 
 A typical Ceph Object Gateway configuration file for an Apache-based deployment
-looks something similar as the following::
+looks something similar as the following:
 
 On Red Hat Enterprise Linux::
 
@@ -524,7 +524,7 @@ Execute the following steps:
 
     bucket = conn.create_bucket('my-new-bucket')
         for bucket in conn.get_all_buckets():
-                print "{name}".format(
+                print "{name} {created}".format(
                         name = bucket.name,
                         created = bucket.creation_date,
      )

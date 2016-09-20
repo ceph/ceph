@@ -91,8 +91,8 @@ int KernelDevice::open(string p)
   // disable readahead as it will wreak havoc on our mix of
   // directio/aio and buffered io.
   r = posix_fadvise(fd_buffered, 0, 0, POSIX_FADV_RANDOM);
-  if (r < 0) {
-    r = -errno;
+  if (r) {
+    r = -r;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
@@ -139,6 +139,9 @@ int KernelDevice::open(string p)
 
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
+
+  // round size down to an even block
+  size &= ~(block_size - 1);
 
   r = _aio_start();
   assert(r == 0);
@@ -385,10 +388,10 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!buffered && bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
+      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
@@ -506,6 +509,8 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
   if (r < 0) {
     r = -errno;
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec 
+      << " error: " << cpp_strerror(r) << dendl;
     goto out;
   }
   assert((uint64_t)r == aligned_len);
@@ -545,6 +550,8 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
       r = ::pread(fd_buffered, t, left, off);
       if (r < 0) {
 	r = -errno;
+        derr << __func__ << " 0x" << std::hex << off << "~" << left 
+          << std::dec << " error: " << cpp_strerror(r) << dendl;
 	goto out;
       }
       off += r;
@@ -556,6 +563,9 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
+      derr << __func__ << " direct_aligned_read" << " 0x" << std::hex 
+        << off << "~" << left << std::dec << " error: " << cpp_strerror(r) 
+        << dendl;
       goto out;
     }
     assert((uint64_t)r == len);
@@ -578,8 +588,8 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
-  if (r < 0) {
-    r = -errno;
+  if (r) {
+    r = -r;
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	 << " error: " << cpp_strerror(r) << dendl;
   }

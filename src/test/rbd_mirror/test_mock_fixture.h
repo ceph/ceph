@@ -23,6 +23,12 @@ ACTION_P(CompleteContext, r) {
   arg0->complete(r);
 }
 
+MATCHER_P(ContentsEqual, bl, "") {
+  // TODO fix const-correctness of bufferlist
+  return const_cast<bufferlist &>(arg).contents_equal(
+    const_cast<bufferlist &>(bl));
+}
+
 namespace rbd {
 namespace mirror {
 

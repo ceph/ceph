@@ -9,6 +9,7 @@
     user enable                re-enable user after suspension
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
+    user list                  list users
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
@@ -82,6 +83,8 @@
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
     gc process                 manually process garbage
+    lc list                    list all bucket lifecycle progress
+    lc process                 manually process lifecycle
     metadata get               get metadata info
     metadata put               put metadata info
     metadata rm                remove metadata info
@@ -141,6 +144,7 @@
      --period=<id>             period id
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
+     --staging                 get staging period info
      --master                  set as master
      --master-url              master url
      --master-zonegroup=<id>   master zonegroup id
@@ -179,7 +183,7 @@
      --replica-log-type        replica log type (metadata, data, bucket), required for
                                replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
-     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
+     --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
      --reset-regions           reset regionmap when regionmap update
      --bypass-gc               when specified with bucket deletion, triggers
@@ -198,6 +202,7 @@
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   

@@ -1,4 +1,5 @@
 lib/udev/rules.d/95-ceph-osd.rules
+lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 usr/sbin/ceph-disk
 usr/sbin/ceph-disk-udev
 usr/bin/ceph-clsinfo

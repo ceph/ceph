@@ -27,6 +27,60 @@ using std::chrono::seconds;
 
 
 
+class ObjectCacher::C_ReadFinish : public Context {
+  ObjectCacher *oc;
+  int64_t poolid;
+  sobject_t oid;
+  loff_t start;
+  uint64_t length;
+  xlist<C_ReadFinish*>::item set_item;
+  bool trust_enoent;
+  ceph_tid_t tid;
+
+public:
+  bufferlist bl;
+  C_ReadFinish(ObjectCacher *c, Object *ob, ceph_tid_t t, loff_t s,
+	       uint64_t l) :
+    oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
+    set_item(this), trust_enoent(true),
+    tid(t) {
+    ob->reads.push_back(&set_item);
+  }
+
+  void finish(int r) {
+    oc->bh_read_finish(poolid, oid, tid, start, length, bl, r, trust_enoent);
+
+    // object destructor clears the list
+    if (set_item.is_on_list())
+      set_item.remove_myself();
+  }
+
+  void distrust_enoent() {
+    trust_enoent = false;
+  }
+};
+
+class ObjectCacher::C_RetryRead : public Context {
+  ObjectCacher *oc;
+  OSDRead *rd;
+  ObjectSet *oset;
+  Context *onfinish;
+public:
+  C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c)
+    : oc(_oc), rd(r), oset(os), onfinish(c) {}
+  void finish(int r) {
+    if (r < 0) {
+      if (onfinish)
+        onfinish->complete(r);
+      return;
+    }
+    int ret = oc->_readx(rd, oset, onfinish, false);
+    if (ret != 0 && onfinish) {
+      onfinish->complete(ret);
+    }
+  }
+};
+
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
 						      loff_t off)
 {
@@ -833,7 +887,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       if (bh->error < 0)
 	err = bh->error;
 
-      loff_t oldpos = opos;
       opos = bh->end();
 
       if (r == -ENOENT) {
@@ -853,7 +906,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	mark_error(bh);
       } else {
 	bh->bl.substr_of(bl,
-			 oldpos-bh->start(),
+			 bh->start() - start,
 			 bh->length());
 	mark_clean(bh);
       }
@@ -889,7 +942,7 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
     BufferHead *obh = *p;
     if (obh->ob != bh->ob)
       break;
-    if (obh->is_dirty() && obh->last_write < cutoff) {
+    if (obh->is_dirty() && obh->last_write <= cutoff) {
       blist.push_back(obh);
       ++count;
       total_len += obh->length();
@@ -904,7 +957,7 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
     BufferHead *obh = *it;
     if (obh->ob != bh->ob)
       break;
-    if (obh->is_dirty() && obh->last_write < cutoff) {
+    if (obh->is_dirty() && obh->last_write <= cutoff) {
       blist.push_front(obh);
       ++count;
       total_len += obh->length();
@@ -1750,7 +1803,6 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 void ObjectCacher::flusher_entry()
 {
   ldout(cct, 10) << "flusher start" << dendl;
-  writeback_handler.get_client_lock();
   lock.Lock();
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() +
@@ -1779,7 +1831,7 @@ void ObjectCacher::flusher_entry()
       int max = MAX_FLUSH_UNDER_LOCK;
       while ((bh = static_cast<BufferHead*>(bh_lru_dirty.
 					    lru_get_next_expire())) != 0 &&
-	     bh->last_write < cutoff &&
+	     bh->last_write <= cutoff &&
 	     max > 0) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	if (scattered_write) {
@@ -1792,8 +1844,6 @@ void ObjectCacher::flusher_entry()
       if (!max) {
 	// back off the lock to avoid starving other threads
 	lock.Unlock();
-	writeback_handler.put_client_lock();
-	writeback_handler.get_client_lock();
 	lock.Lock();
 	continue;
       }
@@ -1801,12 +1851,7 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
-    writeback_handler.put_client_lock();
     flusher_cond.WaitInterval(cct, lock, seconds(1));
-    lock.Unlock();
-
-    writeback_handler.get_client_lock();
-    lock.Lock();
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -1822,7 +1867,6 @@ void ObjectCacher::flusher_entry()
   }
 
   lock.Unlock();
-  writeback_handler.put_client_lock();
   ldout(cct, 10) << "flusher finish" << dendl;
 }
 

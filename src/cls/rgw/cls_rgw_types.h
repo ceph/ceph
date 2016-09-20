@@ -11,7 +11,9 @@
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
-#define CEPH_RGW_TAG_TIMEOUT 60*60*24
+#define CEPH_RGW_TAG_TIMEOUT 120
+#define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
+#define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
 
 class JSONObj;
 
@@ -305,7 +307,7 @@ struct rgw_bucket_dir_entry {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(key.name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);
@@ -530,7 +532,7 @@ struct rgw_bi_log_entry {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
-  
+
   bool is_versioned() {
     return ((bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
   }
@@ -792,7 +794,7 @@ struct rgw_user_bucket {
       return true;
     else if (!comp)
       return bucket.compare(ub2.bucket) < 0;
-  
+
     return false;
   }
 };
@@ -927,5 +929,32 @@ struct cls_rgw_gc_obj_info
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
+
+struct cls_rgw_lc_obj_head
+{
+  time_t start_date;
+  string marker;
+
+  cls_rgw_lc_obj_head() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    uint64_t t = start_date;
+    ::encode(t, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint64_t t;
+    ::decode(t, bl);
+    start_date = static_cast<time_t>(t);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
 
 #endif

@@ -963,6 +963,15 @@ C++ Example
 	cluster.shutdown();
 
 
+Java Example
+--------------
+
+.. code-block:: java
+
+	cluster.ioCtxDestroy(io);
+	cluster.shutDown();
+	
+	
 Python Example
 --------------
 

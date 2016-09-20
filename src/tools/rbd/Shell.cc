@@ -285,6 +285,8 @@ void Shell::print_help() {
 
   for (size_t i = 0; i < actions.size(); ++i) {
     Action *action = actions[i];
+    if (!action->visible)
+      continue;
     std::stringstream ss;
     ss << indent
        << format_command_name(action->command_spec, action->alias_command_spec);

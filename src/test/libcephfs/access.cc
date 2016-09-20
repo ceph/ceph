@@ -19,7 +19,7 @@
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -72,7 +72,7 @@ int do_mon_command(string s, string *key)
 
 string get_unique_dir()
 {
-  return string("/ceph_test_libcephfs.") + stringify(rand());
+  return string("/ceph_test_libcephfs_access.") + stringify(rand());
 }
 
 TEST(AccessTest, Foo) {
@@ -368,8 +368,14 @@ int main(int argc, char **argv)
 
   srand(getpid());
 
-  rados_create(&cluster, NULL);
-  rados_conf_read_file(cluster, NULL);
+  r = rados_create(&cluster, NULL);
+  if (r < 0)
+    exit(1);
+  
+  r = rados_conf_read_file(cluster, NULL);
+  if (r < 0)
+    exit(1);
+
   rados_conf_parse_env(cluster, NULL);
   r = rados_connect(cluster);
   if (r < 0)

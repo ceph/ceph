@@ -62,7 +62,7 @@ to the monitor. The state chart can set:
 
  - recovery_wait: waiting for local/remote reservations
  - recovering: recovering
- - wait_backfill: waiting for remote backfill reservations
+ - backfill_wait: waiting for remote backfill reservations
  - backfilling: backfilling
  - backfill_toofull: backfill reservation rejected, OSD too full
 

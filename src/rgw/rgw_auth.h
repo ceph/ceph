@@ -117,16 +117,24 @@ public:
     const std::string acct_name;
     const uint32_t perm_mask;
     const bool is_admin;
+    const uint32_t acct_type;
 
   public:
+    enum class acct_privilege_t {
+      IS_ADMIN_ACCT,
+      IS_PLAIN_ACCT
+    };
+
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
              const uint32_t perm_mask,
-             const bool is_admin)
+             const acct_privilege_t level,
+             const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
       acct_name(acct_name),
       perm_mask(perm_mask),
-      is_admin(is_admin) {
+      is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),
+      acct_type(acct_type) {
     }
   };
 

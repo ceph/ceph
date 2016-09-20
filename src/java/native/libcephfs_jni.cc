@@ -1665,10 +1665,10 @@ JNIEXPORT jlong JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1read
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: read: fd " << (int)j_fd << " len " << (int)j_size <<
-		" offset " << (int)j_offset << dendl;
+	ldout(cct, 10) << "jni: read: fd " << (int)j_fd << " len " << (long)j_size <<
+		" offset " << (long)j_offset << dendl;
 
-	ret = ceph_read(cmount, (int)j_fd, (char*)c_buf, (int)j_size, (int)j_offset);
+	ret = ceph_read(cmount, (int)j_fd, (char*)c_buf, (long)j_size, (long)j_offset);
 
 	ldout(cct, 10) << "jni: read: exit ret " << ret << dendl;
 
@@ -1707,10 +1707,10 @@ JNIEXPORT jlong JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1write
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: write: fd " << (int)j_fd << " len " << (int)j_size <<
-		" offset " << (int)j_offset << dendl;
+	ldout(cct, 10) << "jni: write: fd " << (int)j_fd << " len " << (long)j_size <<
+		" offset " << (long)j_offset << dendl;
 
-	ret = ceph_write(cmount, (int)j_fd, (char*)c_buf, (int)j_size, (int)j_offset);
+	ret = ceph_write(cmount, (int)j_fd, (char*)c_buf, (long)j_size, (long)j_offset);
 
 	ldout(cct, 10) << "jni: write: exit ret " << ret << dendl;
 

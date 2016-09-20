@@ -33,7 +33,7 @@ clone
   $ rbd clone --image-feature layering,exclusive-lock,object-map,fast-diff bar@snap rbd_other/child
   $ rbd snap create rbd_other/child@snap
   $ rbd flatten rbd_other/child 2> /dev/null
-  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1B > /dev/null 2>&1
+  $ rbd bench rbd_other/child --io-type write --io-pattern seq --io-total 1B > /dev/null 2>&1
   $ rbd clone bar@snap rbd_other/deep-flatten-child
   $ rbd snap create rbd_other/deep-flatten-child@snap
   $ rbd flatten rbd_other/deep-flatten-child 2> /dev/null
@@ -919,8 +919,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </stats>
 
 # cleanup
-  $ rbd snap remove rbd_other/deep-flatten-child@snap
-  $ rbd snap remove rbd_other/child@snap
+  $ rbd snap remove --no-progress rbd_other/deep-flatten-child@snap
+  $ rbd snap remove --no-progress rbd_other/child@snap
   $ rbd snap unprotect bar@snap
   $ rbd snap purge bar 2> /dev/null
   $ rbd snap purge foo 2> /dev/null

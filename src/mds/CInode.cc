@@ -46,6 +46,7 @@
 #include "include/assert.h"
 
 #include "mds/MDSContinuation.h"
+#include "mds/InoTable.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -92,9 +93,8 @@ struct cinode_lock_info_t cinode_lock_info[] = {
   { CEPH_LOCK_IAUTH, CEPH_CAP_AUTH_EXCL },
   { CEPH_LOCK_ILINK, CEPH_CAP_LINK_EXCL },
   { CEPH_LOCK_IXATTR, CEPH_CAP_XATTR_EXCL },
-  { CEPH_LOCK_IFLOCK, CEPH_CAP_FLOCK_EXCL }  
 };
-int num_cinode_locks = 5;
+int num_cinode_locks = sizeof(cinode_lock_info) / sizeof(cinode_lock_info[0]);
 
 
 
@@ -144,6 +144,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
   if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
+  if (in.state_test(CInode::STATE_MISSINGOBJS)) out << " missingobjs";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
@@ -311,20 +312,23 @@ void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t cli
   }
 }
 
-void CInode::split_need_snapflush(CInode *cowin, CInode *in)
+bool CInode::split_need_snapflush(CInode *cowin, CInode *in)
 {
   dout(10) << "split_need_snapflush [" << cowin->first << "," << cowin->last << "] for " << *cowin << dendl;
+  bool need_flush = false;
   for (compact_map<snapid_t, set<client_t> >::iterator p = client_need_snapflush.lower_bound(cowin->first);
        p != client_need_snapflush.end() && p->first < in->first; ) {
     compact_map<snapid_t, set<client_t> >::iterator q = p;
     ++p;
     assert(!q->second.empty());
-    if (cowin->last >= q->first)
+    if (cowin->last >= q->first) {
       cowin->auth_pin(this);
-    else
+      need_flush = true;
+    } else
       client_need_snapflush.erase(q);
     in->auth_unpin(this);
   }
+  return need_flush;
 }
 
 void CInode::mark_dirty_rstat()
@@ -493,6 +497,7 @@ __u32 InodeStoreBase::hash_dentry_name(const string &dn)
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
     which = CEPH_STR_HASH_LINUX;
+  assert(ceph_str_hash_valid(which));
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
@@ -807,9 +812,14 @@ bool CInode::is_projected_ancestor_of(CInode *other)
   return false;
 }
 
-void CInode::make_path_string(string& s, bool force, CDentry *use_parent) const
+/*
+ * If use_parent is NULL (it should be one of inode's projected parents),
+ * we use it to make path string. Otherwise, we use inode's parent dentry
+ * to make path string
+ */
+void CInode::make_path_string(string& s, CDentry *use_parent) const
 {
-  if (!force)
+  if (!use_parent)
     use_parent = parent;
 
   if (use_parent) {
@@ -844,7 +854,7 @@ void CInode::make_path_string_projected(string& s) const
 	 p != projected_parent.end();
 	 ++p) {
       string q;
-      make_path_string(q, true, *p);
+      make_path_string(q, *p);
       s += " ";
       s += q;
     }
@@ -995,6 +1005,7 @@ void CInode::_stored(int r, version_t v, Context *fin)
     mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
 				<< " errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
+    fin->complete(r);
     return;
   }
 
@@ -1211,6 +1222,8 @@ void CInode::_stored_backtrace(int r, version_t v, Context *fin)
                                 << ", pool " << get_backtrace_pool()
                                 << ", errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
+    if (fin)
+      fin->complete(r);
     return;
   }
 
@@ -1975,7 +1988,7 @@ void CInode::finish_scatter_gather_update(int type)
       assert(is_auth());
       inode_t *pi = get_projected_inode();
 
-      bool touched_mtime = false;
+      bool touched_mtime = false, touched_chattr = false;
       dout(20) << "  orig dirstat " << pi->dirstat << dendl;
       pi->dirstat.version++;
       for (compact_map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -2000,7 +2013,7 @@ void CInode::finish_scatter_gather_update(int type)
 	if (pf->accounted_fragstat.version == pi->dirstat.version - 1) {
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime, &touched_chattr);
 	} else {
 	  dout(20) << fg << " skipping STALE accounted_fragstat " << pf->accounted_fragstat << dendl;
 	}
@@ -2028,6 +2041,8 @@ void CInode::finish_scatter_gather_update(int type)
       }
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      if (touched_chattr)
+	pi->change_attr = pi->dirstat.change_attr;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
       if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
@@ -2050,6 +2065,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  version_t v = pi->dirstat.version;
 	  if (pi->dirstat.mtime > dirstat.mtime)
 	    dirstat.mtime = pi->dirstat.mtime;
+	  if (pi->dirstat.change_attr > dirstat.change_attr)
+	    dirstat.change_attr = pi->dirstat.change_attr;
 	  pi->dirstat = dirstat;
 	  pi->dirstat.version = v;
 	}
@@ -2826,18 +2843,18 @@ void CInode::move_to_realm(SnapRealm *realm)
   containing_realm = realm;
 }
 
-Capability *CInode::reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session)
+Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session)
 {
   Capability *cap = get_client_cap(client);
   if (cap) {
     // FIXME?
-    cap->merge(icr.wanted, icr.issued);
+    cap->merge(icr.capinfo.wanted, icr.capinfo.issued);
   } else {
     cap = add_client_cap(client, session);
-    cap->set_wanted(icr.wanted);
-    cap->issue_norevoke(icr.issued);
+    cap->set_cap_id(icr.capinfo.cap_id);
+    cap->set_wanted(icr.capinfo.wanted);
+    cap->issue_norevoke(icr.capinfo.issued);
     cap->reset_seq();
-    cap->set_cap_id(icr.cap_id);
   }
   cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
   return cap;
@@ -3344,6 +3361,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     ::encode(layout.pool_ns, bl);
   }
+  if (session->connection->has_feature(CEPH_FEATURE_FS_BTIME)) {
+    ::encode(any_i->btime, bl);
+    ::encode(any_i->change_attr, bl);
+  }
 
   return valid;
 }
@@ -3375,6 +3396,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->mtime = i->mtime;
   m->atime = i->atime;
   m->ctime = i->ctime;
+  m->change_attr = i->change_attr;
   m->time_warp_seq = i->time_warp_seq;
 
   if (cap->client_inline_version < i->inline_data.version) {
@@ -3829,6 +3851,37 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         }
       }
 next:
+      // If the inode's number was free in the InoTable, fix that
+      // (#15619)
+      {
+        const inode_t& inode = in->inode;
+        MDCache *mdcache = in->mdcache;
+        InoTable *inotable = mdcache->mds->inotable;
+
+        dout(10) << "scrub: inotable ino = 0x" << std::hex << inode.ino << dendl;
+        dout(10) << "scrub: inotable free says "
+          << inotable->is_marked_free(inode.ino) << dendl;
+
+        if (inotable->is_marked_free(inode.ino)) {
+          LogChannelRef clog = in->mdcache->mds->clog;
+          clog->error() << "scrub: inode wrongly marked free: 0x" << std::hex
+            << inode.ino;
+
+          if (in->scrub_infop->header && in->scrub_infop->header->repair) {
+            bool repaired = inotable->repair(inode.ino);
+            if (repaired) {
+              clog->error() << "inode table repaired for inode: 0x" << std::hex
+                << inode.ino;
+
+              inotable->save();
+            } else {
+              clog->error() << "Cannot repair inotable while other operations"
+                " are in progress";
+            }
+          }
+        }
+      }
+
       // quit if we're a file, or kick off directory checks otherwise
       // TODO: validate on-disk inode for non-base directories
       if (!in->is_dir()) {
@@ -4105,6 +4158,8 @@ void CInode::dump(Formatter *f) const
     f->dump_string("state", "dirtypool");
   if (state_test(STATE_ORPHAN))
     f->dump_string("state", "orphan");
+  if (state_test(STATE_MISSINGOBJS))
+    f->dump_string("state", "missingobjs");
   f->close_section();
 
   f->open_array_section("client_caps");

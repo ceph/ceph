@@ -11,7 +11,7 @@
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
-#define dout_prefix *_dout << "JournalMetadata: "
+#define dout_prefix *_dout << "JournalMetadata: " << this << " "
 
 namespace journal {
 
@@ -402,9 +402,9 @@ JournalMetadata::JournalMetadata(ContextWQ *work_queue, SafeTimer *timer,
                                  Mutex *timer_lock, librados::IoCtx &ioctx,
                                  const std::string &oid,
                                  const std::string &client_id,
-                                 double commit_interval)
+                                 const Settings &settings)
     : RefCountedObject(NULL, 0), m_cct(NULL), m_oid(oid),
-      m_client_id(client_id), m_commit_interval(commit_interval), m_order(0),
+      m_client_id(client_id), m_settings(settings), m_order(0),
       m_splay_width(0), m_pool_id(-1), m_initialized(false),
       m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
       m_lock("JournalMetadata::m_lock"), m_commit_tid(0), m_watch_ctx(this),
@@ -587,7 +587,7 @@ void JournalMetadata::get_tags(const boost::optional<uint64_t> &tag_class,
   ctx->send();
 }
 
-void JournalMetadata::add_listener(Listener *listener) {
+void JournalMetadata::add_listener(JournalMetadataListener *listener) {
   Mutex::Locker locker(m_lock);
   while (m_update_notifications > 0) {
     m_update_cond.Wait(m_lock);
@@ -595,7 +595,7 @@ void JournalMetadata::add_listener(Listener *listener) {
   m_listeners.push_back(listener);
 }
 
-void JournalMetadata::remove_listener(Listener *listener) {
+void JournalMetadata::remove_listener(JournalMetadataListener *listener) {
   Mutex::Locker locker(m_lock);
   while (m_update_notifications > 0) {
     m_update_cond.Wait(m_lock);
@@ -749,6 +749,10 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
     Client client(m_client_id, bufferlist());
     RegisteredClients::iterator it = refresh->registered_clients.find(client);
     if (it != refresh->registered_clients.end()) {
+      if (it->state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+	ldout(m_cct, 0) << "client flagged disconnected: " << m_client_id
+			<< dendl;
+      }
       m_minimum_set = MAX(m_minimum_set, refresh->minimum_set);
       m_active_set = MAX(m_active_set, refresh->active_set);
       m_registered_clients = refresh->registered_clients;
@@ -795,7 +799,8 @@ void JournalMetadata::schedule_commit_task() {
   assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == NULL) {
     m_commit_position_task_ctx = new C_CommitPositionTask(this);
-    m_timer->add_event_after(m_commit_interval, m_commit_position_task_ctx);
+    m_timer->add_event_after(m_settings.commit_interval,
+                             m_commit_position_task_ctx);
   }
 }
 
@@ -809,8 +814,10 @@ void JournalMetadata::handle_commit_position_task() {
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, m_commit_position);
 
-  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, m_commit_position_ctx);
+  Context *ctx = new C_NotifyUpdate(this, m_commit_position_ctx);
   m_commit_position_ctx = NULL;
+
+  ctx = schedule_laggy_clients_disconnect(ctx);
 
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(ctx, NULL,
@@ -838,7 +845,7 @@ void JournalMetadata::handle_watch_reset() {
     if (r == -ENOENT) {
       ldout(m_cct, 5) << __func__ << ": journal header not found" << dendl;
     } else {
-      lderr(m_cct) << __func__ << ": failed to watch journal"
+      lderr(m_cct) << __func__ << ": failed to watch journal: "
                    << cpp_strerror(r) << dendl;
     }
     schedule_watch_reset();
@@ -1022,6 +1029,59 @@ void JournalMetadata::handle_notified(int r) {
   ldout(m_cct, 10) << "notified journal header update: r=" << r << dendl;
 }
 
+Context *JournalMetadata::schedule_laggy_clients_disconnect(Context *on_finish) {
+  assert(m_lock.is_locked());
+
+  ldout(m_cct, 20) << __func__ << dendl;
+
+  if (m_settings.max_concurrent_object_sets <= 0) {
+    return on_finish;
+  }
+
+  Context *ctx = on_finish;
+
+  for (auto &c : m_registered_clients) {
+    if (c.state == cls::journal::CLIENT_STATE_DISCONNECTED ||
+	c.id == m_client_id ||
+	m_settings.whitelisted_laggy_clients.count(c.id) > 0) {
+      continue;
+    }
+    const std::string &client_id = c.id;
+    uint64_t object_set = 0;
+    if (!c.commit_position.object_positions.empty()) {
+      auto &position = *(c.commit_position.object_positions.begin());
+      object_set = position.object_number / m_splay_width;
+    }
+
+    if (m_active_set > object_set + m_settings.max_concurrent_object_sets) {
+      ldout(m_cct, 1) << __func__ << ": " << client_id
+		      << ": scheduling disconnect" << dendl;
+
+      ctx = new FunctionContext([this, client_id, ctx](int r1) {
+          ldout(m_cct, 10) << __func__ << ": " << client_id
+                           << ": flagging disconnected" << dendl;
+
+          librados::ObjectWriteOperation op;
+          client::client_update_state(&op, client_id,
+                                      cls::journal::CLIENT_STATE_DISCONNECTED);
+
+          librados::AioCompletion *comp =
+              librados::Rados::aio_create_completion(ctx, nullptr,
+                                                     utils::rados_ctx_callback);
+          int r = m_ioctx.aio_operate(m_oid, comp, &op);
+          assert(r == 0);
+          comp->release();
+	});
+    }
+  }
+
+  if (ctx == on_finish) {
+    ldout(m_cct, 20) << __func__ << ": no laggy clients to disconnect" << dendl;
+  }
+
+  return ctx;
+}
+
 std::ostream &operator<<(std::ostream &os,
 			 const JournalMetadata::RegisteredClients &clients) {
   os << "[";
@@ -1045,7 +1105,7 @@ std::ostream &operator<<(std::ostream &os,
      << "active_set=" << jm.m_active_set << ", "
      << "client_id=" << jm.m_client_id << ", "
      << "commit_tid=" << jm.m_commit_tid << ", "
-     << "commit_interval=" << jm.m_commit_interval << ", "
+     << "commit_interval=" << jm.m_settings.commit_interval << ", "
      << "commit_position=" << jm.m_commit_position << ", "
      << "registered_clients=" << jm.m_registered_clients << "]";
   return os;

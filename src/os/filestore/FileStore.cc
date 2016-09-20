@@ -1624,9 +1624,14 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      omap_store->init(g_conf->filestore_rocksdb_options);
+      ret = omap_store->init(g_conf->filestore_rocksdb_options);
     else
-      omap_store->init();
+      ret = omap_store->init();
+
+    if (ret < 0) {
+      derr << "Error initializing omap_store: " << cpp_strerror(ret) << dendl;
+      goto close_current_fd;
+    }
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -1795,6 +1800,9 @@ close_fsid_fd:
   fsid_fd = -1;
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
+  delete backend;
+  backend = NULL;
+  object_map.reset();
   return ret;
 }
 
@@ -3339,7 +3347,9 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
  
   if (replaying || m_disable_wbthrottle) {
     if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED) {
+#ifdef HAVE_POSIX_FADVISE
         posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
     }
   } else {
     wbthrottle.queue_wb(fd, oid, offset, len,
@@ -4565,6 +4575,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
       if (r < 0)
 	return r;
     }
+    objects.clear();
   }
   return _destroy_collection(cid);
 }
@@ -4670,14 +4681,17 @@ bool FileStore::collection_exists(const coll_t& c)
   return ret;
 }
 
-bool FileStore::collection_empty(const coll_t& c)
+int FileStore::collection_empty(const coll_t& c, bool *empty)
 {
   tracepoint(objectstore, collection_empty_enter, c.c_str());
   dout(15) << "collection_empty " << c << dendl;
   Index index;
   int r = get_index(c, &index);
-  if (r < 0)
-    return false;
+  if (r < 0) {
+    derr << __func__ << " get_index returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
 
   assert(NULL != index.index);
   RWLock::RLocker l((index.index)->access_lock);
@@ -4686,12 +4700,14 @@ bool FileStore::collection_empty(const coll_t& c)
   r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
 				     1, &ls, NULL);
   if (r < 0) {
+    derr << __func__ << " collection_list_partial returned: "
+         << cpp_strerror(r) << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
-    return false;
+    return r;
   }
-  bool ret = ls.empty();
-  tracepoint(objectstore, collection_empty_exit, ret);
-  return ret;
+  *empty = ls.empty();
+  tracepoint(objectstore, collection_empty_exit, *empty);
+  return 0;
 }
 int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
 			       bool sort_bitwise, int max,
@@ -4761,7 +4777,7 @@ int FileStore::collection_list(const coll_t& c, ghobject_t start, ghobject_t end
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
-  dout(20) << "objects: " << ls << dendl;
+  dout(20) << "objects: " << *ls << dendl;
 
   // HashIndex doesn't know the pool when constructing a 'next' value
   if (next && !next->is_max()) {
@@ -4952,13 +4968,16 @@ int FileStore::_collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_n
   dout(15) << __func__ << " collection: " << c << " pg number: "
      << pg_num << " expected number of objects: " << expected_num_objs << dendl;
 
-  if (!collection_empty(c) && !replaying) {
+  bool empty;
+  int ret = collection_empty(c, &empty);
+  if (ret < 0)
+    return ret;
+  if (!empty && !replaying) {
     dout(0) << "Failed to give an expected number of objects hint to collection : "
       << c << ", only empty collection can take such type of hint. " << dendl;
     return 0;
   }
 
-  int ret;
   Index index;
   ret = get_index(c, &index);
   if (ret < 0)
@@ -5423,7 +5442,10 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
   dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
 
   FDRef fd;
-  int ret;
+  int ret = 0;
+
+  if (expected_object_size == 0 || expected_write_size == 0)
+    goto out;
 
   ret = lfn_open(cid, oid, false, &fd);
   if (ret < 0)
@@ -5680,6 +5702,21 @@ uint64_t FileStore::estimate_objects_overhead(uint64_t num_objects)
   uint64_t res = num_objects * blk_size / 2; //assumes that each object uses ( in average ) additional 1/2 block due to FS allocation granularity.
   return res;
 }
+
+int FileStore::apply_layout_settings(const coll_t &cid)
+{
+  dout(20) << __func__ << " " << cid << dendl;
+  Index index;
+  int r = get_index(cid, &index);
+  if (r < 0) {
+    dout(10) << "Error getting index for " << cid << ": " << cpp_strerror(r)
+	     << dendl;
+    return r;
+  }
+
+  return index->apply_layout_settings();
+}
+
 
 // -- FSSuperblock --
 

@@ -3,6 +3,10 @@
 #include "posix_acl.h"
 #include "UserGroups.h"
 
+#ifndef ACCESSPERMS
+#define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
+#endif
+
 int posix_acl_check(const void *xattr, size_t size)
 {
   const acl_ea_header *header;

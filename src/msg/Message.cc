@@ -597,12 +597,7 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_MDS_CACHEREJOIN:
     m = new MMDSCacheRejoin;
 	break;
-	/*
-  case MSG_MDS_CACHEREJOINACK:
-	m = new MMDSCacheRejoinAck;
-	break;
-	*/
-
+  
   case MSG_MDS_DIRUPDATE:
     m = new MDirUpdate();
     break;

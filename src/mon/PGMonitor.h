@@ -78,26 +78,7 @@ private:
   bool prepare_pg_stats(MonOpRequestRef op);
   void _updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op);
 
-  struct C_Stats : public C_MonOp {
-    PGMonitor *pgmon;
-    MonOpRequestRef stats_op_ack;
-    entity_inst_t who;
-    C_Stats(PGMonitor *p,
-            MonOpRequestRef op,
-            MonOpRequestRef op_ack)
-      : C_MonOp(op), pgmon(p), stats_op_ack(op_ack) {}
-    void _finish(int r) {
-      if (r >= 0) {
-	pgmon->_updated_stats(op, stats_op_ack);
-      } else if (r == -ECANCELED) {
-        return;
-      } else if (r == -EAGAIN) {
-	pgmon->dispatch(op);
-      } else {
-	assert(0 == "bad C_Stats return value");
-      }
-    }    
-  };
+  struct C_Stats;
 
   void handle_statfs(MonOpRequestRef op);
   bool preprocess_getpoolstats(MonOpRequestRef op);
@@ -115,17 +96,13 @@ private:
 
   /**
    * check latest osdmap for new pgs to register
-   *
-   * @return true if we updated pending_inc (and should propose)
    */
-  bool register_new_pgs();
+  void register_new_pgs();
 
   /**
    * recalculate creating pg mappings
-   *
-   * @return true if we updated pending_inc
    */
-  bool map_pg_creates();
+  void map_pg_creates();
 
   void send_pg_creates();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
@@ -136,9 +113,8 @@ private:
    * clears need_check_down_pgs
    * clears need_check_down_pg_osds
    *
-   * @return true if we updated pending_inc (and should propose)
    */
-  bool check_down_pgs();
+  void check_down_pgs();
   void _try_mark_pg_stale(const OSDMap *osdmap, pg_t pgid,
 			  const pg_stat_t& cur_stat);
 
@@ -152,11 +128,11 @@ private:
 			  int threshold,
 			  vector<string>& args) const;
 
-  void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    object_stat_sum_t &sum,
-			    uint64_t avail,
-			    float raw_used_rate,
-			    bool verbose, const pg_pool_t *pool) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+				   object_stat_sum_t &sum,
+				   uint64_t avail,
+				   float raw_used_rate,
+				   bool verbose, const pg_pool_t *pool);
 
   int64_t get_rule_avail(OSDMap& osdmap, int ruleno) const;
 
@@ -219,6 +195,11 @@ private:
   // no copying allowed
   PGMonitor(const PGMonitor &rhs);
   PGMonitor &operator=(const PGMonitor &rhs);
+
+  // we don't want to include gtest.h just for FRIEND_TEST
+  friend class pgmonitor_dump_object_stat_sum_0_Test;
+  friend class pgmonitor_dump_object_stat_sum_1_Test;
+  friend class pgmonitor_dump_object_stat_sum_2_Test;
 };
 
 #endif

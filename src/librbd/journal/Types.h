@@ -43,11 +43,11 @@ struct AioDiscardEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_DISCARD;
 
   uint64_t offset;
-  size_t length;
+  uint64_t length;
 
   AioDiscardEvent() : offset(0), length(0) {
   }
-  AioDiscardEvent(uint64_t _offset, size_t _length)
+  AioDiscardEvent(uint64_t _offset, uint64_t _length)
     : offset(_offset), length(_length) {
   }
 
@@ -69,7 +69,7 @@ struct AioWriteEvent {
 
   AioWriteEvent() : offset(0), length(0) {
   }
-  AioWriteEvent(uint64_t _offset, size_t _length, const bufferlist &_data)
+  AioWriteEvent(uint64_t _offset, uint64_t _length, const bufferlist &_data)
     : offset(_offset), length(_length), data(_data) {
   }
 
@@ -162,12 +162,15 @@ struct SnapRenameEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_RENAME;
 
   uint64_t snap_id;
+  std::string src_snap_name;
 
   SnapRenameEvent() : snap_id(CEPH_NOSNAP) {
   }
   SnapRenameEvent(uint64_t op_tid, uint64_t src_snap_id,
+                  const std::string &src_snap_name,
                   const std::string &dest_snap_name)
-    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id) {
+    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id),
+      src_snap_name(src_snap_name) {
   }
 
   void encode(bufferlist& bl) const;
@@ -460,15 +463,38 @@ struct ClientData {
 
 // Journal Tag data structures
 
+struct TagPredecessor {
+  std::string mirror_uuid; // empty if local
+  bool commit_valid = false;
+  uint64_t tag_tid = 0;
+  uint64_t entry_tid = 0;
+
+  TagPredecessor() {
+  }
+  TagPredecessor(const std::string &mirror_uuid, bool commit_valid,
+                 uint64_t tag_tid, uint64_t entry_tid)
+    : mirror_uuid(mirror_uuid), commit_valid(commit_valid), tag_tid(tag_tid),
+      entry_tid(entry_tid) {
+  }
+
+  inline bool operator==(const TagPredecessor &rhs) const {
+    return (mirror_uuid == rhs.mirror_uuid &&
+            commit_valid == rhs.commit_valid &&
+            tag_tid == rhs.tag_tid &&
+            entry_tid == rhs.entry_tid);
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct TagData {
   // owner of the tag (exclusive lock epoch)
   std::string mirror_uuid; // empty if local
 
   // mapping to last committed record of previous tag
-  std::string predecessor_mirror_uuid; // empty if local
-  bool predecessor_commit_valid = false;
-  uint64_t predecessor_tag_tid = 0;
-  uint64_t predecessor_entry_tid = 0;
+  TagPredecessor predecessor;
 
   TagData() {
   }
@@ -479,10 +505,8 @@ struct TagData {
           bool predecessor_commit_valid,
           uint64_t predecessor_tag_tid, uint64_t predecessor_entry_tid)
     : mirror_uuid(mirror_uuid),
-      predecessor_mirror_uuid(predecessor_mirror_uuid),
-      predecessor_commit_valid(predecessor_commit_valid),
-      predecessor_tag_tid(predecessor_tag_tid),
-      predecessor_entry_tid(predecessor_entry_tid) {
+      predecessor(predecessor_mirror_uuid, predecessor_commit_valid,
+                  predecessor_tag_tid, predecessor_entry_tid) {
   }
 
   void encode(bufferlist& bl) const;
@@ -498,7 +522,20 @@ std::ostream &operator<<(std::ostream &out, const ImageClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerSyncPoint &sync);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerState &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta);
+std::ostream &operator<<(std::ostream &out, const TagPredecessor &predecessor);
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
+
+enum class ListenerType : int8_t {
+  RESYNC
+};
+
+struct ResyncListener {
+  virtual ~ResyncListener() {}
+  virtual void handle_resync() = 0;
+};
+
+typedef boost::variant<ResyncListener *> JournalListenerPtr;
+
 
 } // namespace journal
 } // namespace librbd

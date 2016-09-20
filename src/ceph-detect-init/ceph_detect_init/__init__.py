@@ -19,13 +19,16 @@ from ceph_detect_init import exc
 from ceph_detect_init import fedora
 from ceph_detect_init import rhel
 from ceph_detect_init import suse
+from ceph_detect_init import gentoo
 import logging
 import platform
 
 
 def get(use_rhceph=False):
     distro_name, release, codename = platform_information()
-    if not codename or not _get_distro(distro_name):
+    # Not all distributions have a concept that maps to codenames
+    # (or even releases really)
+    if not codename and not _get_distro(distro_name):
         raise exc.UnsupportedPlatform(
             distro=distro_name,
             codename=codename,
@@ -57,6 +60,9 @@ def _get_distro(distro, use_rhceph=False):
         'redhat': centos,
         'fedora': fedora,
         'suse': suse,
+        'gentoo': gentoo,
+        'funtoo': gentoo,
+        'exherbo': gentoo,
     }
 
     if distro == 'redhat' and use_rhceph:
@@ -75,6 +81,8 @@ def _normalized_distro_name(distro):
         return 'suse'
     elif distro.startswith('centos'):
         return 'centos'
+    elif distro.startswith(('gentoo', 'funtoo', 'exherbo')):
+        return 'gentoo'
     return distro
 
 

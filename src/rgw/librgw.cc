@@ -82,6 +82,14 @@ namespace rgw {
 
   void RGWLibProcess::run()
   {
+    /* write completion interval */
+    RGWLibFS::write_completion_interval_s =
+      cct->_conf->rgw_nfs_write_completion_interval_s;
+
+    /* start write timer */
+    RGWLibFS::write_timer.resume();
+
+    /* gc loop */
     while (! shutdown) {
       lsubdout(cct, rgw, 5) << "RGWLibProcess GC" << dendl;
       unique_lock uniq(mtx);
@@ -457,6 +465,7 @@ namespace rgw {
 
     store = RGWStoreManager::get_storage(g_ceph_context,
 					 g_conf->rgw_enable_gc_threads,
+					 g_conf->rgw_enable_lc_threads,
 					 g_conf->rgw_enable_quota_threads,
 					 g_conf->rgw_run_sync_thread);
 
@@ -485,12 +494,13 @@ namespace rgw {
     const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
     const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
     const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
+    const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
     const string& ldap_dnattr =
       store->ctx()->_conf->rgw_ldap_dnattr;
     std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
     ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
-			      ldap_searchdn, ldap_dnattr);
+			      ldap_searchdn, ldap_searchfilter, ldap_dnattr);
     ldh->init();
     ldh->bind();
 

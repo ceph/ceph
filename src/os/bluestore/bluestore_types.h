@@ -16,9 +16,11 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
 #include <ostream>
+#include <bitset>
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
+#include "include/small_encoding.h"
 #include "common/hobject.h"
 
 namespace ceph {
@@ -54,30 +56,85 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
-/// pextent: physical extent
-struct bluestore_pextent_t {
-  const static uint64_t INVALID_OFFSET = ~0ull;
+class AllocExtent {
+public:
+  uint64_t offset;
+  uint32_t length;
 
-  uint64_t offset, length;    ///< location on device
+  AllocExtent() { 
+    offset = 0;
+    length = 0;
+  }
 
-  bluestore_pextent_t() : offset(0), length(0) {}
-  bluestore_pextent_t(uint64_t o, uint64_t l) : offset(o), length(l) {}
-
+  AllocExtent(int64_t off, int32_t len) : offset(off), length(len) { }
   uint64_t end() const {
     return offset + length;
   }
+};
+
+class ExtentList {
+  std::vector<AllocExtent> *m_extents;
+  int64_t m_num_extents;
+  int64_t m_block_size;
+  uint64_t m_max_alloc_size;
+
+public:
+  void init(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+    m_extents = extents;
+    m_num_extents = 0;
+    m_block_size = block_size;
+    m_max_alloc_size = max_alloc_size;
+  }
+
+  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size) {
+    init(extents, block_size, 0);
+  }
+
+  ExtentList(std::vector<AllocExtent> *extents, int64_t block_size, uint64_t max_alloc_size) {
+    init(extents, block_size, max_alloc_size);
+  }
+
+  void reset() {
+    m_num_extents = 0;
+  }
+
+  void add_extents(int64_t start, int64_t count);
+
+  std::vector<AllocExtent> *get_extents() {
+    return m_extents;
+  }
+
+  std::pair<int64_t, int64_t> get_nth_extent(int index) {
+      return std::make_pair
+            ((*m_extents)[index].offset / m_block_size,
+             (*m_extents)[index].length / m_block_size);
+  }
+
+  int64_t get_extent_count() {
+    return m_num_extents;
+  }
+};
+
+
+/// pextent: physical extent
+struct bluestore_pextent_t : public AllocExtent{
+  const static uint64_t INVALID_OFFSET = ~0ull;
+
+  bluestore_pextent_t() : AllocExtent() {}
+  bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
+  bluestore_pextent_t(AllocExtent &ext) : AllocExtent(ext.offset, ext.length) { }
 
   bool is_valid() const {
     return offset != INVALID_OFFSET;
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
+    small_encode_lba(offset, bl);
+    small_encode_varint_lowz(length, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
+    small_decode_lba(offset, p);
+    small_decode_varint_lowz(length, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
@@ -86,6 +143,8 @@ WRITE_CLASS_ENCODER(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl);
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p);
 
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {
@@ -94,12 +153,12 @@ struct bluestore_extent_ref_map_t {
     uint32_t refs;
     record_t(uint32_t l=0, uint32_t r=0) : length(l), refs(r) {}
     void encode(bufferlist& bl) const {
-      ::encode(length, bl);
-      ::encode(refs, bl);
+      small_encode_varint_lowz(length, bl);
+      small_encode_varint(refs, bl);
     }
     void decode(bufferlist::iterator& p) {
-      ::decode(length, p);
-      ::decode(refs, p);
+      small_decode_varint_lowz(length, p);
+      small_decode_varint(refs, p);
     }
   };
   WRITE_CLASS_ENCODER(record_t)
@@ -147,8 +206,11 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
   enum {
-    FLAG_MUTABLE = 1,     ///< blob can be overwritten or split
-    FLAG_COMPRESSED = 2,  ///< blob is compressed
+    FLAG_MUTABLE = 1,         ///< blob can be overwritten or split
+    FLAG_COMPRESSED = 2,      ///< blob is compressed
+    FLAG_CSUM = 4,            ///< blob has checksums
+    FLAG_HAS_UNUSED = 8,      ///< blob has unused map
+    FLAG_SHARED = 16,         ///< blob is shared; see external SharedBlob
   };
   static string get_flags_string(unsigned flags);
 
@@ -188,30 +250,53 @@ struct bluestore_blob_t {
     return -EINVAL;
   }
 
-  vector<bluestore_pextent_t> extents; ///< raw data position on device
-  uint32_t compressed_length;      ///< compressed length if any
-  uint32_t flags;                  ///< FLAG_*
+  enum CompressionAlgorithm {
+    COMP_ALG_NONE = 0,
+    COMP_ALG_SNAPPY = 1,
+    COMP_ALG_ZLIB = 2,
+  };
 
-  uint8_t csum_type;               ///< CSUM_*
-  uint8_t csum_chunk_order;        ///< csum block size is 1<<block_order bytes
-
-  bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
-  interval_set<uint32_t> unused;   ///< portion that has never been written to
-  bufferptr csum_data;          ///< opaque vector of csum data
-
-  bluestore_blob_t(uint32_t f = 0)
-    : compressed_length(0),
-      flags(f),
-      csum_type(CSUM_NONE),
-      csum_chunk_order(12) {
+  static const char * get_comp_alg_name(int a) {
+    switch (a) {
+    case COMP_ALG_NONE: return "none";
+    case COMP_ALG_SNAPPY: return "snappy";
+    case COMP_ALG_ZLIB: return "zlib";
+    default: return "???";
+    }
   }
 
-  bluestore_blob_t(const bluestore_pextent_t& ext, uint32_t f = 0)
-    : compressed_length(0),
-      flags(f),
-      csum_type(CSUM_NONE),
-      csum_chunk_order(12) {
-    extents.push_back(ext);
+  static int get_comp_alg_type(const std::string &s) {
+    if (s == "none")
+      return COMP_ALG_NONE;
+    if (s == "snappy")
+      return COMP_ALG_SNAPPY;
+    if (s == "zlib")
+      return COMP_ALG_ZLIB;
+
+    assert(0 == "invalid compression algorithm");
+    return COMP_ALG_NONE;
+  }
+
+  vector<bluestore_pextent_t> extents;///< raw data position on device
+  uint64_t sbid = 0;                  ///< shared blob id (if shared)
+  uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
+  uint32_t compressed_length = 0;     ///< compressed length if any
+  uint32_t flags = 0;                 ///< FLAG_*
+
+  uint8_t csum_type = CSUM_NONE;      ///< CSUM_*
+  uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
+
+  bufferptr csum_data;                ///< opaque vector of csum data
+
+  typedef uint16_t unused_uint_t;
+  typedef std::bitset<sizeof(unused_uint_t) * 8> unused_t;
+  unused_t unused;                    ///< portion that has never been written to
+
+  bluestore_blob_t(uint32_t f = 0) : flags(f) {}
+
+  int estimate_encoded_size() const {
+    // conservative upper bound... fixme
+    return csum_data.length() + extents.size() * 16 + 48;
   }
 
   void encode(bufferlist& bl) const;
@@ -232,8 +317,9 @@ struct bluestore_blob_t {
     return get_flags_string(flags);
   }
 
-  void set_compressed(uint64_t clen) {
+  void set_compressed(uint64_t clen_orig, uint64_t clen) {
     set_flag(FLAG_COMPRESSED);
+    compressed_length_orig = clen_orig;
     compressed_length = clen;
   }
   bool is_mutable() const {
@@ -242,8 +328,29 @@ struct bluestore_blob_t {
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
   }
+  bool has_csum() const {
+    return has_flag(FLAG_CSUM);
+  }
+  bool has_unused() const {
+    return has_flag(FLAG_HAS_UNUSED);
+  }
+  bool is_shared() const {
+    return has_flag(FLAG_SHARED);
+  }
+
+  /// return chunk (i.e. min readable block) size for the blob
+  uint64_t get_chunk_size(bool csum_enabled, uint64_t dev_block_size) const {
+    return csum_enabled &&
+      has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+  }
+  uint32_t get_csum_chunk_size() const {
+    return 1 << csum_chunk_order;
+  }
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
+  }
+  uint32_t get_compressed_payload_original_length() const {
+    return is_compressed() ? compressed_length_orig : 0;
   }
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
@@ -258,10 +365,6 @@ struct bluestore_blob_t {
     return p->offset + x_off;
   }
 
-  bool is_unreferenced(uint64_t offset, uint64_t length) const {
-    return !ref_map.intersects(offset, length);
-  }
-
   /// return true if the entire range is allocated (mapped to extents on disk)
   bool is_allocated(uint64_t b_off, uint64_t b_len) const {
     auto p = extents.begin();
@@ -273,6 +376,7 @@ struct bluestore_blob_t {
     }
     b_len += b_off;
     while (b_len) {
+      assert(p != extents.end());
       if (!p->is_valid()) {
 	return false;
       }
@@ -287,31 +391,61 @@ struct bluestore_blob_t {
 
   /// return true if the logical range has never been used
   bool is_unused(uint64_t offset, uint64_t length) const {
-    return unused.contains(offset, length);
+    if (!has_unused()) {
+      return false;
+    }
+    uint64_t blob_len = get_logical_length();
+    assert((blob_len % unused.size()) == 0);
+    assert(offset + length <= blob_len);
+    uint64_t chunk_size = blob_len / unused.size();
+    uint64_t start = offset / chunk_size;
+    uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+    assert(end <= unused.size());
+    auto i = start;
+    while (i < end && unused[i]) {
+      i++;
+    }
+    return i >= end;
   }
 
   /// mark a range that has never been used
   void add_unused(uint64_t offset, uint64_t length) {
-    unused.insert(offset, length);
+    uint64_t blob_len = get_logical_length();
+    assert((blob_len % unused.size()) == 0);
+    assert(offset + length <= blob_len);
+    uint64_t chunk_size = blob_len / unused.size();
+    uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
+    uint64_t end = (offset + length) / chunk_size;
+    assert(end <= unused.size());
+    for (auto i = start; i < end; ++i) {
+      unused[i] = 1;
+    }
+    if (start != end) {
+      set_flag(FLAG_HAS_UNUSED);
+    }
   }
 
   /// indicate that a range has (now) been used.
   void mark_used(uint64_t offset, uint64_t length) {
-    if (unused.empty())
-      return;
-    interval_set<uint32_t> t;
-    t.insert(offset, length);
-    t.intersection_of(unused);
-    if (!t.empty())
-      unused.subtract(t);
+    if (has_unused()) {
+      uint64_t blob_len = get_logical_length();
+      assert((blob_len % unused.size()) == 0);
+      assert(offset + length <= blob_len);
+      uint64_t chunk_size = blob_len / unused.size();
+      uint64_t start = offset / chunk_size;
+      uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+      assert(end <= unused.size());
+      for (auto i = start; i < end; ++i) {
+        unused[i] = 0;
+      }
+      if (unused.none()) {
+        clear_flag(FLAG_HAS_UNUSED);
+      }
+    }
   }
 
-  /// put logical references, and get back any released extents
-  void put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
-	       vector<bluestore_pextent_t> *r);
-
-  void map(uint64_t x_off, uint64_t x_len,
-	   std::function<void(uint64_t,uint64_t)> f) const {
+  int map(uint64_t x_off, uint64_t x_len,
+	   std::function<int(uint64_t,uint64_t)> f) const {
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
@@ -320,12 +454,16 @@ struct bluestore_blob_t {
       assert(p != extents.end());
     }
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
-      f(p->offset + x_off, l);
+      int r = f(p->offset + x_off, l);
+      if (r < 0)
+        return r;
       x_off = 0;
       x_len -= l;
       ++p;
     }
+    return 0;
   }
   void map_bl(uint64_t x_off,
 	      bufferlist& bl,
@@ -340,6 +478,7 @@ struct bluestore_blob_t {
     bufferlist::iterator it = bl.begin();
     uint64_t x_len = bl.length();
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
@@ -358,12 +497,12 @@ struct bluestore_blob_t {
     return len;
   }
 
-  bool has_csum_data() const {
-    return csum_data.length() > 0;
-  }
-
-  uint32_t get_csum_chunk_size() const {
-    return 1 << csum_chunk_order;
+  uint32_t get_logical_length() const {
+    if (is_compressed()) {
+      return compressed_length_orig;
+    } else {
+      return get_ondisk_length();
+    }
   }
 
   size_t get_csum_value_size() const {
@@ -389,6 +528,8 @@ struct bluestore_blob_t {
     switch (cs) {
     case 0:
       assert(0 == "no csum data, bad index");
+    case 1:
+      return reinterpret_cast<const uint8_t*>(p)[i];
     case 2:
       return reinterpret_cast<const __le16*>(p)[i];
     case 4:
@@ -409,6 +550,7 @@ struct bluestore_blob_t {
   }
 
   void init_csum(unsigned type, unsigned order, unsigned len) {
+    flags |= FLAG_CSUM;
     csum_type = type;
     csum_chunk_order = order;
     csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
@@ -421,7 +563,8 @@ struct bluestore_blob_t {
   /// verify csum: return -EOPNOTSUPP for unsupported checksum type;
   /// return -1 and valid(nonnegative) b_bad_off for checksum error;
   /// return 0 if all is well.
-  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off) const;
+  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off,
+		  uint64_t *bad_csum) const;
 
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)
@@ -429,131 +572,66 @@ WRITE_CLASS_ENCODER(bluestore_blob_t)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
 
-/// blob id: positive = local, negative = shared bnode
-typedef int64_t bluestore_blob_id_t;
+/// shared blob state
+struct bluestore_shared_blob_t {
+  bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
+  //set<ghobject_t> objects;  ///< objects referencing these shared blocks (debug)
 
-
-/// lextent: logical data block back by the extent
-struct bluestore_lextent_t {
-  bluestore_blob_id_t blob;  ///< blob
-  uint32_t offset;           ///< relative offset within the blob
-  uint32_t length;           ///< length within the blob
-
-  bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
-		      uint32_t o = 0,
-		      uint32_t l = 0)
-    : blob(_blob),
-      offset(o),
-      length(l) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
-
-  bool is_shared() const {
-    return blob < 0;
-  }
-
-  void encode(bufferlist& bl) const {
-    ::encode(blob, bl);
-    ::encode(offset, bl);
-    ::encode(length, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(blob, p);
-    ::decode(offset, p);
-    ::decode(length, p);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_lextent_t*>& o);
+  static void generate_test_instances(list<bluestore_shared_blob_t*>& ls);
+
+  bool empty() const {
+    return ref_map.empty();
+  }
 };
-WRITE_CLASS_ENCODER(bluestore_lextent_t)
+WRITE_CLASS_ENCODER(bluestore_shared_blob_t)
 
-ostream& operator<<(ostream& out, const bluestore_lextent_t& o);
-
-typedef map<bluestore_blob_id_t, bluestore_blob_t> bluestore_blob_map_t;
-
+ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
 
 /// onode: per-object metadata
 struct bluestore_onode_t {
-  uint64_t nid;                        ///< numeric id (locally unique)
-  uint64_t size;                       ///< object size
+  uint64_t nid = 0;                    ///< numeric id (locally unique)
+  uint64_t size = 0;                   ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
-  uint64_t omap_head;                  ///< id for omap root node
+  uint64_t omap_head = 0;              ///< id for omap root node
 
-  uint32_t expected_object_size;
-  uint32_t expected_write_size;
-  uint32_t alloc_hint_flags;
+  struct shard_info {
+    uint32_t offset = 0;  ///< logical offset for start of shard
+    uint32_t bytes = 0;   ///< encoded bytes
+    uint32_t extents = 0; ///< extents
+    void encode(bufferlist& bl) const {
+      ::encode(offset, bl);
+      ::encode(bytes, bl);
+      ::encode(extents, bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      ::decode(offset, p);
+      ::decode(bytes, p);
+      ::decode(extents, p);
+    }
+    void dump(Formatter *f) const;
+  };
+  WRITE_CLASS_ENCODER(shard_info)
+  vector<shard_info> extent_map_shards; ///< extent map shards (if any)
 
-  bluestore_onode_t()
-    : nid(0),
-      size(0),
-      omap_head(0),
-      expected_object_size(0),
-      expected_write_size(0),
-      alloc_hint_flags(0) {}
+  uint32_t expected_object_size = 0;
+  uint32_t expected_write_size = 0;
+  uint32_t alloc_hint_flags = 0;
 
   /// get preferred csum chunk size
   size_t get_preferred_csum_order() const;
-
-  /// find a lextent that includes offset
-  map<uint64_t,bluestore_lextent_t>::iterator find_lextent(uint64_t offset) {
-    map<uint64_t,bluestore_lextent_t>::iterator fp =
-      extent_map.lower_bound(offset);
-    if (fp != extent_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    if (fp != extent_map.end() && fp->first > offset)
-      return extent_map.end();  // extent is past offset
-    return fp;
-  }
-
-  /// seek to the first lextent including or after offset
-  map<uint64_t,bluestore_lextent_t>::iterator seek_lextent(uint64_t offset) {
-    map<uint64_t,bluestore_lextent_t>::iterator fp =
-      extent_map.lower_bound(offset);
-    if (fp != extent_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    return fp;
-  }
-
-  bool has_any_lextents(uint64_t offset, uint64_t length) {
-    map<uint64_t,bluestore_lextent_t>::iterator fp =
-      extent_map.lower_bound(offset);
-    if (fp != extent_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    if (fp == extent_map.end() || fp->first >= offset + length) {
-      return false;
-    }
-    return true;
-  }
-
-  /// consolidate adjacent lextents in extent_map
-  int compress_extent_map();
-
-  /// punch a logical hole.  add lextents to deref to target list.
-  void punch_hole(uint64_t offset, uint64_t length,
-		  vector<bluestore_lextent_t> *deref);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_onode_t*>& o);
 };
+WRITE_CLASS_ENCODER(bluestore_onode_t::shard_info)
 WRITE_CLASS_ENCODER(bluestore_onode_t)
 
+ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si);
 
 /// writeahead-logged op
 struct bluestore_wal_op_t {
@@ -579,9 +657,7 @@ struct bluestore_wal_transaction_t {
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
-  int64_t _bytes;  ///< cached byte count
-
-  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -591,11 +667,11 @@ struct bluestore_wal_transaction_t {
 WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
-  std::string type;
+  uint8_t type = bluestore_blob_t::COMP_ALG_NONE;
   uint32_t length = 0;
 
   bluestore_compression_header_t() {}
-  bluestore_compression_header_t(const std::string& _type)
+  bluestore_compression_header_t(uint8_t _type)
     : type(_type) {}
 
   void encode(bufferlist& bl) const;

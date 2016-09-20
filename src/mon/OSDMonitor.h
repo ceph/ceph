@@ -78,9 +78,7 @@ struct failure_info_t {
 			     MonOpRequestRef op) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end()) {
-      if (max_failed_since == utime_t())
-	max_failed_since = failed_since;
-      else if (max_failed_since < failed_since)
+      if (max_failed_since < failed_since)
 	max_failed_since = failed_since;
       p = reporters.insert(map<int, failure_reporter_t>::value_type(who, failure_reporter_t(failed_since))).first;
     }
@@ -130,6 +128,7 @@ private:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
+  void force_failure(utime_t now, int target_osd);
 
   // map thrashing
   int thrash_map;
@@ -251,6 +250,7 @@ private:
   bool prepare_boot(MonOpRequestRef op);
   void _booted(MonOpRequestRef op, bool logit);
 
+  void update_up_thru(int from, epoch_t up_thru);
   bool preprocess_alive(MonOpRequestRef op);
   bool prepare_alive(MonOpRequestRef op);
   void _reply_map(MonOpRequestRef op, epoch_t e);

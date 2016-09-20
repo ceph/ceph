@@ -18,6 +18,9 @@ foreach(tp ${tps})
     COMMENT "generating ${header} ${src}")
   set_source_files_properties(${header} ${src}
     PROPERTIES GENERATED TRUE)
+  add_custom_target(
+    ${name}-tp
+    DEPENDS ${header})
 endforeach()
 
 function(add_tracing_library name tracings version)
@@ -30,16 +33,12 @@ function(add_tracing_library name tracings version)
       ${header_dir}/${tp}.c)
   endforeach()
   add_library(${name} SHARED ${srcs})
-  target_link_libraries(${name} ${LTTNG_LIBRARIES} dl)
+  target_link_libraries(${name} ${LTTNGUST_LIBRARIES} ${CMAKE_DL_LIBS})
   string(REGEX MATCH "^[0-9]+" soversion ${version})
   set_target_properties(${name} PROPERTIES
     OUTPUT_NAME ${name}
     VERSION ${version}
     SOVERSION ${soversion})
-  string(REGEX REPLACE "_tp$" "" traced ${name})
-  add_custom_target(
-    ${traced}-tp
-    DEPENDS ${hdrs})
 endfunction()
 
 set(osd_traces oprequest.tp osd.tp pg.tp)
@@ -48,5 +47,5 @@ add_tracing_library(rados_tp librados.tp 2.0.0)
 add_tracing_library(rbd_tp librbd.tp 1.0.0)
 add_tracing_library(os_tp objectstore.tp 1.0.0)
 
-install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION lib)
+install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
 

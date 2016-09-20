@@ -36,12 +36,12 @@ def admin_socket(asok_path, cmd, format=''):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(path)
         try:
-            sock.sendall(cmd_bytes + '\0')
+            sock.sendall(cmd_bytes + b'\0')
             len_str = sock.recv(4)
             if len(len_str) < 4:
                 raise RuntimeError("no data returned from admin socket")
             l, = struct.unpack(">I", len_str)
-            sock_ret = ''
+            sock_ret = b''
 
             got = 0
             while got < l:
@@ -55,14 +55,14 @@ def admin_socket(asok_path, cmd, format=''):
 
     try:
         cmd_json = do_sockio(asok_path,
-                             json.dumps({"prefix": "get_command_descriptions"}))
+                             b'{"prefix": "get_command_descriptions"}')
     except Exception as e:
         raise RuntimeError('exception getting command descriptions: ' + str(e))
 
     if cmd == 'get_command_descriptions':
         return cmd_json
 
-    sigdict = parse_json_funcsigs(cmd_json, 'cli')
+    sigdict = parse_json_funcsigs(cmd_json.decode('utf-8'), 'cli')
     valid_dict = validate_command(sigdict, cmd)
     if not valid_dict:
         raise RuntimeError('invalid command')
@@ -71,7 +71,7 @@ def admin_socket(asok_path, cmd, format=''):
         valid_dict['format'] = format
 
     try:
-        ret = do_sockio(asok_path, json.dumps(valid_dict))
+        ret = do_sockio(asok_path, json.dumps(valid_dict).encode('utf-8'))
     except Exception as e:
         raise RuntimeError('exception: ' + str(e))
 
@@ -140,7 +140,7 @@ class DaemonWatcher(object):
         """
         units = [' ', 'k', 'M', 'G', 'T', 'P']
         unit = 0
-        while len("%s" % (int(n) / (1000**unit))) > width - 1:
+        while len("%s" % (int(n) // (1000**unit))) > width - 1:
             unit += 1
 
         if unit > 0:
@@ -177,7 +177,7 @@ class DaemonWatcher(object):
         for section_name, names in self._stats.items():
             section_width = sum([self.col_width(x)+1 for x in names.values()]) - 1
             pad = max(section_width - len(section_name), 0)
-            pad_prefix = pad / 2
+            pad_prefix = pad // 2
             header += (pad_prefix * '-')
             header += (section_name[0:section_width])
             header += ((pad - pad_prefix) * '-')
@@ -234,7 +234,7 @@ class DaemonWatcher(object):
         Populate our instance-local copy of the daemon's performance counter
         schema, and work out which stats we will display.
         """
-        self._schema = json.loads(admin_socket(self.asok_path, ["perf", "schema"]))
+        self._schema = json.loads(admin_socket(self.asok_path, ["perf", "schema"]).decode('utf-8'))
 
         # Build list of which stats we will display, based on which
         # stats have a nickname
@@ -256,13 +256,13 @@ class DaemonWatcher(object):
 
         self._print_headers(ostr)
 
-        last_dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]))
+        last_dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]).decode('utf-8'))
         rows_since_header = 0
         term_height = 25
 
         try:
             while True:
-                dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]))
+                dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]).decode('utf-8'))
                 if rows_since_header > term_height - 2:
                     self._print_headers(ostr)
                     rows_since_header = 0

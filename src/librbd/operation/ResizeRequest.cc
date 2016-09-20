@@ -5,7 +5,6 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -26,11 +25,11 @@ using util::create_rados_safe_callback;
 
 template <typename I>
 ResizeRequest<I>::ResizeRequest(I &image_ctx, Context *on_finish,
-                                uint64_t new_size, ProgressContext &prog_ctx,
+                                uint64_t new_size, bool allow_shrink, ProgressContext &prog_ctx,
                                 uint64_t journal_op_tid, bool disable_journal)
   : Request<I>(image_ctx, on_finish, journal_op_tid),
-    m_original_size(0), m_new_size(new_size), m_prog_ctx(prog_ctx),
-    m_new_parent_overlap(0), m_disable_journal(disable_journal),
+    m_original_size(0), m_new_size(new_size), m_allow_shrink(allow_shrink),
+    m_prog_ctx(prog_ctx), m_new_parent_overlap(0), m_disable_journal(disable_journal),
     m_xlist_item(this)
 {
 }
@@ -106,7 +105,7 @@ Context *ResizeRequest<I>::handle_pre_block_writes(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
     image_ctx.aio_work_queue->unblock_writes();
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   return send_append_op_event();
@@ -115,12 +114,19 @@ Context *ResizeRequest<I>::handle_pre_block_writes(int *result) {
 template <typename I>
 Context *ResizeRequest<I>::send_append_op_event() {
   I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  if (m_new_size < m_original_size && !m_allow_shrink) {
+    ldout(cct, 1) << " shrinking the image is not permitted" << dendl;
+    this->async_complete(-EINVAL);
+    return nullptr;
+  }
+
   if (m_disable_journal || !this->template append_op_event<
         ResizeRequest<I>, &ResizeRequest<I>::handle_append_op_event>(this)) {
     return send_grow_object_map();
   }
 
-  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
   return nullptr;
 }
@@ -135,7 +141,7 @@ Context *ResizeRequest<I>::handle_append_op_event(int *result) {
     lderr(cct) << "failed to commit journal entry: " << cpp_strerror(*result)
                << dendl;
     image_ctx.aio_work_queue->unblock_writes();
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   return send_grow_object_map();
@@ -163,10 +169,42 @@ Context *ResizeRequest<I>::handle_trim_image(int *result) {
 
   if (*result == -ERESTART) {
     ldout(cct, 5) << "resize operation interrupted" << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   } else if (*result < 0) {
     lderr(cct) << "failed to trim image: " << cpp_strerror(*result) << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
+  }
+
+  send_post_block_writes();
+  return nullptr;
+}
+
+template <typename I>
+void ResizeRequest<I>::send_flush_cache() {
+  I &image_ctx = this->m_image_ctx;
+  if (image_ctx.object_cacher == nullptr) {
+    send_trim_image();
+    return;
+  }
+
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+
+  RWLock::RLocker owner_locker(image_ctx.owner_lock);
+  image_ctx.flush_cache(create_async_context_callback(
+    image_ctx, create_context_callback<
+      ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this)));
+}
+
+template <typename I>
+Context *ResizeRequest<I>::handle_flush_cache(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to flush cache: " << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
   }
 
   send_invalidate_cache();
@@ -193,13 +231,16 @@ Context *ResizeRequest<I>::handle_invalidate_cache(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  // ignore busy error -- writeback was successfully flushed so we might be
+  // wasting some cache space for trimmed objects, but they will get purged
+  // eventually. Most likely cause of the issue was a in-flight cache read
+  if (*result < 0 && *result != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(*result)
                << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
-  send_post_block_writes();
+  send_trim_image();
   return nullptr;
 }
 
@@ -214,12 +255,9 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   image_ctx.aio_work_queue->unblock_writes();
 
   if (m_original_size == m_new_size) {
-    if (!m_disable_journal) {
-      this->commit_op_event(0);
-    }
-    return this->create_context_finisher();
+    return this->create_context_finisher(0);
   } else if (m_new_size < m_original_size) {
-    send_trim_image();
+    send_flush_cache();
     return nullptr;
   }
 
@@ -270,7 +308,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
     image_ctx.owner_lock.put_read();
 
     update_size_and_overlap();
-    return this->create_context_finisher();
+    return this->create_context_finisher(0);
   }
 
   CephContext *cct = image_ctx.cct;
@@ -298,7 +336,7 @@ Context *ResizeRequest<I>::handle_shrink_object_map(int *result) {
 
   update_size_and_overlap();
   assert(*result == 0);
-  return this->create_context_finisher();
+  return this->create_context_finisher(0);
 }
 
 template <typename I>
@@ -322,7 +360,7 @@ Context *ResizeRequest<I>::handle_post_block_writes(int *result) {
     image_ctx.aio_work_queue->unblock_writes();
     lderr(cct) << "failed to block writes prior to header update: "
                << cpp_strerror(*result) << dendl;
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
   send_update_header();
@@ -374,12 +412,9 @@ Context *ResizeRequest<I>::handle_update_header(int *result) {
     lderr(cct) << "failed to update image header: " << cpp_strerror(*result)
                << dendl;
     image_ctx.aio_work_queue->unblock_writes();
-    return this->create_context_finisher();
+    return this->create_context_finisher(*result);
   }
 
-  if (!m_disable_journal) {
-    this->commit_op_event(0);
-  }
   return send_shrink_object_map();
 }
 

@@ -17,8 +17,13 @@ public:
   StandardPolicy(ImageCtx *image_ctx) : m_image_ctx(image_ctx) {
   }
 
+  virtual bool append_disabled() const {
+    return false;
+  }
+  virtual bool journal_disabled() const {
+    return false;
+  }
   virtual void allocate_tag_on_lock(Context *on_finish);
-  virtual void cancel_external_replay(Context *on_finish);
 
 private:
   ImageCtx *m_image_ctx;

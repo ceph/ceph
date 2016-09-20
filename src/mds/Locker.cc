@@ -1751,8 +1751,11 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
       } else
 	++p;
     }
-    if (gather)
+    if (gather) {
+      if (in->client_snap_caps.empty())
+	in->item_open_file.remove_myself();
       eval_cap_gather(in, &need_issue);
+    }
   } else {
     if (cap && (cap->wanted() & ~cap->pending()) &&
 	need_issue.count(in) == 0) {  // if we won't issue below anyway
@@ -2468,7 +2471,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     if (mds->is_reconnect() &&
 	m->get_dirty() && m->get_client_tid() > 0 &&
 	!session->have_completed_flush(m->get_client_tid())) {
-      mdcache->set_reconnect_dirty_caps(m->get_ino(), m->get_dirty());
+      mdcache->set_reconnected_dirty_caps(client, m->get_ino(), m->get_dirty());
     }
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -2975,6 +2978,12 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
     pi->ctime = m->get_ctime();
   }
 
+  if (dirty && m->get_change_attr() > pi->change_attr) {
+    dout(7) << "  change_attr " << pi->change_attr << " -> " << m->get_change_attr()
+	    << " for " << *in << dendl;
+    pi->change_attr = m->get_change_attr();
+  }
+
   // file
   if (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) {
     utime_t atime = m->get_atime();
@@ -3035,6 +3044,12 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
 	      << " -> " << m->head.mode << dec
 	      << " for " << *in << dendl;
       pi->mode = m->head.mode;
+    }
+    if (m->get_btime() != pi->btime) {
+      dout(7) << "  btime " << oct << pi->btime
+	      << " -> " << m->get_btime() << dec
+	      << " for " << *in << dendl;
+      pi->btime = m->get_btime();
     }
   }
 

@@ -111,6 +111,18 @@ void WriteIO::write_debug(std::ostream& out) const {
   out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
+void DiscardIO::encode(bufferlist &bl) const {
+  action::Action action((action::DiscardAction(
+    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
+    m_imagectx, m_offset, m_length)));
+  ::encode(action, bl);
+}
+
+void DiscardIO::write_debug(std::ostream& out) const {
+  write_debug_base(out, "discard");
+  out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
+}
+
 void AioReadIO::encode(bufferlist &bl) const {
   action::Action action((action::AioReadAction(
     ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
@@ -132,6 +144,18 @@ void AioWriteIO::encode(bufferlist &bl) const {
 
 void AioWriteIO::write_debug(std::ostream& out) const {
   write_debug_base(out, "aio write");
+  out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
+}
+
+void AioDiscardIO::encode(bufferlist &bl) const {
+  action::Action action((action::AioDiscardAction(
+    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
+    m_imagectx, m_offset, m_length)));
+  ::encode(action, bl);
+}
+
+void AioDiscardIO::write_debug(std::ostream& out) const {
+  write_debug_base(out, "aio discard");
   out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 

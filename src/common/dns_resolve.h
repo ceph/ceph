@@ -16,6 +16,7 @@
 
 #include <string>
 #include <sys/types.h>
+#include <netinet/in.h>
 #include <resolv.h>
 
 #include "common/Mutex.h"

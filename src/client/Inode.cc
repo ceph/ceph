@@ -9,6 +9,28 @@
 #include "ClientSnapRealm.h"
 #include "UserGroups.h"
 
+#include "mds/flock.h"
+
+Inode::~Inode()
+{
+  cap_item.remove_myself();
+  snaprealm_item.remove_myself();
+
+  if (snapdir_parent) {
+    snapdir_parent->flags &= ~I_SNAPDIR_OPEN;
+    snapdir_parent.reset();
+  }
+
+  if (!oset.objects.empty()) {
+    lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
+      << std::hex << ino << std::dec << dendl;
+    assert(oset.objects.empty());
+  }
+
+  delete fcntl_locks;
+  delete flock_locks;
+}
+
 ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
@@ -324,6 +346,7 @@ void Inode::dump(Formatter *f) const
   if (rdev)
     f->dump_unsigned("rdev", rdev);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
@@ -336,12 +359,16 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
   f->dump_int("time_warp_seq", time_warp_seq);
+  f->dump_int("change_attr", change_attr);
 
   f->dump_object("layout", layout);
   if (is_dir()) {
     f->open_object_section("dir_layout");
     ::dump(dir_layout, f);
     f->close_section();
+
+    f->dump_bool("complete", flags & I_COMPLETE);
+    f->dump_bool("ordered", flags & I_DIR_ORDERED);
 
     /* FIXME when wip-mds-encoding is merged ***
     f->open_object_section("dir_stat");

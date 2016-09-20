@@ -244,6 +244,7 @@ WRITE_RAW_ENCODER(ceph_fsid)
 WRITE_RAW_ENCODER(ceph_file_layout)
 WRITE_RAW_ENCODER(ceph_dir_layout)
 WRITE_RAW_ENCODER(ceph_mds_session_head)
+WRITE_RAW_ENCODER(ceph_mds_request_head_legacy)
 WRITE_RAW_ENCODER(ceph_mds_request_head)
 WRITE_RAW_ENCODER(ceph_mds_request_release)
 WRITE_RAW_ENCODER(ceph_filelock)
@@ -475,7 +476,7 @@ WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
 ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
 
-#if defined(__sun) || defined(_AIX)
+#if defined(__sun) || defined(_AIX) || defined(DARWIN)
 __s32  ceph_to_host_errno(__s32 e);
 #else
 #define  ceph_to_host_errno(e) (e)

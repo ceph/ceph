@@ -288,11 +288,17 @@ void ActionEntry::decode(__u8 version, bufferlist::iterator &it) {
   case ACTION_TYPE_WRITE:
     action = WriteAction();
     break;
+  case ACTION_TYPE_DISCARD:
+    action = DiscardAction();
+    break;
   case ACTION_TYPE_AIO_READ:
     action = AioReadAction();
     break;
   case ACTION_TYPE_AIO_WRITE:
     action = AioWriteAction();
+    break;
+  case ACTION_TYPE_AIO_DISCARD:
+    action = AioDiscardAction();
     break;
   case ACTION_TYPE_OPEN_IMAGE:
     action = OpenImageAction();
@@ -330,12 +336,18 @@ void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
   o.push_back(new ActionEntry(WriteAction()));
   o.push_back(new ActionEntry(WriteAction(1, 123456789, dependencies, 3, 4,
                                           5)));
+  o.push_back(new ActionEntry(DiscardAction()));
+  o.push_back(new ActionEntry(DiscardAction(1, 123456789, dependencies, 3, 4,
+                                            5)));
   o.push_back(new ActionEntry(AioReadAction()));
   o.push_back(new ActionEntry(AioReadAction(1, 123456789, dependencies, 3, 4,
                                             5)));
   o.push_back(new ActionEntry(AioWriteAction()));
   o.push_back(new ActionEntry(AioWriteAction(1, 123456789, dependencies, 3, 4,
                                              5)));
+  o.push_back(new ActionEntry(AioDiscardAction()));
+  o.push_back(new ActionEntry(AioDiscardAction(1, 123456789, dependencies, 3, 4,
+                                               5)));
 
   o.push_back(new ActionEntry(OpenImageAction()));
   o.push_back(new ActionEntry(OpenImageAction(1, 123456789, dependencies, 3,
@@ -372,11 +384,17 @@ std::ostream &operator<<(std::ostream &out,
   case ACTION_TYPE_WRITE:
     out << "Write";
     break;
+  case ACTION_TYPE_DISCARD:
+    out << "Discard";
+    break;
   case ACTION_TYPE_AIO_READ:
     out << "AioRead";
     break;
   case ACTION_TYPE_AIO_WRITE:
     out << "AioWrite";
+    break;
+  case ACTION_TYPE_AIO_DISCARD:
+    out << "AioDiscard";
     break;
   case ACTION_TYPE_OPEN_IMAGE:
     out << "OpenImage";

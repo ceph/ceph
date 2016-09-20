@@ -427,6 +427,7 @@ void MonClient::shutdown()
   monc_lock.Unlock();
 
   if (initialized) {
+    finisher.wait_for_empty();
     finisher.stop();
   }
   monc_lock.Lock();
@@ -744,6 +745,14 @@ void MonClient::tick()
 
 void MonClient::schedule_tick()
 {
+  struct C_Tick : public Context {
+    MonClient *monc;
+    explicit C_Tick(MonClient *m) : monc(m) {}
+    void finish(int r) {
+      monc->tick();
+    }
+  };
+
   if (hunting)
     timer.add_event_after(cct->_conf->mon_client_hunt_interval
                           * reopen_interval_multiplier, new C_Tick(this));
@@ -772,7 +781,9 @@ void MonClient::_renew_subs()
     m->what = sub_new;
     _send_mon_message(m);
 
-    sub_sent.insert(sub_new.begin(), sub_new.end());
+    // update sub_sent with sub_new
+    sub_new.insert(sub_sent.begin(), sub_sent.end());
+    std::swap(sub_new, sub_sent);
     sub_new.clear();
   }
 }
@@ -1008,6 +1019,16 @@ int MonClient::start_mon_command(const vector<string>& cmd,
   r->prs = outs;
   r->onfinish = onfinish;
   if (cct->_conf->rados_mon_op_timeout > 0) {
+    class C_CancelMonCommand : public Context
+    {
+      uint64_t tid;
+      MonClient *monc;
+      public:
+      C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
+      void finish(int r) {
+	monc->_cancel_mon_command(tid, -ETIMEDOUT);
+      }
+    };
     r->ontimeout = new C_CancelMonCommand(r->tid, this);
     timer.add_event_after(cct->_conf->rados_mon_op_timeout, r->ontimeout);
   }

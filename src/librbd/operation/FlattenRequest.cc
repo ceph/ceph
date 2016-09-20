@@ -6,8 +6,6 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
-#include "librbd/ObjectMap.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include <boost/lambda/bind.hpp>
@@ -44,7 +42,7 @@ public:
     bufferlist bl;
     string oid = image_ctx.get_object_name(m_object_no);
     AioObjectWrite *req = new AioObjectWrite(&image_ctx, oid, m_object_no, 0,
-                                             bl, m_snapc, this);
+                                             bl, m_snapc, this, 0);
     if (!req->has_parent()) {
       // stop early if the parent went away - it just means
       // another flatten finished first or the image was resized

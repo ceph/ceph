@@ -3,7 +3,6 @@
 #ifndef CEPH_LIBRBD_ASYNC_REQUEST_H
 #define CEPH_LIBRBD_ASYNC_REQUEST_H
 
-#include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
@@ -23,8 +22,7 @@ public:
   void complete(int r) {
     if (should_complete(r)) {
       r = filter_return_code(r);
-      finish(r);
-      delete this;
+      finish_and_destroy(r);
     }
   }
 
@@ -49,6 +47,12 @@ protected:
   virtual bool should_complete(int r) = 0;
   virtual int filter_return_code(int r) const {
     return r;
+  }
+
+  // NOTE: temporary until converted to new state machine format
+  virtual void finish_and_destroy(int r) {
+    finish(r);
+    delete this;
   }
 
   virtual void finish(int r) {

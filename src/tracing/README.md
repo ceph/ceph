@@ -21,4 +21,4 @@ Add tracepoint definitions for the provider into a `.tp` file. Documentation
 on defining a tracepoint can be found in `man lttng-ust`. By convention files
 are named according to the logical sub-system they correspond to (e.g.
 `mutex.tp`, `pg.tp`). Place the `.tp` file into the `src/tracing` directory
-and modify the automake file `src/tracing/Makefile.am` accordingly.
+and modify the CMake file `src/tracing/CMakeLists.txt` accordingly.

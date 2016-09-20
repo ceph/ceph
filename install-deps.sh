@@ -54,47 +54,50 @@ if [ x`uname`x = xFreeBSDx ]; then
         sysutils/flock \
 
     exit
-fi
-
-if test -f /etc/redhat-release ; then
-    $SUDO yum install -y redhat-lsb-core
-fi
-
-if type apt-get > /dev/null 2>&1 ; then
-    $SUDO apt-get install -y lsb-release
-fi
-
-if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
-fi
-
-case $(lsb_release -si) in
-Ubuntu|Debian|Devuan)
+else
+    source /etc/os-release
+    case $ID in
+    debian|ubuntu|devuan)
+        echo "Using apt-get to install dependencies"
+        $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
         fi
         touch $DIR/status
-        packages=$(dpkg-checkbuilddeps --admindir=$DIR debian/control 2>&1 | \
-            perl -p -e 's/.*Unmet build dependencies: *//;' \
-            -e 's/build-essential:native/build-essential/;' \
-            -e 's/\s*\|\s*/\|/g;' \
-            -e 's/\(.*?\)//g;' \
-            -e 's/ +/\n/g;' | sort)
+
+	backports=""
+	control="debian/control"
         case $(lsb_release -sc) in
             squeeze|wheezy)
-                packages=$(echo $packages | perl -pe 's/[-\w]*babeltrace[-\w]*//g')
+		control="/tmp/control.$$"
+		grep -v babeltrace debian/control > $control
                 backports="-t $(lsb_release -sc)-backports"
                 ;;
         esac
-        packages=$(echo $packages) # change newlines into spaces
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages || exit 1
+
+	# make a metapackage that expresses the build dependencies,
+	# install it, rm the .deb; then uninstall the package as its
+	# work is done
+	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-CentOS|Fedora|RedHatEnterpriseServer)
+    centos|fedora|rhel)
+        yumdnf="yum"
+        builddepcmd="yum-builddep -y"
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            yumdnf="dnf"
+            builddepcmd="dnf -y builddep --allowerasing"
+        fi
+        echo "Using $yumdnf to install dependencies"
+        $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
-                $SUDO yum install -y yum-utils
+                if test $yumdnf = yum; then
+                    $SUDO $yumdnf install -y yum-utils
+                fi
                 ;;
             CentOS|RedHatEnterpriseServer)
                 $SUDO yum install -y yum-utils
@@ -113,17 +116,21 @@ CentOS|Fedora|RedHatEnterpriseServer)
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-*SUSE*)
+    opensuse|suse)
+        echo "Using zypper to install dependencies"
+        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
-*)
-        echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
+    *)
+        echo "$ID is unknown, dependencies will have to be installed manually."
+	exit 1
         ;;
-esac
+    esac
+fi
 
 function populate_wheelhouse() {
     local install=$1
@@ -143,7 +150,14 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-$interpreter
 
     if ! test -d $env_dir ; then
-        virtualenv --python $interpreter $env_dir
+        # Make a temporary virtualenv to get a fresh version of virtualenv
+        # because CentOS 7 has a buggy old version (v1.10.1)
+        # https://github.com/pypa/virtualenv/issues/463
+        virtualenv ${env_dir}_tmp
+        ${env_dir}_tmp/bin/pip install --upgrade virtualenv
+        ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
+        rm -rf ${env_dir}_tmp
+
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir

@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
+| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster-name*]
   [ -p | --pool *pool* ] [--size *size* ] [ --object-size *B/K/M* ] [ *command* ... ] 
 
 
@@ -35,7 +35,7 @@ Options
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
-.. option:: --cluster cluster name
+.. option:: --cluster cluster-name
 
    Use different cluster name as compared to default cluster name *ceph*.
 
@@ -54,7 +54,7 @@ Parameters
 
 .. option:: --image-format format-id
 
-   Specifies which object layout to use. The default is 1.
+   Specifies which object layout to use. The default is 2.
 
    * format 1 - (deprecated) Use the original format for a new rbd image. This
      format is understood by all versions of librbd and the kernel rbd module,
@@ -295,7 +295,7 @@ Commands
   Rollback image content to snapshot. This will iterate through the entire blocks
   array and update the data head content to the snapshotted version.
 
-:command:`snap rm` *snap-spec*
+:command:`snap rm` [--force] *snap-spec*
   Removes the specified snapshot.
 
 :command:`snap purge` *image-spec*
@@ -369,10 +369,12 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench-write` [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *total-size-to-write-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
-  Generate a series of writes to the image and measure the write throughput and
+:command:`bench` --io-type <read | write> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *total-size-for-IO-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
+  Generate a series of IOs to the image and measure the IO throughput and
   latency.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq.
+
+  NOTE: --io-type must be specified.
 
 Image and snap specs
 ====================
@@ -508,9 +510,9 @@ To map an image via the kernel with cephx enabled::
 
        rbd map mypool/myimage --id admin --keyfile secretfile
 
-To map an image via the kernel with different cluster name other than default *ceph*.
+To map an image via the kernel with different cluster name other than default *ceph*::
 
-       rbd map mypool/myimage --cluster *cluster name*
+       rbd map mypool/myimage --cluster cluster-name
 
 To unmap an image::
 

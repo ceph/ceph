@@ -190,6 +190,8 @@ protected:
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
       ) { assert(0); return 0; }
 
+  virtual int apply_layout_settings() { assert(0); return 0; }
+
   /// Virtual destructor
   virtual ~CollectionIndex() {}
 };

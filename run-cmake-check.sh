@@ -32,13 +32,20 @@ BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
 CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
 
 function run() {
-    # Same logic as install-deps.sh for finding package installer
     local install_cmd
-    test -f /etc/redhat-release && install_cmd="yum install -y"
+    if test -f /etc/redhat-release ; then
+        source /etc/os-release
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            install_cmd="dnf -y install"
+        else
+            install_cmd="yum install -y"
+        fi
+    fi
+
     type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
     type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
     if [ -n "$install_cmd" ]; then
-        sudo $install_cmd ccache jq
+        $DRY_RUN sudo $install_cmd ccache jq
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
@@ -47,11 +54,11 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
-    $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN mkdir build
+    git submodule update --init --recursive
+    $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
-    $DRY_RUN cmake "$@" ../
-    $DRY_RUN make $BUILD_MAKEOPTS || return 1
+    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+    $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
 }
 
 function main() {

@@ -86,7 +86,7 @@ public:
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
     caller_cond(0), dispatch_cond(0) {
-    memset(&head, 0, sizeof(ceph_mds_request_head));
+    memset(&head, 0, sizeof(head));
     head.op = op;
   }
   ~MetaRequest();
@@ -137,7 +137,7 @@ public:
     out->swap(_old_inode);
   }
   void set_other_inode(Inode *in) {
-    _old_inode = in;
+    _other_inode = in;
   }
   Inode *other_inode() {
     return _other_inode.get();

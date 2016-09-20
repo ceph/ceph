@@ -54,7 +54,7 @@ public:
   struct File : public RefCountedObject {
     bluefs_fnode_t fnode;
     int refs;
-    bool dirty;
+    uint64_t dirty_seq;
     bool locked;
     bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
@@ -65,7 +65,7 @@ public:
     File()
       : RefCountedObject(NULL, 0),
 	refs(0),
-	dirty(false),
+	dirty_seq(0),
 	locked(false),
 	deleted(false),
 	num_readers(0),
@@ -97,6 +97,8 @@ public:
 
   struct Dir : public RefCountedObject {
     map<string,FileRef> file_map;
+
+    Dir() : RefCountedObject(NULL, 0) {}
 
     friend void intrusive_ptr_add_ref(Dir *d) {
       d->get();
@@ -134,6 +136,10 @@ public:
     }
     void append(bufferptr& bp) {
       buffer.append(bp);
+    }
+
+    uint64_t get_effective_write_pos() {
+      return pos + buffer.length();
     }
   };
 
@@ -191,18 +197,28 @@ public:
 private:
   std::mutex lock;
 
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
   // cache
   map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
-  dirty_file_list_t dirty_files;                  ///< list of dirty files
 
-  bluefs_super_t super;       ///< latest superblock (as last written)
-  uint64_t ino_last;          ///< last assigned ino (this one is in use)
-  uint64_t log_seq;           ///< last used log seq (by current pending log_t)
-  FileWriter *log_writer;     ///< writer for the log
-  bluefs_transaction_t log_t; ///< pending, unwritten log transaction
+  // map of dirty files, files of same dirty_seq are grouped into list.
+  map<uint64_t, dirty_file_list_t> dirty_files;
+
+  bluefs_super_t super;        ///< latest superblock (as last written)
+  uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
+  uint64_t log_seq = 0;        ///< last used log seq (by current pending log_t)
+  uint64_t log_seq_stable = 0; ///< last stable/synced log seq
+  FileWriter *log_writer = 0;  ///< writer for the log
+  bluefs_transaction_t log_t;  ///< pending, unwritten log transaction
+  bool log_flushing = false;   ///< true while flushing the log
+  std::condition_variable log_cond;
+
+  uint64_t new_log_jump_to = 0;
+  uint64_t old_log_jump_to = 0;
+  FileRef new_log = nullptr;
+  FileWriter *new_log_writer = nullptr;
 
   /*
    * There are up to 3 block devices:
@@ -229,20 +245,24 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _allocate(unsigned bdev, uint64_t len, vector<bluefs_extent_t> *ev);
+  int _allocate(uint8_t bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
-  void _flush_wait(FileWriter *h);
-  void _fsync(FileWriter *h);
+  void wait_for_aio(FileWriter *h);  // safe to call without a lock
+  int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
 
-  int _flush_log();
+  int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
+			  uint64_t want_seq = 0,
+			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
-  void _maybe_compact_log();
-  void _compact_log();
+  bool _should_compact_log();
+  void _compact_log_dump_metadata(bluefs_transaction_t *t);
+  void _compact_log_sync();
+  void _compact_log_async(std::unique_lock<std::mutex>& l);
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev();
+  void flush_bdev();  // this is safe to call without a lock
 
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
@@ -264,7 +284,7 @@ private:
 
   int _open_super();
   int _write_super();
-  int _replay(); ///< replay journal
+  int _replay(bool noop); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
@@ -289,6 +309,7 @@ public:
 
   int fsck();
 
+  uint64_t get_fs_usage();
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
@@ -329,15 +350,14 @@ public:
   int lock_file(const string& dirname, const string& filename, FileLock **p);
   int unlock_file(FileLock *l);
 
-  /// sync any uncommitted state to disk
-  int sync();
+  void flush_log();
+  void compact_log();
 
+  /// sync any uncommitted state to disk
   void sync_metadata();
 
-  /// compact metadata
-  int compact();
-
   int add_block_device(unsigned bdev, string path);
+  bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
@@ -355,9 +375,9 @@ public:
     std::lock_guard<std::mutex> l(lock);
     _flush_range(h, offset, length);
   }
-  void fsync(FileWriter *h) {
-    std::lock_guard<std::mutex> l(lock);
-    _fsync(h);
+  int fsync(FileWriter *h) {
+    std::unique_lock<std::mutex> l(lock);
+    return _fsync(h, l);
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
 	   bufferlist *outbl, char *out) {

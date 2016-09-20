@@ -427,6 +427,26 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
   encode_json("temp_url_keys", temp_url_keys, f);
+
+  string user_source_type;
+  switch ((RGWUserSourceType)type) {
+  case TYPE_RGW:
+    user_source_type = "rgw";
+    break;
+  case TYPE_KEYSTONE:
+    user_source_type = "keystone";
+    break;
+  case TYPE_LDAP:
+    user_source_type = "ldap";
+    break;
+  case TYPE_NONE:
+    user_source_type = "none";
+    break;
+  default:
+    user_source_type = "none";
+    break;
+  }
+  encode_json("type", user_source_type, f);
 }
 
 
@@ -484,6 +504,18 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
   JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
+
+  string user_source_type;
+  JSONDecoder::decode_json("type", user_source_type, obj);
+  if (user_source_type == "rgw") {
+    type = TYPE_RGW;
+  } else if (user_source_type == "keystone") {
+    type = TYPE_KEYSTONE;
+  } else if (user_source_type == "ldap") {
+    type = TYPE_LDAP;
+  } else if (user_source_type == "none") {
+    type = TYPE_NONE;
+  }
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
@@ -519,6 +551,7 @@ void rgw_bucket::dump(Formatter *f) const
   encode_json("index_pool", index_pool, f);
   encode_json("marker", marker, f);
   encode_json("bucket_id", bucket_id, f);
+  encode_json("tenant", tenant, f);
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
@@ -528,6 +561,7 @@ void rgw_bucket::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const
@@ -546,8 +580,9 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
 void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
   JSONDecoder::decode_json("owner", owner, obj);
-  utime_t ut(creation_time);
+  utime_t ut;
   JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
   JSONDecoder::decode_json("linked", linked, obj);
   JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
   if (has_bucket_info) {
@@ -662,8 +697,9 @@ void RGWBucketInfo::dump(Formatter *f) const
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
-  utime_t ut(creation_time);
+  utime_t ut;
   JSONDecoder::decode_json("creation_time", ut, obj);
+  creation_time = ut.to_real_time();
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("zonegroup", zonegroup, obj);
@@ -810,6 +846,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("domain_root", domain_root.data_pool, f);
   encode_json("control_pool", control_pool.data_pool, f);
   encode_json("gc_pool", gc_pool.data_pool, f);
+  encode_json("lc_pool", lc_pool.data_pool, f);
   encode_json("log_pool", log_pool.data_pool, f);
   encode_json("intent_log_pool", intent_log_pool.data_pool, f);
   encode_json("usage_log_pool", usage_log_pool.data_pool, f);
@@ -854,6 +891,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   ::decode_json("domain_root", domain_root, obj);
   ::decode_json("control_pool", control_pool, obj);
   ::decode_json("gc_pool", gc_pool, obj);
+  ::decode_json("lc_pool", lc_pool, obj);
   ::decode_json("log_pool", log_pool, obj);
   ::decode_json("intent_log_pool", intent_log_pool, obj);
   ::decode_json("usage_log_pool", usage_log_pool, obj);
@@ -1049,8 +1087,9 @@ void RGWMetadataLogInfo::dump(Formatter *f) const
 void RGWMetadataLogInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("marker", marker, obj);
-  utime_t ut(last_update);
+  utime_t ut;
   JSONDecoder::decode_json("last_update", ut, obj);
+  last_update = ut.to_real_time();
 }
 
 void RGWDataChangesLogInfo::dump(Formatter *f) const
@@ -1063,8 +1102,9 @@ void RGWDataChangesLogInfo::dump(Formatter *f) const
 void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("marker", marker, obj);
-  utime_t ut(last_update);
+  utime_t ut;
   JSONDecoder::decode_json("last_update", ut, obj);
+  last_update = ut.to_real_time();
 }
 
 

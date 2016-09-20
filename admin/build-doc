@@ -67,14 +67,16 @@ install -d -m0755 \
 
 # To avoid having to build librbd to build the Python bindings to build the docs,
 # create a dummy librbd.so that allows the module to be imported by sphinx.
+# the module are imported by the "automodule::" directive.
 mkdir -p $vdir/lib
 export LD_LIBRARY_PATH="$vdir/lib"
 export PYTHONPATH=$TOPDIR/src/pybind
 
 ln -sf librados.so.2 $vdir/lib/librados.so
 gcc -shared -o $vdir/lib/librados.so.2 -xc /dev/null
-CFLAGS="-iquote $TOPDIR/src/include" \
-    CPPFLAGS="-iquote $TOPDIR/src/include" \
+BUILD_DOC=1 \
+    CFLAGS="-iquote$TOPDIR/src/include" \
+    CPPFLAGS="-iquote$TOPDIR/src/include" \
     LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
     $vdir/bin/pip install $TOPDIR/src/pybind/rados
 nm $vdir/lib/python*/*-packages/rados.so | grep 'U rados_' | \
@@ -90,8 +92,9 @@ cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/cephfs/
 
 ln -sf librbd.so.1 $vdir/lib/librbd.so
 gcc -shared -o $vdir/lib/librbd.so.1 -xc /dev/null
-CFLAGS="-iquote $TOPDIR/src/include" \
-    CPPFLAGS="-iquote $TOPDIR/src/include" \
+BUILD_DOC=1 \
+    CFLAGS="-iquote$TOPDIR/src/include" \
+    CPPFLAGS="-iquote$TOPDIR/src/include" \
     LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
     $vdir/bin/pip install $TOPDIR/src/pybind/rbd
 nm $vdir/lib/python*/*-packages/rbd.so | grep 'U rbd_' | \
@@ -101,8 +104,9 @@ nm $vdir/lib/python*/*-packages/rbd.so | grep 'U rbd_' | \
 
 ln -sf libcephfs.so.1 $vdir/lib/libcephfs.so
 gcc -shared -o $vdir/lib/libcephfs.so.1 -xc /dev/null
-CFLAGS="-iquote $TOPDIR/src/include" \
-    CPPFLAGS="-iquote $TOPDIR/src/include" \
+BUILD_DOC=1 \
+    CFLAGS="-iquote$TOPDIR/src/include" \
+    CPPFLAGS="-iquote$TOPDIR/src/include" \
     LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
     $vdir/bin/pip install $TOPDIR/src/pybind/cephfs
 nm $vdir/lib/python*/*-packages/cephfs.so | grep 'U cephfs_' | \

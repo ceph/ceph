@@ -51,8 +51,9 @@ struct CapSnap {
   int issued, dirty;
 
   uint64_t size;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   version_t time_warp_seq;
+  uint64_t change_attr;
   uint32_t   mode;
   uid_t      uid;
   gid_t      gid;
@@ -64,13 +65,11 @@ struct CapSnap {
 
   bool writing, dirty_data;
   uint64_t flush_tid;
-  xlist<CapSnap*>::item flushing_item;
 
   explicit CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0),
-      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-      inline_version(0), writing(false), dirty_data(false), flush_tid(0),
-      flushing_item(this)
+    : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
+      mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
+      writing(false), dirty_data(false), flush_tid(0)
   {}
 
   void dump(Formatter *f) const;
@@ -80,12 +79,13 @@ struct CapSnap {
 #define I_COMPLETE	1
 #define I_DIR_ORDERED	2
 #define I_CAP_DROPPED	4
+#define I_SNAPDIR_OPEN	8
 
 struct Inode {
   Client *client;
 
   // -- the actual inode --
-  inodeno_t ino;
+  inodeno_t ino; // ORDER DEPENDENCY: oset
   snapid_t  snapid;
   ino_t faked_ino;
 
@@ -93,6 +93,7 @@ struct Inode {
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
+  utime_t    btime;   // birth time
 
   // perm (namespace permissions)
   uint32_t   mode;
@@ -111,6 +112,7 @@ struct Inode {
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint64_t   change_attr;
 
   uint64_t max_size;  // max size we can write to
 
@@ -139,6 +141,7 @@ struct Inode {
     int which = dir_layout.dl_dir_hash;
     if (!which)
       which = CEPH_STR_HASH_LINUX;
+    assert(ceph_str_hash_valid(which));
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
@@ -179,7 +182,7 @@ struct Inode {
   map<int,int> open_by_mode;
   map<int,int> cap_refs;
 
-  ObjectCacher::ObjectSet oset;
+  ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
   uint64_t     reported_size, wanted_max_size, requested_max_size;
 
@@ -226,8 +229,8 @@ struct Inode {
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
-      time_warp_seq(0), max_size(0), version(0), xattr_version(0),
-      inline_version(0), flags(0),
+      time_warp_seq(0), change_attr(0), max_size(0), version(0),
+      xattr_version(0), inline_version(0), flags(0),
       dir(0), dir_release_count(1), dir_ordered_count(1),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       cap_dirtier_uid(-1), cap_dirtier_gid(-1),
@@ -235,7 +238,7 @@ struct Inode {
       snap_caps(0), snap_cap_refs(0),
       cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
-      oset((void *)this, newlayout->pool_id, ino),
+      oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dn_set(),
       fcntl_locks(NULL), flock_locks(NULL),
@@ -244,7 +247,7 @@ struct Inode {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
   }
-  ~Inode() { }
+  ~Inode();
 
   vinodeno_t vino() const { return vinodeno_t(ino, snapid); }
 

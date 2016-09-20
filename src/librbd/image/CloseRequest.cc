@@ -4,10 +4,8 @@
 #include "librbd/image/CloseRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
@@ -33,6 +31,30 @@ CloseRequest<I>::CloseRequest(I *image_ctx, Context *on_finish)
 
 template <typename I>
 void CloseRequest<I>::send() {
+  send_shut_down_update_watchers();
+}
+
+template <typename I>
+void CloseRequest<I>::send_shut_down_update_watchers() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->state->shut_down_update_watchers(create_async_context_callback(
+    *m_image_ctx, create_context_callback<
+      CloseRequest<I>, &CloseRequest<I>::handle_shut_down_update_watchers>(this)));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_shut_down_update_watchers(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to shut down update watchers: " << cpp_strerror(r)
+               << dendl;
+  }
+
   send_unregister_image_watcher();
 }
 

@@ -206,20 +206,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t == pg_stat.end()) {
       ceph::unordered_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
       pg_stat.insert(v);
-      // did we affect the min?
-      if (min_last_epoch_clean &&
-          update_stat.get_effective_last_epoch_clean() < min_last_epoch_clean)
-	min_last_epoch_clean = 0;
     } else {
-      // did we (or might we) affect the min?
-      epoch_t lec = update_stat.get_effective_last_epoch_clean();
-      if (min_last_epoch_clean &&
-          (lec < min_last_epoch_clean ||  // we did
-           (lec > min_last_epoch_clean && // we might
-            t->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
-          ))
-	min_last_epoch_clean = 0;
-
       stat_pg_sub(update_pg, t->second);
       t->second = update_stat;
     }
@@ -244,14 +231,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     ceph::unordered_map<int32_t,epoch_t>::iterator i = osd_epochs.find(osd);
     map<int32_t,epoch_t>::const_iterator j = inc.get_osd_epochs().find(osd);
     assert(j != inc.get_osd_epochs().end());
-
-    // will we potentially affect the min?
-    if (min_last_epoch_clean &&
-        (i == osd_epochs.end() ||
-         j->second < min_last_epoch_clean ||
-         (j->second > min_last_epoch_clean &&
-          i->second == min_last_epoch_clean)))
-      min_last_epoch_clean = 0;
 
     if (i == osd_epochs.end())
       osd_epochs.insert(*j);
@@ -781,7 +760,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
   TextTable tab;
 
   if (brief){
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
@@ -789,7 +768,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
     tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   }
   else {
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -884,7 +863,7 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
   TextTable tab;
 
   if (header) {
-    tab.define_column("POOLID", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("POOLID", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -894,7 +873,7 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
-    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -928,7 +907,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
   TextTable tab;
 
   if (header) {
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -938,7 +917,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
-    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -967,7 +946,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
 {
   TextTable tab;
 
-  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
@@ -978,18 +957,18 @@ void PGMap::dump_osd_stats(ostream& ss) const
        p != osd_stat.end();
        ++p) {
     tab << p->first
-        << prettybyte_t(p->second.kb_used)
-        << prettybyte_t(p->second.kb_avail)
-        << prettybyte_t(p->second.kb)
+        << si_t(p->second.kb_used << 10)
+        << si_t(p->second.kb_avail << 10)
+        << si_t(p->second.kb << 10)
         << p->second.hb_in
         << get_num_pg_by_osd(p->first)
         << TextTable::endrow;
   }
 
   tab << "sum"
-      << prettybyte_t(osd_sum.kb_used)
-      << prettybyte_t(osd_sum.kb_avail)
-      << prettybyte_t(osd_sum.kb)
+      << si_t(osd_sum.kb_used << 10)
+      << si_t(osd_sum.kb_avail << 10)
+      << si_t(osd_sum.kb << 10)
       << TextTable::endrow;
 
   ss << tab;
@@ -999,15 +978,15 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
 {
   TextTable tab;
 
-  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
 
   tab << "sum"
-      << prettybyte_t(osd_sum.kb_used)
-      << prettybyte_t(osd_sum.kb_avail)
-      << prettybyte_t(osd_sum.kb)
+      << si_t(osd_sum.kb_used << 10)
+      << si_t(osd_sum.kb_avail << 10)
+      << si_t(osd_sum.kb << 10)
       << TextTable::endrow;
 
   ss << tab;
@@ -1754,16 +1733,9 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs)
 {
-  int type = 0;
-  if (state != "all") {
-    type = pg_string_state(state);
-    if (type == -1)
-      assert(0 == "invalid type");
-  }
-
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
@@ -1771,7 +1743,7 @@ void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t o
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if ((state != "all") && !(i->second.state & type))
+    if (!(i->second.state & state))
       continue;
     pgs.insert(i->first);
   }
@@ -1794,7 +1766,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs)
 {
   TextTable tab;
 
-  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);

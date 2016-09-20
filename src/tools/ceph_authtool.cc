@@ -86,6 +86,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--gen-print-key", (char*)NULL)) {
       gen_print_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-a", "--add-key", (char*)NULL)) {
+      if (val.empty()) {
+        cerr << "Option --add-key requires an argument" << std::endl;
+        exit(1);
+      }
       add_key = val;
     } else if (ceph_argparse_flag(args, i, "-l", "--list", (char*)NULL)) {
       list = true;
@@ -140,12 +144,19 @@ int main(int argc, const char **argv)
     usage();
   }
   if (gen_key && (!add_key.empty())) {
-    cerr << "can't both gen_key and add_key" << std::endl;
+    cerr << "can't both gen-key and add-key" << std::endl;
     usage();
   }
 
   common_init_finish(g_ceph_context);
   EntityName ename(g_conf->name);
+
+  // Enforce the use of gen-key or add-key when creating to avoid ending up
+  // with an "empty" key (key = AAAAAAAAAAAAAAAA)
+  if (create_keyring && !gen_key && add_key.empty() && !caps.empty()) {
+    cerr << "must specify either gen-key or add-key when creating" << std::endl;
+    usage();
+  }
 
   if (gen_print_key) {
     CryptoKey key;
@@ -176,6 +187,17 @@ int main(int argc, const char **argv)
       }
     } else {
       cerr << "can't open " << fn << ": " << err << std::endl;
+      exit(1);
+    }
+  }
+
+  // Validate that "name" actually has an existing key in this keyring if we
+  // have not given gen-key or add-key options
+  if (!gen_key && add_key.empty() && !caps.empty()) {
+    CryptoKey key;
+    if (!keyring.get_secret(ename, key)) {
+      cerr << "can't find existing key for " << ename 
+           << " and neither gen-key nor add-key specified" << std::endl;
       exit(1);
     }
   }

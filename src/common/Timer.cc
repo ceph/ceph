@@ -156,7 +156,7 @@ bool SafeTimer::cancel_event(Context *callback)
 {
   assert(lock.is_locked());
   
-  std::map<Context*, std::multimap<utime_t, Context*>::iterator>::iterator p = events.find(callback);
+  auto p = events.find(callback);
   if (p == events.end()) {
     ldout(cct,10) << "cancel_event " << callback << " not found" << dendl;
     return false;
@@ -176,7 +176,7 @@ void SafeTimer::cancel_all_events()
   assert(lock.is_locked());
   
   while (!events.empty()) {
-    std::map<Context*, std::multimap<utime_t, Context*>::iterator>::iterator p = events.begin();
+    auto p = events.begin();
     ldout(cct,10) << " cancelled " << p->second->first << " -> " << p->first << dendl;
     delete p->first;
     schedule.erase(p->second);

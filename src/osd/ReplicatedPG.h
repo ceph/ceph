@@ -172,21 +172,6 @@ public:
    * can associate itself with the correct copy operation.
    */
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
-  class CopyCallback : public GenContext<CopyCallbackResults> {
-  protected:
-    CopyCallback() {}
-    /**
-     * results.get<0>() is the return code: 0 for success; -ECANCELLED if
-     * the operation was cancelled by the local OSD; -errno for other issues.
-     * results.get<1>() is a pointer to a CopyResults object, which you are
-     * responsible for deleting.
-     */
-    virtual void finish(CopyCallbackResults results_) = 0;
-
-  public:
-    /// Provide the final size of the copied object to the CopyCallback
-    virtual ~CopyCallback() {}
-  };
 
   friend class CopyFromCallback;
   friend class PromoteCallback;
@@ -275,47 +260,12 @@ public:
   void failed_push(pg_shard_t from, const hobject_t &soid);
   void cancel_pull(const hobject_t &soid);
 
-  template <typename T>
-  class BlessedGenContext : public GenContext<T> {
-    ReplicatedPGRef pg;
-    GenContext<T> *c;
-    epoch_t e;
-  public:
-    BlessedGenContext(ReplicatedPG *pg, GenContext<T> *c, epoch_t e)
-      : pg(pg), c(c), e(e) {}
-    void finish(T t) {
-      pg->lock();
-      if (pg->pg_has_reset_since(e))
-	delete c;
-      else
-	c->complete(t);
-      pg->unlock();
-    }
-  };
-  class BlessedContext : public Context {
-    ReplicatedPGRef pg;
-    Context *c;
-    epoch_t e;
-  public:
-    BlessedContext(ReplicatedPG *pg, Context *c, epoch_t e)
-      : pg(pg), c(c), e(e) {}
-    void finish(int r) {
-      pg->lock();
-      if (pg->pg_has_reset_since(e))
-	delete c;
-      else
-	c->complete(r);
-      pg->unlock();
-    }
-  };
-  Context *bless_context(Context *c) {
-    return new BlessedContext(this, c, get_osdmap()->get_epoch());
-  }
+  template<class T> class BlessedGenContext;
+  class BlessedContext;
+  Context *bless_context(Context *c);
+
   GenContext<ThreadPool::TPHandle&> *bless_gencontext(
-    GenContext<ThreadPool::TPHandle&> *c) {
-    return new BlessedGenContext<ThreadPool::TPHandle&>(
-      this, c, get_osdmap()->get_epoch());
-  }
+    GenContext<ThreadPool::TPHandle&> *c);
     
   void send_message(int to_osd, Message *m) {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
@@ -352,7 +302,7 @@ public:
     return peer_info;
   }
   using PGBackend::Listener::get_shard_info;  
-  const pg_missing_t &get_local_missing() const {
+  const pg_missing_tracker_t &get_local_missing() const {
     return pg_log.get_missing();
   }
   const PGLog &get_log() const {
@@ -390,6 +340,22 @@ public:
     append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
   }
 
+  struct C_OSD_OnApplied : Context {
+    ReplicatedPGRef pg;
+    epoch_t epoch;
+    eversion_t v;
+    C_OSD_OnApplied(
+      ReplicatedPGRef pg,
+      epoch_t epoch,
+      eversion_t v)
+      : pg(pg), epoch(epoch), v(v) {}
+    void finish(int) override {
+      pg->lock();
+      if (!pg->pg_has_reset_since(epoch))
+	pg->op_applied(v);
+      pg->unlock();
+    }
+  };
   void op_applied(
     const eversion_t &applied_version);
 
@@ -493,6 +459,7 @@ public:
     bool cache_evict;     ///< true if this is a cache eviction
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
     bool ignore_log_op_stats;  // don't log op stats
+    bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
 
     // side effects
     list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
@@ -624,7 +591,7 @@ public:
       snapset(0),
       new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
-      ignore_cache(false), ignore_log_op_stats(false),
+      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
@@ -645,7 +612,7 @@ public:
               vector<OSDOp>& _ops, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
-      ignore_cache(false), ignore_log_op_stats(false),
+      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       data_off(0), reply(NULL), pg(_pg),
@@ -678,7 +645,7 @@ public:
       if (op && op->get_req()) {
         return op->get_req()->get_connection()->get_features();
       }
-      return -1ll;
+      return -1ull;
     }
   };
   using OpContextUPtr = std::unique_ptr<OpContext>;
@@ -876,7 +843,7 @@ protected:
     OpContext *ctx,
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
-  RepGather *new_repop(
+  boost::intrusive_ptr<RepGather> new_repop(
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete);
   void remove_repop(RepGather *repop);
@@ -886,7 +853,9 @@ protected:
 
   /**
    * Merge entries atomically into all actingbackfill osds
-   * adjusting missing and recovery state as necessary
+   * adjusting missing and recovery state as necessary.
+   *
+   * Also used to store error log entries for dup detection.
    */
   void submit_log_entries(
     const list<pg_log_entry_t> &entries,
@@ -896,6 +865,7 @@ protected:
     boost::intrusive_ptr<RepGather> repop;
     set<pg_shard_t> waiting_on;
   };
+  void cancel_log_updates();
   map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
 
 
@@ -1008,15 +978,7 @@ protected:
 
   void context_registry_on_change();
   void object_context_destructor_callback(ObjectContext *obc);
-  struct C_PG_ObjectContext : public Context {
-    ReplicatedPGRef pg;
-    ObjectContext *obc;
-    C_PG_ObjectContext(ReplicatedPG *p, ObjectContext *o) :
-      pg(p), obc(o) {}
-    void finish(int r) {
-      pg->object_context_destructor_callback(obc);
-    }
-  };
+  class C_PG_ObjectContext;
 
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
@@ -1028,7 +990,6 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
-  SnapSetContext *create_snapset_context(const hobject_t& oid);
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
@@ -1278,50 +1239,10 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
 
-  struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContextRef obc, obc2, obc3;
-    C_OSD_OndiskWriteUnlock(
-      ObjectContextRef o,
-      ObjectContextRef o2 = ObjectContextRef(),
-      ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
-    void finish(int r) {
-      obc->ondisk_write_unlock();
-      if (obc2)
-	obc2->ondisk_write_unlock();
-      if (obc3)
-	obc3->ondisk_write_unlock();
-    }
-  };
-  struct C_OSD_AppliedRecoveredObject : public Context {
-    ReplicatedPGRef pg;
-    ObjectContextRef obc;
-    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContextRef o) :
-      pg(p), obc(o) {}
-    void finish(int r) {
-      pg->_applied_recovered_object(obc);
-    }
-  };
-  struct C_OSD_CommittedPushedObject : public Context {
-    ReplicatedPGRef pg;
-    epoch_t epoch;
-    eversion_t last_complete;
-    C_OSD_CommittedPushedObject(
-      ReplicatedPG *p, epoch_t epoch, eversion_t lc) :
-      pg(p), epoch(epoch), last_complete(lc) {
-    }
-    void finish(int r) {
-      pg->_committed_pushed_object(epoch, last_complete);
-    }
-  };
-  struct C_OSD_AppliedRecoveredObjectReplica : public Context {
-    ReplicatedPGRef pg;
-    explicit C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
-      pg(p) {}
-    void finish(int r) {
-      pg->_applied_recovered_object_replica();
-    }
-  };
-
+  class C_OSD_OndiskWriteUnlock;
+  class C_OSD_AppliedRecoveredObject;
+  class C_OSD_CommittedPushedObject;
+  class C_OSD_AppliedRecoveredObjectReplica;
   void sub_op_remove(OpRequestRef op);
 
   void _applied_recovered_object(ObjectContextRef obc);
@@ -1455,6 +1376,8 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle);
   void do_op(OpRequestRef& op);
+  void record_write_error(OpRequestRef op, const hobject_t &soid,
+			  MOSDOpReply *orig_reply, int r);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op);
@@ -1610,9 +1533,6 @@ public:
     ConnectionRef con,
     ceph_tid_t tid);
   eversion_t pick_newest_available(const hobject_t& oid);
-  ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
-				  const hobject_t& oid, eversion_t version,
-				  utime_t mtime, int what);
 
   void do_update_log_missing(
     OpRequestRef &op);

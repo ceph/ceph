@@ -172,16 +172,21 @@ void SnapLimitEvent::dump(Formatter *f) const {
 void SnapRenameEvent::encode(bufferlist& bl) const {
   SnapEventBase::encode(bl);
   ::encode(snap_id, bl);
+  ::encode(src_snap_name, bl);
 }
 
 void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
   SnapEventBase::decode(version, it);
   ::decode(snap_id, it);
+  if (version >= 2) {
+    ::decode(src_snap_name, it);
+  }
 }
 
 void SnapRenameEvent::dump(Formatter *f) const {
   SnapEventBase::dump(f);
   f->dump_unsigned("src_snap_id", snap_id);
+  f->dump_string("src_snap_name", src_snap_name);
   f->dump_string("dest_snap_name", snap_name);
 }
 
@@ -239,7 +244,7 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
 }
@@ -327,7 +332,7 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));
 
   o.push_back(new EventEntry(SnapRenameEvent()));
-  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "snap")));
+  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap")));
 
   o.push_back(new EventEntry(SnapProtectEvent()));
   o.push_back(new EventEntry(SnapProtectEvent(567, "snap")));
@@ -508,29 +513,42 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
 
 // Journal Tag
 
+void TagPredecessor::encode(bufferlist& bl) const {
+  ::encode(mirror_uuid, bl);
+  ::encode(commit_valid, bl);
+  ::encode(tag_tid, bl);
+  ::encode(entry_tid, bl);
+}
+
+void TagPredecessor::decode(bufferlist::iterator& it) {
+  ::decode(mirror_uuid, it);
+  ::decode(commit_valid, it);
+  ::decode(tag_tid, it);
+  ::decode(entry_tid, it);
+}
+
+void TagPredecessor::dump(Formatter *f) const {
+  f->dump_string("mirror_uuid", mirror_uuid);
+  f->dump_string("commit_valid", commit_valid ? "true" : "false");
+  f->dump_unsigned("tag_tid", tag_tid);
+  f->dump_unsigned("entry_tid", entry_tid);
+}
+
 void TagData::encode(bufferlist& bl) const {
   ::encode(mirror_uuid, bl);
-  ::encode(predecessor_mirror_uuid, bl);
-  ::encode(predecessor_commit_valid, bl);
-  ::encode(predecessor_tag_tid, bl);
-  ::encode(predecessor_entry_tid, bl);
+  predecessor.encode(bl);
 }
 
 void TagData::decode(bufferlist::iterator& it) {
   ::decode(mirror_uuid, it);
-  ::decode(predecessor_mirror_uuid, it);
-  ::decode(predecessor_commit_valid, it);
-  ::decode(predecessor_tag_tid, it);
-  ::decode(predecessor_entry_tid, it);
+  predecessor.decode(it);
 }
 
 void TagData::dump(Formatter *f) const {
   f->dump_string("mirror_uuid", mirror_uuid);
-  f->dump_string("predecessor_mirror_uuid", predecessor_mirror_uuid);
-  f->dump_string("predecessor_commit_valid",
-                 predecessor_commit_valid ? "true" : "false");
-  f->dump_unsigned("predecessor_tag_tid", predecessor_tag_tid);
-  f->dump_unsigned("predecessor_entry_tid", predecessor_entry_tid);
+  f->open_object_section("predecessor");
+  predecessor.dump(f);
+  f->close_section();
 }
 
 void TagData::generate_test_instances(std::list<TagData *> &o) {
@@ -664,16 +682,23 @@ std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta) {
   return out;
 }
 
+std::ostream &operator<<(std::ostream &out, const TagPredecessor &predecessor) {
+  out << "["
+      << "mirror_uuid=" << predecessor.mirror_uuid;
+  if (predecessor.commit_valid) {
+    out << ", "
+        << "tag_tid=" << predecessor.tag_tid << ", "
+        << "entry_tid=" << predecessor.entry_tid;
+  }
+  out << "]";
+  return out;
+}
+
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data) {
   out << "["
       << "mirror_uuid=" << tag_data.mirror_uuid << ", "
-      << "predecessor_mirror_uuid=" << tag_data.predecessor_mirror_uuid;
-  if (tag_data.predecessor_commit_valid) {
-    out << ", "
-        << "predecessor_tag_tid=" << tag_data.predecessor_tag_tid << ", "
-        << "predecessor_entry_tid=" << tag_data.predecessor_entry_tid;
-  }
-  out << "]";
+      << "predecessor=" << tag_data.predecessor
+      << "]";
   return out;
 }
 

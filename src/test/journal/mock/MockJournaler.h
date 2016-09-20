@@ -20,6 +20,7 @@ class SafeTimer;
 namespace journal {
 
 struct ReplayHandler;
+struct Settings;
 
 struct MockFuture {
   static MockFuture *s_instance;
@@ -101,6 +102,7 @@ struct MockJournaler {
                                           Context*));
 
   MOCK_METHOD2(register_client, void(const bufferlist &, Context *));
+  MOCK_METHOD1(unregister_client, void(Context *));
   MOCK_METHOD3(get_client, void(const std::string &, cls::journal::Client *,
                                 Context *));
   MOCK_METHOD2(get_cached_client, int(const std::string&, cls::journal::Client*));
@@ -128,33 +130,37 @@ struct MockJournaler {
   MOCK_METHOD1(committed, void(const MockFutureProxy &future));
   MOCK_METHOD1(flush_commit_position, void(Context*));
 
+  MOCK_METHOD1(add_listener, void(JournalMetadataListener *));
+  MOCK_METHOD1(remove_listener, void(JournalMetadataListener *));
+
 };
 
 struct MockJournalerProxy {
   template <typename IoCtxT>
   MockJournalerProxy(IoCtxT &header_ioctx, const std::string &,
-                     const std::string &, double) {
+                     const std::string &, const Settings&) {
     MockJournaler::get_instance().construct();
   }
 
   MockJournalerProxy(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                      librados::IoCtx &header_ioctx, const std::string &journal_id,
-                     const std::string &client_id, double commit_interval) {
+                     const std::string &client_id, const Settings&) {
     MockJournaler::get_instance().construct();
   }
 
-  int exists(bool *header_exists) const {
-    return -EINVAL;
+  void exists(Context *on_finish) const {
+    on_finish->complete(-EINVAL);
   }
-  int create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
-    return -EINVAL;
+  void create(uint8_t order, uint8_t splay_width, int64_t pool_id, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
-  int remove(bool force) {
-    return -EINVAL;
+  void remove(bool force, Context *on_finish) {
+    on_finish->complete(-EINVAL);
   }
   int register_client(const bufferlist &data) {
     return -EINVAL;
   }
+
   void allocate_tag(uint64_t, const bufferlist &,
                     cls::journal::Tag*, Context *on_finish) {
     on_finish->complete(-EINVAL);
@@ -186,6 +192,10 @@ struct MockJournalerProxy {
 
   void register_client(const bufferlist &data, Context *on_finish) {
     MockJournaler::get_instance().register_client(data, on_finish);
+  }
+
+  void unregister_client(Context *on_finish) {
+    MockJournaler::get_instance().unregister_client(on_finish);
   }
 
   void get_client(const std::string &client_id, cls::journal::Client *client,
@@ -265,6 +275,14 @@ struct MockJournalerProxy {
 
   void flush_commit_position(Context *on_finish) {
     MockJournaler::get_instance().flush_commit_position(on_finish);
+  }
+
+  void add_listener(JournalMetadataListener *listener) {
+    MockJournaler::get_instance().add_listener(listener);
+  }
+
+  void remove_listener(JournalMetadataListener *listener) {
+    MockJournaler::get_instance().remove_listener(listener);
   }
 };
 

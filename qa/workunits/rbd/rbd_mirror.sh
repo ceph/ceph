@@ -75,13 +75,19 @@ wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror start
-wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
-
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
@@ -92,6 +98,19 @@ admin_daemon ${CLUSTER1} rbd mirror status
 
 testlog "TEST: failover and failback"
 start_mirror ${CLUSTER2}
+
+# demote and promote same cluster
+demote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+test_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+promote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+write_image ${CLUSTER2} ${POOL} ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
 
 # failover
 demote_image ${CLUSTER2} ${POOL} ${image}
@@ -141,6 +160,9 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
 test_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${clone_image}
 
+expect_failure "is non-primary" clone_image ${CLUSTER1} ${PARENT_POOL} \
+    ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
+
 testlog "TEST: disable mirroring / delete non-primary image"
 image2=test2
 image3=test3
@@ -170,6 +192,8 @@ unprotect_snapshot ${CLUSTER2} ${POOL} ${image5} 'snap2'
 for i in ${image3} ${image5}; do
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
+  # workaround #16555: before removing make sure it is not still bootstrapped
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
   remove_image ${CLUSTER2} ${POOL} ${i}
 done
 
@@ -186,6 +210,14 @@ for i in ${image2} ${image4}; do
   compare_images ${POOL} ${i}
 done
 
+testlog "TEST: snapshot rename"
+snap_name='snap_rename'
+create_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_0"
+for i in `seq 1 20`; do
+  rename_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_$(expr ${i} - 1)" "${snap_name}_${i}"
+done
+wait_for_snap_present ${CLUSTER1} ${POOL} ${image2} "${snap_name}_${i}"
+
 testlog "TEST: disable mirror while daemon is stopped"
 stop_mirror ${CLUSTER1}
 stop_mirror ${CLUSTER2}
@@ -197,5 +229,94 @@ wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
+testlog "TEST: simple image resync"
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: image resync while replayer is stopped"
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL}/${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: request image resync while daemon is offline"
+stop_mirror ${CLUSTER1}
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+start_mirror ${CLUSTER1}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: client disconnect"
+image=laggy
+create_image ${CLUSTER2} ${POOL} ${image} 128 --journal-object-size 64K
+write_image ${CLUSTER2} ${POOL} ${image} 10
+
+testlog " - replay stopped after disconnect"
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+disconnect_image ${CLUSTER2} ${POOL} ${image}
+test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnected'
+
+testlog " - replay started after resync requested"
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+compare_images ${POOL} ${image}
+
+testlog " - disconnected after max_concurrent_object_sets reached"
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL}/${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+set_image_meta ${CLUSTER2} ${POOL} ${image} \
+	       conf_rbd_journal_max_concurrent_object_sets 1
+write_image ${CLUSTER2} ${POOL} ${image} 20 16384
+write_image ${CLUSTER2} ${POOL} ${image} 20 16384
+test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+set_image_meta ${CLUSTER2} ${POOL} ${image} \
+	       conf_rbd_journal_max_concurrent_object_sets 0
+
+testlog " - replay is still stopped (disconnected) after restart"
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnected'
+
+testlog " - replay started after resync requested"
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+compare_images ${POOL} ${image}
+
+testlog " - rbd_mirroring_resync_after_disconnect config option"
+set_image_meta ${CLUSTER1} ${POOL} ${image} \
+	       conf_rbd_mirroring_resync_after_disconnect true
+disconnect_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+compare_images ${POOL} ${image}
+set_image_meta ${CLUSTER1} ${POOL} ${image} \
+	       conf_rbd_mirroring_resync_after_disconnect false
+disconnect_image ${CLUSTER2} ${POOL} ${image}
+test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnected'
 
 echo OK

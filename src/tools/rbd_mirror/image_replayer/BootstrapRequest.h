@@ -10,6 +10,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/BaseRequest.h"
+#include "tools/rbd_mirror/types.h"
 #include <list>
 #include <string>
 
@@ -24,7 +25,6 @@ namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 namespace rbd {
 namespace mirror {
 
-template <typename> class ImageSync;
 class ProgressContext;
 
 namespace image_replayer {
@@ -37,21 +37,24 @@ public:
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
   typedef rbd::mirror::ProgressContext ProgressContext;
 
-  static BootstrapRequest* create(librados::IoCtx &local_io_ctx,
-                                  librados::IoCtx &remote_io_ctx,
-                                  ImageCtxT **local_image_ctx,
-                                  const std::string &local_image_name,
-                                  const std::string &remote_image_id,
-                                  const std::string &global_image_id,
-                                  ContextWQ *work_queue, SafeTimer *timer,
-                                  Mutex *timer_lock,
-                                  const std::string &local_mirror_uuid,
-                                  const std::string &remote_mirror_uuid,
-                                  Journaler *journaler,
-                                  MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish,
-				  ProgressContext *progress_ctx = nullptr) {
-    return new BootstrapRequest(local_io_ctx, remote_io_ctx, local_image_ctx,
+  static BootstrapRequest* create(
+        librados::IoCtx &local_io_ctx,
+        librados::IoCtx &remote_io_ctx,
+        ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+        ImageCtxT **local_image_ctx,
+        const std::string &local_image_name,
+        const std::string &remote_image_id,
+        const std::string &global_image_id,
+        ContextWQ *work_queue, SafeTimer *timer,
+        Mutex *timer_lock,
+        const std::string &local_mirror_uuid,
+        const std::string &remote_mirror_uuid,
+        Journaler *journaler,
+        MirrorPeerClientMeta *client_meta,
+        Context *on_finish,
+        ProgressContext *progress_ctx = nullptr) {
+    return new BootstrapRequest(local_io_ctx, remote_io_ctx,
+                                image_sync_throttler, local_image_ctx,
                                 local_image_name, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
@@ -61,6 +64,7 @@ public:
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
                    librados::IoCtx &remote_io_ctx,
+                   ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                    ImageCtxT **local_image_ctx,
                    const std::string &local_image_name,
                    const std::string &remote_image_id,
@@ -82,48 +86,54 @@ private:
    * <start>
    *    |
    *    v
-   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * GET_REMOTE_TAG_CLASS * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * GET_CLIENT * * * * * * * * * * * * * * * *
-   *    |                                     *
-   *    v (skip if not needed)                * (error)
-   * REGISTER_CLIENT  * * * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * *
-   *    |                                     *
-   *    v                                     *
-   * OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
-   *    |   .   ^                             *
-   *    |   .   |                             *
-   *    |   .   \-----------------------\     *
-   *    |   .                           |     *
-   *    |   . (image sync requested)    |     *
-   *    |   . . > REMOVE_LOCAL_IMAGE  * * * * *
-   *    |   .                   |       |     *
-   *    |   . (image doesn't    |       |     *
-   *    |   .  exist)           v       |     *
-   *    |   . . > CREATE_LOCAL_IMAGE  * * * * *
-   *    |             |                 |     *
-   *    |             \-----------------/     *
-   *    |                                     *
-   *    v (skip if not needed)                *
-   * UPDATE_CLIENT  * * * * * * * *           *
-   *    |                         *           *
-   *    v (skip if not needed)    *           *
-   * GET_REMOTE_TAGS  * * * * * * *           *
-   *    |                         *           *
-   *    v (skip if not needed)    v           *
-   * IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
-   *    |                         |           *
-   *    |     /-------------------/           *
-   *    |     |                               *
-   *    v     v                               *
-   * CLOSE_REMOTE_IMAGE < * * * * * * * * * * *
+   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * GET_CLIENT * * * * * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v (skip if not needed)                          * (error)
+   * REGISTER_CLIENT  * * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    v                                               *
+   * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * *
+   *    |                                               *
+   *    | (remote image primary)                        *
+   *    \----> OPEN_LOCAL_IMAGE * * * * * * * * * * * * *
+   *    |         |   .   ^                             *
+   *    |         |   .   |                             *
+   *    |         |   .   \-----------------------\     *
+   *    |         |   .                           |     *
+   *    |         |   . (image sync requested)    |     *
+   *    |         |   . . > REMOVE_LOCAL_IMAGE  * * * * *
+   *    |         |   .                   |       |     *
+   *    |         |   . (image doesn't    |       |     *
+   *    |         |   .  exist)           v       |     *
+   *    |         |   . . > CREATE_LOCAL_IMAGE  * * * * *
+   *    |         |             |                 |     *
+   *    |         |             \-----------------/     *
+   *    |         |                                     *
+   *    |         v (skip if not needed)                *
+   *    |      UPDATE_CLIENT_IMAGE  * * * * *           *
+   *    |         |                         *           *
+   *    |         v (skip if not needed)    *           *
+   *    |      GET_REMOTE_TAGS  * * * * * * *           *
+   *    |         |                         *           *
+   *    |         v (skip if not needed)    v           *
+   *    |      IMAGE_SYNC * * * > CLOSE_LOCAL_IMAGE     *
+   *    |         |                         |           *
+   *    |         \-----------------\ /-----/           *
+   *    |                            |                  *
+   *    |                            |                  *
+   *    | (skip if not needed)       |                  *
+   *    \----> UPDATE_CLIENT_STATE  *|* * * * * * * * * *
+   *                |                |                  *
+   *    /-----------/----------------/                  *
+   *    |                                               *
+   *    v                                               *
+   * CLOSE_REMOTE_IMAGE < * * * * * * * * * * * * * * * *
    *    |
    *    v
    * <finish>
@@ -134,6 +144,7 @@ private:
 
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
+  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
   ImageCtxT **m_local_image_ctx;
   std::string m_local_image_name;
   std::string m_local_image_id;
@@ -148,7 +159,6 @@ private:
   MirrorPeerClientMeta *m_client_meta;
   ProgressContext *m_progress_ctx;
   Mutex m_lock;
-  ImageSync<ImageCtxT> *m_image_sync_request = nullptr;
   bool m_canceled = false;
 
   Tags m_remote_tags;
@@ -175,6 +185,9 @@ private:
   void open_remote_image();
   void handle_open_remote_image(int r);
 
+  void update_client_state();
+  void handle_update_client_state(int r);
+
   void open_local_image();
   void handle_open_local_image(int r);
 
@@ -184,8 +197,8 @@ private:
   void create_local_image();
   void handle_create_local_image(int r);
 
-  void update_client();
-  void handle_update_client(int r);
+  void update_client_image();
+  void handle_update_client_image(int r);
 
   void get_remote_tags();
   void handle_get_remote_tags(int r);

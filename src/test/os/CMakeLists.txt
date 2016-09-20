@@ -1,5 +1,5 @@
 # unittest_lfnindex
-add_executable(unittest_lfnindex EXCLUDE_FROM_ALL
+add_executable(unittest_lfnindex
   TestLFNIndex.cc
   )
 add_ceph_unittest(unittest_lfnindex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_lfnindex)

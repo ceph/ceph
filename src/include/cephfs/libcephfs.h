@@ -25,6 +25,9 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <fcntl.h>
+
+#include "ceph_statx.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -103,13 +106,14 @@ struct CephContext;
 
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
-# define CEPH_SETATTR_MODE   1
-# define CEPH_SETATTR_UID    2
-# define CEPH_SETATTR_GID    4
-# define CEPH_SETATTR_MTIME  8
-# define CEPH_SETATTR_ATIME 16
-# define CEPH_SETATTR_SIZE  32
-# define CEPH_SETATTR_CTIME 64
+# define CEPH_SETATTR_MODE	1
+# define CEPH_SETATTR_UID	2
+# define CEPH_SETATTR_GID	4
+# define CEPH_SETATTR_MTIME	8
+# define CEPH_SETATTR_ATIME	16
+# define CEPH_SETATTR_SIZE	32
+# define CEPH_SETATTR_CTIME	64
+# define CEPH_SETATTR_BTIME	512
 #endif
 
 /* define error codes for the mount function*/
@@ -618,6 +622,19 @@ int ceph_rename(struct ceph_mount_info *cmount, const char *from, const char *to
 int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
 
 /**
+ * Get a file's extended statistics and attributes.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param path the file or directory to get the statistics of.
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_statx(struct ceph_mount_info *cmount, const char *path, struct ceph_statx *stx,
+	       unsigned int want, unsigned int flags);
+
+/**
  * Get a file's statistics and attributes, without following symlinks.
  *
  * @param cmount the ceph mount handle to use for performing the stat.
@@ -633,10 +650,22 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
  * @param cmount the ceph mount handle to use for performing the setattr.
  * @param relpath the path to the file/directory to set the attributes of.
  * @param attr the stat struct that must include attribute values to set on the file.
- * @param mask a mask of all the stat values that have been set on the stat struct.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the stat struct.
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
+
+/**
+ * Set a file's attributes (extended version).
+ *
+ * @param cmount the ceph mount handle to use for performing the setattr.
+ * @param relpath the path to the file/directory to set the attributes of.
+ * @param stx the statx struct that must include attribute values to set on the file.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+ * @param flags mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath, struct ceph_statx *stx, int mask, int flags);
 
 /**
  * Change the mode bits (permissions) of a file/directory.
@@ -898,6 +927,19 @@ int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
  * @returns 0 on success or a negative error code on failure
  */
 int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
+
+/**
+ * Get an open file's extended statistics and attributes.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param fd the file descriptor of the file to get statistics of.
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
+		unsigned int want, unsigned int flags);
 
 /** @} file */
 
@@ -1392,8 +1434,13 @@ int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 		 struct stat *attr);
 int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *attr, int uid, int gid);
+int ceph_ll_getattrx(struct ceph_mount_info *cmount, struct Inode *in,
+		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
+		    int uid, int gid);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
+int ceph_ll_setattrx(struct ceph_mount_info *cmount, struct Inode *in,
+		    struct ceph_statx *stx, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
 		 struct Fh **fh, int uid, int gid);
 off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
@@ -1494,6 +1541,11 @@ int ceph_ll_write_block(struct ceph_mount_info *cmount,
 int ceph_ll_commit_blocks(struct ceph_mount_info *cmount,
 			  struct Inode *in, uint64_t offset, uint64_t range);
 
+
+int ceph_ll_getlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner);
+int ceph_ll_setlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
 #ifdef __cplusplus
 }

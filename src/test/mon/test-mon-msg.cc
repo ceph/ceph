@@ -187,6 +187,7 @@ fail:
   void ms_handle_connect(Connection *con) { }
   void ms_handle_remote_reset(Connection *con) { }
   bool ms_handle_reset(Connection *con) { return false; }
+  bool ms_handle_refused(Connection *con) { return false; }
 
   bool is_wanted(Message *m) {
     dout(20) << __func__ << " " << *m << " type " << m->get_type() << dendl;

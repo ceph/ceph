@@ -11,10 +11,21 @@
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
 
 namespace librbd {
+
+namespace {
+
+struct MockTestImageCtx : public librbd::MockImageCtx {
+  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+    : librbd::MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace journal {
 
 template <>
-struct TypeTraits<librbd::MockImageCtx> {
+struct TypeTraits<librbd::MockTestImageCtx> {
   typedef ::journal::MockJournaler Journaler;
 };
 
@@ -23,7 +34,7 @@ struct TypeTraits<librbd::MockImageCtx> {
 
 // template definitions
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc"
-template class rbd::mirror::image_sync::SyncPointCreateRequest<librbd::MockImageCtx>;
+template class rbd::mirror::image_sync::SyncPointCreateRequest<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
@@ -35,7 +46,7 @@ using ::testing::WithArg;
 
 class TestMockImageSyncSyncPointCreateRequest : public TestMockFixture {
 public:
-  typedef SyncPointCreateRequest<librbd::MockImageCtx> MockSyncPointCreateRequest;
+  typedef SyncPointCreateRequest<librbd::MockTestImageCtx> MockSyncPointCreateRequest;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();
@@ -50,17 +61,17 @@ public:
       .WillOnce(WithArg<1>(CompleteContext(r)));
   }
 
-  void expect_image_refresh(librbd::MockImageCtx &mock_remote_image_ctx, int r) {
+  void expect_image_refresh(librbd::MockTestImageCtx &mock_remote_image_ctx, int r) {
     EXPECT_CALL(*mock_remote_image_ctx.state, refresh(_))
       .WillOnce(CompleteContext(r));
   }
 
-  void expect_snap_create(librbd::MockImageCtx &mock_remote_image_ctx, int r) {
+  void expect_snap_create(librbd::MockTestImageCtx &mock_remote_image_ctx, int r) {
     EXPECT_CALL(*mock_remote_image_ctx.operations, snap_create(_, _))
       .WillOnce(WithArg<1>(CompleteContext(r)));
   }
 
-  MockSyncPointCreateRequest *create_request(librbd::MockImageCtx &mock_remote_image_ctx,
+  MockSyncPointCreateRequest *create_request(librbd::MockTestImageCtx &mock_remote_image_ctx,
                                              journal::MockJournaler &mock_journaler,
                                              Context *ctx) {
     return new MockSyncPointCreateRequest(&mock_remote_image_ctx, "uuid",
@@ -72,7 +83,7 @@ public:
 };
 
 TEST_F(TestMockImageSyncSyncPointCreateRequest, Success) {
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -94,7 +105,7 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, ResyncSuccess) {
   m_client_meta.sync_points.emplace_front("start snap", "", boost::none);
   auto sync_point = m_client_meta.sync_points.front();
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -115,7 +126,7 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, ResyncSuccess) {
 }
 
 TEST_F(TestMockImageSyncSyncPointCreateRequest, SnapshotExists) {
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -137,7 +148,7 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, SnapshotExists) {
 }
 
 TEST_F(TestMockImageSyncSyncPointCreateRequest, ClientUpdateError) {
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;

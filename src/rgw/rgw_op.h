@@ -35,9 +35,13 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 
+#include "rgw_lc.h"
+#include "rgw_torrent.h"
+
 #include "include/assert.h"
 
 using namespace std;
+using ceph::crypto::SHA1;
 
 struct req_state;
 class RGWHandler;
@@ -103,6 +107,7 @@ RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
 
 class RGWGetObj : public RGWOp {
 protected:
+  seed torrent; // get torrent
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
@@ -446,6 +451,7 @@ public:
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   bool enable_versioning;
+  bufferlist in_data;
 public:
   RGWSetBucketVersioning() : enable_versioning(false) {}
 
@@ -641,6 +647,7 @@ class RGWPutObj : public RGWOp {
   friend class RGWPutObjProcessor;
 
 protected:
+  seed torrent;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
@@ -1004,6 +1011,75 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWGetLC : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWGetLC() : ret(0) { }
+  virtual ~RGWGetLC() { }
+
+  int verify_permission();
+  void pre_exec();
+  virtual void execute() = 0;
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutLC : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWPutLC() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWPutLC() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+//  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWDeleteLC : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWDeleteLC() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWDeleteLC() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWGetCORS : public RGWOp {
 protected:
 
@@ -1309,6 +1385,58 @@ public:
 };
 
 
+class RGWGetCrossDomainPolicy : public RGWOp {
+public:
+  RGWGetCrossDomainPolicy() = default;
+  ~RGWGetCrossDomainPolicy() = default;
+
+  int verify_permission() override {
+    return 0;
+  }
+
+  void execute() override {
+    op_ret = 0;
+  }
+
+  const string name() override {
+    return "get_crossdomain_policy";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_GET_CROSS_DOMAIN_POLICY;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+};
+
+
+class RGWGetHealthCheck : public RGWOp {
+public:
+  RGWGetHealthCheck() = default;
+  ~RGWGetHealthCheck() = default;
+
+  int verify_permission() override {
+    return 0;
+  }
+
+  void execute() override;
+
+  const string name() override {
+    return "get_health_check";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_GET_HEALTH_CHECK;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+};
+
+
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   int max_to_delete;
@@ -1339,6 +1467,17 @@ public:
   virtual const string name() { return "multi_object_delete"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_MULTI_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+};
+
+class RGWInfo: public RGWOp {
+public:
+  RGWInfo() = default;
+  ~RGWInfo() = default;
+
+  int verify_permission() override { return 0; }
+  const string name() override { return "get info"; }
+  RGWOpType get_type() override { return RGW_OP_GET_INFO; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWHandler {
@@ -1518,5 +1657,28 @@ static inline void complete_etag(MD5& hash, string *etag)
 
   *etag = etag_buf_str;
 } /* complete_etag */
+
+class RGWSetAttrs : public RGWOp {
+protected:
+  map<string, buffer::list> attrs;
+
+public:
+  RGWSetAttrs() {}
+  virtual ~RGWSetAttrs() {}
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl));
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
 
 #endif /* CEPH_RGW_OP_H */

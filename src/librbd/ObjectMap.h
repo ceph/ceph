@@ -5,13 +5,15 @@
 
 #include "include/int_types.h"
 #include "include/fs_types.h"
-#include "include/rados/librados.hpp"
 #include "include/rbd/object_map_types.h"
 #include "common/bit_vector.hpp"
 #include <boost/optional.hpp>
 
 class Context;
 class RWLock;
+namespace librados {
+  class IoCtx;
+}
 
 namespace librbd {
 
@@ -37,6 +39,7 @@ public:
   void close(Context *on_finish);
 
   bool object_may_exist(uint64_t object_no) const;
+  bool update_required(uint64_t object_no, uint8_t new_state);
 
   void aio_save(Context *on_finish);
   void aio_resize(uint64_t new_size, uint8_t default_object_state,

@@ -102,9 +102,10 @@ struct InodeStat {
   version_t xattr_version;
   ceph_mds_reply_cap cap;
   file_layout_t layout;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   uint32_t time_warp_seq;
   uint64_t size, max_size;
+  uint64_t change_attr;
   uint64_t truncate_size;
   uint32_t truncate_seq;
   uint32_t mode, uid, gid, nlink;
@@ -185,6 +186,13 @@ struct InodeStat {
 
     if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
       ::decode(layout.pool_ns, p);
+    if ((features & CEPH_FEATURE_FS_BTIME)) {
+      ::decode(btime, p);
+      ::decode(change_attr, p);
+    } else {
+      btime = utime_t();
+      change_attr = 0;
+    }
   }
   
   // see CInode::encode_inodestat for encoder.
@@ -205,7 +213,9 @@ public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
 
-  int get_result() const { return (__s32)(__u32)head.result; }
+  int get_result() const {
+    return ceph_to_host_errno((__s32)(__u32)head.result);
+  }
 
   void set_result(int r) { head.result = r; }
 

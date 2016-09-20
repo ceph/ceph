@@ -97,7 +97,13 @@ public:
 
   std::string init()
   {
+      return init({});
+  }
+
+  std::string init(const std::map<std::string, std::string> &config)
+  {
     int ret;
+
     if (SEM_FAILED == (m_sem = sem_open("/test_aio_sem", O_CREAT, 0644, 0))) {
       int err = errno;
       ostringstream oss;
@@ -105,7 +111,7 @@ public:
       return oss.str();
     }
     m_pool_name = get_temp_pool_name();
-    std::string err = create_one_pool_pp(m_pool_name, m_cluster);
+    std::string err = create_one_pool_pp(m_pool_name, m_cluster, config);
     if (!err.empty()) {
       sem_close(m_sem);
       ostringstream oss;
@@ -3388,4 +3394,34 @@ TEST(LibRadosAioEC, MultiWritePP) {
   delete my_completion;
   delete my_completion2;
   delete my_completion3;
+}
+
+TEST(LibRadosAio, RacingRemovePP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init({{"objecter_retry_writes_after_first_reply", "true"}}));
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+        (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion, nullptr);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+        (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion2, nullptr);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_remove("foo", my_completion2));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+                                         bl, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    my_completion2->wait_for_complete();
+    my_completion->wait_for_complete();
+  }
+  ASSERT_EQ(-ENOENT, my_completion2->get_return_value());
+  ASSERT_EQ(0, my_completion->get_return_value());
+  ASSERT_EQ(0, test_data.m_ioctx.stat("foo", nullptr, nullptr));
+  delete my_completion;
+  delete my_completion2;
 }

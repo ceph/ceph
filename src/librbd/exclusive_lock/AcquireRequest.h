@@ -6,10 +6,8 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "include/rados/librados.hpp"
 #include "librbd/ImageCtx.h"
 #include "msg/msg_types.h"
-#include <map>
 #include <string>
 
 class Context;
@@ -35,6 +33,9 @@ private:
    * @verbatim
    *
    * <start>
+   *    |
+   *    v
+   * PREPARE_LOCK
    *    |
    *    v
    * FLUSH_NOTIFIES
@@ -99,6 +100,10 @@ private:
   uint64_t m_locker_handle;
 
   int m_error_result;
+  bool m_prepare_lock_completed = false;
+
+  void send_prepare_lock();
+  Context *handle_prepare_lock(int *ret_val);
 
   void send_flush_notifies();
   Context *handle_flush_notifies(int *ret_val);

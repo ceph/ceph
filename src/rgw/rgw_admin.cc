@@ -26,7 +26,8 @@
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
-
+#include "rgw_lc.h"
+#include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
@@ -45,7 +46,7 @@ using namespace std;
 
 static RGWRados *store = NULL;
 
-void _usage() 
+void _usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cout << "commands:\n";
@@ -57,6 +58,7 @@ void _usage()
   cout << "  user enable                re-enable user after suspension\n";
   cout << "  user check                 check user info\n";
   cout << "  user stats                 show user stats as accounted by quota subsystem\n";
+  cout << "  user list                  list users\n";
   cout << "  caps add                   add user capabilities\n";
   cout << "  caps rm                    remove user capabilities\n";
   cout << "  subuser create             create a new subuser\n" ;
@@ -130,6 +132,8 @@ void _usage()
   cout << "  gc list                    dump expired garbage collection objects (specify\n";
   cout << "                             --include-all to list all entries, including unexpired)\n";
   cout << "  gc process                 manually process garbage\n";
+  cout << "  lc list                    list all bucket lifecycle progress\n";
+  cout << "  lc process                 manually process lifecycle\n";
   cout << "  metadata get               get metadata info\n";
   cout << "  metadata put               put metadata info\n";
   cout << "  metadata rm                remove metadata info\n";
@@ -189,6 +193,7 @@ void _usage()
   cout << "   --period=<id>             period id\n";
   cout << "   --epoch=<number>          period epoch\n";
   cout << "   --commit                  commit the period during 'period update'\n";
+  cout << "   --staging                 get staging period info\n";
   cout << "   --master                  set as master\n";
   cout << "   --master-url              master url\n";
   cout << "   --master-zonegroup=<id>   master zonegroup id\n";
@@ -227,7 +232,7 @@ void _usage()
   cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
   cout << "                             replica log operations\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
-  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
+  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
   cout << "   --reset-regions           reset regionmap when regionmap update\n";
   cout << "   --bypass-gc               when specified with bucket deletion, triggers\n";
@@ -244,6 +249,7 @@ void _usage()
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\nOrphans list-jobs options:\n";
@@ -268,6 +274,7 @@ enum {
   OPT_USER_ENABLE,
   OPT_USER_CHECK,
   OPT_USER_STATS,
+  OPT_USER_LIST,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -307,6 +314,8 @@ enum {
   OPT_QUOTA_DISABLE,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
+  OPT_LC_LIST,
+  OPT_LC_PROCESS,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
   OPT_ORPHANS_LIST_JOBS,
@@ -323,7 +332,7 @@ enum {
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
-  OPT_ZONE_CREATE,  
+  OPT_ZONE_CREATE,
   OPT_ZONE_DELETE,
   OPT_ZONE_GET,
   OPT_ZONE_MODIFY,
@@ -396,16 +405,17 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "data") == 0 ||
       strcmp(cmd, "datalog") == 0 ||
       strcmp(cmd, "error") == 0 ||
-      strcmp(cmd, "gc") == 0 || 
+      strcmp(cmd, "gc") == 0 ||
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
+      strcmp(cmd, "lc") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "objects") == 0 ||
       strcmp(cmd, "olh") == 0 ||
       strcmp(cmd, "opstate") == 0 ||
-      strcmp(cmd, "orphans") == 0 || 
+      strcmp(cmd, "orphans") == 0 ||
       strcmp(cmd, "period") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
@@ -452,6 +462,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USER_CHECK;
     if (strcmp(cmd, "stats") == 0)
       return OPT_USER_STATS;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_USER_LIST;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -655,6 +667,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_GC_LIST;
     if (strcmp(cmd, "process") == 0)
       return OPT_GC_PROCESS;
+  } else if (strcmp(prev_cmd, "lc") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_LC_LIST;
+    if (strcmp(cmd, "process") == 0)
+      return OPT_LC_PROCESS;
   } else if (strcmp(prev_cmd, "orphans") == 0) {
     if (strcmp(cmd, "find") == 0)
       return OPT_ORPHANS_FIND;
@@ -849,7 +866,7 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("pool", bucket.data_pool);
   formatter->dump_string("index_pool", bucket.index_pool);
-  
+
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   ::encode_json("owner", bucket_info.owner, formatter);
@@ -952,7 +969,7 @@ static int read_decode_json(const string& infile, T& t)
   }
   return 0;
 }
-    
+
 template <class T, class K>
 static int read_decode_json(const string& infile, T& t, K *k)
 {
@@ -1191,7 +1208,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   f->dump_string("oid", oid);
   f->dump_string("locator", locator);
 
-  
+
   RGWObjectCtx obj_ctx(store);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
@@ -1289,7 +1306,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
   list_op.params.ns = ns;
   list_op.params.enforce_ns = true;
   list_op.params.list_versions = true;
-  
+
   f->open_array_section("check_objects");
   do {
     ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
@@ -1306,7 +1323,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
       if (key.name[0] == '_') {
         ret = check_obj_locator_underscore(bucket_info, obj, key, fix, remove_bad, f);
-	
+
 	if (ret >= 0) {
           ret = check_obj_tail_locator_underscore(bucket_info, obj, key, fix, f);
 	}
@@ -1536,10 +1553,10 @@ static int update_period(const string& realm_id, const string& realm_name,
   return 0;
 }
 
-static int init_bucket_for_sync(const string& tenant, const string& bucket_name, string& bucket_id)
+static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
+                                const string& bucket_id, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
-  rgw_bucket bucket;
 
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
   if (ret == -ENOENT) {
@@ -1547,8 +1564,6 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
       cerr << "ERROR: bucket id specified" << std::endl;
       return EINVAL;
     }
-  } else {
-    bucket_id = bucket.bucket_id;
   }
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -1669,7 +1684,7 @@ static void get_md_sync_status(list<string>& status)
   }
 
   status.push_back(status_str);
-  
+
   uint64_t full_total = 0;
   uint64_t full_complete = 0;
 
@@ -1808,7 +1823,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   }
 
   push_ss(ss, status, tab) << status_str;
-  
+
   uint64_t full_total = 0;
   uint64_t full_complete = 0;
 
@@ -1956,7 +1971,7 @@ static void sync_status(Formatter *formatter)
   tab_dump("data sync", width, data_status);
 }
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -2434,7 +2449,7 @@ int main(int argc, char **argv)
   bool raw_period_pull = opt_cmd == OPT_PERIOD_PULL && remote.empty() && !url.empty();
 
   bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_ADD || opt_cmd == OPT_ZONEGROUP_CREATE || opt_cmd == OPT_ZONEGROUP_DELETE ||
-			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||  
+			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||
                          opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
 			 opt_cmd == OPT_ZONEGROUP_RENAME || opt_cmd == OPT_ZONEGROUP_MODIFY ||
 			 opt_cmd == OPT_ZONEGROUP_REMOVE ||
@@ -2456,7 +2471,7 @@ int main(int argc, char **argv)
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
-    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false);
+    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -2717,7 +2732,7 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  cerr << "list periods failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
-	}	
+	}
 	formatter->open_object_section("realm_periods_list");
 	encode_json("current_period", period_id, formatter);
 	encode_json("periods", periods, formatter);
@@ -3065,6 +3080,20 @@ int main(int argc, char **argv)
           need_update = true;
         }
 
+        if (!realm_id.empty()) {
+          zonegroup.realm_id = realm_id;
+          need_update = true;
+        } else if (!realm_name.empty()) {
+          // get realm id from name
+          RGWRealm realm{g_ceph_context, store};
+          ret = realm.read_id(realm_name, zonegroup.realm_id);
+          if (ret < 0) {
+            cerr << "failed to find realm by name " << realm_name << std::endl;
+            return -ret;
+          }
+          need_update = true;
+        }
+
         if (need_update) {
           zonegroup.post_process_params();
 	  ret = zonegroup.update();
@@ -3200,7 +3229,7 @@ int main(int argc, char **argv)
 	  cerr << "failed to read zonegroupmap info: " << cpp_strerror(ret);
 	  return ret;
 	}
-		
+
 	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
@@ -3532,6 +3561,20 @@ int main(int argc, char **argv)
           need_zone_update = true;
         }
 
+        if (!realm_id.empty()) {
+          zone.realm_id = realm_id;
+          need_zone_update = true;
+        } else if (!realm_name.empty()) {
+          // get realm id from name
+          RGWRealm realm{g_ceph_context, store};
+          ret = realm.read_id(realm_name, zone.realm_id);
+          if (ret < 0) {
+            cerr << "failed to find realm by name " << realm_name << std::endl;
+            return -ret;
+          }
+          need_zone_update = true;
+        }
+
         if (need_zone_update) {
           ret = zone.update();
           if (ret < 0) {
@@ -3539,13 +3582,6 @@ int main(int argc, char **argv)
             return -ret;
           }
         }
-
-	RGWRealm realm(realm_id, realm_name);
-	ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	ret = zonegroup.init(g_ceph_context, store);
@@ -3981,7 +4017,7 @@ int main(int argc, char **argv)
       list_op.params.ns = ns;
       list_op.params.enforce_ns = false;
       list_op.params.list_versions = true;
-      
+
       do {
         ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
         if (ret < 0) {
@@ -4092,7 +4128,7 @@ int main(int argc, char **argv)
       formatter->open_object_section("log");
 
       struct rgw_log_entry entry;
-      
+
       // peek at first entry to get bucket metadata
       r = store->log_show_next(h, &entry);
       if (r < 0) {
@@ -4159,7 +4195,7 @@ next:
       }
     }
   }
-  
+
   if (opt_cmd == OPT_POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
@@ -4207,7 +4243,7 @@ next:
     uint64_t end_epoch = (uint64_t)-1;
 
     int ret;
-    
+
     if (!start_date.empty()) {
       ret = utime_t::parse_date(start_date, &start_epoch, NULL);
       if (ret < 0) {
@@ -4264,7 +4300,7 @@ next:
     if (ret < 0) {
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
-    }   
+    }
   }
 
   if (opt_cmd == OPT_OLH_GET || opt_cmd == OPT_OLH_READLOG) {
@@ -4708,6 +4744,39 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_LC_LIST) {
+    formatter->open_array_section("life cycle progress");
+    map<string, int> bucket_lc_map;
+    string marker;
+#define MAX_LC_LIST_ENTRIES 100
+    do {
+      int ret = store->list_lc_progress(marker, max_entries, &bucket_lc_map);
+      if (ret < 0) {
+        cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
+        return 1;
+      }
+      map<string, int>::iterator iter;
+      for (iter = bucket_lc_map.begin(); iter != bucket_lc_map.end(); ++iter) {
+        formatter->open_object_section("bucket_lc_info");
+        formatter->dump_string("bucket", iter->first);
+        string lc_status = LC_STATUS[iter->second];
+        formatter->dump_string("status", lc_status);
+        formatter->close_section(); // objs
+        formatter->flush(cout);
+        marker = iter->first;
+      }
+    } while (!bucket_lc_map.empty());
+  }
+
+
+  if (opt_cmd == OPT_LC_PROCESS) {
+    int ret = store->process_lc();
+    if (ret < 0) {
+      cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+  }
+
   if (opt_cmd == OPT_ORPHANS_FIND) {
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
@@ -4812,7 +4881,11 @@ next:
     string user_str = user_id.to_str();
     int ret = store->cls_user_get_header(user_str, &header);
     if (ret < 0) {
-      cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
+      if (ret == -ENOENT) { /* in case of ENOENT */
+        cerr << "User has not been initialized or user does not exist" << std::endl;
+      } else {
+        cerr << "ERROR: can't read user: " << cpp_strerror(ret) << std::endl;
+      }
       return -ret;
     }
 
@@ -4852,7 +4925,10 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_METADATA_LIST) {
+  if (opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_USER_LIST) {
+    if (opt_cmd == OPT_USER_LIST) {
+      metadata_key = "user";
+    }
     void *handle;
     int max = 1000;
     int ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
@@ -4914,7 +4990,7 @@ next:
       list<cls_log_entry> entries;
 
 
-      meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle); 
+      meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
       bool truncated;
       do {
 	  int ret = meta_log->list_entries(handle, 1000, entries, NULL, &truncated);
@@ -4935,7 +5011,7 @@ next:
       if (specified_shard_id)
         break;
     }
-  
+
 
     formatter->close_section();
     formatter->flush(cout);
@@ -4965,7 +5041,7 @@ next:
       if (specified_shard_id)
         break;
     }
-  
+
 
     formatter->close_section();
     formatter->flush(cout);
@@ -5172,11 +5248,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5199,11 +5276,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5231,11 +5309,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5452,7 +5531,7 @@ next:
     formatter->close_section();
     formatter->flush(cout);
   }
-  
+
   if (opt_cmd == OPT_DATALOG_STATUS) {
     RGWDataChangesLog *log = store->data_log;
     int i = (specified_shard_id ? shard_id : 0);
@@ -5473,7 +5552,7 @@ next:
     formatter->close_section();
     formatter->flush(cout);
   }
-  
+
   if (opt_cmd == OPT_DATALOG_TRIM) {
     utime_t start_time, end_time;
 

@@ -23,7 +23,10 @@ Timeline
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |`Infernalis`_ |`Jewel`_   |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |Stable        |LTS        |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
-| June      2016 |           |           |           |           |           |           |              |`10.2.2`_  |
+| August    2016 |           |           |           |           |           |`0.94.9`_  |              |           |
+|                |           |           |           |           |           |`0.94.8`_  |              |           |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
+| June      2016 | 11.0.0    |           |           |           |           |           |              |`10.2.2`_  |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
 | May       2016 |           |           |           |           |           |`0.94.7`_  |              |`10.2.1`_  |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
@@ -137,8 +140,8 @@ Timeline
 .. _10.2.0: ../release-notes#v10.2.0-jewel
 .. _Jewel: ../release-notes#v10.2.0-jewel
 
-.. _10.1.2: ../release-notes#v10-1-2
-.. _10.1.1: ../release-notes#v10-1-1
+.. _10.1.2: ../release-notes#v10-1-2-jewel-release-candidate
+.. _10.1.1: ../release-notes#v10-1-1-jewel-release-candidate
 .. _10.1.0: ../release-notes#v10-1-0-jewel-release-candidate
 .. _10.0.5: ../release-notes#v10-0-5
 .. _10.0.3: ../release-notes#v10-0-3
@@ -156,6 +159,8 @@ Timeline
 .. _9.0.1: ../release-notes#v9-0-1
 .. _9.0.0: ../release-notes#v9-0-0
 
+.. _0.94.9: ../release-notes#v0-94-9-hammer
+.. _0.94.8: ../release-notes#v0-94-8-hammer
 .. _0.94.7: ../release-notes#v0-94-7-hammer
 .. _0.94.6: ../release-notes#v0-94-6-hammer
 .. _0.94.5: ../release-notes#v0-94-5-hammer

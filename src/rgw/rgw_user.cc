@@ -1917,6 +1917,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   user_id = uid;
   user_info.user_id = user_id;
   user_info.display_name = display_name;
+  user_info.type = TYPE_RGW;
 
   if (!user_email.empty())
     user_info.user_email = user_email;
