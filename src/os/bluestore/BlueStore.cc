@@ -307,7 +307,7 @@ static void get_object_key(const ghobject_t& oid, string *key)
       derr << "key " << pretty_binary_string(*key) << dendl;
       derr << "oid " << oid << dendl;
       derr << "  t " << t << dendl;
-      assert(t == oid);
+      assert(r == 0 && t == oid);
     }
   }
 }
