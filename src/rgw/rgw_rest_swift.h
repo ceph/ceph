@@ -243,6 +243,7 @@ class RGWFormPost : public RGWPostObj_ObjStore {
   bool is_next_file_to_upload() override;
   static bool is_expired(const std::string& expires);
 
+  parts_collection_t ctrl_parts;
   boost::optional<post_form_part> current_data_part;
   std::string prefix;
   bool stream_done = false;
