@@ -7,6 +7,8 @@
 
 #include <sstream>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/mime.h"
@@ -1406,11 +1408,14 @@ void RGWGetObj::execute()
   start = ofs;
 
   /* STAT ops don't need data, and do no i/o */
-  if (get_type() == RGW_OP_STAT_OBJ)
+  if (get_type() == RGW_OP_STAT_OBJ) {
     return;
+  }
 
-  if (!get_data || ofs > end)
-    goto done_err;
+  if (!get_data || ofs > end) {
+    send_response_data(bl, 0, 0);
+    return;
+  }
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
@@ -2122,6 +2127,46 @@ static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
 }
 
 
+static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attrs,
+                               const std::set<std::string>& rmattr_names,
+                               RGWBucketWebsiteConf& ws_conf)
+{
+  std::string lstval;
+
+  /* Let's define a mapping between each custom attribute and the memory where
+   * attribute's value should be stored. The memory location is expressed by
+   * a non-const reference. */
+  const auto mapping  = {
+    std::make_pair(RGW_ATTR_WEB_INDEX,     std::ref(ws_conf.index_doc_suffix)),
+    std::make_pair(RGW_ATTR_WEB_ERROR,     std::ref(ws_conf.error_doc)),
+    std::make_pair(RGW_ATTR_WEB_LISTINGS,  std::ref(lstval)),
+    std::make_pair(RGW_ATTR_WEB_LIST_CSS,  std::ref(ws_conf.listing_css_doc)),
+    std::make_pair(RGW_ATTR_SUBDIR_MARKER, std::ref(ws_conf.subdir_marker))
+  };
+
+  for (const auto& kv : mapping) {
+    const char * const key = kv.first;
+    auto& target = kv.second;
+
+    auto iter = add_attrs.find(key);
+
+    if (std::end(add_attrs) != iter) {
+      /* The "target" is a reference to ws_conf. */
+      target = iter->second.c_str();
+      add_attrs.erase(iter);
+    }
+
+    if (rmattr_names.count(key)) {
+      target = std::string();
+    }
+  }
+
+  if (! lstval.empty()) {
+    ws_conf.listing_enabled = boost::algorithm::iequals(lstval, "true");
+  }
+}
+
+
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
@@ -2236,9 +2281,13 @@ void RGWCreateBucket::execute()
     op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
     if (op_ret < 0) {
       return;
+    } else {
+      pquota_info = &quota_info;
     }
 
-    pquota_info = &quota_info;
+    /* Web site of Swift API. */
+    filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
+    s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
   }
 
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
@@ -2331,6 +2380,10 @@ void RGWCreateBucket::execute()
         s->bucket_info.swift_ver_location = *swift_ver_location;
         s->bucket_info.swift_versioning = (! swift_ver_location->empty());
       }
+
+      /* Web site of Swift API. */
+      filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
+      s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
 
       /* This will also set the quota on the bucket. */
       op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
@@ -3198,6 +3251,10 @@ void RGWPutMetadataBucket::execute()
     s->bucket_info.swift_ver_location = *swift_ver_location;
     s->bucket_info.swift_versioning = (! swift_ver_location->empty());
   }
+
+  /* Web site of Swift API. */
+  filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
+  s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
 
   /* Setting attributes also stores the provided bucket info. Due to this
    * fact, the new quota settings can be serialized with the same call. */
