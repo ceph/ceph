@@ -151,7 +151,7 @@ private:
 
   ActionsContexts m_actions_contexts;
 
-  bool m_request_blocked = false;
+  uint32_t m_request_blocked_count = 0;
   int m_request_blocked_ret_val = 0;
 
   std::string encode_lock_cookie() const;
