@@ -1535,8 +1535,7 @@ int RGWPostObj_ObjStore_S3::get_params()
     if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
       map<string, struct post_part_field, ltstr_nocase>::iterator piter;
       for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-	ldout(s->cct, 20) << "read part header: name=" << part.name
-			  << " content_type=" << part.content_type << dendl;
+	ldout(s->cct, 20) << "read part header: name=" << part.name << dendl;
 	ldout(s->cct, 20) << "name=" << piter->first << dendl;
 	ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
 	ldout(s->cct, 20) << "params:" << dendl;
