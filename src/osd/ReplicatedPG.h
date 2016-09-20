@@ -699,9 +699,11 @@ public:
 
     RepGather(
       ObcLockManager &&manager,
+      OpRequestRef &&o,
       boost::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
       eversion_t lc) :
+      op(o),
       queue_item(this),
       nref(1),
       rep_tid(rt),
@@ -845,6 +847,7 @@ protected:
     ceph_tid_t rep_tid);
   boost::intrusive_ptr<RepGather> new_repop(
     ObcLockManager &&manager,
+    OpRequestRef &&op,
     boost::optional<std::function<void(void)> > &&on_complete);
   void remove_repop(RepGather *repop);
 
@@ -860,7 +863,8 @@ protected:
   void submit_log_entries(
     const list<pg_log_entry_t> &entries,
     ObcLockManager &&manager,
-    boost::optional<std::function<void(void)> > &&on_complete);
+    boost::optional<std::function<void(void)> > &&on_complete,
+    OpRequestRef op = OpRequestRef());
   struct LogUpdateCtx {
     boost::intrusive_ptr<RepGather> repop;
     set<pg_shard_t> waiting_on;
