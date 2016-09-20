@@ -1329,7 +1329,7 @@ void Operations<I>::execute_update_features(uint64_t features, bool enabled,
   } else {
     operation::DisableFeaturesRequest<I> *req =
       new operation::DisableFeaturesRequest<I>(
-        m_image_ctx, on_finish, journal_op_tid, features);
+        m_image_ctx, on_finish, journal_op_tid, features, false);
     req->send();
   }
 }
