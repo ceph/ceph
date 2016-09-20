@@ -17,9 +17,6 @@
 #ifndef CEPH_MSG_EVENTSELECT_H
 #define CEPH_MSG_EVENTSELECT_H
 
-#include <unistd.h>
-#include <sys/select.h>
-
 #include "Event.h"
 
 class SelectDriver : public EventDriver {
