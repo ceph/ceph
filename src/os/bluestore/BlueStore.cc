@@ -2200,6 +2200,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
+    debug_read_error_lock("BlueStore::debug_read_error_lock"),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
     sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
 {
@@ -4517,7 +4518,12 @@ int BlueStore::stat(
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
-  return 0;
+  int r = 0;
+  if (_debug_mdata_eio(oid)) {
+    r = -EIO;
+    derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  }
+  return r;
 }
 
 int BlueStore::read(
@@ -4574,6 +4580,10 @@ int BlueStore::read(
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
+  if (r == 0 && _debug_data_eio(oid)) {
+    r = -EIO;
+    derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  }
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -5020,6 +5030,10 @@ int BlueStore::getattr(
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
+  if (r == 0 && _debug_mdata_eio(oid)) {
+    r = -EIO;
+    derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  }
   dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
@@ -5064,6 +5078,10 @@ int BlueStore::getattrs(
   c->cache->trim(
     g_conf->bluestore_onode_cache_size,
     g_conf->bluestore_buffer_cache_size);
+  if (r == 0 && _debug_mdata_eio(oid)) {
+    r = -EIO;
+    derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  }
   dout(10) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
@@ -7691,6 +7709,7 @@ int BlueStore::_do_remove(
     txc->t->rmkey(PREFIX_OBJ, s.key);
   }
   txc->t->rmkey(PREFIX_OBJ, o->key);
+  _debug_obj_on_delete(o->oid);
   return 0;
 }
 
