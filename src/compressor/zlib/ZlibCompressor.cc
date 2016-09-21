@@ -38,20 +38,30 @@ _prefix(std::ostream* _dout)
 
 #define MAX_LEN (CEPH_PAGE_SIZE)
 
+// default window size for Zlib 1.2.8, negated for raw deflate
+#define ZLIB_DEFAULT_WIN_SIZE -15
+
+// compression level we use. probably should be configurable...
+#define ZLIB_COMPRESSION_LEVEL 5
+
+// desired memory usage level. increasing to 9 doesn't speed things up
+// significantly (helps only on >=16K blocks) and sometimes degrades
+// compression ratio.
+#define ZLIB_MEMORY_LEVEL 8
+
 int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
 {
   int ret;
   unsigned have;
   z_stream strm;
   unsigned char* c_in;
-  int level = 5;
   int begin = 1;
 
   /* allocate deflate state */
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
-  ret = deflateInit(&strm, level);
+  ret = deflateInit2(&strm, ZLIB_COMPRESSION_LEVEL, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
   if (ret != Z_OK) {
     dout(1) << "Compression init error: init return "
          << ret << " instead of Z_OK" << dendl;
@@ -74,6 +84,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
+        // put a compressor variation mark in front of compressed stream
         ptr.c_str()[0] = 0;
         begin = 0;
       }
@@ -129,6 +140,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
+        // put a compressor variation mark in front of compressed stream
         ptr.c_str()[0] = 1;
         begin = 0;
       }
@@ -177,10 +189,12 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
   strm.opaque = Z_NULL;
   strm.avail_in = 0;
   strm.next_in = Z_NULL;
+
+  // choose the variation of compressor
   if (*p == 1)
     ret = inflateInit2(&strm, -HIST_SIZE);
   else
-    ret = inflateInit(&strm);
+    ret = inflateInit2(&strm, ZLIB_DEFAULT_WIN_SIZE);
   if (ret != Z_OK) {
     dout(1) << "Decompression init error: init return "
          << ret << " instead of Z_OK" << dendl;
