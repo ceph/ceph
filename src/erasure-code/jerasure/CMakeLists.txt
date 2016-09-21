@@ -72,10 +72,21 @@ set(jerasure_srcs
   jerasure_init.cc)
 add_library(jerasure_objs OBJECT ${jerasure_srcs}) 
 
-add_library(ec_jerasure SHARED
+set(ec_jerasure_objs
   $<TARGET_OBJECTS:gf-complete_objs>
   $<TARGET_OBJECTS:jerasure_objs>
   $<TARGET_OBJECTS:jerasure_utils>
   $<TARGET_OBJECTS:erasure_code_objs>)
+
+add_library(ec_jerasure SHARED ${ec_jerasure_objs})
 target_link_libraries(ec_jerasure ${EXTRALIBS})
 install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
+
+# legacy libraries
+foreach(flavor ${jerasure_legacy_flavors})
+  set(plugin_name "ec_jerasure_${flavor}")
+  add_library(${plugin_name} SHARED ${ec_jerasure_objs})
+  install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
+  add_dependencies(ec_jerasure ${plugin_name})
+endforeach()
+
