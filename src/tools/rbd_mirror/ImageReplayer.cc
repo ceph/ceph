@@ -1050,6 +1050,8 @@ void ImageReplayer<I>::process_entry() {
   Context *on_ready = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
   Context *on_commit = new C_ReplayCommitted(this, std::move(m_replay_entry));
+
+  m_event_replay_tracker.start_op();
   m_local_replay->process(m_event_entry, on_ready, on_commit);
 }
 
@@ -1070,14 +1072,12 @@ void ImageReplayer<I>::handle_process_entry_safe(const ReplayEntry& replay_entry
 
   if (r < 0) {
     derr << "failed to commit journal event: " << cpp_strerror(r) << dendl;
-
     handle_replay_complete(r, "failed to commit journal event");
-    return;
-  }
-
-  if (m_remote_journaler) {
+  } else {
+    assert(m_remote_journaler != nullptr);
     m_remote_journaler->committed(replay_entry);
   }
+  m_event_replay_tracker.finish_op();
 }
 
 template <typename I>
@@ -1374,7 +1374,9 @@ void ImageReplayer<I>::shut_down(int r) {
 
         // blocks if listener notification is in-progress
         m_local_journal->remove_listener(m_journal_listener);
-        ctx->complete(0);
+
+        // wait for all in-flight replayed events to complete
+        m_event_replay_tracker.wait_for_ops(ctx);
       });
     if (m_local_replay != nullptr) {
       ctx = new FunctionContext([this, ctx](int r) {
