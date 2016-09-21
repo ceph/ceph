@@ -58,11 +58,11 @@ void *RGWLC::LCWorker::entry() {
       break;
 
     utime_t end = ceph_clock_now(cct);
-    int secs = shedule_next_start_time(end);
+    int secs = schedule_next_start_time(start, end);
     time_t next_time = end + secs;
     char buf[30];
     char *nt = ctime_r(&next_time, buf);
-    dout(5) << "shedule life cycle next start time: " << nt <<dendl;
+    dout(5) << "schedule life cycle next start time: " << nt <<dendl;
 
     lock.Lock();
     cond.WaitInterval(cct, lock, utime_t(secs, 0));
@@ -87,6 +87,11 @@ void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
     snprintf(buf, 32, ".%d", i);
     obj_names[i].append(buf);
   }
+
+#define COOKIE_LEN 16
+  char cookie_buf[COOKIE_LEN + 1];
+  gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
+  cookie = cookie_buf;
 }
 
 void RGWLC::finalize()
@@ -100,6 +105,12 @@ bool RGWLC::if_already_run_today(time_t& start_date)
   time_t begin_of_day;
   utime_t now = ceph_clock_now(cct);
   localtime_r(&start_date, &bdt);
+
+  if (cct->_conf->rgw_lc_debug_interval > 0) {
+	  /* We're debugging, so say we can run */
+	  return false;
+  }
+
   bdt.tm_hour = 0;
   bdt.tm_min = 0;
   bdt.tm_sec = 0;
@@ -151,18 +162,32 @@ int RGWLC::bucket_lc_prepare(int index)
   return 0;
 }
 
+bool RGWLC::obj_has_expired(double timediff, int days)
+{
+	double cmp;
+
+	if (cct->_conf->rgw_lc_debug_interval <= 0) {
+		/* Normal case, run properly */
+		cmp = days*24*60*60;
+	} else {
+		/* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
+		cmp = days*cct->_conf->rgw_lc_debug_interval;
+	}
+
+	return (timediff >= cmp);
+}
+
 int RGWLC::bucket_lc_process(string& shard_id)
 {
   RGWLifecycleConfiguration  config(cct);
   RGWBucketInfo bucket_info;
   map<string, bufferlist> bucket_attrs;
-  string prefix, delimiter, marker, next_marker, no_ns, end_marker, list_versions;
+  string next_marker, no_ns, list_versions;
   bool is_truncated;
   bool default_config = false;
   int default_days = 0;
   vector<RGWObjEnt> objs;
   RGWObjectCtx obj_ctx(store);
-  map<string, bool> common_prefixes;
   vector<std::string> result;
   result = split(shard_id, ':');
   string bucket_tenant = result[0];
@@ -183,12 +208,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
   RGWRados::Bucket target(store, bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
-  list_op.params.prefix = prefix;
-  list_op.params.delim = delimiter;
-  list_op.params.marker = marker;
-  list_op.params.end_marker = end_marker;
-  list_op.params.list_versions = false;
-
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
     return 0;
@@ -206,7 +225,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     if (prefix_iter->first.empty()) {
       default_config = true;
       default_days = prefix_iter->second;
-      continue;
+      break;
     }
   }
 
@@ -215,7 +234,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
       objs.clear();
       list_op.params.marker = list_op.get_next_marker();
-      ret = list_op.list_objects(1000, &objs, &common_prefixes, &is_truncated);
+      ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
       if (ret < 0) {
         if (ret == -ENOENT)
           return 0;
@@ -251,7 +270,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
         } else {
           continue;
         }
-        if (now - ceph::real_clock::to_time_t((*obj_iter).mtime) >= days*24*60*60) {
+        if (obj_has_expired(now - ceph::real_clock::to_time_t((*obj_iter).mtime), days)) {
           RGWObjectCtx rctx(store);
           rgw_obj obj(bucket_info.bucket, (*obj_iter).key.name);
           RGWObjState *state;
@@ -281,7 +300,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
         objs.clear();
         list_op.params.marker = list_op.get_next_marker();
-        ret = list_op.list_objects(1000, &objs, &common_prefixes, &is_truncated);
+        ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
 
         if (ret < 0) {
           if (ret == (-ENOENT))
@@ -295,7 +314,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
         utime_t now = ceph_clock_now(cct);
 
         for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
-          if (now - ceph::real_clock::to_time_t((*obj_iter).mtime) >= days*24*60*60) {
+          if (obj_has_expired(now - ceph::real_clock::to_time_t((*obj_iter).mtime), days)) {
             RGWObjectCtx rctx(store);
             rgw_obj obj(bucket_info.bucket, (*obj_iter).key.name);
             RGWObjState *state;
@@ -324,6 +343,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head
                                                               pair<string, int >& entry, int& result)
 {
   rados::cls::lock::Lock l(lc_index_lock_name);
+  l.set_cookie(cookie);
   do {
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
@@ -505,17 +525,28 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
   struct tm bdt;
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
-  if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute)||
-      (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
-    return true;
+
+  if (cct->_conf->rgw_lc_debug_interval > 0) {
+	  /* We're debugging, so say we can run */
+	  return true;
+  } else if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) ||
+		     (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
+	  return true;
   } else {
-    return false;
+	  return false;
   }
 
 }
 
-int RGWLC::LCWorker::shedule_next_start_time(utime_t& now)
+int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 {
+  if (cct->_conf->rgw_lc_debug_interval > 0) {
+	int secs = start + cct->_conf->rgw_lc_debug_interval - now;
+	if (secs < 0)
+	  secs = 0;
+	return (secs);
+  }
+
   int start_hour;
   int start_minute;
   int end_hour;
@@ -530,6 +561,7 @@ int RGWLC::LCWorker::shedule_next_start_time(utime_t& now)
   bdt.tm_min = start_minute;
   bdt.tm_sec = 0;
   nt = mktime(&bdt);
+
   return (nt+24*60*60 - tt);
 }
 

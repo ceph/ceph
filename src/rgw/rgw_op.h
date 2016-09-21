@@ -1033,6 +1033,7 @@ protected:
   int ret;
   size_t len;
   char *data;
+  string cookie;
 
 public:
   RGWPutLC() {
@@ -1042,6 +1043,15 @@ public:
   }
   virtual ~RGWPutLC() {
     free(data);
+  }
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    RGWOp::init(store, s, dialect_handler);
+    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+    cookie = buf;
   }
 
   int verify_permission();

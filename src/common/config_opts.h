@@ -1318,6 +1318,7 @@ OPTION(rgw_lifecycle_thread, OPT_INT, 1) //start lifecycle thread number per rad
 OPTION(rgw_lifecycle_work_time, OPT_STR, "00:00-06:00") //job process lc  at 00:00-06:00s
 OPTION(rgw_lc_lock_max_time, OPT_INT, 60)  // total run time for a single gc processor work
 OPTION(rgw_lc_max_objs, OPT_INT, 32)
+OPTION(rgw_lc_debug_interval, OPT_INT, -1)  // Debug run interval, in seconds
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
