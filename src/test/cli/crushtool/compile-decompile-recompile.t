@@ -11,5 +11,5 @@
   $ cmp nto.compiled nto.recompiled
 
   $ crushtool -c missing-bucket.crushmap.txt
-  in rule 'rule-bad' item 'root-404' not defined
-  [1]
+  input file missing-bucket.crushmap.txt not found
+  [254]
