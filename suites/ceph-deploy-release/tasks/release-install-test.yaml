@@ -1,0 +1,40 @@
+overrides:
+  ceph-deploy:
+    branch:
+      stable: jewel
+    conf:
+      global:
+        mon pg warn min per osd: 2
+        osd pool default size: 2
+roles:
+- - mon.a
+  - mds.0
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+  - mon.b
+- - client.0
+openstack:
+  - machine:
+      disk: 10 # GB
+      ram: 2000 # MB
+      cpus: 1
+    volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- ssh_keys:
+- ceph-deploy:
+- workunit:
+    clients:
+      client.0:
+      - rados/test.sh
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_librbd_python.sh
+    env:
+      RBD_FEATURES: "1"
