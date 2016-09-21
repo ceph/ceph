@@ -1017,7 +1017,6 @@ protected:
   const char *supplied_md5_b64;
   const char *supplied_etag;
   string etag;
-  bool data_pending;
   string content_type;
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
@@ -1034,8 +1033,7 @@ public:
                  len(0),
                  ofs(0),
                  supplied_md5_b64(nullptr),
-                 supplied_etag(nullptr),
-                 data_pending(false) {
+                 supplied_etag(nullptr) {
   }
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
@@ -1056,9 +1054,9 @@ public:
     return 0;
   }
   virtual int get_params() = 0;
-  virtual int get_data(bufferlist& bl) = 0;
+  virtual int get_data(ceph::bufferlist& bl, bool& again) = 0;
   void send_response() override = 0;
-  const string name() override { return "post_obj"; }
+  const std::string name() override { return "post_obj"; }
   RGWOpType get_type() override { return RGW_OP_POST_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };

@@ -3348,9 +3348,10 @@ void RGWPostObj::execute()
       }
     }
 
-    while (data_pending) {
-      bufferlist data;
-      len = get_data(data);
+    bool again;
+    do {
+      ceph::bufferlist data;
+      len = get_data(data, again);
 
       if (len < 0) {
         op_ret = len;
@@ -3370,7 +3371,7 @@ void RGWPostObj::execute()
         op_ret = -ERR_TOO_LARGE;
         return;
       }
-    }
+    } while (again);
 
     {
       bufferlist flush;
