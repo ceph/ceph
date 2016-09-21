@@ -286,7 +286,7 @@ fi
 test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
 if [ "$start_all" -eq 1 ]; then
-    $SUDO $INIT_CEPH stop
+    $SUDO $INIT_CEPH $ARGS stop
 fi
 $SUDO rm -f core*
 
@@ -647,7 +647,15 @@ do_rgw()
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20"
     fi
-    $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+	export CEPH_CONF=$conf_fn
+	export CEPH_KEYRING=$keyring_fn
+    fi
+    $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1 $ARGS
+
+    if [ "$new" -eq 0 ]; then
+	return
+    fi
 
     # Create S3 user
     local akey='0555b35654ad1656d804'
@@ -673,7 +681,7 @@ do_rgw()
 
     # Create Swift user
     echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create --subuser=tester:testing --display-name=Tester-Subuser --key-type=swift --secret=asdf > /dev/null
+    $CEPH_BIN/radosgw-admin user create --subuser=tester:testing --display-name=Tester-Subuser --key-type=swift --secret=asdf $ARGS > /dev/null
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
@@ -682,8 +690,10 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
+echo "export PATH=$PATH:$PWD"
 echo "export PYTHONPATH=./pybind"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"
+echo "export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
 if [ "$CEPH_DIR" != "$PWD" ]; then
     echo "export CEPH_CONF=$conf_fn"
