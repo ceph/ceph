@@ -230,11 +230,10 @@ public:
 
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
-    rocksdb::WriteBatch *bat;
+    rocksdb::WriteBatch bat;
     RocksDBStore *db;
 
     explicit RocksDBTransactionImpl(RocksDBStore *_db);
-    ~RocksDBTransactionImpl();
     void set(
       const string &prefix,
       const string &k,

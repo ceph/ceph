@@ -324,13 +324,13 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
   RocksWBHandler bat_txc;
-  _t->bat->Iterate(&bat_txc);
+  _t->bat.Iterate(&bat_txc);
   *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
   
-  rocksdb::Status s = db->Write(woptions, _t->bat);
+  rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
     RocksWBHandler rocks_txc;
-    _t->bat->Iterate(&rocks_txc);
+    _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
          << " Rocksdb transaction: " << rocks_txc.seen << dendl;
   }
@@ -350,13 +350,13 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
   RocksWBHandler bat_txc;
-  _t->bat->Iterate(&bat_txc);
+  _t->bat.Iterate(&bat_txc);
   *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
 
-  rocksdb::Status s = db->Write(woptions, _t->bat);
+  rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
     RocksWBHandler rocks_txc;
-    _t->bat->Iterate(&rocks_txc);
+    _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
          << " Rocksdb transaction: " << rocks_txc.seen << dendl;
   }
@@ -385,12 +385,8 @@ int RocksDBStore::get_info_log_level(string info_log_level)
 RocksDBStore::RocksDBTransactionImpl::RocksDBTransactionImpl(RocksDBStore *_db)
 {
   db = _db;
-  bat = new rocksdb::WriteBatch();
 }
-RocksDBStore::RocksDBTransactionImpl::~RocksDBTransactionImpl()
-{
-  delete bat;
-}
+
 void RocksDBStore::RocksDBTransactionImpl::set(
   const string &prefix,
   const string &k,
@@ -400,13 +396,13 @@ void RocksDBStore::RocksDBTransactionImpl::set(
 
   // bufferlist::c_str() is non-constant, so we can't call c_str()
   if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
-    bat->Put(rocksdb::Slice(key),
+    bat.Put(rocksdb::Slice(key),
 	     rocksdb::Slice(to_set_bl.buffers().front().c_str(),
 			    to_set_bl.length()));
   } else {
     // make a copy
     bufferlist val = to_set_bl;
-    bat->Put(rocksdb::Slice(key),
+    bat.Put(rocksdb::Slice(key),
 	     rocksdb::Slice(val.c_str(), val.length()));
   }
 }
@@ -414,7 +410,7 @@ void RocksDBStore::RocksDBTransactionImpl::set(
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
-  bat->Delete(combine_strings(prefix, k));
+  bat.Delete(combine_strings(prefix, k));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
@@ -423,10 +419,11 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   for (it->seek_to_first();
        it->valid();
        it->next()) {
-    bat->Delete(combine_strings(prefix, it->key()));
+    bat.Delete(combine_strings(prefix, it->key()));
   }
 }
 
+ew/delete
 int RocksDBStore::get(
     const string &prefix,
     const std::set<string> &keys,
