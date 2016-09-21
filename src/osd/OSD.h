@@ -2472,6 +2472,8 @@ private:
 
   int init_op_flags(OpRequestRef& op);
 
+  int _recover_broken_maps();
+
 public:
   static int peek_meta(ObjectStore *store, string& magic,
 		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);

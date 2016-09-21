@@ -37,6 +37,7 @@
 #include "OSD.h"
 #include "OSDMap.h"
 #include "Watch.h"
+#include "OSDMapRecovery.h"
 #include "osdc/Objecter.h"
 
 #include "common/ceph_argparse.h"
@@ -1612,6 +1613,34 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
   return 0;
 }
 
+int OSD::_recover_broken_maps()
+{
+  dout(0) << __func__ << " attempt to recover broken maps" << dendl;
+
+  OSDMapRecovery omr(cct, this);
+  list<pair<epoch_t, epoch_t> > ranges;
+
+  epoch_t max = MAX(superblock.newest_map, superblock.current_epoch);
+  dout(0) << __func__ << " looking at epochs [" << superblock.oldest_map
+          << " .. " << max << "]" << dendl;
+
+  if (!omr.find_broken_ranges(superblock.oldest_map, max, ranges)) {
+    dout(0) << "no broken maps were found" << dendl;
+    return 0;
+  }
+
+  int r = omr.init();
+  if (r < 0) {
+    derr << "error initializing osdmap recovery" << dendl;
+    return r;
+  }
+
+  r = omr.recover(superblock.oldest_map, superblock.newest_map);
+  if (r < 0) {
+    derr << "unable to recover maps" << dendl;
+  } 
+  return 0;
+}
 
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
