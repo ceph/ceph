@@ -6,7 +6,7 @@ Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
 a health status, it means that the monitors have a quorum.
 If you don't have a monitor quorum or if there are errors with the monitor
-status, `address the monitor issues first <../troubleshooting-mon>`_. 
+status, `address the monitor issues first <../troubleshooting-mon>`_.
 Check your networks to ensure they
 are running properly, because networks may have a significant impact on OSD
 operation and performance.
@@ -140,18 +140,18 @@ If you start your cluster and an OSD won't start, check the following:
   actual mounts, you may have trouble starting OSDs. If you want to store the
   journal on a block device, you should partition your journal disk and assign
   one partition per OSD.
-  
+
 - **Check Max Threadcount:** If you have a node with a lot of OSDs, you may be
   hitting the default maximum number of threads (e.g., usually 32k), especially
-  during recovery. You can increase the number of threads using ``sysctl`` to 
-  see if increasing the maximum number of threads to the maximum possible 
-  number of threads allowed (i.e.,  4194303) will help. For example:: 
+  during recovery. You can increase the number of threads using ``sysctl`` to
+  see if increasing the maximum number of threads to the maximum possible
+  number of threads allowed (i.e.,  4194303) will help. For example::
 
 	sysctl -w kernel.pid_max=4194303
 
   If increasing the maximum thread count resolves the issue, you can make it
-  permanent by including a ``kernel.pid_max`` setting in the 
-  ``/etc/sysctl.conf`` file. For example:: 
+  permanent by including a ``kernel.pid_max`` setting in the
+  ``/etc/sysctl.conf`` file. For example::
 
 	kernel.pid_max = 4194303
 
@@ -165,11 +165,7 @@ If you start your cluster and an OSD won't start, check the following:
   (if it isn't already), and try again. If it segment faults again,
   contact the ceph-devel email list and provide your Ceph configuration
   file, your monitor output and the contents of your log file(s).
-  
 
-
-If you cannot resolve the issue and the email list isn't helpful, you may
-contact `Inktank`_ for support.
 
 
 An OSD Failed
@@ -454,7 +450,7 @@ You can clear the flags with::
 
 Two other flags are supported, ``noin`` and ``noout``, which prevent
 booting OSDs from being marked ``in`` (allocated data) or protect OSDs
-from eventually being marked ``out`` (regardless of what the current value for 
+from eventually being marked ``out`` (regardless of what the current value for
 ``mon osd down out interval`` is).
 
 .. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the
@@ -479,6 +475,5 @@ from eventually being marked ``out`` (regardless of what the current value for
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
 .. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
-.. _Inktank: http://inktank.com
 .. _OS recommendations: ../../../install/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org
