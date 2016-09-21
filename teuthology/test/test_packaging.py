@@ -384,6 +384,22 @@ class TestBuilderProject(object):
         assert result == expected
         expected_log = 'More than one of ref, tag, branch, or sha1 supplied; using tag'
         assert expected_log in caplog.text()
+        return gp
+
+    def test_init_from_config_branch_overrides_sha1(self, caplog):
+        config = dict(
+            os_type="ubuntu",
+            os_version="14.04",
+            branch='jewel',
+            sha1='sha1',
+        )
+        gp = self.klass("ceph", config)
+        result = gp.uri_reference
+        expected = 'ref/jewel'
+        assert result == expected
+        expected_log = 'More than one of ref, tag, branch, or sha1 supplied; using branch'
+        assert expected_log in caplog.text()
+        return gp
 
     REFERENCE_MATRIX = [
         ('the_ref', 'the_tag', 'the_branch', 'the_sha1', dict(ref='the_ref')),
@@ -659,6 +675,20 @@ class TestShamanProject(TestBuilderProject):
                 "https://shaman.ceph.com/api/search?status=ready&project=ceph" \
                 "&flavor=default&distros=ubuntu%2F14.04%2Fx86_64&sha1=sha1"
             )
+
+    def test_init_from_config_tag_overrides_branch_ref(self, caplog):
+        obj = super(TestShamanProject, self)\
+            .test_init_from_config_tag_overrides_branch_ref(caplog)
+        search_uri = obj._search_uri
+        assert 'v10.0.1' in search_uri
+        assert 'jewel' not in search_uri
+
+    def test_init_from_config_branch_overrides_sha1(self, caplog):
+        obj = super(TestShamanProject, self)\
+            .test_init_from_config_branch_overrides_sha1(caplog)
+        search_uri = obj._search_uri
+        assert 'jewel' in search_uri
+        assert 'sha1' not in search_uri
 
     def test_get_package_version_found(self):
         resp = Mock()
