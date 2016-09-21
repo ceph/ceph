@@ -15,8 +15,10 @@
 #include "librbd/operation/DisableFeaturesRequest.h"
 #include "librbd/operation/EnableFeaturesRequest.h"
 #include "librbd/operation/FlattenRequest.h"
-#include "librbd/operation/RebuildObjectMapRequest.h"
+#include "librbd/operation/MetadataRemoveRequest.h"
+#include "librbd/operation/MetadataSetRequest.h"
 #include "librbd/operation/ObjectMapIterate.h"
+#include "librbd/operation/RebuildObjectMapRequest.h"
 #include "librbd/operation/RenameRequest.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
@@ -1294,6 +1296,123 @@ void Operations<I>::execute_update_features(uint64_t features, bool enabled,
         m_image_ctx, on_finish, journal_op_tid, features);
     req->send();
   }
+}
+
+template <typename I>
+int Operations<I>::metadata_set(const std::string &key,
+                                const std::string &value) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": key=" << key << ", value="
+                << value << dendl;
+
+  string start = m_image_ctx.METADATA_CONF_PREFIX;
+  size_t conf_prefix_len = start.size();
+
+  if (key.size() > conf_prefix_len && !key.compare(0, conf_prefix_len, start)) {
+    string subkey = key.substr(conf_prefix_len, key.size() - conf_prefix_len);
+    int r = cct->_conf->set_val(subkey.c_str(), value);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  {
+    RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+    C_SaferCond metadata_ctx;
+
+    if (m_image_ctx.exclusive_lock != nullptr &&
+	!m_image_ctx.exclusive_lock->is_lock_owner()) {
+      C_SaferCond lock_ctx;
+
+      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      r = lock_ctx.wait();
+      if (r < 0) {
+	return r;
+      }
+    }
+
+    execute_metadata_set(key, value, &metadata_ctx);
+    r = metadata_ctx.wait();
+  }
+
+  return r;
+}
+
+template <typename I>
+void Operations<I>::execute_metadata_set(const std::string &key,
+					const std::string &value,
+					Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": key=" << key << ", value="
+                << value << dendl;
+
+  operation::MetadataSetRequest<I> *request =
+    new operation::MetadataSetRequest<I>(m_image_ctx, on_finish, key, value);
+  request->send();
+}
+
+template <typename I>
+int Operations<I>::metadata_remove(const std::string &key) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  {
+    RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+    C_SaferCond metadata_ctx;
+
+    if (m_image_ctx.exclusive_lock != nullptr &&
+        !m_image_ctx.exclusive_lock->is_lock_owner()) {
+      C_SaferCond lock_ctx;
+
+      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      r = lock_ctx.wait();
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    execute_metadata_remove(key, &metadata_ctx);
+    r = metadata_ctx.wait();
+  }
+
+  return r;
+}
+
+template <typename I>
+void Operations<I>::execute_metadata_remove(const std::string &key,
+                                           Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
+
+  operation::MetadataRemoveRequest<I> *request =
+    new operation::MetadataRemoveRequest<I>(m_image_ctx, on_finish, key);
+  request->send();
 }
 
 template <typename I>

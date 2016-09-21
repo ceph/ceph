@@ -247,6 +247,39 @@ void UpdateFeaturesEvent::dump(Formatter *f) const {
   f->dump_bool("enabled", enabled);
 }
 
+void MetadataSetEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(key, bl);
+  ::encode(value, bl);
+}
+
+void MetadataSetEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(key, it);
+  ::decode(value, it);
+}
+
+void MetadataSetEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_string("key", key);
+  f->dump_string("value", value);
+}
+
+void MetadataRemoveEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(key, bl);
+}
+
+void MetadataRemoveEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(key, it);
+}
+
+void MetadataRemoveEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_string("key", key);
+}
+
 void UnknownEvent::encode(bufferlist& bl) const {
   assert(false);
 }
@@ -320,6 +353,12 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_UPDATE_FEATURES:
     event = UpdateFeaturesEvent();
     break;
+  case EVENT_TYPE_METADATA_SET:
+    event = MetadataSetEvent();
+    break;
+  case EVENT_TYPE_METADATA_REMOVE:
+    event = MetadataRemoveEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -376,6 +415,12 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
 
   o.push_back(new EventEntry(UpdateFeaturesEvent()));
   o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true)));
+
+  o.push_back(new EventEntry(MetadataSetEvent()));
+  o.push_back(new EventEntry(MetadataSetEvent(123, "key", "value")));
+
+  o.push_back(new EventEntry(MetadataRemoveEvent()));
+  o.push_back(new EventEntry(MetadataRemoveEvent(123, "key")));
 }
 
 // Journal Client
@@ -629,6 +674,12 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_UPDATE_FEATURES:
     out << "UpdateFeatures";
+    break;
+  case EVENT_TYPE_METADATA_SET:
+    out << "MetadataSet";
+    break;
+  case EVENT_TYPE_METADATA_REMOVE:
+    out << "MetadataRemove";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";
