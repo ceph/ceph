@@ -1833,15 +1833,18 @@ int RGWFormPost::get_params()
     }
 
     if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+      ldout(s->cct, 20) << "read part header -- part.name="
+                        << part.name << dendl;
+
       for (const auto& pair : part.fields) {
-	ldout(s->cct, 20) << "read part header: partname=" << part.name << dendl;
-	ldout(s->cct, 20) << "name=" << pair.first << dendl;
-	ldout(s->cct, 20) << "val=" << pair.second.val << dendl;
-	ldout(s->cct, 20) << "params:" << dendl;
+        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
+        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
+        ldout(s->cct, 20) << "field.params:" << dendl;
+
         for (const auto& param_pair : pair.second.params) {
-	  ldout(s->cct, 20) << " " << param_pair.first
+          ldout(s->cct, 20) << " " << param_pair.first
                             << " -> " << param_pair.second << dendl;
-	}
+        }
       }
     }
 
