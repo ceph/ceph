@@ -552,6 +552,65 @@ namespace buffer CEPH_BUFFER_API {
       return contiguous_appender(this, len);
     }
 
+    class page_aligned_appender {
+      bufferlist *pbl;
+      size_t offset;
+      unsigned min_alloc;
+      ptr buffer;
+      char *pos, *end;
+
+      page_aligned_appender(list *l, unsigned min_pages)
+	: pbl(l),
+	  min_alloc(min_pages * CEPH_PAGE_SIZE),
+	  pos(nullptr), end(nullptr) {}
+
+      friend class list;
+
+    public:
+      ~page_aligned_appender() {
+	flush();
+      }
+
+      void flush() {
+	if (pos && pos != buffer.c_str()) {
+	  size_t len = pos - buffer.c_str();
+	  pbl->append(buffer, 0, len);
+	  buffer.set_length(buffer.length() - len);
+	  buffer.set_offset(buffer.offset() + len);
+	}
+      }
+
+      void append(const char *buf, size_t len) {
+	while (len > 0) {
+	  if (!pos) {
+	    size_t alloc = (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK;
+	    if (alloc < min_alloc) {
+	      alloc = min_alloc;
+	    }
+	    buffer = create_page_aligned(alloc);
+	    pos = buffer.c_str();
+	    end = buffer.end_c_str();
+	  }
+	  size_t l = len;
+	  if (l > (size_t)(end - pos)) {
+	    l = end - pos;
+	  }
+	  memcpy(pos, buf, l);
+	  pos += l;
+	  buf += l;
+	  len -= l;
+	  if (pos == end) {
+	    pbl->append(buffer, 0, buffer.length());
+	    pos = end = nullptr;
+	  }
+	}
+      }
+    };
+
+    page_aligned_appender get_page_aligned_appender(unsigned min_pages=1) {
+      return page_aligned_appender(this, min_pages);
+    }
+
   private:
     mutable iterator last_p;
     int zero_copy_to_fd(int fd) const;
