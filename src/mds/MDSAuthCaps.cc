@@ -200,6 +200,17 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 
     if (i->match.match(inode_path, caller_uid, caller_gid, caller_gid_list) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
+      // we have a match; narrow down GIDs to those specifically allowed here
+      vector<uint64_t> gids;
+      if (std::find(i->match.gids.begin(), i->match.gids.end(), caller_gid) !=
+	  i->match.gids.end()) {
+	gids.push_back(caller_gid);
+      }
+      if (caller_gid_list) {
+	std::set_intersection(i->match.gids.begin(), i->match.gids.end(),
+			      caller_gid_list->begin(), caller_gid_list->end(),
+			      std::back_inserter(gids));
+      }
 
       // Spec is non-allowing if caller asked for set pool but spec forbids it
       if (mask & MAY_SET_POOL) {
@@ -223,8 +234,8 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
       if (mask & MAY_CHGRP) {
 	// you can only chgrp *to* one of your groups... if you own the file.
 	if (inode_uid != caller_uid ||
-	    std::find(i->match.gids.begin(), i->match.gids.end(), new_gid) ==
-	    i->match.gids.end()) {
+	    std::find(gids.begin(), gids.end(), new_gid) ==
+	    gids.end()) {
 	  continue;
 	}
       }
@@ -235,8 +246,8 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
           return true;
         }
-      } else if (std::find(i->match.gids.begin(), i->match.gids.end(),
-			   inode_gid) != i->match.gids.end()) {
+      } else if (std::find(gids.begin(), gids.end(),
+			   inode_gid) != gids.end()) {
         if ((!(mask & MAY_READ) || (inode_mode & S_IRGRP)) &&
 	    (!(mask & MAY_WRITE) || (inode_mode & S_IWGRP)) &&
 	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXGRP))) {
