@@ -214,27 +214,24 @@ static void get_coll_key_range(const coll_t& cid, int bits,
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
     _key_encode_shard(pgid.shard, start);
-    *end = *start;
     *temp_start = *start;
-    *temp_end = *start;
 
     _key_encode_u64(pgid.pool() + 0x8000000000000000ull, start);
     _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_start);
-    _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), start);
-    _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), temp_start);
 
-    _key_encode_u64(pgid.pool() + 0x8000000000000000ull, end);
-    _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_end);
+    *end = *start;
+    *temp_end = *temp_start;
 
-    uint64_t end_hash =
-      hobject_t::_reverse_bits(pgid.ps()) + (1ull << (32-bits));
-    if (end_hash <= 0xffffffffull) {
-      _key_encode_u32(end_hash, end);
-      _key_encode_u32(end_hash, temp_end);
-    } else {
-      _key_encode_u32(0xffffffff, end);
-      _key_encode_u32(0xffffffff, temp_end);
-    }
+    uint32_t reverse_hash = hobject_t::_reverse_bits(pgid.ps());
+    _key_encode_u32(reverse_hash, start);
+    _key_encode_u32(reverse_hash, temp_start);
+
+    uint64_t end_hash = reverse_hash  + (1ull << (32 - bits));
+    if (end_hash > 0xffffffffull)
+      end_hash = 0xffffffffull;
+
+    _key_encode_u32(end_hash, end);
+    _key_encode_u32(end_hash, temp_end);
   } else {
     _key_encode_shard(shard_id_t::NO_SHARD, start);
     _key_encode_u64(-1ull + 0x8000000000000000ull, start);
