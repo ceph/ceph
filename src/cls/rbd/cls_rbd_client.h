@@ -153,8 +153,12 @@ namespace librbd {
                              const std::string &start, uint64_t max_return);
     int metadata_list_finish(bufferlist::iterator *it,
                              std::map<std::string, bufferlist> *pairs);
+    void metadata_set(librados::ObjectWriteOperation *op,
+                      const map<std::string, bufferlist> &data);
     int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
                      const map<std::string, bufferlist> &data);
+    void metadata_remove(librados::ObjectWriteOperation *op,
+                         const std::string &key);
     int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
                         const std::string &key);
     int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
