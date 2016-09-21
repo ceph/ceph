@@ -2965,8 +2965,25 @@ void MDSMonitor::tick()
     do_propose |= maybe_expand_cluster(i.second);
   }
 
+  const auto now = ceph_clock_now(g_ceph_context);
+  if (last_tick.is_zero()) {
+    last_tick = now;
+  }
+
+  if (now - last_tick > (g_conf->mds_beacon_grace - g_conf->mds_beacon_interval)) {
+    // This case handles either local slowness (calls being delayed
+    // for whatever reason) or cluster election slowness (a long gap
+    // between calls while an election happened)
+    dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
+            "(slow election?) of " << now - last_tick << " seconds" << dendl;
+    for (auto &i : last_beacon) {
+      i.second.stamp = now;
+    }
+  }
+
+  last_tick = now;
+
   // check beacon timestamps
-  utime_t now = ceph_clock_now(g_ceph_context);
   utime_t cutoff = now;
   cutoff -= g_conf->mds_beacon_grace;
 
@@ -2974,7 +2991,7 @@ void MDSMonitor::tick()
   for (const auto &p : pending_fsmap.mds_roles) {
     auto &gid = p.first;
     if (last_beacon.count(gid) == 0) {
-      last_beacon[gid].stamp = ceph_clock_now(g_ceph_context);
+      last_beacon[gid].stamp = now;
       last_beacon[gid].seq = 0;
     }
   }
@@ -3054,5 +3071,12 @@ MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
         "mds remove_data_pool"));
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds rm_data_pool"));
+}
+
+void MDSMonitor::on_restart()
+{
+  // Clear out the leader-specific state.
+  last_tick = utime_t();
+  last_beacon.clear();
 }
 
