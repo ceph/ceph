@@ -3288,7 +3288,8 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
     return r;
   }
 
-  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+  if ((mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLING) &&
+      (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_CREATING)) {
     return -EBUSY;
   }
 
