@@ -7,6 +7,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/image/SetFlagsRequest.h"
@@ -21,6 +22,7 @@
 namespace librbd {
 namespace operation {
 
+using util::create_async_context_callback;
 using util::create_context_callback;
 using util::create_rados_ack_callback;
 
@@ -40,7 +42,7 @@ void EnableFeaturesRequest<I>::send_op() {
 
   ldout(cct, 20) << this << " " << __func__ << ": features=" << m_features
 		 << dendl;
-  send_block_writes();
+  send_prepare_lock();
 }
 
 template <typename I>
@@ -56,11 +58,39 @@ bool EnableFeaturesRequest<I>::should_complete(int r) {
 }
 
 template <typename I>
+void EnableFeaturesRequest<I>::send_prepare_lock() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  image_ctx.state->prepare_lock(create_async_context_callback(
+    image_ctx, create_context_callback<
+    EnableFeaturesRequest<I>,
+    &EnableFeaturesRequest<I>::handle_prepare_lock>(this)));
+}
+
+template <typename I>
+Context *EnableFeaturesRequest<I>::handle_prepare_lock(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to lock image: " << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
+  }
+
+  send_block_writes();
+  return nullptr;
+}
+
+template <typename I>
 void EnableFeaturesRequest<I>::send_block_writes() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  RWLock::WLocker locker(image_ctx.owner_lock);
   image_ctx.aio_work_queue->block_writes(create_context_callback<
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_block_writes>(this));
@@ -74,9 +104,9 @@ Context *EnableFeaturesRequest<I>::handle_block_writes(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
-    image_ctx.aio_work_queue->unblock_writes();
-    return this->create_context_finisher(*result);
+    return handle_finish(*result);
   }
+  m_writes_blocked = true;
 
   send_get_mirror_mode();
   return nullptr;
@@ -437,8 +467,11 @@ Context *EnableFeaturesRequest<I>::handle_finish(int r) {
     if (image_ctx.exclusive_lock != nullptr && m_requests_blocked) {
       image_ctx.exclusive_lock->unblock_requests();
     }
-    image_ctx.aio_work_queue->unblock_writes();
+    if (m_writes_blocked) {
+      image_ctx.aio_work_queue->unblock_writes();
+    }
   }
+  image_ctx.state->handle_prepare_lock_complete();
 
   return this->create_context_finisher(r);
 }

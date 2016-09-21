@@ -190,6 +190,18 @@ public:
     librados::IoCtx &m_ioctx;
   };
 
+  void expect_prepare_lock(MockOperationImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.state, prepare_lock(_))
+      .WillOnce(Invoke([](Context *on_ready) {
+	    on_ready->complete(0);
+	  }));
+    expect_op_work_queue(mock_image_ctx);
+  }
+
+  void expect_handle_prepare_lock_complete(MockOperationImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.state, handle_prepare_lock_complete());
+  }
+
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
@@ -297,6 +309,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
   MockRemoveObjectMapRequest mock_remove_object_map_request;
 
   ::testing::InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
   expect_block_writes(mock_image_ctx);
   if (mock_image_ctx.journal != nullptr) {
     expect_is_journal_replaying(*mock_image_ctx.journal);
@@ -324,6 +337,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
   }
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
@@ -354,6 +368,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMap) {
   MockRemoveObjectMapRequest mock_remove_object_map_request;
 
   ::testing::InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
   expect_block_writes(mock_image_ctx);
   if (mock_image_ctx.journal != nullptr) {
     expect_is_journal_replaying(*mock_image_ctx.journal);
@@ -367,6 +382,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMap) {
   expect_notify_update(mock_image_ctx);
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, 0);
 
   C_SaferCond cond_ctx;
@@ -399,6 +415,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMapError) {
   MockRemoveObjectMapRequest mock_remove_object_map_request;
 
   ::testing::InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
   expect_block_writes(mock_image_ctx);
   if (mock_image_ctx.journal != nullptr) {
     expect_is_journal_replaying(*mock_image_ctx.journal);
@@ -409,6 +426,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMapError) {
                                         mock_remove_object_map_request, -EINVAL);
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
 
   C_SaferCond cond_ctx;
@@ -441,6 +459,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, Mirroring) {
   MockDisableMirrorRequest mock_disable_mirror_request;
 
   ::testing::InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
   expect_block_writes(mock_image_ctx);
   expect_is_journal_replaying(*mock_image_ctx.journal);
   expect_block_requests(mock_image_ctx);
@@ -454,6 +473,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, Mirroring) {
   expect_set_journal_policy(mock_image_ctx);
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
@@ -484,6 +504,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, MirroringError) {
   MockDisableMirrorRequest mock_disable_mirror_request;
 
   ::testing::InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
   expect_block_writes(mock_image_ctx);
   expect_is_journal_replaying(*mock_image_ctx.journal);
   expect_block_requests(mock_image_ctx);
@@ -497,6 +518,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, MirroringError) {
   expect_set_journal_policy(mock_image_ctx);
   expect_unblock_requests(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(

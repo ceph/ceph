@@ -46,6 +46,9 @@ private:
    * <start>
    *    |
    *    v
+   * STATE_PREPARE_LOCK
+   *    |
+   *    v
    * STATE_BLOCK_WRITES
    *    |
    *    v
@@ -83,12 +86,16 @@ private:
 
   bool m_enable_mirroring = false;
   bool m_requests_blocked = false;
+  bool m_writes_blocked = false;
 
   uint64_t m_new_features = 0;
   uint64_t m_enable_flags = 0;
   uint64_t m_features_mask = 0;
 
   bufferlist m_out_bl;
+
+  void send_prepare_lock();
+  Context *handle_prepare_lock(int *result);
 
   void send_block_writes();
   Context *handle_block_writes(int *result);
