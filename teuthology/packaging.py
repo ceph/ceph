@@ -644,6 +644,21 @@ class GitbuilderProject(object):
 
         :returns: A string URI. Ex: ref/master
         """
+        ref_name, ref_val = self._choose_reference().items()[0]
+        if ref_name == 'sha1':
+            return 'sha1/%s' % ref_val
+        else:
+            return 'ref/%s' % ref_val
+
+    def _choose_reference(self):
+        """
+        Since it's only meaningful to search for one of:
+            ref, tag, branch, sha1
+        Decide which to use.
+
+        :returns: a single-key dict containing the name and value of the
+                  reference to use, e.g. {'branch': 'master'}
+        """
         tag = branch = sha1 = None
         if self.remote:
             tag = _get_config_value_for_remote(self.ctx, self.remote,
@@ -665,28 +680,28 @@ class GitbuilderProject(object):
             # filter(None,) filters for truth
             if len(filter(None, vars)) > 1:
                 log.warning(
-                    'More than one of ref, tag, branch, or sha1 supplied; using %s',
-                     attrname
+                    "More than one of ref, tag, branch, or sha1 supplied; "
+                    "using %s",
+                    attrname
                 )
                 for n, v in zip(names, vars):
                     log.info('%s: %s' % (n, v))
 
         if ref:
-            uri = 'ref/' + ref
             warn('ref')
+            return dict(ref=ref)
         elif tag:
-            uri = 'ref/' + tag
             warn('tag')
+            return dict(tag=tag)
         elif branch:
-            uri = 'ref/' + branch
             warn('branch')
+            return dict(branch=branch)
         elif sha1:
-            uri = 'sha1/' + sha1
             warn('sha1')
+            return dict(sha1=sha1)
         else:
             log.warning("defaulting to master branch")
-            uri = getattr(self, 'ref', 'ref/master')
-        return uri
+            return dict(branch='master')
 
     def _get_base_url(self):
         """

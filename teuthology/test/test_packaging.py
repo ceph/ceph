@@ -386,18 +386,18 @@ class TestBuilderProject(object):
         assert expected_log in caplog.text()
 
     REFERENCE_MATRIX = [
-        ('the_ref', 'the_tag', 'the_branch', 'the_sha1', 'ref/the_ref'),
-        (None, 'the_tag', 'the_branch', 'the_sha1', 'ref/the_tag'),
-        (None, None, 'the_branch', 'the_sha1', 'ref/the_branch'),
-        (None, None, None, 'the_sha1', 'sha1/the_sha1'),
-        (None, None, 'the_branch', None, 'ref/the_branch'),
+        ('the_ref', 'the_tag', 'the_branch', 'the_sha1', dict(ref='the_ref')),
+        (None, 'the_tag', 'the_branch', 'the_sha1', dict(tag='the_tag')),
+        (None, None, 'the_branch', 'the_sha1', dict(branch='the_branch')),
+        (None, None, None, 'the_sha1', dict(sha1='the_sha1')),
+        (None, None, 'the_branch', None, dict(branch='the_branch')),
     ]
 
     @pytest.mark.parametrize(
         "ref, tag, branch, sha1, expected",
         REFERENCE_MATRIX,
     )
-    def test_uri_reference(self, ref, tag, branch, sha1, expected):
+    def test_choose_reference(self, ref, tag, branch, sha1, expected):
         config = dict(
             os_type='ubuntu',
             os_version='16.04',
@@ -411,7 +411,7 @@ class TestBuilderProject(object):
         if sha1:
             config['sha1'] = sha1
         gp = self.klass("ceph", config)
-        assert gp.uri_reference == expected
+        assert gp._choose_reference() == expected
 
     def test_get_package_version_found(self):
         rem = self._get_remote()
