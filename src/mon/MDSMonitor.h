@@ -55,6 +55,7 @@ class MDSMonitor : public PaxosService {
   bool should_propose(double& delay);
 
   void on_active();
+  void on_restart();
 
   void check_subs();
   void check_sub(Subscription *sub);
@@ -153,6 +154,11 @@ class MDSMonitor : public PaxosService {
 
   int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
   mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
+
+  // When did the mon last call into our tick() method?  Used for detecting
+  // when the mon was not updating us for some period (e.g. during slow
+  // election) to reset last_beacon timeouts
+  utime_t last_tick;
 };
 
 #endif
