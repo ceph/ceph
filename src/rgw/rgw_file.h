@@ -1812,6 +1812,10 @@ public:
     return (iter != attrs.end()) ? &(iter->second) : nullptr;
   }
 
+  real_time get_ctime() const {
+    return bucket.creation_time;
+  }
+
   virtual bool only_bucket() { return false; }
 
   virtual int op_init() {
@@ -1842,10 +1846,6 @@ public:
     s->user = user;
 
     return 0;
-  }
-
-  real_time get_ctime() const {
-    return bucket.creation_time;
   }
 
   virtual int get_params() {
