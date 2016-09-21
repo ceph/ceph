@@ -385,6 +385,34 @@ class TestBuilderProject(object):
         expected_log = 'More than one of ref, tag, branch, or sha1 supplied; using tag'
         assert expected_log in caplog.text()
 
+    REFERENCE_MATRIX = [
+        ('the_ref', 'the_tag', 'the_branch', 'the_sha1', 'ref/the_ref'),
+        (None, 'the_tag', 'the_branch', 'the_sha1', 'ref/the_tag'),
+        (None, None, 'the_branch', 'the_sha1', 'ref/the_branch'),
+        (None, None, None, 'the_sha1', 'sha1/the_sha1'),
+        (None, None, 'the_branch', None, 'ref/the_branch'),
+    ]
+
+    @pytest.mark.parametrize(
+        "ref, tag, branch, sha1, expected",
+        REFERENCE_MATRIX,
+    )
+    def test_uri_reference(self, ref, tag, branch, sha1, expected):
+        config = dict(
+            os_type='ubuntu',
+            os_version='16.04',
+        )
+        if ref:
+            config['ref'] = ref
+        if tag:
+            config['tag'] = tag
+        if branch:
+            config['branch'] = branch
+        if sha1:
+            config['sha1'] = sha1
+        gp = self.klass("ceph", config)
+        assert gp.uri_reference == expected
+
     def test_get_package_version_found(self):
         rem = self._get_remote()
         ctx = dict(foo="bar")
