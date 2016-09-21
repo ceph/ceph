@@ -615,6 +615,13 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   }
 }
 
+void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
+                                                         const string &start,
+                                                         const string &end)
+{
+  bat.DeleteRange(combine_strings(prefix, start), combine_strings(prefix, end));
+}
+
 void RocksDBStore::RocksDBTransactionImpl::merge(
   const string &prefix,
   const string &k,

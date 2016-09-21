@@ -237,8 +237,20 @@ void LevelDBStore::LevelDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   for (it->seek_to_first();
        it->valid();
        it->next()) {
-    string key = combine_strings(prefix, it->key());
-    bat.Delete(key);
+    bat.Delete(leveldb::Slice(combine_strings(prefix, it->key())));
+  }
+}
+
+void LevelDBStore::LevelDBTransactionImpl::rm_range_keys(const string &prefix, const string &start, const string &end)
+{
+  KeyValueDB::Iterator it = db->get_iterator(prefix);
+  it->lower_bound(start);
+  while (it->valid()) {
+    if (it->key() >= end) {
+      break;
+    }
+    bat.Delete(combine_strings(prefix, it->key()));
+    it->next();
   }
 }
 
