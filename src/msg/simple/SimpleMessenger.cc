@@ -39,7 +39,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  */
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
-				 string mname, uint64_t _nonce, uint64_t features)
+                                  string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
     dispatch_queue(cct, this, mname),
@@ -106,12 +106,12 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest)
   m->set_cct(cct);
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
- 
+
   ldout(cct,1) <<"--> " << dest.name << " "
           << dest.addr << " -- " << *m
-    	  << " -- ?+" << m->get_data().length()
-	  << " " << m 
-	  << dendl;
+          << " -- ?+" << m->get_data().length()
+          << " " << m
+          << dendl;
 
   if (dest.addr == entity_addr_t()) {
     ldout(cct,0) << "send_message message " << *m
@@ -142,7 +142,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
       << dendl;
 
   submit_message(m, static_cast<PipeConnection*>(con),
-		 con->get_peer_addr(), con->get_peer_type(), false);
+                 con->get_peer_addr(), con->get_peer_type(), false);
   return 0;
 }
 
@@ -349,18 +349,18 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
  * NOTE: assumes messenger.lock held.
  */
 Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
-				    int type,
-				    PipeConnection *con,
-				    Message *first)
+                                    int type,
+                                    PipeConnection *con,
+                                    Message *first)
 {
   assert(lock.is_locked());
   assert(addr != my_inst.addr);
-  
+
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
-  
+
   // create pipe
   Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING,
-			static_cast<PipeConnection*>(con));
+                        static_cast<PipeConnection*>(con));
   pipe->pipe_lock.Lock();
   pipe->set_peer_type(type);
   pipe->set_peer_addr(addr);
@@ -386,8 +386,8 @@ AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
 }
 
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
-					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-					bool& isvalid,CryptoKey& session_key)
+                                        int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+                                        bool& isvalid,CryptoKey& session_key)
 {
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid,session_key);
 }
@@ -422,8 +422,8 @@ ConnectionRef SimpleMessenger::get_loopback_connection()
 }
 
 void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
-				     const entity_addr_t& dest_addr, int dest_type,
-				     bool already_locked)
+                                     const entity_addr_t& dest_addr, int dest_type,
+                                     bool already_locked)
 {
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
@@ -443,7 +443,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
     bool ok = static_cast<PipeConnection*>(con)->try_get_pipe(&pipe);
     if (!ok) {
       ldout(cct,0) << "submit_message " << *m << " remote, " << dest_addr
-		   << ", failed lossy con, dropping message " << m << dendl;
+                   << ", failed lossy con, dropping message " << m << dendl;
       m->put();
       return;
     }
@@ -451,25 +451,25 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
       // we loop in case of a racing reconnect, either from us or them
       pipe->pipe_lock.Lock(); // can't use a Locker because of the Pipe ref
       if (pipe->state != Pipe::STATE_CLOSED) {
-	ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-	pipe->_send(m);
-	pipe->pipe_lock.Unlock();
-	pipe->put();
-	return;
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
+        pipe->_send(m);
+        pipe->pipe_lock.Unlock();
+        pipe->put();
+        return;
       }
       Pipe *current_pipe;
       ok = con->try_get_pipe(&current_pipe);
       pipe->pipe_lock.Unlock();
       if (current_pipe == pipe) {
-	ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
-		      << ", had pipe " << pipe << ", but it closed." << dendl;
-	pipe->put();
-	current_pipe->put();
-	m->put();
-	return;
+        ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
+                      << ", had pipe " << pipe << ", but it closed." << dendl;
+        pipe->put();
+        current_pipe->put();
+        m->put();
+        return;
       } else {
-	pipe->put();
-	pipe = current_pipe;
+        pipe->put();
+        pipe = current_pipe;
       }
     }
   }
@@ -487,7 +487,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
   const Policy& policy = get_policy(dest_type);
   if (policy.server) {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
-		  << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
+                  << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
     m->put();
   } else {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
@@ -638,7 +638,7 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
       // not Connection* based) interface
       PipeConnectionRef con = p->connection_state;
       if (con && con->clear_pipe(p))
-	dispatch_queue.queue_reset(con.get());
+        dispatch_queue.queue_reset(con.get());
     }
     p->pipe_lock.Unlock();
   } else {
