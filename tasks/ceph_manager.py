@@ -1926,6 +1926,21 @@ class CephManager:
                      'doing powercycle of {s}'.format(o=osd, s=remote.name))
             self._assert_ipmi(remote)
             remote.console.power_off()
+        elif self.config.get('bdev_inject_crash') and self.config.get('bdev_inject_crash_probability'):
+            if random.uniform(0, 1) < self.config.get('bdev_inject_crash_probability', .5):
+                self.raw_cluster_cmd(
+                    '--', 'tell', 'osd.%d' % osd,
+                    'injectargs',
+                    '--bdev-inject-crash %d' % self.config.get('bdev_inject_crash'),
+                )
+                try:
+                    self.ctx.daemons.get_daemon('osd', osd, self.cluster).wait()
+                except:
+                    pass
+                else:
+                    raise RuntimeError('osd.%s did not fail' % osd)
+            else:
+                self.ctx.daemons.get_daemon('osd', osd, self.cluster).stop()
         else:
             self.ctx.daemons.get_daemon('osd', osd, self.cluster).stop()
 
