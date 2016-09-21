@@ -3401,8 +3401,9 @@ void RGWPostObj::execute()
     policy.encode(aclbl);
     emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-    if (content_type.size()) {
-      bufferlist ct_bl;
+    const std::string content_type = get_current_content_type();
+    if (! content_type.empty()) {
+      ceph::bufferlist ct_bl;
       ct_bl.append(content_type.c_str(), content_type.size() + 1);
       emplace_attr(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
     }
