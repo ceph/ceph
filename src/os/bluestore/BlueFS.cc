@@ -1279,14 +1279,26 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
 	     << log_seq_stable << ", done" << dendl;
     return 0;
   }
-  if (log_t.empty()) {
+  if (log_t.empty() && dirty_files.empty()) {
     dout(10) << __func__ << " want_seq " << want_seq
-	     << " " << log_t << " not dirty, no-op" << dendl;
+	     << " " << log_t << " not dirty, dirty_files empty, no-op" << dendl;
     return 0;
   }
+
   uint64_t seq = log_t.seq = ++log_seq;
   assert(want_seq == 0 || want_seq <= seq);
   log_t.uuid = super.uuid;
+
+  // log dirty files
+  auto lsi = dirty_files.find(seq);
+  if (lsi != dirty_files.end()) {
+    dout(20) << __func__ << " " << lsi->second.size() << " dirty_files" << dendl;
+    for (auto &f : lsi->second) {
+      dout(20) << __func__ << "   op_file_update " << f.fnode << dendl;
+      log_t.op_file_update(f.fnode);
+    }
+  }
+
   dout(10) << __func__ << " " << log_t << dendl;
   assert(!log_t.empty());
 
@@ -1432,7 +1444,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   if (must_dirty) {
     h->file->fnode.mtime = ceph_clock_now(NULL);
     assert(h->file->fnode.ino >= 1);
-    log_t.op_file_update(h->file->fnode);
     if (h->file->dirty_seq == 0) {
       h->file->dirty_seq = log_seq + 1;
       dirty_files[h->file->dirty_seq].push_back(*h->file);
