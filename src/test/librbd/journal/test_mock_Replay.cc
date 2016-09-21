@@ -155,9 +155,9 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _,
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, _,
                                                                 op_tid, false))
-                  .WillOnce(DoAll(SaveArg<1>(on_finish),
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
@@ -557,7 +557,8 @@ TEST_F(TestMockJournalReplay, BlockedOpFinishError) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap",
+								 cls::rbd::UserSnapshotNamespace())},
                &on_start_ready, &on_start_safe);
 
   C_SaferCond on_resume;
@@ -603,7 +604,8 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 
   C_SaferCond on_snap_create_ready;
   C_SaferCond on_snap_create_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap",
+							       cls::rbd::UserSnapshotNamespace())},
                &on_snap_create_ready, &on_snap_create_safe);
 
   C_SaferCond on_shut_down;
@@ -644,7 +646,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 
   C_SaferCond on_snap_create_ready;
   C_SaferCond on_snap_create_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
                &on_snap_create_ready, &on_snap_create_safe);
 
   C_SaferCond on_resume;
@@ -729,7 +731,7 @@ TEST_F(TestMockJournalReplay, SnapCreateEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
                &on_start_ready, &on_start_safe);
 
   C_SaferCond on_resume;
@@ -766,7 +768,7 @@ TEST_F(TestMockJournalReplay, SnapCreateEventExists) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap")},
+  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
                &on_start_ready, &on_start_safe);
 
   wait_for_op_invoked(&on_finish, -EEXIST);

@@ -458,6 +458,18 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
+  int ImageCtx::get_snap_namespace(snap_t in_snap_id,
+				   cls::rbd::SnapshotNamespace *out_snap_namespace) const
+  {
+    assert(snap_lock.is_locked());
+    const SnapInfo *info = get_snap_info(in_snap_id);
+    if (info) {
+      *out_snap_namespace = info->snap_namespace;
+      return 0;
+    }
+    return -ENOENT;
+  }
+
   int ImageCtx::get_parent_spec(snap_t in_snap_id,
 				parent_spec *out_pspec) const
   {
@@ -527,13 +539,16 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
+  void ImageCtx::add_snap(string in_snap_name,
+			  cls::rbd::SnapshotNamespace in_snap_namespace,
+			  snap_t id, uint64_t in_size,
 			  parent_info parent, uint8_t protection_status,
                           uint64_t flags)
   {
     assert(snap_lock.is_wlocked());
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, parent, protection_status, flags);
+    SnapInfo info(in_snap_name, in_snap_namespace,
+		  in_size, parent, protection_status, flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
