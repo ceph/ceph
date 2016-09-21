@@ -792,6 +792,9 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
                                        const off_t end_ofs)
 {
   ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
+  RGWGetObj_CB cb(this);
+  RGWGetDataCB* filter = &cb;
+  boost::optional<RGWGetObj_Decompress> decompress;
 
   int64_t cur_ofs = start_ofs;
   int64_t cur_end = end_ofs;
@@ -824,11 +827,31 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   op_ret = read_op.range_to_ofs(obj_size, cur_ofs, cur_end);
   if (op_ret < 0)
     return op_ret;
+  bool need_decompress;
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
+  if (op_ret < 0) {
+	  lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
+      return -EIO;
+  }
 
-  if (obj_size != ent.size) {
-    // hmm.. something wrong, object not as expected, abort!
-    ldout(s->cct, 0) << "ERROR: expected obj_size=" << obj_size << ", actual read size=" << ent.size << dendl;
-    return -EIO;
+  if (need_decompress)
+  {
+    if (cs_info.orig_size != ent.size) {
+      // hmm.. something wrong, object not as expected, abort!
+      ldout(s->cct, 0) << "ERROR: expected cs_info.orig_size=" << cs_info.orig_size <<
+          ", actual read size=" << ent.size << dendl;
+      return -EIO;
+    }
+    decompress = boost::in_place(s->cct, &cs_info, partial_content, filter);
+    filter = &*decompress;
+  }
+  else
+  {
+    if (obj_size != ent.size) {
+      // hmm.. something wrong, object not as expected, abort!
+      ldout(s->cct, 0) << "ERROR: expected obj_size=" << obj_size << ", actual read size=" << ent.size << dendl;
+      return -EIO;
+	  }
   }
 
   op_ret = rgw_policy_from_attrset(s->cct, attrs, &obj_policy);
@@ -847,29 +870,11 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   }
 
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
-  while (cur_ofs <= cur_end) {
-    bufferlist bl;
-    op_ret = read_op.read(cur_ofs, cur_end, bl);
-    if (op_ret < 0)
-      return op_ret;
-
-    off_t len = bl.length();
-    cur_ofs += len;
-    if (!len) {
-        ldout(s->cct, 0) << "ERROR: read 0 bytes; ofs=" << cur_ofs
-	    << " end=" << cur_end << " from obj=" << ent.key.name
-	    << "[" << ent.key.instance << "]" << dendl;
-        return -EIO;
-    }
-    op_ret = 0; /* XXX redundant? */
-    perfcounter->tinc(l_rgw_get_lat,
-                      (ceph_clock_now(s->cct) - start_time));
-    send_response_data(bl, 0, len);
-
-    start_time = ceph_clock_now(s->cct);
-  }
-
-  return 0;
+  filter->fixup_range(cur_ofs, cur_end);
+  op_ret = read_op.iterate(cur_ofs, cur_end, filter);
+  if (op_ret >= 0)
+	  op_ret = filter->flush();
+  return op_ret;
 }
 
 static int iterate_user_manifest_parts(CephContext * const cct,
@@ -4949,7 +4954,6 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
-
   op_ret = obj_op.write_meta(ofs, attrs);
   if (op_ret < 0)
     return;
