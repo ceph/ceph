@@ -773,6 +773,17 @@ class ShamanProject(GitbuilderProject):
         return self._result_obj
 
     def _search(self):
+        uri = self._search_uri
+        log.debug("Querying %s", uri)
+        resp = requests.get(
+            uri,
+            headers={'content-type': 'application/json'},
+        )
+        resp.raise_for_status()
+        return resp
+
+    @property
+    def _search_uri(self):
         flavor = self.flavor
         if flavor == 'basic':
             flavor = 'default'
@@ -790,13 +801,7 @@ class ShamanProject(GitbuilderProject):
             self.query_url,
             'search',
         ) + '?%s' % req_str
-        log.debug("Querying %s", uri)
-        resp = requests.get(
-            uri,
-            headers={'content-type': 'application/json'},
-        )
-        resp.raise_for_status()
-        return resp
+        return uri
 
     def assert_result(self):
         if len(self._result.json()) == 0:
