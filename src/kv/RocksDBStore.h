@@ -273,6 +273,10 @@ public:
     void rmkeys_by_prefix(
       const string &prefix
       ) override;
+    void rm_range_keys(
+      const string &prefix,
+      const string &start,
+      const string &end) override;
     void merge(
       const string& prefix,
       const string& k,
