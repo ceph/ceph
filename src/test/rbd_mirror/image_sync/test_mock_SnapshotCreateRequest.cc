@@ -80,11 +80,11 @@ public:
 
   void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, 0, true))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, _, 0, true))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
                                     inject_snap(mock_image_ctx, snap_id, snap_name);
                                   }),
-                                  WithArg<1>(Invoke([this, r](Context *ctx) {
+                                  WithArg<2>(Invoke([this, r](Context *ctx) {
                                     m_threads->work_queue->queue(ctx, r);
                                   }))));
   }
@@ -105,11 +105,12 @@ public:
 
   MockSnapshotCreateRequest *create_request(librbd::MockTestImageCtx &mock_local_image_ctx,
                                             const std::string &snap_name,
+					    const cls::rbd::SnapshotNamespace &snap_namespace,
                                             uint64_t size,
                                             const librbd::parent_spec &spec,
                                             uint64_t parent_overlap,
                                             Context *on_finish) {
-    return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, size,
+    return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, snap_namespace, size,
                                          spec, parent_overlap, on_finish);
   }
 
@@ -126,7 +127,9 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, Resize) {
 
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
-                                                      "snap1", 123, {}, 0,
+                                                      "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
+						      123, {}, 0,
                                                       &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -140,7 +143,9 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeError) {
 
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
-                                                      "snap1", 123, {}, 0,
+                                                      "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
+						      123, {}, 0,
                                                       &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -158,6 +163,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParent) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {}, 0, &ctx);
   request->send();
@@ -174,6 +180,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParentError) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {}, 0, &ctx);
   request->send();
@@ -193,6 +200,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveSetParent) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {123, "test", 0}, 0,
                                                       &ctx);
@@ -211,6 +219,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentSpec) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {123, "test", 0}, 0,
                                                       &ctx);
@@ -230,6 +239,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentOverlap) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       mock_local_image_ctx.parent_md.spec,
                                                       123, &ctx);
@@ -246,6 +256,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentError) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {123, "test", 0}, 0,
                                                       &ctx);
@@ -263,6 +274,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreate) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {}, 0, &ctx);
   request->send();
@@ -278,6 +290,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreateError) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {}, 0, &ctx);
   request->send();
@@ -295,6 +308,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMap) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {}, 0, &ctx);
   request->send();
@@ -312,6 +326,7 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMapError) {
   C_SaferCond ctx;
   MockSnapshotCreateRequest *request = create_request(mock_local_image_ctx,
                                                       "snap1",
+						      cls::rbd::UserSnapshotNamespace(),
                                                       m_local_image_ctx->size,
                                                       {}, 0, &ctx);
   request->send();
