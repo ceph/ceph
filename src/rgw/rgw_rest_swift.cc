@@ -1847,6 +1847,11 @@ int RGWFormPost::get_params()
     }
   } while (! stream_done);
 
+  if (! current_data_part) {
+    err_msg = "FormPost: no files to process";
+    return -EINVAL;
+  }
+
   if (! is_non_expired()) {
     err_msg = "FormPost: Form Expired";
     return -EACCES;
@@ -1857,7 +1862,7 @@ int RGWFormPost::get_params()
     return -EACCES;
   }
 
-  return ! current_data_part ? -EINVAL : 0;
+  return 0;
 }
 
 std::string RGWFormPost::get_current_filename() const
