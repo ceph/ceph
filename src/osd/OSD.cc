@@ -2144,7 +2144,33 @@ int OSD::init()
     r = -EINVAL;
     goto out;
   }
-  osdmap = get_map(superblock.current_epoch);
+
+  {
+    bool broken_map = false;
+    try {
+      osdmap = service.try_get_map(superblock.current_epoch);
+      if (!osdmap) {
+        throw ceph::buffer::end_of_buffer();
+      }
+    } catch (ceph::buffer::end_of_buffer e) {
+      broken_map = true;
+    } catch (ceph::buffer::malformed_input e) {
+      broken_map = true;
+    }
+    if (broken_map) {
+      derr << "OSD::init: invalid map for superblock's current epoch "
+        << superblock.current_epoch << dendl;
+      derr << "OSD::init: this may be a symptom of a malfunctioning disk or"
+           << " deeper corruption." << dendl;
+      derr << "OSD::init: you can attempt recovering the broken map by setting"
+           << " 'osd_map_recover_broken = true'" << dendl;
+      r = -EIO; // 'fd in bad state' seems to somewhat fit the truth
+      goto out;
+    }
+    assert(osdmap);
+  }
+
+
   check_osdmap_features(store);
 
   create_recoverystate_perf();
@@ -2160,8 +2186,12 @@ int OSD::init()
   try {
     load_pgs();
   } catch (OSD::corrupt_map e) {
-    derr << "OSD::init detected corrupt osdmap at epoch " << e.epoch << dendl;
-    r = -EIO; // 'fd in bad state' - not too far from the truth-ish
+    derr << "OSD::init corrupt map found at epoch " << e.epoch << dendl;
+    derr << "OSD::init you can attempt recovering the broken map by setting"
+         << " 'osd_map_recover_broken = true', but corrupted maps may be a"
+         << " symptom of a malfunctioning disk or other corruption"
+         << dendl;
+    r = -EIO; // 'fd in bad state' seems to somewhat fit the truth
     goto out;
   }
 
@@ -3320,9 +3350,9 @@ void OSD::load_pgs()
 	  continue;
 	} else {
 	  derr << __func__ << ": have pgid " << pgid << " at epoch "
-	       << map_epoch << ", but missing map.  Crashing."
+	       << map_epoch << ", but missing map."
 	       << dendl;
-	  assert(0 == "Missing map in load_pgs");
+          throw OSD::corrupt_map(map_epoch);
 	}
       }
       pg = _open_lock_pg(pgosdmap, pgid);
