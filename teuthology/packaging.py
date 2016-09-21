@@ -792,10 +792,11 @@ class ShamanProject(GitbuilderProject):
         req_obj['project'] = self.project
         req_obj['flavor'] = flavor
         req_obj['distros'] = '%s/%s' % (self.distro, self.arch)
-        if getattr(self, 'branch', None):
-            req_obj['ref'] = self.branch
-        if self.sha1:
-            req_obj['sha1'] = self.sha1
+        ref_name, ref_val = self._choose_reference().items()[0]
+        if ref_name == 'sha1':
+            req_obj['sha1'] = ref_val
+        else:
+            req_obj['ref'] = ref_val
         req_str = urllib.urlencode(req_obj)
         uri = urlparse.urljoin(
             self.query_url,

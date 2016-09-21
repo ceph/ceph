@@ -639,7 +639,7 @@ class TestShamanProject(TestBuilderProject):
                 .test_init_from_remote_base_url(
                     "https://shaman.ceph.com/api/search?status=ready"
                     "&project=ceph&flavor=default"
-                    "&distros=ubuntu%2F14.04%2Fx86_64"
+                    "&distros=ubuntu%2F14.04%2Fx86_64&ref=master"
                 )
 
     def test_init_from_remote_base_url_debian(self):
@@ -657,7 +657,7 @@ class TestShamanProject(TestBuilderProject):
                 .test_init_from_remote_base_url_debian(
                     "https://shaman.ceph.com/api/search?status=ready"
                     "&project=ceph&flavor=default"
-                    "&distros=debian%2F7.1%2Fx86_64"
+                    "&distros=debian%2F7.1%2Fx86_64&ref=master"
                 )
 
     def test_init_from_config_base_url(self):
