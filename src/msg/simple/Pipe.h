@@ -84,20 +84,20 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 
     public:
       explicit DelayedDelivery(Pipe *p)
-	: pipe(p),
-	  delay_lock("Pipe::DelayedDelivery::delay_lock"), flush_count(0),
-	  active_flush(false),
-	  stop_delayed_delivery(false),
-	  delay_dispatching(false),
-	  stop_fast_dispatching_flag(false) { }
+        : pipe(p),
+        delay_lock("Pipe::DelayedDelivery::delay_lock"), flush_count(0),
+        active_flush(false),
+        stop_delayed_delivery(false),
+        delay_dispatching(false),
+        stop_fast_dispatching_flag(false) { }
       ~DelayedDelivery() {
-	discard();
+        discard();
       }
       void *entry();
       void queue(utime_t release, Message *m) {
-	Mutex::Locker l(delay_lock);
-	delay_queue.push_back(make_pair(release, m));
-	delay_cond.Signal();
+        Mutex::Locker l(delay_lock);
+        delay_queue.push_back(make_pair(release, m));
+        delay_cond.Signal();
       }
       void discard();
       void flush();
@@ -111,10 +111,10 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
           delay_cond.Wait(delay_lock);
       }
       void stop() {
-	delay_lock.Lock();
-	stop_delayed_delivery = true;
-	delay_cond.Signal();
-	delay_lock.Unlock();
+        delay_lock.Lock();
+        stop_delayed_delivery = true;
+        delay_cond.Signal();
+        delay_lock.Unlock();
       }
       void steal_for_pipe(Pipe *new_owner) {
         Mutex::Locker l(delay_lock);
@@ -189,7 +189,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     int peer_type;
     entity_addr_t peer_addr;
     Messenger::Policy policy;
-    
+
     Mutex pipe_lock;
     int state;
     atomic_t state_closed; // non-zero iff state = STATE_CLOSED
@@ -217,11 +217,11 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     bool send_keepalive_ack;
     utime_t keepalive_ack_stamp;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
-    
+
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
     uint64_t in_seq, in_seq_acked;
-    
+
     void set_socket_options();
 
     int accept();   // server handshake
@@ -233,7 +233,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     int randomize_out_seq();
 
     int read_message(Message **pm,
-		     AuthSessionHandler *session_security_copy);
+        AuthSessionHandler *session_security_copy);
     int write_message(const ceph_msg_header& h, const ceph_msg_footer& f, bufferlist& body);
     /**
      * Write the given data (of length len) to the Pipe's socket. This function
