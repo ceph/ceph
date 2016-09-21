@@ -110,12 +110,14 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
   uint64_t used_size = 0;
   uint64_t total_prov = 0;
   uint64_t total_used = 0;
+  bool found = false;
   std::sort(names.begin(), names.end());
   for (std::vector<string>::const_iterator name = names.begin();
        name != names.end(); ++name) {
     if (imgname != NULL && *name != imgname) {
       continue;
     }
+    found = true;
 
     librbd::Image image;
     r = rbd.open_read_only(io_ctx, image, name->c_str(), NULL);
@@ -205,6 +207,10 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       total_used += used_size;
       ++count;
     }
+  }
+  if (!found) {
+    std::cerr << "specified image " << imgname << " is not found." << std::endl;
+    return -ENOENT;
   }
 
 out:
