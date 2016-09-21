@@ -7,12 +7,12 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
-#include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/Settings.h"
 #include <boost/intrusive_ptr.hpp>

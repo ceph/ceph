@@ -1,19 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "journal/AsyncOpTracker.h"
-#include "journal/Utils.h"
+#include "common/AsyncOpTracker.h"
 #include "include/assert.h"
-
-namespace journal {
+#include "include/Context.h"
 
 AsyncOpTracker::AsyncOpTracker()
-  : m_lock(utils::unique_lock_name("AsyncOpTracker::m_lock", this)),
-    m_pending_ops(0) {
+  : m_lock("AsyncOpTracker::m_lock", false, false) {
 }
 
 AsyncOpTracker::~AsyncOpTracker() {
-  wait_for_ops();
+  Mutex::Locker locker(m_lock);
+  assert(m_pending_ops == 0);
 }
 
 void AsyncOpTracker::start_op() {
@@ -27,20 +25,12 @@ void AsyncOpTracker::finish_op() {
     Mutex::Locker locker(m_lock);
     assert(m_pending_ops > 0);
     if (--m_pending_ops == 0) {
-      m_cond.Signal();
       std::swap(on_finish, m_on_finish);
     }
   }
 
   if (on_finish != nullptr) {
     on_finish->complete(0);
-  }
-}
-
-void AsyncOpTracker::wait_for_ops() {
-  Mutex::Locker locker(m_lock);
-  while (m_pending_ops > 0) {
-    m_cond.Wait(m_lock);
   }
 }
 
@@ -61,4 +51,3 @@ bool AsyncOpTracker::empty() {
   return (m_pending_ops == 0);
 }
 
-} // namespace journal
