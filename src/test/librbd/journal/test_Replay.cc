@@ -680,6 +680,80 @@ TEST_F(TestJournalReplay, UpdateFeatures) {
   ASSERT_EQ(0, ictx->operations->update_features(features, !enabled));
 }
 
+TEST_F(TestJournalReplay, MetadataSet) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  // get current commit position
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
+
+  // inject metadata_set op into journal
+  inject_into_journal(ictx, librbd::journal::MetadataSetEvent(1, "key", "value"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+  close_image(ictx);
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag + 1, current_tag);
+  ASSERT_EQ(1, current_entry);
+
+  std::string value;
+  ASSERT_EQ(0, librbd::metadata_get(ictx, "key", &value));
+  ASSERT_EQ("value", value);
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->metadata_set("key2", "value"));
+}
+
+TEST_F(TestJournalReplay, MetadataRemove) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  ASSERT_EQ(0, ictx->operations->metadata_set("key", "value"));
+
+  // get current commit position
+  int64_t initial_tag;
+  int64_t initial_entry;
+  get_journal_commit_position(ictx, &initial_tag, &initial_entry);
+
+  // inject metadata_remove op into journal
+  inject_into_journal(ictx, librbd::journal::MetadataRemoveEvent(1, "key"));
+  inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
+  close_image(ictx);
+
+  // replay journal
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
+
+  int64_t current_tag;
+  int64_t current_entry;
+  get_journal_commit_position(ictx, &current_tag, &current_entry);
+  ASSERT_EQ(initial_tag, current_tag);
+  ASSERT_EQ(initial_entry + 2, current_entry);
+
+  std::string value;
+  ASSERT_EQ(-ENOENT, librbd::metadata_get(ictx, "key", &value));
+
+  // verify lock ordering constraints
+  ASSERT_EQ(0, ictx->operations->metadata_set("key", "value"));
+  ASSERT_EQ(0, ictx->operations->metadata_remove("key"));
+}
+
 TEST_F(TestJournalReplay, ObjectPosition) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 

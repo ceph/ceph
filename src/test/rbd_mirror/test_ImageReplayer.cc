@@ -1005,3 +1005,48 @@ TEST_F(TestImageReplayer, UpdateFeatures)
 
   stop();
 }
+
+TEST_F(TestImageReplayer, MetadataSetRemove)
+{
+  const std::string KEY = "test_key";
+  const std::string VALUE = "test_value";
+
+  librbd::ImageCtx *ictx;
+  std::string value;
+
+  bootstrap();
+
+  start();
+
+  // Test metadata_set replication
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, ictx->operations->metadata_set(KEY, VALUE));
+  value.clear();
+  ASSERT_EQ(0, librbd::metadata_get(ictx, KEY, &value));
+  ASSERT_EQ(VALUE, value);
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  value.clear();
+  ASSERT_EQ(0, librbd::metadata_get(ictx, KEY, &value));
+  ASSERT_EQ(VALUE, value);
+  close_image(ictx);
+
+  // Test metadata_remove replication
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, ictx->operations->metadata_remove(KEY));
+  ASSERT_EQ(-ENOENT, librbd::metadata_get(ictx, KEY, &value));
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  ASSERT_EQ(-ENOENT, librbd::metadata_get(ictx, KEY, &value));
+  close_image(ictx);
+
+  stop();
+}

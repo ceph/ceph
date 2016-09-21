@@ -204,6 +204,22 @@ public:
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
+  void expect_metadata_set(MockReplayImageCtx &mock_image_ctx,
+                           Context **on_finish, const char *key,
+                           const char *value) {
+    EXPECT_CALL(*mock_image_ctx.operations, execute_metadata_set(StrEq(key),
+                                                                 StrEq(value), _))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
+                                  NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
+  }
+
+  void expect_metadata_remove(MockReplayImageCtx &mock_image_ctx,
+                              Context **on_finish, const char *key) {
+    EXPECT_CALL(*mock_image_ctx.operations, execute_metadata_remove(StrEq(key), _))
+                  .WillOnce(DoAll(SaveArg<1>(on_finish),
+                                  NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
+  }
+
   void expect_refresh_image(MockReplayImageCtx &mock_image_ctx, bool required,
                             int r) {
     EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
@@ -1285,6 +1301,102 @@ TEST_F(TestMockJournalReplay, UpdateFeaturesEvent) {
   ASSERT_EQ(0, on_resume.wait());
   wait_for_op_invoked(&on_finish, 0);
 
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, MetadataSetEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_metadata_set(mock_image_ctx, &on_finish, "key", "value");
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{MetadataSetEvent(123, "key", "value")},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  wait_for_op_invoked(&on_finish, 0);
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, MetadataRemoveEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_metadata_remove(mock_image_ctx, &on_finish, "key");
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{MetadataRemoveEvent(123, "key")},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  wait_for_op_invoked(&on_finish, 0);
+  ASSERT_EQ(0, on_start_safe.wait());
+  ASSERT_EQ(0, on_finish_ready.wait());
+  ASSERT_EQ(0, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, MetadataRemoveEventDNE) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  Context *on_finish = nullptr;
+  expect_refresh_image(mock_image_ctx, false, 0);
+  expect_metadata_remove(mock_image_ctx, &on_finish, "key");
+
+  C_SaferCond on_start_ready;
+  C_SaferCond on_start_safe;
+  when_process(mock_journal_replay, EventEntry{MetadataRemoveEvent(123, "key")},
+               &on_start_ready, &on_start_safe);
+  ASSERT_EQ(0, on_start_ready.wait());
+
+  C_SaferCond on_finish_ready;
+  C_SaferCond on_finish_safe;
+  when_process(mock_journal_replay, EventEntry{OpFinishEvent(123, 0)},
+               &on_finish_ready, &on_finish_safe);
+
+  wait_for_op_invoked(&on_finish, -ENOENT);
   ASSERT_EQ(0, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(0, on_finish_safe.wait());
