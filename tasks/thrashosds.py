@@ -93,6 +93,14 @@ def task(ctx, config):
         of just the osd process. Note that this assumes that a single
         osd is the only important process on the node.
 
+    bdev_inject_crash: (0) seconds to delay while inducing a synthetic crash.
+        the delay lets the BlockDevice "accept" more aio operations but blocks
+        any flush, and then eventually crashes (losing some or all ios).  If 0,
+        no bdev failure injection is enabled.
+
+    bdev_inject_crash_probability: (.5) probability of doing a bdev failure
+        injection crash vs a normal OSD kill.
+
     chance_test_backfill_full: (0) chance to simulate full disks stopping
         backfill
 
@@ -159,8 +167,12 @@ def task(ctx, config):
                         'but not available on osd role: {r}'.format(
                             r=remote.name))
 
-    log.info('Beginning thrashosds...')
     cluster_manager = ctx.managers[cluster]
+    for f in ['powercycle', 'bdev_inject_crash']:
+        if config.get(f):
+            cluster_manager.config[f] = config.get(f)
+
+    log.info('Beginning thrashosds...')
     thrash_proc = ceph_manager.Thrasher(
         cluster_manager,
         config,
