@@ -221,7 +221,7 @@ public:
   int complete_get_params();
 
   void send_response() override;
-  int get_data(bufferlist& bl) override;
+  int get_data(ceph::bufferlist& bl, bool& again) override;
   int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor>* filter,
                          RGWPutObjDataProcessor* cb) override;
 };

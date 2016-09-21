@@ -1559,7 +1559,6 @@ int RGWPostObj_ObjStore_S3::get_params()
 	filename = iter->second;
       }
       parts[part.name] = part;
-      data_pending = true;
       break;
     }
 
@@ -1766,7 +1765,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+int RGWPostObj_ObjStore_S3::get_data(ceph::bufferlist& bl, bool& again)
 {
   bool boundary;
   bool done;
@@ -1778,8 +1777,6 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
   }
 
   if (boundary) {
-    data_pending = false;
-
     if (!done) {
       /* Reached end of data, let's drain the rest of the params */
       r = complete_get_params();
@@ -1789,6 +1786,7 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
     }
   }
 
+  again = !boundary;
   return bl.length();
 }
 

@@ -1827,9 +1827,6 @@ int RGWFormPost::get_params()
       /* First data part ahead. */
       current_data_part = std::move(part);
 
-      /* Tell RGWPostObj::execute() that it has some data to put. */
-      data_pending = true;
-
       /* Stop the iteration. We can assume that all control parts have been
        * already parsed. The rest of HTTP body should contain data parts
        * only. They will be picked up by ::get_data(). */
@@ -1895,10 +1892,6 @@ bool RGWFormPost::is_next_file_to_upload()
 
       if (std::end(params) != params.find("filename")) {
         current_data_part = std::move(part);
-
-        /* Tell RGWPostObj::execute() that it has some data to put. */
-        data_pending = true;
-
         return true;
       }
     }
@@ -1907,7 +1900,7 @@ bool RGWFormPost::is_next_file_to_upload()
   return false;
 }
 
-int RGWFormPost::get_data(ceph::bufferlist& bl)
+int RGWFormPost::get_data(ceph::bufferlist& bl, bool& again)
 {
   bool boundary;
 
@@ -1917,10 +1910,8 @@ int RGWFormPost::get_data(ceph::bufferlist& bl)
     return r;
   }
 
-  if (boundary) {
-    data_pending = false;
-    current_data_part = boost::none;
-  }
+  /* Tell RGWPostObj::execute() that it has some data to put. */
+  again = !boundary;
 
   return bl.length();
 }

@@ -261,7 +261,7 @@ public:
             RGWHandler* dialect_handler) override;
 
   int get_params() override;
-  int get_data(ceph::bufferlist& bl) override;
+  int get_data(ceph::bufferlist& bl, bool& again) override;
   void send_response() override;
 
   static bool is_formpost_req(req_state* const s);
