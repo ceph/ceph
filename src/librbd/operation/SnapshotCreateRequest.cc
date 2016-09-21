@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -61,9 +62,11 @@ template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
                                                 Context *on_finish,
                                                 const std::string &snap_name,
+						const cls::rbd::SnapshotNamespace &snap_namespace,
                                                 uint64_t journal_op_tid,
                                                 bool skip_object_map)
   : Request<I>(image_ctx, on_finish, journal_op_tid), m_snap_name(snap_name),
+  m_snap_namespace(snap_namespace),
     m_skip_object_map(skip_object_map), m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
 }
 
@@ -210,7 +213,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
     if (image_ctx.exclusive_lock != nullptr) {
       image_ctx.exclusive_lock->assert_header_locked(&op);
     }
-    cls_client::snapshot_add(&op, m_snap_id, m_snap_name);
+    cls_client::snapshot_add(&op, m_snap_id, m_snap_name, m_snap_namespace);
   }
 
   librados::AioCompletion *rados_completion = create_rados_safe_callback<
@@ -330,7 +333,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
          image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
-  image_ctx.add_snap(m_snap_name, m_snap_id, m_size, m_parent_info,
+  image_ctx.add_snap(m_snap_name, m_snap_namespace, m_snap_id, m_size, m_parent_info,
                      RBD_PROTECTION_STATUS_UNPROTECTED, 0);
 
   // immediately start using the new snap context if we

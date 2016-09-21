@@ -189,9 +189,14 @@ public:
     }
   }
 
+  void expect_snap_namespace_list(MockRefreshImageCtx &mock_image_ctx, int r) {
+    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_namespace"), _, _, _));
+  }
+
   void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
                        const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, snap_id, _, _, _, _));
+    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _));
   }
 
   void expect_init_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,
@@ -332,7 +337,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessV1) {
 
 TEST_F(TestMockImageRefreshRequest, SuccessSnapshotV1) {
   REQUIRE_FORMAT_V1();
-
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
@@ -401,6 +405,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSnapshotV2) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_get_snapshots(mock_image_ctx, 0);
+  expect_snap_namespace_list(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
@@ -433,6 +438,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_get_snapshots(mock_image_ctx, 0);
+  expect_snap_namespace_list(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
     expect_open_object_map(mock_image_ctx, &mock_object_map, 0);

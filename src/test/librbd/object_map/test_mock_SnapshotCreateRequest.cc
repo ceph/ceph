@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
@@ -24,7 +25,9 @@ public:
   void inject_snap_info(librbd::ImageCtx *ictx, uint64_t snap_id) {
     RWLock::WLocker snap_locker(ictx->snap_lock);
     RWLock::RLocker parent_locker(ictx->parent_lock);
-    ictx->add_snap("snap name", snap_id, ictx->size, ictx->parent_md,
+    ictx->add_snap("snap name",
+	  cls::rbd::UserSnapshotNamespace(), snap_id,
+		   ictx->size, ictx->parent_md,
                    RBD_PROTECTION_STATUS_UNPROTECTED, 0);
   }
 

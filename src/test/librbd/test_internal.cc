@@ -1,5 +1,6 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+#include "cls/rbd/cls_rbd_types.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "librbd/AioCompletion.h"
@@ -812,7 +813,8 @@ TEST_F(TestInternal, WriteFullCopyup) {
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-  ASSERT_EQ(0, ictx2->operations->snap_create("snap1"));
+  ASSERT_EQ(0, ictx2->operations->snap_create("snap1",
+					      cls::rbd::UserSnapshotNamespace()));
 
   bufferlist write_full_bl;
   write_full_bl.append(std::string(1 << ictx2->order, '2'));
