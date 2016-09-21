@@ -86,6 +86,7 @@ cls_method_handle_t h_get_snapcontext;
 cls_method_handle_t h_get_object_prefix;
 cls_method_handle_t h_get_data_pool;
 cls_method_handle_t h_get_snapshot_name;
+cls_method_handle_t h_get_snapshot_namespace;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
 cls_method_handle_t h_snapshot_rename;
@@ -1538,11 +1539,52 @@ int get_snapshot_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 }
 
 /**
+ * Retrieve namespace of a snapshot.
+ *
+ * Input:
+ * @param snap_id id of the snapshot (uint64_t)
+ *
+ * Output:
+ * @param SnapshotNamespace
+ * @returns 0 on success, negative error code on failure.
+ */
+int get_snapshot_namespace(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "get_snapshot_namespace snap_id=%" PRIu64, snap_id);
+
+  if (snap_id == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(snap.snapshot_namespace, *out);
+
+  return 0;
+}
+
+/**
  * Adds a snapshot to an rbd header. Ensures the id and name are unique.
  *
  * Input:
  * @param snap_name name of the snapshot (string)
  * @param snap_id id of the snapshot (uint64_t)
+ * @param snap_namespace namespace of the snapshot (cls::rbd::SnapshotNamespaceOnDisk)
  *
  * Output:
  * @returns 0 on success, negative error code on failure.
@@ -1559,6 +1601,9 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     bufferlist::iterator iter = in->begin();
     ::decode(snap_meta.name, iter);
     ::decode(snap_meta.id, iter);
+    if (!iter.end()) {
+      ::decode(snap_meta.snapshot_namespace, iter);
+    }
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -4781,6 +4826,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_snapshot_name",
 			  CLS_METHOD_RD,
 			  get_snapshot_name, &h_get_snapshot_name);
+  cls_register_cxx_method(h_class, "get_snapshot_namespace",
+			  CLS_METHOD_RD,
+			  get_snapshot_namespace, &h_get_snapshot_namespace);
   cls_register_cxx_method(h_class, "snapshot_add",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_add, &h_snapshot_add);
