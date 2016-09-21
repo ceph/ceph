@@ -161,7 +161,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
 	  char buf[5050];
 	  string mountpoint = cfuse->get_mount_point();
-	  snprintf(buf, 5049, "fusermount -u -z %s", mountpoint.c_str());
+	  snprintf(buf, sizeof(buf), "fusermount -u -z %s", mountpoint.c_str());
 	  int umount_r = system(buf);
 	  if (umount_r) {
 	    if (umount_r != -1) {
