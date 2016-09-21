@@ -1538,17 +1538,18 @@ int RGWPostObj_ObjStore_S3::get_params()
       return r;
 
     if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-      map<string, struct post_part_field, ltstr_nocase>::iterator piter;
-      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-	ldout(s->cct, 20) << "read part header: name=" << part.name << dendl;
-	ldout(s->cct, 20) << "name=" << piter->first << dendl;
-	ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
-	ldout(s->cct, 20) << "params:" << dendl;
-	map<string, string>& params = piter->second.params;
-        for (const auto& pair : params) {
-	  ldout(s->cct, 20) << " " << pair.first << " -> " << pair.second
-                            << dendl;
-	}
+      ldout(s->cct, 20) << "read part header -- part.name="
+                        << part.name << dendl;
+
+      for (const auto& pair : part.fields) {
+        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
+        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
+        ldout(s->cct, 20) << "field.params:" << dendl;
+
+        for (const auto& param_pair : pair.second.params) {
+          ldout(s->cct, 20) << " " << param_pair.first
+                            << " -> " << param_pair.second << dendl;
+        }
       }
     }
 
