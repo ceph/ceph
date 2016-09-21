@@ -672,7 +672,7 @@ class GitbuilderProject(object):
                     log.info('%s: %s' % (n, v))
 
         if ref:
-            uri = 'ref'/ + ref
+            uri = 'ref/' + ref
             warn('ref')
         elif tag:
             uri = 'ref/' + tag
