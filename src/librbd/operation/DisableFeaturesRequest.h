@@ -47,6 +47,9 @@ private:
    * <start>
    *    |
    *    v
+   * STATE_PREPARE_LOCK
+   *    |
+   *    v
    * STATE_BLOCK_WRITES
    *    |
    *    v
@@ -101,6 +104,7 @@ private:
   uint64_t m_features;
 
   bool m_acquired_lock = false;
+  bool m_writes_blocked = false;
   bool m_snap_lock_acquired = false;
   bool m_requests_blocked = false;
   bool m_disabling_journal = false;
@@ -111,6 +115,9 @@ private:
 
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   bufferlist m_out_bl;
+
+  void send_prepare_lock();
+  Context *handle_prepare_lock(int *result);
 
   void send_block_writes();
   Context *handle_block_writes(int *result);
