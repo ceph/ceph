@@ -1013,13 +1013,13 @@ protected:
   const char *supplied_md5_b64;
   const char *supplied_etag;
   string etag;
-  string content_type;
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
+  virtual std::string get_current_content_type() const = 0;
   virtual bool is_next_file_to_upload() {
      return false;
   }

@@ -242,6 +242,7 @@ public:
 
 class RGWFormPost : public RGWPostObj_ObjStore {
   std::string get_current_filename() const override;
+  std::string get_current_content_type() const override;
   std::size_t get_max_file_size() /*const*/;
   bool is_next_file_to_upload() override;
   bool is_integral();
