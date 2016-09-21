@@ -121,22 +121,15 @@ int check_utf8(const char *buf, int len)
 				unsigned char re_encoded[MAX_UTF8_SZ];
 				unsigned long code = decode_utf8(u, enc_len);
 				if (code == INVALID_UTF8_CHAR) {
-					//printf("decoded to invalid utf8");
 					return i + 1;
 				}
 				re_encoded_len = encode_utf8(code, re_encoded);
 				if (enc_len != re_encoded_len) {
-					//printf("originally encoded as %d bytes, "
-					//	"but was re-encoded to %d!\n",
-					//	enc_len, re_encoded_len);
 					return i + 1;
 				}
 				if (memcmp(u, re_encoded, enc_len) != 0) {
-					//printf("re-encoded to a different "
-					//	"byte stream!");
 					return i + 1;
 				}
-				//printf("code_point %lu\n", code);
 			}
 			enc_len = 0;
 			if (i >= len)
@@ -146,10 +139,8 @@ int check_utf8(const char *buf, int len)
 				u[enc_len++] = c;
 		} else {
 			if (enc_len == MAX_UTF8_SZ) {
-				//printf("too many enc_len in utf character!\n");
 				return i + 1;
 			}
-			//printf("continuation byte...\n");
 			u[enc_len++] = c;
 		}
 		++i;

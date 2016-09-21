@@ -28,7 +28,6 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 {
   int len2 = strlen(str2);
 
-  //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   while (*plen < pos + len2 + 1) {
     *plen += BUF_SIZE;
 
@@ -39,7 +38,6 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
     } else {
       *pstr = (char *)_realloc;
     }
-    //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   }
 
   strncpy((*pstr)+pos, str2, len2);
@@ -99,8 +97,6 @@ char *resolve_addrs(const char *orig_str)
       brackets = 1;
     }
 
-    //printf("name '%s' port '%s'\n", tok, port_str);
-
     memset(&hint, 0, sizeof(hint));
     hint.ai_family = AF_UNSPEC;
     hint.ai_socktype = SOCK_STREAM;
@@ -123,10 +119,7 @@ char *resolve_addrs(const char *orig_str)
 		  host, sizeof(host),
 		  port, sizeof(port),
 		  NI_NUMERICSERV | NI_NUMERICHOST);
-      /*printf(" host %s port %s flags %d family %d socktype %d proto %d sanonname %s\n",
-	host, port,
-	res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
-	res->ai_canonname);*/
+
       if (res->ai_family == AF_INET6)
 	brackets = 1;  /* always surround ipv6 addrs with brackets */
       if (brackets)
@@ -150,7 +143,6 @@ char *resolve_addrs(const char *orig_str)
 
   }
 
-  //printf("new_str is '%s'\n", new_str);
   free(buf);
   return new_str;
 }

@@ -169,7 +169,6 @@ std::string AdminSocketClient::do_request(std::string request, std::string *resu
     err = oss.str();
     goto done;
   }
-  //printf("MESSAGE FROM SERVER: %s\n", buffer);
   result->assign((const char*)buffer);
 done:
   close(socket_fd);
