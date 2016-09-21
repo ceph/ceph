@@ -3185,9 +3185,11 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
   RWLock::RLocker l(pg_map_lock);
-  if (!pg_map.count(pgid))
-    return NULL;
-  PG *pg = pg_map[pgid];
+
+  auto pg_map_entry = pg_map.find(pgid);
+  if (pg_map_entry == pg_map.end())
+    return nullptr;
+  PG *pg = pg_map_entry->second;
   pg->lock();
   return pg;
 }
@@ -5210,18 +5212,19 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     PGRef _pg(pg);
     ++p;
 
-    if (ack->pg_stat.count(pg->info.pgid.pgid)) {
-      pair<version_t,epoch_t> acked = ack->pg_stat[pg->info.pgid.pgid];
+    auto acked = ack->pg_stat.find(pg->info.pgid.pgid);
+    if (acked != ack->pg_stat.end()) {
       pg->pg_stats_publish_lock.Lock();
-      if (acked.first == pg->pg_stats_publish.reported_seq &&
-	  acked.second == pg->pg_stats_publish.reported_epoch) {
+      if (acked->second.first == pg->pg_stats_publish.reported_seq &&
+	  acked->second.second == pg->pg_stats_publish.reported_epoch) {
 	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
 		 << ":" << pg->pg_stats_publish.reported_seq << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put("pg_stat_queue");
       } else {
 	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
-		 << ":" << pg->pg_stats_publish.reported_seq << " > acked " << acked << dendl;
+		 << ":" << pg->pg_stats_publish.reported_seq << " > acked "
+		 << acked->second << dendl;
       }
       pg->pg_stats_publish_lock.Unlock();
     } else {
@@ -6374,9 +6377,10 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p != m->scrub_pgs.end();
 	 ++p) {
       spg_t pcand;
+      auto pg_map_entry = pg_map.find(pcand);
       if (osdmap->get_primary_shard(*p, &pcand) &&
-	  pg_map.count(pcand))
-	handle_pg_scrub(m, pg_map[pcand]);
+	  pg_map_entry != pg_map.end())
+	handle_pg_scrub(m, pg_map_entry->second);
     }
   }
 
