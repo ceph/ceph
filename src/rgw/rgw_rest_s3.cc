@@ -1514,6 +1514,11 @@ std::string RGWPostObj_ObjStore_S3::get_current_filename() const
   return s->object.name;
 }
 
+std::string RGWPostObj_ObjStore_S3::get_current_content_type() const
+{
+  return content_type;
+}
+
 int RGWPostObj_ObjStore_S3::get_params()
 {
   op_ret = RGWPostObj_ObjStore::get_params();

@@ -198,6 +198,7 @@ public:
 class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   parts_collection_t parts;
   std::string filename;
+  std::string content_type;
   RGWPolicyEnv env;
   RGWPolicy post_policy;
   map<string, string> crypt_http_responses;
@@ -208,6 +209,8 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   void rebuild_key(string& key);
 
   std::string get_current_filename() const override;
+  std::string get_current_content_type() const override;
+
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
