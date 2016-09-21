@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd objectstore: bluestore
+        bluestore block size: 96636764160
+        debug bluestore: 30
+        debug bdev: 20
+        debug bluefs: 20
+        enable experimental unrecoverable data corrupting features: "*"
+        osd debug randomize hobject sort order: false
