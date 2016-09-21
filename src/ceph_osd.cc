@@ -47,8 +47,6 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "erasure-code/ErasureCodePlugin.h"
-
 #define dout_subsys ceph_subsys_osd
 
 namespace {
@@ -90,21 +88,6 @@ void usage()
        << "                    get OSD fsid for the given block device\n"
        << std::endl;
   generic_server_usage();
-}
-
-int preload_erasure_code()
-{
-  string plugins = g_conf->osd_erasure_code_plugins;
-  stringstream ss;
-  int r = ErasureCodePluginRegistry::instance().preload(
-    plugins,
-    g_conf->erasure_code_dir,
-    &ss);
-  if (r)
-    derr << ss.str() << dendl;
-  else
-    dout(10) << ss.str() << dendl;
-  return r;
 }
 
 int main(int argc, const char **argv) 
@@ -575,7 +558,7 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  if (preload_erasure_code() < 0)
+  if (global_init_preload_erasure_code(g_ceph_context) < 0)
     return -1;
 
   osd = new OSD(g_ceph_context,

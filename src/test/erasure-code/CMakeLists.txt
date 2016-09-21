@@ -1,3 +1,4 @@
+add_ceph_test(test-erasure-code-plugins.sh ${CMAKE_CURRENT_SOURCE_DIR}/test-erasure-code-plugins.sh)
 
 add_executable(ceph_erasure_code_benchmark 
   ${CMAKE_SOURCE_DIR}/src/erasure-code/ErasureCode.cc
