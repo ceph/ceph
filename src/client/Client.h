@@ -839,7 +839,7 @@ private:
   int may_hardlink(Inode *in, const UserPerm& perms);
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
-  int _getgrouplist(gid_t **sgids, int uid, int gid);
+  int _getgrouplist(gid_t **sgids, uid_t uid, gid_t gid);
 
   int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
