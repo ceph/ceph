@@ -104,6 +104,7 @@ private:
   librados::snap_t m_prev_snap_id = CEPH_NOSNAP;
 
   std::string m_snap_name;
+  cls::rbd::SnapshotNamespace m_snap_namespace;
 
   librbd::parent_spec m_local_parent_spec;
 

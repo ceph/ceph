@@ -14,6 +14,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
@@ -150,7 +151,8 @@ public:
     EXPECT_EQ(0, ictx->state->open());
     promote_image(ictx);
 
-    EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str()));
+    EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str(),
+					       cls::rbd::UserSnapshotNamespace()));
 
     if (protect) {
       EXPECT_EQ(0, ictx->operations->snap_protect(snap_name.c_str()));
@@ -166,7 +168,8 @@ public:
     EXPECT_EQ(0, ictx->state->open());
     promote_image(ictx);
 
-    EXPECT_EQ(0, ictx->operations->snap_create("snap1"));
+    EXPECT_EQ(0, ictx->operations->snap_create("snap1",
+					       cls::rbd::UserSnapshotNamespace()));
     EXPECT_EQ(0, ictx->operations->snap_protect("snap1"));
     int order = 20;
     EXPECT_EQ(0, librbd::clone(m_local_io_ctx, ictx->name.c_str(), "snap1",

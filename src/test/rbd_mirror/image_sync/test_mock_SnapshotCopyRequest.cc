@@ -45,6 +45,7 @@ struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
   static SnapshotCreateRequest* s_instance;
   static SnapshotCreateRequest* create(librbd::MockTestImageCtx* image_ctx,
                                        const std::string &snap_name,
+                                       const cls::rbd::SnapshotNamespace &snap_namespace,
                                        uint64_t size,
                                        const librbd::parent_spec &parent_spec,
                                        uint64_t parent_overlap,
@@ -176,7 +177,8 @@ public:
 
   int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,
                   bool protect = false) {
-    int r = image_ctx->operations->snap_create(snap_name.c_str());
+    int r = image_ctx->operations->snap_create(snap_name.c_str(),
+					       cls::rbd::UserSnapshotNamespace());
     if (r < 0) {
       return r;
     }
