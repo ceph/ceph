@@ -52,3 +52,10 @@
   https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
   https://www.debian.org/doc/manuals/maint-guide/advanced.en.html,
   we should remove them.
+
+* The jerasure and shec plugins can now detect SIMD instruction at runtime
+  and no longer need to be built for different processors. The following 
+  plugins are now deprecated: jerasure_generic, jerasure_sse3, jerasure_sse4, 
+  jerasure_neon, shec_generic, shec_sse3, shec_sse4, and shec_neon. If you use any
+  of these plugins directly you will see a warning in the mon log file.
+  Please switch to using just 'jerasure' or 'shec'.
