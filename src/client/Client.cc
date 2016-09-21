@@ -4966,7 +4966,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   m->put();
 }
 
-int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
+int Client::_getgrouplist(gid_t** sgids, uid_t uid, gid_t gid)
 {
   // cppcheck-suppress variableScope
   int sgid_count;
