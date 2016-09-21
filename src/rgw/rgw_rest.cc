@@ -1504,6 +1504,19 @@ bool RGWPostObj_ObjStore::part_str(parts_collection_t& parts,
   return true;
 }
 
+std::string RGWPostObj_ObjStore::get_part_str(parts_collection_t& parts,
+                                              const std::string& name,
+                                              const std::string& def_val)
+{
+  std::string val;
+
+  if (part_str(parts, name, &val)) {
+    return val;
+  } else {
+    return rgw_trim_whitespace(def_val);
+  }
+}
+
 bool RGWPostObj_ObjStore::part_bl(parts_collection_t& parts,
                                   const std::string& name,
                                   ceph::bufferlist* pbl)
