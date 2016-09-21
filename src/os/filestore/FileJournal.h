@@ -327,7 +327,6 @@ private:
   int _open(bool wr, bool create=false);
   int _open_block_device();
   void _close(int fd) const;
-  void _check_disk_write_cache() const;
   int _open_file(int64_t oldsize, blksize_t blksize, bool create);
   int _dump(ostream& out, bool simple);
   void print_header(const header_t &hdr) const;
