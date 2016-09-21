@@ -151,4 +151,7 @@ namespace ceph {
     InnerClient get_inner_client(const Client& cl, const Request& request);
   }; // class mClockClientAdapter
 
+
+  std::ostream& operator<<(std::ostream&, const Request&);
+
 } // namespace ceph

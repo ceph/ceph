@@ -15,9 +15,9 @@
 
 #pragma once
 
+#include <ostream>
 
 #include "include/types.h"
-
 #include "include/utime.h"
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
@@ -62,7 +62,7 @@ class PGQueueable {
     PGRecovery
     > QVariant;
   QVariant qvariant;
-  int cost; 
+  int cost;
   unsigned priority;
   utime_t start_time;
   entity_inst_t owner;
@@ -78,6 +78,16 @@ class PGQueueable {
     void operator()(const PGScrub &op);
     void operator()(const PGRecovery &op);
   }; // struct RunVis
+
+  struct DisplayVis : public boost::static_visitor<> {
+    std::ostream& out;
+    DisplayVis(std::ostream& out) : out(out) {}
+    void operator()(const OpRequestRef &op);
+    void operator()(const PGSnapTrim &op);
+    void operator()(const PGScrub &op);
+    void operator()(const PGRecovery &op);
+  }; // struct DisplayVis
+
 
 public:
 
@@ -102,6 +112,9 @@ public:
     const entity_inst_t &owner)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner) {}
+
+  friend std::ostream& operator<<(std::ostream&, const PGQueueable&);
+
   const boost::optional<OpRequestRef> maybe_get_op() const {
     const OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
     return op ? OpRequestRef(*op) : boost::optional<OpRequestRef>();
@@ -119,4 +132,7 @@ public:
   utime_t get_start_time() const { return start_time; }
   entity_inst_t get_owner() const { return owner; }
   const QVariant& get_variant() const { return qvariant; }
-};
+}; // class PGQueueable
+
+
+std::ostream& operator<<(std::ostream&, const PGQueueable&);

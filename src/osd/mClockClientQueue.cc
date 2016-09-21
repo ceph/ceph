@@ -161,4 +161,10 @@ namespace ceph {
   inline Request mClockClientQueue::dequeue() {
     return queue.dequeue();
   }
+
+  std::ostream& operator<<(std::ostream& out, const Request& req) {
+    out << "request:{ pg:" << req.first->info.pgid << ", " <<
+      req.second << " }";
+    return out;
+  }
 } // namespace ceph

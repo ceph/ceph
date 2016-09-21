@@ -33,3 +33,36 @@ void PGQueueable::RunVis::operator()(const PGScrub &op) {
 void PGQueueable::RunVis::operator()(const PGRecovery &op) {
   osd->do_recovery(pg.get(), op.epoch_queued, op.reserved_pushes, handle);
 }
+
+void PGQueueable::DisplayVis::operator()(const OpRequestRef &op) {
+  Message& msg = *boost::get<OpRequestRef>(op)->get_req();
+  if (MSG_OSD_SUBOP == msg.get_header().type) {
+    out << "osd-sub-op ";
+  } else {
+    out << "client-op, type:" << msg.get_type() <<
+      ", tid:" << msg.get_tid() <<
+      ", source_addr:" << msg.get_source_addr() <<
+      ", source_inst:" << msg.get_source_inst() <<
+      " ";
+  }
+}
+
+void PGQueueable::DisplayVis::operator()(const PGSnapTrim &op) {
+  out << "snaptrim ";
+}
+
+void PGQueueable::DisplayVis::operator()(const PGScrub &op) {
+  out << "scrub ";
+}
+
+void PGQueueable::DisplayVis::operator()(const PGRecovery &op) {
+  out << "recovery ";
+}
+
+std::ostream& operator<<(std::ostream& out, const PGQueueable& q) {
+  PGQueueable::DisplayVis visitor(out);
+  out << "req:{ owner:" << q.owner << " ";
+  boost::apply_visitor(visitor, q.qvariant);
+  out << "}";
+  return out;
+}
