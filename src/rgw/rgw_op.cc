@@ -3987,6 +3987,7 @@ void RGWPutLC::execute()
   rados::cls::lock::Lock l(lc_index_lock_name); 
   utime_t time(max_lock_secs, 0);
   l.set_duration(time);
+  l.set_cookie(cookie);
   librados::IoCtx *ctx = store->get_lc_pool_ctx();
   do {
     ret = l.lock_exclusive(ctx, oid);
