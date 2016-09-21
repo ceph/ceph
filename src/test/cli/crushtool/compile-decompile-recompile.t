@@ -10,6 +10,6 @@
   $ cmp need_tree_order.crush nto.conf
   $ cmp nto.compiled nto.recompiled
 
-  $ crushtool -c missing-bucket.crushmap.txt
+  $ crushtool -c "$TESTDIR/missing-bucket.crushmap.txt"
   in rule 'rule-bad' item 'root-404' not defined
   [1]
