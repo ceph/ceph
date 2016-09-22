@@ -6307,7 +6307,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     bufferlist bl;
     unsigned onode_part, blob_part, extent_part;
     {
-      auto p = bl.get_contiguous_appender(bound);
+      auto p = bl.get_contiguous_appender(bound, true);
       denc(o->onode, p);
       onode_part = p.get_logical_offset();
       o->extent_map.encode_spanning_blobs(p);
