@@ -902,8 +902,12 @@ int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t s
 {
   // lock the object in exclusive mode
   std::string firstObjOid = getObjectId(soid, 0);
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
   std::string lockCookie = RadosStriperImpl::getUUID();
-  int rc = m_ioCtx.lock_exclusive(firstObjOid, RADOS_LOCK_NAME, lockCookie, "", 0, 0);
+  utime_t dur = utime_t();
+  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, LOCK_EXCLUSIVE, lockCookie, "", "", dur, 0);
+  int rc = m_ioCtx.operate(firstObjOid, &op);
   if (rc) return rc;
   // load layout and size
   ceph_file_layout layout;
