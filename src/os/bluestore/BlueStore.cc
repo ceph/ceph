@@ -4728,8 +4728,7 @@ int BlueStore::_do_read(
     } else {
       for (auto reg : b2r_it->second) {
 	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->get_blob().get_chunk_size(
-	  csum_type != bluestore_blob_t::CSUM_NONE, block_size);
+	uint64_t chunk_size = bptr->get_blob().get_chunk_size(true, block_size);
 	uint64_t r_off = reg.blob_xoffset;
 	uint64_t r_len = reg.length;
 	unsigned front = r_off % chunk_size;
@@ -7337,8 +7336,9 @@ int BlueStore::_do_alloc_write(
 	     << dendl;
 
     // checksum
-    if (csum_type) {
-      b->dirty_blob().init_csum(csum_type, csum_order, csum_length);
+    int csum = csum_type.load();
+    if (csum) {
+      b->dirty_blob().init_csum(csum, csum_order, csum_length);
       b->dirty_blob().calc_csum(b_off, *l);
     }
     if (wi.mark_unused) {
