@@ -1,6 +1,6 @@
 # zlib
 
-if(INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
+if(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
 	set(zlib_sources
 	  CompressionPluginZlib.cc
 	  ZlibCompressor.cc
@@ -20,12 +20,12 @@ if(INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
 	  ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_stateless_base.c
 	  ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_base.c
 	)
-else(INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
+else(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
 	set(zlib_sources
 	  CompressionPluginZlib.cc
 	  ZlibCompressor.cc
 	)
-endif(INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
+endif(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
 
 add_library(ceph_zlib SHARED ${zlib_sources})
 add_dependencies(ceph_zlib ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
