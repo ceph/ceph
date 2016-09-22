@@ -27,13 +27,9 @@
 #include "common/config.h"
 #include <sstream>
 
-// <<<<<<< HEAD
-// #include "MonitorDBStore.h"
-// =======
 // FIXME: don't like including this here to get OSDMap::Incremental, maybe
 // PGMapUpdater needs its own header.
 #include "osd/OSDMap.h"
-// >>>>>>> afa7078... mon: refactor PGMap updating code for reuse in mgr
 
 namespace ceph { class Formatter; }
 
