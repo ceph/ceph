@@ -741,8 +741,9 @@ void AsyncConnection::process()
 
           // note last received message.
           in_seq.set(message->get_seq());
-	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " seq "
-                                    << message->get_seq() << " " << message << " " << *message << dendl;
+	  ldout(async_msgr->cct, 5) << " rx " << message->get_source() << " seq "
+                                    << message->get_seq() << " " << message
+				    << " " << *message << dendl;
 
           ack_left.inc();
           // if send_message always send inline, it may have no
