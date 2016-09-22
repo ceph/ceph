@@ -23,6 +23,7 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeShecTableCache.h"
 #include "ErasureCodeShec.h"
+#include "jerasure_init.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -70,25 +71,15 @@ public:
   }
 };
 
-extern "C" {
-#include "jerasure/include/galois.h"
-
-extern gf_t *gfp_array[];
-extern int  gfp_is_composite[];
-}
-
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory = (char *)"")
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 8, 16, 32 };
-  for(int i = 0; i < 3; i++) {
-    int r = galois_init_default_field(w[i]);
-    if (r) {
-      derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
-      return -r;
-    }
+  int r = jerasure_init(3, w);
+  if (r) {
+    return -r;
   }
   return instance.add(plugin_name, new ErasureCodePluginShec());
 }

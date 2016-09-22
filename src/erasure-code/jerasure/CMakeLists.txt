@@ -5,20 +5,39 @@ add_library(jerasure_utils OBJECT
   ErasureCodeJerasure.cc)
 add_dependencies(jerasure_utils ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 
-add_library(ec_jerasure SHARED ErasureCodePluginSelectJerasure.cc)
-add_dependencies(ec_jerasure ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ec_jerasure ${EXTRALIBS})
-install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
+# Set the CFLAGS correctly for gf-complete based on SIMD compiler support
+set(GF_COMPILE_FLAGS)
+if(HAVE_ARMV8_SIMD)
+  list(APPEND GF_COMPILE_FLAGS ARM_NEON ARCH_AARCH64)
+endif()
+if(HAVE_ARM_NEON)
+  list(APPEND GF_COMPILE_FLAGS ARM_NEON)
+endif()
+if(HAVE_INTEL_SSE)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE)
+endif()
+if(HAVE_INTEL_SSE2)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE2)
+endif()
+if(HAVE_INTEL_SSE3)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE3)
+endif()
+if(HAVE_INTEL_SSSE3)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSSE3)
+endif()
+if(HAVE_INTEL_PCLMUL)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE4_PCLMUL)
+endif()
+if(HAVE_INTEL_SSE4_1)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE4)
+endif()
+if(HAVE_INTEL_SSE4_2)
+  list(APPEND GF_COMPILE_FLAGS INTEL_SSE4)
+endif()
 
-set(jerasure_srcs
-  jerasure/src/cauchy.c
-  jerasure/src/galois.c
-  jerasure/src/jerasure.c
-  jerasure/src/liberation.c
-  jerasure/src/reed_sol.c
+set(gf-complete_srcs
   gf-complete/src/gf_cpu.c
   gf-complete/src/gf_wgen.c
-  gf-complete/src/gf_method.c
   gf-complete/src/gf_w16.c
   gf-complete/src/gf.c
   gf-complete/src/gf_w32.c
@@ -29,44 +48,34 @@ set(jerasure_srcs
   gf-complete/src/gf_rand.c
   gf-complete/src/gf_w8.c)
 
-list(FIND jerasure_flavors generic found)
-if(found GREATER -1)
-  add_library(jerasure_generic OBJECT ${jerasure_srcs})
-endif()
-
-list(FIND jerasure_flavors neon found)
-if(found GREATER -1)
-  add_library(jerasure_neon OBJECT
-    ${jerasure_srcs}
+if(HAVE_ARM_NEON OR HAVE_ARMV8_SIMD)
+  list(APPEND gf-complete_srcs
     gf-complete/src/neon/gf_w4_neon.c
     gf-complete/src/neon/gf_w8_neon.c
     gf-complete/src/neon/gf_w16_neon.c
     gf-complete/src/neon/gf_w32_neon.c
     gf-complete/src/neon/gf_w64_neon.c)
-  set_target_properties(jerasure_neon PROPERTIES
-    COMPILE_FLAGS ${ARM_NEON_FLAGS})
 endif()
 
-list(FIND jerasure_flavors sse3 found)
-if(found GREATER -1)
-  add_library(jerasure_sse3 OBJECT ${jerasure_srcs})
-  set_target_properties(jerasure_sse3 PROPERTIES
-    COMPILE_FLAGS ${SSE3_FLAGS})
-endif()
+add_library(gf-complete_objs OBJECT ${gf-complete_srcs})
+set_target_properties(gf-complete_objs PROPERTIES 
+  COMPILE_FLAGS ${SIMD_COMPILE_FLAGS})
+set_target_properties(gf-complete_objs PROPERTIES 
+  COMPILE_DEFINITIONS "${GF_COMPILE_FLAGS}")
 
-list(FIND jerasure_flavors sse4 found)
-if(found GREATER -1)
-  add_library(jerasure_sse4 OBJECT ${jerasure_srcs})
-  set_target_properties(jerasure_sse4 PROPERTIES
-    COMPILE_FLAGS ${SSE4_FLAGS})
-endif()
+set(jerasure_srcs
+  jerasure/src/cauchy.c
+  jerasure/src/galois.c
+  jerasure/src/jerasure.c
+  jerasure/src/liberation.c
+  jerasure/src/reed_sol.c
+  jerasure_init.cc)
+add_library(jerasure_objs OBJECT ${jerasure_srcs}) 
 
-foreach(flavor ${jerasure_flavors})
-  set(plugin_name "ec_jerasure_${flavor}")
-  add_library(${plugin_name} SHARED
-    $<TARGET_OBJECTS:jerasure_${flavor}>
-    $<TARGET_OBJECTS:jerasure_utils>
-    $<TARGET_OBJECTS:erasure_code_objs>)
-  target_link_libraries(${plugin_name} ${EXTRALIBS})
-  install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
-endforeach()
+add_library(ec_jerasure SHARED
+  $<TARGET_OBJECTS:gf-complete_objs>
+  $<TARGET_OBJECTS:jerasure_objs>
+  $<TARGET_OBJECTS:jerasure_utils>
+  $<TARGET_OBJECTS:erasure_code_objs>)
+target_link_libraries(ec_jerasure ${EXTRALIBS})
+install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
