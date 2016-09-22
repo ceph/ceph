@@ -2104,7 +2104,7 @@ void AsyncConnection::_stop()
   if (delay_state)
     delay_state->flush();
 
-  ldout(async_msgr->cct, 1) << __func__ << dendl;
+  ldout(async_msgr->cct, 2) << __func__ << dendl;
   std::lock_guard<std::mutex> l(write_lock);
 
   reset_recv_state();
