@@ -6305,22 +6305,23 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 
     // encode
     bufferlist bl;
+    unsigned onode_part, blob_part, extent_part;
     {
       auto p = bl.get_contiguous_appender(bound);
       denc(o->onode, p);
-      //unsigned onode_part = bl.length();
+      onode_part = p.get_logical_offset();
       o->extent_map.encode_spanning_blobs(p);
-      //unsigned blob_part = bl.length() - onode_part;
+      blob_part = p.get_logical_offset() - onode_part;
       if (o->onode.extent_map_shards.empty()) {
 	denc(o->extent_map.inline_bl, p);
       }
-      //unsigned extent_part = bl.length() - onode_part - blob_part;
+      extent_part = p.get_logical_offset() - onode_part - blob_part;
     }
 
     dout(20) << "  onode " << o->oid << " is " << bl.length()
-      //<< " (" << onode_part << " bytes onode + "
-      //<< blob_part << " bytes spanning blobs + "
-      //<< extent_part << " bytes inline extents)"
+	     << " (" << onode_part << " bytes onode + "
+	     << blob_part << " bytes spanning blobs + "
+	     << extent_part << " bytes inline extents)"
 	     << dendl;
     t->set(PREFIX_OBJ, o->key, bl);
 
