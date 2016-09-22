@@ -261,7 +261,7 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
-  ldout(cct, 1) << __func__ << dendl;
+  ldout(cct, 2) << __func__ << dendl;
 
   char buf = 'c';
   // wake up "event_wait"
