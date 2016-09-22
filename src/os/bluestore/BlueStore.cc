@@ -2110,7 +2110,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     on = new Onode(&onode_map, this, oid, key);
   } else {
     // loaded
-    assert(r >=0 );
+    assert(r >= 0);
     on = new Onode(&onode_map, this, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
@@ -2202,8 +2202,8 @@ BlueStore::~BlueStore()
 {
   for (auto f : finishers) {
     delete f;
-    f = NULL;
   }
+  finishers.clear();
 
   g_ceph_context->_conf->remove_observer(this);
   _shutdown_logger();
