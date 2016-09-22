@@ -1018,6 +1018,7 @@ OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
 OPTION(bluestore_debug_freelist, OPT_BOOL, false)
 OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
 OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
+OPTION(bluestore_debug_inject_read_err, OPT_BOOL, false)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 
