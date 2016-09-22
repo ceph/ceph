@@ -59,6 +59,10 @@ struct librados::AioCompletionImpl {
 			is_read(false), blp(nullptr), out_buf(nullptr),
 			io(NULL), aio_write_seq(0), aio_write_list_item(this) { }
 
+  bool wants_ack() {
+    return is_read || callback_complete;
+  }
+
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
     lock.Lock();
     callback_complete = cb;
