@@ -3,7 +3,7 @@
 /*
  * Ceph distributed storage system
  *
- * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
@@ -15,11 +15,21 @@
  * 
  */
 
-#include "ceph_ver.h"
+#include "common/debug.h"
+#include "jerasure_init.h"
 
-extern "C" const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+extern "C" {
+#include "galois.h"
+}
 
-extern "C" int __erasure_code_init(char *plugin_name, char *directory)
+extern "C" int jerasure_init(int count, int *words)
 {
-  return -333;
+  for(int i = 0; i < count; i++) {
+    int r = galois_init_default_field(words[i]);
+    if (r) {
+      derr << "failed to galois_init_default_field(" << words[i] << ")" << dendl;
+      return -r;
+    }
+  }
+  return 0;
 }
