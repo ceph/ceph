@@ -256,8 +256,7 @@ private:
 
   friend class OSDMonitor;
   // FIXME: the elements required for PGMap updates should be exposed properly
-  friend class PGMonitor;
-  friend class ClusterState;
+  friend class PGMapUpdater;
 
  public:
   OSDMap() : epoch(0), 

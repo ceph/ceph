@@ -91,18 +91,7 @@ private:
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_pg(OSDMap *osdmap, pg_pool_t& pool, pg_t pgid,
-		   epoch_t epoch, bool new_pool);
-
-  /**
-   * check latest osdmap for new pgs to register
-   */
   void register_new_pgs();
-
-  /**
-   * recalculate creating pg mappings
-   */
-  void map_pg_creates();
 
   void send_pg_creates();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
