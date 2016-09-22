@@ -34,6 +34,8 @@
 #include <gtest/gtest.h>
 
 #include "include/unordered_map.h"
+#include "store_test_fixture.h"
+
 typedef boost::mt11213b gen_type;
 
 #if GTEST_HAS_PARAM_TEST
@@ -83,51 +85,6 @@ int apply_transaction(
   }
 }
 
-class StoreTest : public ::testing::TestWithParam<const char*> {
-public:
-  boost::scoped_ptr<ObjectStore> store;
-
-  StoreTest() : store(0) {}
-
-  void rm_r(string path) {
-    string cmd = string("rm -r ") + path;
-    cout << "==> " << cmd << std::endl;
-    int r = ::system(cmd.c_str());
-    if (r) {
-      cerr << "failed with exit code " << r
-	   << ", continuing anyway" << std::endl;
-    }
-  }
-
-  virtual void SetUp() {
-    int r = ::mkdir("store_test_temp_dir", 0777);
-    if (r < 0) {
-      r = -errno;
-      cerr << __func__ << ": unable to create store_test_temp_dir" << ": " << cpp_strerror(r) << std::endl;
-      return;
-    }
-
-    ObjectStore *store_ = ObjectStore::create(g_ceph_context,
-                                              string(GetParam()),
-                                              string("store_test_temp_dir"),
-                                              string("store_test_temp_journal"));
-    if (!store_) {
-      cerr << __func__ << ": objectstore type " << string(GetParam()) << " doesn't exist yet!" << std::endl;
-      return;
-    }
-    EXPECT_EQ(store_->mkfs(), 0);
-    EXPECT_EQ(store_->mount(), 0);
-    store.reset(store_);
-  }
-
-  virtual void TearDown() {
-    if (store) {
-      int r = store->umount();
-      EXPECT_EQ(r, 0);
-      rm_r("store_test_temp_dir");
-    }
-  }
-};
 
 bool sorted(const vector<ghobject_t> &in, bool bitwise) {
   ghobject_t start;
@@ -142,6 +99,14 @@ bool sorted(const vector<ghobject_t> &in, bool bitwise) {
   }
   return true;
 }
+
+class StoreTest : public StoreTestFixture,
+                  public ::testing::WithParamInterface<const char*> {
+public:
+  StoreTest()
+    : StoreTestFixture(GetParam())
+  {}
+};
 
 TEST_P(StoreTest, collect_metadata) {
   map<string,string> pm;
