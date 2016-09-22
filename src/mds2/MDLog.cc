@@ -661,13 +661,15 @@ void MDLog::trim(int m)
   _trim_expired_segments();
 }
 
-class C_MaybeExpiredSegment : public MDSContext {
+class C_MaybeExpiredSegment : public MDSAsyncContextBase {
+protected:
   MDLog *mdlog;
   LogSegment *ls;
   int op_prio;
-  public:
+  MDSRank* get_mds() { return mdlog->mds; }
+public:
   C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
-    MDSContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
+    mdlog(mdl), ls(s), op_prio(p) {}
   void finish(int res) {
     if (res < 0)
       mdlog->mds->handle_write_error(res);
@@ -861,8 +863,10 @@ void MDLog::replay(MDSContextBase *c)
   }
 
   // add waiter
-  if (c)
+  if (c) {
+    assert(c->is_async());
     waitfor_replay.push_back(c);
+  }
 
   // go!
   dout(10) << "replay start, from " << journaler->get_read_pos()

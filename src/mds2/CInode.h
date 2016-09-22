@@ -25,6 +25,7 @@ public:
   // -- pins --
   static const int PIN_DIRFRAG =		-1;
   static const int PIN_CAPS =			2;  // client caps
+  static const int PIN_RECOVERING =		3;
   static const int PIN_TRUNCATING =		18;
   static const int PIN_STRAY =			19; 
   static const int PIN_DIRTYRSTAT =		21;
@@ -40,6 +41,8 @@ public:
   static const unsigned STATE_STRAYPINNED =	(1<<6);
   static const unsigned STATE_REPLAYUNDEF =	(1<<7);
   static const unsigned STATE_ORPHAN =		(1<<8);
+  static const unsigned STATE_NEEDSRECOVER =	(1<<9);
+  static const unsigned STATE_RECOVERING =	(1<<10);
 
   // -- waiters --
   static const uint64_t WAIT_TRUNC       = (1<<2);
@@ -201,6 +204,8 @@ public:
   CDirRef get_or_open_dirfrag(frag_t fg);
   void close_dirfrag(frag_t fg);
   void get_dirfrags(list<CDir*>& ls);
+
+  __u32 hash_dentry_name(const std::string &dn);
 
   int encode_inodestat(bufferlist& bl, Session *session,
 		       unsigned max_bytes=0, int getattr_wants=0);

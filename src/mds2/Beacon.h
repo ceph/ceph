@@ -42,6 +42,7 @@ class Beacon : public Dispatcher
   //CephContext *cct;
   mutable Mutex lock;
   MonClient*    monc;
+  MDSRank*	mds;
   SafeTimer     timer;
 
   // Items we duplicate from the MDS to have access under our own lock
@@ -95,8 +96,10 @@ public:
   bool ms_handle_reset(Connection *c) {return false;}
   void ms_handle_remote_reset(Connection *c) {}
 
+  void set_mds(MDSRank *mds);
+  void notify_health();
+
   void notify_mdsmap(MDSMap const *mdsmap);
-  void notify_health(MDSRank const *mds);
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();

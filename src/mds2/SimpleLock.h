@@ -303,9 +303,11 @@ public:
   void take_waiting(uint64_t mask, list<MDSContextBase*>& ls) {
     parent->take_waiting(mask << get_wait_shift(), ls);
   }
+  /*
   void finish_waiting(uint64_t mask) {
     parent->finish_waiting(mask << get_wait_shift());
   }
+  */
   bool is_waiting_for(uint64_t mask) const {
     return parent->is_waiting_for(mask << get_wait_shift());
   }

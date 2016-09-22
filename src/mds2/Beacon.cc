@@ -33,7 +33,8 @@
 
 
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
-  Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
+  Dispatcher(cct_), lock("Beacon"), monc(monc_), mds(NULL),
+  timer(g_ceph_context, lock),
   name(name_), standby_for_rank(MDS_RANK_NONE),
   standby_for_fscid(FS_CLUSTER_ID_NONE), want_state(MDSMap::STATE_BOOT),
   awaiting_seq(-1)
@@ -118,6 +119,8 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
 	dout(0) << "handle_mds_beacon no longer laggy" << dendl;
 	was_laggy = false;
 	laggy_until = now;
+	if (mds)
+	  mds->unpause_workers();
       }
     } else {
       // Mark myself laggy if system clock goes backwards. Hopping
@@ -126,6 +129,8 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
 	      << "mark myself laggy" << dendl;
       last_acked_stamp = now - utime_t(g_conf->mds_beacon_grace + 1, 0);
       was_laggy = true;
+      if (mds)
+	mds->pause_workers();
     }
 
     // clean up seq_stamp map
@@ -257,6 +262,8 @@ bool Beacon::is_laggy()
     dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
 	    << " since last acked beacon" << dendl;
     was_laggy = true;
+    if (mds)
+      mds->pause_workers();
     if (since > (g_conf->mds_beacon_grace*2) &&
 	now > last_mon_reconnect + g_conf->mds_beacon_interval) {
       // maybe it's not us?
@@ -296,13 +303,19 @@ void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const news
   }
 }
 
+void Beacon::set_mds(MDSRank *_mds)
+{
+  Mutex::Locker l(lock);
+  assert(!mds);
+  mds = _mds;
+}
 
 /**
  * We are 'shown' an MDS briefly in order to update
  * some health metrics that we will send in the next
  * beacon.
  */
-void Beacon::notify_health(MDSRank const *mds)
+void Beacon::notify_health()
 {
   Mutex::Locker l(lock);
   if (!mds) {

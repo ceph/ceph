@@ -25,14 +25,15 @@ public:
 
   const std::string name;
 protected:
+  __u32 hash;
   CDir *dir;
 public:
 
-  CDentry(CDir *d, const std::string &n);
+  CDentry(CDir *d, const std::string &n, __u32 h);
 
   CDir *get_dir() const { return dir; }
   CInode *get_dir_inode() const;
-  dentry_key_t get_key() const { return dentry_key_t(CEPH_NOSNAP, name.c_str()); }
+  dentry_key_t get_key() const { return dentry_key_t(CEPH_NOSNAP, name.c_str(), hash); }
   void make_string(std::string& s) const;
 
   bool is_lt(const CObject *r) const;

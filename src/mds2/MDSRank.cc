@@ -72,6 +72,7 @@ MDSRank::MDSRank(
     waiter_list_lock("MDSRank::waiter_list_lock"),
     op_tp(msgr->cct, "MDSRank::op_tp", "tp_op",  g_conf->osd_op_threads * 2, "mds_op_threads"),
     msg_tp(msgr->cct, "MDSRank::msg_tp", "tp_msg",  g_conf->osd_op_threads, "mds_msg_threads"),
+    workers_paused(false),
     ctx_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
     req_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
     msg_wq(this, g_conf->osd_op_thread_timeout, &msg_tp)
@@ -79,6 +80,8 @@ MDSRank::MDSRank(
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
   objecter->unset_honor_osdmap_full();
+
+  beacon.set_mds(this);
 
   log_finisher = new Finisher(msgr->cct);
   filer_finisher = new Finisher(msgr->cct);
@@ -159,7 +162,7 @@ void MDSRankDispatcher::tick()
   mdlog->flush();
 
   // Expose ourselves to Beacon to update health indicators
-  beacon.notify_health(this);
+  beacon.notify_health();
 
   if (is_active() || is_stopping()) { // NOT during recovery!
     // FIXME: use seperate timer to do this
@@ -744,6 +747,7 @@ void MDSRankDispatcher::handle_mds_map(
 
   if (oldstate != newstate) {
     msg_tp.pause();
+    op_tp.pause();
 
     state = newstate;
     last_state = oldstate;
@@ -828,8 +832,10 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
     dout(1) << "cluster recovered." << dendl;
 
-  if (oldstate != newstate)
+  if (oldstate != newstate) {
     msg_tp.unpause();
+    op_tp.unpause();
+  }
 }
 
 bool MDSRank::replay_next_request()

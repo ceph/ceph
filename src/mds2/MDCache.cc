@@ -11,6 +11,7 @@
 #include "MDLog.h"
 #include "SessionMap.h"
 #include "StrayManager.h"
+#include "RecoveryQueue.h"
 
 #include "events/EUpdate.h"
 #include "events/ESubtreeMap.h"
@@ -43,14 +44,19 @@ MDCache::MDCache(MDSRank *_mds) :
   rejoin_done(NULL),
   rejoin_num_opening_inodes(0)
 {
+  recovery_queue = new RecoveryQueue(mds);
   stray_manager = new StrayManager(mds);
+
   filer = new Filer(mds->objecter, mds->get_filer_finisher());
+
   dentry_lru.lru_set_max(g_conf->mds_cache_size);
   dentry_lru.lru_set_midpoint(g_conf->mds_cache_mid);
 }
 
 MDCache::~MDCache()
 {
+  delete recovery_queue;
+  recovery_queue = NULL;
   delete stray_manager;
   stray_manager = NULL;
   delete filer;
@@ -511,22 +517,24 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 
 class C_MDC_RetryScanStray : public MDSContextBase {
   MDCache *mdcache;
-  dirfrag_t next;
+  dirfrag_t dirfrag;
+  string last_name;
   MDSRank* get_mds() { return mdcache->mds; };
 public:
-  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) :
-    mdcache(c), next(n) { }
+  C_MDC_RetryScanStray(MDCache *c, dirfrag_t df, const string& ln) :
+    mdcache(c), dirfrag(df), last_name(ln) { }
   void finish(int r) {
-    mdcache->scan_stray_dir(next);
+    mdcache->scan_stray_dir(dirfrag, last_name);
   }
 };
 
-void MDCache::scan_stray_dir(dirfrag_t next)
+void MDCache::scan_stray_dir(dirfrag_t dirfrag, string last_name)
 {
-  dout(10) << "scan_stray_dir " << next << dendl;
+  dout(10) << "scan_stray_dir " << dirfrag << " '" << last_name << "'" << dendl;
 
+  unsigned count = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
-    if (strays[i]->ino() < next.ino)
+    if (strays[i]->ino() < dirfrag.ino)
       continue;
   
     CInodeRef& strayi = strays[i];
@@ -536,24 +544,40 @@ void MDCache::scan_stray_dir(dirfrag_t next)
     strayi->get_dirfrags(ls);
     for (auto p = ls.begin(); p != ls.end(); ++p) {
       CDir *dir = *p;
-      if (dir->dirfrag() < next)
+      if (dir->dirfrag() < dirfrag)
 	continue;
       if (!dir->is_complete()) {
-	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag(), last_name));
 	return;
       }
-      for (auto q = dir->begin(); q != dir->end(); ++q) {
+
+      dentry_map_t::const_iterator q;
+      if (last_name.empty()) {
+	q = dir->begin();
+      } else {
+	dentry_key_t key(CEPH_NOSNAP, last_name.c_str(),
+			 strayi->hash_dentry_name(last_name));
+	q = dir->upper_bound(key);
+      }
+      while (q != dir->end()) {
 	CDentryRef dn = q->second;
+	++q;
 	// stray_manager.notify_stray_created();
 	// CDentry::last_put() will do the job
+	if (++count >= 5000 && q != dir->end()) {
+	  // avoid work queue timeout
+	  mds->queue_context(new C_MDC_RetryScanStray(this, dir->dirfrag(), dn->name));
+	  return;
+	}
       }
     }
+    last_name.clear();
   }
 }
 
 void MDCache::scan_strays()
 {
-  mds->queue_context(new C_MDC_RetryScanStray(this, dirfrag_t()));
+  mds->queue_context(new C_MDC_RetryScanStray(this, dirfrag_t(), ""));
 }
 
 CDentryRef MDCache::get_or_create_stray_dentry(CInode *in)
@@ -732,6 +756,7 @@ CInodeRef MDCache::replay_invent_inode(inodeno_t ino)
   inode_t *pi = in->__get_inode();
   pi->ino = ino;
   pi->mode = S_IFDIR|0755;
+  pi->dir_layout.dl_dir_hash = CEPH_STR_HASH_RJENKINS;
   in->state_set(CInode::STATE_REPLAYUNDEF);
   replay_undef_inodes.push_back(&in->item_dirty_parent);
   add_inode(in.get());
@@ -1576,7 +1601,7 @@ void MDCache::_open_inode_finish(inodeno_t ino, open_inode_info_t& info, int ret
 
   open_inode_mutex.Unlock();
 
-  finish_contexts(g_ceph_context, waiters, ret);
+  mds->queue_contexts(waiters, ret);
 }
 
 void MDCache::open_inode(inodeno_t ino, int64_t pool, MDSContextBase* fin)

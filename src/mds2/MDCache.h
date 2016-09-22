@@ -17,6 +17,7 @@ class EMetaBlob;
 class ESubtreeMap;
 class Session;
 class Filer;
+class RecoveryQueue;
 class StrayManager;
 
 struct MutationImpl;
@@ -64,11 +65,12 @@ public:
 
   int path_traverse(const MDRequestRef& mdr,
 		    const filepath& path, vector<CDentryRef> *pdnvec, CInodeRef *pin);
-
+protected:
+  RecoveryQueue *recovery_queue;
 
 protected:
   StrayManager *stray_manager;
-  void scan_stray_dir(dirfrag_t next=dirfrag_t());
+  void scan_stray_dir(dirfrag_t dirfrag, string last_name);
   friend struct C_MDC_RetryScanStray;
 public:
   void advance_stray() { stray_index = (stray_index + 1) % NUM_STRAY; }

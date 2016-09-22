@@ -102,6 +102,12 @@ public:
   bool empty() const { return items.empty(); }
   dentry_map_t::const_iterator begin() const { return items.begin(); }
   dentry_map_t::const_iterator end() const { return items.end(); }
+  dentry_map_t::const_iterator lower_bound(dentry_key_t& key) const {
+    return items.lower_bound(key);
+  }
+  dentry_map_t::const_iterator upper_bound(dentry_key_t& key) const {
+    return items.upper_bound(key);
+  }
   dentry_map_t::const_reverse_iterator rbegin() const { return items.rbegin(); }
   dentry_map_t::const_reverse_iterator rend() const { return items.rend(); }
 
@@ -115,12 +121,12 @@ public:
   void remove_dentry(CDentry *dn);
   void touch_dentries_bottom();
 
-  CDentry* __lookup(const char *nanme, snapid_t snap=CEPH_NOSNAP);
+  CDentry* __lookup(const string& name, snapid_t snap=CEPH_NOSNAP);
   CDentryRef lookup(const char *name, snapid_t snap=CEPH_NOSNAP) {
-    return CDentryRef(__lookup(name, snap));
+    return CDentryRef(__lookup(string(name), snap));
   }
   CDentryRef lookup(const string &name, snapid_t snap=CEPH_NOSNAP) {
-    return CDentryRef(__lookup(name.c_str(), snap));
+    return CDentryRef(__lookup(name, snap));
   }
 
   void encode_dirstat(bufferlist& bl, mds_rank_t whoami);

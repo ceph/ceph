@@ -267,10 +267,27 @@ public:
 protected:
   ThreadPool op_tp;
   ThreadPool msg_tp;
+  bool workers_paused;
+
   // finish log contexts in same order of log entires
   Finisher *log_finisher;
   Finisher *filer_finisher;
 public:
+  void pause_workers() {
+    if (!workers_paused) {
+      workers_paused = true;
+      msg_tp.pause_new();
+      op_tp.pause_new();
+    }
+  }
+  void unpause_workers() {
+    if (workers_paused) {
+      workers_paused = false;
+      msg_tp.unpause();
+      op_tp.unpause();
+    }
+  }
+
   Finisher *get_log_finisher() { return log_finisher; }
   Finisher *get_filer_finisher() { return filer_finisher; }
 

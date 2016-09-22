@@ -1713,6 +1713,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
   MClientRequest *req = mdr->client_request;
   string offset_str = req->get_path2();
+  unsigned req_flags = (__u32)req->head.args.readdir.flags;
 
   unsigned max = req->head.args.readdir.max_entries;
   if (!max)
@@ -1751,7 +1752,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
       continue;
 
     if (!offset_str.empty()) {
-      dentry_key_t offset_key(CEPH_NOSNAP, offset_str.c_str());
+      dentry_key_t offset_key(CEPH_NOSNAP, offset_str.c_str(),
+			      diri->hash_dentry_name(offset_str));
       if (!(offset_key < dn->get_key()))
         continue;
     }
@@ -1828,6 +1830,11 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     complete = offset_str.empty(); // FIXME: what purpose does this serve
     if (complete)
       flags |= CEPH_READDIR_FRAG_COMPLETE;
+  }
+
+  // client only understand END and COMPLETE flags ?
+  if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+    flags |= CEPH_READDIR_HASH_ORDER;
   }
 
   // finish final blob

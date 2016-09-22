@@ -230,7 +230,7 @@ CDentryRef CDir::add_null_dentry(const string& dname)
 {
   dout(12) << "add_null_dentry " << dname << dendl;
   inode->mutex_assert_locked_by_me();
-  CDentryRef dn = new CDentry(this, dname);
+  CDentryRef dn = new CDentry(this, dname, inode->hash_dentry_name(dname));
 
   if (inode->is_stray())
     dn->state_set(CDentry::STATE_STRAY);
@@ -251,7 +251,7 @@ CDentryRef CDir::add_null_dentry(const string& dname)
 CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in)
 {
   inode->mutex_assert_locked_by_me();
-  CDentryRef dn = new CDentry(this, dname);
+  CDentryRef dn = new CDentry(this, dname, inode->hash_dentry_name(dname));
 
   if (inode->is_stray())
     dn->state_set(CDentry::STATE_STRAY);
@@ -273,7 +273,7 @@ CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in)
 CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d_type)
 {
   inode->mutex_assert_locked_by_me();
-  CDentryRef dn = new CDentry(this, dname);
+  CDentryRef dn = new CDentry(this, dname, inode->hash_dentry_name(dname));
 
   assert(!inode->is_stray());
   mdcache->dentry_lru_insert(dn.get());
@@ -319,11 +319,11 @@ void CDir::touch_dentries_bottom()
     mdcache->touch_dentry_bottom(p->second);
 }
 
-CDentry* CDir::__lookup(const char *name, snapid_t snap)
+CDentry* CDir::__lookup(const string& name, snapid_t snap)
 {
   assert(snap == CEPH_NOSNAP);
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
-  auto it = items.lower_bound(dentry_key_t(snap, name));
+  auto it = items.lower_bound(dentry_key_t(snap, name.c_str(), inode->hash_dentry_name(name)));
   if (it == items.end())
     return 0;
   if (it->second->name == name) {

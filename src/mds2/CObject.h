@@ -193,11 +193,13 @@ public:
     if (waiting.empty())
       put(PIN_WAITER);
   }
+  /*
   void finish_waiting(uint64_t mask, int result = 0) {
     list<MDSContextBase*> finished;
     take_waiting(mask, finished);
     finish_contexts(g_ceph_context, finished, result);
   }
+  */
 
   virtual void mark_dirty_scattered(int type, LogSegment *ls) { assert(0); }
   virtual void clear_dirty_scattered(int type) { assert(0); }

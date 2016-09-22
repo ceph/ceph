@@ -57,10 +57,12 @@ protected:
   void eval_scatter_gathers(CInode *in);
   void eval_cap_gather(CInode *in, set<CInodeRef> *issue_set=0);
 
-  bool eval(CInode *in, int mask); // parent mutex/
   void try_eval(CObject *p, int mask); // parent mutex
   void try_eval(SimpleLock *lock, bool *pneed_issue); 
+public:
+  bool eval(CInode *in, int mask); // parent mutex/
 
+protected:
   bool rdlock_kick(SimpleLock *lock);
   bool rdlock_start(SimpleLock *lock, const MDRequestRef& mut);
   void rdlock_finish(SimpleLock *lock, const MutationRef& mut, bool *pneed_issue);

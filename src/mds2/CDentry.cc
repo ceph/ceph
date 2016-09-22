@@ -68,8 +68,8 @@ ostream& operator<<(ostream& out, const CDentry& dn)
   return out;
 }
 
-CDentry::CDentry(CDir *d, const std::string &n) :
-  CObject("CDentry"), name(n), dir(d),
+CDentry::CDentry(CDir *d, const std::string &n, __u32 h) :
+  CObject("CDentry"), name(n), hash(h), dir(d),
   lock(this, &lock_type),
   versionlock(this, &versionlock_type)
 {

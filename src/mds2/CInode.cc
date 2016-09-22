@@ -438,6 +438,14 @@ bool CInode::is_projected_ancestor_of(CInode *other) const
   return false;
 }
 
+__u32 CInode::hash_dentry_name(const string &dn)
+{
+  int which = inode.dir_layout.dl_dir_hash;
+  if (!which)
+    which = CEPH_STR_HASH_LINUX;
+  assert(ceph_str_hash_valid(which));
+  return ceph_str_hash(which, dn.data(), dn.length());
+}
 
 int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     unsigned max_bytes, int getattr_wants)

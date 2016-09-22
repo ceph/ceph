@@ -939,6 +939,7 @@ set(ceph_mds2_srcs
   mds2/journal.cc
   mds2/LogEvent.cc
   mds2/StrayManager.cc
+  mds2/RecoveryQueue.cc
   osdc/Filer.cc
   osdc/Journaler.cc)
 add_executable(ceph-mds2 ${ceph_mds2_srcs} $<TARGET_OBJECTS:common_util_obj>)
