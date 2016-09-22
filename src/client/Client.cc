@@ -1129,7 +1129,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 		   << ", readdir_start " << readdir_start << dendl;
 
     if (diri->snapid != CEPH_SNAPDIR &&
-	fg.is_leftmost() && readdir_offset == 2) {
+	fg.is_leftmost() && readdir_offset == 2 && readdir_start.empty()) {
       dirp->release_count = diri->dir_release_count;
       dirp->ordered_count = diri->dir_ordered_count;
       dirp->start_shared_gen = diri->shared_gen;
