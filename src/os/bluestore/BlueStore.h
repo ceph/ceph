@@ -357,7 +357,15 @@ public:
       assert(n > 0);
     }
 
-    SharedBlobRef lookup(uint64_t sbid);
+    SharedBlobRef lookup(uint64_t sbid) {
+      std::lock_guard<std::mutex> l(lock);
+      dummy.sbid = sbid;
+      auto p = uset.find(dummy);
+      if (p == uset.end()) {
+        return nullptr;
+      }
+      return &*p;
+    }
 
     void add(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
