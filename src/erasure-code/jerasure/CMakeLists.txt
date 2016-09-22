@@ -35,6 +35,13 @@ if(HAVE_INTEL_SSE4_2)
   list(APPEND GF_COMPILE_FLAGS INTEL_SSE4)
 endif()
 
+# set this to TRUE to enable debugging of SIMD detection
+# inside gf-complete. gf-complete will printf the SIMD
+# instructions detected to stdout.
+if (FALSE)
+  list(APPEND GF_COMPILE_FLAGS DEBUG_CPU_DETECTION)
+endif()
+
 set(gf-complete_srcs
   gf-complete/src/gf_cpu.c
   gf-complete/src/gf_wgen.c
@@ -59,7 +66,7 @@ endif()
 
 add_library(gf-complete_objs OBJECT ${gf-complete_srcs})
 set_target_properties(gf-complete_objs PROPERTIES 
-  COMPILE_FLAGS ${SIMD_COMPILE_FLAGS})
+  COMPILE_FLAGS "${SIMD_COMPILE_FLAGS}")
 set_target_properties(gf-complete_objs PROPERTIES 
   COMPILE_DEFINITIONS "${GF_COMPILE_FLAGS}")
 
