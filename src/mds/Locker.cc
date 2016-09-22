@@ -1276,7 +1276,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
 void Locker::nudge_log(SimpleLock *lock)
 {
   dout(10) << "nudge_log " << *lock << " on " << *lock->get_parent() << dendl;
-  if (lock->get_parent()->is_auth() && !lock->is_stable())    // as with xlockdone, or cap flush
+  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked())    // as with xlockdone, or cap flush
     mds->mdlog->flush();
 }
 
@@ -1814,10 +1814,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [auth] twiddle mode?
     eval(in, CEPH_CAP_LOCKS);
 
-    if (!in->filelock.is_stable() ||
-	!in->authlock.is_stable() ||
-	!in->linklock.is_stable() ||
-	!in->xattrlock.is_stable())
+    if (_need_flush_mdlog(in, my_want))
       mds->mdlog->flush();
 
   } else {
@@ -2129,32 +2126,29 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
 class C_MDL_CheckMaxSize : public LockerContext {
   CInode *in;
-  bool update_size;
-  uint64_t newsize;
-  bool update_max;
   uint64_t new_max_size;
+  uint64_t newsize;
   utime_t mtime;
 
 public:
-  C_MDL_CheckMaxSize(Locker *l, CInode *i, bool _update_size, uint64_t _newsize,
-                     bool _update_max, uint64_t _new_max_size, utime_t _mtime) :
+  C_MDL_CheckMaxSize(Locker *l, CInode *i, uint64_t _new_max_size,
+                     uint64_t _newsize, utime_t _mtime) :
     LockerContext(l), in(i),
-    update_size(_update_size), newsize(_newsize),
-    update_max(_update_max), new_max_size(_new_max_size),
-    mtime(_mtime)
+    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime)
   {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
     in->put(CInode::PIN_PTRWAITER);
     if (in->is_auth())
-      locker->check_inode_max_size(in, false, update_size, newsize,
-                                   update_max, new_max_size, mtime);
+      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
   }
 };
 
 
-void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,client_writeable_range_t>& new_ranges)
+void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
+				    map<client_t,client_writeable_range_t> *new_ranges,
+				    bool *max_increased)
 {
   inode_t *latest = in->get_projected_inode();
   uint64_t ms;
@@ -2171,10 +2165,12 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,clie
        p != in->client_caps.end();
        ++p) {
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
-      client_writeable_range_t& nr = new_ranges[p->first];
+      client_writeable_range_t& nr = (*new_ranges)[p->first];
       nr.range.first = 0;
       if (latest->client_ranges.count(p->first)) {
 	client_writeable_range_t& oldr = latest->client_ranges[p->first];
+	if (ms > oldr.range.last)
+	  *max_increased = true;
 	nr.range.last = MAX(ms, oldr.range.last);
 	nr.follows = oldr.follows;
       } else {
@@ -2186,8 +2182,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,clie
 }
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
-				  bool update_size, uint64_t new_size,
-				  bool update_max, uint64_t new_max_size,
+				  uint64_t new_max_size, uint64_t new_size,
 				  utime_t new_mtime)
 {
   assert(in->is_auth());
@@ -2196,7 +2191,9 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   inode_t *latest = in->get_projected_inode();
   map<client_t, client_writeable_range_t> new_ranges;
   uint64_t size = latest->size;
-  bool new_max = update_max;
+  bool update_size = new_size > 0;
+  bool update_max = false;
+  bool max_increased = false;
 
   if (update_size) {
     new_size = size = MAX(size, new_size);
@@ -2205,14 +2202,12 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       update_size = false;
   }
 
-  uint64_t client_range_size = update_max ? new_max_size : size;
+  calc_new_client_ranges(in, max(new_max_size, size), &new_ranges, &max_increased);
 
-  calc_new_client_ranges(in, client_range_size, new_ranges);
+  if (max_increased || latest->client_ranges != new_ranges)
+    update_max = true;
 
-  if (latest->client_ranges != new_ranges)
-    new_max = true;
-
-  if (!update_size && !new_max) {
+  if (!update_size && !update_max) {
     dout(20) << "check_inode_max_size no-op on " << *in << dendl;
     return false;
   }
@@ -2224,8 +2219,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (in->is_frozen()) {
     dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
     C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-                                                     update_size, new_size,
-                                                     update_max, new_max_size,
+                                                     new_max_size,
+                                                     new_size,
                                                      new_mtime);
     in->add_waiter(CInode::WAIT_UNFREEZE, cms);
     return false;
@@ -2241,8 +2236,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     if (!in->filelock.can_wrlock(in->get_loner())) {
       // try again later
       C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-                                                       update_size, new_size,
-                                                       update_max, new_max_size,
+                                                       new_max_size,
+                                                       new_size,
                                                        new_mtime);
 
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
@@ -2257,7 +2252,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
 
-  if (new_max) {
+  if (update_max) {
     dout(10) << "check_inode_max_size client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
     pi->client_ranges = new_ranges;
   }
@@ -2302,7 +2297,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   mut->auth_pin(in);
 
   // make max_size _increase_ timely
-  if (new_max)
+  if (max_increased)
     mds->mdlog->flush();
 
   return true;
@@ -2343,6 +2338,22 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
     if (only_cap)
       break;
   }
+}
+
+bool Locker::_need_flush_mdlog(CInode *in, int wanted)
+{
+  /* flush log if caps are wanted by client but corresponding lock is unstable and locked by
+   * pending mutations. */
+  if (((wanted & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_SHARED|CEPH_CAP_FILE_EXCL)) &&
+       in->filelock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_AUTH_SHARED|CEPH_CAP_AUTH_EXCL)) &&
+       in->authlock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_LINK_SHARED|CEPH_CAP_LINK_EXCL)) &&
+       in->linklock.is_unstable_and_locked()) ||
+      ((wanted & (CEPH_CAP_XATTR_SHARED|CEPH_CAP_XATTR_EXCL)) &&
+       in->xattrlock.is_unstable_and_locked()))
+    return true;
+  return false;
 }
 
 void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
@@ -2636,7 +2647,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       assert(in->last != CEPH_NOSNAP);
       if (in->is_auth() && m->get_dirty()) {
 	dout(10) << " updating intermediate snapped inode " << *in << dendl;
-	_do_cap_update(in, NULL, m->get_dirty(), follows, m, NULL);
+	_do_cap_update(in, NULL, m->get_dirty(), follows, m);
       }
       in = mdcache->pick_inode_snap(head_in, in->last);
     }
@@ -2682,26 +2693,24 @@ void Locker::handle_client_caps(MClientCaps *m)
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)
+    bool need_flush = false;
     int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
     if (new_wanted != cap->wanted()) {
-      if (new_wanted & ~cap->wanted()) {
+      if (new_wanted & ~cap->pending()) {
 	// exapnding caps.  make sure we aren't waiting for a log flush
-	if (!in->filelock.is_stable() ||
-	    !in->authlock.is_stable() ||
-	    !in->xattrlock.is_stable())
-	  mds->mdlog->flush();
+	need_flush = _need_flush_mdlog(head_in, new_wanted & ~cap->pending());
       }
 
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
       
     if (in->is_auth() &&
-	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
+	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack, &need_flush)) {
       // updated
       eval(in, CEPH_CAP_LOCKS);
-      
-      if (cap->wanted() & ~cap->pending())
-	mds->mdlog->flush();
+
+      if (!need_flush && (cap->wanted() & ~cap->pending()))
+	need_flush = _need_flush_mdlog(in, cap->wanted() & ~cap->pending());
     } else {
       // no update, ack now.
       if (ack)
@@ -2710,12 +2719,16 @@ void Locker::handle_client_caps(MClientCaps *m)
       bool did_issue = eval(in, CEPH_CAP_LOCKS);
       if (!did_issue && (cap->wanted() & ~cap->pending()))
 	issue_caps(in, cap);
+
       if (cap->get_last_seq() == 0 &&
 	  (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER))) {
 	cap->issue_norevoke(cap->issued());
 	share_inode_max_size(in, cap);
       }
     }
+
+    if (need_flush)
+      mds->mdlog->flush();
   }
 
  out:
@@ -3061,8 +3074,9 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
  * if we update, return true; otherwise, false (no updated needed).
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
-			    int dirty, snapid_t follows, MClientCaps *m,
-			    MClientCaps *ack)
+			    int dirty, snapid_t follows,
+			    MClientCaps *m, MClientCaps *ack,
+			    bool *need_flush)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " issued " << ccap_string(cap ? cap->issued() : 0)
@@ -3130,10 +3144,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       if (!in->filelock.can_wrlock(client) &&
 	  !in->filelock.can_force_wrlock(client)) {
 	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
-	                                                 false, 0,
-	                                                 forced_change_max,
-	                                                 new_max,
-	                                                 utime_t());
+	                                                 forced_change_max ? new_max : 0,
+	                                                 0, utime_t());
 
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
 	change_max = false;
@@ -3234,15 +3246,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 								 change_max,
 								 client, cap,
 								 ack));
-  // only flush immediately if the lock is unstable, or unissued caps are wanted, or max_size is 
-  // changing
-  if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
-      ((dirty & CEPH_CAP_AUTH_EXCL) && !in->authlock.is_stable()) ||
-      ((dirty & CEPH_CAP_XATTR_EXCL) && !in->xattrlock.is_stable()) ||
-      (!dirty && (!in->filelock.is_stable() || !in->authlock.is_stable() || !in->xattrlock.is_stable())) ||  // nothing dirty + unstable lock -> probably a revoke?
-      (change_max && new_max) ||         // max INCREASE
-      (cap && (cap->wanted() & ~cap->pending())))
-    mds->mdlog->flush();
+  if (need_flush && !*need_flush &&
+      ((change_max && new_max) || // max INCREASE
+       _need_flush_mdlog(in, dirty)))
+    *need_flush = true;
 
   return true;
 }
