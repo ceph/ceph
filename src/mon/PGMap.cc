@@ -2212,7 +2212,9 @@ void PGMapUpdater::register_new_pgs(
            << ", last_pg_scan " << pg_map->last_pg_scan << dendl;
 
   int created = 0;
-  for (const auto &p : osd_map.pools) {
+  const auto &pools = osd_map.get_pools();
+
+  for (const auto &p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t &pool = p.second;
     int ruleno = osd_map.crush->find_rule(pool.get_crush_ruleset(),
