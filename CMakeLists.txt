@@ -117,7 +117,6 @@ CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
 
-CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
@@ -386,16 +385,69 @@ if(LINUX)
   add_definitions(-D__linux__)
 endif(LINUX)
 
-if(ENABLE_SHARED)
-  set(Boost_USE_STATIC_LIBS   OFF)
-else(ENABLE_SHARED)
-  set(Boost_USE_STATIC_LIBS   ON)
-endif(ENABLE_SHARED)
+# Boost
+option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
+
+if (WITH_SYSTEM_BOOST)
+  if(ENABLE_SHARED)
+    set(Boost_USE_STATIC_LIBS OFF)
+  else()
+    set(Boost_USE_STATIC_LIBS ON)
+  endif()
+else()
+  set(BOOST_CFLAGS "-fPIC") # check on arm, etc <---XXX
+  set(BOOST_J 1 CACHE STRING
+    "max jobs for Boost build") # override w/-DBOOST_J=<n>
+  message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
+  # 1. prep w/required components
+  set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
+  set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
+  set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
+  set(Boost_USE_STATIC_LIBS ON)
+  execute_process(COMMAND "./bootstrap.sh"
+    "--prefix=${BOOST_PREFIX}"
+    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,random,regex,system,thread"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 2. install headers
+  set(BOOST_ROOT "${BOOST_PREFIX}")
+  execute_process(COMMAND "./b2"
+    #"--buildid=ceph" # changes lib names--can omit for static
+    "--variant=release" # could override
+    "--link=static" # avoid library versioning issues
+    "--threading=multi"
+    "--build-dir=${BOOST_BUILD}"
+    "-j${BOOST_J}"
+    "cxxflags=${BOOST_CFLAGS}"
+    "headers"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 3. build and install libs
+  execute_process(COMMAND "./b2"
+    #"--buildid=ceph" # changes lib names--can omit for static
+    "--variant=release" # could override
+    "--link=static" # avoid library versioning issues
+    "--threading=multi"
+    "--build-dir=${BOOST_BUILD}"
+    "-j${BOOST_J}"
+    "cxxflags=${BOOST_CFLAGS}"
+    "install"
+    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
+  # 4. set hints for FindBoost.cmake
+  set(Boost_NO_SYSTEM_PATHS ON)
+  include_directories(BEFORE ${BOOST_PREFIX}/include)
+endif()
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
+
+# require minimally the bundled version
+find_package(Boost 1.61 COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${PROJECT_BINARY_DIR}/include)
+
+if (NOT WITH_SYSTEM_BOOST)
+  LIST(APPEND Boost_LIBRARIES "-lz")
+endif()
+
+CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 
 find_package(Threads REQUIRED)
 
