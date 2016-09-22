@@ -186,8 +186,9 @@ void CloseRequest<I>::send_flush_readahead() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  m_image_ctx->readahead.wait_for_pending(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_flush_readahead>(this));
+  m_image_ctx->readahead.wait_for_pending(create_async_context_callback(
+    *m_image_ctx, create_context_callback<
+      CloseRequest<I>, &CloseRequest<I>::handle_flush_readahead>(this)));
 }
 
 template <typename I>
