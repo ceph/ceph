@@ -545,6 +545,13 @@ namespace buffer CEPH_BUFFER_API {
 	flush_and_continue();
 	pbl->append(l);
 	out_of_band_offset += l.length();
+
+      size_t get_logical_offset() {
+	if (bp.have_raw()) {
+	  return out_of_band_offset + (pos - bp.c_str());
+	} else {
+	  return out_of_band_offset + (pos - pbl->append_buffer.end_c_str());
+	}
       }
     };
 
