@@ -2354,7 +2354,7 @@ void AsyncConnection::DelayedDelivery::flush() {
 
 void AsyncConnection::send_keepalive()
 {
-  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
   std::lock_guard<std::mutex> l(write_lock);
   if (can_write != WriteStatus::CLOSED) {
     keepalive = true;
@@ -2364,7 +2364,7 @@ void AsyncConnection::send_keepalive()
 
 void AsyncConnection::mark_down()
 {
-  ldout(async_msgr->cct, 1) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
   std::lock_guard<std::mutex> l(lock);
   _stop();
 }
@@ -2392,7 +2392,7 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
 
 void AsyncConnection::handle_write()
 {
-  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
   ssize_t r = 0;
 
   write_lock.lock();
