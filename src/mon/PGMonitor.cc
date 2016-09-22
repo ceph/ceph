@@ -71,7 +71,7 @@ void PGMonitor::on_restart()
 void PGMonitor::on_active()
 {
   if (mon->is_leader()) {
-    check_osd_map(mon->osdmon()->osdmap.epoch);
+    check_osd_map(mon->osdmon()->osdmap.get_epoch());
     need_check_down_pgs = true;
   }
 
@@ -895,54 +895,16 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
     assert(bl.length());
     OSDMap::Incremental inc(bl);
-    for (map<int32_t,uint32_t>::iterator p = inc.new_weight.begin();
-         p != inc.new_weight.end();
-         ++p)
-      if (p->second == CEPH_OSD_OUT) {
-	dout(10) << __func__ << "  osd." << p->first << " went OUT" << dendl;
-	pending_inc.stat_osd_out(p->first);
-      }
 
-
-    // this is conservative: we want to know if any osds (maybe) got marked down.
-    for (map<int32_t,uint8_t>::iterator p = inc.new_state.begin();
-         p != inc.new_state.end();
-         ++p) {
-      if (p->second & CEPH_OSD_UP) {   // true if marked up OR down,
-	                               // but we're too lazy to check
-	                               // which
-	need_check_down_pg_osds.insert(p->first);
-
-	// clear out the last_osd_report for this OSD
-	map<int, utime_t>::iterator report = last_osd_report.find(p->first);
-	if (report != last_osd_report.end()) {
-	  last_osd_report.erase(report);
-	}
-
-	// clear out osd_stat slow request histogram
-	dout(20) << __func__ << " clearing osd." << p->first
-	         << " request histogram" << dendl;
-	pending_inc.stat_osd_down_up(p->first, pg_map);
-      }
-
-      if (p->second & CEPH_OSD_EXISTS) {
-	// whether it was created *or* destroyed, we can safely drop
-	// it's osd_stat_t record.
-	dout(10) << __func__ << "  osd." << p->first
-	         << " created or destroyed" << dendl;
-	pending_inc.rm_stat(p->first);
-
-	// and adjust full, nearfull set
-	pg_map.nearfull_osds.erase(p->first);
-	pg_map.full_osds.erase(p->first);
-      }
-    }
+    PGMapUpdater::check_osd_map(inc, &need_check_down_pg_osds,
+                                &last_osd_report, &pg_map, &pending_inc);
   }
 
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
-  map_pg_creates();
-  register_new_pgs();
+  PGMapUpdater::update_creating_pgs(mon->osdmon()->osdmap,
+                                    &pg_map, &pending_inc);
+  PGMapUpdater::register_new_pgs(mon->osdmon()->osdmap, &pg_map, &pending_inc);
 
   if (need_check_down_pgs || !need_check_down_pg_osds.empty())
     check_down_pgs();
@@ -950,6 +912,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   propose_pending();
 }
 
+/*
+<<<<<<< HEAD
 void PGMonitor::register_pg(OSDMap *osdmap,
                             pg_pool_t& pool, pg_t pgid, epoch_t epoch,
                             bool new_pool)
@@ -1188,6 +1152,9 @@ void PGMonitor::map_pg_creates()
   }
 }
 
+=======
+>>>>>>> afa7078... mon: refactor PGMap updating code for reuse in mgr
+*/
 void PGMonitor::send_pg_creates()
 {
   // We only need to do this old, spammy way of broadcasting create messages
