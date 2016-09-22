@@ -57,6 +57,16 @@ PTYPE = {
             'ready': 'cafecafe-9b03-4f30-b4c6-b4b80ceff106',
             'tobe': 'cafecafe-9b03-4f30-b4c6-b4b80ceff106',
         },
+        'block.db': {
+            # identical because creating a block is atomic
+            'ready': '30cd0809-c2b2-499c-8879-2d6b78529876',
+            'tobe': '30cd0809-c2b2-499c-8879-2d6b785292be',
+        },
+        'block.wal': {
+            # identical because creating a block is atomic
+            'ready': '5ce17fce-4087-4169-b7ff-056cc58473f9',
+            'tobe': '5ce17fce-4087-4169-b7ff-056cc58472be',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-062c0ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be',
@@ -75,6 +85,14 @@ PTYPE = {
             'ready': 'cafecafe-9b03-4f30-b4c6-35865ceff106',
             'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
         },
+        'block.db': {
+            'ready': '166418da-c469-4022-adf4-b30afd37f176',
+            'tobe': '7521c784-4626-4260-bc8d-ba77a0f5f2be',
+        },
+        'block.wal': {
+            'ready': '86a32090-3647-40b9-bbbd-38d8c573aa86',
+            'tobe': '92dad30f-175b-4d40-a5b0-5c0a258b42be',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-35865ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be',
@@ -89,6 +107,14 @@ PTYPE = {
             'ready': 'cafecafe-9b03-4f30-b4c6-5ec00ceff106',
             'tobe': '89c57f98-2fe5-4dc0-89c1-35865ceff2be',
         },
+        'block.db': {
+            'ready': '93b0052d-02d9-4d8a-a43b-33a3ee4dfbc3',
+            'tobe': '69d17c68-3e58-4399-aff0-b68265f2e2be',
+        },
+        'block.wal': {
+            'ready': '306e8683-4fe2-4330-b7c0-00a917c16966',
+            'tobe': 'f2d89683-a621-4063-964a-eb1f7863a2be',
+        },
         'osd': {
             'ready': '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d',
             'tobe': '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be',
@@ -102,6 +128,14 @@ PTYPE = {
         'block': {
             'ready': 'cafecafe-8ae0-4982-bf9d-5a8d867af560',
             'tobe': 'cafecafe-8ae0-4982-bf9d-5a8d867af560',
+        },
+        'block.db': {
+            'ready': 'ec6d6385-e346-45dc-be91-da2a7c8b3261',
+            'tobe': 'ec6d6385-e346-45dc-be91-da2a7c8b32be',
+        },
+        'block.wal': {
+            'ready': '01b41e1b-002a-453c-9f17-88793989ff8f',
+            'tobe': '01b41e1b-002a-453c-9f17-88793989f2be',
         },
         'osd': {
             'ready': '4fbd7e29-8ae0-4982-bf9d-5a8d867af560',
@@ -1805,6 +1839,8 @@ class PrepareBluestore(Prepare):
             self.lockbox = Lockbox(args)
         self.data = PrepareBluestoreData(args)
         self.block = PrepareBluestoreBlock(args)
+        self.blockdb = PrepareBluestoreBlockDB(args)
+        self.blockwal = PrepareBluestoreBlockWAL(args)
 
     @staticmethod
     def parser():
@@ -1821,17 +1857,19 @@ class PrepareBluestore(Prepare):
         return [
             PrepareBluestore.parser(),
             PrepareBluestoreBlock.parser(),
+            PrepareBluestoreBlockDB.parser(),
+            PrepareBluestoreBlockWAL.parser(),
         ]
 
     def prepare_locked(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
-        self.data.prepare(self.block)
+        self.data.prepare(self.blockdb, self.blockwal, self.block)
 
 
 class Space(object):
 
-    NAMES = ('block', 'journal')
+    NAMES = ('block', 'journal', 'block.db', 'block.wal')
 
 
 class PrepareSpace(object):
@@ -1903,7 +1941,7 @@ class PrepareSpace(object):
         return self.type == self.DEVICE
 
     @staticmethod
-    def parser(name):
+    def parser(name, positional=True):
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument(
             '--%s-uuid' % name,
@@ -1920,13 +1958,15 @@ class PrepareSpace(object):
             action='store_true', default=None,
             help='verify that %s is a block device' % name.upper(),
         )
-        parser.add_argument(
-            name,
-            metavar=name.upper(),
-            nargs='?',
-            help=('path to OSD %s disk block device;' % name +
-                  ' leave out to store %s in file' % name),
-        )
+
+        if positional:
+            parser.add_argument(
+                name,
+                metavar=name.upper(),
+                nargs='?',
+                help=('path to OSD %s disk block device;' % name +
+                      ' leave out to store %s in file' % name),
+            )
         return parser
 
     def wants_space(self):
@@ -2068,17 +2108,18 @@ class PrepareSpace(object):
             partition.format()
             partition.map()
 
-            command_check_call(
-                [
-                    'sgdisk',
-                    '--typecode={num}:{uuid}'.format(
-                        num=num,
-                        uuid=partition.ptype_for_name(self.name),
-                    ),
-                    '--',
-                    getattr(self.args, self.name),
-                ],
-            )
+        command_check_call(
+            [
+                'sgdisk',
+                '--typecode={num}:{uuid}'.format(
+                    num=num,
+                    uuid=partition.ptype_for_name(self.name),
+                ),
+                '--',
+                getattr(self.args, self.name),
+            ],
+        )
+        update_partition(getattr(self.args, self.name), 'prepared')
 
         LOG.debug('%s is GPT partition %s',
                   self.name.capitalize(),
@@ -2128,7 +2169,15 @@ class PrepareBluestoreBlock(PrepareSpace):
         super(PrepareBluestoreBlock, self).__init__(args)
 
     def get_space_size(self):
-        return 0  # get as much space as possible
+        block_size = get_conf(
+            cluster=self.args.cluster,
+            variable='bluestore_block_size',
+        )
+
+        if block_size is None:
+            return 0  # get as much space as possible
+        else:
+            return int(block_size) / 1048576  # MB
 
     def desired_partition_number(self):
         if self.args.block == self.args.data:
@@ -2140,6 +2189,76 @@ class PrepareBluestoreBlock(PrepareSpace):
     @staticmethod
     def parser():
         return PrepareSpace.parser('block')
+
+
+class PrepareBluestoreBlockDB(PrepareSpace):
+
+    def __init__(self, args):
+        self.name = 'block.db'
+        super(PrepareBluestoreBlockDB, self).__init__(args)
+
+    def get_space_size(self):
+        block_size = get_conf(
+            cluster=self.args.cluster,
+            variable='bluestore_block_db_size',
+        )
+
+        if block_size is None:
+            return 64  # MB, default value
+        else:
+            return int(block_size) / 1048576  # MB
+
+    def desired_partition_number(self):
+        if getattr(self.args, 'block.db') == self.args.data:
+            num = 3
+        else:
+            num = 0
+        return num
+
+    @staticmethod
+    def parser():
+        parser = PrepareSpace.parser('block.db', positional=False)
+        parser.add_argument(
+            '--block.db',
+            metavar='BLOCKDB',
+            help='path to the device or file for bluestore block.db',
+        )
+        return parser
+
+
+class PrepareBluestoreBlockWAL(PrepareSpace):
+
+    def __init__(self, args):
+        self.name = 'block.wal'
+        super(PrepareBluestoreBlockWAL, self).__init__(args)
+
+    def get_space_size(self):
+        block_size = get_conf(
+            cluster=self.args.cluster,
+            variable='bluestore_block_wal_size',
+        )
+
+        if block_size is None:
+            return 128  # MB, default value
+        else:
+            return int(block_size) / 1048576  # MB
+
+    def desired_partition_number(self):
+        if getattr(self.args, 'block.wal') == self.args.data:
+            num = 4
+        else:
+            num = 0
+        return num
+
+    @staticmethod
+    def parser():
+        parser = PrepareSpace.parser('block.wal', positional=False)
+        parser.add_argument(
+            '--block.wal',
+            metavar='BLOCKWAL',
+            help='path to the device or file for bluestore block.wal',
+        )
+        return parser
 
 
 class CryptHelpers(object):
@@ -4362,7 +4481,11 @@ def main_trigger(args):
         )
 
     elif parttype in (PTYPE['regular']['block']['ready'],
-                      PTYPE['mpath']['block']['ready']):
+                      PTYPE['regular']['block.db']['ready'],
+                      PTYPE['regular']['block.wal']['ready'],
+                      PTYPE['mpath']['block']['ready'],
+                      PTYPE['mpath']['block.db']['ready'],
+                      PTYPE['mpath']['block.wal']['ready']):
         out, err, ret = command(
             ceph_disk +
             [
@@ -4372,7 +4495,11 @@ def main_trigger(args):
         )
 
     elif parttype in (PTYPE['plain']['block']['ready'],
-                      PTYPE['luks']['block']['ready']):
+                      PTYPE['plain']['block.db']['ready'],
+                      PTYPE['plain']['block.wal']['ready'],
+                      PTYPE['luks']['block']['ready'],
+                      PTYPE['luks']['block.db']['ready'],
+                      PTYPE['luks']['block.wal']['ready']):
         out, err, ret = command(
             ceph_disk +
             [
