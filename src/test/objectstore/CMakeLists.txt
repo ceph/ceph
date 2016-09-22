@@ -11,6 +11,7 @@ install(TARGETS ceph_perf_objectstore
 #ceph_test_objectstore
 add_executable(ceph_test_objectstore
   store_test.cc
+  store_test_fixture.cc
   )
 set_target_properties(ceph_test_objectstore PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
