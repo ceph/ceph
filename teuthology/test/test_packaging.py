@@ -573,6 +573,14 @@ class TestGitbuilderProject(TestBuilderProject):
         super(TestGitbuilderProject, self)\
             .test_get_package_version_found()
 
+    def test_version_strip_v(self):
+        resp = Mock()
+        resp.ok = True
+        resp.text = "v0.90.0"
+        self.m_get_response.return_value = resp
+        super(TestGitbuilderProject, self)\
+            .test_get_package_version_found()
+
     def test_get_package_sha1_fetched_found(self):
         resp = Mock()
         resp.ok = True

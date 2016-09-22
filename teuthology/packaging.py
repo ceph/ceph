@@ -732,7 +732,7 @@ class GitbuilderProject(object):
 
         if not resp.ok:
             raise VersionNotFoundError(url)
-        version = resp.text.strip()
+        version = resp.text.strip().lstrip('v')
         log.info("Found version: {0}".format(version))
         return version
 
