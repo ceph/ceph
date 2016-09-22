@@ -9,9 +9,13 @@ install(TARGETS ceph_perf_objectstore
   DESTINATION bin)
 
 #ceph_test_objectstore
+add_library(store_test_fixture OBJECT store_test_fixture.cc)
+set_target_properties(store_test_fixture PROPERTIES
+  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
 add_executable(ceph_test_objectstore
   store_test.cc
-  )
+  $<TARGET_OBJECTS:store_test_fixture>)
 set_target_properties(ceph_test_objectstore PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_objectstore
@@ -138,6 +142,8 @@ add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittes
 target_link_libraries(unittest_transaction os common)
 
 # unittest_memstore_clone
-add_executable(unittest_memstore_clone test_memstore_clone.cc)
+add_executable(unittest_memstore_clone
+  test_memstore_clone.cc
+  $<TARGET_OBJECTS:store_test_fixture>)
 add_ceph_unittest(unittest_memstore_clone ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_memstore_clone)
 target_link_libraries(unittest_memstore_clone os global)
