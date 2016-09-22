@@ -2222,7 +2222,6 @@ BlueStore::~BlueStore()
 const char **BlueStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
-    "bluestore_csum",
     "bluestore_csum_type",
     "bluestore_compression",
     "bluestore_compression_algorithm",
@@ -2236,8 +2235,7 @@ const char **BlueStore::get_tracked_conf_keys() const
 void BlueStore::handle_conf_change(const struct md_config_t *conf,
 				   const std::set<std::string> &changed)
 {
-  if (changed.count("bluestore_csum_type") ||
-      changed.count("bluestore_csum")) {
+  if (changed.count("bluestore_csum_type")) {
     _set_csum();
   }
   if (changed.count("bluestore_compression") ||
@@ -2303,12 +2301,9 @@ void BlueStore::_set_compression()
 void BlueStore::_set_csum()
 {
   csum_type = bluestore_blob_t::CSUM_NONE;
-  if (g_conf->bluestore_csum) {
-    int t = bluestore_blob_t::get_csum_string_type(
-            g_conf->bluestore_csum_type);
-    if (t > bluestore_blob_t::CSUM_NONE)
-      csum_type = t;
-  }
+  int t = bluestore_blob_t::get_csum_string_type(g_conf->bluestore_csum_type);
+  if (t > bluestore_blob_t::CSUM_NONE)
+    csum_type = t;
 
   dout(10) << __func__ << " csum_type "
 	   << bluestore_blob_t::get_csum_type_string(csum_type)
