@@ -766,7 +766,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
+  Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *oncommit = new C_aio_Safe(c);
 
   c->io = this;
@@ -874,7 +874,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
+  Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *onsafe = new C_aio_Safe(c);
 
   c->io = this;
@@ -900,7 +900,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
+  Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *onsafe = new C_aio_Safe(c);
 
   c->io = this;
@@ -927,7 +927,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
+  Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *onsafe = new C_aio_Safe(c);
 
   c->io = this;
@@ -958,7 +958,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
+  Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *onsafe = new C_aio_Safe(c);
 
   c->io = this;
@@ -982,7 +982,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
+  Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *onsafe = new C_aio_Safe(c);
 
   c->io = this;
