@@ -1850,6 +1850,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
                      << "mask=" << features_mask << dendl;
       r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
                                            new_features, features_mask);
+      if (!enabled && r == -EINVAL) {
+        // NOTE: infernalis OSDs will not accept a mask with new features, so
+        // re-attempt with a reduced mask.
+        features_mask &= ~RBD_FEATURE_JOURNALING;
+        r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
+                                             new_features, features_mask);
+      }
       if (r < 0) {
         lderr(cct) << "failed to update features: " << cpp_strerror(r)
                    << dendl;
