@@ -22,8 +22,8 @@ void StoreTestFixture::SetUp() {
   if (r < 0) {
     r = -errno;
     cerr << __func__ << ": unable to create " << data_dir << ": " << cpp_strerror(r) << std::endl;
-    return;
   }
+  ASSERT_EQ(0, r);
 
   store.reset(ObjectStore::create(g_ceph_context,
                                   type,
@@ -31,10 +31,10 @@ void StoreTestFixture::SetUp() {
                                   string("store_test_temp_journal")));
   if (!store) {
     cerr << __func__ << ": objectstore type " << type << " doesn't exist yet!" << std::endl;
-    return;
   }
-  EXPECT_EQ(0, store->mkfs());
-  EXPECT_EQ(0, store->mount());
+  ASSERT_TRUE(store);
+  ASSERT_EQ(0, store->mkfs());
+  ASSERT_EQ(0, store->mount());
 }
 
 void StoreTestFixture::TearDown() {
