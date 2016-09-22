@@ -18,10 +18,10 @@
 #include <gtest/gtest.h>
 #include "include/assert.h"
 #include "common/errno.h"
+#include "store_test_fixture.h"
 
 namespace {
 
-ObjectStore *g_store{nullptr};
 const coll_t cid;
 
 ghobject_t make_ghobject(const char *oid)
@@ -31,12 +31,32 @@ ghobject_t make_ghobject(const char *oid)
 
 } // anonymous namespace
 
+class MemStoreClone : public StoreTestFixture {
+public:
+  MemStoreClone()
+    : StoreTestFixture("memstore")
+  {}
+  void SetUp() override {
+    StoreTestFixture::SetUp();
+    if (HasFailure()) {
+      return;
+    }
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 4);
+    unsigned r = store->apply_transaction(nullptr, std::move(t));
+    if (r != 0) {
+      derr << "failed to create collection with " << cpp_strerror(r) << dendl;
+    }
+    ASSERT_EQ(0U, r);
+  }
+};
+
 // src 11[11 11 11 11]11
 // dst 22 22 22 22 22 22
 // res 22 11 11 11 11 22
-TEST(MemStore, CloneRangeAllocated)
+TEST_F(MemStoreClone, CloneRangeAllocated)
 {
-  ASSERT_TRUE(g_store);
+  ASSERT_TRUE(store);
 
   const auto src = make_ghobject("src1");
   const auto dst = make_ghobject("dst1");
@@ -50,17 +70,17 @@ TEST(MemStore, CloneRangeAllocated)
   t.write(cid, src, 0, 12, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, g_store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, g_store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
+  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
 // src __[__ __ __ __]__ 11 11
 // dst 22 22 22 22 22 22
 // res 22 00 00 00 00 22
-TEST(MemStore, CloneRangeHole)
+TEST_F(MemStoreClone, CloneRangeHole)
 {
-  ASSERT_TRUE(g_store);
+  ASSERT_TRUE(store);
 
   const auto src = make_ghobject("src2");
   const auto dst = make_ghobject("dst2");
@@ -74,17 +94,17 @@ TEST(MemStore, CloneRangeHole)
   t.write(cid, src, 12, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, g_store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, g_store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
+  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
 // src __[__ __ __ 11]11
 // dst 22 22 22 22 22 22
 // res 22 00 00 00 11 22
-TEST(MemStore, CloneRangeHoleStart)
+TEST_F(MemStoreClone, CloneRangeHoleStart)
 {
-  ASSERT_TRUE(g_store);
+  ASSERT_TRUE(store);
 
   const auto src = make_ghobject("src3");
   const auto dst = make_ghobject("dst3");
@@ -98,17 +118,17 @@ TEST(MemStore, CloneRangeHoleStart)
   t.write(cid, src, 8, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, g_store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, g_store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
+  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
 // src 11[11 __ __ 11]11
 // dst 22 22 22 22 22 22
 // res 22 11 00 00 11 22
-TEST(MemStore, CloneRangeHoleMiddle)
+TEST_F(MemStoreClone, CloneRangeHoleMiddle)
 {
-  ASSERT_TRUE(g_store);
+  ASSERT_TRUE(store);
 
   const auto src = make_ghobject("src4");
   const auto dst = make_ghobject("dst4");
@@ -123,17 +143,17 @@ TEST(MemStore, CloneRangeHoleMiddle)
   t.write(cid, src, 8, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, g_store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, g_store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
+  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
 // src 11[11 __ __ __]__ 11 11
 // dst 22 22 22 22 22 22
 // res 22 11 00 00 00 22
-TEST(MemStore, CloneRangeHoleEnd)
+TEST_F(MemStoreClone, CloneRangeHoleEnd)
 {
-  ASSERT_TRUE(g_store);
+  ASSERT_TRUE(store);
 
   const auto src = make_ghobject("src5");
   const auto dst = make_ghobject("dst5");
@@ -148,8 +168,8 @@ TEST(MemStore, CloneRangeHoleEnd)
   t.write(cid, src, 12, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, g_store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, g_store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
+  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -162,7 +182,7 @@ int main(int argc, char** argv)
   // default to memstore
   vector<const char*> defaults{
     "--osd_objectstore", "memstore",
-    "--osd_data", "memstore_clone_temp_dir",
+    "--osd_data", "memstore.test_temp_dir",
     "--memstore_page_size", "4",
   };
 
@@ -175,49 +195,6 @@ int main(int argc, char** argv)
 
   // release g_ceph_context on exit
   boost::intrusive_ptr<CephContext> cct{g_ceph_context, false};
-
-  // create and mount the objectstore
-  std::unique_ptr<ObjectStore> store{ObjectStore::create(
-      g_ceph_context,
-      g_conf->osd_objectstore,
-      g_conf->osd_data,
-      g_conf->osd_journal,
-      g_conf->osd_os_flags)};
-  if (!store) {
-    derr << "failed to create osd_objectstore=" << g_conf->osd_objectstore << dendl;
-    return EXIT_FAILURE;
-  }
-
-  int r = store->mkfs();
-  if (r < 0) {
-    derr << "failed to mkfs with " << cpp_strerror(r) << dendl;
-    return EXIT_FAILURE;
-  }
-
-  r = store->mount();
-  if (r < 0) {
-    derr << "failed to mount with " << cpp_strerror(r) << dendl;
-    return EXIT_FAILURE;
-  }
-  g_store = store.get();
-
-  ObjectStore::Transaction t;
-  t.create_collection(cid, 4);
-  r = store->apply_transaction(nullptr, std::move(t));
-  if (r < 0) {
-    derr << "failed to create collection with " << cpp_strerror(r) << dendl;
-    return EXIT_FAILURE;
-  }
-
-  // unmount the store on exit
-  auto umount = [] (ObjectStore *store) {
-    int r = store->umount();
-    if (r < 0) {
-      derr << "failed to unmount with " << cpp_strerror(r) << dendl;
-    }
-    g_store = nullptr;
-  };
-  std::unique_ptr<ObjectStore, decltype(umount)> umounter{store.get(), umount};
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
