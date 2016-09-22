@@ -26,6 +26,10 @@
 #include "osd/osd_types.h"
 #include <sstream>
 
+// FIXME: don't like including this here to get OSDMap::Incremental, maybe
+// PGMapUpdater needs its own header.
+#include "osd/OSDMap.h"
+
 namespace ceph { class Formatter; }
 
 class PGMap {
@@ -381,5 +385,40 @@ inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_oneline_summary(NULL, &out);
   return out;
 }
+
+class PGMapUpdater
+{
+public:
+  static void check_osd_map(
+      const OSDMap::Incremental &osd_inc,
+      std::set<int> *need_check_down_pg_osds,
+      std::map<int,utime_t> *last_osd_report,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+  /**
+   * check latest osdmap for new pgs to register
+   */
+  static void register_new_pgs(
+      const OSDMap &osd_map,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+  /**
+   * recalculate creating pg mappings
+   */
+  static void update_creating_pgs(
+      const OSDMap &osd_map,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+protected:
+  static void register_pg(
+      const OSDMap &osd_map,
+      pg_t pgid, epoch_t epoch,
+      bool new_pool,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+};
 
 #endif
