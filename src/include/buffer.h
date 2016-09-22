@@ -462,11 +462,14 @@ namespace buffer CEPH_BUFFER_API {
       bufferlist *pbl;
       char *pos;
       ptr bp;
+      bool deep;
 
       /// running count of bytes appended that are not reflected by @pos
       size_t out_of_band_offset = 0;
 
-      contiguous_appender(bufferlist *l, size_t len) : pbl(l) {
+      contiguous_appender(bufferlist *l, size_t len, bool d)
+	: pbl(l),
+	  deep(d) {
 	size_t unused = pbl->append_buffer.unused_tail_length();
 	if (len > unused) {
 	  // note: if len < the normal append_buffer size it *might*
@@ -537,14 +540,31 @@ namespace buffer CEPH_BUFFER_API {
       }
 
       void append(const bufferptr& p) {
-	flush_and_continue();
-	pbl->append(p);
-	out_of_band_offset += p.length();
+	if (!p.length()) {
+	  return;
+	}
+	if (deep) {
+	  append(p.c_str(), p.length());
+	} else {
+	  flush_and_continue();
+	  pbl->append(p);
+	  out_of_band_offset += p.length();
+	}
       }
       void append(const bufferlist& l) {
-	flush_and_continue();
-	pbl->append(l);
-	out_of_band_offset += l.length();
+	if (!l.length()) {
+	  return;
+	}
+	if (deep) {
+	  for (const auto &p : l._buffers) {
+	    append(p.c_str(), p.length());
+	  }
+	} else {
+	  flush_and_continue();
+	  pbl->append(l);
+	  out_of_band_offset += l.length();
+	}
+      }
 
       size_t get_logical_offset() {
 	if (bp.have_raw()) {
@@ -555,8 +575,8 @@ namespace buffer CEPH_BUFFER_API {
       }
     };
 
-    contiguous_appender get_contiguous_appender(size_t len) {
-      return contiguous_appender(this, len);
+    contiguous_appender get_contiguous_appender(size_t len, bool deep=false) {
+      return contiguous_appender(this, len, deep);
     }
 
     class page_aligned_appender {
