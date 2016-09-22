@@ -1851,7 +1851,12 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
-  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m << dendl;
+  lgeneric_subdout(async_msgr->cct, ms,
+		   1) << "-- " << async_msgr->get_myaddr() << " --> "
+		      << get_peer_addr() << " -- "
+		      << *m << " -- " << m << " con "
+		      << m->get_connection().get()
+		      << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
