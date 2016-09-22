@@ -3411,6 +3411,7 @@ void PG::reg_next_scrub()
   double scrub_min_interval = 0, scrub_max_interval = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
   pool.info.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &scrub_max_interval);
+  assert(scrubber.scrub_reg_stamp == utime_t());
   scrubber.scrub_reg_stamp = osd->reg_pg_scrub(info.pgid,
 					       reg_stamp,
 					       scrub_min_interval,
@@ -3420,8 +3421,10 @@ void PG::reg_next_scrub()
 
 void PG::unreg_next_scrub()
 {
-  if (is_primary())
+  if (is_primary()) {
     osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+    scrubber.scrub_reg_stamp = utime_t();
+  }
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)
