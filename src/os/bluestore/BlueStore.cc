@@ -2222,7 +2222,6 @@ BlueStore::~BlueStore()
 const char **BlueStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
-    "bluestore_csum",
     "bluestore_csum_type",
     "bluestore_compression",
     "bluestore_compression_algorithm",
@@ -2236,8 +2235,7 @@ const char **BlueStore::get_tracked_conf_keys() const
 void BlueStore::handle_conf_change(const struct md_config_t *conf,
 				   const std::set<std::string> &changed)
 {
-  if (changed.count("bluestore_csum_type") ||
-      changed.count("bluestore_csum")) {
+  if (changed.count("bluestore_csum_type")) {
     _set_csum();
   }
   if (changed.count("bluestore_compression") ||
@@ -2303,12 +2301,9 @@ void BlueStore::_set_compression()
 void BlueStore::_set_csum()
 {
   csum_type = bluestore_blob_t::CSUM_NONE;
-  if (g_conf->bluestore_csum) {
-    int t = bluestore_blob_t::get_csum_string_type(
-            g_conf->bluestore_csum_type);
-    if (t > bluestore_blob_t::CSUM_NONE)
-      csum_type = t;
-  }
+  int t = bluestore_blob_t::get_csum_string_type(g_conf->bluestore_csum_type);
+  if (t > bluestore_blob_t::CSUM_NONE)
+    csum_type = t;
 
   dout(10) << __func__ << " csum_type "
 	   << bluestore_blob_t::get_csum_type_string(csum_type)
@@ -4733,8 +4728,7 @@ int BlueStore::_do_read(
     } else {
       for (auto reg : b2r_it->second) {
 	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->get_blob().get_chunk_size(
-	  csum_type != bluestore_blob_t::CSUM_NONE, block_size);
+	uint64_t chunk_size = bptr->get_blob().get_chunk_size(true, block_size);
 	uint64_t r_off = reg.blob_xoffset;
 	uint64_t r_len = reg.length;
 	unsigned front = r_off % chunk_size;
@@ -4820,8 +4814,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 {
   int bad;
   uint64_t bad_csum;
-  int r = csum_type != bluestore_blob_t::CSUM_NONE ?
-    blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum)  :0;
+  int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
       vector<bluestore_pextent_t> pex;
@@ -7343,8 +7336,9 @@ int BlueStore::_do_alloc_write(
 	     << dendl;
 
     // checksum
-    if (csum_type) {
-      b->dirty_blob().init_csum(csum_type, csum_order, csum_length);
+    int csum = csum_type.load();
+    if (csum) {
+      b->dirty_blob().init_csum(csum, csum_order, csum_length);
       b->dirty_blob().calc_csum(b_off, *l);
     }
     if (wi.mark_unused) {

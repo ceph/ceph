@@ -1336,7 +1336,7 @@ private:
   set<ghobject_t, ghobject_t::BitwiseComparator> debug_data_error_objects;
   set<ghobject_t, ghobject_t::BitwiseComparator> debug_mdata_error_objects;
 
-  int csum_type;
+  std::atomic<int> csum_type;
 
   uint64_t block_size;     ///< block size of block device (power of 2)
   uint64_t block_mask;     ///< mask to get just the block offset
