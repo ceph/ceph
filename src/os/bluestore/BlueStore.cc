@@ -3936,13 +3936,18 @@ int BlueStore::fsck()
 	  expecting_shards.pop_front();
 	  continue;
 	}
-	while (expecting_shards.empty() ||
-	       expecting_shards.front() > it->key()) {
-	  uint32_t offset;
-	  string okey;
-	  get_key_extent_shard(it->key(), &okey, &offset);
-	  derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
-	       << dendl;
+
+        uint32_t offset;
+        string okey;
+        get_key_extent_shard(it->key(), &okey, &offset);
+        derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
+                         << dendl;
+        if (expecting_shards.empty()) {
+          derr << __func__ << pretty_binary_string(it->key())
+               << " is unexpected" << dendl;
+          continue;
+        }
+	while (expecting_shards.front() > it->key()) {
 	  derr << __func__ << "   saw " << pretty_binary_string(it->key())
 	       << dendl;
 	  derr << __func__ << "   exp "
