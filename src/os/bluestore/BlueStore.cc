@@ -7420,6 +7420,12 @@ void BlueStore::_wctx_finish(
       }
     }
     delete &lo;
+    if (b->id >= 0 && b->ref_map.empty()) {
+      dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
+	       << dendl;
+      auto it = o->extent_map.spanning_blob_map.iterator_to(*b);
+      o->extent_map.spanning_blob_map.erase(it);
+    }
   }
 }
 
