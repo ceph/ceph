@@ -605,6 +605,7 @@ namespace rgw {
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
     /* save attrs */
+    req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
     rc = rgwlib.get_fe()->execute_req(&req);
