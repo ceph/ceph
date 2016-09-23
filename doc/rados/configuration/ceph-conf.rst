@@ -227,6 +227,11 @@ Ceph supports the following metavariables:
 :Description: Expands to ``$type.$id``.
 :Example: ``/var/run/ceph/$cluster-$name.asok``
 
+``$pid``
+
+:Description: Expands to daemon pid.
+:Example: ``/var/run/ceph/$cluster-$name-$pid.asok``
+
 
 .. _ceph-conf-common-settings:
 
