@@ -3883,6 +3883,8 @@ void PG::replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     end.pool = info.pgid.pool();
 
   if (scrubber.map_state == PG::Scrubber::REG_SCRUBBING) {
+    assert(scrubber.scrubmap.objects.empty());
+    assert(scrubber.ls.empty());
     build_scrub_map_chunk(scrubber.scrubmap, start, end, msg->seed, handle, scrubber.ls);
   } else {
     assert(scrubber.map_state == PG::Scrubber::DEEP_SCRUBBING);
@@ -3918,9 +3920,11 @@ void PG::replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle)
   subop->ops = scrub;
 
   osd->send_message_osd_cluster(subop, msg->get_connection());
+
   scrubber.map_state = PG::Scrubber::NOT_BUILDING;
   scrubber.active_rep_scrub = OpRequestRef();
   scrubber.ls.clear();
+  scrubber.scrubmap = ScrubMap();
 }
 
 /* Scrub:
