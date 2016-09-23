@@ -118,6 +118,7 @@ protected:
   // file
 public:
   void file_eval(ScatterLock *lock, bool *need_issue);
+  void file_recover(ScatterLock *lock);
 protected:
   void scatter_mix(ScatterLock *lock, bool *need_issue=0);
   void file_excl(ScatterLock *lock, bool *need_issue=0);

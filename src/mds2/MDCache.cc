@@ -575,6 +575,16 @@ void MDCache::scan_stray_dir(dirfrag_t dirfrag, string last_name)
   }
 }
 
+void MDCache::queue_file_recovery(CInode* in)
+{
+  recovery_queue->enqueue(in);
+}
+
+void MDCache::prioritize_file_recovery(CInode* in)
+{
+  recovery_queue->prioritize(in);
+}
+
 void MDCache::scan_strays()
 {
   mds->queue_context(new C_MDC_RetryScanStray(this, dirfrag_t(), ""));
@@ -1699,7 +1709,48 @@ void MDCache::choose_inodes_lock_states()
 
 void MDCache::identify_files_to_recover()
 {
-// FIXME
+  dout(10) << "identify_files_to_recover" << dendl;
+  for (auto p = inode_map.begin(); p != inode_map.end(); ++p) {
+    CInode* in = p->second;
+    if (in->last != CEPH_NOSNAP)
+      continue;
+    if (!in->is_file())
+      continue;
+
+    bool recover = false;
+    in->mutex_lock();
+    for (auto& p : in->get_inode()->client_ranges) {
+      Capability *cap = in->get_client_cap(p.first);
+      if (!cap) {
+	dout(10) << " client." << p.first << " has range " << p.second << " but no cap on " << *in << dendl;
+	recover = true;
+	break;
+      }
+    }
+    bool check = in->is_any_caps();
+    in->mutex_unlock();
+
+    if (recover) {
+      rejoin_recover_q.push_back(in);
+      in->filelock.set_state(LOCK_PRE_SCAN);
+    } else if (check) {
+      rejoin_check_q.push_back(in);
+    }
+  }
+}
+
+void MDCache::start_files_recovery()
+{
+  for (CInodeRef& in : rejoin_check_q) {
+    CObject::Locker l(in.get());
+    locker->check_inode_max_size(in.get());
+  }
+  rejoin_check_q.clear();
+  for (CInodeRef& in : rejoin_recover_q) {
+    CObject::Locker l(in.get());
+    locker->file_recover(&in->filelock);
+  }
+  rejoin_recover_q.clear();
 }
 
 void MDCache::process_reconnecting_caps()

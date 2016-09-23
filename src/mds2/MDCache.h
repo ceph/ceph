@@ -67,6 +67,9 @@ public:
 		    const filepath& path, vector<CDentryRef> *pdnvec, CInodeRef *pin);
 protected:
   RecoveryQueue *recovery_queue;
+public:
+  void queue_file_recovery(CInode *in);
+  void prioritize_file_recovery(CInode *in);
 
 protected:
   StrayManager *stray_manager;
@@ -256,10 +259,13 @@ protected:
   void rejoin_open_inode_finish(inodeno_t ino, int ret);
   friend class C_MDC_RejoinOpenInodeFinish;
 
+  vector<CInodeRef> rejoin_recover_q, rejoin_check_q;
+  void identify_files_to_recover();
+
   void process_reconnecting_caps();
   void choose_inodes_lock_states();
-  void identify_files_to_recover();
 public:
+  void start_files_recovery();
   void rejoin_start(MDSContextBase *c);
   void try_reconnect_cap(CInode *in, Session *session);
 public:

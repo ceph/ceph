@@ -47,6 +47,7 @@ public:
   const static int PIN_INTRUSIVEPTR     = 1000;
   const static int PIN_LOCK		= -1002;
   const static int PIN_REQUEST		= -1003;
+  const static int PIN_UNSTABLELOCK	= -1004;
   const static int PIN_WAITER		= 1004;
   const static int PIN_DIRTYSCATTERED	= -1005;
   static const int PIN_PTRWAITER	= -1007;

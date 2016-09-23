@@ -395,6 +395,18 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, uint64
     dout(7) << "eval_gather finished gather on " << *lock
       << " on " << *lock->get_parent() << dendl;
 
+    if (lock->get_sm() == &sm_filelock) {
+      assert(in);
+      if (in->state_test(CInode::STATE_RECOVERING)) {
+	dout(7) << "eval_gather finished gather, but still recovering" << dendl;
+	return;
+      } else if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+	dout(7) << "eval_gather finished gather, but need to recover" << dendl;
+	mdcache->queue_file_recovery(in);
+	return;
+      }
+    }
+
     if (lock->is_dirty() && !lock->is_flushed()) {
       scatter_writebehind(static_cast<ScatterLock *>(lock));
       //mds->mdlog->flush();
@@ -643,14 +655,13 @@ bool Locker::rdlock_kick(SimpleLock *lock)
       simple_sync(lock);
     return true;
   }
-  /*
+
   if (lock->get_type() == CEPH_LOCK_IFILE) {
     CInode *in = static_cast<CInode *>(lock->get_parent());
     if (in->state_test(CInode::STATE_RECOVERING)) {
-      mdcache->recovery_queue.prioritize(in);
+      mdcache->prioritize_file_recovery(in);
     }
   }
-  */
 
   return false;
 }
@@ -757,12 +768,12 @@ bool Locker::wrlock_start(SimpleLock *lock, const MutationRef& mut)
 
   if (!lock->can_wrlock(client)) {
 
-    /*
-       if (lock->get_type() == CEPH_LOCK_IFILE &&
-       in->state_test(CInode::STATE_RECOVERING)) {
-       mdcache->recovery_queue.prioritize(in);
-       }
-       */
+    if (lock->get_type() == CEPH_LOCK_IFILE) {
+      CInode *in = static_cast<CInode *>(lock->get_parent());
+      if(in->state_test(CInode::STATE_RECOVERING)) {
+	mdcache->prioritize_file_recovery(in);
+      }
+    }
 
     if (!lock->is_stable())
       return false;
@@ -797,7 +808,6 @@ bool Locker::wrlock_start(SimpleLock *lock, const MDRequestRef& mut)
 
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
-  CInode *in = static_cast<CInode *>(lock->get_parent());
   client_t client = mut->get_client();
 
   while (1) {
@@ -810,12 +820,12 @@ bool Locker::wrlock_start(SimpleLock *lock, const MDRequestRef& mut)
       return true;
     }
 
-    /*
-    if (lock->get_type() == CEPH_LOCK_IFILE &&
-	in->state_test(CInode::STATE_RECOVERING)) {
-      mdcache->recovery_queue.prioritize(in);
+    if (lock->get_type() == CEPH_LOCK_IFILE) {
+      CInode *in = static_cast<CInode *>(lock->get_parent());
+      if (in->state_test(CInode::STATE_RECOVERING)) {
+	mdcache->prioritize_file_recovery(in);
+      }
     }
-    */
 
     if (!lock->is_stable())
       break;
@@ -883,14 +893,12 @@ bool Locker::xlock_start(SimpleLock *lock, const MDRequestRef& mut)
       return true;
     }
 
-    /*
     if (lock->get_type() == CEPH_LOCK_IFILE) {
       CInode *in = static_cast<CInode*>(lock->get_parent());
       if (in->state_test(CInode::STATE_RECOVERING)) {
-	mdcache->recovery_queue.prioritize(in);
+	mdcache->prioritize_file_recovery(in);
       }
     }
-    */
 
     if (!lock->is_stable() && (lock->get_state() != LOCK_XLOCKDONE ||
 			       lock->get_xlock_by_client() != client ||
@@ -1111,17 +1119,13 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       }
     }
     
-    bool need_recover = false;
-      /*
     if (lock->get_type() == CEPH_LOCK_IFILE) {
       assert(in);
       if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
-        mds->mdcache->queue_file_recover(in);
-	need_recover = true;
+        mds->mdcache->queue_file_recovery(in);
         gather++;
       }
     }
-      */
     
     if (!gather && lock->is_dirty()) {
       scatter_writebehind(static_cast<ScatterLock*>(lock));
@@ -1130,10 +1134,6 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
 
     if (gather) {
-	    /*
-      if (need_recover)
-	mds->mdcache->do_file_recover();
-	*/
       return false;
     }
   }
@@ -1236,17 +1236,13 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     }
   }
 
-  bool need_recover = false;
-  /*
   if (lock->get_type() == CEPH_LOCK_IFILE) {
     assert(in);
     if(in->state_test(CInode::STATE_NEEDSRECOVER)) {
-      mds->mdcache->queue_file_recover(in);
-      need_recover = true;
+      mds->mdcache->queue_file_recovery(in);
       gather++;
     }
   }
-  */
 
     // move to second stage of gather now, so we don't send the lock action later.
     if (lock->get_state() == LOCK_MIX_LOCK)
@@ -1258,12 +1254,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     return;
   }
 
-  if (gather) {
-	  /*
-    if (need_recover)
-      mds->mdcache->do_file_recover();
-      */
-  } else {
+  if (!gather) {
     lock->set_state(LOCK_LOCK);
     finish_waiting(lock, ScatterLock::WAIT_STABLE|ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR);
   }
@@ -1779,6 +1770,11 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       gather++;
     }
 
+    if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+      mdcache->queue_file_recovery(in);
+      gather++;
+    }
+
     if (!gather) {
       in->start_scatter(lock);
       lock->set_state(LOCK_MIX);
@@ -1966,6 +1962,38 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   }
 }
 
+void Locker::file_recover(ScatterLock *lock)
+{
+  CInode *in = static_cast<CInode *>(lock->get_parent());
+  dout(7) << "file_recover " << *lock << " on " << *in << dendl;
+
+ // assert(in->is_auth());
+  //assert(lock->is_stable());
+  assert(lock->get_state() == LOCK_PRE_SCAN); // only called from MDCache::start_files_to_recover()
+
+  int gather = 0;
+
+  /*
+  if (in->is_replicated()
+      lock->get_sm()->states[oldstate].replica_state != LOCK_LOCK) {
+    send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    gather++;
+  }
+  */
+  if (in->is_head() &&
+      in->issued_caps_need_gather(lock)) {
+    issue_caps(in);
+    gather++;
+  }
+
+  lock->set_state(LOCK_SCAN);
+  if (gather)
+    in->state_set(CInode::STATE_NEEDSRECOVER);
+  else
+    mds->mdcache->queue_file_recovery(in);
+}
+
 void Locker::file_excl(ScatterLock *lock, bool *need_issue)
 {
   lock->get_parent()->mutex_assert_locked_by_me();
@@ -2003,6 +2031,11 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
       *need_issue = true;
     else
       issue_caps(in);
+    gather++;
+  }
+
+  if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
+    mdcache->queue_file_recovery(in);
     gather++;
   }
   
@@ -2298,10 +2331,8 @@ void Locker::revoke_stale_caps(Session *session, uint64_t sseq)
       dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;
       cap->revoke();
 
-      /* FIXME
-      if (in->inode.client_ranges.count(client))
+      if (in->get_inode()->client_ranges.count(client))
 	in->state_set(CInode::STATE_NEEDSRECOVER);
-	*/
 
       if (!in->filelock.is_stable()) eval_gather(&in->filelock);
       if (!in->linklock.is_stable()) eval_gather(&in->linklock);

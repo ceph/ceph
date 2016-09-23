@@ -314,7 +314,14 @@ public:
 
   // state
   int get_state() const { return state; }
-  int set_state(int s) { 
+  int set_state(int s) {
+    if (state != s) {
+      bool new_stable = (get_sm()->states[s].next == 0);
+      if (is_stable() && !new_stable)
+	parent->get(CObject::PIN_UNSTABLELOCK);
+      else if (!is_stable() && new_stable)
+	parent->put(CObject::PIN_UNSTABLELOCK);
+    }
     state = s; 
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;

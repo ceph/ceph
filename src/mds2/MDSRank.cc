@@ -644,6 +644,8 @@ void MDSRank::clientreplay_start()
   waiter_list_lock.Unlock();
 
   finish_contexts(g_ceph_context, ls);  // kick waiters
+
+  mdcache->start_files_recovery();
   replay_next_request();
 }
 
@@ -663,6 +665,8 @@ void MDSRank::active_start()
   waiter_list_lock.Unlock();
   finish_contexts(g_ceph_context, ls);  // kick waiters
   ls.clear();
+
+  mdcache->start_files_recovery();
 
   waiter_list_lock.Lock();
   ls.swap(waiting_for_active);
