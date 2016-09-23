@@ -741,8 +741,9 @@ void AsyncConnection::process()
 
           // note last received message.
           in_seq.set(message->get_seq());
-	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " seq "
-                                    << message->get_seq() << " " << message << " " << *message << dendl;
+	  ldout(async_msgr->cct, 5) << " rx " << message->get_source() << " seq "
+                                    << message->get_seq() << " " << message
+				    << " " << *message << dendl;
 
           ack_left.inc();
           // if send_message always send inline, it may have no
@@ -1851,7 +1852,12 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
-  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m << dendl;
+  lgeneric_subdout(async_msgr->cct, ms,
+		   1) << "-- " << async_msgr->get_myaddr() << " --> "
+		      << get_peer_addr() << " -- "
+		      << *m << " -- " << m << " con "
+		      << m->get_connection().get()
+		      << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
@@ -2104,7 +2110,7 @@ void AsyncConnection::_stop()
   if (delay_state)
     delay_state->flush();
 
-  ldout(async_msgr->cct, 1) << __func__ << dendl;
+  ldout(async_msgr->cct, 2) << __func__ << dendl;
   std::lock_guard<std::mutex> l(write_lock);
 
   reset_recv_state();
@@ -2348,7 +2354,7 @@ void AsyncConnection::DelayedDelivery::flush() {
 
 void AsyncConnection::send_keepalive()
 {
-  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
   std::lock_guard<std::mutex> l(write_lock);
   if (can_write != WriteStatus::CLOSED) {
     keepalive = true;
@@ -2358,7 +2364,7 @@ void AsyncConnection::send_keepalive()
 
 void AsyncConnection::mark_down()
 {
-  ldout(async_msgr->cct, 1) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
   std::lock_guard<std::mutex> l(lock);
   _stop();
 }
@@ -2386,7 +2392,7 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
 
 void AsyncConnection::handle_write()
 {
-  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
   ssize_t r = 0;
 
   write_lock.lock();
