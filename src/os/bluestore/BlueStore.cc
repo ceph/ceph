@@ -1488,9 +1488,10 @@ void BlueStore::ExtentMap::reshard(Onode *o)
     }
   }
   unsigned target = g_conf->bluestore_extent_map_shard_target_size;
+  unsigned slop = target * g_conf->bluestore_extent_map_shard_target_size_slop;
   unsigned extent_avg = bytes / extent_map.size();
   dout(20) << __func__ << " extent_avg " << extent_avg
-	   << " target " << target << dendl;
+	   << " target " << target << " slop " << slop << dendl;
 
   // reshard
   auto ep = extent_map.begin();
@@ -1500,6 +1501,7 @@ void BlueStore::ExtentMap::reshard(Onode *o)
   unsigned estimate = 0;
   unsigned offset = 0;
   vector<bluestore_onode_t::shard_info> new_shard_info;
+  unsigned max_blob_end = 0;
   while (ep != extent_map.end()) {
     dout(30) << " ep " << *ep << dendl;
     assert(!ep->blob->is_spanning());
@@ -1521,7 +1523,10 @@ void BlueStore::ExtentMap::reshard(Onode *o)
       dout(20) << __func__ << " old shard end 0x" << std::hex << shard_end
 	       << std::dec << dendl;
     }
-    if (estimate && estimate + extent_avg > target) {
+    // disfavor shard boundaries that span a blob
+    bool would_span = (ep->logical_offset < max_blob_end) || ep->blob_offset;
+    if (estimate &&
+	estimate + extent_avg > target + (would_span ? slop : 0)) {
       // new shard
       if (offset == 0) {
 	new_shard_info.emplace_back(bluestore_onode_t::shard_info());
@@ -1537,6 +1542,10 @@ void BlueStore::ExtentMap::reshard(Onode *o)
       estimate = 0;
     }
     estimate += extent_avg;
+    uint32_t be = ep->blob_end();
+    if (be > max_blob_end) {
+      max_blob_end = be;
+    }
     ++ep;
   }
   o->onode.extent_map_shards.swap(new_shard_info);
