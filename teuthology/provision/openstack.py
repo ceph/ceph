@@ -66,22 +66,33 @@ class ProvisionOpenStack(OpenStack):
             except subprocess.CalledProcessError as e:
                 if 'No volume with a name or ID' not in e.output:
                     raise e
-                self.run("volume create -f json " +
-                         config['openstack'].get('volume-create', '') + " " +
-                         " --property ownedby=" + config.openstack['ip'] +
-                         " --size " + str(volumes['size']) + " " +
-                         volume_name)
+                # do not use OpenStack().run because its
+                # bugous for volume create as of openstackclient 3.2.0
+                # https://bugs.launchpad.net/python-openstackclient/+bug/1619726
+                misc.sh(
+                    "openstack volume create -f json " +
+                    config['openstack'].get('volume-create', '') + " " +
+                    " --property ownedby=" + config.openstack['ip'] +
+                    " --size " + str(volumes['size']) + " " +
+                    volume_name)
             with safe_while(sleep=2, tries=100,
                             action="volume " + volume_name) as proceed:
                 while proceed():
-                    r = self.run("volume show  -f json " + volume_name)
-                    status = self.get_value(json.loads(r), 'status')
-                    if status == 'available':
-                        break
-                    else:
-                        log.info("volume " + volume_name +
-                                 " not available yet")
-            self.run("server add volume " + name + " " + volume_name)
+                    try:
+                        r = OpenStack().run("volume show  -f json " +
+                                            volume_name)
+                        status = self.get_value(json.loads(r), 'status')
+                        if status == 'available':
+                            break
+                        else:
+                            log.info("volume " + volume_name +
+                                     " not available yet")
+                    except subprocess.CalledProcessError:
+                            log.info("volume " + volume_name +
+                                     " not information available yet")
+            # do not use OpenStack().run because its
+            # bugous for volume
+            misc.sh("openstack server add volume " + name + " " + volume_name)
 
     @staticmethod
     def ip2name(prefix, ip):
@@ -127,7 +138,7 @@ class ProvisionOpenStack(OpenStack):
                " --wait " +
                " " + self.basename)
         try:
-            misc.sh(cmd)
+            self.run(cmd, type='compute')
         except CalledProcessError as exc:
             if "quota exceeded" in exc.output.lower():
                 raise QuotaExceededError(message=exc.output)
