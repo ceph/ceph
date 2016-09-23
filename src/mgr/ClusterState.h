@@ -87,20 +87,21 @@ public:
         std::forward<Args>(args)...);
   }
 
-  template<typename Callback, typename...Args>
-  void with_monmap(Callback&& cb, Args&&...args)
+  template<typename... Args>
+  void with_monmap(Args &&... args)
   {
     Mutex::Locker l(lock);
     assert(monc != nullptr);
-    monc->with_monmap(cb);
+    monc->with_monmap(std::forward<Args>(args)...);
   }
 
-  template<typename Callback, typename...Args>
-  void with_osdmap(Callback&& cb, Args&&...args)
+  template<typename... Args>
+  void with_osdmap(Args &&... args)
   {
     assert(objecter != nullptr);
-    objecter->with_osdmap(cb);
+    objecter->with_osdmap(std::forward<Args>(args)...);
   }
+
 };
 
 #endif
