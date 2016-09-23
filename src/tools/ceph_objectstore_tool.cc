@@ -479,9 +479,8 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   map<string,bufferlist> km;
   int ret = PG::_prepare_write_info(
     &km, epoch,
-    info, coll,
+    info,
     past_intervals,
-    pgmeta_oid,
     true, true);
   if (ret) cerr << "Failed to write info" << std::endl;
   t.omap_setkeys(coll, pgmeta_oid, km);
