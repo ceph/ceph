@@ -398,12 +398,8 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
 		  bool use_striper)
 {
   string oid(objname);
-  bufferlist indata;
-  bool stdio = false;
-  if (strcmp(infile, "-") == 0)
-    stdio = true;
-
-  int ret;
+  bool stdio = (strcmp(infile, "-") == 0);
+  int ret = 0;
   int fd = STDIN_FILENO;
   if (!stdio)
     fd = open(infile, O_RDONLY);
@@ -411,11 +407,11 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
     cerr << "error reading input file " << infile << ": " << cpp_strerror(errno) << std::endl;
     return 1;
   }
-  char *buf = new char[op_size];
   int count = op_size;
   uint64_t offset = 0;
   while (count != 0) {
-    count = read(fd, buf, op_size);
+    bufferlist indata;
+    count = indata.read_fd(fd, op_size);
     if (count < 0) {
       ret = -errno;
       cerr << "error reading input file " << infile << ": " << cpp_strerror(ret) << std::endl;
@@ -434,7 +430,6 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
       }
       continue;
     }
-    indata.append(buffer::ptr(buffer::create_static(count, buf)));
     if (use_striper) {
       if (offset == 0)
 	ret = striper.write_full(oid, indata);
@@ -446,7 +441,6 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
       else
 	ret = io_ctx.write(oid, indata, count, offset);
     }
-    indata.clear();
 
     if (ret < 0) {
       goto out;
@@ -457,7 +451,6 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
  out:
   if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
-  delete[] buf;
   return ret;
 }
 
