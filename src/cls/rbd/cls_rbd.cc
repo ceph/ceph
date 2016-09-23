@@ -3259,6 +3259,15 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
            cpp_strerror(r).c_str());
     return r;
   }
+
+  r = cls_cxx_map_remove_key(hctx,
+                             status_global_key(mirror_image.global_image_id));
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error removing global status for image '%s': %s", image_id.c_str(),
+           cpp_strerror(r).c_str());
+    return r;
+  }
+
   return 0;
 }
 
