@@ -781,7 +781,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     CDir *dir = dn->get_dir();
     CInode *diri = dir->get_inode();
 
-    diri->encode_inodestat(bl, session, 0);
+    diri->encode_inodestat(bl, session);
     //    dout(20) << "set_trace_dist added diri " << *diri << dendl;
 
     encode_empty_dirstat(bl);
@@ -796,7 +796,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     reply->head.is_dentry = 0;
 
   if (in) {
-    in->encode_inodestat(bl, session, 0, mdr->getattr_mask);
+    in->encode_inodestat(bl, session, mdr->getattr_mask);
 //    dout(20) << "set_trace_dist added in  " << *in << dendl;
     reply->head.is_target = 1;
   } else
@@ -1740,6 +1740,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8)*2;
   int bytes_left = max_bytes - front_bytes;
 
+  vector<pair<CInodeRef, int64_t> >suppressed_caps;
+
   // build dir contents
   bufferlist dnbl;
   __u32 num_entries = 0;
@@ -1804,13 +1806,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     encode_null_lease(dnbl);
 
     in->mutex_lock();
-    int r = in->encode_inodestat(dnbl, mdr->session, bytes_left - (int)dnbl.length());
+    int64_t r = in->encode_inodestat(dnbl, mdr->session, 0, bytes_left - (int)dnbl.length());
     in->mutex_unlock();
-    /*
-     * FIXME:
-     * After unlock the inode, Other thread may kick in, change inode's locks states and
-     * send cap message before us. Need a mechanism to prevent this.
-     */
     if (r < 0) {
       // chop off dn->name, lease
       bufferlist keep;
@@ -1818,6 +1815,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
       dnbl.swap(keep);
       break;
     }
+    if (r > 0)
+      suppressed_caps.push_back(make_pair(in, r));
 
     assert(r >= 0);
     num_entries++;
@@ -1843,9 +1842,20 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   dirbl.claim_append(dnbl);
 
   mdr->reply_extra_bl = dirbl;
-
   mdr->tracei = 0;
+
   respond_to_request(mdr, 0);
+
+  if (!suppressed_caps.empty()) {
+    client_t client = mdr->get_client();
+    for (auto& p : suppressed_caps) {
+      CInodeRef &in = p.first;
+      CObject::Locker l(in.get());
+      Capability *cap = in->get_client_cap(client);
+      if (cap && cap->get_cap_id() == (uint64_t)p.second)
+	cap->dec_suppress();
+    }
+  }
 }
 
 CDentryRef Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)

@@ -207,8 +207,8 @@ public:
 
   __u32 hash_dentry_name(const std::string &dn);
 
-  int encode_inodestat(bufferlist& bl, Session *session,
-		       unsigned max_bytes=0, int getattr_wants=0);
+  int64_t encode_inodestat(bufferlist& bl, Session *session,
+			   int getattr_wants=0, int max_bytes=INT_MAX);
   void encode_cap_message(MClientCaps *m, Capability *cap);
 
 protected:

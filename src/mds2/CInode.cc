@@ -447,13 +447,14 @@ __u32 CInode::hash_dentry_name(const string &dn)
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
-int CInode::encode_inodestat(bufferlist& bl, Session *session,
-			     unsigned max_bytes, int getattr_wants)
+int64_t CInode::encode_inodestat(bufferlist& bl, Session *session,
+				 int getattr_wants, int max_bytes)
 {
   client_t client = session->get_client();
   assert(session->connection);
 
   snapid_t snapid = CEPH_NOSNAP;
+  bool for_readdir = max_bytes != INT_MAX;
   
   // pick a version!
   const inode_t *oi = get_inode();
@@ -543,8 +544,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
   
   // do we have room?
-  if (max_bytes) {
-    unsigned bytes = 8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
+  if (max_bytes != INT_MAX) {
+    int bytes = 8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
       sizeof(struct ceph_file_layout) + 4 + layout.pool_ns.size() +
       sizeof(struct ceph_timespec) * 3 +
       4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 +
@@ -572,24 +573,39 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     }
   }
 
-  int likes = get_caps_liked();
-  int allowed = get_caps_allowed_for_client(session, file_i);
-  int issue = (cap->wanted() | likes) & allowed;
-  cap->issue_norevoke(issue);
-  issue = cap->pending();
-  cap->set_last_issue();
-  cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
-  cap->clear_new();
-
   struct ceph_mds_reply_cap ecap;
-  ecap.caps = issue;
-  ecap.wanted = cap->wanted();
-  ecap.cap_id = cap->get_cap_id();
-  ecap.seq = cap->get_last_seq();
-  dout(10) << "encode_inodestat issuing " << ccap_string(issue)
-           << " seq " << cap->get_last_seq() << dendl;
-  ecap.mseq = cap->get_mseq();
-  ecap.realm = CEPH_INO_ROOT;
+  if (!cap->is_suppress()) {
+    int likes = get_caps_liked();
+    int allowed = get_caps_allowed_for_client(session, file_i);
+    int issue = (cap->wanted() | likes) & allowed;
+    cap->issue_norevoke(issue);
+    issue = cap->pending();
+    cap->set_last_issue();
+    cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+    cap->clear_new();
+
+    ecap.caps = issue;
+    ecap.wanted = cap->wanted();
+    ecap.cap_id = cap->get_cap_id();
+    ecap.seq = cap->get_last_seq();
+    dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+      << " seq " << cap->get_last_seq() << dendl;
+    ecap.mseq = cap->get_mseq();
+    ecap.realm = CEPH_INO_ROOT;
+
+    if (for_readdir) {
+      cap->inc_suppress();
+    }
+  } else {
+    if (cap)
+      cap->clear_new();
+    ecap.cap_id = 0;
+    ecap.caps = 0;
+    ecap.seq = 0;
+    ecap.mseq = 0;
+    ecap.realm = 0;
+    ecap.wanted = 0;
+  }
 
   ecap.flags = CEPH_CAP_FLAG_AUTH;
   dout(10) << "encode_inodestat caps " << ccap_string(ecap.caps)
@@ -681,7 +697,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ::encode(layout.pool_ns, bl);
   }
 
-  return 0;
+  return ecap.cap_id;
 }
 
 
