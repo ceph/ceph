@@ -1002,14 +1002,13 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
 				  uint64_t *psize, time_t *pmtime)
 {
   C_aio_stat_Ack *onack = new C_aio_stat_Ack(c, pmtime);
-
+  c->is_read = true;
   c->io = this;
   Objecter::Op *o = objecter->prepare_stat_op(
     oid, oloc,
     snap_seq, psize, &onack->mtime, 0,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
-
   return 0;
 }
 
@@ -1017,14 +1016,13 @@ int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
 				  uint64_t *psize, struct timespec *pts)
 {
   C_aio_stat2_Ack *onack = new C_aio_stat2_Ack(c, pts);
-
+  c->is_read = true;
   c->io = this;
   Objecter::Op *o = objecter->prepare_stat_op(
     oid, oloc,
     snap_seq, psize, &onack->mtime, 0,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
-
   return 0;
 }
 
