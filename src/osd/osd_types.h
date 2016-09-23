@@ -1967,6 +1967,16 @@ struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
   bool using_gmt;	///< use gmt for creating the hit_set archive object name
+
+  friend bool operator==(const pg_hit_set_info_t& l,
+			 const pg_hit_set_info_t& r) {
+    return
+      l.begin == r.begin &&
+      l.end == r.end &&
+      l.version == r.version &&
+      l.using_gmt == r.using_gmt;
+  }
+
   explicit pg_hit_set_info_t(bool using_gmt = true)
     : using_gmt(using_gmt) {}
 
@@ -1986,6 +1996,13 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
   list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+
+  friend bool operator==(const pg_hit_set_history_t& l,
+			 const pg_hit_set_history_t& r) {
+    return
+      l.current_last_update == r.current_last_update &&
+      l.history == r.history;
+  }
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -2026,6 +2043,23 @@ struct pg_history_t {
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
   utime_t last_clean_scrub_stamp;
+
+  friend bool operator==(const pg_history_t& l, const pg_history_t& r) {
+    return
+      l.epoch_created == r.epoch_created &&
+      l.last_epoch_started == r.last_epoch_started &&
+      l.last_epoch_clean == r.last_epoch_clean &&
+      l.last_epoch_split == r.last_epoch_split &&
+      l.last_epoch_marked_full == r.last_epoch_marked_full &&
+      l.same_up_since == r.same_up_since &&
+      l.same_interval_since == r.same_interval_since &&
+      l.same_primary_since == r.same_primary_since &&
+      l.last_scrub == r.last_scrub &&
+      l.last_deep_scrub == r.last_deep_scrub &&
+      l.last_scrub_stamp == r.last_scrub_stamp &&
+      l.last_deep_scrub_stamp == r.last_deep_scrub_stamp &&
+      l.last_clean_scrub_stamp == r.last_clean_scrub_stamp;
+  }
 
   pg_history_t()
     : epoch_created(0),
@@ -2122,6 +2156,22 @@ struct pg_info_t {
 
   pg_history_t history;
   pg_hit_set_history_t hit_set;
+
+  friend bool operator==(const pg_info_t& l, const pg_info_t& r) {
+    return
+      l.pgid == r.pgid &&
+      l.last_update == r.last_update &&
+      l.last_complete == r.last_complete &&
+      l.last_epoch_started == r.last_epoch_started &&
+      l.last_user_version == r.last_user_version &&
+      l.log_tail == r.log_tail &&
+      l.last_backfill == r.last_backfill &&
+      l.last_backfill_bitwise == r.last_backfill_bitwise &&
+      l.purged_snaps == r.purged_snaps &&
+      l.stats == r.stats &&
+      l.history == r.history &&
+      l.hit_set == r.hit_set;
+  }
 
   pg_info_t()
     : last_epoch_started(0), last_user_version(0),
