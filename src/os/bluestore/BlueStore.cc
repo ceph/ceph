@@ -3356,14 +3356,15 @@ int BlueStore::_setup_block_symlink_or_file(
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {
+    r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " failed to create " << name << " symlink to "
+           << epath << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
     if (!epath.compare(0, strlen(SPDK_PREFIX), SPDK_PREFIX)) {
-      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
-      if (r < 0) {
-        r = -errno;
-        derr << __func__ << " failed to create " << name << " symlink to "
-    	     << epath << ": " << cpp_strerror(r) << dendl;
-        return r;
-      }
       int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
       if (fd < 0) {
 	r = -errno;
@@ -3374,16 +3375,9 @@ int BlueStore::_setup_block_symlink_or_file(
       string serial_number = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
-      dout(1) << __func__ << " created " << name << " file with " << dendl;
+      dout(1) << __func__ << " created " << name << " symlink to "
+              << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
-    } else {
-      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
-      if (r < 0) {
-        r = -errno;
-        derr << __func__ << " failed to create " << name << " symlink to "
-    	   << epath << ": " << cpp_strerror(r) << dendl;
-        return r;
-      }
     }
   }
   if (size) {
@@ -3942,14 +3936,18 @@ int BlueStore::fsck()
 	  expecting_shards.pop_front();
 	  continue;
 	}
-	while (expecting_shards.empty() ||
-	       expecting_shards.front() > it->key()) {
-	  uint32_t offset;
-	  string okey;
-	  get_key_extent_shard(it->key(), &okey, &offset);
-	  string ekey;
-	  derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
-	       << dendl;
+
+        uint32_t offset;
+        string okey;
+        get_key_extent_shard(it->key(), &okey, &offset);
+        derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
+                         << dendl;
+        if (expecting_shards.empty()) {
+          derr << __func__ << pretty_binary_string(it->key())
+               << " is unexpected" << dendl;
+          continue;
+        }
+	while (expecting_shards.front() > it->key()) {
 	  derr << __func__ << "   saw " << pretty_binary_string(it->key())
 	       << dendl;
 	  derr << __func__ << "   exp "
@@ -4728,7 +4726,7 @@ int BlueStore::_do_read(
     } else {
       for (auto reg : b2r_it->second) {
 	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->get_blob().get_chunk_size(true, block_size);
+	uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
 	uint64_t r_off = reg.blob_xoffset;
 	uint64_t r_len = reg.length;
 	unsigned front = r_off % chunk_size;
@@ -7026,9 +7024,7 @@ void BlueStore::_do_write_small(
 	     << " bstart 0x" << std::hex << bstart << std::dec << dendl;
 
     // can we pad our head/tail out with zeros?
-    // blob csum settings to be applied hence ignoring current config
-    // settings for csum enable/disable
-    uint64_t chunk_size = b->get_blob().get_chunk_size(true, block_size);
+    uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
     uint64_t head_pad = P2PHASE(offset, chunk_size);
     if (head_pad &&
 	o->extent_map.has_any_lextents(offset - head_pad, chunk_size)) {
