@@ -3356,14 +3356,15 @@ int BlueStore::_setup_block_symlink_or_file(
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {
+    r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " failed to create " << name << " symlink to "
+           << epath << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
     if (!epath.compare(0, strlen(SPDK_PREFIX), SPDK_PREFIX)) {
-      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
-      if (r < 0) {
-        r = -errno;
-        derr << __func__ << " failed to create " << name << " symlink to "
-    	     << epath << ": " << cpp_strerror(r) << dendl;
-        return r;
-      }
       int fd = ::openat(path_fd, epath.c_str(), flags, 0644);
       if (fd < 0) {
 	r = -errno;
@@ -3374,16 +3375,9 @@ int BlueStore::_setup_block_symlink_or_file(
       string serial_number = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, serial_number.c_str(), serial_number.size());
       assert(r == (int)serial_number.size());
-      dout(1) << __func__ << " created " << name << " file with " << dendl;
+      dout(1) << __func__ << " created " << name << " symlink to "
+              << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
-    } else {
-      r = ::symlinkat(epath.c_str(), path_fd, name.c_str());
-      if (r < 0) {
-        r = -errno;
-        derr << __func__ << " failed to create " << name << " symlink to "
-    	   << epath << ": " << cpp_strerror(r) << dendl;
-        return r;
-      }
     }
   }
   if (size) {
