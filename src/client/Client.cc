@@ -3947,6 +3947,8 @@ public:
 
 void Client::_invalidate_kernel_dcache()
 {
+  if (unmounting)
+    return;
   if (can_invalidate_dentries && dentry_invalidate_cb && root->dir) {
     for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
 	 p != root->dir->dentries.end();
