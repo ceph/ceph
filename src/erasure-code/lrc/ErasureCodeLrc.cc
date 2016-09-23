@@ -31,6 +31,8 @@
 // re-include our assert to clobber boost's
 #include "include/assert.h"
 
+using namespace std;
+
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)

@@ -34,7 +34,7 @@ public:
   virtual int factory(const std::string& directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) {
+		      std::ostream *ss) {
     ErasureCodeJerasure *interface;
     std::string t;
     if (profile.find("technique") != profile.end())

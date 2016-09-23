@@ -19,6 +19,9 @@
 #include "ErasureCodeJerasure.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
+
+using namespace std;
+
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"

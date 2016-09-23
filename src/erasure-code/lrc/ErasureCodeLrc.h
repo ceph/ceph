@@ -46,33 +46,33 @@
 
 class ErasureCodeLrc : public ErasureCode {
 public:
-  static const string DEFAULT_KML;
+  static const std::string DEFAULT_KML;
 
   struct Layer {
-    explicit Layer(string _chunks_map) : chunks_map(_chunks_map) { }
+    explicit Layer(std::string _chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
-    vector<int> data;
-    vector<int> coding;
-    vector<int> chunks;
-    set<int> chunks_as_set;
-    string chunks_map;
+    std::vector<int> data;
+    std::vector<int> coding;
+    std::vector<int> chunks;
+    std::set<int> chunks_as_set;
+    std::string chunks_map;
     ErasureCodeProfile profile;
   };
-  vector<Layer> layers;
-  string directory;
+  std::vector<Layer> layers;
+  std::string directory;
   unsigned int chunk_count;
   unsigned int data_chunk_count;
-  string ruleset_root;
+  std::string ruleset_root;
   struct Step {
-    Step(string _op, string _type, int _n) :
+    Step(std::string _op, std::string _type, int _n) :
       op(_op),
       type(_type),
       n(_n) {}
-    string op;
-    string type;
+    std::string op;
+    std::string type;
     int n;
   };
-  vector<Step> ruleset_steps;
+  std::vector<Step> ruleset_steps;
 
   explicit ErasureCodeLrc(const std::string &dir)
     : directory(dir),
@@ -83,16 +83,16 @@ public:
 
   virtual ~ErasureCodeLrc() {}
 
-  set<int> get_erasures(const set<int> &need,
-			const set<int> &available) const;
+  std::set<int> get_erasures(const std::set<int> &need,
+			const std::set<int> &available) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_read,
-				const set<int> &available,
-				set<int> *minimum);
+  virtual int minimum_to_decode(const std::set<int> &want_to_read,
+				const std::set<int> &available,
+				std::set<int> *minimum);
 
-  virtual int create_ruleset(const string &name,
+  virtual int create_ruleset(const std::string &name,
 			     CrushWrapper &crush,
-			     ostream *ss) const;
+			     std::ostream *ss) const;
 
   virtual unsigned int get_chunk_count() const {
     return chunk_count;
@@ -104,34 +104,34 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded);
+  virtual int encode_chunks(const std::set<int> &want_to_encode,
+			    std::map<int, bufferlist> *encoded);
 
-  virtual int decode_chunks(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded);
+  virtual int decode_chunks(const std::set<int> &want_to_read,
+			    const std::map<int, bufferlist> &chunks,
+			    std::map<int, bufferlist> *decoded);
 
-  virtual int init(ErasureCodeProfile &profile, ostream *ss);
+  virtual int init(ErasureCodeProfile &profile, std::ostream *ss);
 
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_kml(ErasureCodeProfile &profile, ostream *ss);
+  int parse_kml(ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_ruleset(ErasureCodeProfile &profile, ostream *ss);
+  int parse_ruleset(ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_ruleset_step(string description_string,
+  int parse_ruleset_step(std::string description_string,
 			 json_spirit::mArray description,
-			 ostream *ss);
+			 std::ostream *ss);
 
   int layers_description(const ErasureCodeProfile &profile,
 			 json_spirit::mArray *description,
-			 ostream *ss) const;
-  int layers_parse(string description_string,
+			 std::ostream *ss) const;
+  int layers_parse(std::string description_string,
 		   json_spirit::mArray description,
-		   ostream *ss);
-  int layers_init(ostream *ss);
-  int layers_sanity_checks(string description_string,
-			   ostream *ss) const;
+		   std::ostream *ss);
+  int layers_init(std::ostream *ss);
+  int layers_sanity_checks(std::string description_string,
+			   std::ostream *ss) const;
 };
 
 #endif
