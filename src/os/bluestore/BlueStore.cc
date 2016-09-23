@@ -1888,6 +1888,20 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
   if (p != extent_map.begin()) {
     --p;  // start to the left of offset
   }
+
+  // identify the *next* shard
+  auto pshard = shards.begin();
+  while (pshard != shards.end() &&
+	 p->logical_offset >= pshard->offset) {
+    ++pshard;
+  }
+  uint64_t shard_end;
+  if (pshard != shards.end()) {
+    shard_end = pshard->offset;
+  } else {
+    shard_end = OBJECT_MAX_SIZE;
+  }
+
   auto n = p;
   for (++n; n != extent_map.end(); p = n++) {
     if (n->logical_offset > offset + length) {
@@ -1896,13 +1910,25 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
     while (n != extent_map.end() &&
 	   p->logical_offset + p->length == n->logical_offset &&
 	   p->blob == n->blob &&
-	   p->blob_offset + p->length == n->blob_offset) {
+	   p->blob_offset + p->length == n->blob_offset &&
+	   n->logical_offset < shard_end) {
+      dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+	       << " next shard 0x" << shard_end << std::dec
+	       << " merging " << *p << " and " << *n << dendl;
       p->length += n->length;
       rm(n++);
       ++removed;
     }
     if (n == extent_map.end()) {
       break;
+    }
+    if (n->logical_offset >= shard_end) {
+      ++pshard;
+      if (pshard != shards.end()) {
+	shard_end = pshard->offset;
+      } else {
+	shard_end = OBJECT_MAX_SIZE;
+      }
     }
   }
   return removed;
