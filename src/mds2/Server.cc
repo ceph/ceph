@@ -1045,8 +1045,12 @@ int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
     in = dnl->get_inode();
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
-      if (!in) {
-	mdcache->open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type(),
+      if (in) {
+	dn->link_remote(dnl, in);
+      } else if (dn->is_bad_remote_ino(dnl)) {
+	respond_to_request(mdr, -EIO);
+      } else {
+	mdcache->open_remote_dentry(dn.get(), dnl->get_remote_ino(), dnl->get_remote_d_type(),
 				    new C_MDS_RetryRequest(mds, mdr));
 	mdr->unlock_object(diri.get());
 	locker->drop_locks(mdr);
@@ -1771,11 +1775,16 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     // remote link?
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
-      if (!in) {
+      if (in) {
+	dn->link_remote(dnl, in);
+      } else if (dn->is_bad_remote_ino(dnl)) {
+	// skip bad remote linkage
+	continue;
+      } else {
 	if (num_entries > 0) {
-	  mdcache->open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type());
+	  mdcache->open_remote_dentry(dn, dnl->get_remote_ino(), dnl->get_remote_d_type());
 	} else {
-	  mdcache->open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type(),
+	  mdcache->open_remote_dentry(dn, dnl->get_remote_ino(), dnl->get_remote_d_type(),
 				      new C_MDS_RetryRequest(mds, mdr));
 	  mdr->unlock_object(diri.get());
 	  //locker->drop_locks(mdr);

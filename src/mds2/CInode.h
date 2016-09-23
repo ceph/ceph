@@ -26,6 +26,7 @@ public:
   static const int PIN_DIRFRAG =		-1;
   static const int PIN_CAPS =			2;  // client caps
   static const int PIN_RECOVERING =		3;
+  static const int PIN_REMOTEPARENT =		8;
   static const int PIN_TRUNCATING =		18;
   static const int PIN_STRAY =			19; 
   static const int PIN_DIRTYRSTAT =		21;
@@ -150,6 +151,7 @@ public:
 protected:
   CDentry *parent;
   list<CDentry*> projected_parent;
+  set<CDentry*> remote_parents;
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == NULL);
@@ -183,6 +185,12 @@ public:
   CDentryRef get_lock_parent_dn();
   CDentryRef get_lock_projected_parent_dn();
   bool is_projected_ancestor_of(CInode *other) const;
+
+  void add_remote_parent(CDentry *p);
+  void remove_remote_parent(CDentry *p);
+  bool has_remote_parents() const {
+    return !remote_parents.empty();
+  }
 
 protected:
   map<frag_t,CDir*> dirfrags;

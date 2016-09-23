@@ -22,6 +22,7 @@ public:
   static const unsigned STATE_ORPHANINODE =	(1<<2);
   static const unsigned STATE_PURGING =		(1<<3);
   static const unsigned STATE_EVALUATINGSTRAY =	(1<<4);
+  static const unsigned STATE_BADREMOTEINO =	(1<<5);
 
   const std::string name;
 protected:
@@ -89,6 +90,10 @@ public:
   void link_inode_work(CInode *in);
   void link_inode_work(inodeno_t ino, uint8_t d_type);
   void unlink_inode_work();
+  void link_remote(const CDentry::linkage_t *dnl, CInodeRef& in);
+  bool is_bad_remote_ino(const CDentry::linkage_t *dnl) const {
+    return dnl == get_linkage() && state_test(STATE_BADREMOTEINO);
+  }
 
   version_t get_version() const { return version; }
   version_t get_projected_version() const { return projected_version; }

@@ -179,8 +179,10 @@ void CDentry::unlink_inode_work()
     // remote
     linkage.set_remote(0, 0);
     if (in) {
-      //dn->unlink_remote(dn->get_linkage());
+      in->remove_remote_parent(this);
+      linkage.set_inode(NULL);
     }
+    state_clear(STATE_BADREMOTEINO);
   } else {
     // primary
     assert(linkage.is_primary());
@@ -193,6 +195,19 @@ void CDentry::unlink_inode_work()
     // detach inode
     in->remove_primary_parent(this);
     linkage.set_inode(NULL);
+  }
+}
+
+void CDentry::link_remote(const CDentry::linkage_t *dnl, CInodeRef& in)
+{
+  assert(dnl->is_remote());
+  assert(in->ino() == dnl->get_remote_ino());
+
+  if (dnl == &linkage) {
+    in->mutex_lock();
+    in->add_remote_parent(this);
+    linkage.set_inode(in.get());
+    in->mutex_unlock();
   }
 }
 

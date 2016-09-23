@@ -114,13 +114,18 @@ void MDCache::remove_inode_recursive(CInode *in)
     while (!subdir->empty()) {
       CDentry *dn = subdir->begin()->second;
       const CDentry::linkage_t *dnl = dn->get_linkage();
+      CInode* other_in = dnl->get_inode();
       if (dnl->is_primary()) {
-	CInode* other_in = dnl->get_inode();
 	other_in->mutex_lock();
 	subdir->unlink_inode(dn);
 	remove_inode_recursive(other_in);
       } else if (dnl->is_remote()) {
+	CInodeRef tmp = other_in;
+	if (other_in)
+	  other_in->mutex_lock();
 	subdir->unlink_inode(dn);
+	if (other_in)
+	  other_in->mutex_unlock();
       }
       if (dn->is_dirty())
 	dn->mark_clean();
@@ -473,8 +478,12 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 	in = dnl->get_inode();
 	if (dnl->is_remote() && !in) {
 	  in = get_inode(dnl->get_remote_ino());
-	  if (!in) {
-	    open_remote_dentry(dnl->get_remote_ino(), dnl->get_remote_d_type(),
+	  if (in) {
+	    dn->link_remote(dnl, in);
+	  } else if (dn->is_bad_remote_ino(dnl)) {
+	    err = -EIO;
+	  } else {
+	    open_remote_dentry(dn.get(), dnl->get_remote_ino(), dnl->get_remote_d_type(),
 			       new C_MDS_RetryRequest(mds, mdr));
 	    err = 1;
 	  }
@@ -701,7 +710,12 @@ bool MDCache::trim_dentry(CDentry *dn, bool *null_straydn)
     if (!trim_inode(dn, in))
       return false;
   } else if (dnl->is_remote()) {
+    CInodeRef tmp = in;
+    if (in)
+      in->mutex_lock();
     dir->unlink_inode(dn);
+    if (in)
+      in->mutex_unlock();
   }
 
   if (!was_null) {
@@ -1638,9 +1652,47 @@ void MDCache::open_inode(inodeno_t ino, int64_t pool, MDSContextBase* fin)
   }
 }
 
-void MDCache::open_remote_dentry(inodeno_t ino, uint8_t d_type , MDSContextBase* fin) {
+class C_MDC_OpenRemoteDentry : public MDSContextBase {
+protected:
+  MDCache *mdcache;
+  CDentryRef dn;
+  inodeno_t ino;
+  MDSContextBase *onfinish;
+  MDSRank* get_mds() { return mdcache->mds; };
+public:
+  C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, inodeno_t i, MDSContextBase *f) :
+    mdcache(m), dn(d), ino(i), onfinish(f) {}
+  void finish(int r) {
+    mdcache->_open_remote_dentry_finish(dn, ino, r);
+    if (onfinish)
+      onfinish->complete(r < 0 ? r : 0);
+  }
+};
+
+void MDCache::_open_remote_dentry_finish(CDentryRef& dn, inodeno_t ino, int r)
+{
+  if (r < 0) {
+    CInode *diri = dn->get_dir_inode();
+    CObject::Locker l(diri);
+    dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
+    if (dn->get_linkage()->get_remote_ino() == ino)
+      dn->state_set(CDentry::STATE_BADREMOTEINO);
+    /*
+    bool fatal = mds->damage_table.notify_remote_damaged(
+	dn->get_projected_linkage()->get_remote_ino());
+    if (fatal) {
+      mds->damaged();
+      assert(0);  // unreachable, damaged() respawns us
+    }
+    */
+  }
+}
+
+void MDCache::open_remote_dentry(CDentry *dn, inodeno_t ino, uint8_t d_type,
+				 MDSContextBase* fin)
+{
   int64_t pool = (d_type == DT_DIR) ? metadata_pool : -1;
-  open_inode(ino, pool, fin);
+  open_inode(ino, pool, new C_MDC_OpenRemoteDentry(this, dn, ino, fin));
 }
 
 ESubtreeMap *MDCache::create_subtree_map()

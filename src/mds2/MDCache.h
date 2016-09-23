@@ -183,13 +183,17 @@ protected:
   void _open_inode_lookup_dentry(inodeno_t ino);
   void _open_inode_finish(inodeno_t ino, open_inode_info_t& info, int err);
 
+  void _open_remote_dentry_finish(CDentryRef& dn, inodeno_t ino, int r);
+
   friend class C_MDC_OI_BacktraceFetched;
   friend class C_MDC_OI_LookupDentry;
+  friend class C_MDC_OpenRemoteDentry;
 public:
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl,
 		       MDSAsyncContextBase *fin);
   void open_inode(inodeno_t ino, int64_t pool, MDSContextBase* fin=NULL);
-  void open_remote_dentry(inodeno_t ino, uint8_t d_type, MDSContextBase *fin=NULL);
+  void open_remote_dentry(CDentry *dn, inodeno_t ino, uint8_t d_type,
+			  MDSContextBase *fin=NULL);
 
 protected:
   std::atomic<uint64_t> last_cap_id;

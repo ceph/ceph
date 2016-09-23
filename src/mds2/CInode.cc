@@ -438,6 +438,22 @@ bool CInode::is_projected_ancestor_of(CInode *other) const
   return false;
 }
 
+void CInode::add_remote_parent(CDentry *p)
+{
+  mutex_assert_locked_by_me();
+  if (remote_parents.empty())
+    get(PIN_REMOTEPARENT);
+  remote_parents.insert(p);
+}
+
+void CInode::remove_remote_parent(CDentry *p)
+{
+  mutex_assert_locked_by_me();
+  remote_parents.erase(p);
+  if (remote_parents.empty())
+    put(PIN_REMOTEPARENT);
+}
+
 __u32 CInode::hash_dentry_name(const string &dn)
 {
   int which = inode.dir_layout.dl_dir_hash;
