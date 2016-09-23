@@ -2484,8 +2484,7 @@ void PG::_update_calc_stats()
   info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
   info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
-  info.stats.ondisk_log_size =
-    pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
 
