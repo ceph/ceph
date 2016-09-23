@@ -3941,7 +3941,6 @@ int BlueStore::fsck()
 	  uint32_t offset;
 	  string okey;
 	  get_key_extent_shard(it->key(), &okey, &offset);
-	  string ekey;
 	  derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
 	       << dendl;
 	  derr << __func__ << "   saw " << pretty_binary_string(it->key())
