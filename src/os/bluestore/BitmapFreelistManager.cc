@@ -521,17 +521,15 @@ void BitmapFreelistManager::_xor(
       first_key += bytes_per_key;
     }
     // middle keys
-    if (first_key < last_key) {
-      while (first_key < last_key) {
-	string k;
-	make_offset_key(first_key, &k);
-	dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec
-		 << ": ";
-	all_set_bl.hexdump(*_dout, false);
-	*_dout << dendl;
-	txn->merge(bitmap_prefix, k, all_set_bl);
-	first_key += bytes_per_key;
-      }
+    while (first_key < last_key) {
+      string k;
+      make_offset_key(first_key, &k);
+      dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec
+      	 << ": ";
+      all_set_bl.hexdump(*_dout, false);
+      *_dout << dendl;
+      txn->merge(bitmap_prefix, k, all_set_bl);
+      first_key += bytes_per_key;
     }
     assert(first_key == last_key);
     {
