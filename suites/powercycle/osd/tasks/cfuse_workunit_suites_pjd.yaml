@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse default permissions: false
+        fuse set user groups: true
 tasks:
 - ceph-fuse:
 - workunit:
