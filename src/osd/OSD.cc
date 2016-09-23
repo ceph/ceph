@@ -6377,10 +6377,12 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p != m->scrub_pgs.end();
 	 ++p) {
       spg_t pcand;
-      auto pg_map_entry = pg_map.find(pcand);
-      if (osdmap->get_primary_shard(*p, &pcand) &&
-	  pg_map_entry != pg_map.end())
-	handle_pg_scrub(m, pg_map_entry->second);
+      if (osdmap->get_primary_shard(*p, &pcand)) {
+	auto pg_map_entry = pg_map.find(pcand);
+	if (pg_map_entry != pg_map.end()) {
+	  handle_pg_scrub(m, pg_map_entry->second);
+	}
+      }
     }
   }
 
