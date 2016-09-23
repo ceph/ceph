@@ -361,7 +361,7 @@ protected:
   int make_request(MetaRequest *req, int uid, int gid,
 		   //MClientRequest *req, int uid, int gid,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
-		   int use_mds=-1, bufferlist *pdirbl=0);
+		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
