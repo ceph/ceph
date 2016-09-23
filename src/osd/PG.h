@@ -292,7 +292,8 @@ public:
     return pool.info.ec_pool();
   }
   // pg state
-  pg_info_t        info;
+  pg_info_t info;               ///< current pg info
+  pg_info_t last_written_info;  ///< last written info
   __u8 info_struct_v;
   static const __u8 cur_struct_v = 8;
   // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
@@ -2235,6 +2236,7 @@ public:
   static int _prepare_write_info(map<string,bufferlist> *km,
     epoch_t epoch,
     pg_info_t &info,
+    pg_info_t &last_written_info,
     map<epoch_t,pg_interval_t> &past_intervals,
     bool dirty_big_info,
     bool dirty_epoch);
