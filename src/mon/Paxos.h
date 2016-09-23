@@ -626,81 +626,27 @@ private:
   /**
    * Callback class responsible for handling a Collect Timeout.
    */
-  class C_CollectTimeout : public Context {
-    Paxos *paxos;
-  public:
-    explicit C_CollectTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->collect_timeout();
-    }
-  };
-
+  class C_CollectTimeout;
   /**
    * Callback class responsible for handling an Accept Timeout.
    */
-  class C_AcceptTimeout : public Context {
-    Paxos *paxos;
-  public:
-    explicit C_AcceptTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->accept_timeout();
-    }
-  };
-
+  class C_AcceptTimeout;
   /**
    * Callback class responsible for handling a Lease Ack Timeout.
    */
-  class C_LeaseAckTimeout : public Context {
-    Paxos *paxos;
-  public:
-    explicit C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->lease_ack_timeout();
-    }
-  };
+  class C_LeaseAckTimeout;
 
   /**
    * Callback class responsible for handling a Lease Timeout.
    */
-  class C_LeaseTimeout : public Context {
-    Paxos *paxos;
-  public:
-    explicit C_LeaseTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->lease_timeout();
-    }
-  };
+  class C_LeaseTimeout;
 
   /**
    * Callback class responsible for handling a Lease Renew Timeout.
    */
-  class C_LeaseRenew : public Context {
-    Paxos *paxos;
-  public:
-    explicit C_LeaseRenew(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->lease_renew_timeout();
-    }
-  };
+  class C_LeaseRenew;
 
-  class C_Trimmed : public Context {
-    Paxos *paxos;
-  public:
-    explicit C_Trimmed(Paxos *p) : paxos(p) { }
-    void finish(int r) {
-      paxos->trimming = false;
-    }
-  };
+  class C_Trimmed;
   /**
    *
    */
