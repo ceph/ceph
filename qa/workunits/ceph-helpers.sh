@@ -1167,7 +1167,7 @@ function pg_scrub() {
     wait_for_scrub $pgid "$last_scrub"
 }
 
-function DISABLED_test_pg_scrub() {
+function test_pg_scrub() {
     local dir=$1
 
     setup $dir || return 1
