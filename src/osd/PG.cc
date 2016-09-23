@@ -2782,9 +2782,8 @@ void PG::upgrade(ObjectStore *store)
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
-			    pg_info_t &info, coll_t coll,
+			    pg_info_t &info,
 			    map<epoch_t,pg_interval_t> &past_intervals,
-			    ghobject_t &pgmeta_oid,
 			    bool dirty_big_info,
 			    bool dirty_epoch)
 {
@@ -2842,8 +2841,8 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   unstable_stats.clear();
 
   bool need_update_epoch = last_epoch < get_osdmap()->get_epoch();
-  int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info, coll,
-				past_intervals, pgmeta_oid,
+  int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info,
+				past_intervals,
 				dirty_big_info, need_update_epoch);
   assert(ret == 0);
   if (need_update_epoch)

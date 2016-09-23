@@ -2234,9 +2234,8 @@ private:
 public:
   static int _prepare_write_info(map<string,bufferlist> *km,
     epoch_t epoch,
-    pg_info_t &info, coll_t coll,
+    pg_info_t &info,
     map<epoch_t,pg_interval_t> &past_intervals,
-    ghobject_t &pgmeta_oid,
     bool dirty_big_info,
     bool dirty_epoch);
   void write_if_dirty(ObjectStore::Transaction& t);
