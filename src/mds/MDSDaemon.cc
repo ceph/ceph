@@ -91,6 +91,19 @@ class C_VoidFn : public Context
   }
 };
 
+class MDSDaemon::C_MDS_Tick : public Context {
+  protected:
+    MDSDaemon *mds_daemon;
+public:
+  explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
+  void finish(int r) {
+    assert(mds_daemon->mds_lock.is_locked_by_me());
+
+    mds_daemon->tick_event = 0;
+    mds_daemon->tick();
+  }
+};
+
 // cons/des
 MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
