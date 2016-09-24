@@ -253,10 +253,8 @@ private:
 //   we assume that we want heapSlabs to be about 1KBytes.
 //
 
-enum { _desired_allocation_size = 1024 }; // approximate preferred allocation size
-
-inline constexpr size_t defaultHeapCount(size_t nodeSize) {
-   return (_desired_allocation_size / nodeSize) ? (_desired_allocation_size / nodeSize) : size_t(1); // can't uses std::max, it's not constexpr
+inline size_t defaultHeapCount(size_t nodeSize) {
+   return std::max(1024 / nodeSize,size_t(1));
 }
 
 //
@@ -558,9 +556,7 @@ private:
 // Vector. We rely on having an initial "reserve" call that ensures we wire-in the in-stack memory allocations
 //
 template<typename value,size_t   stackCount >
-   class fast_vector : public std::vector<value,fs_vector_allocator<value,stackCount> > {
-   typedef std::vector<value,fs_vector_allocator<value,stackCount>> vector_type;
-public:
+   struct fast_vector : public std::vector<value,fs_vector_allocator<value,stackCount> > {
 
    fast_vector() {
       this->reserve(stackCount);
@@ -583,23 +579,14 @@ public:
          this->push_back(i);
       }
       return *this;
-   }
-   //
-   // sadly, this previously O(1) operation now becomes O(N) for small N :)
-   //
-   void swap(fast_vector& rhs) {
-      //
-      // Lots of ways to optimize this, but we'll just do something simple....
-      //
-      // Use reserve to force the underlying code to malloc.
-      //
-      this->reserve(stackCount + 1);
-      rhs.reserve(stackCount + 1);
-      this->vector_type::swap(rhs);
-   }
-   
+   }   
 
 private:
+   typedef std::vector<value,fs_vector_allocator<value,stackCount>> vector_type;
+   //
+   // Disallowed operations
+   //
+   using vector_type::swap;
    //
    // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
    // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
