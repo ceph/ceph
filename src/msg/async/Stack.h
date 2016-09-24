@@ -288,6 +288,8 @@ class NetworkStack : public CephContext::ForkWatcher {
 
   explicit NetworkStack(CephContext *c, const string &t);
  public:
+  NetworkStack(const NetworkStack &) = delete;
+  NetworkStack& operator=(const NetworkStack &) = delete;
   virtual ~NetworkStack() {
     for (auto &&w : workers)
       delete w;
@@ -331,9 +333,6 @@ class NetworkStack : public CephContext::ForkWatcher {
     start();
   }
 
- private:
-  NetworkStack(const NetworkStack &);
-  NetworkStack& operator=(const NetworkStack &);
 };
 
 #endif //CEPH_MSG_ASYNC_STACK_H

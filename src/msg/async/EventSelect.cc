@@ -17,6 +17,8 @@
 #include "common/errno.h"
 #include "EventSelect.h"
 
+#include <unistd.h>
+#include <sys/select.h>
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix

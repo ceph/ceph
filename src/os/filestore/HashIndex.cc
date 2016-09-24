@@ -19,6 +19,7 @@
 
 #include "HashIndex.h"
 
+#include "common/errno.h"
 #include "common/debug.h"
 #define dout_subsys ceph_subsys_filestore
 
@@ -301,6 +302,59 @@ int HashIndex::_split(
     bits,
     match,
     &mkdirred);
+}
+
+int HashIndex::split_dirs(const vector<string> &path) {
+  dout(20) << __func__ << " " << path << dendl;
+  subdir_info_s info;
+  int r = get_info(path, &info);
+  if (r < 0) {
+    dout(10) << "error looking up info for " << path << ": "
+	     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (must_split(info)) {
+    r = initiate_split(path, info);
+    if (r < 0) {
+      dout(10) << "error initiating split on " << path << ": "
+	       << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    r = complete_split(path, info);
+    if (r < 0) {
+      dout(10) << "error completing split on " << path << ": "
+	       << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  vector<string> subdirs;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0) {
+    dout(10) << "error listing subdirs of " << path << ": "
+	     << cpp_strerror(r) << dendl;
+    return r;
+  }
+  for (vector<string>::const_iterator it = subdirs.begin();
+       it != subdirs.end(); ++it) {
+    vector<string> subdir_path(path);
+    subdir_path.push_back(*it);
+    r = split_dirs(subdir_path);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return r;
+}
+
+int HashIndex::apply_layout_settings() {
+  vector<string> path;
+  dout(10) << __func__ << " split multiple = " << split_multiplier
+	   << " merge threshold = " << merge_threshold << dendl;
+  return split_dirs(path);
 }
 
 int HashIndex::_init() {

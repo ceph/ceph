@@ -38,8 +38,8 @@ target_link_libraries(unittest_rbd_mirror
   rbd_mirror
   rados_test_stub
   rbd_mirror_internal
-  rbd_internal
   rbd_api
+  rbd_internal
   rbd_test_mock
   journal
   journal_test_mock
@@ -64,8 +64,8 @@ set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rbd_mirror
   rbd_mirror
   rbd_mirror_internal
-  rbd_internal
   rbd_api
+  rbd_internal
   journal
   cls_rbd_client
   cls_lock_client

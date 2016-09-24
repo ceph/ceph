@@ -18,7 +18,6 @@
 
 #include <algorithm>
 #include <sstream>
-#include <boost/assign.hpp>
 
 #include "OSDMonitor.h"
 #include "Monitor.h"
@@ -1367,7 +1366,7 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
 bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  Message *m = op->get_req();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
@@ -1404,7 +1403,7 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 bool OSDMonitor::prepare_update(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  Message *m = op->get_req();
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
@@ -1820,6 +1819,22 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   return false;
 }
 
+void OSDMonitor::force_failure(utime_t now, int target_osd)
+{
+  // already pending failure?
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return;
+  }
+
+  dout(1) << " we're forcing failure of osd." << target_osd << dendl;
+  pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+
+  mon->clog->info() << osdmap.get_inst(target_osd) << " failed (forced)\n";
+  return;
+}
+
 bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -1841,8 +1856,15 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
   if (m->if_osd_failed()) {
     // add a report
+    if (m->is_immediate()) {
+      mon->clog->debug() << m->get_target() << " reported immediately failed by "
+            << m->get_orig_source_inst() << "\n";
+      force_failure(now, target_osd);
+      return true;
+    }
     mon->clog->debug() << m->get_target() << " reported failed by "
-                       << m->get_orig_source_inst() << "\n";
+		      << m->get_orig_source_inst() << "\n";
+
     failure_info_t& fi = failure_info[target_osd];
     MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
     if (old_op) {
@@ -3542,48 +3564,52 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "var", var);
 
     typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
-    const choices_map_t ALL_CHOICES = boost::assign::map_list_of
-      ("size", SIZE)
-      ("min_size", MIN_SIZE)
-      ("crash_replay_interval", CRASH_REPLAY_INTERVAL)
-      ("pg_num", PG_NUM)("pgp_num", PGP_NUM)("crush_ruleset", CRUSH_RULESET)
-      ("hashpspool", HASHPSPOOL)("nodelete", NODELETE)
-      ("nopgchange", NOPGCHANGE)("nosizechange", NOSIZECHANGE)
-      ("noscrub", NOSCRUB)("nodeep-scrub", NODEEP_SCRUB)
-      ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
-      ("hit_set_type", HIT_SET_TYPE)("hit_set_period", HIT_SET_PERIOD)
-      ("hit_set_count", HIT_SET_COUNT)("hit_set_fpp", HIT_SET_FPP)
-      ("use_gmt_hitset", USE_GMT_HITSET)
-      ("auid", AUID)("target_max_objects", TARGET_MAX_OBJECTS)
-      ("target_max_bytes", TARGET_MAX_BYTES)
-      ("cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO)
-      ("cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO)
-      ("cache_target_full_ratio", CACHE_TARGET_FULL_RATIO)
-      ("cache_min_flush_age", CACHE_MIN_FLUSH_AGE)
-      ("cache_min_evict_age", CACHE_MIN_EVICT_AGE)
-      ("erasure_code_profile", ERASURE_CODE_PROFILE)
-      ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
-      ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
-      ("fast_read", FAST_READ)
-      ("hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE)
-      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N)
-      ("scrub_min_interval", SCRUB_MIN_INTERVAL)
-      ("scrub_max_interval", SCRUB_MAX_INTERVAL)
-      ("deep_scrub_interval", DEEP_SCRUB_INTERVAL)
-      ("recovery_priority", RECOVERY_PRIORITY)
-      ("recovery_op_priority", RECOVERY_OP_PRIORITY)
-      ("scrub_priority", SCRUB_PRIORITY);
+    const choices_map_t ALL_CHOICES = {
+      {"size", SIZE},
+      {"min_size", MIN_SIZE},
+      {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
+      {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM}, {"crush_ruleset", CRUSH_RULESET},
+      {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
+      {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
+      {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
+      {"write_fadvise_dontneed", WRITE_FADVISE_DONTNEED},
+      {"hit_set_type", HIT_SET_TYPE}, {"hit_set_period", HIT_SET_PERIOD},
+      {"hit_set_count", HIT_SET_COUNT}, {"hit_set_fpp", HIT_SET_FPP},
+      {"use_gmt_hitset", USE_GMT_HITSET},
+      {"auid", AUID}, {"target_max_objects", TARGET_MAX_OBJECTS},
+      {"target_max_bytes", TARGET_MAX_BYTES},
+      {"cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO},
+      {"cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO},
+      {"cache_target_full_ratio", CACHE_TARGET_FULL_RATIO},
+      {"cache_min_flush_age", CACHE_MIN_FLUSH_AGE},
+      {"cache_min_evict_age", CACHE_MIN_EVICT_AGE},
+      {"erasure_code_profile", ERASURE_CODE_PROFILE},
+      {"min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE},
+      {"min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE},
+      {"fast_read", FAST_READ},
+      {"hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE},
+      {"hit_set_search_last_n", HIT_SET_SEARCH_LAST_N},
+      {"scrub_min_interval", SCRUB_MIN_INTERVAL},
+      {"scrub_max_interval", SCRUB_MAX_INTERVAL},
+      {"deep_scrub_interval", DEEP_SCRUB_INTERVAL},
+      {"recovery_priority", RECOVERY_PRIORITY},
+      {"recovery_op_priority", RECOVERY_OP_PRIORITY},
+      {"scrub_priority", SCRUB_PRIORITY},
+    };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
-    const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
-      (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
-      (TARGET_MAX_OBJECTS)(TARGET_MAX_BYTES)(CACHE_TARGET_FULL_RATIO)
-      (CACHE_TARGET_DIRTY_RATIO)(CACHE_TARGET_DIRTY_HIGH_RATIO)
-      (CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE)(MIN_READ_RECENCY_FOR_PROMOTE)
-      (HIT_SET_GRADE_DECAY_RATE)(HIT_SET_SEARCH_LAST_N);
-    const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
-      (ERASURE_CODE_PROFILE);
+    const choices_set_t ONLY_TIER_CHOICES = {
+      {HIT_SET_TYPE}, {HIT_SET_PERIOD}, {HIT_SET_COUNT}, {HIT_SET_FPP},
+      {TARGET_MAX_OBJECTS}, {TARGET_MAX_BYTES}, {CACHE_TARGET_FULL_RATIO},
+      {CACHE_TARGET_DIRTY_RATIO}, {CACHE_TARGET_DIRTY_HIGH_RATIO},
+      {CACHE_MIN_FLUSH_AGE}, {CACHE_MIN_EVICT_AGE},
+      {MIN_READ_RECENCY_FOR_PROMOTE},
+      {HIT_SET_GRADE_DECAY_RATE}, {HIT_SET_SEARCH_LAST_N}
+    };
+    const choices_set_t ONLY_ERASURE_CHOICES = {
+      {ERASURE_CODE_PROFILE}
+    };
 
     choices_set_t selected_choices;
     if (var == "all") {

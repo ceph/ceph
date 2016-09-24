@@ -845,7 +845,6 @@ public:
   Objecter *objecter;
   Finisher objecter_finisher;
 
-
   // -- Watch --
   Mutex watch_lock;
   SafeTimer watch_timer;
@@ -907,6 +906,7 @@ public:
 	  entity_inst_t())));
   }
 
+private:
   // -- pg recovery and associated throttling --
   Mutex recovery_lock;
   list<pair<epoch_t, PGRef> > awaiting_throttle;
@@ -918,10 +918,24 @@ public:
 #ifdef DEBUG_RECOVERY_OIDS
   map<spg_t, set<hobject_t, hobject_t::BitwiseComparator> > recovery_oids;
 #endif
-  void start_recovery_op(PG *pg, const hobject_t& soid);
-  void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
+  void _queue_for_recovery(
+    pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
+    assert(recovery_lock.is_locked_by_me());
+    pair<PGRef, PGQueueable> to_queue = make_pair(
+      p.second,
+      PGQueueable(
+	PGRecovery(p.first, reserved_pushes),
+	cct->_conf->osd_recovery_cost,
+	cct->_conf->osd_recovery_priority,
+	ceph_clock_now(cct),
+	entity_inst_t()));
+    op_wq.queue(to_queue);
+  }
+public:
+  void start_recovery_op(PG *pg, const hobject_t& soid);
+  void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
   void release_reserved_pushes(uint64_t pushes) {
     Mutex::Locker l(recovery_lock);
     assert(recovery_ops_reserved >= pushes);
@@ -973,19 +987,6 @@ public:
     _maybe_queue_recovery();
   }
 
-  void _queue_for_recovery(
-    pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
-    assert(recovery_lock.is_locked_by_me());
-    pair<PGRef, PGQueueable> to_queue = make_pair(
-      p.second,
-      PGQueueable(
-	PGRecovery(p.first, reserved_pushes),
-	cct->_conf->osd_recovery_cost,
-	cct->_conf->osd_recovery_priority,
-	ceph_clock_now(cct),
-	entity_inst_t()));
-    op_wq.queue(to_queue);
-  }
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
@@ -1131,10 +1132,10 @@ public:
   void set_state(int s) {
     state = s;
   }
-  bool is_stopping() {
+  bool is_stopping() const {
     return state == STOPPING;
   }
-  bool is_preparing_to_stop() {
+  bool is_preparing_to_stop() const {
     return state == PREPARING_TO_STOP;
   }
   bool prepare_to_stop();
@@ -1181,6 +1182,12 @@ public:
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   /** OSD **/
+  Mutex osd_lock;			// global lock
+  SafeTimer tick_timer;    // safe timer (osd_lock)
+
+  // Tick timer for those stuff that do not need osd_lock
+  Mutex tick_timer_lock;
+  SafeTimer tick_timer_without_osd_lock;
 public:
   // config observer bits
   virtual const char** get_tracked_conf_keys() const;
@@ -1190,12 +1197,6 @@ public:
   void check_config();
 
 protected:
-  Mutex osd_lock;			// global lock
-  SafeTimer tick_timer;    // safe timer (osd_lock)
-
-  // Tick timer for those stuff that do not need osd_lock
-  Mutex tick_timer_lock;
-  SafeTimer tick_timer_without_osd_lock;
 
   static const double OSD_TICK_INTERVAL; // tick interval for tick_timer and tick_timer_without_osd_lock
 
@@ -1340,28 +1341,28 @@ private:
   std::atomic_int state{STATE_INITIALIZING};
 
 public:
-  int get_state() {
+  int get_state() const {
     return state;
   }
   void set_state(int s) {
     state = s;
   }
-  bool is_initializing() {
+  bool is_initializing() const {
     return state == STATE_INITIALIZING;
   }
-  bool is_preboot() {
+  bool is_preboot() const {
     return state == STATE_PREBOOT;
   }
-  bool is_booting() {
+  bool is_booting() const {
     return state == STATE_BOOTING;
   }
-  bool is_active() {
+  bool is_active() const {
     return state == STATE_ACTIVE;
   }
-  bool is_stopping() {
+  bool is_stopping() const {
     return state == STATE_STOPPING;
   }
-  bool is_waiting_for_healthy() {
+  bool is_waiting_for_healthy() const {
     return state == STATE_WAITING_FOR_HEALTHY;
   }
 
@@ -1606,7 +1607,7 @@ private:
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
 
-    bool is_unhealthy(utime_t cutoff) {
+    bool is_unhealthy(utime_t cutoff) const {
       return
 	! ((last_rx_front > cutoff ||
 	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
@@ -1615,7 +1616,7 @@ private:
 	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
 					   first_tx > cutoff))));
     }
-    bool is_healthy(utime_t cutoff) {
+    bool is_healthy(utime_t cutoff) const {
       return last_rx_front > cutoff && last_rx_back > cutoff;
     }
 
@@ -1702,6 +1703,9 @@ public:
       return osd->heartbeat_reset(con);
     }
     void ms_handle_remote_reset(Connection *con) {}
+    bool ms_handle_refused(Connection *con) {
+      return osd->ms_handle_refused(con);
+    }
     bool ms_verify_authorizer(Connection *con, int peer_type,
 			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			      bool& isvalid, CryptoKey& session_key) {
@@ -2395,6 +2399,7 @@ protected:
   void ms_handle_fast_accept(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con);
 
   io_queue get_io_queue() const {
     if (cct->_conf->osd_op_queue == "debug_random") {

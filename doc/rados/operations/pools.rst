@@ -26,8 +26,6 @@ pools for storing data. A pool provides you with:
 - **Snapshots**: When you create snapshots with ``ceph osd pool mksnap``, 
   you effectively take a snapshot of a particular pool.
   
-- **Set Ownership**: You can set a user ID as the owner of a pool. 
-
 To organize data into pools, you can list, create, and remove pools. 
 You can also view the utilization statistics for each pool.
 

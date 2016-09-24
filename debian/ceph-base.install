@@ -21,4 +21,3 @@ usr/share/man/man8/osdmaptool.8
 usr/lib/python*/dist-packages/ceph_detect_init*
 usr/share/man/man8/ceph-detect-init.8
 usr/share/man/man8/ceph-create-keys.8
-usr/bin/ceph-client-debug

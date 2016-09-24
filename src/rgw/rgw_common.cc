@@ -1109,6 +1109,14 @@ void url_encode(const string& src, string& dst)
   }
 }
 
+std::string url_encode(const std::string& src)
+{
+  std::string dst;
+  url_encode(src, dst);
+
+  return dst;
+}
+
 string rgw_trim_whitespace(const string& src)
 {
   if (src.empty()) {

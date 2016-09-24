@@ -1375,18 +1375,21 @@ bool KStore::collection_exists(const coll_t& c)
   return coll_map.count(c);
 }
 
-bool KStore::collection_empty(const coll_t& cid)
+int KStore::collection_empty(const coll_t& cid, bool *empty)
 {
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
   int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, 1,
 			  &ls, &next);
-  if (r < 0)
-    return false;  // fixme?
-  bool empty = ls.empty();
-  dout(10) << __func__ << " " << cid << " = " << (int)empty << dendl;
-  return empty;
+  if (r < 0) {
+    derr << __func__ << " collection_list returned: " << cpp_strerror(r)
+         << dendl;
+    return r;
+  }
+  *empty = ls.empty();
+  dout(10) << __func__ << " " << cid << " = " << (int)(*empty) << dendl;
+  return 0;
 }
 
 int KStore::collection_list(

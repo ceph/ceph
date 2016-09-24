@@ -16,7 +16,12 @@
 # 
 %bcond_with ocf
 %bcond_without cephfs_java
-%bcond_with tests
+%if 0%{?suse_version}
+%bcond_with ceph_test_package
+%else
+%bcond_without ceph_test_package
+%endif
+%bcond_with make_check
 %bcond_with xio
 %ifnarch s390 s390x
 %bcond_without tcmalloc
@@ -98,7 +103,6 @@ BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
 %endif
-BuildRequires:	hdparm
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
@@ -222,7 +226,6 @@ Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
 Requires:      util-linux
-Requires:      hdparm
 Requires:      cryptsetup
 Requires:      findutils
 Requires:      which
@@ -560,6 +563,7 @@ well as the RESTful interface. These have to do with querying the daemons for
 command-description information, validating user command input against those
 descriptions, and submitting the command to the appropriate daemon.
 
+%if 0%{with ceph_test_package}
 %package -n ceph-test
 Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
@@ -568,6 +572,7 @@ Requires:	ceph-common
 Requires:	xmlstarlet
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
+%endif
 
 %if 0%{with cephfs_java}
 
@@ -672,12 +677,16 @@ cmake .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DWITH_MANPAGE=ON \
+    -DWITH_PYTHON3=ON \
     -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
 %endif
 %if 0%{with xio}
     -DWITH_XIO=ON \
+%endif
+%if 0%{without ceph_test_package}
+    -DWITH_TESTS=OFF \
 %endif
 %if 0%{with cephfs_java}
     -DWITH_CEPHFS_JAVA=ON \
@@ -706,7 +715,7 @@ cmake .. \
 make %{?_smp_mflags}
 
 
-%if 0%{with tests}
+%if 0%{with make_check}
 %check
 # run in-tree unittests
 cd build
@@ -787,7 +796,6 @@ rm -rf %{buildroot}
 %{_bindir}/osdmaptool
 %{_bindir}/ceph-run
 %{_bindir}/ceph-detect-init
-%{_bindir}/ceph-client-debug
 %{_unitdir}/ceph-create-keys@.service
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
@@ -1246,7 +1254,6 @@ fi
 
 %files resource-agents
 %defattr(0755,root,root,-)
-# N.B. src/ocf/Makefile.am uses $(prefix)/lib
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
@@ -1371,6 +1378,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
+%{_includedir}/cephfs/ceph_statx.h
 %{_libdir}/libcephfs.so
 
 %files -n python-cephfs
@@ -1393,8 +1401,10 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python3_sitelib}/ceph_daemon.py
 %{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
 
+%if 0%{with ceph_test_package}
 %files -n ceph-test
 %defattr(-,root,root,-)
+%{_bindir}/ceph-client-debug
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
@@ -1427,6 +1437,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
+%endif
 
 %if 0%{with cephfs_java}
 %files -n libcephfs_jni1

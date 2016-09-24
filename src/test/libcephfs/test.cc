@@ -14,6 +14,7 @@
 
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/stat.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -1464,6 +1465,208 @@ TEST(LibCephFS, SlashDotDot) {
   ASSERT_TRUE(result != NULL);
   ASSERT_STREQ(result->d_name, "..");
   ASSERT_EQ(ino, result->d_ino);
+
+  ceph_shutdown(cmount);
+}
+
+static inline bool
+timespec_eq(timespec const& lhs, timespec const& rhs)
+{
+  return lhs.tv_sec == rhs.tv_sec && lhs.tv_nsec == rhs.tv_nsec;
+}
+
+TEST(LibCephFS, Btime) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/getattrx%x", getpid());
+
+  ceph_unlink(cmount, filename);
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+
+  /* make sure fstatx works */
+  struct ceph_statx	stx;
+
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
+  ASSERT_TRUE(timespec_eq(stx.stx_ctime, stx.stx_btime));
+  ceph_close(cmount, fd);
+
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(timespec_eq(stx.stx_ctime, stx.stx_btime));
+  ASSERT_TRUE(stx.stx_mask & (CEPH_STATX_CTIME|CEPH_STATX_BTIME));
+
+  struct timespec old_btime = stx.stx_btime;
+
+  /* Now sleep, do a chmod and verify that the ctime changed, but btime didn't */
+  sleep(1);
+  ASSERT_EQ(ceph_chmod(cmount, filename, 0644), 0);
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_CTIME|CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_BTIME);
+  ASSERT_TRUE(timespec_eq(stx.stx_btime, old_btime));
+  ASSERT_FALSE(timespec_eq(stx.stx_ctime, stx.stx_btime));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SetBtime) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/setbtime%x", getpid());
+
+  ceph_unlink(cmount, filename);
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+  ceph_close(cmount, fd);
+
+  struct ceph_statx stx;
+  struct timespec old_btime = { 1, 2 };
+
+  stx.stx_btime = old_btime;
+
+  ASSERT_EQ(ceph_setattrx(cmount, filename, &stx, CEPH_SETATTR_BTIME, 0), 0);
+
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_BTIME, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_BTIME);
+  ASSERT_TRUE(timespec_eq(stx.stx_btime, old_btime));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, LazyStatx) {
+  struct ceph_mount_info *cmount1, *cmount2;
+  ASSERT_EQ(ceph_create(&cmount1, NULL), 0);
+  ASSERT_EQ(ceph_create(&cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount1, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount2, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount1, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount2, NULL));
+  ASSERT_EQ(ceph_mount(cmount1, "/"), 0);
+  ASSERT_EQ(ceph_mount(cmount2, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "lazystatx%x", getpid());
+
+  Inode *root1, *file1, *root2, *file2;
+  struct stat st;
+  Fh *fh;
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root1), 0);
+  ceph_ll_unlink(cmount1, root1, filename, getuid(), getgid());
+  ASSERT_EQ(ceph_ll_create(cmount1, root1, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
+			    &st, &file1, &fh, getuid(), getgid()), 0);
+
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
+  ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &st, &file2, getuid(), getgid()), 0);
+
+  struct timespec old_ctime = st.st_ctim;
+
+  /*
+   * Now sleep, do a chmod on the first client and the see whether we get a
+   * different ctime with a statx that uses AT_NO_ATTR_SYNC
+   */
+  sleep(1);
+  st.st_mode = 0644;
+  ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &st, CEPH_SETATTR_MODE, getuid(), getgid()), 0);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_ll_getattrx(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, getuid(), getgid()), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
+  ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
+	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);
+
+  ceph_shutdown(cmount1);
+  ceph_shutdown(cmount2);
+}
+
+TEST(LibCephFS, ChangeAttr) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/changeattr%x", getpid());
+
+  ceph_unlink(cmount, filename);
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+
+  uint64_t old_change_attr = stx.stx_version;
+
+  /* do chmod, and check whether change_attr changed */
+  ASSERT_EQ(ceph_chmod(cmount, filename, 0644), 0);
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+  old_change_attr = stx.stx_version;
+
+  /* now do a write and see if it changed again */
+  ASSERT_EQ(3, ceph_write(cmount, fd, "foo", 3, 0));
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+  old_change_attr = stx.stx_version;
+
+  /* Now truncate and check again */
+  ASSERT_EQ(0, ceph_ftruncate(cmount, fd, 0));
+  ASSERT_EQ(ceph_statx(cmount, filename, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, DirChangeAttr) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char dirname[32], filename[32];
+  sprintf(dirname, "/dirchange%x", getpid());
+  sprintf(filename, "%s/foo", dirname);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dirname, 0755), 0);
+
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+
+  uint64_t old_change_attr = stx.stx_version;
+
+  int fd = ceph_open(cmount, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+  ceph_close(cmount, fd);
+
+  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
+
+  old_change_attr = stx.stx_version;
+
+  ASSERT_EQ(ceph_unlink(cmount, filename), 0);
+  ASSERT_EQ(ceph_statx(cmount, dirname, &stx, CEPH_STATX_VERSION, 0), 0);
+  ASSERT_TRUE(stx.stx_mask & CEPH_STATX_VERSION);
+  ASSERT_NE(stx.stx_version, old_change_attr);
 
   ceph_shutdown(cmount);
 }

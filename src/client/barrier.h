@@ -42,26 +42,9 @@ enum CBlockSync_State
   CBlockSync_State_Completed,
 };
 
-class Barrier;
 class BarrierContext;
 
-class C_Block_Sync : public Context {
-private:
-  Client *cl;
-  uint64_t ino;
-  barrier_interval iv;
-  enum CBlockSync_State state;
-  Barrier *barrier;
-  int *rval; /* see Cond.h */
-
-public:
-  boost::intrusive::list_member_hook<> intervals_hook;
-  C_Block_Sync(Client *c, uint64_t i, barrier_interval iv, int *r);
-  void finish(int rval);
-
-  friend class Barrier;
-  friend class BarrierContext;
-};
+class C_Block_Sync;
 
 typedef boost::intrusive::list< C_Block_Sync,
 				boost::intrusive::member_hook<

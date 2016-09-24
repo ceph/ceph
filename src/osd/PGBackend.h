@@ -625,30 +625,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
- };
-
-struct PG_SendMessageOnConn: public Context {
-  PGBackend::Listener *pg;
-  Message *reply;
-  ConnectionRef conn;
-  PG_SendMessageOnConn(
-    PGBackend::Listener *pg,
-    Message *reply,
-    ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
-  void finish(int) {
-    pg->send_message_osd_cluster(reply, conn.get());
-  }
-};
-
-struct PG_RecoveryQueueAsync : public Context {
-  PGBackend::Listener *pg;
-  GenContext<ThreadPool::TPHandle&> *c;
-  PG_RecoveryQueueAsync(
-    PGBackend::Listener *pg,
-    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
-  void finish(int) {
-    pg->schedule_recovery_work(c);
-  }
 };
 
 #endif

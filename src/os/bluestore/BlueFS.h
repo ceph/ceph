@@ -98,6 +98,8 @@ public:
   struct Dir : public RefCountedObject {
     map<string,FileRef> file_map;
 
+    Dir() : RefCountedObject(NULL, 0) {}
+
     friend void intrusive_ptr_add_ref(Dir *d) {
       d->get();
     }
@@ -134,6 +136,10 @@ public:
     }
     void append(bufferptr& bp) {
       buffer.append(bp);
+    }
+
+    uint64_t get_effective_write_pos() {
+      return pos + buffer.length();
     }
   };
 
@@ -351,6 +357,7 @@ public:
   void sync_metadata();
 
   int add_block_device(unsigned bdev, string path);
+  bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space

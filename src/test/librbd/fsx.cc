@@ -725,8 +725,7 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 
 	uint64_t features = RBD_FEATURES_ALL;
 	if (krbd) {
-		features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK |
-		              RBD_FEATURE_OBJECT_MAP     |
+		features &= ~(RBD_FEATURE_OBJECT_MAP     |
                               RBD_FEATURE_FAST_DIFF      |
                               RBD_FEATURE_DEEP_FLATTEN   |
                               RBD_FEATURE_JOURNALING);

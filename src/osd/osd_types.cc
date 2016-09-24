@@ -3123,6 +3123,7 @@ bool pg_interval_t::check_new_interval(
       if (*p != CRUSH_ITEM_NONE)
 	++num_acting;
 
+    assert(lastmap->get_pools().count(pgid.pool()));
     const pg_pool_t& old_pg_pool = lastmap->get_pools().find(pgid.pool())->second;
     set<pg_shard_t> old_acting_shards;
     old_pg_pool.convert_to_pg_shards(old_acting, &old_acting_shards);
@@ -5414,7 +5415,7 @@ void store_statfs_t::dump(Formatter *f) const
 ostream& operator<<(ostream& out, const store_statfs_t &s)
 {
   out << std::hex
-      << " store_statfs(0x" << s.available
+      << "store_statfs(0x" << s.available
       << "/0x"  << s.total
       << ", stored 0x" << s.stored
       << "/0x"  << s.allocated

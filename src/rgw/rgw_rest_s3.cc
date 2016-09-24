@@ -4310,11 +4310,12 @@ void RGWLDAPAuthEngine::init(CephContext* const cct)
       const string& ldap_uri = cct->_conf->rgw_ldap_uri;
       const string& ldap_binddn = cct->_conf->rgw_ldap_binddn;
       const string& ldap_searchdn = cct->_conf->rgw_ldap_searchdn;
+      const string& ldap_searchfilter = cct->_conf->rgw_ldap_searchfilter;
       const string& ldap_dnattr = cct->_conf->rgw_ldap_dnattr;
       std::string ldap_bindpw = parse_rgw_ldap_bindpw(cct);
 
       ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
-                                ldap_searchdn, ldap_dnattr);
+                                ldap_searchdn, ldap_searchfilter, ldap_dnattr);
 
       ldh->init();
       ldh->bind();
@@ -4332,11 +4333,13 @@ RGWRemoteAuthApplier::acl_strategy_t RGWLDAPAuthEngine::get_acl_strategy() const
 RGWRemoteAuthApplier::AuthInfo
 RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
 {
+  using acct_privilege_t = RGWRemoteAuthApplier::AuthInfo::acct_privilege_t;
+
   return RGWRemoteAuthApplier::AuthInfo {
     rgw_user(token.id),
     token.id,
     RGW_PERM_FULL_CONTROL,
-    true,
+    acct_privilege_t::IS_PLAIN_ACCT,
     TYPE_LDAP
   };
 }

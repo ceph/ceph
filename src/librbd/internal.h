@@ -136,6 +136,8 @@ namespace librbd {
   int get_flags(ImageCtx *ictx, uint64_t *flags);
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
+  int lock_acquire(ImageCtx *ictx, rbd_lock_mode_t lock_mode);
+  int lock_release(ImageCtx *ictx);
 
   int remove(librados::IoCtx& io_ctx, const std::string &image_name,
              const std::string &image_id, ProgressContext& prog_ctx,
@@ -223,17 +225,6 @@ namespace librbd {
   int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
 			      size_t status_size);
 
-  // Consistency groups functions
-  int group_create(librados::IoCtx& io_ctx, const char *imgname);
-  int group_remove(librados::IoCtx& io_ctx, const char *group_name);
-  int group_list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
-  int group_image_add(librados::IoCtx& group_ioctx, const char *group_name,
-		      librados::IoCtx& image_ioctx, const char *image_name);
-  int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-			 librados::IoCtx& image_ioctx, const char *image_name);
-  int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
-		       std::vector<group_image_status_t>& images);
-  int image_get_group(ImageCtx *ictx, group_spec_t *group_spec);
 }
 
 #endif

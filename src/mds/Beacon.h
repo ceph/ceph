@@ -94,6 +94,7 @@ public:
   void ms_handle_connect(Connection *c) {}
   bool ms_handle_reset(Connection *c) {return false;}
   void ms_handle_remote_reset(Connection *c) {}
+  bool ms_handle_refused(Connection *c) {return false;}
 
   void notify_mdsmap(MDSMap const *mdsmap);
   void notify_health(MDSRank const *mds);
