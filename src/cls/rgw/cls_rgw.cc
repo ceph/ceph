@@ -2260,6 +2260,11 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 {
   string filter = name;
   string start_key = marker;
+
+  string first_instance_idx;
+  encode_obj_versioned_data_key(string(), &first_instance_idx);
+  string end_key = first_instance_idx;
+
   int count = 0;
   map<string, bufferlist> keys;
   do {
@@ -2275,6 +2280,11 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 
     map<string, bufferlist>::iterator iter;
     for (iter = keys.begin(); iter != keys.end(); ++iter) {
+      if (iter->first >= end_key) {
+        /* past the end of plain namespace */
+        return count;
+      }
+
       rgw_cls_bi_entry entry;
       entry.type = PlainIdx;
       entry.idx = iter->first;
@@ -2292,7 +2302,7 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 
       CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__, escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
 
-      if (e.key.name != name) {
+      if (!name.empty() && e.key.name != name) {
         return count;
       }
 
@@ -2311,13 +2321,20 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
   cls_rgw_obj_key key(name);
   string first_instance_idx;
   encode_obj_versioned_data_key(key, &first_instance_idx);
-  string start_key = first_instance_idx;
+  string start_key;
+
+  if (!name.empty()) {
+    start_key = first_instance_idx;
+  } else {
+    start_key = BI_PREFIX_CHAR;
+    start_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
+  }
+  string filter = start_key;
   if (bi_entry_gt(marker, start_key)) {
     start_key = marker;
   }
   int count = 0;
   map<string, bufferlist> keys;
-  string filter = first_instance_idx;
   bool started = true;
   do {
     if (count >= (int)max) {
@@ -2329,13 +2346,13 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     if (started) {
       ret = cls_cxx_map_get_val(hctx, start_key, &keys[start_key]);
       if (ret == -ENOENT) {
-        ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+        ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
       }
       started = false;
     } else {
-      ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+      ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
     }
-    CLS_LOG(20, "%s(): start_key=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), (int)keys.size());
+    CLS_LOG(20, "%s(): start_key=%s first_instance_idx=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), escape_str(first_instance_idx).c_str(), (int)keys.size());
     if (ret < 0) {
       return ret;
     }
@@ -2346,6 +2363,10 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
       entry.type = InstanceIdx;
       entry.idx = iter->first;
       entry.data = iter->second;
+
+      if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+        return count;
+      }
 
       CLS_LOG(20, "%s(): entry.idx=%s", __func__, escape_str(entry.idx).c_str());
 
@@ -2359,7 +2380,85 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
         return -EIO;
       }
 
-      if (e.key.name != name) {
+      if (!name.empty() && e.key.name != name) {
+        return count;
+      }
+
+      entries->push_back(entry);
+      count++;
+      start_key = entry.idx;
+    }
+  } while (!keys.empty());
+
+  return count;
+}
+
+static int list_olh_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
+                            list<rgw_cls_bi_entry> *entries)
+{
+  cls_rgw_obj_key key(name);
+  string first_instance_idx;
+  encode_olh_data_key(key, &first_instance_idx);
+  string start_key;
+
+  if (!name.empty()) {
+    start_key = first_instance_idx;
+  } else {
+    start_key = BI_PREFIX_CHAR;
+    start_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
+  }
+  string filter = start_key;
+  if (bi_entry_gt(marker, start_key)) {
+    start_key = marker;
+  }
+  int count = 0;
+  map<string, bufferlist> keys;
+  bool started = true;
+  do {
+    if (count >= (int)max) {
+      return count;
+    }
+    keys.clear();
+#define BI_GET_NUM_KEYS 128
+    int ret;
+    if (started) {
+      ret = cls_cxx_map_get_val(hctx, start_key, &keys[start_key]);
+      if (ret == -ENOENT) {
+        ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
+      }
+      started = false;
+    } else {
+      ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
+    }
+    CLS_LOG(20, "%s(): start_key=%s first_instance_idx=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), escape_str(first_instance_idx).c_str(), (int)keys.size());
+    if (ret < 0) {
+      return ret;
+    }
+
+    map<string, bufferlist>::iterator iter;
+    for (iter = keys.begin(); iter != keys.end(); ++iter) {
+      rgw_cls_bi_entry entry;
+      entry.type = OLHIdx;
+      entry.idx = iter->first;
+      entry.data = iter->second;
+
+      if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+        return count;
+      }
+
+      CLS_LOG(20, "%s(): entry.idx=%s", __func__, escape_str(entry.idx).c_str());
+
+      bufferlist::iterator biter = entry.data.begin();
+
+      rgw_bucket_olh_entry e;
+      try {
+        ::decode(e, biter);
+      } catch (buffer::error& err) {
+        CLS_LOG(0, "ERROR: %s(): failed to decode buffer (size=%d)", __func__, entry.data.length());
+        return -EIO;
+      }
+
+      if (!name.empty() && e.key.name != name) {
         return count;
       }
 
@@ -2397,22 +2496,18 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
   int count = ret;
 
+  CLS_LOG(20, "found %d plain entries", count);
+
   ret = list_instance_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
     return ret;
   }
 
-  cls_rgw_obj_key key(op.name);
-  rgw_cls_bi_entry entry;
-  encode_olh_data_key(key, &entry.idx);
-  ret = cls_cxx_map_get_val(hctx, entry.idx, &entry.data);
-  if (ret < 0 && ret != -ENOENT) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_map_get_val retured ret=%d", __func__, ret);
+  ret = list_olh_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
     return ret;
-  } else if (ret >= 0) {
-    entry.type = OLHIdx;
-    op_ret.entries.push_back(entry);
   }
 
   ::encode(op_ret, *out);
