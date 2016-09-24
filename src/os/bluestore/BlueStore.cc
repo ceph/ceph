@@ -4953,7 +4953,7 @@ int BlueStore::fiemap(
     g_conf->bluestore_buffer_cache_size);
   ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size = 0 (" << m << ")" << std::dec << dendl;
+	   << " size = 0x(" << m << ")" << std::dec << dendl;
   return 0;
 }
 
