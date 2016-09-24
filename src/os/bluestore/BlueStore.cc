@@ -4116,7 +4116,6 @@ int BlueStore::fsck()
 	    dout(30) << __func__
 		     << "  got " << pretty_binary_string(it->key())
 		     << " -> " << user_key << dendl;
-	    assert(it->key() < tail);
 	  }
 	  it->next();
 	}
