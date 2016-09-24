@@ -2342,6 +2342,8 @@ void BlueStore::_init_logger()
     "Average compress latency");
   b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
     "Average decompress latency");
+  b.add_time_avg(l_bluestore_csum_lat, "csum_lat",
+    "Average checksum latency");
   b.add_u64(l_bluestore_compress_success_count, "compress_success_count",
     "Sum for beneficial compress ops");
 
@@ -4812,6 +4814,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 {
   int bad;
   uint64_t bad_csum;
+  utime_t start = ceph_clock_now(g_ceph_context);
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
@@ -4834,10 +4837,9 @@ int BlueStore::_verify_csum(OnodeRef& o,
     } else {
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
-    return r;
-  } else {
-    return 0;
   }
+  logger->tinc(l_bluestore_csum_lat, ceph_clock_now(g_ceph_context) - start);
+  return r;
 }
 
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
