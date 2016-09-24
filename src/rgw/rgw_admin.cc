@@ -2164,6 +2164,7 @@ int main(int argc, char **argv)
 
   string job_id;
   int num_shards = 0;
+  bool num_shards_specified = false;
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
 
@@ -2298,6 +2299,7 @@ int main(int argc, char **argv)
         cerr << "ERROR: failed to parse num shards: " << err << std::endl;
         return EINVAL;
       }
+      num_shards_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
       max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4904,6 +4906,11 @@ next:
   if (opt_cmd == OPT_BUCKET_RESHARD) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    if (!num_shards_specified) {
+      cerr << "ERROR: --num-shards not specified" << std::endl;
       return EINVAL;
     }
 
