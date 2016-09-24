@@ -3963,8 +3963,8 @@ int BlueStore::fsck()
       }
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
-	dout(30) << __func__ << "  bad object key "
-		 << pretty_binary_string(it->key()) << dendl;
+        derr << __func__ << "  bad object key "
+             << pretty_binary_string(it->key()) << dendl;
 	++errors;
 	continue;
       }
@@ -3983,8 +3983,8 @@ int BlueStore::fsck()
 	  }
 	}
 	if (!c) {
-	  dout(30) << __func__ << "  stray object " << oid
-		   << " not owned by any collection" << dendl;
+          derr << __func__ << "  stray object " << oid
+               << " not owned by any collection" << dendl;
 	  ++errors;
 	  continue;
 	}
