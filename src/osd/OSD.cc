@@ -325,7 +325,7 @@ void OSDService::mark_split_in_progress(spg_t parent, const set<spg_t> &children
 void OSDService::cancel_pending_splits_for_parent(spg_t parent)
 {
   Mutex::Locker l(in_progress_split_lock);
-  return _cancel_pending_splits_for_parent(parent);
+  _cancel_pending_splits_for_parent(parent);
 }
 
 void OSDService::_cancel_pending_splits_for_parent(spg_t parent)
@@ -2273,11 +2273,10 @@ out:
 
 void OSD::final_init()
 {
-  int r;
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
-  r = admin_socket->register_command("status", "status", asok_hook,
-				     "high-level status of OSD");
+  int r = admin_socket->register_command("status", "status", asok_hook,
+					 "high-level status of OSD");
   assert(r == 0);
   r = admin_socket->register_command("flush_journal", "flush_journal",
                                      asok_hook,
@@ -3186,9 +3185,11 @@ PGRef OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
   RWLock::RLocker l(pg_map_lock);
-  if (!pg_map.count(pgid))
-    return NULL;
-  PG *pg = pg_map[pgid];
+
+  auto pg_map_entry = pg_map.find(pgid);
+  if (pg_map_entry == pg_map.end())
+    return nullptr;
+  PG *pg = pg_map_entry->second;
   pg->lock();
   return pg;
 }
@@ -3988,22 +3989,24 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::PING:
     {
       if (cct->_conf->osd_debug_drop_ping_probability > 0) {
-	if (debug_heartbeat_drops_remaining.count(from)) {
-	  if (debug_heartbeat_drops_remaining[from] == 0) {
-	    debug_heartbeat_drops_remaining.erase(from);
+	auto heartbeat_drop = debug_heartbeat_drops_remaining.find(from);
+	if (heartbeat_drop != debug_heartbeat_drops_remaining.end()) {
+	  if (heartbeat_drop->second == 0) {
+	    debug_heartbeat_drops_remaining.erase(heartbeat_drop);
 	  } else {
-	    debug_heartbeat_drops_remaining[from]--;
+	    --heartbeat_drop->second;
 	    dout(5) << "Dropping heartbeat from " << from
-		    << ", " << debug_heartbeat_drops_remaining[from]
+		    << ", " << heartbeat_drop->second
 		    << " remaining to drop" << dendl;
 	    break;
 	  }
 	} else if (cct->_conf->osd_debug_drop_ping_probability >
 	           ((((double)(rand()%100))/100.0))) {
-	  debug_heartbeat_drops_remaining[from] =
-	    cct->_conf->osd_debug_drop_ping_duration;
+	  heartbeat_drop =
+	    debug_heartbeat_drops_remaining.insert(std::make_pair(from,
+	                     cct->_conf->osd_debug_drop_ping_duration)).first;
 	  dout(5) << "Dropping heartbeat from " << from
-		  << ", " << debug_heartbeat_drops_remaining[from]
+		  << ", " << heartbeat_drop->second
 		  << " remaining to drop" << dendl;
 	  break;
 	}
@@ -4069,18 +4072,20 @@ void OSD::handle_osd_ping(MOSDPing *m)
         cutoff -= cct->_conf->osd_heartbeat_grace;
         if (i->second.is_healthy(cutoff)) {
           // Cancel false reports
-          if (failure_queue.count(from)) {
+	  auto failure_queue_entry = failure_queue.find(from);
+	  if (failure_queue_entry != failure_queue.end()) {
             dout(10) << "handle_osd_ping canceling queued "
                      << "failure report for osd." << from << dendl;
-            failure_queue.erase(from);
+            failure_queue.erase(failure_queue_entry);
           }
 
-          if (failure_pending.count(from)) {
+	  auto failure_pending_entry = failure_pending.find(from);
+	  if (failure_pending_entry != failure_pending.end()) {
             dout(10) << "handle_osd_ping canceling in-flight "
                      << "failure report for osd." << from << dendl;
             send_still_alive(curmap->get_epoch(),
-              failure_pending[from].second);
-            failure_pending.erase(from);
+			     failure_pending_entry->second.second);
+            failure_pending.erase(failure_pending_entry);
           }
         }
       }
@@ -4407,7 +4412,6 @@ void OSD::check_ops_in_flight()
       clog->warn() << *i;
     }
   }
-  return;
 }
 
 // Usage:
@@ -4567,7 +4571,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     return;
   }
   ss << "Internal error - command=" << command;
-  return;
 }
 
 // =========================================
@@ -4770,6 +4773,37 @@ bool OSD::ms_handle_reset(Connection *con)
   session->wstate.reset(con);
   session->con.reset(NULL);  // break con <-> session ref cycle
   session_handle_reset(session);
+  session->put();
+  return true;
+}
+
+bool OSD::ms_handle_refused(Connection *con)
+{
+  if (!cct->_conf->osd_fast_fail_on_connection_refused)
+    return false;
+
+  OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
+  if (!session)
+    return false;
+  int type = con->get_peer_type();
+  // handle only OSD failures here
+  if (monc && (type == CEPH_ENTITY_TYPE_OSD)) {
+    OSDMapRef osdmap = get_osdmap();
+    if (osdmap) {
+      int id = osdmap->identify_osd_on_all_channels(con->get_peer_addr());
+      if (id >= 0 && osdmap->is_up(id)) {
+	// I'm cheating mon heartbeat grace logic, because we know it's not going
+	// to respawn alone. +1 so we won't hit any boundary case.
+	monc->send_mon_message(new MOSDFailure(monc->get_fsid(),
+						  osdmap->get_inst(id),
+						  cct->_conf->osd_heartbeat_grace + 1,
+						  osdmap->get_epoch(),
+						  MOSDFailure::FLAG_IMMEDIATE | MOSDFailure::FLAG_FAILED
+						  ));
+      }
+    }
+  }
   session->put();
   return true;
 }
@@ -5083,8 +5117,7 @@ void OSD::send_failures()
 
 void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch);
-  m->is_failed = false;
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch, MOSDFailure::FLAG_ALIVE);
   monc->send_mon_message(m);
 }
 
@@ -5179,18 +5212,19 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     PGRef _pg(pg);
     ++p;
 
-    if (ack->pg_stat.count(pg->info.pgid.pgid)) {
-      pair<version_t,epoch_t> acked = ack->pg_stat[pg->info.pgid.pgid];
+    auto acked = ack->pg_stat.find(pg->info.pgid.pgid);
+    if (acked != ack->pg_stat.end()) {
       pg->pg_stats_publish_lock.Lock();
-      if (acked.first == pg->pg_stats_publish.reported_seq &&
-	  acked.second == pg->pg_stats_publish.reported_epoch) {
+      if (acked->second.first == pg->pg_stats_publish.reported_seq &&
+	  acked->second.second == pg->pg_stats_publish.reported_epoch) {
 	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
 		 << ":" << pg->pg_stats_publish.reported_seq << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put("pg_stat_queue");
       } else {
 	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
-		 << ":" << pg->pg_stats_publish.reported_seq << " > acked " << acked << dendl;
+		 << ":" << pg->pg_stats_publish.reported_seq << " > acked "
+		 << acked->second << dendl;
       }
       pg->pg_stats_publish_lock.Unlock();
     } else {
@@ -6343,9 +6377,10 @@ void OSD::handle_scrub(MOSDScrub *m)
 	 p != m->scrub_pgs.end();
 	 ++p) {
       spg_t pcand;
+      auto pg_map_entry = pg_map.find(pcand);
       if (osdmap->get_primary_shard(*p, &pcand) &&
-	  pg_map.count(pcand))
-	handle_pg_scrub(m, pg_map[pcand]);
+	  pg_map_entry != pg_map.end())
+	handle_pg_scrub(m, pg_map_entry->second);
     }
   }
 

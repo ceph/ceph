@@ -15,17 +15,17 @@
 #define CEPH_HEALTH_MONITOR_H
 
 #include "mon/QuorumService.h"
-#include "mon/HealthService.h"
 
 //forward declaration
 namespace ceph { class Formatter; }
+class HealthService;
 
 class HealthMonitor : public QuorumService
 {
   map<int,HealthService*> services;
 
 protected:
-  virtual void service_shutdown();
+  void service_shutdown() override;
 
 public:
   HealthMonitor(Monitor *m) : QuorumService(m) { }
@@ -38,36 +38,24 @@ public:
    * @defgroup HealthMonitor_Inherited_h Inherited abstract methods
    * @{
    */
-  virtual void init();
-  virtual void get_health(Formatter *f,
-		     list<pair<health_status_t,string> >& summary,
-		     list<pair<health_status_t,string> > *detail);
-  virtual bool service_dispatch(MonOpRequestRef op);
+  void init() override;
+  void get_health(Formatter *f,
+		  list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail) override;
+  bool service_dispatch(MonOpRequestRef op) override;
 
-  virtual void start_epoch() {
-    for (map<int,HealthService*>::iterator it = services.begin();
-         it != services.end(); ++it) {
-      it->second->start(get_epoch());
-    }
-  }
+  void start_epoch() override;
 
-  virtual void finish_epoch() {
-    generic_dout(20) << "HealthMonitor::finish_epoch()" << dendl;
-    for (map<int,HealthService*>::iterator it = services.begin();
-         it != services.end(); ++it) {
-      assert(it->second != NULL);
-      it->second->finish();
-    }
-  }
+  void finish_epoch() override;
 
-  virtual void cleanup() { }
-  virtual void service_tick() { }
+  void cleanup() override { }
+  void service_tick() override { }
 
-  virtual int get_type() {
+  int get_type() override {
     return QuorumService::SERVICE_HEALTH;
   }
 
-  virtual string get_name() const {
+  string get_name() const override {
     return "health";
   }
 

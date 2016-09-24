@@ -192,40 +192,6 @@ TEST(pg_interval_t, check_new_interval)
   }
 
   //
-  // pool did not exist in the old osdmap
-  //
-  {
-    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
-    lastmap->set_max_osd(10);
-    lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
-    lastmap->set_epoch(epoch);
-
-    map<epoch_t, pg_interval_t> past_intervals;
-
-    ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
-						  new_primary,
-						  old_acting,
-						  new_acting,
-						  old_up_primary,
-						  new_up_primary,
-						  old_up,
-						  new_up,
-						  same_interval_since,
-						  last_epoch_clean,
-						  osdmap,
-						  lastmap,
-						  pgid,
-                                                  recoverable.get(),
-						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
-  }
-
-  //
   // The acting set has changed
   //
   {

@@ -383,6 +383,81 @@ example::
 
 	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
 
+Monitor Store Failures
+======================
+
+Symptoms of store corruption
+----------------------------
+
+Ceph monitor stores the `cluster map`_ in a key/value store such as LevelDB. If
+a monitor fails due to the key/value store corruption, following error messages
+might be found in the monitor log::
+
+  Corruption: error in middle of record
+
+or::
+
+  Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.0/store.db/1234567.ldb
+
+Recovery using healthy monitor(s)
+---------------------------------
+
+If there is any survivers, we can always `replace`_ the corrupted one with a
+new one. And after booting up, the new joiner will sync up with a healthy
+peer, and once it is fully sync'ed, it will be able to serve the clients.
+
+Recovery using OSDs
+-------------------
+
+But what if all monitors fail at the same time? Since users are encouraged to
+deploy at least three monitors in a Ceph cluster, the chance of simultaneous
+failure is rare. But unplanned power-downs in a data center with improperly
+configured disk/fs settings could fail the underlying filesystem, and hence
+kill all the monitors. In this case, we can recover the monitor store with the
+information stored in OSDs.::
+
+  ms=/tmp/mon-store
+  mkdir $ms
+  # collect the cluster map from OSDs
+  for host in $hosts; do
+    rsync -avz $ms user@host:$ms
+    rm -rf $ms
+    ssh user@host <<EOF
+      for osd in /var/lib/osd/osd-*; do
+        ceph-objectstore-tool --data-path $osd --op update-mon-db --mon-store-path $ms
+      done
+    EOF
+    rsync -avz user@host:$ms $ms
+  done
+  # rebuild the monitor store from the collected map, if the cluster does not
+  # use cephx authentication, there is no need to pass the "--keyring" option.
+  # i.e. use "ceph-monstore-tool /tmp/mon-store rebuild" instead
+  ceph-monstore-tool /tmp/mon-store rebuild -- --keyring /path/to/admin.keyring
+  # backup corrupted store.db just in case
+  mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
+  mv /tmp/mon-store/store.db /var/lib/ceph/mon/mon.0/store.db
+
+The steps above
+
+#. collect the map from all OSD hosts,
+#. then rebuild the store,
+#. replace the corrupted store on ``mon.0`` with the recovered copy.
+
+Known limitations
+~~~~~~~~~~~~~~~~~
+
+Following information are not recoverable using the steps above:
+
+- **some added keyrings**: all the OSD keyrings added using ``ceph auth add`` command
+  are recovered from the OSD's copy. And the ``client.admin`` keyring is imported
+  using ``ceph-monstore-tool``. But the MDS keyrings and other keyrings are missing
+  in the recovered monitor store. You might need to re-add them manually.
+
+- **pg settings**: the ``full ratio`` and ``nearfull ratio`` settings configured using
+  ``ceph pg set_full_ratio`` and ``ceph pg set_nearfull_ratio`` will be lost.
+
+- **MDS Maps**: the MDS maps are lost.
+
 
 Everything Failed! Now What?
 =============================
@@ -480,4 +555,6 @@ based on that.
 Finally, you should reach out to us on the mailing lists, on IRC or file
 a new issue on the `tracker`_.
 
+.. _cluster map: ../../architecture#cluster-map
+.. _replace: ../operation/add-or-rm-mons
 .. _tracker: http://tracker.ceph.com/projects/ceph/issues/new

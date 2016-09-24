@@ -92,8 +92,7 @@ capability means that ``btrfs`` can support snapshots that are writable.
 ``btrfs`` also incorporates multi-device management into the file system,
 which enables you to support heterogeneous disk storage infrastructure,
 data allocation policies. The community also aims to provide ``fsck``, 
-deduplication, and data encryption support in the future. This compelling 
-list of features makes ``btrfs`` the ideal choice for Ceph clusters.
+deduplication, and data encryption support in the future.
 
 .. _copy-on-write: http://en.wikipedia.org/wiki/Copy-on-write
 .. _compared: http://en.wikipedia.org/wiki/Comparison_of_file_systems

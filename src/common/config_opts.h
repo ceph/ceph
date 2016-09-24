@@ -167,7 +167,7 @@ OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
-OPTION(ms_type, OPT_STR, "simple")   // messenger backend
+OPTION(ms_type, OPT_STR, "async")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
 OPTION(ms_tcp_rcvbuf, OPT_INT, 0)
 OPTION(ms_tcp_prefetch_max_size, OPT_INT, 4096) // max prefetch size, we limit this to avoid extra memcpy
@@ -531,7 +531,6 @@ OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 OPTION(mds_wipe_sessions, OPT_BOOL, 0)
 OPTION(mds_wipe_ino_prealloc, OPT_BOOL, 0)
 OPTION(mds_skip_ino, OPT_INT, 0)
-OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_for_fscid, OPT_INT, -1)
@@ -542,7 +541,7 @@ OPTION(mds_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a snapshot
-OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
+OPTION(mds_snap_max_uid, OPT_U32, 4294967294) // The maximum UID allowed to create a snapshot
 OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 // detect clients which aren't trimming completed requests
@@ -817,6 +816,7 @@ OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
+OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL, true) // immediately mark OSDs as down once they refuse to accept connections
 
 OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
 OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
@@ -936,6 +936,7 @@ OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 65536)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
+OPTION(bluefs_allocator, OPT_STR, "stupid")     // stupid | bitmap
 
 OPTION(bluestore_bluefs, OPT_BOOL, true)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
@@ -978,9 +979,14 @@ OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
  * And ask for compressing at least 12.5%(1/8) off, by default.
  */
 OPTION(bluestore_compression_required_ratio, OPT_DOUBLE, .875)
+OPTION(bluestore_extent_map_shard_max_size, OPT_U32, 1200)
+OPTION(bluestore_extent_map_shard_target_size, OPT_U32, 500)
+OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
+OPTION(bluestore_extent_map_inline_shard_prealloc_size, OPT_U32, 256)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
 OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
+OPTION(bluestore_shared_blob_hash_table_size_ratio, OPT_FLOAT, 2)  // multiple of onode_cache_size
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
@@ -1002,6 +1008,7 @@ OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_wal_max_ops, OPT_U64, 512)
 OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_blobid_prealloc, OPT_U64, 10240)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
@@ -1180,6 +1187,8 @@ OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(journal_ignore_corruption, OPT_BOOL, false) // assume journal is not corrupt
 OPTION(journal_discard, OPT_BOOL, false) //using ssd disk as journal, whether support discard nouse journal-data.
 
+OPTION(fio_dir, OPT_STR, "/tmp/fio") // fio data directory for fio-objectstore
+
 OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means on limit.
 OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
@@ -1212,6 +1221,8 @@ OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will 
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
+OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether to automatically acquire/release exclusive lock until it is explicitly requested, i.e. before we know the user of librbd is properly using the lock API
+OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1252,6 +1263,7 @@ OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending 
 OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
 OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 OPTION(rbd_journal_max_payload_bytes, OPT_U32, 16384) // maximum journal payload size before splitting
+OPTION(rbd_journal_max_concurrent_object_sets, OPT_INT, 0) // maximum number of object sets a journal client can be behind before it is automatically unregistered
 
 /**
  * RBD Mirror options
@@ -1307,6 +1319,7 @@ OPTION(rgw_lifecycle_thread, OPT_INT, 1) //start lifecycle thread number per rad
 OPTION(rgw_lifecycle_work_time, OPT_STR, "00:00-06:00") //job process lc  at 00:00-06:00s
 OPTION(rgw_lc_lock_max_time, OPT_INT, 60)  // total run time for a single gc processor work
 OPTION(rgw_lc_max_objs, OPT_INT, 32)
+OPTION(rgw_lc_debug_interval, OPT_INT, -1)  // Debug run interval, in seconds
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
@@ -1348,6 +1361,8 @@ OPTION(rgw_ldap_dnattr, OPT_STR, "uid")
 OPTION(rgw_ldap_secret, OPT_STR, "/etc/openldap/secret")
 /* rgw_s3_auth_use_ldap  use LDAP for RGW auth? */
 OPTION(rgw_s3_auth_use_ldap, OPT_BOOL, false)
+/* rgw_ldap_searchfilter  LDAP search filter */
+OPTION(rgw_ldap_searchfilter, OPT_STR, "")
 
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)

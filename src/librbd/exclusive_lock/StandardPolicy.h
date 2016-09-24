@@ -12,12 +12,16 @@ struct ImageCtx;
 
 namespace exclusive_lock {
 
-class StandardPolicy : public Policy{
+class StandardPolicy : public Policy {
 public:
   StandardPolicy(ImageCtx *image_ctx) : m_image_ctx(image_ctx) {
   }
 
-  virtual void lock_requested(bool force);
+  virtual bool may_auto_request_lock() {
+    return false;
+  }
+
+  virtual int lock_requested(bool force);
 
 private:
   ImageCtx *m_image_ctx;

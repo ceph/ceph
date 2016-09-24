@@ -175,6 +175,9 @@ class FakeDispatcher : public Dispatcher {
     got_remote_reset = true;
     cond.Signal();
   }
+  bool ms_handle_refused(Connection *con) {
+    return false;
+  }
   void ms_fast_dispatch(Message *m) {
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
@@ -558,7 +561,7 @@ TEST_P(MessengerTest, StatelessTest) {
     while (!srv_dispatcher.got_new)
       srv_dispatcher.cond.Wait(srv_dispatcher.lock);
   }
-  ASSERT_EQ(static_cast<Session*>(server_conn->get_priv())->get_count(), 1);
+  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv())->get_count());
 
   // 2. test for client lossy
   server_conn->mark_down();
@@ -824,6 +827,9 @@ class SyntheticDispatcher : public Dispatcher {
       sent.erase(*it);
     conn_sent.erase(con);
     got_remote_reset = true;
+  }
+  bool ms_handle_refused(Connection *con) {
+    return false;
   }
   void ms_fast_dispatch(Message *m) {
     // MSG_COMMAND is used to disorganize regular message flow
@@ -1407,6 +1413,9 @@ class MarkdownDispatcher : public Dispatcher {
     Mutex::Locker l(lock);
     conns.erase(con);
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
+  }
+  bool ms_handle_refused(Connection *con) {
+    return false;
   }
   void ms_fast_dispatch(Message *m) {
     assert(0);

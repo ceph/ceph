@@ -41,11 +41,11 @@ TEST_P(AllocTest, test_alloc_init)
   alloc->shutdown(); 
   blocks = BitMapZone::get_total_blocks() * 2 + 16;
   init_alloc(blocks, 1);
-  ASSERT_EQ(alloc->get_free(), 0);
+  ASSERT_EQ(0U, alloc->get_free());
   alloc->shutdown(); 
   blocks = BitMapZone::get_total_blocks() * 2;
   init_alloc(blocks, 1);
-  ASSERT_EQ(alloc->get_free(), 0);
+  ASSERT_EQ(alloc->get_free(), (uint64_t) 0);
 }
 
 TEST_P(AllocTest, test_alloc_min_alloc)
@@ -91,7 +91,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
                                    0, (int64_t) 0, &extents, &count), 0);
     EXPECT_EQ(extents[0].length, 2 * block_size);
     EXPECT_EQ(extents[1].length, 2 * block_size);
-    EXPECT_EQ(extents[2].length, 0);
+    EXPECT_EQ(0U, extents[2].length);
     EXPECT_EQ(count, 2);
   }
   alloc->shutdown();
@@ -186,6 +186,49 @@ TEST_P(AllocTest, test_alloc_failure)
                                    block_size * 512, (int64_t) 0, &extents, &count), -ENOSPC);
   }
 }
+
+TEST_P(AllocTest, test_alloc_hint_bmap)
+{
+  if (GetParam() == std::string("stupid")) {
+    return;
+  }
+  int64_t blocks = BitMapArea::get_level_factor(2) * 4;
+  int count = 0;
+  int64_t allocated = 0;
+  int64_t zone_size = 1024;
+  g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone", std::to_string(zone_size));
+
+  init_alloc(blocks, 1);
+  alloc->init_add_free(0, blocks);
+
+  auto extents = std::vector<AllocExtent>
+          (zone_size * 4, AllocExtent(-1, -1));
+  alloc->reserve(blocks);
+
+  allocated = alloc->alloc_extents(1, 1, 1, zone_size, &extents, &count);
+  ASSERT_EQ(0, allocated);
+  ASSERT_EQ(1, count);
+  ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
+
+  allocated = alloc->alloc_extents(1, 1, 1, zone_size * 2 - 1, &extents, &count);
+  EXPECT_EQ(0, allocated);
+  ASSERT_EQ(1, count);
+  EXPECT_EQ((int64_t) extents[0].offset, zone_size * 2 - 1);
+
+  /*
+   * Wrap around with hint
+   */
+  allocated = alloc->alloc_extents(zone_size * 2, 1, 1,  blocks - zone_size * 2, &extents, &count);
+  EXPECT_EQ(0, allocated);
+  EXPECT_EQ(zone_size * 2, count);
+  EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
+
+  allocated = alloc->alloc_extents(zone_size, 1, 1, blocks - zone_size, &extents, &count);
+  EXPECT_EQ(0, allocated);
+  EXPECT_EQ(zone_size, count);
+  EXPECT_EQ(extents[0].offset, (uint64_t) 0);
+}
+
 
 INSTANTIATE_TEST_CASE_P(
   Allocator,

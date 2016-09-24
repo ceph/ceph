@@ -233,6 +233,9 @@ public:
     std::set<cls::journal::Client>::const_iterator c;
     for (c = registered_clients.begin(); c != registered_clients.end(); c++) {
       std::cout << __func__ << ": client: " << *c << std::endl;
+      if (c->state != cls::journal::CLIENT_STATE_CONNECTED) {
+	continue;
+      }
       cls::journal::ObjectPositions object_positions =
 	c->commit_position.object_positions;
       cls::journal::ObjectPositions::const_iterator p =
@@ -822,3 +825,91 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
   close_image(ictx);
 }
 
+TEST_F(TestImageReplayer, Disconnect)
+{
+  bootstrap();
+
+  // Make sure rbd_mirroring_resync_after_disconnect is not set
+  EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirroring_resync_after_disconnect", "false"));
+
+  // Test start fails if disconnected
+
+  librbd::ImageCtx *ictx;
+
+  generate_test_data();
+  open_remote_image(&ictx);
+  for (int i = 0; i < TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+  close_image(ictx);
+
+  std::string oid = ::journal::Journaler::header_oid(m_remote_image_id);
+  ASSERT_EQ(0, cls::journal::client::client_update_state(m_remote_ioctx, oid,
+	m_local_mirror_uuid, cls::journal::CLIENT_STATE_DISCONNECTED));
+
+  C_SaferCond cond1;
+  m_replayer->start(&cond1);
+  ASSERT_EQ(-ENOTCONN, cond1.wait());
+
+  // Test start succeeds after resync
+
+  open_local_image(&ictx);
+  librbd::Journal<>::request_resync(ictx);
+  close_image(ictx);
+  C_SaferCond cond2;
+  m_replayer->start(&cond2);
+  ASSERT_EQ(-ENOTCONN, cond2.wait());
+  C_SaferCond delete_cond;
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond);
+  EXPECT_EQ(0, delete_cond.wait());
+
+  start();
+  wait_for_replay_complete();
+
+  // Test replay stopped after disconnect
+
+  open_remote_image(&ictx);
+  for (int i = TEST_IO_COUNT; i < 2 * TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+  close_image(ictx);
+
+  ASSERT_EQ(0, cls::journal::client::client_update_state(m_remote_ioctx, oid,
+	m_local_mirror_uuid, cls::journal::CLIENT_STATE_DISCONNECTED));
+  bufferlist bl;
+  ASSERT_EQ(0, m_remote_ioctx.notify2(oid, bl, 5000, NULL));
+
+  wait_for_stopped();
+
+  // Test start fails after disconnect
+
+  C_SaferCond cond3;
+  m_replayer->start(&cond3);
+  ASSERT_EQ(-ENOTCONN, cond3.wait());
+  C_SaferCond cond4;
+  m_replayer->start(&cond4);
+  ASSERT_EQ(-ENOTCONN, cond4.wait());
+
+  // Test automatic resync if rbd_mirroring_resync_after_disconnect is set
+
+  EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirroring_resync_after_disconnect", "true"));
+
+  // Resync is flagged on first start attempt
+  C_SaferCond cond5;
+  m_replayer->start(&cond5);
+  ASSERT_EQ(-ENOTCONN, cond5.wait());
+  C_SaferCond delete_cond1;
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond1);
+  EXPECT_EQ(0, delete_cond1.wait());
+
+  C_SaferCond cond6;
+  m_replayer->start(&cond6);
+  ASSERT_EQ(0, cond6.wait());
+  wait_for_replay_complete();
+
+  stop();
+}

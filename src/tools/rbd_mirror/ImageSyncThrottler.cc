@@ -27,6 +27,25 @@ using std::set;
 namespace rbd {
 namespace mirror {
 
+template <typename ImageCtxT>
+struct ImageSyncThrottler<ImageCtxT>::C_SyncHolder : public Context {
+  ImageSyncThrottler<ImageCtxT> *m_sync_throttler;
+  PoolImageId m_local_pool_image_id;
+  ImageSync<ImageCtxT> *m_sync = nullptr;
+  Context *m_on_finish;
+
+  C_SyncHolder(ImageSyncThrottler<ImageCtxT> *sync_throttler,
+               const PoolImageId &local_pool_image_id, Context *on_finish)
+    : m_sync_throttler(sync_throttler),
+      m_local_pool_image_id(local_pool_image_id), m_on_finish(on_finish) {
+  }
+
+  virtual void finish(int r) {
+    m_sync_throttler->handle_sync_finished(this);
+    m_on_finish->complete(r);
+  }
+};
+
 template <typename I>
 ImageSyncThrottler<I>::ImageSyncThrottler()
   : m_max_concurrent_syncs(g_ceph_context->_conf->rbd_mirror_concurrent_image_syncs),

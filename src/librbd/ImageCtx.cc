@@ -16,6 +16,7 @@
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
@@ -204,7 +205,11 @@ struct C_InvalidateCache : public Context {
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
 
-    exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
+      exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
+    } else {
+      exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    }
     journal_policy = new journal::StandardPolicy(this);
   }
 
@@ -939,7 +944,9 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_object_flush_bytes", false)(
         "rbd_journal_object_flush_age", false)(
         "rbd_journal_pool", false)(
-        "rbd_journal_max_payload_bytes", false);
+        "rbd_journal_max_payload_bytes", false)(
+        "rbd_journal_max_concurrent_object_sets", false)(
+        "rbd_mirroring_resync_after_disconnect", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -995,6 +1002,8 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_age);
     ASSIGN_OPTION(journal_pool);
     ASSIGN_OPTION(journal_max_payload_bytes);
+    ASSIGN_OPTION(journal_max_concurrent_object_sets);
+    ASSIGN_OPTION(mirroring_resync_after_disconnect);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

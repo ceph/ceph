@@ -236,6 +236,8 @@ public:
 
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);
+  int lock_acquire(rbd_lock_mode_t lock_mode);
+  int lock_release();
 
   /* object map feature */
   int rebuild_object_map(ProgressContext &prog_ctx);

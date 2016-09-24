@@ -100,6 +100,9 @@ struct MonClientPinger : public Dispatcher {
     return true;
   }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) {
+    return false;
+  }
 };
 
 class MonClient : public Dispatcher {
@@ -140,6 +143,7 @@ private:
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) { return false; }
 
   void handle_monmap(MMonMap *m);
 
@@ -148,13 +152,6 @@ private:
   // monitor session
   bool hunting;
 
-  struct C_Tick : public Context {
-    MonClient *monc;
-    explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) {
-      monc->tick();
-    }
-  };
   void tick();
   void schedule_tick();
 
@@ -212,7 +209,7 @@ private:
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-  bool _sub_want(string what, version_t start, unsigned flags) {
+  bool _sub_want(const string &what, version_t start, unsigned flags) {
     if ((sub_new.count(what) == 0 &&
 	 sub_sent.count(what) &&
 	 sub_sent[what].start == start &&
@@ -225,7 +222,7 @@ private:
     sub_new[what].flags = flags;
     return true;
   }
-  void _sub_got(string what, version_t got) {
+  void _sub_got(const string &what, version_t got) {
     if (sub_new.count(what)) {
       if (sub_new[what].start <= got) {
 	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
@@ -242,7 +239,7 @@ private:
       }
     }
   }
-  void _sub_unwant(string what) {
+  void _sub_unwant(const string &what) {
     sub_sent.erase(what);
     sub_new.erase(what);
   }
@@ -297,6 +294,8 @@ public:
 
  public:
   explicit MonClient(CephContext *cct_);
+  MonClient(const MonClient &) = delete;
+  MonClient& operator=(const MonClient &) = delete;
   ~MonClient();
 
   int init();
@@ -448,8 +447,6 @@ private:
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 
-  MonClient(const MonClient &rhs);
-  MonClient& operator=(const MonClient &rhs);
 };
 
 #endif

@@ -39,7 +39,7 @@ class Base(object):
         os.unlink(self.conf_file)
 
     def save_conf(self):
-        self.conf.write(open(self.conf_file, 'w'))
+        self.conf.write(open(self.conf_file, 'wb'))
 
 
 class TestPrepare(Base):

@@ -478,6 +478,10 @@ void librados::RadosClient::ms_handle_remote_reset(Connection *con)
 {
 }
 
+bool librados::RadosClient::ms_handle_refused(Connection *con)
+{
+  return false;
+}
 
 bool librados::RadosClient::_dispatch(Message *m)
 {

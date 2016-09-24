@@ -39,11 +39,12 @@ class KqueueDriver : public EventDriver {
       free(events);
   }
 
-  int init(int nevent);
-  int add_event(int fd, int cur_mask, int add_mask);
-  int del_event(int fd, int cur_mask, int del_mask);
-  int resize_events(int newsize);
-  int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp);
+  int init(int nevent) override;
+  int add_event(int fd, int cur_mask, int add_mask) override;
+  int del_event(int fd, int cur_mask, int del_mask) override;
+  int resize_events(int newsize) override;
+  int event_wait(vector<FiredFileEvent> &fired_events,
+		 struct timeval *tp) override;
 };
 
 #endif

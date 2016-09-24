@@ -307,7 +307,7 @@ struct rgw_bucket_dir_entry {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(key.name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);

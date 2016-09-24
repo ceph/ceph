@@ -206,3 +206,10 @@ def test_flock():
     cephfs.close(fd2)
 
     cephfs.close(fd)
+
+@with_setup(setup_test)
+def test_mount_unmount():
+    test_directory()
+    cephfs.unmount()
+    cephfs.mount()
+    test_open()

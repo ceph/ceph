@@ -55,8 +55,8 @@ if [ x`uname`x = xFreeBSDx ]; then
 
     exit
 else
-    DISTRO=$(grep  "^ID=" /etc/os-release | sed "s/ID=//")
-    case $DISTRO in
+    source /etc/os-release
+    case $ID in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
@@ -85,11 +85,19 @@ else
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel)
-        echo "Using yum to install dependencies"
-        $SUDO yum install -y redhat-lsb-core
+        yumdnf="yum"
+        builddepcmd="yum-builddep -y"
+        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
+            yumdnf="dnf"
+            builddepcmd="dnf -y builddep --allowerasing"
+        fi
+        echo "Using $yumdnf to install dependencies"
+        $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
-                $SUDO yum install -y yum-utils
+                if test $yumdnf = yum; then
+                    $SUDO $yumdnf install -y yum-utils
+                fi
                 ;;
             CentOS|RedHatEnterpriseServer)
                 $SUDO yum install -y yum-utils
@@ -108,7 +116,7 @@ else
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
     opensuse|suse)
@@ -118,7 +126,8 @@ else
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)
-        echo "$DISTRO is unknown, dependencies will have to be installed manually."
+        echo "$ID is unknown, dependencies will have to be installed manually."
+	exit 1
         ;;
     esac
 fi

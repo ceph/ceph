@@ -749,6 +749,10 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
     Client client(m_client_id, bufferlist());
     RegisteredClients::iterator it = refresh->registered_clients.find(client);
     if (it != refresh->registered_clients.end()) {
+      if (it->state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+	ldout(m_cct, 0) << "client flagged disconnected: " << m_client_id
+			<< dendl;
+      }
       m_minimum_set = MAX(m_minimum_set, refresh->minimum_set);
       m_active_set = MAX(m_active_set, refresh->active_set);
       m_registered_clients = refresh->registered_clients;
@@ -810,8 +814,10 @@ void JournalMetadata::handle_commit_position_task() {
   librados::ObjectWriteOperation op;
   client::client_commit(&op, m_client_id, m_commit_position);
 
-  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, m_commit_position_ctx);
+  Context *ctx = new C_NotifyUpdate(this, m_commit_position_ctx);
   m_commit_position_ctx = NULL;
+
+  ctx = schedule_laggy_clients_disconnect(ctx);
 
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(ctx, NULL,
@@ -839,7 +845,7 @@ void JournalMetadata::handle_watch_reset() {
     if (r == -ENOENT) {
       ldout(m_cct, 5) << __func__ << ": journal header not found" << dendl;
     } else {
-      lderr(m_cct) << __func__ << ": failed to watch journal"
+      lderr(m_cct) << __func__ << ": failed to watch journal: "
                    << cpp_strerror(r) << dendl;
     }
     schedule_watch_reset();
@@ -1021,6 +1027,59 @@ void JournalMetadata::async_notify_update() {
 
 void JournalMetadata::handle_notified(int r) {
   ldout(m_cct, 10) << "notified journal header update: r=" << r << dendl;
+}
+
+Context *JournalMetadata::schedule_laggy_clients_disconnect(Context *on_finish) {
+  assert(m_lock.is_locked());
+
+  ldout(m_cct, 20) << __func__ << dendl;
+
+  if (m_settings.max_concurrent_object_sets <= 0) {
+    return on_finish;
+  }
+
+  Context *ctx = on_finish;
+
+  for (auto &c : m_registered_clients) {
+    if (c.state == cls::journal::CLIENT_STATE_DISCONNECTED ||
+	c.id == m_client_id ||
+	m_settings.whitelisted_laggy_clients.count(c.id) > 0) {
+      continue;
+    }
+    const std::string &client_id = c.id;
+    uint64_t object_set = 0;
+    if (!c.commit_position.object_positions.empty()) {
+      auto &position = *(c.commit_position.object_positions.begin());
+      object_set = position.object_number / m_splay_width;
+    }
+
+    if (m_active_set > object_set + m_settings.max_concurrent_object_sets) {
+      ldout(m_cct, 1) << __func__ << ": " << client_id
+		      << ": scheduling disconnect" << dendl;
+
+      ctx = new FunctionContext([this, client_id, ctx](int r1) {
+          ldout(m_cct, 10) << __func__ << ": " << client_id
+                           << ": flagging disconnected" << dendl;
+
+          librados::ObjectWriteOperation op;
+          client::client_update_state(&op, client_id,
+                                      cls::journal::CLIENT_STATE_DISCONNECTED);
+
+          librados::AioCompletion *comp =
+              librados::Rados::aio_create_completion(ctx, nullptr,
+                                                     utils::rados_ctx_callback);
+          int r = m_ioctx.aio_operate(m_oid, comp, &op);
+          assert(r == 0);
+          comp->release();
+	});
+    }
+  }
+
+  if (ctx == on_finish) {
+    ldout(m_cct, 20) << __func__ << ": no laggy clients to disconnect" << dendl;
+  }
+
+  return ctx;
 }
 
 std::ostream &operator<<(std::ostream &os,

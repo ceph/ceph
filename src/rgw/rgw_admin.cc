@@ -232,7 +232,7 @@ void _usage()
   cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
   cout << "                             replica log operations\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
-  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
+  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
   cout << "   --reset-regions           reset regionmap when regionmap update\n";
   cout << "   --bypass-gc               when specified with bucket deletion, triggers\n";
@@ -249,6 +249,7 @@ void _usage()
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\nOrphans list-jobs options:\n";

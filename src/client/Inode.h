@@ -53,8 +53,9 @@ struct CapSnap {
   int issued, dirty;
 
   uint64_t size;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   version_t time_warp_seq;
+  uint64_t change_attr;
   uint32_t   mode;
   uid_t      uid;
   gid_t      gid;
@@ -68,9 +69,9 @@ struct CapSnap {
   uint64_t flush_tid;
 
   explicit CapSnap(Inode *i)
-    : in(i), issued(0), dirty(0),
-      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
-      inline_version(0), writing(false), dirty_data(false), flush_tid(0)
+    : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
+      mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
+      writing(false), dirty_data(false), flush_tid(0)
   {}
 
   void dump(Formatter *f) const;
@@ -94,6 +95,7 @@ struct Inode {
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
+  utime_t    btime;   // birth time
 
   // perm (namespace permissions)
   uint32_t   mode;
@@ -112,6 +114,7 @@ struct Inode {
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint64_t   change_attr;
 
   uint64_t max_size;  // max size we can write to
 
@@ -228,8 +231,8 @@ struct Inode {
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
-      time_warp_seq(0), max_size(0), version(0), xattr_version(0),
-      inline_version(0), flags(0),
+      time_warp_seq(0), change_attr(0), max_size(0), version(0),
+      xattr_version(0), inline_version(0), flags(0),
       dir(0), dir_release_count(1), dir_ordered_count(1),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       cap_dirtier_uid(-1), cap_dirtier_gid(-1),

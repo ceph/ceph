@@ -29,21 +29,47 @@ TEST(ZlibCompressor, compress_decompress)
   ZlibCompressor sp(false);
   EXPECT_STREQ(sp.get_type().c_str(), "zlib");
   const char* test = "This is test text";
+  int res;
   int len = strlen(test);
   bufferlist in, out;
-  in.append(test, len);
-  int res = sp.compress(in, out);
-  EXPECT_EQ(res, 0);
   bufferlist after;
+  bufferlist exp;
+  in.append(test, len);
+  res = sp.compress(in, out);
+  EXPECT_EQ(res, 0);
   res = sp.decompress(out, after);
   EXPECT_EQ(res, 0);
-  bufferlist exp;
   exp.append(test);
   EXPECT_TRUE(exp.contents_equal(after));
   after.clear();
   size_t compressed_len = out.length();
   out.append_zero(12);
   auto it = out.begin();
+  res = sp.decompress(it, compressed_len, after);
+  EXPECT_EQ(res, 0);
+  EXPECT_TRUE(exp.contents_equal(after));
+
+  //large block and non-begin iterator for continuous block
+  std::string data;
+  data.resize(0x10000 * 1);
+  for(size_t i = 0; i < data.size(); i++)
+    data[i] = i / 256;
+  in.clear();
+  out.clear();
+  in.append(data);
+  exp = in;
+  res = sp.compress(in, out);
+  EXPECT_EQ(res, 0);
+  compressed_len = out.length();
+  out.append_zero(0x10000 - out.length());
+  after.clear();
+  out.c_str();
+  bufferlist prefix;
+  prefix.append(string("some prefix"));
+  size_t prefix_len = prefix.length();
+  out.claim_prepend(prefix);
+  it = out.begin();
+  it.advance(prefix_len);
   res = sp.decompress(it, compressed_len, after);
   EXPECT_EQ(res, 0);
   EXPECT_TRUE(exp.contents_equal(after));
@@ -149,6 +175,91 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   EXPECT_TRUE(exp.contents_equal(after));
 }
 
+void test_compress(size_t size)
+{
+  ZlibCompressor sp(false);
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
+  char* data = (char*) malloc(size);
+  for (size_t t = 0; t < size; t++) {
+    data[t] = (t & 0xff) | (t >> 8);
+  }
+  bufferlist in;
+  in.append(data, size);
+  for (size_t t = 0; t < 100000; t++) {
+    bufferlist out;
+    int res = sp.compress(in, out);
+    EXPECT_EQ(res, 0);
+  }
+}
+
+void test_decompress(size_t size)
+{
+  ZlibCompressor sp(false);
+  EXPECT_STREQ(sp.get_type().c_str(), "zlib");
+  char* data = (char*) malloc(size);
+  for (size_t t = 0; t < size; t++) {
+    data[t] = (t & 0xff) | (t >> 8);
+  }
+  bufferlist in, out;
+  in.append(data, size);
+  int res = sp.compress(in, out);
+  EXPECT_EQ(res, 0);
+  for (size_t t = 0; t < 100000; t++) {
+    bufferlist out_dec;
+    int res = sp.decompress(out, out_dec);
+    EXPECT_EQ(res, 0);
+  }
+}
+
+TEST(ZlibCompressor, compress_1024)
+{
+  test_compress(1024);
+}
+
+TEST(ZlibCompressor, compress_2048)
+{
+  test_compress(2048);
+}
+
+TEST(ZlibCompressor, compress_4096)
+{
+  test_compress(4096);
+}
+
+TEST(ZlibCompressor, compress_8192)
+{
+  test_compress(8192);
+}
+
+TEST(ZlibCompressor, compress_16384)
+{
+  test_compress(16384);
+}
+
+TEST(Zlibdecompressor, decompress_1024)
+{
+  test_decompress(1024);
+}
+
+TEST(Zlibdecompressor, decompress_2048)
+{
+  test_decompress(2048);
+}
+
+TEST(Zlibdecompressor, decompress_4096)
+{
+  test_decompress(4096);
+}
+
+TEST(Zlibdecompressor, decompress_8192)
+{
+  test_decompress(8192);
+}
+
+TEST(Zlibdecompressor, decompress_16384)
+{
+  test_decompress(16384);
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;

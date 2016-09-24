@@ -20,15 +20,15 @@
 
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 1;
 
  public:
   struct ceph_mds_caps_head head;
 
-  uint64_t size, max_size, truncate_size;
+  uint64_t size, max_size, truncate_size, change_attr;
   uint32_t truncate_seq;
-  utime_t mtime, atime, ctime;
+  utime_t mtime, atime, ctime, btime;
   file_layout_t layout;
   uint32_t time_warp_seq;
 
@@ -62,8 +62,10 @@ class MClientCaps : public Message {
   __u32 get_truncate_seq() { return truncate_seq; }
   uint64_t get_truncate_size() { return truncate_size; }
   utime_t get_ctime() { return ctime; }
+  utime_t get_btime() { return btime; }
   utime_t get_mtime() { return mtime; }
   utime_t get_atime() { return atime; }
+  __u64 get_change_attr() { return change_attr; }
   __u32 get_time_warp_seq() { return time_warp_seq; }
 
   const file_layout_t& get_layout() {
@@ -110,6 +112,7 @@ class MClientCaps : public Message {
       size(0),
       max_size(0),
       truncate_size(0),
+      change_attr(0),
       truncate_seq(0),
       time_warp_seq(0),
       osd_epoch_barrier(0),
@@ -131,6 +134,7 @@ class MClientCaps : public Message {
       size(0),
       max_size(0),
       truncate_size(0),
+      change_attr(0),
       truncate_seq(0),
       time_warp_seq(0),
       osd_epoch_barrier(oeb),
@@ -156,6 +160,7 @@ class MClientCaps : public Message {
       size(0),
       max_size(0),
       truncate_size(0),
+      change_attr(0),
       truncate_seq(0),
       time_warp_seq(0),
       osd_epoch_barrier(oeb),
@@ -255,6 +260,10 @@ public:
     if (header.version >= 8) {
       ::decode(layout.pool_ns, p);
     }
+    if (header.version >= 9) {
+      ::decode(btime, p);
+      ::decode(change_attr, p);
+    }
   }
   void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
@@ -311,6 +320,8 @@ public:
     ::encode(caller_gid, payload);
 
     ::encode(layout.pool_ns, payload);
+    ::encode(btime, payload);
+    ::encode(change_attr, payload);
   }
 };
 

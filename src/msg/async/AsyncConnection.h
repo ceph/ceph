@@ -97,7 +97,7 @@ class AsyncConnection : public Connection {
     state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
     return 0;
   }
-  bool is_queued() {
+  bool is_queued() const {
     return !out_q.empty() || outcoming_bl.length();
   }
   void shutdown_socket() {
@@ -130,7 +130,7 @@ class AsyncConnection : public Connection {
     }
     return m;
   }
-  bool _has_next_outgoing() {
+  bool _has_next_outgoing() const {
     return !out_q.empty();
   }
   void reset_recv_state();

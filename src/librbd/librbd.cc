@@ -23,6 +23,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/Group.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -816,6 +817,24 @@ namespace librbd {
     tracepoint(librbd, is_exclusive_lock_owner_enter, ictx);
     int r = librbd::is_exclusive_lock_owner(ictx, is_owner);
     tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
+    return r;
+  }
+
+  int Image::lock_acquire(rbd_lock_mode_t lock_mode)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, lock_acquire_enter, ictx, lock_mode);
+    int r = librbd::lock_acquire(ictx, lock_mode);
+    tracepoint(librbd, lock_acquire_exit, ictx, r);
+    return r;
+  }
+
+  int Image::lock_release()
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, lock_release_enter, ictx);
+    int r = librbd::lock_release(ictx);
+    tracepoint(librbd, lock_release_exit, ictx, r);
     return r;
   }
 
@@ -2246,6 +2265,24 @@ extern "C" int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
   int r = librbd::is_exclusive_lock_owner(ictx, &owner);
   *is_owner = owner ? 1 : 0;
   tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
+  return r;
+}
+
+extern "C" int rbd_lock_acquire(rbd_image_t image, rbd_lock_mode_t lock_mode)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, lock_acquire_enter, ictx, lock_mode);
+  int r = librbd::lock_acquire(ictx, lock_mode);
+  tracepoint(librbd, lock_acquire_exit, ictx, r);
+  return r;
+}
+
+extern "C" int rbd_lock_release(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, lock_release_enter, ictx);
+  int r = librbd::lock_release(ictx);
+  tracepoint(librbd, lock_release_exit, ictx, r);
   return r;
 }
 

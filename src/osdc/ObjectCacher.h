@@ -189,14 +189,14 @@ class ObjectCacher {
     void set_dontneed(bool v) {
       dontneed = v;
     }
-    bool get_dontneed() {
+    bool get_dontneed() const {
       return dontneed;
     }
 
     void set_nocache(bool v) {
       nocache = v;
     }
-    bool get_nocache() {
+    bool get_nocache() const {
       return nocache;
     }
 
@@ -306,8 +306,8 @@ class ObjectCacher {
      * @param offset object byte offset
      * @return iterator pointing to buffer, or data.end()
      */
-    map<loff_t,BufferHead*>::iterator data_lower_bound(loff_t offset) {
-      map<loff_t,BufferHead*>::iterator p = data.lower_bound(offset);
+    map<loff_t,BufferHead*>::const_iterator data_lower_bound(loff_t offset) const {
+      map<loff_t,BufferHead*>::const_iterator p = data.lower_bound(offset);
       if (p != data.begin() &&
 	  (p == data.end() || p->first > offset)) {
 	--p;     // might overlap!
@@ -332,14 +332,14 @@ class ObjectCacher {
 	put();
     }
 
-    bool is_empty() { return data.empty(); }
+    bool is_empty() const { return data.empty(); }
 
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
     void merge_left(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
-    bool is_cached(loff_t off, loff_t len);
+    bool is_cached(loff_t off, loff_t len) const;
     bool include_all_cached_data(loff_t off, loff_t len);
     int map_read(ObjectExtent &ex,
                  map<loff_t, BufferHead*>& hits,
