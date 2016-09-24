@@ -3945,6 +3945,7 @@ int BlueStore::fsck()
         if (expecting_shards.empty()) {
           derr << __func__ << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
+          ++errors;
           continue;
         }
 	while (expecting_shards.front() > it->key()) {
