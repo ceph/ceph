@@ -1298,9 +1298,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (map<int64_t,string>::const_iterator p = inc.new_pool_names.begin();
        p != inc.new_pool_names.end();
        ++p) {
-    if (pool_name.count(p->first))
-      name_pool.erase(pool_name[p->first]);
-    pool_name[p->first] = p->second;
+    auto pool_name_entry = pool_name.find(p->first);
+    if (pool_name_entry != pool_name.end()) {
+      name_pool.erase(pool_name_entry->second);
+      pool_name_entry->second = p->second;
+    } else {
+      pool_name[p->first] = p->second;
+    }
     name_pool[p->second] = p->first;
   }
   for (set<int64_t>::const_iterator p = inc.old_pools.begin();
