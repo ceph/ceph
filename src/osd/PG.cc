@@ -3733,7 +3733,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 int PG::build_scrub_map_chunk(
   ScrubMap &map,
   hobject_t start, hobject_t end, uint32_t seed,
-  ThreadPool::TPHandle &handle, vector<hobject_t> &ls)
+  vector<hobject_t> *lsp, ThreadPool::TPHandle &handle)
 {
   dout(10) << __func__ << " [" << start << "," << end << ") "
 	   << " seed " << seed << dendl;
@@ -3746,14 +3746,14 @@ int PG::build_scrub_map_chunk(
     start,
     end,
     0,
-    &ls,
+    lsp,
     &rollback_obs);
   if (ret < 0) {
     dout(5) << "objects_list_range error: " << ret << dendl;
     return ret;
   }
 
-  get_pgbackend()->be_scan_list(map, ls, seed, handle);
+  get_pgbackend()->be_scan_list(map, *lsp, seed, handle);
   _scan_rollback_obs(rollback_obs, handle);
   _scan_snaps(map);
 
@@ -3818,7 +3818,7 @@ void PG::repair_object(
  * Queue to build a single
  * scrubmap of objects that are in the range [msg->start, msg->end).
  */
-void PG::do_build_scrub_map(
+void PG::do_scrub_map_op(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
@@ -3828,7 +3828,7 @@ void PG::do_build_scrub_map(
   assert(!scrubber.active_rep_scrub);
   assert(scrubber.map_state == PG::Scrubber::NOT_BUILDING);
 
-  dout(20) << __func__ << " " << msg << " " << *msg << dendl;
+  dout(30) << __func__ << " " << msg << " " << *msg << dendl;
 
   if (msg->map_epoch < info.history.same_interval_since) {
     dout(10) << __func__ << " discarding old build-scrub-map from "
@@ -3850,23 +3850,27 @@ void PG::do_build_scrub_map(
     return;
   }
 
-  scrubber.active_rep_scrub = op;
   scrubber.map_state = PG::Scrubber::REG_SCRUBBING;
+  scrubber.active_rep_scrub = op;
   osd->queue_for_build_scrub_map(this, g_conf->osd_scrub_map_start_cost);
 }
 
-void PG::replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle)
+void PG::do_build_scrub_map(epoch_t queued, ThreadPool::TPHandle &handle)
 {
-  dout(20) << __func__ << " state " << Scrubber::map_state_string(scrubber.map_state)
-           << " objects " << scrubber.ls.size() << dendl;
   assert(_lock.is_locked());
-  assert(scrubber.active_rep_scrub);
-  assert(scrubber.map_state != PG::Scrubber::NOT_BUILDING);
-  MOSDRepScrub *msg = static_cast<MOSDRepScrub *>(scrubber.active_rep_scrub->get_req());
 
   if (pg_has_reset_since(queued)) {
     return;
   }
+
+  assert(scrubber.active_rep_scrub);
+  assert(scrubber.map_state != PG::Scrubber::NOT_BUILDING);
+  MOSDRepScrub *msg = static_cast<MOSDRepScrub *>(scrubber.active_rep_scrub->get_req());
+
+  dout(20) << __func__ << " state " << Scrubber::map_state_string(scrubber.map_state)
+           << " objects " << scrubber.ls.size() << dendl;
+
+  // XXX: Not sure if this is possible if !pg_has_reset_since()
   if (msg->map_epoch < info.history.same_interval_since) {
     dout(10) << __func__ << " discarding old build-scrub-map from "
 	     << msg->map_epoch << " < " << info.history.same_interval_since
@@ -3874,18 +3878,19 @@ void PG::replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     return;
   }
 
-  // compensate for hobject_t's with wrong pool from sloppy hammer OSDs
-  hobject_t start = msg->start;
-  hobject_t end = msg->end;
-  if (!start.is_max())
-    start.pool = info.pgid.pool();
-  if (!end.is_max())
-    end.pool = info.pgid.pool();
-
   if (scrubber.map_state == PG::Scrubber::REG_SCRUBBING) {
     assert(scrubber.scrubmap.objects.empty());
     assert(scrubber.ls.empty());
-    build_scrub_map_chunk(scrubber.scrubmap, start, end, msg->seed, handle, scrubber.ls);
+
+    // compensate for hobject_t's with wrong pool from sloppy hammer OSDs
+    hobject_t start = msg->start;
+    hobject_t end = msg->end;
+    if (!start.is_max())
+      start.pool = info.pgid.pool();
+    if (!end.is_max())
+      end.pool = info.pgid.pool();
+
+    build_scrub_map_chunk(scrubber.scrubmap, start, end, msg->seed, &scrubber.ls, handle);
   } else {
     assert(scrubber.map_state == PG::Scrubber::DEEP_SCRUBBING);
     get_pgbackend()->be_deep_scan_list(scrubber.scrubmap, scrubber.ls, msg->seed, handle);
@@ -3893,7 +3898,7 @@ void PG::replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 
   if (msg->deep && !scrubber.ls.empty()) {
     scrubber.map_state = PG::Scrubber::DEEP_SCRUBBING;
-    unsigned howmany = scrubber.ls.size() > (unsigned)g_conf->osd_deep_map_chunk_max ? (unsigned)g_conf->osd_deep_map_chunk_max : scrubber.ls.size();
+    unsigned howmany = MIN(scrubber.ls.size(), g_conf->osd_deep_map_chunk_max);
     unsigned cost = g_conf->osd_scrub_map_deep_per_obj_cost * howmany;
     dout(20) << __func__ << " queuing " << howmany << " out of "
              << scrubber.ls.size() << " objects, cost "
@@ -3921,8 +3926,8 @@ void PG::replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 
   osd->send_message_osd_cluster(subop, msg->get_connection());
 
-  scrubber.map_state = PG::Scrubber::NOT_BUILDING;
   scrubber.active_rep_scrub = OpRequestRef();
+  scrubber.map_state = PG::Scrubber::NOT_BUILDING;
   scrubber.ls.clear();
   scrubber.scrubmap = ScrubMap();
 }

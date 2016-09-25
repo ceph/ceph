@@ -1313,7 +1313,7 @@ public:
   int build_scrub_map_chunk(
     ScrubMap &map,
     hobject_t start, hobject_t end, uint32_t seed,
-    ThreadPool::TPHandle &handle, vector<hobject_t> &ls);
+    vector<hobject_t> *lsp, ThreadPool::TPHandle &handle);
   /**
    * returns true if [begin, end) is good to scrub at this time
    * a false return value obliges the implementer to requeue scrub when the
@@ -1340,10 +1340,10 @@ public:
   void reg_next_scrub();
   void unreg_next_scrub();
 
-  void do_build_scrub_map(
+  void do_scrub_map_op(
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
-  void replica_scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+  void do_build_scrub_map(epoch_t queued, ThreadPool::TPHandle &handle);
   void sub_op_scrub_map(OpRequestRef op);
   void sub_op_scrub_reserve(OpRequestRef op);
   void sub_op_scrub_reserve_reply(OpRequestRef op);

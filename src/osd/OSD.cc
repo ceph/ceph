@@ -176,7 +176,7 @@ void PGQueueable::RunVis::operator()(const PGRecovery &op) {
 }
 
 void PGQueueable::RunVis::operator()(const PGBuildScrubMap &op) {
-  return pg->replica_scrub(op.epoch_queued, handle);
+  return pg->do_build_scrub_map(op.epoch_queued, handle);
 }
 
 //Initial features in new superblock.
