@@ -12,8 +12,8 @@
  *
  */
 
-#ifndef _FAST_CONTAINERS_H
-#define _FAST_CONTAINERS_H
+#ifndef _SLAB_CONTAINERS_H
+#define _SLAB_CONTAINERS_H
 
 #include <map>
 #include <set>
@@ -22,16 +22,16 @@
 #include <list>
 
 //
-// The ceph::fast_xxxx containers are standard STL containers with a custom allocator.
+// The ceph::slab_xxxx containers are made from standard STL containers with a custom allocator.
 //
-// When you declare a fast container you provide 1 or 2 additional integer template parameters that
+// When you declare a slab container you provide 1 or 2 additional integer template parameters that
 // modify the memory allocation pattern. The point is to amortize the memory allocations for nodes
-// within the container.
+// within the container so that the memory allocation time and space overheads are reduced.
 //
-//  ceph::fast_map     <key,value,stackSize,heapSize = stackSize,compare = less<key>>
-//  ceph::fast_multimap<key,value,stackSize,heapSize = stackSize,compare = less<key>>
-//  ceph::fast_set     <value,    stackSize,heapSize = stackSize,compare = less<key>>
-//  ceph::fast_multiset<value,    stackSize,heapSize = stackSize,compare = less<key>>
+//  ceph::slab_map     <key,value,stackSize,heapSize = stackSize,compare = less<key>>
+//  ceph::slab_multimap<key,value,stackSize,heapSize = stackSize,compare = less<key>>
+//  ceph::slab_set     <value,    stackSize,heapSize = stackSize,compare = less<key>>
+//  ceph::slab_multiset<value,    stackSize,heapSize = stackSize,compare = less<key>>
 //  ceph::list         <value,    stackSize,heapSize = stackSize>
 //   
 //  stackSize indicates the number of nodes that will be allocated within the container itself.
@@ -42,13 +42,20 @@
 //      In other words, nodes are allocated in batches of heapSize.
 //
 //  All of this wizardry comes with a price. There are two basic restrictions:
-//  (1) nodes are never deallocated until the container is destroyed.
+//  (1) nodes allocated in a batch can only be freed in the same batch amount
 //  (2) nodes cannot escape a container, i.e., be transferred to another container
 //
-//  The first restriction suggests that long-lived containers might want to use this code.
-//  The second restriction means that some functions like list::splice are now o(N), not O(1)
+//  The first restriction suggests that long-lived containers might not want to use this code. As some allocation/free
+//      patterns can result in large amounts of unused, but un-freed memory (worst case 'excess' memory occurs when
+//      each batch contains only a single in-use node). Worst-case unused memory consumption is thus equal to:
+//         container.size() * (heapSize -1) * sizeof(Node)
+//      This computation assumes that the slab_xxxx::reserve function is NOT used. If that function is used then
+//      the maximum unused memory consumption is related to its parameters.
+//  The second restriction means that some functions like list::splice are now O(N), not O(1)
 //      list::swap is supported but is O(2N) not O(1) as before.
-//      set::swap, multiset::swap, map::swap and multimap::swap are hidden, but could be implemented if needed
+//      vector::swap is also supported. It converts any stack elements into heap elements and then does an O(1) swap. So
+//          it's worst-case runtime is O(2*stackSize), which is likely to be pretty good :)
+//      set::swap, multiset::swap, map::swap and multimap::swap are unavailable, but could be implemented if needed (though EXPENSIVELY).
 //
 
 namespace ceph {
@@ -62,51 +69,101 @@ namespace ceph {
 // The first slab is part of the object itself, meaning that no memory allocation is required
 // if the container doesn't exceed "stackSize" nodes.
 //
-// Subsequent slabs are allocated using the normal heap. A slab on the heap contains 'heapSize' nodes.
-//
-// This allocator is optimized for ephemeral objects. It's wastes space to gain time. One
-// optimization is that once a slab is allocated, it's never freed until the allocator is destructed.
-//
-// Technically, this allocator is not entirely safe. That's because it doesn't allow the lifetime of an
-// allocated node to exceed the lifetime of the declaring object. For many containers, this isn't a problem
-// but for some containers, you have the ability to move nodes directly between containers. For example list::splice
-// If you use this allocator with those containers, you'll corrupt memory. Fortunately, this situation is detected
-// automatically, but only after the fact. Violations will result in an assert failure at run-time see ~fs_allocator
+// Subsequent slabs are allocated using the normal heap. A slab on the heap, by default, contains 'heapSize' nodes.
+// However, a "reserve" function (same functionality as vector::reserve) is provided that ensure a minimum number
+// of free nodes is available without further memory allocation. If the slab_xxxx::reserve function needs to allocate
+// additional nodes, only a single memory allocation will be done. Meaning that it's possible to have slabs that
+// are larger (or smaller) than 'heapSize' nodes.
 //
 template<typename T,size_t stackSize, size_t heapSize>
-class fs_allocator {
+class slab_allocator {
+   struct slab_t;
+   struct slabHead_t {
+      slabHead_t *prev;
+      slabHead_t *next;
+   };
    //
-   // Stores one Object OR if it's free exactly one pointer to a slot_t in a free slot list.
+   // Each slot has a pointer to it's containing slab PLUS either one Object OR if it's free exactly one pointer 
+   // in a per-slab freelist.
    // Since this is raw memory, we don't want to declare something of type "T" to avoid
    // accidental constructor/destructor calls.
    //
    struct slot_t {
-      enum { SLOT_SIZE_IN_POINTERS = (sizeof(T) + sizeof(slot_t *) - 1) / sizeof(slot_t *) };
-      slot_t *storage[SLOT_SIZE_IN_POINTERS];
+      slab_t *slab; // Pointer to my slab, NULL for slots on the stack (Technically, this could be an index but I'm lazy :))
+      enum { OBJECT_IN_POINTERS = (sizeof(T) + sizeof(void *) - 1) / sizeof(void *) };
+      slot_t *storage[OBJECT_IN_POINTERS]; // Either one object OR index[0] points to next element in free list for this slab
    };
    //
-   // Exactly one of these as part of this object (the slab on the stack :))
+   // Each slab has a freelist of objects within the slab and the size of that list
+   // The size is needed to cheaply determine when all of the slots within a slab are unused
+   // so that we can free the slab itself    
    //
-   struct stackSlab_t {
-      slot_t slots[stackSize];
+   struct slab_t {
+      slabHead_t slabHead;  // membership of slab in list of slabs with free elements
+      uint32_t slabSize;    // # of allocated slots in this slab
+      uint32_t freeSlots;   // # of free slots, i.e., size of freelist of slots within this slab
+      slot_t *freeHead;     // Head of list of freeslots OR NULL if none
+      slot_t slot[0];       // slots
+   };
+   slab_t *slabHeadToSlab(slabHead_t *head) { return reinterpret_cast<slab_t *>(head); }
+   //
+   // Exactly one of these as part of this container (the slab on the stack :))
+   //
+   struct stackSlab_t : public slab_t {
+      slot_t stackSlot[stackSize]; // Allows the compiler to get the right size :)
    };
    //
-   // These are malloc/freeded when you exceed the number of slots allocated in the stackSlab
+   // Initialize a new slab, remember, "T" might not be correct use the stored sizes.
    //
-   struct heapSlab_t {
-      heapSlab_t *next;
-   };
+   void initSlab(slab_t *slab,size_t sz) {
+      slab->slabSize = sz;
+      slab->freeSlots = 0; // Pretend that it was completely allocated before :)
+      slab->freeHead = NULL;
+      slab->slabHead.next = NULL;
+      slab->slabHead.prev = NULL;
+      char *raw = reinterpret_cast<char *>(slab->slot);
+      for (size_t i = 0; i < sz; ++i) {
+         slot_t *slot = reinterpret_cast<slot_t *>(raw);
+         slot->slab = slab;
+         freeslot(slot,false);
+         raw += trueSlotSize;
+      }
+   }
    //
-   // Free a slot of unknown origin
-   //
-   void freeslot(slot_t *s) {
-      s->storage[0] = freelist;
-      freelist = s;
+   // Free a slot, the "freeEmpty" parameter indicates if this slab should be freed if it's emptied
+   // 
+   void freeslot(slot_t *s, bool freeEmpty) {
+      slab_t *slab = s->slab;
+      //
+      // Put this slot onto the per-slab freelist
+      //
+      s->storage[0] = slab->freeHead;
+      slab->freeHead = s;
+      slab->freeSlots++;
       ++freeSlotCount;
+      if (slab->freeSlots == 1) {
+         //
+         // put slab onto the contianer's slab freelist
+         //
+         slab->slabHead.next = freeSlabHeads.next;
+         freeSlabHeads.next->prev = &slab->slabHead;
+         freeSlabHeads.next = &slab->slabHead;
+         slab->slabHead.prev = &freeSlabHeads;
+      }         
+      if (freeEmpty && slab->freeSlots == slab->slabSize && slab != &stackSlab) {
+         //
+         // Slab is entirely free
+         //
+         slab->slabHead.next->prev = slab->slabHead.prev;
+         slab->slabHead.prev->next = slab->slabHead.next;
+         assert(freeSlotCount >= slab->slabSize);
+         freeSlotCount -= slab->slabSize;
+         ::free(slab);
+      }
    }
    //
    // Danger, because of the my_actual_allocator hack. You can't rely on T to be correct, nor any value or offset that's
-   // derived directly or indirectly from T.
+   // derived directly or indirectly from T. We use the values saved during initialization, when T was correct.
    //
    void addSlab(size_t slabSize) {
        //
@@ -120,33 +177,35 @@ class fs_allocator {
        // However, here sizeof(T) isn't correct [see warning above, 'T' might not be correct]
        // so I use the sizeof(T) that's actually correct: 'trueSlotSize'
        //
-       size_t sz = sizeof(heapSlab_t) + slabSize * trueSlotSize;
+       size_t sz = sizeof(slab_t) + (slabSize * trueSlotSize);
        //
-       // Allocate the slab and put it on the list of malloc'ed slabs
+       // Allocate the slab and free the slots within.
        //
-       heapSlab_t *s = reinterpret_cast<heapSlab_t *>(::malloc(sz));
-       s->next = heapSlabs;
-       heapSlabs = s;
-       //
-       // Now, put the new slots on the free list. This is a bit ugly because slotSize isn't known at compile time (because T is incorrect)
-       //
-       char *raw = reinterpret_cast<char *>(s+1);
-       for (size_t i = 0; i < slabSize; ++i) {
-          freeslot(reinterpret_cast<slot_t *>(raw));
-          raw += trueSlotSize;
-          allocSlotCount++;
-       }
+       slab_t *slab = reinterpret_cast<slab_t *>(::malloc(sz));
+       initSlab(slab,slabSize);
    }
    
    slot_t *allocslot() {
-      if (freelist == nullptr) {
-         // empty, alloc another slab
+      if (freeSlabHeads.next == &freeSlabHeads) {
          addSlab(heapSize);
       }
-      slot_t *result = freelist;
-      freelist = freelist->storage[0];
+      slab_t *freeSlab = slabHeadToSlab(freeSlabHeads.next);
+      slot_t *freeSlot = freeSlab->freeHead;
+      freeSlab->freeHead = freeSlot->storage[0];
+      assert(freeSlab->freeSlots > 0);
+      freeSlab->freeSlots--;
+      if (freeSlab->freeSlots == 0) {
+         //
+         // remove slab from list
+         //
+         assert(freeSlab->freeHead == nullptr);
+         freeSlabHeads.next = freeSlab->slabHead.next;
+         freeSlab->slabHead.next->prev = &freeSlabHeads;
+         freeSlab->slabHead.next = nullptr;
+         freeSlab->slabHead.prev = nullptr;
+      }
       --freeSlotCount;
-      return result;
+      return freeSlot;
    }
 
    void _reserve(size_t freeCount) {
@@ -155,9 +214,8 @@ class fs_allocator {
       }      
    }
 
-   fs_allocator *selfPointer;                   // for selfCheck
-   slot_t *freelist;                            // list of slots that are free
-   heapSlab_t *heapSlabs;		        // List of slabs to free on dtor
+   slab_allocator *selfPointer;                 // for selfCheck
+   slabHead_t freeSlabHeads;	                // List of slabs that have free slots
    size_t freeSlotCount;                        // # of slots currently in the freelist * Only used for debug integrity check *
    size_t allocSlotCount;                       // # of slabs allocated                 * Only used for debug integrity check *
    size_t trueSlotSize;	                        // Actual Slot Size
@@ -166,7 +224,7 @@ class fs_allocator {
    stackSlab_t stackSlab; 			// stackSlab is always allocated with the object :)
   
 public:
-   typedef fs_allocator<T,stackSize,heapSize> allocator_type;
+   typedef slab_allocator<T,stackSize,heapSize> allocator_type;
    typedef T value_type;
    typedef value_type *pointer;
    typedef const value_type * const_pointer;
@@ -175,37 +233,35 @@ public:
    typedef std::size_t size_type;
    typedef std::ptrdiff_t difference_type;
 
-   template<typename U> struct rebind { typedef fs_allocator<U,stackSize,heapSize> other; };
+   template<typename U> struct rebind { typedef slab_allocator<U,stackSize,heapSize> other; };
 
-   fs_allocator() : freelist(nullptr), heapSlabs(nullptr), freeSlotCount(0), allocSlotCount(stackSize), trueSlotSize(sizeof(slot_t)) {
+   slab_allocator() : freeSlotCount(0), allocSlotCount(stackSize), trueSlotSize(sizeof(slot_t)) {
       //
       // For the "in the stack" slots, put them on the free list
       //
-      for (size_t i = 0; i < stackSize; ++i) {
-         freeslot(&stackSlab.slots[i]);
-      }
+      freeSlabHeads.next = &freeSlabHeads;
+      freeSlabHeads.prev = &freeSlabHeads;
+      initSlab(&stackSlab,stackSize);
       selfPointer = this;
    }
-   ~fs_allocator() {
+   ~slab_allocator() {
       //
       // If you fail here, it's because you've allowed a node to escape the enclosing object. Something like a swap
-      // or a splice operation. Probably the fast_xxx container is missing a "using" that serves to hide some operation.
+      // or a splice operation. Probably the slab_xxx container is missing a "using" that serves to hide some operation.
       //
       assert(freeSlotCount == allocSlotCount);
-      while (heapSlabs != nullptr) {
-         heapSlab_t *aslab = heapSlabs;
-         heapSlabs = heapSlabs->next;
-         ::free(aslab);
-      }     
+      assert(freeSlotCount == stackSize);
+      assert(freeSlabHeads.next == &stackSlab.slabHead); // Empty list should have stack slab on it
    }
 
    pointer allocate(size_t cnt,void *p = nullptr) {
       assert(cnt == 1); // if you fail this you've used this class with the wrong STL container.
-      return reinterpret_cast<pointer>(allocslot());
+      assert(sizeof(slot_t) == trueSlotSize);
+      return reinterpret_cast<pointer>(sizeof(void *) + (char *)allocslot());
    }
 
    void deallocate(pointer p, size_type s) {
-      freeslot(reinterpret_cast<slot_t *>(p));
+      freeslot(reinterpret_cast<slot_t *>((char *)p - sizeof(void *)),true);
    }
 
    void destroy(pointer p) {
@@ -224,8 +280,8 @@ public:
       ::new((void *)p) U(std::forward<Args>(args)...);
    }
 
-   bool operator==(const fs_allocator&) { return true; }
-   bool operator!=(const fs_allocator&) { return false; }
+   bool operator==(const slab_allocator&) { return true; }
+   bool operator!=(const slab_allocator&) { return false; }
 
    //
    // Extra function for our use
@@ -241,10 +297,10 @@ public:
 private:
 
    // Can't copy or assign this guy
-   fs_allocator(fs_allocator&) = delete;
-   fs_allocator(fs_allocator&&) = delete;
-   void operator=(const fs_allocator&) = delete;
-   void operator=(const fs_allocator&&) = delete;
+   slab_allocator(slab_allocator&) = delete;
+   slab_allocator(slab_allocator&&) = delete;
+   void operator=(const slab_allocator&) = delete;
+   void operator=(const slab_allocator&&) = delete;
 };
 
 //
@@ -253,8 +309,10 @@ private:
 //   we assume that we want heapSlabs to be about 1KBytes.
 //
 
-inline size_t defaultHeapCount(size_t nodeSize) {
-   return std::max(1024 / nodeSize,size_t(1));
+enum { _desired_slab_size = 128 }; // approximate preferred allocation size
+
+inline constexpr size_t defaultSlabHeapCount(size_t nodeSize) {
+   return (_desired_slab_size / nodeSize) ? (_desired_slab_size / nodeSize) : size_t(1); // can't uses std::max, it's not constexpr
 }
 
 //
@@ -265,15 +323,15 @@ template<
    typename key,
    typename value,
    size_t   stackCount, 
-   size_t   heapCount = defaultHeapCount(sizeof(key) + sizeof(value)), 
+   size_t   heapCount = defaultSlabHeapCount(sizeof(key) + sizeof(value)), 
    typename compare = std::less<key> >
-   struct fast_map : public std::map<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount> > {
+   struct slab_map : public std::map<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount> > {
    //
    // Extended operator. reserve is now meaningful.
    //
    void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
-   typedef std::map<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount>> map_type;
+   typedef std::map<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount>> map_type;
    //
    // Disallowed operations
    //
@@ -290,7 +348,7 @@ private:
    // additional members.
    // But that doesn't matter for this hack...
    //
-   typedef fs_allocator<std::pair<key,value>,stackCount,heapCount> my_alloc_type;
+   typedef slab_allocator<std::pair<key,value>,stackCount,heapCount> my_alloc_type;
    my_alloc_type * get_my_actual_allocator() {
       my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
       alloc->selfCheck();
@@ -302,15 +360,15 @@ template<
    typename key,
    typename value,
    size_t   stackCount, 
-   size_t   heapCount = defaultHeapCount(sizeof(key) + sizeof(value)), 
+   size_t   heapCount = defaultSlabHeapCount(sizeof(key) + sizeof(value)), 
    typename compare = std::less<key> >
-   struct fast_multimap : public std::multimap<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount> > {
+   struct slab_multimap : public std::multimap<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount> > {
    //
    // Extended operator. reserve is now meaningful.
    //
    void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
-   typedef std::multimap<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount>> map_type;
+   typedef std::multimap<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount>> map_type;
    //
    // Disallowed operations
    //
@@ -326,7 +384,7 @@ private:
    // additional members.
    // But that doesn't matter for this hack...
    //
-   typedef fs_allocator<std::pair<key,value>,stackCount,heapCount> my_alloc_type;
+   typedef slab_allocator<std::pair<key,value>,stackCount,heapCount> my_alloc_type;
    my_alloc_type * get_my_actual_allocator() {
       my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
       alloc->selfCheck();
@@ -337,15 +395,15 @@ private:
 template<
    typename key,
    size_t   stackCount, 
-   size_t   heapCount = defaultHeapCount(sizeof(key)), 
+   size_t   heapCount = defaultSlabHeapCount(sizeof(key)), 
    typename compare = std::less<key> >
-   struct fast_set : public std::set<key,compare,fs_allocator<key,stackCount,heapCount> > {
+   struct slab_set : public std::set<key,compare,slab_allocator<key,stackCount,heapCount> > {
    //
    // Extended operator. reserve is now meaningful.
    //
    void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
-   typedef std::set<key,compare,fs_allocator<key,stackCount,heapCount>> set_type;
+   typedef std::set<key,compare,slab_allocator<key,stackCount,heapCount>> set_type;
    //
    // Disallowed operations
    //
@@ -361,7 +419,7 @@ private:
    // additional members.
    // But that doesn't matter for this hack...
    //
-   typedef fs_allocator<key,stackCount,heapCount> my_alloc_type;
+   typedef slab_allocator<key,stackCount,heapCount> my_alloc_type;
    my_alloc_type * get_my_actual_allocator() {
       my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
       alloc->selfCheck();
@@ -372,15 +430,15 @@ private:
 template<
    typename key,
    size_t   stackCount, 
-   size_t   heapCount = defaultHeapCount(sizeof(key)), 
+   size_t   heapCount = defaultSlabHeapCount(sizeof(key)), 
    typename compare = std::less<key> >
-   struct fast_multiset : public std::multiset<key,compare,fs_allocator<key,stackCount,heapCount> > {
+   struct slab_multiset : public std::multiset<key,compare,slab_allocator<key,stackCount,heapCount> > {
    //
    // Extended operator. reserve is now meaningful.
    //
    void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
-   typedef std::multiset<key,compare,fs_allocator<key,stackCount,heapCount>> set_type;
+   typedef std::multiset<key,compare,slab_allocator<key,stackCount,heapCount>> set_type;
    //
    // Disallowed operations
    //
@@ -396,7 +454,7 @@ private:
    // additional members.
    // But that doesn't matter for this hack...
    //
-   typedef fs_allocator<key,stackCount,heapCount> my_alloc_type;
+   typedef slab_allocator<key,stackCount,heapCount> my_alloc_type;
    my_alloc_type * get_my_actual_allocator() {
       my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
       alloc->selfCheck();
@@ -407,32 +465,32 @@ private:
 template<
    typename node,
    size_t   stackCount, 
-   size_t   heapCount = defaultHeapCount(sizeof(node)) >
-   struct fast_list : public std::list<node,fs_allocator<node,stackCount,heapCount> > {
-   fast_list() {}
+   size_t   heapCount = defaultSlabHeapCount(sizeof(node)) >
+struct slab_list : public std::list<node,slab_allocator<node,stackCount,heapCount> > {
 
-   typedef typename std::list<node,fs_allocator<node,stackCount,heapCount>>::iterator it;
+   //
+   // copy and assignment
+   //
+   slab_list() {}
+   slab_list(const slab_list& o) { copy(o); }; // copy
+   slab_list& operator=(const slab_list& o) { copy(o); return *this; }
+
+   typedef typename std::list<node,slab_allocator<node,stackCount,heapCount>>::iterator it;
    //
    // We support splice, but it requires actually copying each node, so it's O(N) not O(1)
    //
-   void splice(it pos, fast_list& other)        { this->splice(pos, other, other.begin(), other.end()); }
-   void splice(it pos, fast_list& other, it it) { this->splice(pos, other, it, std::next(it)); }
-   void splice(it pos, fast_list& other, it first, it last) {
+   void splice(it pos, slab_list& other)        { this->splice(pos, other, other.begin(), other.end()); }
+   void splice(it pos, slab_list& other, it it) { this->splice(pos, other, it, it == other.end() ? it : std::next(it)); }
+   void splice(it pos, slab_list& other, it first, it last) {
       while (first != last) {
-         other.insert(pos,std::move(*first));
+         pos = std::next(this->insert(pos,*first)); // points after insertion of this element
          first = other.erase(first);
       }
    }
    //
-   // Same with copy and assignment
-   //
-   fast_list(const fast_list& o) { copy(o); }; // copy
-   fast_list& operator=(const fast_list& o) { copy(o); return *this; }
-
-   //
    // Swap is supported, but it's O(2N)
    //
-   void swap(fast_list& o) {
+   void swap(slab_list& o) {
       it ofirst = o.begin();
       it olast  = o.end();
       it mfirst = this->begin();
@@ -457,9 +515,9 @@ template<
    //
    void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
-   typedef std::list<node,fs_allocator<node,stackCount,heapCount>> list_type;
+   typedef std::list<node,slab_allocator<node,stackCount,heapCount>> list_type;
 
-   void copy(const fast_list& o) {
+   void copy(const slab_list& o) {
       this->clear();
       for (auto& e : o) {
          this->push_back(e);
@@ -478,7 +536,7 @@ private:
    // additional members.
    // But that doesn't matter for this hack...
    //
-   typedef fs_allocator<node,stackCount,heapCount> my_alloc_type;
+   typedef slab_allocator<node,stackCount,heapCount> my_alloc_type;
    my_alloc_type * get_my_actual_allocator() {
       my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
       alloc->selfCheck();
@@ -492,11 +550,11 @@ private:
 //  Unlike the more sophisticated allocator above, we always have the right type, so we can save a lot of machinery
 //
 template<typename T,size_t stackSize>
-class fs_vector_allocator {
+class slab_vector_allocator {
    T stackSlot[stackSize]; 			// stackSlab is always allocated with the object :)
   
 public:
-   typedef fs_vector_allocator<T,stackSize> allocator_type;
+   typedef slab_vector_allocator<T,stackSize> allocator_type;
    typedef T value_type;
    typedef value_type *pointer;
    typedef const value_type * const_pointer;
@@ -505,11 +563,11 @@ public:
    typedef std::size_t size_type;
    typedef std::ptrdiff_t difference_type;
 
-   template<typename U> struct rebind { typedef fs_vector_allocator<U,stackSize> other; };
+   template<typename U> struct rebind { typedef slab_vector_allocator<U,stackSize> other; };
 
-   fs_vector_allocator() {
+   slab_vector_allocator() {
    }
-   ~fs_vector_allocator() {
+   ~slab_vector_allocator() {
    }
 
    pointer allocate(size_t cnt,void *p = nullptr) {
@@ -537,8 +595,8 @@ public:
       ::new((void *)p) U(std::forward<Args>(args)...);
    }
 
-   bool operator==(const fs_vector_allocator&) { return true; }
-   bool operator!=(const fs_vector_allocator&) { return false; }
+   bool operator==(const slab_vector_allocator&) { return true; }
+   bool operator!=(const slab_vector_allocator&) { return false; }
 
    void selfCheck() {
    }
@@ -546,47 +604,58 @@ public:
 private:
 
    // Can't copy or assign this guy
-   fs_vector_allocator(fs_vector_allocator&) = delete;
-   fs_vector_allocator(fs_vector_allocator&&) = delete;
-   void operator=(const fs_vector_allocator&) = delete;
-   void operator=(const fs_vector_allocator&&) = delete;
+   slab_vector_allocator(slab_vector_allocator&) = delete;
+   slab_vector_allocator(slab_vector_allocator&&) = delete;
+   void operator=(const slab_vector_allocator&) = delete;
+   void operator=(const slab_vector_allocator&&) = delete;
 };
 
 //
 // Vector. We rely on having an initial "reserve" call that ensures we wire-in the in-stack memory allocations
 //
 template<typename value,size_t   stackCount >
-   struct fast_vector : public std::vector<value,fs_vector_allocator<value,stackCount> > {
+   class slab_vector : public std::vector<value,slab_vector_allocator<value,stackCount> > {
+   typedef std::vector<value,slab_vector_allocator<value,stackCount>> vector_type;
+public:
 
-   fast_vector() {
+   slab_vector() {
       this->reserve(stackCount);
    }
 
-   fast_vector(size_t initSize,const value& val = value()) {
+   slab_vector(size_t initSize,const value& val = value()) {
       this->reserve(std::max(initSize,stackCount));
       for (size_t i = 0; i < initSize; ++i) this->push_back(val);
    }
 
-   fast_vector(const fast_vector& rhs) {
+   slab_vector(const slab_vector& rhs) {
       this->reserve(stackCount);
       *this = rhs;
    }
 
-   fast_vector& operator=(const fast_vector& rhs) {
+   slab_vector& operator=(const slab_vector& rhs) {
       this->reserve(rhs.size());
       this->clear();
       for (auto& i : rhs) {
          this->push_back(i);
       }
       return *this;
-   }   
+   }
+   //
+   // sadly, this previously O(1) operation now becomes O(N) for small N :)
+   //
+   void swap(slab_vector& rhs) {
+      //
+      // Lots of ways to optimize this, but we'll just do something simple....
+      //
+      // Use reserve to force the underlying code to malloc.
+      //
+      this->reserve(stackCount + 1);
+      rhs.reserve(stackCount + 1);
+      this->vector_type::swap(rhs);
+   }
+   
 
 private:
-   typedef std::vector<value,fs_vector_allocator<value,stackCount>> vector_type;
-   //
-   // Disallowed operations
-   //
-   using vector_type::swap;
    //
    // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
    // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
@@ -598,7 +667,7 @@ private:
    // additional members.
    // But that doesn't matter for this hack...
    //
-   typedef fs_vector_allocator<value,stackCount> my_alloc_type;
+   typedef slab_vector_allocator<value,stackCount> my_alloc_type;
    my_alloc_type * get_my_actual_allocator() {
       my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
       alloc->selfCheck();
@@ -610,5 +679,5 @@ private:
 
 };
 
-#endif // _FAST_CONTAINERS_H
+#endif // _slab_CONTAINERS_H
 

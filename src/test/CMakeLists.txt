@@ -710,6 +710,12 @@ add_executable(unittest_fast_containers
 add_ceph_unittest(unittest_fast_containers ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_fast_containers)
 target_link_libraries(unittest_fast_containers global)
 
+# unittest_slab_containers
+add_executable(unittest_slab_containers
+  test_slab_containers.cc
+  )
+add_ceph_unittest(unittest_slab_containers ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_slab_containers)
+target_link_libraries(unittest_slab_containers global)
 
 # unittest_crypto
 add_executable(unittest_crypto
