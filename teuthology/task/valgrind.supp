@@ -353,3 +353,10 @@
 	fun:PosixEnv
 	...
 }
+{
+	more rocksdb env leaks
+	Memcheck:Leak
+	...
+	fun:rocksdb::Env::Default*
+	...
+}
