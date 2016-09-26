@@ -972,7 +972,8 @@ PG::Scrubber::Scrubber()
    num_digest_updates_pending(0),
    state(INACTIVE),
    deep(false),
-   seed(0)
+   seed(0),
+   map_state(NOT_BUILDING)
 {}
 
 PG::Scrubber::~Scrubber() {}
