@@ -1,8 +1,13 @@
+
+from distutils.version import StrictVersion
+
+import rest_framework
 from rest_framework import serializers
 from rest_framework import fields
 
 
-if False:
+
+if StrictVersion(rest_framework.__version__) < StrictVersion("3.0.0"):
     class BooleanField(serializers.BooleanField):
         """
         Version of BooleanField which handles fields which are 1,0
@@ -17,7 +22,7 @@ else:
     BooleanField = fields.BooleanField
 
 
-if False:
+if StrictVersion(rest_framework.__version__) < StrictVersion("3.0.0"):
     class UuidField(serializers.CharField):
         """
         For strings like Ceph service UUIDs and Ceph cluster FSIDs
@@ -28,7 +33,7 @@ else:
     # rest-framework 3 has built in uuid field.
     UuidField = fields.UUIDField
 
-if False:
+if StrictVersion(rest_framework.__version__) < StrictVersion("3.0.0"):
     class EnumField(serializers.CharField):
         def __init__(self, mapping, *args, **kwargs):
             super(EnumField, self).__init__(*args, **kwargs)

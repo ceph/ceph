@@ -2,8 +2,10 @@ from collections import defaultdict
 import json
 import logging
 import shlex
+from distutils.version import StrictVersion
 
 from django.http import Http404
+import rest_framework
 from rest_framework.exceptions import ParseError, APIException, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
@@ -11,22 +13,16 @@ from rest_framework import status
 from django.contrib.auth.decorators import login_required
 
 
-from rest.app.serializers.v2 import PoolSerializer, CrushRuleSetSerializer, CrushRuleSerializer, \
-    ServerSerializer, SaltKeySerializer, RequestSerializer, \
-    ClusterSerializer, EventSerializer, LogTailSerializer, OsdSerializer, ConfigSettingSerializer, MonSerializer, OsdConfigSerializer, \
-    CliSerializer
-#from rest.app.views.database_view_set import DatabaseViewSet
+from rest.app.serializers.v2 import PoolSerializer, CrushRuleSetSerializer, \
+    CrushRuleSerializer, ServerSerializer, RequestSerializer, OsdSerializer, \
+    ConfigSettingSerializer, MonSerializer, OsdConfigSerializer
 from rest.app.views.exceptions import ServiceUnavailable
-#from rest.app.views.paginated_mixin import PaginatedMixin
-#from rest.app.views.remote_view_set import RemoteViewSet
 from rest.app.views.rpc_view import RPCViewSet, DataObject
-from rest.app.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, USER_REQUEST_SUBMITTED, \
-    OSD_IMPLEMENTED_COMMANDS, MON, OSD_MAP, SYNC_OBJECT_TYPES, ServiceId, severity_from_str, SEVERITIES, \
+from rest.app.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, \
+    USER_REQUEST_SUBMITTED, OSD_IMPLEMENTED_COMMANDS, MON, OSD_MAP, \
+    SYNC_OBJECT_TYPES, ServiceId, severity_from_str, SEVERITIES, \
     OsdMap, Config, MonMap, MonStatus
 
-
-class Event(object):
-    pass
 
 from rest.logger import logger
 log = logger()
@@ -67,10 +63,10 @@ To cancel a request while it is running, send an empty POST to ``request/<reques
             raise ParseError("State must be one of %s" % ", ".join(valid_states))
 
         requests = self.client.list_requests({'state': filter_state, 'fsid': fsid})
-        if False:
-            # FIXME reinstate pagination, broke in DRF 2.x -> 3.x
+        if StrictVersion(rest_framework.__version__) < StrictVersion("3.0.0"):
             return Response(self._paginate(request, requests))
         else:
+            # FIXME reinstate pagination, broke in DRF 2.x -> 3.x
             return Response(requests)
 
 
@@ -109,76 +105,6 @@ A CRUSH rule is used by Ceph to decide where to locate placement groups on OSDs.
         }) for (rd_id, rd_rules) in rulesets_data.items()]
 
         return Response(CrushRuleSetSerializer(rulesets, many=True).data)
-
-
-class SaltKeyViewSet(RPCViewSet):
-    """
-Ceph servers authentication with the Calamari using a key pair.  Before
-Calamari accepts messages from a server, the server's key must be accepted.
-    """
-    serializer_class = SaltKeySerializer
-
-    def list(self, request):
-        return Response(self.serializer_class(self.client.minion_status(None), many=True).data)
-
-    def partial_update(self, request, minion_id):
-        serializer = self.serializer_class(data=request.DATA)
-        if serializer.is_valid(request.method):
-            self._partial_update(minion_id, serializer.get_data())
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def _partial_update(self, minion_id, data):
-        valid_status = ['accepted', 'rejected']
-        if 'status' not in data:
-            raise ParseError({'status': "This field is mandatory"})
-        elif data['status'] not in valid_status:
-            raise ParseError({'status': "Must be one of %s" % ",".join(valid_status)})
-        else:
-            key = self.client.minion_get(minion_id)
-            transition = [key['status'], data['status']]
-            if transition == ['pre', 'accepted']:
-                self.client.minion_accept(minion_id)
-            elif transition == ['pre', 'rejected']:
-                self.client.minion_reject(minion_id)
-            else:
-                raise ParseError({'status': ["Transition {0}->{1} is invalid".format(
-                    transition[0], transition[1]
-                )]})
-
-    def _validate_list(self, request):
-        keys = request.DATA
-        if not isinstance(keys, list):
-            raise ParseError("Bulk PATCH must send a list")
-        for key in keys:
-            if 'id' not in key:
-                raise ParseError("Items in bulk PATCH must have 'id' attribute")
-
-    def list_partial_update(self, request):
-        self._validate_list(request)
-
-        keys = request.DATA
-        log.debug("KEYS %s" % keys)
-        for key in keys:
-            self._partial_update(key['id'], key)
-
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def destroy(self, request, minion_id):
-        self.client.minion_delete(minion_id)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def list_destroy(self, request):
-        self._validate_list(request)
-        keys = request.DATA
-        for key in keys:
-            self.client.minion_delete(key['id'])
-
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def retrieve(self, request, minion_id):
-        return Response(self.serializer_class(self.client.minion_get(minion_id)).data)
 
 
 class PoolDataObject(DataObject):
@@ -587,93 +513,6 @@ Ceph OSDs, MDSs, mons.
             many=True).data)
 
 
-if False:
-    class EventViewSet(DatabaseViewSet, PaginatedMixin):
-        """
-    Events generated by Calamari server in response to messages from
-    servers and Ceph clusters.  This resource is paginated.
-
-    Note that events are not visible synchronously with respect to
-    all other API resources.  For example, you might read the OSD
-    map, see an OSD is down, then quickly read the events and find
-    that the event about the OSD going down is not visible yet (though
-    it would appear very soon after).
-
-    The ``severity`` attribute mainly follows a typical INFO, WARN, ERROR
-    hierarchy.  However, we have an additional level between INFO and WARN
-    called RECOVERY.  Where something going bad in the system is usually
-    a WARN message, the opposite state transition is usually a RECOVERY
-    message.
-
-    This resource supports "more severe than" filtering on the severity
-    attribute.  Pass the desired severity threshold as a URL parameter
-    in a GET, such as ``?severity=RECOVERY`` to show everything but INFO.
-
-        """
-        serializer_class = EventSerializer
-
-        @property
-        def queryset(self):
-            return self.session.query(Event).order_by(Event.when.desc())
-
-        def _filter_by_severity(self, request, queryset=None):
-            if queryset is None:
-                queryset = self.queryset
-            severity_str = request.GET.get("severity", "INFO")
-            try:
-                severity = severity_from_str(severity_str)
-            except KeyError:
-                raise ParseError("Invalid severity '%s', must be on of %s" % (severity_str,
-                                                                              ",".join(SEVERITIES.values())))
-
-            return queryset.filter(Event.severity <= severity)
-
-        def list(self, request):
-            return Response(self._paginate(request, self._filter_by_severity(request)))
-
-        def list_cluster(self, request):
-            return Response(self._paginate(request, self._filter_by_severity(request, self.queryset.filter_by(fsid=fsid))))
-
-        def list_server(self, request, fqdn):
-            return Response(self._paginate(request, self._filter_by_severity(request, self.queryset.filter_by(fqdn=fqdn))))
-
-
-if False:
-    class LogTailViewSet(RemoteViewSet):
-        """
-    A primitive remote log viewer.
-
-    Logs are retrieved on demand from the Ceph servers, so this resource will return a 503 error if no suitable
-    server is available to get the logs.
-
-    GETs take an optional ``lines`` parameter for the number of lines to retrieve.
-        """
-        serializer_class = LogTailSerializer
-
-        def get_cluster_log(self, request):
-            """
-            Retrieve the cluster log from one of a cluster's mons (expect it to be in /var/log/ceph/ceph.log)
-            """
-
-            # Number of lines to get
-            lines = request.GET.get('lines', 40)
-
-            # Resolve FSID to name
-            name = self.client.get_cluster(fsid)['name']
-
-            # Execute remote operation synchronously
-            result = self.run_mon_job("log_tail.tail", ["ceph/{name}.log".format(name=name), lines])
-
-            return Response({'lines': result})
-
-        def list_server_logs(self, request, fqdn):
-            return Response(sorted(self.run_job(fqdn, "log_tail.list_logs", ["."])))
-
-        def get_server_log(self, request, fqdn, log_path):
-            lines = request.GET.get('lines', 40)
-            return Response({'lines': self.run_job(fqdn, "log_tail.tail", [log_path, lines])})
-
-
 class MonViewSet(RPCViewSet):
     """
 Ceph monitor services.
@@ -717,54 +556,3 @@ useful to show users data from the /status sub-url, which returns the
             self.serializer_class([DataObject(m) for m in mons],
                                   many=True).data)
 
-
-if False:
-    class CliViewSet(RemoteViewSet):
-        """
-    Access the `ceph` CLI tool remotely.
-
-    To achieve the same result as running "ceph osd dump" at a shell, an
-    API consumer may POST an object in either of the following formats:
-
-    ::
-
-        {'command': ['osd', 'dump']}
-
-        {'command': 'osd dump'}
-
-
-    The response will be a 200 status code if the command executed, regardless
-    of whether it was successful, to check the result of the command itself
-    read the ``status`` attribute of the returned data.
-
-    The command will be executed on the first available mon server, retrying
-    on subsequent mon servers if no response is received.  Due to this retry
-    behaviour, it is possible for the command to be run more than once in
-    rare cases; since most ceph commands are idempotent this is usually
-    not a problem.
-        """
-        serializer_class = CliSerializer
-
-        def create(self, request):
-            # Validate
-            try:
-                command = request.DATA['command']
-            except KeyError:
-                raise ParseError("'command' field is required")
-            else:
-                if not (isinstance(command, basestring) or isinstance(command, list)):
-                    raise ParseError("'command' must be a string or list")
-
-            # Parse string commands to list
-            if isinstance(command, basestring):
-                command = shlex.split(command)
-
-            name = self.client.get_cluster(fsid)['name']
-            result = self.run_mon_job("ceph.ceph_command", [name, command])
-            log.debug("CliViewSet: result = '%s'" % result)
-
-            if not isinstance(result, dict):
-                # Errors from salt like "module not available" come back as strings
-                raise APIException("Remote error: %s" % str(result))
-
-            return Response(self.serializer_class(DataObject(result)).data)

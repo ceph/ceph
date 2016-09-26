@@ -4,13 +4,8 @@ import rest.app.views.v2
 
 router = routers.DefaultRouter(trailing_slash=False)
 
-# Information about each Ceph cluster (FSID), see sub-URLs
-
 urlpatterns = patterns(
     '',
-
-    # About the host calamari server is running on
-    # url(r'^grains', rest.app.views.v2.grains),
 
     # This has to come after /user/me to make sure that special case is handled
     url(r'^', include(router.urls)),
@@ -99,21 +94,4 @@ urlpatterns = patterns(
         rest.app.views.v2.ConfigViewSet.as_view({'get': 'list'})),
     url(r'^cluster/config/(?P<key>[a-zA-Z0-9_]+)$',
         rest.app.views.v2.ConfigViewSet.as_view({'get': 'retrieve'})),
-
-    # Events
-    # url(r'^event$', rest.app.views.v2.EventViewSet.as_view({'get': 'list'})),
-    # url(r'^cluster/event$', rest.app.views.v2.EventViewSet.as_view({'get': 'list_cluster'})),
-    # url(r'^server/(?P<fqdn>[a-zA-Z0-9-\.]+)/event$', rest.app.views.v2.EventViewSet.as_view({'get': 'list_server'})),
-
-    # Log tail
-    # url(r'^cluster/log$',
-    #    rest.app.views.v2.LogTailViewSet.as_view({'get': 'get_cluster_log'})),
-    # url(r'^server/(?P<fqdn>[a-zA-Z0-9-\.]+)/log$',
-    #    rest.app.views.v2.LogTailViewSet.as_view({'get': 'list_server_logs'})),
-    # url(r'^server/(?P<fqdn>[a-zA-Z0-9-\.]+)/log/(?P<log_path>.+)$',
-    #    rest.app.views.v2.LogTailViewSet.as_view({'get': 'get_server_log'})),
-
-    # Ceph CLI access
-    # url(r'^cluster/cli$',
-    #    rest.app.views.v2.CliViewSet.as_view({'post': 'create'}))
 )
