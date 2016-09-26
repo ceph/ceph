@@ -343,6 +343,29 @@ void rgw_cls_check_index_ret::dump(Formatter *f) const
   ::encode_json("calculated_header", calculated_header, f);
 }
 
+void rgw_cls_bucket_update_stats_op::generate_test_instances(list<rgw_cls_bucket_update_stats_op*>& o)
+{
+  rgw_cls_bucket_update_stats_op *r = new rgw_cls_bucket_update_stats_op;
+  r->absolute = true;
+  rgw_bucket_category_stats& s = r->stats[0];
+  s.total_size = 1;
+  s.total_size_rounded = 4096;
+  s.num_entries = 1;
+  o.push_back(r);
+
+  o.push_back(new rgw_cls_bucket_update_stats_op);
+}
+
+void rgw_cls_bucket_update_stats_op::dump(Formatter *f) const
+{
+  ::encode_json("absolute", absolute, f);
+  map<int, rgw_bucket_category_stats> s;
+  for (auto& entry : stats) {
+    s[(int)entry.first] = entry.second;
+  }
+  ::encode_json("stats", s, f);
+}
+
 void cls_rgw_bi_log_list_op::dump(Formatter *f) const
 {
   f->dump_string("marker", marker);
