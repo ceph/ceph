@@ -210,7 +210,9 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 	std::set_intersection(i->match.gids.begin(), i->match.gids.end(),
 			      caller_gid_list->begin(), caller_gid_list->end(),
 			      std::back_inserter(gids));
+	std::sort(gids.begin(), gids.end());
       }
+      
 
       // Spec is non-allowing if caller asked for set pool but spec forbids it
       if (mask & MAY_SET_POOL) {
@@ -290,6 +292,9 @@ bool MDSAuthCaps::parse(CephContext *c, const std::string& str, ostream *err)
   bool r = qi::phrase_parse(iter, end, g, ascii::space, *this);
   cct = c;  // set after parser self-assignment
   if (r && iter == end) {
+    for (auto& grant : grants) {
+      std::sort(grant.match.gids.begin(), grant.match.gids.end());
+    }
     return true;
   } else {
     // Make sure no grants are kept after parsing failed!
