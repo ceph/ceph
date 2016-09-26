@@ -60,6 +60,7 @@ enum {
   l_bluestore_state_done_lat,
   l_bluestore_compress_lat,
   l_bluestore_decompress_lat,
+  l_bluestore_csum_lat,
   l_bluestore_compress_success_count,
   l_bluestore_write_pad_bytes,
   l_bluestore_wal_write_ops,
