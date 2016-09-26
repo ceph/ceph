@@ -7581,6 +7581,8 @@ int BlueStore::_zero(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
+  o->exists = true;
+  _assign_nid(txc, o);
   int r = _do_zero(txc, c, o, offset, length);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
@@ -7597,8 +7599,6 @@ int BlueStore::_do_zero(TransContext *txc,
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
   int r = 0;
-  o->exists = true;
-  _assign_nid(txc, o);
 
   _dump_onode(o);
 
