@@ -73,6 +73,7 @@ Standards-Version: 3.9.3
 Package: ceph
 Architecture: linux-any
 Depends: ceph-mon (= ${binary:Version}),
+         ceph-mgr (= ${binary:Version}),
          ceph-osd (= ${binary:Version})
 Recommends: ceph-mds (= ${binary:Version})
 Description: distributed storage and file system
@@ -111,8 +112,8 @@ Description: common ceph daemon libraries and management tools
  block and file system storage.
  .
  This package contains the libraries and management tools that are common among
- the three Ceph server daemons (ceph-mon, ceph-osd, ceph-mds). These tools are
- necessary for creating, running, and administering a Ceph storage cluster.
+ the Ceph server daemons (ceph-mon, ceph-mgr, ceph-osd, ceph-mds). These tools
+ are necessary for creating, running, and administering a Ceph storage cluster.
 
 Package: ceph-mds
 Architecture: linux-any
@@ -140,6 +141,31 @@ Description: debugging symbols for ceph-mds
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-mds.
+
+Package: ceph-mgr
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Replaces: ceph (<< 0.93-417)
+Breaks: ceph (<< 0.93-417)
+Description: metadata server for the ceph distributed file system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the manager daemon, which is used to expose high
+ level management and monitoring functionality.
+
+Package: ceph-mgr-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-mgr (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-mgr.
 
 Package: ceph-mon
 Architecture: linux-any
