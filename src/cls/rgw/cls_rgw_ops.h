@@ -443,6 +443,30 @@ struct rgw_cls_check_index_ret
 };
 WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 
+struct rgw_cls_bucket_update_stats_op
+{
+  bool absolute{false};
+  map<uint8_t, rgw_bucket_category_stats> stats;
+
+  rgw_cls_bucket_update_stats_op() {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(absolute, bl);
+    ::encode(stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(absolute, bl);
+    ::decode(stats, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_bucket_update_stats_op *>& o);
+};
+WRITE_CLASS_ENCODER(rgw_cls_bucket_update_stats_op)
+
 struct rgw_cls_obj_remove_op {
   list<string> keep_attr_prefixes;
 
