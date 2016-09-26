@@ -61,6 +61,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_HINTS CompatSet::Feature(12, "transaction hints")
 #define CEPH_OSD_FEATURE_INCOMPAT_PGMETA CompatSet::Feature(13, "pg meta object")
 #define CEPH_OSD_FEATURE_INCOMPAT_MISSING CompatSet::Feature(14, "explicit missing set")
+#define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(14, "fastinfo pg attr")
 
 
 /// max recovery priority for MBackfillReserve
@@ -2231,6 +2232,149 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
       << ")";
   return out;
 }
+
+/**
+ * pg_fast_info_t - common pg_info_t fields
+ *
+ * These are the fields of pg_info_t (and children) that are updated for
+ * most IO operations.
+ *
+ * ** WARNING **
+ * Because we rely on these fields to be applied to the normal
+ * info struct, adding a new field here that is not also new in info
+ * means that we must set an incompat OSD feature bit!
+ */
+struct pg_fast_info_t {
+  eversion_t last_update;
+  eversion_t last_complete;
+  version_t last_user_version;
+  struct { // pg_stat_t stats
+    eversion_t version;
+    version_t reported_seq;
+    utime_t last_fresh;
+    utime_t last_active;
+    utime_t last_peered;
+    utime_t last_clean;
+    utime_t last_unstale;
+    utime_t last_undegraded;
+    utime_t last_fullsized;
+    int64_t log_size;  // (also ondisk_log_size, which has the same value)
+    struct { // object_stat_collection_t stats;
+      struct { // objct_stat_sum_t sum
+	int64_t num_bytes;    // in bytes
+	int64_t num_objects;
+	int64_t num_object_copies;
+	int64_t num_rd;
+	int64_t num_rd_kb;
+	int64_t num_wr;
+	int64_t num_wr_kb;
+	int64_t num_objects_dirty;
+      } sum;
+    } stats;
+  } stats;
+
+  void populate_from(const pg_info_t& info) {
+    last_update = info.last_update;
+    last_complete = info.last_complete;
+    last_user_version = info.last_user_version;
+    stats.version = info.stats.version;
+    stats.reported_seq = info.stats.reported_seq;
+    stats.last_fresh = info.stats.last_fresh;
+    stats.last_active = info.stats.last_active;
+    stats.last_peered = info.stats.last_peered;
+    stats.last_clean = info.stats.last_clean;
+    stats.last_unstale = info.stats.last_unstale;
+    stats.last_undegraded = info.stats.last_undegraded;
+    stats.last_fullsized = info.stats.last_fullsized;
+    stats.log_size = info.stats.log_size;
+    stats.stats.sum.num_bytes = info.stats.stats.sum.num_bytes;
+    stats.stats.sum.num_objects = info.stats.stats.sum.num_objects;
+    stats.stats.sum.num_object_copies = info.stats.stats.sum.num_object_copies;
+    stats.stats.sum.num_rd = info.stats.stats.sum.num_rd;
+    stats.stats.sum.num_rd_kb = info.stats.stats.sum.num_rd_kb;
+    stats.stats.sum.num_wr = info.stats.stats.sum.num_wr;
+    stats.stats.sum.num_wr_kb = info.stats.stats.sum.num_wr_kb;
+    stats.stats.sum.num_objects_dirty = info.stats.stats.sum.num_objects_dirty;
+  }
+
+  void apply_to(pg_info_t* info) {
+    info->last_update = last_update;
+    info->last_complete = last_complete;
+    info->last_user_version = last_user_version;
+    info->stats.version = stats.version;
+    info->stats.reported_seq = stats.reported_seq;
+    info->stats.last_fresh = stats.last_fresh;
+    info->stats.last_active = stats.last_active;
+    info->stats.last_peered = stats.last_peered;
+    info->stats.last_clean = stats.last_clean;
+    info->stats.last_unstale = stats.last_unstale;
+    info->stats.last_undegraded = stats.last_undegraded;
+    info->stats.last_fullsized = stats.last_fullsized;
+    info->stats.log_size = stats.log_size;
+    info->stats.ondisk_log_size = stats.log_size;
+    info->stats.stats.sum.num_bytes = stats.stats.sum.num_bytes;
+    info->stats.stats.sum.num_objects = stats.stats.sum.num_objects;
+    info->stats.stats.sum.num_object_copies = stats.stats.sum.num_object_copies;
+    info->stats.stats.sum.num_rd = stats.stats.sum.num_rd;
+    info->stats.stats.sum.num_rd_kb = stats.stats.sum.num_rd_kb;
+    info->stats.stats.sum.num_wr = stats.stats.sum.num_wr;
+    info->stats.stats.sum.num_wr_kb = stats.stats.sum.num_wr_kb;
+    info->stats.stats.sum.num_objects_dirty = stats.stats.sum.num_objects_dirty;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(last_update, bl);
+    ::encode(last_complete, bl);
+    ::encode(last_user_version, bl);
+    ::encode(stats.version, bl);
+    ::encode(stats.reported_seq, bl);
+    ::encode(stats.last_fresh, bl);
+    ::encode(stats.last_active, bl);
+    ::encode(stats.last_peered, bl);
+    ::encode(stats.last_clean, bl);
+    ::encode(stats.last_unstale, bl);
+    ::encode(stats.last_undegraded, bl);
+    ::encode(stats.last_fullsized, bl);
+    ::encode(stats.log_size, bl);
+    ::encode(stats.stats.sum.num_bytes, bl);
+    ::encode(stats.stats.sum.num_objects, bl);
+    ::encode(stats.stats.sum.num_object_copies, bl);
+    ::encode(stats.stats.sum.num_rd, bl);
+    ::encode(stats.stats.sum.num_rd_kb, bl);
+    ::encode(stats.stats.sum.num_wr, bl);
+    ::encode(stats.stats.sum.num_wr_kb, bl);
+    ::encode(stats.stats.sum.num_objects_dirty, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(last_update, p);
+    ::decode(last_complete, p);
+    ::decode(last_user_version, p);
+    ::decode(stats.version, p);
+    ::decode(stats.reported_seq, p);
+    ::decode(stats.last_fresh, p);
+    ::decode(stats.last_active, p);
+    ::decode(stats.last_peered, p);
+    ::decode(stats.last_clean, p);
+    ::decode(stats.last_unstale, p);
+    ::decode(stats.last_undegraded, p);
+    ::decode(stats.last_fullsized, p);
+    ::decode(stats.log_size, p);
+    ::decode(stats.stats.sum.num_bytes, p);
+    ::decode(stats.stats.sum.num_objects, p);
+    ::decode(stats.stats.sum.num_object_copies, p);
+    ::decode(stats.stats.sum.num_rd, p);
+    ::decode(stats.stats.sum.num_rd_kb, p);
+    ::decode(stats.stats.sum.num_wr, p);
+    ::decode(stats.stats.sum.num_wr_kb, p);
+    ::decode(stats.stats.sum.num_objects_dirty, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(pg_fast_info_t)
+
 
 struct pg_notify_t {
   epoch_t query_epoch;

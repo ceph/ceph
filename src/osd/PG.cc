@@ -74,6 +74,7 @@ const string infover_key("_infover");
 const string info_key("_info");
 const string biginfo_key("_biginfo");
 const string epoch_key("_epoch");
+const string fastinfo_key("_fastinfo");
 
 
 template <class T>
@@ -2739,23 +2740,30 @@ void PG::init(
 
 void PG::upgrade(ObjectStore *store)
 {
-  assert(info_struct_v <= 8);
+  assert(info_struct_v <= 9);
   ObjectStore::Transaction t;
 
-  assert(info_struct_v == 7);
+  assert(info_struct_v >= 7);
+
+  // 8 -> 9
+  if (info_struct_v <= 8) {
+    // no special action needed.
+  }
 
   // 7 -> 8
-  pg_log.mark_log_for_rewrite();
-  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(coll_t::meta(), log_oid);
-  t.remove(coll_t::meta(), biginfo_oid);
+  if (info_struct_v <= 7) {
+    pg_log.mark_log_for_rewrite();
+    ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+    ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+    t.remove(coll_t::meta(), log_oid);
+    t.remove(coll_t::meta(), biginfo_oid);
 
-  t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> v;
-  __u8 ver = cur_struct_v;
-  ::encode(ver, v[infover_key]);
-  t.omap_setkeys(coll, pgmeta_oid, v);
+    t.touch(coll, pgmeta_oid);
+    map<string,bufferlist> v;
+    __u8 ver = cur_struct_v;
+    ::encode(ver, v[infover_key]);
+    t.omap_setkeys(coll, pgmeta_oid, v);
+  }
 
   dirty_info = true;
   dirty_big_info = true;
@@ -2785,12 +2793,41 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    pg_info_t &info, pg_info_t &last_written_info,
 			    map<epoch_t,pg_interval_t> &past_intervals,
 			    bool dirty_big_info,
-			    bool dirty_epoch)
+			    bool dirty_epoch,
+			    bool try_fast_info)
 {
+  if (dirty_epoch) {
+    ::encode(epoch, (*km)[epoch_key]);
+  }
+
+  // try to do info efficiently?
+  if (!dirty_big_info && try_fast_info) {
+    pg_fast_info_t fast;
+    fast.populate_from(info);
+    fast.apply_to(&last_written_info);
+    if (info == last_written_info) {
+      ::encode(fast, (*km)[fastinfo_key]);
+      return 0;
+    }
+    generic_dout(30) << __func__ << " fastinfo failed, info:\n";
+    {
+      JSONFormatter jf(true);
+      jf.dump_object("info", info);
+      jf.flush(*_dout);
+    }
+    {
+      *_dout << "\nlast_written_info:\n";
+      JSONFormatter jf(true);
+      jf.dump_object("last_written_info", last_written_info);
+      jf.flush(*_dout);
+    }
+    *_dout << dendl;
+  }
+  (*km)[fastinfo_key];  // erase any previous fastinfo
+  last_written_info = info;
+
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  if (dirty_epoch)
-    ::encode(epoch, (*km)[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
   ::encode(info, (*km)[info_key]);
   purged_snaps.swap(info.purged_snaps);
@@ -2845,7 +2882,8 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
 				info,
 				last_written_info,
 				past_intervals,
-				dirty_big_info, need_update_epoch);
+				dirty_big_info, need_update_epoch,
+				g_conf->osd_fast_info);
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();
@@ -3065,11 +3103,13 @@ int PG::read_info(
   keys.insert(infover_key);
   keys.insert(info_key);
   keys.insert(biginfo_key);
+  keys.insert(fastinfo_key);
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
   if (r == 0) {
-    assert(values.size() == 3);
+    assert(values.size() == 3 ||
+	   values.size() == 4);
 
     bufferlist::iterator p = values[infover_key].begin();
     ::decode(struct_v, p);
@@ -3081,6 +3121,13 @@ int PG::read_info(
     p = values[biginfo_key].begin();
     ::decode(past_intervals, p);
     ::decode(info.purged_snaps, p);
+
+    p = values[fastinfo_key].begin();
+    if (!p.end()) {
+      pg_fast_info_t fast;
+      ::decode(fast, p);
+      fast.apply_to(&info);
+    }
     return 0;
   }
 
