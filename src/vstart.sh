@@ -8,13 +8,8 @@ if [ -n "$VSTART_DEST" ]; then
   SRC_PATH=`(cd $SRC_PATH; pwd)`
 
   CEPH_DIR=$SRC_PATH
-  CEPH_BIN=$SRC_PATH
-  CEPH_LIB=$SRC_PATH/.libs
-
-  if [ -e CMakeCache.txt ]; then
-      CEPH_BIN=${PWD}/bin
-      CEPH_LIB=${PWD}/lib
-  fi
+  CEPH_BIN=${PWD}/bin
+  CEPH_LIB=${PWD}/lib
 
   CEPH_CONF_PATH=$VSTART_DEST
   CEPH_DEV_DIR=$VSTART_DEST/dev
@@ -42,11 +37,6 @@ elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
-else
-        [ -z "$CEPH_BIN" ] && CEPH_BIN=.
-        [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
-        [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
-        [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
 fi
 
 if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
