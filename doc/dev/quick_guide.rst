@@ -25,6 +25,7 @@ deployment using the following command:
 .. code::
 
 	$ cd ceph/build  # Assuming this is where you ran cmake
+	$ make vstart
 	$ ../src/vstart.sh -d -n -x
 
 You can also configure ``vstart.sh`` to use only one monitor and one metadata server by using the following:
