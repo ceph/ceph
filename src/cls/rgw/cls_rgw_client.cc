@@ -277,6 +277,15 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, rgw_cls_bi_entry& 
   return 0;
 }
 
+void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, rgw_cls_bi_entry& entry)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_put_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  op.exec("rgw", "bi_put", in);
+}
+
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
                    const string& name, const string& marker, uint32_t max,
                    list<rgw_cls_bi_entry> *entries, bool *is_truncated)

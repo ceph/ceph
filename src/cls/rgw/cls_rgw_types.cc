@@ -237,6 +237,30 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
   dump_bi_entry(data, type, f);
 }
 
+void rgw_cls_bi_entry::get_key(cls_rgw_obj_key *key)
+{
+  bufferlist::iterator iter = data.begin();
+  switch (type) {
+    case PlainIdx:
+    case InstanceIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        ::decode(entry, iter);
+        *key = entry.key;
+      }
+      break;
+    case OLHIdx:
+      {
+        rgw_bucket_olh_entry entry;
+        ::decode(entry, iter);
+        *key = entry.key;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
   encode_json("key", key, f);
