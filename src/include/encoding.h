@@ -46,8 +46,8 @@ using namespace ceph;
 // --------------------------------------
 // base types
 
-template<class T>
-inline void encode_raw(const T& t, bufferlist& bl)
+template<class T, class A>
+inline void encode_raw(const T& t, A& bl)
 {
   bl.append((char*)&t, sizeof(t));
 }
@@ -58,8 +58,13 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
 }
 
 #define WRITE_RAW_ENCODER(type)						\
-  inline void encode(const type &v, bufferlist& bl, uint64_t features=0) { encode_raw(v, bl); } \
-  inline void decode(type &v, bufferlist::iterator& p) { __ASSERT_FUNCTION decode_raw(v, p); }
+  template<class A>							\
+  inline void encode(const type &v, A& bl, uint64_t features=0) {	\
+    encode_raw(v, bl);							\
+  }									\
+  inline void decode(type &v, bufferlist::iterator& p) {		\
+    __ASSERT_FUNCTION decode_raw(v, p);					\
+  }
 
 WRITE_RAW_ENCODER(__u8)
 #ifndef _CHAR_IS_SIGNED
@@ -89,7 +94,8 @@ inline void decode(bool &v, bufferlist::iterator& p) {
 // int types
 
 #define WRITE_INTTYPE_ENCODER(type, etype)				\
-  inline void encode(type v, bufferlist& bl, uint64_t features=0) {	\
+  template<class A>							\
+  inline void encode(type v, A& bl, uint64_t features=0) {		\
     ceph_##etype e;					                \
     e = v;                                                              \
     encode_raw(e, bl);							\

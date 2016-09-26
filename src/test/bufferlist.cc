@@ -2269,6 +2269,322 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ('\0', bl[1]);
 }
 
+TEST(BufferList, appender_bench) {
+  unsigned long long ma = 16 * 16, mb = 65536;
+  cout << "appending " << 16 * (ma * mb) << " uint64_t's" << std::endl;
+  size_t bufmax = 1048576 * 1024;
+  char *buf = new char[bufmax];
+  uint64_t *p;
+  memset(buf, 0, bufmax);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+	bl.append((char*)(p++), sizeof(*p));
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::append " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+	::encode(*(p++), bl);
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list encode " << dur << std::endl;
+  }
+
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::safe_appender ap = bl.get_safe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::safe_appender::append " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::safe_appender ap = bl.get_safe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	bufferlist::unsafe_appender uap = ap.reserve(sizeof(*p) * 16);
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+	uap.append((char*)(p++), sizeof(*p));
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::safe_appender::append (reserve 16) " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::safe_appender ap = bl.get_safe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::safe_appender::append_v " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::safe_appender ap = bl.get_safe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	bufferlist::unsafe_appender uap = ap.reserve(sizeof(*p) * 16);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+	uap.append_v(*p++);
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::safe_appender::append_v (reserve 16) " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::safe_appender ap = bl.get_safe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::safe_appender encode " << dur << std::endl;
+  }
+
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::unsafe_appender ap = bl.get_unsafe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+	ap.append((char*)(p++), sizeof(*p));
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::unsafe_appender::append " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::unsafe_appender ap = bl.get_unsafe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+	ap.append_v(*p++);
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::unsafe_appender::append_v " << dur << std::endl;
+  }
+  {
+    utime_t start = ceph_clock_now(NULL);
+    for (unsigned a = 0; a < ma; ++a) {
+      bufferlist bl;
+      bufferlist::unsafe_appender ap = bl.get_unsafe_appender(16 * sizeof(*p) * mb);
+      for (unsigned b = 0; b < mb; ++b) {
+	p = (uint64_t*)buf +
+	  (1234567 * a + 45678907 * b) % (bufmax/2/sizeof(uint64_t)) +
+	  123 * a;
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+	::encode(*(p++), ap);
+      }
+    }
+    utime_t dur = ceph_clock_now(NULL) - start;
+    cout << "buffer::list::unsafe_appender encode " << dur << std::endl;
+  }
+}
+
+TEST(BufferList, safe_appender) {
+  bufferlist bl;
+  bufferlist::appender a = bl.get_safe_appender();
+}
+
 TEST(BufferList, operator_brackets) {
   bufferlist bl;
   EXPECT_THROW(bl[1], buffer::end_of_buffer);
@@ -2954,6 +3270,7 @@ TEST(BufferHash, all) {
     EXPECT_EQ((unsigned)0xB3109EBF, hash.digest());
   }
 }
+
 
 /*
  * Local Variables:
