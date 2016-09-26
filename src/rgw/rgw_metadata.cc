@@ -190,7 +190,8 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
 public:
   RGWMetadataLogInfoCompletion(RGWMetadataLogInfo *_pinfo, RGWCompletionManager *_cm, void *_uinfo, int *_pret) :
                                                pinfo(_pinfo), completion_manager(_cm), user_info(_uinfo), pret(_pret) {
-    completion = librados::Rados::aio_create_completion((void *)this, _mdlog_info_completion, NULL);
+    completion = librados::Rados::aio_create_completion((void *)this, NULL,
+							_mdlog_info_completion);
   }
 
   ~RGWMetadataLogInfoCompletion() {
