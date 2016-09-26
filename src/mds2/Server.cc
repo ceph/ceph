@@ -12,6 +12,7 @@
 #include "SessionMap.h"
 #include "InoTable.h"
 #include "LogEvent.h"
+#include "snap.h"
 
 #include "messages/MClientSession.h"
 #include "messages/MClientRequest.h"
@@ -775,6 +776,12 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 {
   utime_t now = ceph_clock_now(g_ceph_context);
   bufferlist bl;
+
+  {
+    SnapRealmInfo info(CEPH_INO_ROOT, 0, 1, 1);
+    ::encode(info, reply->snapbl);
+  }
+
   // dir + dentry?
   if (dn) {
     reply->head.is_dentry = 1;
