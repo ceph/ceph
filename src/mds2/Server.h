@@ -97,6 +97,8 @@ protected:
   void do_open_truncate(const MDRequestRef& mdr, int cmode);
   void handle_client_open(const MDRequestRef& mdr);
   void handle_client_openc(const MDRequestRef& mdr);
+  void handle_client_setxattr(const MDRequestRef& mdr);
+  void handle_client_removexattr(const MDRequestRef& mdr);
 
   void __inode_update_finish(const MDRequestRef& mdr, bool truncate_smaller);
   void __mknod_finish(const MDRequestRef& mdr);

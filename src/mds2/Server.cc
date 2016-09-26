@@ -749,6 +749,12 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     case CEPH_MDS_OP_RENAME:
       handle_client_rename(mdr);
       break;
+    case CEPH_MDS_OP_SETXATTR:
+      handle_client_setxattr(mdr);
+      break;
+    case CEPH_MDS_OP_RMXATTR:
+      handle_client_removexattr(mdr);
+      break;
     default:
       dout(1) << " unknown client op " << req->get_op() << dendl;
       respond_to_request(mdr, -EOPNOTSUPP);
@@ -1453,7 +1459,6 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
   // journal inode;
 
-  CDentryRef null_dn; 
   journal_and_reply(mdr, 0, -1, le, new C_MDS_inode_update_finish(this, mdr, truncate_smaller));
 }
 
@@ -2691,6 +2696,125 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
   journal_and_reply(mdr, 0, 0, le, new C_MDS_mknod_finish(this, mdr));
 }
 
+void Server::handle_client_setxattr(const MDRequestRef& mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
+
+  if (name.compare(0, 5, "ceph.") == 0) {
+    respond_to_request(mdr, -EOPNOTSUPP);
+    return;
+  }
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
+  if (r < 0)
+    return;
+
+  CInodeRef& in = mdr->in[0];
+
+  xlocks.insert(&in->xattrlock);
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
+
+  mdcache->lock_objects_for_update(mdr, in.get(), false);
+
+  const xattr_map_t *pxattrs = in->get_projected_xattrs();
+  int flags = req->head.args.setxattr.flags;
+  if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(name)) {
+    dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *in << dendl;
+    respond_to_request(mdr, -EEXIST);
+    return;
+  }
+  if ((flags & CEPH_XATTR_REPLACE) && !pxattrs->count(name)) {
+    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *in << dendl;
+    respond_to_request(mdr, -ENODATA);
+    return;
+  }
+
+  int len = req->get_data().length();
+  dout(10) << "setxattr '" << name << "' len " << len << " on " << *in << dendl;
+
+  mdr->add_projected_inode(in.get(), true);
+  xattr_map_t *px;
+  inode_t *pi = in->project_inode(&px);
+  pi->version = in->pre_dirty();
+  pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
+  pi->xattr_version++;
+  px->erase(name);
+  if (!(flags & CEPH_XATTR_REMOVE)) {
+    (*px)[name] = buffer::create(len);
+    if (len)
+      req->get_data().copy(0, len, (*px)[name].c_str());
+  }
+
+  EUpdate *le = new EUpdate(NULL, "setxattr");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), NULL, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
+
+  journal_and_reply(mdr, 0, -1, le, new C_MDS_inode_update_finish(this, mdr, false));
+}
+
+void Server::handle_client_removexattr(const MDRequestRef& mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  string name(req->get_path2());
+
+  if (name.compare(0, 5, "ceph.") == 0) {
+    respond_to_request(mdr, -EOPNOTSUPP);
+    return;
+  }
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  int r = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
+  if (r < 0)
+    return;
+
+  CInodeRef& in = mdr->in[0];
+
+  xlocks.insert(&in->xattrlock);
+  r = locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (r <= 0) {
+    if (r == -EAGAIN)
+      dispatch_client_request(mdr); // revalidate path
+    return;
+  }
+
+  mdcache->lock_objects_for_update(mdr, in.get(), false);
+
+  const xattr_map_t *pxattrs = in->get_projected_xattrs();
+  if (pxattrs->count(name) == 0) {
+    dout(10) << "removexattr '" << name << "' and ENODATA on " << *in << dendl;
+    respond_to_request(mdr, -ENODATA);
+    return;
+  }
+
+  dout(10) << "removexattr '" << name << "' on " << *in << dendl;
+
+  mdr->add_projected_inode(in.get(), true);
+  xattr_map_t *px;
+  inode_t *pi = in->project_inode(&px);
+  pi->version = in->pre_dirty();
+  pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
+  pi->xattr_version++;
+  px->erase(name);
+
+  EUpdate *le = new EUpdate(NULL, "removexattr");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), NULL, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in.get());
+
+  journal_and_reply(mdr, 0, -1, le, new C_MDS_inode_update_finish(this, mdr, false));
+}
 
 /* This function DOES put the passed message before returning*/
 void Server::handle_client_reconnect(MClientReconnect *m)

@@ -916,6 +916,7 @@ add_subdirectory(script)
 set(ceph_mds2_srcs
   mds2/ceph_mds2.cc
   mds2/mdstypes.cc
+  mds2/snap.cc
   mds2/locks.c
   mds2/JournalPointer.cc
   mds2/MDSAuthCaps.cc
