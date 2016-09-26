@@ -38,6 +38,8 @@ class PyModules
 
   mutable Mutex lock;
 
+  std::string get_site_packages();
+
 public:
   static constexpr auto config_prefix = "mgr.";
 

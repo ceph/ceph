@@ -278,6 +278,73 @@ std::string handle_pyerror()
 }
 
 
+std::string PyModules::get_site_packages()
+{
+  std::stringstream site_packages;
+
+  // CPython doesn't auto-add site-packages dirs to sys.path for us,
+  // but it does provide a module that we can ask for them.
+  auto site_module = PyImport_ImportModule("site");
+  assert(site_module);
+
+  auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
+  if (site_packages_fn != nullptr) {
+    auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
+    assert(site_packages_list);
+
+    auto n = PyList_Size(site_packages_list);
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      if (i != 0) {
+        site_packages << ":";
+      }
+      site_packages << PyString_AsString(PyList_GetItem(site_packages_list, i));
+    }
+
+    Py_DECREF(site_packages_list);
+    Py_DECREF(site_packages_fn);
+  } else {
+    // Fall back to generating our own site-packages paths by imitating
+    // what the standard site.py does.  This is annoying but it lets us
+    // run inside virtualenvs :-/
+
+    auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
+    assert(site_packages_fn);
+
+    auto known_paths = PySet_New(nullptr);
+    auto pArgs = PyTuple_Pack(1, known_paths);
+    PyObject_CallObject(site_packages_fn, pArgs);
+    Py_DECREF(pArgs);
+    Py_DECREF(known_paths);
+    Py_DECREF(site_packages_fn);
+
+    auto sys_module = PyImport_ImportModule("sys");
+    assert(sys_module);
+    auto sys_path = PyObject_GetAttrString(sys_module, "path");
+    assert(sys_path);
+
+    dout(1) << "sys.path:" << dendl;
+    auto n = PyList_Size(sys_path);
+    bool first = true;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      dout(1) << "  " << PyString_AsString(PyList_GetItem(sys_path, i)) << dendl;
+      if (first) {
+        first = false;
+      } else {
+        site_packages << ":";
+      }
+      site_packages << PyString_AsString(PyList_GetItem(sys_path, i));
+    }
+
+    Py_DECREF(sys_path);
+    Py_DECREF(sys_module);
+  }
+
+  Py_DECREF(site_module);
+
+  return site_packages.str();
+}
+
+
 int PyModules::init()
 {
   Mutex::Locker locker(lock);
@@ -296,20 +363,8 @@ int PyModules::init()
   Py_InitModule("ceph_state", CephStateMethods);
 
   // Configure sys.path to include mgr_module_path
-  const std::string module_path = g_conf->mgr_module_path;
-  dout(4) << "Loading modules from '" << module_path << "'" << dendl;
-  std::string sys_path = Py_GetPath();
-
-  // We need site-packages for flask et al, unless we choose to
-  // embed them in the ceph package.  site-packages is an interpreter-specific
-  // thing, so as an embedded interpreter we're responsible for picking
-  // this.  FIXME: don't hardcode this.
-  std::string site_packages = "/usr/lib/python2.7/site-packages:/usr/lib64/python2.7/site-packages:/usr/lib64/python2.7";
-  sys_path += ":";
-  sys_path += site_packages;
-
-  sys_path += ":";
-  sys_path += module_path;
+  std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
+                         + ":" + g_conf->mgr_module_path;
   dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
   PySys_SetPath((char*)(sys_path.c_str()));
 
@@ -338,13 +393,7 @@ int PyModules::init()
   } 
 
   // Drop the GIL
-#if 1
   PyThreadState *tstate = PyEval_SaveThread();
-#else
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
-  PyGILState_Release(gstate);
-#endif
   
   return 0;
 }
