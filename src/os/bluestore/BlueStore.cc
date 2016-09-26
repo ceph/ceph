@@ -2342,6 +2342,8 @@ void BlueStore::_init_logger()
     "Average compress latency");
   b.add_time_avg(l_bluestore_decompress_lat, "decompress_lat",
     "Average decompress latency");
+  b.add_time_avg(l_bluestore_csum_lat, "csum_lat",
+    "Average checksum latency");
   b.add_u64(l_bluestore_compress_success_count, "compress_success_count",
     "Sum for beneficial compress ops");
 
@@ -3945,6 +3947,7 @@ int BlueStore::fsck()
         if (expecting_shards.empty()) {
           derr << __func__ << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
+          ++errors;
           continue;
         }
 	while (expecting_shards.front() > it->key()) {
@@ -3962,8 +3965,8 @@ int BlueStore::fsck()
       }
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
-	dout(30) << __func__ << "  bad object key "
-		 << pretty_binary_string(it->key()) << dendl;
+        derr << __func__ << "  bad object key "
+             << pretty_binary_string(it->key()) << dendl;
 	++errors;
 	continue;
       }
@@ -3982,8 +3985,8 @@ int BlueStore::fsck()
 	  }
 	}
 	if (!c) {
-	  dout(30) << __func__ << "  stray object " << oid
-		   << " not owned by any collection" << dendl;
+          derr << __func__ << "  stray object " << oid
+               << " not owned by any collection" << dendl;
 	  ++errors;
 	  continue;
 	}
@@ -4115,7 +4118,6 @@ int BlueStore::fsck()
 	    dout(30) << __func__
 		     << "  got " << pretty_binary_string(it->key())
 		     << " -> " << user_key << dendl;
-	    assert(it->key() < tail);
 	  }
 	  it->next();
 	}
@@ -4812,6 +4814,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 {
   int bad;
   uint64_t bad_csum;
+  utime_t start = ceph_clock_now(g_ceph_context);
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
@@ -4834,10 +4837,9 @@ int BlueStore::_verify_csum(OnodeRef& o,
     } else {
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
-    return r;
-  } else {
-    return 0;
   }
+  logger->tinc(l_bluestore_csum_lat, ceph_clock_now(g_ceph_context) - start);
+  return r;
 }
 
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
@@ -4951,7 +4953,7 @@ int BlueStore::fiemap(
     g_conf->bluestore_buffer_cache_size);
   ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size = 0 (" << m << ")" << std::dec << dendl;
+	   << " size = 0x(" << m << ")" << std::dec << dendl;
   return 0;
 }
 
