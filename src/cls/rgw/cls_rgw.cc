@@ -59,9 +59,6 @@ cls_method_handle_t h_rgw_lc_get_head;
 cls_method_handle_t h_rgw_lc_list_entries;
 
 
-#define ROUND_BLOCK_SIZE 4096
-
-
 #define BI_PREFIX_CHAR 0x80
 
 #define BI_BUCKET_OBJS_INDEX          0
@@ -78,11 +75,6 @@ static string bucket_index_prefixes[] = { "", /* special handling for the objs l
 
                                           /* this must be the last index */
                                           "9999_",};
-
-static uint64_t get_rounded_size(uint64_t size)
-{
-  return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
-}
 
 static bool bi_is_objs_index(const string& s) {
   return ((unsigned char)s[0] != BI_PREFIX_CHAR);
@@ -543,7 +535,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
       struct rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
       stats.num_entries++;
       stats.total_size += entry.meta.accounted_size;
-      stats.total_size_rounded += get_rounded_size(entry.meta.accounted_size);
+      stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
 
       start_obj = kiter->first;
     }
@@ -747,7 +739,7 @@ static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_buc
   struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
   stats.num_entries--;
   stats.total_size -= entry.meta.accounted_size;
-  stats.total_size_rounded -= get_rounded_size(entry.meta.accounted_size);
+  stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
 }
 
 static void log_entry(const char *func, const char *str, struct rgw_bucket_dir_entry *entry)
@@ -932,7 +924,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.tag = op.tag;
       stats.num_entries++;
       stats.total_size += meta.accounted_size;
-      stats.total_size_rounded += get_rounded_size(meta.accounted_size);
+      stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
       int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1962,7 +1954,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
-        old_stats.total_size_rounded -= get_rounded_size(cur_disk.meta.accounted_size);
+        old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
         header_changed = true;
       }
       struct rgw_bucket_category_stats& stats =
@@ -1989,7 +1981,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
                 cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
         stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
-        stats.total_size_rounded += get_rounded_size(cur_change.meta.accounted_size);
+        stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
         header_changed = true;
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
