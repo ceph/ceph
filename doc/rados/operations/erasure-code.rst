@@ -34,7 +34,6 @@ instead of 2TB to store 1TB of data. The default profile can be
 displayed with::
 
     $ ceph osd erasure-code-profile get default
-    directory=.libs
     k=2
     m=1
     plugin=jerasure
