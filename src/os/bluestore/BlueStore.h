@@ -555,6 +555,7 @@ public:
 
     ExtentMap(Onode *o);
     ~ExtentMap() {
+      spanning_blob_map.clear_and_dispose([&](Blob *b) { b->put(); });
       extent_map.clear_and_dispose([&](Extent *e) { delete e; });
     }
 
