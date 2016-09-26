@@ -26,12 +26,19 @@ AC_DEFUN([AX_ARM_FEATURES],
         AC_DEFINE(HAVE_NEON,,[Support NEON instructions])
         AC_SUBST(ARM_NEON_FLAGS)
       fi
-      AX_CHECK_COMPILE_FLAG(-march=armv8-a+crc, ax_cv_support_crc_ext=yes, [])
+
+      AC_LANG_SAVE
+      AC_LANG_CPLUSPLUS
+      AC_CACHE_CHECK(whether the assembler supports crc extensions,
+                     ax_cv_support_crc_ext, AC_TRY_COMPILE([
+          #define CRC32CX(crc, value) __asm__("crc32cx %w[c], %w[c], %x[v]":[c]"+r"(crc):[v]"r"(value))
+          asm(".arch_extension crc");
+          unsigned int foo(unsigned int ret) {
+              CRC32CX(ret, 0);
+              return ret;
+          }],[ foo(0); ], ax_cv_support_crc_ext=yes, []))
       if test x"$ax_cv_support_crc_ext" = x"yes"; then
-        ARM_ARCH_FLAGS="$ARM_ARCH_FLAGS+crc"
-        ARM_CRC_FLAGS="-march=armv8-a+crc -DARCH_AARCH64"
         AC_DEFINE(HAVE_ARMV8_CRC,,[Support ARMv8 CRC instructions])
-        AC_SUBST(ARM_CRC_FLAGS)
       fi
         ARM_FLAGS="$ARM_ARCH_FLAGS $ARM_DEFINE_FLAGS"
     ;;
