@@ -680,9 +680,9 @@ void FileJournal::print_header(const header_t &header) const
   dout(10) << "header: block_size " << header.block_size
 	   << " alignment " << header.alignment
 	   << " max_size " << header.max_size
-	   << dendl;
-  dout(10) << "header: start " << header.start << dendl;
-  dout(10) << " write_pos " << write_pos << dendl;
+           << " start " << header.start
+           << " write_pos " << write_pos 
+           << dendl;
 }
 
 int FileJournal::read_header(header_t *hdr) const
