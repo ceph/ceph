@@ -136,9 +136,12 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
+  uint64_t nonce = 0;
+  get_random_bytes((char*)&nonce, sizeof(nonce));
+
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
-				      getpid(), 0, Messenger::HAS_MANY_CONNECTIONS);
+				      nonce, 0, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
