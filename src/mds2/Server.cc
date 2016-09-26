@@ -1166,7 +1166,7 @@ CInodeRef Server::prepare_new_inode(const MDRequestRef& mdr, CDentryRef& dn,
     pi->gid = req->get_caller_gid();
   }
 
-  pi->ctime = pi->mtime = pi->atime = mdr->get_op_stamp();
+  pi->btime = pi->ctime = pi->mtime = pi->atime = mdr->get_op_stamp();
 
   if (req->get_data().length()) {
     bufferlist::iterator p = req->get_data().begin();
@@ -1414,6 +1414,7 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
 
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
@@ -1426,7 +1427,9 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     pi->mtime = req->head.args.setattr.mtime;
   if (mask & CEPH_SETATTR_ATIME)
     pi->atime = req->head.args.setattr.atime;
-  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
+  if (mask & CEPH_SETATTR_BTIME)
+    pi->btime = req->head.args.setattr.btime;
+  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_BTIME))
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
 
   bool truncate_smaller = false;
@@ -2045,6 +2048,7 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->nlink--;
 
   dn->push_projected_linkage();
@@ -2143,6 +2147,7 @@ void Server::handle_client_link(const MDRequestRef& mdr)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
   pi->nlink++;
 
   mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), dn->get_dir(), PREDIRTY_DIR, 1);
@@ -2401,8 +2406,10 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
 
   if (!linkmerge) {
     pi->ctime = mdr->get_op_stamp();
+    pi->change_attr++;
     if (tpi) {
       tpi->ctime = mdr->get_op_stamp();
+      tpi->change_attr++;
       tpi->nlink--;
     }
   }
@@ -2496,6 +2503,7 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
+  pi->change_attr++;
 
   assert(!pi->is_truncating());
   uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);

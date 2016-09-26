@@ -201,7 +201,7 @@ CInodeRef MDCache::create_system_inode(inodeno_t ino, int mode)
   pi->xattr_version = 1;
   pi->mode = 0500 | mode;
   pi->size = 0;
-  pi->ctime = pi->mtime = ceph_clock_now(g_ceph_context);
+  pi->btime = pi->ctime = pi->mtime = ceph_clock_now(g_ceph_context);
   pi->nlink = 1;
   pi->truncate_size = -1ull;
 
@@ -1160,6 +1160,7 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
       parent->resync_accounted_rstat(pf);
 
       if (update_parent_mtime) {
+	pf->fragstat.change_attr++;
 	pf->fragstat.mtime = mut->get_op_stamp();
 	if (pf->fragstat.mtime > pf->rstat.rctime)
 	  pf->rstat.rctime = pf->fragstat.mtime;
@@ -1233,11 +1234,13 @@ void MDCache::predirty_journal_parents(const MutationRef& mut, EMetaBlob *blob,
     pi->version = pin->pre_dirty();
 
     if (update_parent_mtime || linkunlink) {
-      bool touched_mtime = false;
-      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      bool touched_mtime = false, touched_chattr = false;
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime, &touched_chattr);
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
+      if (touched_chattr)
+	pi->change_attr = pi->dirstat.change_attr;
     }
 
     // frag rstat -> inode rstat

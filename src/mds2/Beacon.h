@@ -95,6 +95,7 @@ public:
   void ms_handle_connect(Connection *c) {}
   bool ms_handle_reset(Connection *c) {return false;}
   void ms_handle_remote_reset(Connection *c) {}
+  bool ms_handle_refused(Connection *c) {return false;}
 
   void set_mds(MDSRank *mds);
   void notify_health();

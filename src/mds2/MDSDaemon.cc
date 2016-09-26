@@ -913,6 +913,12 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
   }
 }
 
+bool MDSDaemon::ms_handle_refused(Connection *con)
+{
+  // do nothing for now
+  return false;
+}
+
 bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& is_valid, CryptoKey& session_key)

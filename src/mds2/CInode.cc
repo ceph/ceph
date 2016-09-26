@@ -712,6 +712,10 @@ int64_t CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     ::encode(layout.pool_ns, bl);
   }
+  if (session->connection->has_feature(CEPH_FEATURE_FS_BTIME)) {
+    ::encode(any_i->btime, bl);
+    ::encode(any_i->change_attr, bl);
+  }
 
   return ecap.cap_id;
 }
@@ -744,6 +748,8 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->mtime = i->mtime;
   m->atime = i->atime;
   m->ctime = i->ctime;
+  m->btime = i->btime;
+  m->change_attr = i->change_attr;
   m->time_warp_seq = i->time_warp_seq;
 
   m->inline_version = CEPH_INLINE_NONE;
@@ -1120,7 +1126,7 @@ void CInode::finish_scatter_gather_update(int type, const MutationRef& mut)
 	if (pf->accounted_fragstat.version == pi->dirstat.version - 1) {
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime);
 	} else {
 	  dout(20) << fg << " skipping STALE accounted_fragstat " << pf->accounted_fragstat << dendl;
 	}
