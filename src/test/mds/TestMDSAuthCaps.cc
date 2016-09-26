@@ -119,7 +119,7 @@ TEST(MDSAuthCaps, AllowAll) {
 
 TEST(MDSAuthCaps, AllowUid) {
   MDSAuthCaps cap(g_ceph_context);
-  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10 gids=10,11,12; allow * uid=12 gids=10,12", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10 gids=10,11,12; allow * uid=12 gids=12,10", NULL));
   ASSERT_FALSE(cap.allow_all());
 
   // uid/gid must be valid
