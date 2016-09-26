@@ -16,9 +16,20 @@
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
   set(HAVE_ARM 1) 
-  CHECK_C_COMPILER_FLAG(-march=armv8-a+crc HAVE_ARMV8_CRC)
+  set(save_quiet ${CMAKE_REQUIRED_QUIET})
+  set(CMAKE_REQUIRED_QUIET true)
+  include(CheckCXXSourceCompiles)
+  check_cxx_source_compiles("
+    #define CRC32CX(crc, value) __asm__(\"crc32cx %w[c], %w[c], %x[v]\":[c]\"+r\"(crc):[v]\"r\"(value))
+    asm(\".arch_extension crc\");
+    unsigned int foo(unsigned int ret) {
+      CRC32CX(ret, 0);
+      return ret;
+    }
+    int main() { foo(0); }" HAVE_ARMV8_CRC)
+  set(CMAKE_REQUIRED_QUIET ${save_quiet})
   if(HAVE_ARMV8_CRC)
-    set(ARM_CRC_FLAGS "-march=armv8-a+crc")
+    message(STATUS " aarch64 crc extensions supported")
   endif()
   CHECK_C_COMPILER_FLAG(-march=armv8-a+simd HAVE_ARMV8_SIMD)
   if(HAVE_ARMV8_SIMD)
