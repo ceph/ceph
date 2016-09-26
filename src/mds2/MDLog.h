@@ -204,10 +204,6 @@ private:
   void _start_new_segment();
   void _prepare_new_segment();
   void _journal_segment_subtree_map(MDSLogContextBase *onsync);
-  LogSegment *_get_current_segment() { 
-    assert(!segments.empty());
-    return segments.rbegin()->second;
-  }
   LogSegment *_peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
   }
@@ -220,10 +216,14 @@ public:
   }
   void prepare_new_segment() {
     Mutex::Locker l(submit_mutex);
-    _prepare_new_segment();
+    return _prepare_new_segment();
   }
   void journal_segment_subtree_map(MDSContextBase *onsync);
 
+  LogSegment *_get_current_segment() { 
+    assert(!segments.empty());
+    return segments.rbegin()->second;
+  }
   LogSegment *get_current_segment() { 
     assert(submit_mutex.is_locked_by_me());
     return _get_current_segment();

@@ -24,10 +24,6 @@ MDCache::MDCache(MDSRank *_mds) :
   request_map_lock("MDCache::request_map_lock"),
   rename_dir_mutex("MDCache::rename_dir_mutex")
 {
-  default_file_layout = file_layout_t::get_default();
-  default_file_layout.pool_id = mds->mdsmap->get_first_data_pool();
-  default_log_layout = file_layout_t::get_default();
-  default_log_layout.pool_id = mds->mdsmap->get_metadata_pool();
 }
 
 void MDCache::add_inode(CInode *in)
@@ -122,7 +118,7 @@ CInodeRef MDCache::create_system_inode(inodeno_t ino, int mode)
   inode_t* pi = in->__get_inode();
 
   pi->ino = ino;
-  pi->version = 1;
+  pi->version = 0;
   pi->xattr_version = 1;
   pi->mode = 0500 | mode;
   pi->size = 0;
@@ -147,51 +143,66 @@ CInodeRef MDCache::create_system_inode(inodeno_t ino, int mode)
   return in;
 }
 
-void MDCache::create_empty_hierarchy()
+void MDCache::create_empty_hierarchy(MDSGather *gather)
 {
   // create root inode 
   create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  if (!gather) {
+    // create undef inode for log replay
+    return;
+  }
+
+  LogSegment *ls = mds->mdlog->_get_current_segment();
 
   root->mutex_lock();
   CDirRef rootdir = root->get_or_open_dirfrag(frag_t());
+  rootdir->__set_version(1);
 
-  fnode_t *pf = rootdir->__get_fnode();
-  pf->accounted_fragstat = pf->fragstat;
-  pf->accounted_rstat = pf->rstat;
+  rootdir->mark_complete();
+  rootdir->mark_dirty(rootdir->pre_dirty(), ls);
+  rootdir->commit(gather->new_sub());
 
-  inode_t *pi = root->__get_inode();
-  pi->dirstat = pf->fragstat;
-  pi->rstat = pf->rstat;
-  pi->rstat.rsubdirs++; 
-  pi->accounted_rstat = pi->rstat;
+  root->mark_dirty(root->pre_dirty(), ls);
+  root->store(gather->new_sub());
 
   root->mutex_unlock();
 }
 
-void MDCache::create_mydir_hierarchy()
+void MDCache::create_mydir_hierarchy(MDSGather *gather)
 {
   // create mds dir
   create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR);
+  if (!gather) {
+    // create undef inode for log replay
+    return;
+  }
 
   myin->mutex_lock();
 
   CDirRef mydir = myin->get_or_open_dirfrag(frag_t());
+  mydir->__set_version(1);
   fnode_t *pf = mydir->__get_fnode();
+
+  LogSegment *ls = mds->mdlog->_get_current_segment();
 
   // stray dir
   for (int i = 0; i < NUM_STRAY; ++i) {
     CInodeRef stray = create_system_inode(MDS_INO_STRAY(mds->get_nodeid(), i), S_IFDIR);
     stringstream name;
     name << "stray" << i;
-    mydir->add_primary_dentry(name.str(), stray.get());
 
     stray->mutex_lock();
+    mydir->add_primary_dentry(name.str(), stray.get());
 
     CDirRef straydir = stray->get_or_open_dirfrag(frag_t());
-    stray->__get_inode()->dirstat = straydir->get_fnode()->fragstat;
     pf->rstat.add(stray->get_inode()->rstat);
     pf->fragstat.nsubdirs++;
 
+    straydir->mark_complete();
+    straydir->mark_dirty(straydir->pre_dirty(), ls);
+    straydir->commit(gather->new_sub());
+
+    stray->mark_dirty(stray->pre_dirty(), ls);
     stray->mutex_unlock();
   }
 
@@ -204,7 +215,135 @@ void MDCache::create_mydir_hierarchy()
   pi->rstat.rsubdirs++;
   pi->accounted_rstat = pi->rstat;
 
+  mydir->mark_complete();
+  mydir->mark_dirty(mydir->pre_dirty(), ls);
+  mydir->commit(gather->new_sub());
+
+  myin->mark_dirty(myin->pre_dirty(), ls);
+  myin->store(gather->new_sub());
+
   myin->mutex_unlock();
+}
+
+class C_MDS_OpenRootMydir : public MDSContextBase {
+  MDCache *mdcache;
+  MDSRank* get_mds() { return mdcache->mds; }
+public:
+  explicit C_MDS_OpenRootMydir(MDCache *c) : mdcache(c) {}
+  void finish(int r) {
+    if (r < 0) {
+      // If we can't open root, something disastrous has happened: mark
+      // this rank damaged for operator intervention.  Note that
+      // it is not okay to call suicide() here because we are in
+      // a Finisher callback.
+      get_mds()->damaged();
+      assert(0);  // damaged should never return
+      return;
+    }
+    mdcache->open_root_mydir();
+  }
+};
+
+void MDCache::open_root_mydir()
+{
+  assert(root);
+  assert(myin);
+
+  MDSGatherBuilder gather(g_ceph_context);
+  if (root->get_version() == 0) {
+    root->mutex_lock();
+    root->fetch(gather.new_sub());
+    root->mutex_unlock();
+  }
+
+  if (myin->get_version() == 0) {
+    myin->mutex_lock();
+    myin->fetch(gather.new_sub());
+    myin->mutex_unlock();
+  } else {
+    populate_mydir(gather);
+  }
+
+  if (gather.has_subs()) {
+    gather.set_finisher(new C_MDS_OpenRootMydir(this));
+    gather.activate();
+  } else {
+    dout(10) << "open_root_mydir done" << dendl;
+  }
+}
+
+void MDCache::populate_mydir(MDSGatherBuilder& gather)
+{
+  assert(myin);
+
+  myin->mutex_lock();
+  CDirRef mydir = myin->get_or_open_dirfrag(frag_t());
+
+  dout(10) << "populate_mydir " << *mydir << dendl;
+
+  if (!mydir->is_complete()) {
+    mydir->fetch(gather.new_sub());
+    myin->mutex_unlock();
+    return;
+  }
+
+/*
+  FIXME:
+  if (mydir->get_version() == 0 && mydir->state_test(CDir::STATE_BADFRAG)) {
+    // A missing dirfrag, we will recreate it.  Before that, we must dirty
+    // it before dirtying any of the strays we create within it.
+    mds->clog->warn() << "fragment " << mydir->dirfrag() << " was unreadable, "
+      "recreating it now";
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    mydir->state_clear(CDir::STATE_BADFRAG);
+    mydir->mark_complete();
+    mydir->mark_dirty(mydir->pre_dirty(), ls);
+  }
+*/
+
+  // open or create stray
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    stringstream name;
+    name << "stray" << i;
+    CDentryRef straydn = mydir->lookup(name.str());
+ 
+    // allow for older fs's with stray instead of stray0
+    assert(straydn);
+    assert(strays[i]);
+
+    myin->mutex_unlock();
+    strays[i]->mutex_lock();
+
+    // we make multiple passes through this method; make sure we only pin each stray once.
+    if (!strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
+      strays[i]->get(CInode::PIN_STRAY);
+      strays[i]->state_set(CInode::STATE_STRAYPINNED);
+      //strays[i]->get_stickydirs();
+    }
+    dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
+
+    // open all frags
+    list<frag_t> ls;
+    strays[i]->dirfragtree.get_leaves(ls);
+    for (auto fg : ls) {
+      CDirRef dir = strays[i]->get_or_open_dirfrag(fg);
+
+      // DamageTable applies special handling to strays: it will
+      // have damaged() us out if one is damaged.
+      // assert(!dir->state_test(CDir::STATE_BADFRAG));
+
+      if (dir->get_version() == 0)
+        dir->fetch(gather.new_sub());
+    }
+
+    strays[i]->mutex_unlock();
+    myin->mutex_lock();
+  }
+
+  myin->mutex_unlock();
+
+  // okay!
+  //dout(10) << "populate_mydir done" << dendl;
 }
 
 bool MDCache::trim_inode(CDentry *dn, CInode *in)
@@ -307,6 +446,10 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
 	}
 	assert(in);
       }
+    } else if (!curdir->is_complete() &&
+	       !(curdir->has_bloom() && !curdir->is_in_bloom(dname))) {
+      curdir->fetch(new C_MDS_RetryRequest(mds, mdr));
+      err = 1;
     } else {
       if (pdnvec) {
 	if (depth == path.depth() - 1) {
@@ -334,6 +477,14 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
     pin->swap(cur);
 
   return err;
+}
+
+void MDCache::init_layouts()
+{
+  default_file_layout = file_layout_t::get_default();
+  default_file_layout.pool_id = mds->mdsmap->get_first_data_pool();
+  default_log_layout = file_layout_t::get_default();
+  default_log_layout.pool_id = mds->mdsmap->get_metadata_pool();
 }
 
 MDRequestRef MDCache::request_start(MClientRequest *req)

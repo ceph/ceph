@@ -436,7 +436,7 @@ private:
       in = dn->get_projected_linkage()->get_inode();
 
     // make note of where this inode was last journaled
-    in->last_journaled = event_seq;
+    // FIXME: in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     const inode_t *pi = in->get_projected_inode();
@@ -493,7 +493,7 @@ private:
 
   void add_root(bool dirty, CInode *in, const inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 		const xattr_map_t *px=0) {
-    in->last_journaled = event_seq;
+    // FIXME: in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     if (!pi) pi = in->get_projected_inode();

@@ -330,7 +330,6 @@ EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
 
 void EMetaBlob::update_segment(LogSegment *ls)
 {
-#if 0
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
 
@@ -340,6 +339,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
   if (sessionmapv)
     ls->sessionmapv = sessionmapv;
 
+#if 0
   // truncated inodes
   // -> handled directly by Server.cc
 
@@ -1129,17 +1129,17 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (mask)
 	diri->mark_dirty_scattered(logseg, mask);
     }
+    if (lump.is_complete())
+      dir->mark_complete();
     /*
+    if (lump.is_new())
+      dir->mark_new(logseg);
     if (lump.is_dirty_dft()) {
       dout(10) << "EMetaBlob.replay      dirty dirfragtree on " << *dir << dendl;
       dir->state_set(CDir::STATE_DIRTYDFT);
       mds->locker->mark_updated_scatterlock(&dir->inode->dirfragtreelock);
       logseg->dirty_dirfrag_dirfragtree.push_back(&dir->inode->item_dirty_dirfrag_dirfragtree);
     }
-    if (lump.is_new())
-      dir->mark_new(logseg);
-    if (lump.is_complete())
-      dir->mark_complete();
     */
     
     dout(10) << "EMetaBlob.replay updated dir " << *dir << dendl;  
@@ -1912,8 +1912,8 @@ void EUpdate::generate_test_instances(list<EUpdate*>& ls)
 
 void EUpdate::update_segment()
 {
-#if 0
   metablob.update_segment(_segment);
+#if 0
 
   if (had_slaves)
     _segment->uncommitted_masters.insert(reqid);

@@ -21,17 +21,18 @@ typedef std::map<string, bufferptr> xattr_map_t;
 
 class CInode : public CObject {
 public:
-  MDCache* const mdcache;
-
   // pins
   static const int PIN_DIRFRAG =		-1;
   static const int PIN_CAPS =			2;  // client caps
+  static const int PIN_STRAY =			19; 
   static const int PIN_DIRTYRSTAT =		21;
   // states
   static const unsigned STATE_FREEING =		(1<<0);
   static const unsigned STATE_CHECKINGMAXSIZE =	(1<<1);
   static const unsigned STATE_DIRTYRSTAT =	(1<<15);
+  static const unsigned STATE_STRAYPINNED =	(1<<16);
 
+  MDCache* const mdcache;
 protected:
 
   inode_t inode;
@@ -181,17 +182,21 @@ public:
 		       unsigned max_bytes=0, int getattr_wants=0);
   void encode_cap_message(MClientCaps *m, Capability *cap);
 
-
-
+protected:
   object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
   void encode(bufferlist &bl, uint64_t features);
-  void encode_bare(bufferlist &bl, uint64_t features);
+  void decode(bufferlist::iterator &bl);
 
-protected:
   void _stored(int r, version_t v, MDSContextBase *fin);
+  void _fetched(int r, bufferlist& bl, Context *fin);
   friend class C_Inode_Stored;
+  friend class C_Inode_Fetched;
 public:
+  void encode_bare(bufferlist &bl, uint64_t features);
+  void decode_bare(bufferlist::iterator &bl, __u8 struct_v=4);
+
   void store(MDSContextBase *fin);
+  void fetch(MDSContextBase *fin);
 
 protected:
   static LockType versionlock_type;
@@ -324,13 +329,9 @@ protected:
   void last_put();
 
 public: // crap
-  static snapid_t first, last;
-  static snapid_t oldest_snap;
+  static snapid_t first, last, oldest_snap;
   static compact_map<snapid_t, old_inode_t> old_inodes;
   static fragtree_t dirfragtree;
-
-  uint64_t last_journaled;
-
 };
 
 ostream& operator<<(ostream& out, const CInode& in);

@@ -72,13 +72,20 @@ ostream& operator<<(ostream& out, const CDir& dir)
   return out;
 }
 
-CDir::CDir(CInode *i) :
-  CObject("CDir"), mdcache(i->mdcache), inode(i),
+CDir::CDir(CInode *in) :
+  CObject("CDir"), mdcache(in->mdcache), inode(in),
   projected_version(0),
   committing_version(0), committed_version(0),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
-  dirty_rstat_inodes(member_offset(CInode, item_dirty_rstat))
+  num_head_items(0), num_head_null(0),
+  dirty_rstat_inodes(member_offset(CInode, item_dirty_rstat)),
+  bloom(NULL)
 {
+}
+
+CDir::~CDir()
+{
+  remove_bloom();
 }
 
 dirfrag_t CDir::dirfrag() const
@@ -200,18 +207,24 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, uint8_t d_type)
 {
 //  dout(12) << "link_remote_inode " << *dn << " remote " << ino << dendl;
   dn->link_inode_work(ino, d_type);
+  num_head_items++;
+  num_head_null--;
 }
 
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
 { 
 //  dout(12) << "link_primary_inode " << *dn << " " << *in << dendl;
   dn->link_inode_work(in);
+  num_head_items++;
+  num_head_null--;
 }
 
 void CDir::unlink_inode(CDentry *dn)
 {
 //  dout(12) << "unlink_inode " << *dn << dendl;
   dn->unlink_inode_work();
+  num_head_items--;
+  num_head_null++;
 }
 
 CDentryRef CDir::add_null_dentry(const string& dname)
@@ -224,6 +237,8 @@ CDentryRef CDir::add_null_dentry(const string& dname)
   else
     assert(items.count(dn->get_key()) == 0);
   items[dn->get_key()] = dn.get();
+
+  num_head_null++;
 
   return dn;
 }
@@ -239,9 +254,9 @@ CDentryRef CDir::add_primary_dentry(const string& dname, CInode *in)
     assert(items.count(dn->get_key()) == 0);
   items[dn->get_key()] = dn.get();
 
-  in->mutex_lock();
+  num_head_items++;
+
   dn->link_inode_work(in);
-  in->mutex_unlock();
   return dn;
 }
 
@@ -255,6 +270,8 @@ CDentryRef CDir::add_remote_dentry(const string& dname, inodeno_t ino, uint8_t d
   else
     assert(items.count(dn->get_key()) == 0);
   items[dn->get_key()] = dn.get();
+
+  num_head_items++;
 
   dn->link_inode_work(ino, d_type);
   return dn;
@@ -270,6 +287,8 @@ void CDir::remove_dentry(CDentry *dn)
   auto it = items.find(dn->get_key());
   assert(it != items.end());
   items.erase(it);
+
+  num_head_null--;
 
   if (items.empty())
     put(PIN_CHILD);
@@ -421,7 +440,7 @@ void CDir::commit(MDSContextBase *c, int op_prio)
 
   // auth_pin on first waiter
   if (waiting_for_commit.empty())
-    get(PIN_COMITTING);
+    get(PIN_COMMITTING);
   if (c)
     waiting_for_commit[want].push_back(c);
   else
@@ -714,11 +733,355 @@ void CDir::_committed(int r, version_t v)
 
   // unpin if we kicked the last waiter.
   if (were_waiting && waiting_for_commit.empty())
-    put(PIN_COMITTING);
+    put(PIN_COMMITTING);
 
   inode->mutex_unlock();
 
   finish_contexts(g_ceph_context, finished, 0);
+}
+
+
+void CDir::fetch(MDSContextBase *c)
+{
+  inode->mutex_assert_locked_by_me();
+  dout(10) << "fetch " << " on " << *this << dendl;
+
+  assert(!is_complete());
+
+  add_waiter(WAIT_COMPLETE, c);
+
+  if (state_test(CDir::STATE_FETCHING)) {
+    dout(7) << "already fetching; waiting" << dendl;
+    return;
+  }
+
+  state_set(CDir::STATE_FETCHING);
+  get(PIN_FETCHING);
+
+  // if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_fetch);
+
+  std::set<dentry_key_t> empty;
+  _omap_fetch(NULL, empty);
+}
+
+class C_Dir_Fetched : public CDirContext {
+  MDSContextBase *fin;
+public:
+  bufferlist hdrbl;
+  map<string, bufferlist> omap;
+  int ret1, ret2;
+
+  C_Dir_Fetched(CDir *d, MDSContextBase *f) :
+    CDirContext(d), fin(f), ret1(0), ret2(0) { }
+  void finish(int r) {
+    if (r >= 0) r = ret1;
+    if (r >= 0) r = ret2;
+    dir->_omap_fetched(r, hdrbl, omap, !fin);
+    if (fin)
+      fin->complete(r);
+  }
+};
+
+void CDir::_omap_fetch(MDSContextBase *c, const std::set<dentry_key_t>& keys)
+{
+  C_Dir_Fetched *fin = new C_Dir_Fetched(this, c);
+  object_t oid = get_ondisk_object();
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  ObjectOperation rd;
+  rd.omap_get_header(&fin->hdrbl, &fin->ret1);
+  if (keys.empty()) {
+    assert(!c);
+    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->ret2);
+  } else {
+    assert(c);
+    std::set<std::string> str_keys;
+    for (auto p = keys.begin(); p != keys.end(); ++p) {
+      string str;
+      p->encode(str);
+      str_keys.insert(str);
+    }
+    rd.omap_get_vals_by_keys(str_keys, &fin->omap, &fin->ret2);
+  }
+#if 0
+  // check the correctness of backtrace
+  if (g_conf->mds_verify_backtrace > 0 && frag == frag_t()) {
+    rd.getxattr("parent", &fin->btbl, &fin->ret3);
+    rd.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+  } else {
+    fin->ret3 = -ECANCELED;
+  }
+#endif
+  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
+}
+
+
+CDentryRef CDir::_load_dentry(const std::string &dname, const snapid_t last,
+			      bufferlist &bl, const int pos)
+{
+  bufferlist::iterator q = bl.begin();
+
+  snapid_t first;
+  ::decode(first, q);
+
+  // marker
+  char type;
+  ::decode(type, q);
+
+  dout(20) << "_fetched pos " << pos << " marker '" << type << "' dname '" << dname
+           << " [" << first << "," << last << "]"
+           << dendl;
+
+  CDentryRef dn = lookup(dname);
+  if (type == 'L') {
+    // hard link
+    inodeno_t ino;
+    unsigned char d_type;
+    ::decode(ino, q);
+    ::decode(d_type, q);
+
+    if (dn) {
+      if (dn->get_linkage()->get_inode() == 0) {
+        dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
+      } else {
+        dout(12) << "_fetched  had dentry " << *dn << dendl;
+      }
+    } else {
+      // (remote) link
+      dn = add_remote_dentry(dname, ino, d_type);
+
+#if 0
+      // link to inode?
+      CInode *in = cache->get_inode(ino);   // we may or may not have it.
+      if (in) {
+        dn->link_remote(dn->get_linkage(), in);
+        dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
+      } else {
+        dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;
+      }
+#endif
+    }
+  }
+  else if (type == 'I') {
+    if (dn) {
+      if (dn->get_linkage()->is_null()) {
+        dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
+      } else {
+        dout(12) << "_fetched  had dentry " << *dn << dendl;
+      }
+    } else {
+      // add inode
+      CInode* newi = new CInode(mdcache);
+
+      try {
+	newi->decode_bare(q);
+      } catch (buffer::error &err) {
+	delete newi;
+	throw err;
+      }
+
+      CInodeRef in = mdcache->get_inode(newi->ino(), last);
+      if (!in) {
+	in = newi;
+	in->mutex_lock();
+
+	dn = add_primary_dentry(dname, in.get()); // link
+
+	if (in->get_inode()->is_dirty_rstat())
+	  in->mark_dirty_rstat();
+
+	mdcache->add_inode(in.get()); // add
+
+	in->mutex_unlock();
+
+	/*
+	if (inode->is_stray()) {
+	  cache->notify_stray_loaded(dn);
+	}
+	*/
+      } else {
+	LogChannelRef clog = mdcache->mds->clog;
+	string dirpath, inopath;
+	this->make_string(dirpath);
+	in->mutex_lock();
+	in->make_string(inopath);
+	in->mutex_unlock();
+	dout(0) << "_fetched  badness: got (but i already had) " << *in << dendl;
+	clog->error() << "loaded dup inode " << newi->vino()
+		      << " v" << newi->get_inode()->version << " at " << dirpath << "/" << dname
+		      << ", but inode " << in->vino() << " v" << in->get_inode()->version
+		      << " already exists at " << inopath << "\n";
+	delete newi;
+	return dn;
+      }
+    }
+  } else {
+    std::ostringstream oss;
+    oss << "Invalid tag char '" << type << "' pos " << pos;
+    throw buffer::malformed_input(oss.str());
+  }
+
+  return dn;
+}
+
+void CDir::_omap_fetched(int r, bufferlist& hdrbl, map<string, bufferlist>& omap,
+			 bool complete)
+{
+  LogChannelRef clog = mdcache->mds->clog;
+  dout(10) << "_fetched header " << hdrbl.length() << " bytes "
+           << omap.size() << " keys for " << *this << dendl;
+
+  assert(r == 0 || r == -ENOENT || r == -ENODATA);
+
+  if (hdrbl.length() == 0) {
+    dout(0) << "_fetched missing object for " << *this << dendl;
+    clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
+
+    go_bad(complete);
+    return;
+  }
+
+  fnode_t got_fnode;
+  {
+    bufferlist::iterator p = hdrbl.begin();
+    try {
+      ::decode(got_fnode, p);
+    } catch (const buffer::error &err) {
+      derr << "Corrupt fnode in dirfrag " << dirfrag() << ": " << err << dendl;
+      clog->warn() << "Corrupt fnode header in " << dirfrag() << ": " << err;
+      go_bad(complete);
+      return;
+    }
+    if (!p.end()) {
+      clog->warn() << "header buffer of dir " << dirfrag() << " has "
+		   << hdrbl.length() - p.get_off() << " extra bytes\n";
+      go_bad(complete);
+      return;
+    }
+  }
+  dout(10) << "_fetched version " << got_fnode.version << dendl;
+
+  inode->mutex_lock();
+
+  // take the loaded fnode?
+  // only if we are a fresh CDir* with no prior state.
+  if (get_version() == 0) {
+    assert(!is_projected());
+    assert(!state_test(STATE_COMMITTING));
+    fnode = got_fnode;
+    projected_version = committing_version = committed_version = got_fnode.version;
+  }
+
+  unsigned pos = omap.size() - 1;
+  for (auto p = omap.rbegin(); p != omap.rend(); ++p, --pos) {
+    string dname;
+    snapid_t last;
+    dentry_key_t::decode_helper(p->first, dname, last);
+
+    CDentryRef dn;
+    try {
+      dn = _load_dentry(dname, last, p->second, pos);
+    } catch (const buffer::error &err) {
+      clog->warn() << "Corrupt dentry '" << dname << "' in dir frag "
+		   << dirfrag() << ": " << err;
+
+      // Remember that this dentry is damaged.  Subsequent operations
+      // that try to act directly on it will get their EIOs, but this
+      // dirfrag as a whole will continue to look okay (minus the
+      // mysteriously-missing dentry)
+      go_bad_dentry(last, dname);
+
+      // Anyone who was WAIT_DENTRY for this guy will get kicked
+      // to RetryRequest, and hit the DamageTable-interrogating path.
+      // Stats will now be bogus because we will think we're complete,
+      // but have 1 or more missing dentries.
+      continue;
+    }
+
+#if 0
+    if (dn && (wanted_items.count(dname) > 0 || !complete)) {
+      dout(10) << " touching wanted dn " << *dn << dendl;
+      inode->mdcache->touch_dentry(dn);
+    }
+#endif
+
+    /** clean underwater item?
+     * Underwater item is something that is dirty in our cache from
+     * journal replay, but was previously flushed to disk before the
+     * mds failed.
+     *
+     * We only do this is committed_version == 0. that implies either
+     * - this is a fetch after from a clean/empty CDir is created
+     *   (and has no effect, since the dn won't exist); or
+     * - this is a fetch after _recovery_, which is what we're worried 
+     *   about.  Items that are marked dirty from the journal should be
+     *   marked clean if they appear on disk.
+     */
+    if (committed_version == 0 &&
+	dn && dn->is_dirty() &&
+	dn->get_version() <= got_fnode.version) {
+      dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
+      dn->mark_clean();
+
+      if (dn->get_linkage()->is_primary()) {
+	CInodeRef in = dn->get_linkage()->get_inode();
+	in->mutex_lock();
+        assert(in->get_version() <= got_fnode.version);
+        dout(10) << "_fetched  had underwater inode " << *in << ", marking clean" << dendl;
+        in->mark_clean();
+	in->mutex_unlock();
+      }
+    }
+  }
+
+  //cache->mds->logger->inc("newin", num_new_inodes_loaded);
+
+  std::list<MDSContextBase*> finished;
+  // mark complete, !fetching
+  if (complete) {
+    assert(state_test(STATE_FETCHING));
+    state_clear(STATE_FETCHING);
+    mark_complete();
+    take_waiting(WAIT_COMPLETE, finished);
+    put(PIN_FETCHING);
+  }
+
+  inode->mutex_unlock();
+
+  finish_contexts(g_ceph_context, finished, 0);
+}
+
+void CDir::mark_complete() {
+  state_set(STATE_COMPLETE);
+  remove_bloom();
+}
+
+void CDir::add_to_bloom(CDentry *dn)
+{
+  assert(dn->last == CEPH_NOSNAP);
+  if (!bloom) {
+    /* not create bloom filter for incomplete dir that was added by log replay */
+    if (!is_complete())
+      return;
+    unsigned size = num_head_items;
+    if (size < 100)
+      size = 100;
+    bloom = new bloom_filter(size, 1.0 / size, 0);
+  }
+  /* This size and false positive probability is completely random.*/
+  bloom->insert(dn->get_name().c_str(), dn->get_name().size());
+}
+
+bool CDir::is_in_bloom(const string& name)
+{
+  if (!bloom)
+    return false;
+  return bloom->contains(name.c_str(), name.size());
+}
+
+void CDir::remove_bloom()
+{
+  delete bloom;
+  bloom = NULL;
 }
 
 void CDir::first_get()
@@ -730,7 +1093,6 @@ void CDir::last_put()
 {
   inode->put(CInode::PIN_DIRFRAG);
 }
-
 
 void intrusive_ptr_add_ref(CDir *o)
 {

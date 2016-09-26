@@ -133,10 +133,7 @@ void MDLog::create(MDSContextBase *c)
 {
   dout(5) << "create empty log" << dendl;
 
-  C_GatherBuilder gather(g_ceph_context);
-  // This requires an OnFinisher wrapper because Journaler will call back the completion for write_head inside its own lock
-  // XXX but should maybe that be handled inside Journaler?
-  gather.set_finisher(new C_OnFinisher(c, mds->finisher));
+  C_GatherBuilder gather(g_ceph_context, c);
 
   // The inode of the default Journaler we will create
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
@@ -569,7 +566,7 @@ void MDLog::_journal_segment_subtree_map(MDSLogContextBase *onsync)
   dout(7) << __func__ << dendl;
   ESubtreeMap *sle = mds->mdcache->create_subtree_map();
   sle->event_seq = get_last_segment_seq();
-  _submit_entry(sle, onsync, false);
+  _submit_entry(sle, onsync, !!onsync);
 }
 
 void MDLog::journal_segment_subtree_map(MDSContextBase *onsync) {
@@ -795,8 +792,7 @@ void MDLog::_trim_expired_segments()
       
     // this was the oldest segment, adjust expire pos
     if (journaler->get_expire_pos() < ls->end) {
-      // FIXME: log reply code is not finished
-      //journaler->set_expire_pos(ls->end);
+      journaler->set_expire_pos(ls->end);
     }
     
     logger->set(l_mdl_expos, ls->offset);

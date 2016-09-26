@@ -1293,6 +1293,36 @@ void CInode::encode(bufferlist &bl, uint64_t features)
   ENCODE_FINISH(bl);
 }
 
+void CInode::decode_bare(bufferlist::iterator &bl, __u8 struct_v)
+{
+  ::decode(inode, bl);
+  if (is_symlink())
+    ::decode(symlink, bl);
+  {
+    fragtree_t tmp;
+    ::decode(tmp, bl);
+    assert(tmp.empty());
+  }
+  ::decode(xattrs, bl);
+  {
+    bufferlist snap_blob;
+    ::decode(snap_blob, bl);
+    assert(snap_blob.length() == 0);
+  }
+  {
+    map<snapid_t, old_inode_t> tmp;
+    ::decode(tmp, bl);
+    assert(tmp.empty());
+  }
+}
+
+void CInode::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  decode_bare(bl, struct_v);
+  DECODE_FINISH(bl);
+}
+
 struct C_Inode_Stored : public CInodeContext {
   version_t version;
   MDSContextBase *fin;
@@ -1337,7 +1367,7 @@ void CInode::store(MDSContextBase *fin)
 void CInode::_stored(int r, version_t v, MDSContextBase *fin)
 {
   if (r < 0) {
-    dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
+    derr << "store error " << r << " v " << v << " on " << *this << dendl;
     mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
       << " errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
@@ -1351,7 +1381,64 @@ void CInode::_stored(int r, version_t v, MDSContextBase *fin)
     mark_clean();
   mutex_unlock();
 
-  mdcache->mds->queue_context(fin);
+  fin->complete(0);
+}
+
+struct C_Inode_Fetched : public CInodeContext {
+  bufferlist bl;
+  Context *fin;
+  C_Inode_Fetched(CInode *i, Context *f) : CInodeContext(i), fin(f) {}
+  void finish(int r) {
+    in->_fetched(r, bl, fin);
+  }
+};
+
+void CInode::fetch(MDSContextBase *fin)
+{
+  mutex_assert_locked_by_me();
+  dout(10) << "fetch" << dendl;
+
+  C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
+
+  object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
+  mdcache->mds->objecter->read(oid, oloc, 0, 0, CEPH_NOSNAP, &c->bl, 0, c);
+}
+
+void CInode::_fetched(int r, bufferlist& bl, Context *fin)
+{
+  if (r < 0) {
+    derr << "fetch error " << r << " on " << *this << dendl;
+    mdcache->mds->clog->error() << "failed to fetch ino " << ino() << " object,"
+      << " errno " << r << "\n";
+    fin->complete(r);
+    return;
+  }
+
+  int err = -EINVAL;
+  mutex_lock();
+  // Attempt decode
+  try {
+    bufferlist::iterator p = bl.begin();
+    string magic;
+    ::decode(magic, p);
+    dout(10) << " magic is '" << magic << "' (expecting '"
+	     << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
+    if (magic != CEPH_FS_ONDISK_MAGIC) {
+      dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
+	      << "'" << dendl;
+    } else {
+      decode(p);
+      err = 0;
+      dout(10) << "_fetched " << *this << dendl;
+    }
+  } catch (buffer::error &err) {
+    derr << "Corrupt inode 0x" << std::hex << ino() << std::dec
+	 << ": " << err << dendl;
+    return;
+  }
+  mutex_unlock();
+  fin->complete(err);
 }
 
 void CInode::first_get()

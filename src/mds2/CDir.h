@@ -7,6 +7,9 @@
 #include "include/elist.h"
 
 class LogSegment;
+class bloom_filter;
+
+typedef std::map<dentry_key_t, CDentry*> dentry_map_t;
 
 class CDir : public CObject {
   // dir mutex should not be used
@@ -15,19 +18,23 @@ class CDir : public CObject {
   bool mutex_trylock();
   void mutex_assert_locked_by_me();
 public:
-  MDCache* const mdcache;
-  CInode* const inode;
-
   // -- pins --
-  static const int PIN_CHILD =        3;
-  static const int PIN_COMITTING =    4;
+  static const int PIN_CHILD =        1;
+  static const int PIN_COMMITTING =   2;
+  static const int PIN_FETCHING =     3;
 
-  // -- states ==
+  // -- states ---
   static const unsigned STATE_NEW =		(1<<0);
-  static const unsigned STATE_COMMITTING =	(1<< 6);   // mid-commit
+  static const unsigned STATE_COMPLETE =        (1<< 1);
+  static const unsigned STATE_COMMITTING =	(1<< 2);   // mid-commit
+  static const unsigned STATE_FETCHING =	(1<< 3);   // mid-commit
   static const unsigned STATE_ASSIMRSTAT =	(1<<17);  // assimilating inode->frag rstats
 
-  typedef std::map<dentry_key_t, CDentry*> map_t;
+  // -- waiters ---
+  static const uint64_t WAIT_COMPLETE =		(1<<0);
+
+  MDCache* const mdcache;
+  CInode* const inode;
 protected:
   fnode_t fnode;
   std::list<fnode_t> projected_fnode;
@@ -35,7 +42,8 @@ protected:
 
 public:
 
-  CDir(CInode *i);
+  CDir(CInode *in);
+  ~CDir();
 
   frag_t get_frag() const { return frag_t(); }
   dirfrag_t dirfrag() const;
@@ -86,12 +94,14 @@ public:
   void clear_new();
 
 protected:
-  map_t items;
+  dentry_map_t items;
+  unsigned num_head_items;
+  unsigned num_head_null;
 
 public:
   bool empty() const { return items.empty(); }
-  map_t::const_iterator begin() const { return items.begin(); }
-  map_t::const_iterator end() const { return items.end(); }
+  dentry_map_t::const_iterator begin() const { return items.begin(); }
+  dentry_map_t::const_iterator end() const { return items.end(); }
 
   void link_remote_inode(CDentry *dn, inodeno_t ino, uint8_t d_type);
   void link_primary_inode(CDentry *dn, CInode *in);
@@ -129,8 +139,30 @@ protected:
   void _encode_dentry(CDentry *dn, bufferlist& bl);
   void _committed(int r, version_t v);  
   friend class C_Dir_Committed;
+
+  void _omap_fetch(MDSContextBase *c, const std::set<dentry_key_t>& keys);
+  CDentryRef _load_dentry(const std::string &dname, const snapid_t last,
+			  bufferlist &bl, const int pos);
+  void _omap_fetched(int r, bufferlist& hdrbl, map<string, bufferlist>& omap,
+		     bool complete);
+  // FIXME
+  void go_bad_dentry(snapid_t last, const std::string &dname) { assert(0); } 
+  void go_bad(bool complete) { assert(0); }
+  friend class C_Dir_Fetched;
+
+  bloom_filter *bloom;
 public:
   void commit(MDSContextBase *c, int op_prio=-1);
+  void fetch(MDSContextBase *c);
+
+  bool is_complete() { return state_test(STATE_COMPLETE); };
+  void clear_complete() { state_clear(STATE_COMPLETE); }
+  void mark_complete();
+
+  void add_to_bloom(CDentry *dn);
+  bool is_in_bloom(const std::string& name);
+  bool has_bloom() { return (bloom ? true : false); }
+  void remove_bloom();
 
 public:
    elist<CDir*>::item item_dirty, item_new;

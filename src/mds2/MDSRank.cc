@@ -212,21 +212,23 @@ void MDSRankDispatcher::shutdown()
 /**
  * Helper for simple callbacks that call a void fn with no args.
  */
-class C_MDS_VoidFn : public MDSContext
+class C_MDS_VoidFn : public MDSAsyncContextBase
 {
   typedef void (MDSRank::*fn_ptr)();
-  protected:
-   fn_ptr fn;
-  public:
-  C_MDS_VoidFn(MDSRank *mds_, fn_ptr fn_)
-    : MDSContext(mds_), fn(fn_)
+protected:
+  MDSRank *mds;
+  MDSRank* get_mds() { return mds; }
+  fn_ptr fn;
+public:
+  C_MDS_VoidFn(MDSRank *mds_, fn_ptr fn_) : mds(mds_), fn(fn_)
   {
-    assert(mds_);
-    assert(fn_);
+    assert(mds);
+    assert(fn);
+    set_finisher(mds->finisher);
   }
-
   void finish(int r)
   {
+    Mutex::Locker l(mds->mds_lock);
     (mds->*fn)();
   }
 };
@@ -452,12 +454,18 @@ void MDSRank::request_state(MDSMap::DaemonState s)
   beacon.send();
 }
 
-class C_MDS_BootStart : public MDSContext {
+class C_MDS_BootStart : public MDSAsyncContextBase {
+protected:
+  MDSRank *mds;
+  MDSRank* get_mds() { return mds; }
   MDSRank::BootStep nextstep;
 public:
-  C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n)
-    : MDSContext(m), nextstep(n) {}
+  C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n) : mds(m), nextstep(n) {
+    assert(mds);
+    set_finisher(mds->finisher);
+  }
   void finish(int r) {
+    Mutex::Locker l(mds->mds_lock);
     mds->boot_start(nextstep, r);
   }
 };
@@ -468,38 +476,54 @@ void MDSRank::boot_start(BootStep step, int r)
 
   assert(r >= 0);
 
+  assert(is_starting() || is_any_replay());
+
   switch(step) {
-    case MDS_BOOT_INITIAL:
-      mdcache->create_empty_hierarchy();
-      mdcache->create_mydir_hierarchy();
+  case MDS_BOOT_INITIAL:
+    {
+      mdcache->init_layouts();
 
-      sessionmap->set_rank(whoami);
-      sessionmap->wipe();
+      MDSGatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
 
+      dout(3) << "boot_start " << step << ": opening inotable" << dendl;
       inotable->set_rank(whoami);
-      inotable->reset();
+      inotable->load(gather.new_sub());
 
-      mdlog->open(new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
-      break;
-    case MDS_BOOT_PREPARE_LOG:
-      if (is_any_replay()) {
-	mdlog->replay(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
-      } else {
-	mdlog->append();
-	starting_done();
-      }
-      break;
-    case MDS_BOOT_REPLAY_DONE:
-      assert(is_any_replay());
-      replay_done();
-      break;
+      dout(3) << "boot_start " << step << ": opening sessionmap" << dendl;
+      sessionmap->set_rank(whoami);
+      sessionmap->load(gather.new_sub());
+
+      dout(3) << "boot_start " << step << ": opening mds log" << dendl;
+      mdlog->open(gather.new_sub());
+
+      dout(3) << "boot_start " << step << ": create root and mydir" << dendl;
+      mdcache->create_empty_hierarchy(NULL);
+      mdcache->create_mydir_hierarchy(NULL);
+
+      gather.activate();
+    }
+    break;
+  case MDS_BOOT_PREPARE_LOG:
+    if (is_any_replay()) {
+      mdlog->replay(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+    } else {
+      mdlog->append();
+      starting_done();
+    }
+    break;
+  case MDS_BOOT_REPLAY_DONE:
+    assert(is_any_replay());
+    replay_done();
+    break;
   }
 }
 
 void MDSRank::starting_done()
 {
   dout(3) << "starting_done" << dendl;
+  assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
+  mdcache->open_root_mydir();
   mdlog->start_new_segment();
 }
 
@@ -569,6 +593,11 @@ void MDSRank::recovery_done(int oldstate)
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
+
+  if (oldstate == MDSMap::STATE_CREATING)
+    return;
+
+  mdcache->open_root_mydir();
 }
 
 void MDSRank::creating_done()
@@ -581,19 +610,39 @@ void MDSRank::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  mdcache->create_empty_hierarchy();
-  mdcache->create_mydir_hierarchy();
+  MDSGatherBuilder gather(g_ceph_context, new C_MDS_VoidFn(this, &MDSRank::creating_done));
 
-  sessionmap->set_rank(whoami);
-  sessionmap->wipe();
+  mdcache->init_layouts();
 
+  // start with a fresh journal
+  dout(3) << "boot_create creating fresh journal" << dendl;
+  mdlog->create(gather.new_sub());
+
+  // open new journal segment, but do not journal subtree map (yet)
+  mdlog->prepare_new_segment();
+
+  dout(3) << "boot_create creating fresh hierarchy" << dendl;
+  mdcache->create_empty_hierarchy(gather.get());
+
+  dout(3) << "boot_create creating mydir hierarchy" << dendl;
+  mdcache->create_mydir_hierarchy(gather.get());
+
+  dout(10) << "boot_create creating fresh inotable table" << dendl;
+  inotable->mutex_lock();
   inotable->set_rank(whoami);
   inotable->reset();
+  inotable->save(gather.new_sub());
+  inotable->mutex_unlock();
 
-  mdlog->create(new C_MDSContextNoop);
-  mdlog->start_new_segment();
+  dout(10) << "boot_create creating fresh session map" << dendl;
+  sessionmap->mutex_lock();
+  sessionmap->set_rank(whoami);
+  sessionmap->save(gather.new_sub());
+  sessionmap->mutex_unlock();
 
-  creating_done();
+  mdlog->journal_segment_subtree_map(gather.new_sub());
+
+  gather.activate();
 }
 
 void MDSRank::stopping_start()

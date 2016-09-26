@@ -206,7 +206,7 @@ protected:
     // The MDSMap is available, configure default layouts and structures
     MDS_BOOT_INITIAL = 0,
     // We are ready to open some inodes
-    MDS_BOOT_OPEN_ROOT,
+    // MDS_BOOT_OPEN_ROOT,
     // We are ready to do a replay if needed
     MDS_BOOT_PREPARE_LOG,
     // Replay is complete

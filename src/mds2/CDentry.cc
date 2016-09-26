@@ -172,8 +172,9 @@ void CDentry::link_inode_work(CInode *in)
 void CDentry::unlink_inode_work()
 {
   dir->get_inode()->mutex_assert_locked_by_me();
-  CInode *in = linkage.get_inode();
+  assert(!linkage.is_null());
 
+  CInode *in = linkage.get_inode();
   if (linkage.is_remote()) {
     // remote
     linkage.set_remote(0, 0);

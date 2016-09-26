@@ -813,6 +813,13 @@ int Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr, int n,
   assert(dir);
 
   CDentryRef dn = dir->lookup(dname);
+  if (!dn && !dir->is_complete() &&
+      !(dir->has_bloom() && !dir->is_in_bloom(dname))) {
+    dir->fetch(new C_MDS_RetryRequest(mds, mdr));
+    mdr->unlock_object(diri.get());
+    return -EAGAIN;
+  }
+
   const CDentry::linkage_t* dnl = dn ? dn->get_linkage(mdr->get_client(), mdr) : NULL;
   CInodeRef in;
   if (mustexist) {
@@ -1436,6 +1443,7 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
 
   CDirRef newdir = newi->get_or_open_dirfrag(frag_t());
   newdir->__get_fnode()->version = newdir->pre_dirty();
+  newdir->mark_complete();
 
   dn->push_projected_linkage(newi.get());
 
@@ -1487,6 +1495,13 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   mdr->lock_object(diri.get());
 
   CDirRef dir = diri->get_or_open_dirfrag(frag_t());
+
+  if (!dir->is_complete()) {
+    //locker->drop_locks(mdr);
+    dir->fetch(new C_MDS_RetryRequest(mds, mdr));
+    mdr->unlock_object(diri.get());
+    return;
+  }
 
   bufferlist dirbl;
   encode_empty_dirstat(dirbl);

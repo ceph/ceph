@@ -43,10 +43,13 @@ protected:
   file_layout_t default_file_layout;
   file_layout_t default_log_layout;
 public:
-
   CInodeRef create_system_inode(inodeno_t ino, int mode);
-  void create_empty_hierarchy();
-  void create_mydir_hierarchy();
+  void create_empty_hierarchy(MDSGather *gather);
+  void create_mydir_hierarchy(MDSGather *gather);
+
+  void open_root_mydir();
+  void populate_mydir(MDSGatherBuilder& gather);
+
   void add_inode(CInode *in);
   void remove_inode(CInode *in);
   void remove_inode_recursive(CInode *in);
@@ -68,6 +71,7 @@ public:
   void lock_log_segments() { log_segments_lock.Lock(); }
   void unlock_log_segments() { log_segments_lock.Unlock(); }
 
+  void init_layouts();
   const file_layout_t& get_default_file_layout() const {
     return default_file_layout;
   }
