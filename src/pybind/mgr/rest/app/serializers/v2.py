@@ -1,3 +1,7 @@
+
+from distutils.version import StrictVersion
+
+import rest_framework
 from rest_framework import serializers
 import rest.app.serializers.fields as fields
 from rest.app.types import CRUSH_RULE_TYPE_REPLICATED, \
@@ -6,13 +10,15 @@ from rest.app.types import CRUSH_RULE_TYPE_REPLICATED, \
 
 
 class ValidatingSerializer(serializers.Serializer):
-    # django rest framework >= 3 renamed this field
     @property
     def init_data(self):
+        """
+        Compatibility alias for django rest framework 2 vs. 3
+        """
         return self.initial_data
 
     def is_valid(self, http_method):
-        if False:
+        if StrictVersion(rest_framework.__version__) < StrictVersion("3.0.0"):
             self._errors = super(ValidatingSerializer, self).errors or {}
         else:
             # django rest framework >= 3 has different is_Valid prototype
@@ -58,21 +64,6 @@ class ValidatingSerializer(serializers.Serializer):
             filtered_data[field] = self.data[field]
 
         return filtered_data
-
-
-class ClusterSerializer(serializers.Serializer):
-    class Meta:
-        fields = ('update_time', 'id', 'name')
-
-    update_time = serializers.DateTimeField(
-        help_text="The time at which the last status update from this cluster was received"
-    )
-    name = serializers.Field(
-        help_text="Human readable cluster name, not a unique identifier"
-    )
-    id = serializers.Field(
-        help_text="The FSID of the cluster, universally unique"
-    )
 
 
 class PoolSerializer(ValidatingSerializer):
@@ -257,20 +248,6 @@ class RequestSerializer(serializers.Serializer):
         help_text="Time at which the request completed, may be null.")
 
 
-class SaltKeySerializer(ValidatingSerializer):
-    class Meta:
-        fields = ('id', 'status')
-        create_allowed = ()
-        create_required = ()
-        modify_allowed = ('status',)
-        modify_required = ()
-
-    id = serializers.CharField(required=False,
-                               help_text="The minion ID, usually equal to a host's FQDN")
-    status = serializers.CharField(
-        help_text="One of 'accepted', 'rejected' or 'pre'")
-
-
 class ServiceSerializer(serializers.Serializer):
     class Meta:
         fields = ('type', 'id')
@@ -292,41 +269,6 @@ class ServerSerializer(serializers.Serializer):
     services = ServiceSerializer(many=True,
                                  help_text="List of Ceph services seen"
                                            "on this server")
-
-    # Ceph network configuration
-    # frontend_addr = serializers.CharField()  # may be null if no OSDs or mons on server
-    # backend_addr = serializers.CharField()  # may be null if no OSDs on server
-
-    # TODO: reinstate by having OSDs resolve addresses to ifaces and report
-    # in their metadata
-    # frontend_iface = serializers.CharField()  # may be null if interface for frontend addr not up
-    # backend_iface = serializers.CharField()  # may be null if interface for backend addr not up
-
-
-class EventSerializer(serializers.Serializer):
-    class Meta:
-        fields = ('when', 'severity', 'message')
-
-    when = serializers.DateTimeField(
-        help_text="Time at which event was generated")
-    severity = serializers.SerializerMethodField('get_severity')
-    message = serializers.CharField(
-        help_text="One line human readable description")
-
-    def get_severity(self, obj):
-        return severity_str(obj.severity)
-
-
-class LogTailSerializer(serializers.Serializer):
-    """
-    Trivial serializer to wrap a string blob of log output
-    """
-
-    class Meta:
-        fields = ('lines',)
-
-    lines = serializers.CharField(
-        help_text="Retrieved log data as a newline-separated string")
 
 
 class ConfigSettingSerializer(serializers.Serializer):
@@ -368,19 +310,17 @@ class CliSerializer(serializers.Serializer):
 
 # Declarative metaclass definitions are great until you want
 # to use a reserved word
-if False:
+if StrictVersion(rest_framework.__version__) < StrictVersion("3.0.0"):
     # In django-rest-framework 2.3.x (Calamari used this)
     OsdSerializer.base_fields['in'] = OsdSerializer.base_fields['_in']
     OsdConfigSerializer.base_fields['nodeep-scrub'] = \
     OsdConfigSerializer.base_fields['nodeepscrub']
-    # django_rest_framework 2.3.12 doesn't let me put help_text on a methodfield
-    # https://github.com/tomchristie/django-rest-framework/pull/1594
-    EventSerializer.base_fields['severity'].help_text = "One of %s" % ",".join(
-        SEVERITIES.values())
 else:
     OsdSerializer._declared_fields['in'] = OsdSerializer._declared_fields[
         '_in']
+    del OsdSerializer._declared_fields['_in']
+    OsdSerializer._declared_fields['in'].source = "in"
     OsdConfigSerializer._declared_fields['nodeep-scrub'] = \
     OsdConfigSerializer._declared_fields['nodeepscrub']
-    EventSerializer._declared_fields[
-        'severity'].help_text = "One of %s" % ",".join(SEVERITIES.values())
+
+

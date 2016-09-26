@@ -108,8 +108,8 @@ class MgrClient(object):
             'error_message': request.error_message,
             'status': request.status,
             'headline': request.headline,
-            'requested_at': request.requested_at.isoformat(),
-            'completed_at': request.completed_at.isoformat() if request.completed_at else None
+            'requested_at': request.requested_at,
+            'completed_at': request.completed_at
         }
 
     def get_request(self, request_id):
