@@ -172,6 +172,9 @@ void Mgr::init()
     cluster_state.notify_osdmap(osd_map);
   });
 
+  // Subscribe to OSDMap update to pass on to ClusterState
+  objecter->maybe_request_map();
+
   monc->sub_want("mgrdigest", 0, 0);
 
   // Prepare to receive FSMap and request it
@@ -437,7 +440,6 @@ bool Mgr::ms_dispatch(Message *m)
       m->put();
       break;
     case CEPH_MSG_OSD_MAP:
-
       handle_osd_map();
 
       py_modules.notify_all("osd_map", "");
