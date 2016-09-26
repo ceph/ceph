@@ -15,6 +15,8 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 
+#include "cls/rgw/cls_rgw_client.h"
+
 #include "global/global_init.h"
 
 #include "include/utime.h"
@@ -2016,6 +2018,7 @@ class BucketReshardShard {
   int num_shard;
   RGWRados::BucketShard bs;
   vector<rgw_cls_bi_entry> entries;
+  map<uint8_t, rgw_bucket_category_stats> stats;
 
 public:
   BucketReshardShard(RGWRados *_store, RGWBucketInfo& _bucket_info, int _num_shard) : store(_store), bucket_info(_bucket_info), bs(store) {
@@ -2023,8 +2026,15 @@ public:
     bs.init(bucket_info.bucket, num_shard);
   }
 
-  int add_entry(rgw_cls_bi_entry& entry) {
+  int add_entry(rgw_cls_bi_entry& entry, bool account, uint8_t category,
+                rgw_bucket_category_stats entry_stats) {
     entries.push_back(entry);
+    if (account) {
+      rgw_bucket_category_stats& target = stats[category];
+      target.num_entries += entry_stats.num_entries;
+      target.total_size += entry_stats.total_size;
+      target.total_size_rounded += entry_stats.total_size_rounded;
+    }
     if (entries.size() >= RESHARD_SHARD_WINDOW) {
       int ret = flush();
       if (ret < 0) {
@@ -2042,12 +2052,14 @@ public:
     for (auto& entry : entries) {
       store->bi_put(op, bs, entry);
     }
+    cls_rgw_bucket_update_stats(op, false, stats);
     int ret = bs.index_ctx.operate(bs.bucket_obj, &op);
     if (ret < 0) {
       std::cerr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << std::endl;
       return ret;
     }
     entries.clear();
+    stats.clear();
     return 0;
   }
 };
@@ -4975,7 +4987,9 @@ next:
 
           int target_shard_id;
           cls_rgw_obj_key cls_key;
-          entry.get_key(&cls_key);
+          uint8_t category;
+          rgw_bucket_category_stats stats;
+          bool account = entry.get_info(&cls_key, &category, &stats);
           rgw_obj_key key(cls_key);
           rgw_obj obj(new_bucket_info.bucket, key);
           int ret = store->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
@@ -4986,7 +5000,7 @@ next:
 
           int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
 
-          ret = target_shards[shard_index]->add_entry(entry);
+          ret = target_shards[shard_index]->add_entry(entry, account, category, stats);
           if (ret < 0) {
             cerr << "ERROR: target_shards.add_entry(" << key << ") returned error: " << cpp_strerror(-ret) << std::endl;
             return ret;
