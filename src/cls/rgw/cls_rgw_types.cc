@@ -237,8 +237,9 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
   dump_bi_entry(data, type, f);
 }
 
-void rgw_cls_bi_entry::get_key(cls_rgw_obj_key *key)
+bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats)
 {
+  bool account = false;
   bufferlist::iterator iter = data.begin();
   switch (type) {
     case PlainIdx:
@@ -247,6 +248,11 @@ void rgw_cls_bi_entry::get_key(cls_rgw_obj_key *key)
         rgw_bucket_dir_entry entry;
         ::decode(entry, iter);
         *key = entry.key;
+        *category = entry.meta.category;
+        accounted_stats->num_entries++;
+        accounted_stats->total_size += entry.meta.accounted_size;
+        accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        account = true;
       }
       break;
     case OLHIdx:
@@ -259,6 +265,8 @@ void rgw_cls_bi_entry::get_key(cls_rgw_obj_key *key)
     default:
       break;
   }
+
+  return account;
 }
 
 void rgw_bucket_olh_entry::dump(Formatter *f) const
