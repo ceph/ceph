@@ -2629,12 +2629,21 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket, int num_shards)
     return r;
 
   string dir_oid =  dir_oid_prefix;
-  dir_oid.append(bucket.marker);
+  dir_oid.append(bucket.bucket_id);
 
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, num_shards, bucket_objs);
 
   return CLSRGWIssueBucketIndexInit(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+}
+
+void RGWRados::create_bucket_id(string *bucket_id)
+{
+  uint64_t iid = instance_id();
+  uint64_t bid = next_bucket_id();
+  char buf[get_zone_params().get_id().size() + 48];
+  snprintf(buf, sizeof(buf), "%s.%llu.%llu", get_zone_params().get_id().c_str(), (long long)iid, (long long)bid);
+  *bucket_id = buf;
 }
 
 /**
@@ -4562,13 +4571,13 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx, 
   if (r < 0)
     return r;
 
-  if (bucket.marker.empty()) {
-    ldout(cct, 0) << "ERROR: empty marker for bucket operation" << dendl;
+  if (bucket.bucket_id.empty()) {
+    ldout(cct, 0) << "ERROR: empty bucket id for bucket operation" << dendl;
     return -EIO;
   }
 
   bucket_oid = dir_oid_prefix;
-  bucket_oid.append(bucket.marker);
+  bucket_oid.append(bucket.bucket_id);
 
   return 0;
 }
@@ -4582,13 +4591,13 @@ int RGWRados::open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx& index_
   if (r < 0)
     return r;
 
-  if (bucket.marker.empty()) {
-    ldout(cct, 0) << "ERROR: empty marker for bucket operation" << dendl;
+  if (bucket.bucket_id.empty()) {
+    ldout(cct, 0) << "ERROR: empty bucket_id for bucket operation" << dendl;
     return -EIO;
   }
 
   bucket_oid_base = dir_oid_prefix;
-  bucket_oid_base.append(bucket.marker);
+  bucket_oid_base.append(bucket.bucket_id);
 
   return 0;
 
