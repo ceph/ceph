@@ -12,22 +12,6 @@ MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PYTHONPATH and LD_LIBRARY_PATH'
 
-if MYDIR.endswith('src') and \
-   os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')):
-    MYLIBPATH = os.path.join(MYDIR, '.libs')
-    if 'LD_LIBRARY_PATH' in os.environ:
-        if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
-            os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
-            print >> sys.stderr, DEVMODEMSG
-            os.execvp('python', ['python'] + sys.argv)
-    else:
-        os.environ['LD_LIBRARY_PATH'] = MYLIBPATH
-        print >> sys.stderr, DEVMODEMSG
-        os.execvp('python', ['python'] + sys.argv)
-    sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Ceph REST API webapp")
     parser.add_argument('-c', '--conf', help='Ceph configuration file')
