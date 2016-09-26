@@ -59,8 +59,8 @@ function test_fast_kill() {
    rados -p rbd bench 10 write -b 4096 --max-objects 128 --no-cleanup
    sleep 1
 
-   $killid=0
-   $previd=0
+   killid=0
+   previd=0
 
    # kill random osd and see if 1 sec after, the osd count decreased.
    for i in {1..2}; do
