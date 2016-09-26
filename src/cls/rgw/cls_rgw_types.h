@@ -388,6 +388,8 @@ struct rgw_cls_bi_entry {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
+
+  void get_key(cls_rgw_obj_key *key);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
