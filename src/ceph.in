@@ -70,17 +70,7 @@ def get_pythonlib_dir():
     """Returns the name of a distutils build directory"""
     return "lib.{version[0]}".format(version=sys.version_info)
 
-if MYDIR.endswith('src') and \
-   os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')) and \
-   os.path.exists(os.path.join(MYDIR, 'build')):
-
-    python_libpath = os.path.join(MYDIR, 'build', get_pythonlib_dir())
-    respawn_in_path(os.path.join(MYDIR, '.libs'), 'pybind', python_libpath)
-    if 'PATH' in os.environ and MYDIR not in os.environ['PATH']:
-        os.environ['PATH'] += ':' + MYDIR
-
-elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
+if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
      and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
     src_path = None
     for l in open("./CMakeCache.txt"):
