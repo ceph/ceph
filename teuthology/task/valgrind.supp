@@ -345,3 +345,11 @@
 	fun:*ThreadLocalPtr*
 	...
 }
+{
+	rocksdb singleton Env leak, blech
+	Memcheck:Leak
+	...
+	fun:CreateThreadStatusUpdater
+	fun:PosixEnv
+	...
+}
