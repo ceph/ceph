@@ -138,6 +138,17 @@ int CLSRGWIssueSetTagTimeout::issue_op(int shard_id, const string& oid)
   return issue_bucket_set_tag_timeout_op(io_ctx, oid, tag_timeout, &manager);
 }
 
+void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o, bool absolute,
+                                 const map<uint8_t, rgw_bucket_category_stats>& stats)
+{
+  struct rgw_cls_bucket_update_stats_op call;
+  call.absolute = absolute;
+  call.stats = stats;
+  bufferlist in;
+  ::encode(call, in);
+  o.exec("rgw", "bucket_update_stats", in);
+}
+
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                const cls_rgw_obj_key& key, const string& locator, bool log_op,
                                uint16_t bilog_flags)
