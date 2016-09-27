@@ -397,6 +397,12 @@ def synch_clocks(remotes):
         )
 
 
+def unlock_firmware_repo(ctx):
+    log.info('Making sure firmware.git is not locked...')
+    ctx.cluster.run(args=['sudo', 'rm', '-f',
+                          '/lib/firmware/updates/.git/index.lock', ])
+
+
 def check_console(hostname):
     remote = Remote(hostname)
     shortname = remote.shortname

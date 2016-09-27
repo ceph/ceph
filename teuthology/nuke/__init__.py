@@ -26,9 +26,9 @@ from .actions import (
     check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
     reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
     remove_kernel_mounts, remove_ceph_packages, synch_clocks,
-    remove_configuration_files, undo_multipath, reset_syslog_dir,
-    remove_ceph_data, remove_testing_tree, remove_yum_timedhosts,
-    kill_valgrind,
+    unlock_firmware_repo, remove_configuration_files, undo_multipath,
+    reset_syslog_dir, remove_ceph_data, remove_testing_tree,
+    remove_yum_timedhosts, kill_valgrind,
 )
 
 log = logging.getLogger(__name__)
@@ -332,9 +332,7 @@ def nuke_helper(ctx, should_unlock):
     remove_kernel_mounts(ctx)
     remove_ceph_packages(ctx)
     synch_clocks(remotes)
-    log.info('Making sure firmware.git is not locked...')
-    ctx.cluster.run(args=['sudo', 'rm', '-f',
-                          '/lib/firmware/updates/.git/index.lock', ])
+    unlock_firmware_repo(ctx)
     remove_configuration_files(ctx)
     undo_multipath(ctx)
     reset_syslog_dir(ctx)
