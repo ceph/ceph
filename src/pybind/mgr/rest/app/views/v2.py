@@ -482,21 +482,6 @@ such as the cluster maps
         return Response([s.str for s in SYNC_OBJECT_TYPES])
 
 
-class DebugJob(RPCViewSet, RequestReturner):
-    """
-For debugging and automated testing only.
-    """
-    def create(self, request, fqdn):
-        cmd = request.DATA['cmd']
-        args = request.DATA['args']
-
-        # Avoid this debug interface being an arbitrary execution mechanism.
-        if not cmd.startswith("ceph.selftest"):
-            raise PermissionDenied("Command '%s' is not a self test command".format(cmd))
-
-        return self._return_request(self.client.debug_job(fqdn, cmd, args))
-
-
 class ServerViewSet(RPCViewSet):
     """
 Servers that we've learned about via the daemon metadata reported by

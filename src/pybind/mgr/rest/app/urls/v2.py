@@ -78,9 +78,6 @@ urlpatterns = patterns(
     url(r'^cluster/sync_object/(?P<sync_type>[a-zA-Z0-9-_]+)$',
         rest.app.views.v2.SyncObject.as_view({'get': 'retrieve'}),
         name='cluster-sync-object'),
-    url(r'^server/(?P<fqdn>[a-zA-Z0-9-\.]+)/debug_job',
-        rest.app.views.v2.DebugJob.as_view({'post': 'create'}),
-        name='server-debug-job'),
 
     url(r'^cluster/server$',
         rest.app.views.v2.ServerViewSet.as_view({'get': 'list'}),
