@@ -438,6 +438,17 @@ struct C_InvalidateCache : public Context {
     return CEPH_NOSNAP;
   }
 
+  snap_t ImageCtx::get_snap_id_from_namespace(cls::rbd::SnapshotNamespace in_snap_namespace) const
+  {
+    assert(snap_lock.is_locked());
+    map<cls::rbd::SnapshotNamespace, snap_t>::const_iterator it =
+      snap_namespace_ids.find(in_snap_namespace);
+    if (it != snap_namespace_ids.end()) {
+      return it->second;
+    }
+    return CEPH_NOSNAP;
+  }
+
   const SnapInfo* ImageCtx::get_snap_info(snap_t in_snap_id) const
   {
     assert(snap_lock.is_locked());
@@ -553,10 +564,21 @@ struct C_InvalidateCache : public Context {
 		  in_size, parent, protection_status, flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
+    if (boost::get<cls::rbd::GroupSnapshotNamespace>(&in_snap_namespace) != nullptr) {
+      // We can only distinguish snapshots from GroupSnapshotNamespace.
+      // Other namespaces are not interesting to us because one UserSnapshotNamespace
+      // is indistinguishable from another UserSnapshotNamespace.
+      snap_namespace_ids.insert(make_pair(in_snap_namespace, id));
+    }
   }
 
   void ImageCtx::rm_snap(string in_snap_name, snap_t id)
   {
+    const SnapInfo *snapInfo = get_snap_info(id);
+    if (snapInfo != nullptr) {
+      const cls::rbd::SnapshotNamespace &snap_namespace = snapInfo->snap_namespace;
+      snap_namespace_ids.erase(snap_namespace);
+    }
     assert(snap_lock.is_wlocked());
     snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
     snap_info.erase(id);
