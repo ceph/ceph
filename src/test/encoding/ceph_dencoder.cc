@@ -50,9 +50,9 @@ void usage(ostream &out)
 {
   out << "usage: ceph-dencoder [commands ...]" << std::endl;
   out << "\n";
-  out << "  version            print version string (to stdout)\n";
+  out << "  version             print version string (to stdout)\n";
   out << "\n";
-  out << "  import <encfile>   read encoded data from encfile\n";
+  out << "  import <encfile>    read encoded data from encfile\n";
   out << "  export <outfile>    write encoded data to outfile\n";
   out << "\n";
   out << "  set_features <num>  set feature bits used for encoding\n";
@@ -325,7 +325,7 @@ int main(int argc, const char **argv)
   uint64_t skip = 0;
 
   if (args.empty()) {
-    usage(cerr);
+    cerr << "-h for help" << std::endl;
     exit(1);
   }
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
@@ -345,7 +345,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("type")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting type" << std::endl;
 	exit(1);
       }
       string cname = *i;
@@ -358,7 +358,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("skip")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting byte count" << std::endl;
 	exit(1);
       }
       skip = atoi(*i);
@@ -368,42 +368,37 @@ int main(int argc, const char **argv)
     } else if (*i == string("set_features")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting features" << std::endl;
 	exit(1);
       }
       features = atoi(*i);
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       den->encode(encbl, features | CEPH_FEATURE_RESERVED); // hack for OSDMap
     } else if (*i == string("decode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       err = den->decode(encbl, skip);
     } else if (*i == string("copy_ctor")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       den->copy_ctor();
     } else if (*i == string("copy")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       den->copy();
     } else if (*i == string("dump_json")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       JSONFormatter jf(true);
@@ -418,7 +413,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("import")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting filename" << std::endl;
 	exit(1);
       }
       int r;
@@ -437,7 +432,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("export")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting filename" << std::endl;
 	exit(1);
       }
       int fd = ::open(*i, O_WRONLY|O_CREAT|O_TRUNC, 0644);
@@ -455,19 +450,17 @@ int main(int argc, const char **argv)
     } else if (*i == string("count_tests")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       cout << den->num_generated() << std::endl;
     } else if (*i == string("select_test")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting instance number" << std::endl;
 	exit(1);
       }
       int n = atoi(*i);
@@ -475,7 +468,6 @@ int main(int argc, const char **argv)
     } else if (*i == string("is_deterministic")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       if (den->is_deterministic())
@@ -484,7 +476,6 @@ int main(int argc, const char **argv)
 	exit(1);
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
-      usage(cerr);
       exit(1);
     }      
     if (err.length()) {
