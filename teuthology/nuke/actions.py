@@ -126,7 +126,7 @@ def remove_osd_mounts(ctx):
             run.Raw('|'),
             'awk', '{print $2}', run.Raw('|'),
             'xargs', '-r',
-            'sudo', 'umount', run.Raw(';'),
+            'sudo', 'umount', '-l', run.Raw(';'),
             'true'
         ],
         timeout=120
