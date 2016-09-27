@@ -57,7 +57,7 @@ void JournalTool::usage()
     << "      --frag=<ino>.<frag> [--dname=<dentry string>]\n"
     << "      --client=<session id integer>\n"
     << "    <effect>: [get|apply|recover_dentries|splice]\n"
-    << "    <output>: [summary|binary|json] [--path <path>]\n"
+    << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
     << "Options:\n"
     << "  --rank=<str>  Journal rank (default 0)\n";
