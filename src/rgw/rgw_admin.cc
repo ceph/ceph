@@ -5089,6 +5089,8 @@ next:
 
     formatter->open_array_section("entries");
 
+    uint64_t total_entries = 0;
+
     for (int i = 0; i < num_source_shards; ++i) {
       bool is_truncated = true;
       marker.clear();
@@ -5102,6 +5104,12 @@ next:
 
         list<rgw_cls_bi_entry>::iterator iter;
         for (iter = entries.begin(); iter != entries.end(); ++iter) {
+          formatter->open_object_section("entry");
+
+          encode_json("shard_id", i, formatter);
+          encode_json("num_entry", total_entries, formatter);
+          total_entries++;
+
           rgw_cls_bi_entry& entry = *iter;
           encode_json("entry", entry, formatter);
           marker = entry.idx;
@@ -5125,9 +5133,9 @@ next:
           if (ret < 0) {
             return ret;
           }
+          formatter->close_section();
+          formatter->flush(cout);
         }
-
-        formatter->flush(cout);
       }
     }
     formatter->close_section();
