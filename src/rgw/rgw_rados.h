@@ -46,6 +46,8 @@ class RGWRESTConn;
 
 #define RGW_NO_SHARD -1
 
+#define MAX_BUCKET_INDEX_SHARDS_PRIME 7877
+
 static inline void prepend_bucket_marker(rgw_bucket& bucket, const string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -2023,6 +2025,10 @@ public:
 
   int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
   int get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size);
+
+  uint32_t get_max_bucket_shards() {
+    return MAX_BUCKET_INDEX_SHARDS_PRIME;
+  }
 
   int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
