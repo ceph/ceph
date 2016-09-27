@@ -7687,6 +7687,13 @@ int BlueStore::_do_write(
       wctx.target_blob_size > g_conf->bluestore_max_blob_size) {
     wctx.target_blob_size = g_conf->bluestore_max_blob_size;
   }
+  // set the min blob size floor at 2x the min_alloc_size, or else we
+  // won't be able to allocate a smaller extent for the compressed
+  // data.
+  if (wctx.compress &&
+      wctx.target_blob_size < min_alloc_size * 2) {
+    wctx.target_blob_size = min_alloc_size * 2;
+  }
 
   dout(20) << __func__ << " prefer csum_order " << wctx.csum_order
 	   << " target_blob_size 0x" << std::hex << wctx.target_blob_size
