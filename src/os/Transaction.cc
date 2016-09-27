@@ -232,6 +232,23 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
       }
       break;
 
+    case Transaction::OP_MERGE_DELETE:
+      {
+	coll_t cid;
+	ghobject_t src_oid;
+	ghobject_t oid;
+	vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
+
+	::decode(src_oid, p);
+	::decode(cid, p);
+	::decode(oid, p);
+	::decode(move_info, p);
+
+	move_ranges_destroy_src(cid, src_oid, oid, move_info);
+
+      }
+      break;
+
     case Transaction::OP_MKCOLL:
       {
 	coll_t cid;

@@ -14,6 +14,7 @@
  */
 #include "include/compat.h"
 #include "include/int_types.h"
+#include "boost/tuple/tuple.hpp"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -2669,13 +2670,14 @@ void FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        coll_t ncid = cid;
         ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+	_kludge_temp_object_collection(cid, oid);
+	_kludge_temp_object_collection(ncid, noid);
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, clone_range_enter, osr_name, len);
-        r = _clone_range(cid, oid, noid, off, len, off, spos);
+        r = _clone_range(cid, oid, ncid, noid, off, len, off, spos);
         tracepoint(objectstore, clone_range_exit, r);
       }
       break;
@@ -2684,15 +2686,32 @@ void FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-	_kludge_temp_object_collection(cid, oid);
+        coll_t ncid = i.get_cid(op->cid);
         ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+	_kludge_temp_object_collection(cid, oid);
+	_kludge_temp_object_collection(ncid, noid);
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
         tracepoint(objectstore, clone_range2_enter, osr_name, len);
-        r = _clone_range(cid, oid, noid, srcoff, len, dstoff, spos);
+        r = _clone_range(cid, oid, ncid, noid, srcoff, len, dstoff, spos);
         tracepoint(objectstore, clone_range2_exit, r);
+      }
+      break;
+
+    case Transaction::OP_MERGE_DELETE:
+      {
+        ghobject_t src_oid = i.get_oid(op->oid);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->dest_oid);
+        coll_t src_cid = i.get_cid(op->cid);
+        _kludge_temp_object_collection(cid, oid);
+        _kludge_temp_object_collection(src_cid, src_oid);
+        vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
+        i.decode_move_info(move_info);
+        tracepoint(objectstore, move_ranges_destroy_src_enter, osr_name);
+        r = _move_ranges_destroy_src(src_cid, src_oid, cid, oid, move_info, spos);
+        tracepoint(objectstore, move_ranges_destroy_src_exit, r);
       }
       break;
 
@@ -2812,7 +2831,7 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_SETATTR:
     case Transaction::OP_COLL_RMATTR:
-      assert(0 == "collection attr methods no longer implmented");
+      assert(0 == "collection attr methods no longer implemented");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -3709,22 +3728,22 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   return r;
 }
 
-int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+int FileStore::_clone_range(const coll_t& oldcid, const ghobject_t& oldoid, const coll_t& newcid, const ghobject_t& newoid,
 			    uint64_t srcoff, uint64_t len, uint64_t dstoff,
 			    const SequencerPosition& spos)
 {
-  dout(15) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
+  dout(15) << "clone_range " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " " << srcoff << "~" << len << " to " << dstoff << dendl;
 
-  if (_check_replay_guard(cid, newoid, spos) < 0)
+  if (_check_replay_guard(newcid, newoid, spos) < 0)
     return 0;
 
   int r;
   FDRef o, n;
-  r = lfn_open(cid, oldoid, false, &o);
+  r = lfn_open(oldcid, oldoid, false, &o);
   if (r < 0) {
     goto out2;
   }
-  r = lfn_open(cid, newoid, true, &n);
+  r = lfn_open(newcid, newoid, true, &n);
   if (r < 0) {
     goto out;
   }
@@ -3741,8 +3760,86 @@ int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const g
  out:
   lfn_close(o);
  out2:
-  dout(10) << "clone_range " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " "
+  dout(10) << "clone_range " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+  return r;
+}
+
+/*
+ * Move contents of src object according to move_info to base object. Once the move_info is traversed completely, delete the src object.
+ */
+int FileStore::_move_ranges_destroy_src(const coll_t& src_cid, const ghobject_t& src_oid, const coll_t& cid, const ghobject_t& oid,
+                              const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info,
+                              const SequencerPosition& spos)
+{
+  int r = 0;
+
+  dout(10) << __func__ << src_cid << "/" << src_oid << " -> " << cid << "/" << oid << dendl;
+
+  // check replay guard for base object. If not possible to replay, return.
+  int dstcmp = _check_replay_guard(cid, oid, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  // check the src name too; it might have a newer guard, and we don't
+  // want to clobber it
+  int srccmp = _check_replay_guard(src_cid, src_oid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  FDRef b;
+  r = lfn_open(cid, oid, true, &b);
+  if (r < 0) {
+    return 0;
+  }
+
+  FDRef t;
+  r = lfn_open(src_cid, src_oid, false, &t);
+  //If we are replaying, it is possible that we do not find src obj as it is deleted before crashing.
+  if (r < 0) {
+    lfn_close(b);
+    dout(10) << __func__ << " replaying -->" << replaying  << dendl;
+    if (replaying) {
+      _set_replay_guard(**b, spos, &oid);
+      return 0;
+    } else {
+      return -ENOENT;
+    }
+  }
+
+  for (unsigned i = 0; i < move_info.size(); ++i) {
+     uint64_t srcoff = move_info[i].get<0>();
+     uint64_t dstoff = move_info[i].get<1>();
+     uint64_t len = move_info[i].get<2>();
+
+     r = _do_clone_range(**t, **b, srcoff, len, dstoff);
+  }
+
+  dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
+
+  lfn_close(t);
+
+  //In case crash occurs here, replay will have to do cloning again.
+  //Only if do_clone_range is successful, go ahead with deleting the source object.
+  if (r < 0)
+    goto out;
+
+  r = lfn_unlink(src_cid, src_oid, spos, true);
+  // If crash occurs between unlink and set guard, correct the error.
+  // as during next time, it might not find the already deleted object.
+  if (r < 0 && replaying) {
+    r = 0;
+  }
+
+  if (r < 0)
+    goto out;
+
+  //set replay guard for base obj coll_t, as this api is not idempotent.
+  _set_replay_guard(**b, spos, &oid);
+
+out:
+  lfn_close(b);
+  dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
   return r;
 }
 
@@ -4639,7 +4736,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       continue;
     coll_t cid;
     if (!cid.parse(de->d_name)) {
-      derr << "ignoging invalid collection '" << de->d_name << "'" << dendl;
+      derr << "ignoring invalid collection '" << de->d_name << "'" << dendl;
       continue;
     }
     if (!cid.is_temp() || include_temp)
