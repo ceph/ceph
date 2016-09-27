@@ -2701,6 +2701,12 @@ next:
 
     int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
 
+    if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
+      cerr << "num shards is less or equal to current shards count" << std::endl
+           << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
+    }
+
     RGWBucketInfo new_bucket_info(bucket_info);
     store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
     new_bucket_info.bucket.oid.clear();
