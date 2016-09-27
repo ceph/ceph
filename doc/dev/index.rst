@@ -163,21 +163,12 @@ All newcomers are encouraged to read that file carefully.
 Building from source
 --------------------
 
-See instructions at :doc:`/dev/quick_guide` and :doc:`/install/build-ceph`.
+See instructions at :doc:`/install/build-ceph`.
 
 Development-mode cluster
 ------------------------
 
-You can start a development-mode Ceph cluster, after compiling the source,
-with::
-
-    cd build
-    make vstart
-    ../src/vstart.sh -n -x -l
-    # check that it's there
-    ./bin/ceph health
-
-For more ``vstart.sh`` examples, see :doc:`/dev/quick_guide`.
+See :doc:`/dev/quick_guide`.
 
 Backporting
 -----------
