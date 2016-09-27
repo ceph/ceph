@@ -64,6 +64,7 @@ void usage(ostream &out)
   out << "  decode              decode into in-memory object\n";
   out << "  encode              encode in-memory object\n";
   out << "  dump_json           dump in-memory object as json (to stdout)\n";
+  out << "  hexdump             print encoded data in hex\n";
   out << "\n";
   out << "  copy                copy object (via operator=)\n";
   out << "  copy_ctor           copy object (via copy ctor)\n";
@@ -412,6 +413,8 @@ int main(int argc, const char **argv)
       jf.flush(cout);
       cout << std::endl;
 
+    } else if (*i == string("hexdump")) {
+      encbl.hexdump(cout);
     } else if (*i == string("import")) {
       ++i;
       if (i == args.end()) {
