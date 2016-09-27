@@ -235,7 +235,7 @@ class NotFound(Exception):
 
 
 # The objects that ClusterMonitor keeps copies of from the mon
-SYNC_OBJECT_TYPES = [FsMap, OsdMap, MonMap, PgSummary, Health, Config]
+SYNC_OBJECT_TYPES = [FsMap, OsdMap, MonMap, MonStatus, PgSummary, Health, Config]
 SYNC_OBJECT_STR_TYPE = dict((t.str, t) for t in SYNC_OBJECT_TYPES)
 
 USER_REQUEST_COMPLETE = 'complete'

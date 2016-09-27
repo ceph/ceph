@@ -21,7 +21,7 @@ from rest.app.views.rpc_view import RPCViewSet, DataObject
 from rest.app.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, \
     USER_REQUEST_SUBMITTED, OSD_IMPLEMENTED_COMMANDS, MON, OSD_MAP, \
     SYNC_OBJECT_TYPES, ServiceId, severity_from_str, SEVERITIES, \
-    OsdMap, Config, MonMap, MonStatus
+    OsdMap, Config, MonMap, MonStatus, SYNC_OBJECT_STR_TYPE
 
 
 from rest.logger import logger
@@ -472,7 +472,11 @@ such as the cluster maps
     """
 
     def retrieve(self, request, sync_type):
-        return Response(self.client.get_sync_object(sync_type))
+        try:
+            sync_type_cls = SYNC_OBJECT_STR_TYPE[sync_type]
+        except KeyError:
+            return Response("Unknown type '{0}'".format(sync_type), status=404)
+        return Response(self.client.get_sync_object(sync_type_cls).data)
 
     def describe(self, request):
         return Response([s.str for s in SYNC_OBJECT_TYPES])
