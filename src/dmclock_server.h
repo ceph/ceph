@@ -331,16 +331,13 @@ namespace crimson {
 
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
-	template<typename Collect>
-	bool remove_by_req_filter_forwards(std::function<bool(const R&)> filter,
-					   Collect& out) {
+	bool remove_by_req_filter_fw(std::function<bool(const R&)> filter_accum) {
 	  bool any_removed = false;
 	  for (auto i = requests.begin();
 	       i != requests.end();
 	       /* no inc */) {
-	    if (filter(*i->request)) {
+	    if (filter_accum(*i->request)) {
 	      any_removed = true;
-	      out.push_back(*i->request);
 	      i = requests.erase(i);
 	    } else {
 	      ++i;
@@ -351,31 +348,28 @@ namespace crimson {
 
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
-	template<typename Collect>
-	bool remove_by_req_filter_backwards(std::function<bool(const R&)> filter,
-					    Collect& out) {
+	bool remove_by_req_filter_bw(std::function<bool(const R&)> filter_accum) {
 	  bool any_removed = false;
-	  for (auto i = --requests.end();
-	       /* no cond */;
-	       --i) {
-	    if (filter(*i->request)) {
+	  for (auto i = requests.rbegin();
+	       i != requests.rend();
+	       /* no inc */) {
+	    if (filter_accum(*i->request)) {
 	      any_removed = true;
-	      out.push_back(*i->request);
-	      i = requests.erase(i);
+	      i = decltype(i){ requests.erase(std::next(i).base()) };
+	    } else {
+	      ++i;
 	    }
-	    if (requests.begin() == i) break;
 	  }
 	  return any_removed;
 	}
 
-	template<typename Collect>
-	inline bool remove_by_req_filter(std::function<bool(const R&)> filter,
-					 Collect& out,
-					 bool visit_backwards) {
+	inline bool
+	remove_by_req_filter(std::function<bool(const R&)> filter_accum,
+			     bool visit_backwards) {
 	  if (visit_backwards) {
-	    return remove_by_req_filter_backwards(filter, out);
+	    return remove_by_req_filter_bw(filter_accum);
 	  } else {
-	    return remove_by_req_filter_forwards(filter, out);
+	    return remove_by_req_filter_fw(filter_accum);
 	  }
 	}
 	
@@ -438,25 +432,13 @@ namespace crimson {
       }
 
 
-      bool remove_by_req_filter(std::function<bool(const R&)> filter,
-				bool visit_backwards = false) {
-	struct Sink {
-	  void push_back(const R& v) {} // do nothing
-	};
-	static Sink my_sink;
-	return remove_by_req_filter(filter, my_sink, visit_backwards);
-      }
-
-
-      template<typename Collect>
-      bool remove_by_req_filter(std::function<bool(const R&)> filter,
-				Collect& out,
+      bool remove_by_req_filter(std::function<bool(const R&)> filter_accum,
 				bool visit_backwards = false) {
 	bool any_removed = false;
 	DataGuard g(data_mtx);
 	for (auto i : client_map) {
 	  bool modified =
-	    i.second->remove_by_req_filter(filter, out, visit_backwards);
+	    i.second->remove_by_req_filter(filter_accum, visit_backwards);
 	  if (modified) {
 	    resv_heap.adjust(*i.second);
 	    limit_heap.adjust(*i.second);
@@ -471,29 +453,33 @@ namespace crimson {
       }
 
 
-      void remove_by_client(const C& client) {
-	struct Sink {
-	  void push_back(const R& v) {}
-	};
-	static Sink my_sink;
-	remove_by_client(client, my_sink);
+      // use as a default value when no accumulator is provide
+      static void request_sink(const R& req) {
+	// do nothing
       }
 
 
-      // Collect must support calls to push_back(R), such as
-      // std::list<R>.
-      template<typename Collect>
-      void remove_by_client(const C& client, Collect& out) {
+      void remove_by_client(const C& client,
+			    bool reverse = false,
+			    std::function<void (const R&)> accum = request_sink) {
 	DataGuard g(data_mtx);
 
 	auto i = client_map.find(client);
 
 	if (i == client_map.end()) return;
 
-	for (auto j = i->second->requests.begin();
-	     j != i->second->requests.end();
-	     ++j) {
-	  out.push_back(*j->request);
+	if (reverse) {
+	  for (auto j = i->second->requests.rbegin();
+	       j != i->second->requests.rend();
+	       ++j) {
+	    accum(*j->request);
+	  }
+	} else {
+	  for (auto j = i->second->requests.begin();
+	       j != i->second->requests.end();
+	       ++j) {
+	    accum(*j->request);
+	  }
 	}
 
 	i->second->requests.clear();

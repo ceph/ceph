@@ -263,8 +263,16 @@ namespace crimson {
       EXPECT_EQ(5, pq.request_count());
 
       std::list<MyReq> capture;
-      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 0 == r.id % 2;},
-			      capture);
+      pq.remove_by_req_filter(
+	[&capture] (const MyReq& r) -> bool {
+	  if (0 == r.id % 2) {
+	    capture.push_front(r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	},
+	true);
 
       EXPECT_EQ(0, pq.request_count());
       EXPECT_EQ(5, capture.size());
@@ -276,7 +284,89 @@ namespace crimson {
     } // TEST
 
 
-    TEST(dmclock_server, remove_by_req_filter_ordering) {
+    TEST(dmclock_server, remove_by_req_filter_ordering_forwards_visit) {
+      struct MyReq {
+	int id;
+
+	MyReq(int _id) :
+	  id(_id)
+	{
+	  // empty
+	}
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+
+      ClientId client1 = 17;
+
+      dmc::ClientInfo info1(0.0, 1.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info1;
+      };
+
+      Queue pq(client_info_f, true);
+
+      EXPECT_EQ(0, pq.client_count());
+      EXPECT_EQ(0, pq.request_count());
+
+      ReqParams req_params(1,1);
+
+      pq.add_request(MyReq(1), client1, req_params);
+      pq.add_request(MyReq(2), client1, req_params);
+      pq.add_request(MyReq(3), client1, req_params);
+      pq.add_request(MyReq(4), client1, req_params);
+      pq.add_request(MyReq(5), client1, req_params);
+      pq.add_request(MyReq(6), client1, req_params);
+
+      EXPECT_EQ(1, pq.client_count());
+      EXPECT_EQ(6, pq.request_count());
+
+      // remove odd ids in forward order and append to end
+
+      std::vector<MyReq> capture;
+      pq.remove_by_req_filter(
+	[&capture] (const MyReq& r) -> bool {
+	  if (1 == r.id % 2) {
+	    capture.push_back(r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	},
+	false);
+
+      EXPECT_EQ(3, pq.request_count());
+      EXPECT_EQ(3, capture.size());
+      EXPECT_EQ(1, capture[0].id) << "items should come out in forward order";
+      EXPECT_EQ(3, capture[1].id) << "items should come out in forward order";
+      EXPECT_EQ(5, capture[2].id) << "items should come out in forward order";
+
+      // remove even ids in reverse order but insert at front so comes
+      // out forwards
+
+      std::vector<MyReq> capture2;
+      pq.remove_by_req_filter(
+	[&capture2] (const MyReq& r) -> bool {
+	  if (0 == r.id % 2) {
+	    capture2.insert(capture2.begin(), r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	},
+	false);
+
+      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(3, capture2.size());
+      EXPECT_EQ(6, capture2[0].id) << "items should come out in reverse order";
+      EXPECT_EQ(4, capture2[1].id) << "items should come out in reverse order";
+      EXPECT_EQ(2, capture2[2].id) << "items should come out in reverse order";
+    } // TEST
+
+
+    TEST(dmclock_server, remove_by_req_filter_ordering_backwards_visit) {
       struct MyReq {
 	int id;
 
@@ -318,8 +408,16 @@ namespace crimson {
       // now remove odd ids in forward order
 
       std::vector<MyReq> capture;
-      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 1 == r.id % 2;},
-			      capture);
+      pq.remove_by_req_filter(
+	[&capture] (const MyReq& r) -> bool {
+	  if (1 == r.id % 2) {
+	    capture.insert(capture.begin(), r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	},
+	true);
 
       EXPECT_EQ(3, pq.request_count());
       EXPECT_EQ(3, capture.size());
@@ -330,9 +428,17 @@ namespace crimson {
       // now remove even ids in reverse order
 
       std::vector<MyReq> capture2;
-      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 0 == r.id % 2;},
-			      capture2,
-			      true);
+      pq.remove_by_req_filter(
+	[&capture2] (const MyReq& r) -> bool {
+	  if (0 == r.id % 2) {
+	    capture2.push_back(r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	},
+	true);
+
       EXPECT_EQ(0, pq.request_count());
       EXPECT_EQ(3, capture2.size());
       EXPECT_EQ(6, capture2[0].id) << "items should come out in reverse order";
@@ -386,7 +492,11 @@ namespace crimson {
 
       std::list<MyReq> removed;
 
-      pq.remove_by_client(client1, removed);
+      pq.remove_by_client(client1,
+			  true,
+			  [&removed] (const MyReq& r) {
+			    removed.push_front(r);
+			  });
 
       EXPECT_EQ(3, removed.size());
       EXPECT_EQ(1, removed.front().id);
