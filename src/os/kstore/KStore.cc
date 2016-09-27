@@ -2368,7 +2368,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         i.decode_move_info(move_info);
         r = _move_ranges_destroy_src(txc, c, o, cvec[op->dest_cid], bo, move_info);
       }
-			break;
+      break;
 
     case Transaction::OP_COLL_ADD:
       assert(0 == "not implemented");

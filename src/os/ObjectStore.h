@@ -1377,21 +1377,12 @@ public:
    */
   void move_ranges_destroy_src(const coll_t& cid, const ghobject_t& src_oid, ghobject_t oid,
                      const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info) {
-    if (use_tbl) {
-      __u32 op = OP_MERGE_DELETE;
-      ::encode(op, tbl);
-      ::encode(src_oid, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(move_info, tbl);
-    } else {
-      Op* _op = _get_next_op();
-      _op->op = OP_MERGE_DELETE;
-      _op->cid = _get_coll_id(cid);
-      _op->oid = _get_object_id(src_oid);
-      _op->dest_oid = _get_object_id(oid);
-      ::encode(move_info, data_bl);
-    }
+    Op* _op = _get_next_op();
+    _op->op = OP_MERGE_DELETE;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(src_oid);
+    _op->dest_oid = _get_object_id(oid);
+    ::encode(move_info, data_bl);
     data.ops++;
   }
 

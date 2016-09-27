@@ -2670,7 +2670,7 @@ void FileStore::_do_transaction(
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-        coll_t ncid = i.get_cid(op->cid);
+        coll_t ncid = cid;
         ghobject_t noid = i.get_oid(op->dest_oid);
 	_kludge_temp_object_collection(cid, oid);
 	_kludge_temp_object_collection(ncid, noid);
@@ -3799,9 +3799,12 @@ int FileStore::_move_ranges_destroy_src(const coll_t& src_cid, const ghobject_t&
   if (r < 0) {
     lfn_close(b);
     dout(10) << __func__ << " replaying -->" << replaying  << dendl;
-    if (replaying)
+    if (replaying) {
       _set_replay_guard(**b, spos, &oid);
-    return 0;
+      return 0;
+    } else {
+      return -ENOENT;
+    }
   }
 
   for (unsigned i = 0; i < move_info.size(); ++i) {
