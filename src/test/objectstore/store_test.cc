@@ -3432,6 +3432,98 @@ public:
     return status;
   }
 
+  int move_ranges_destroy_src() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("move_ranges_destroy_src");
+    if (!can_unlink())
+      return -ENOENT;
+    if (!can_create())
+      return -ENOSPC;
+    wait_for_ready();
+
+    ghobject_t old_obj;
+    int max = 20;
+    do {
+      old_obj = get_uniform_random_object();
+    } while (--max && !contents[old_obj].data.length());
+    bufferlist &srcdata = contents[old_obj].data;
+    if (srcdata.length() == 0) {
+      return 0;
+    }
+    available_objects.erase(old_obj);
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
+    uint64_t srcoff = u1(*rng);
+    uint64_t dstoff = u1(*rng);
+    uint64_t len = u2(*rng);
+    if (write_alignment) {
+      srcoff = ROUND_UP_TO(srcoff, write_alignment);
+      dstoff = ROUND_UP_TO(dstoff, write_alignment);
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    if (srcoff > srcdata.length() - 1) {
+      srcoff = srcdata.length() - 1;
+    }
+    if (srcoff + len > srcdata.length()) {
+      len = srcdata.length() - srcoff;
+    }
+    if (0)
+      cout << __func__ << " from " << srcoff << "~" << len
+	 << " (size " << srcdata.length() << ") to "
+	 << dstoff << "~" << len << std::endl;
+
+    ObjectStore::Transaction t;
+    vector<boost::tuple<uint64_t,uint64_t,uint64_t>> extents;
+    extents.emplace_back(
+      boost::tuple<uint64_t,uint64_t,uint64_t>(srcoff, dstoff, len));
+    t.move_ranges_destroy_src(cid, old_obj, new_obj, extents);
+    ++in_flight;
+    in_flight_objects.insert(old_obj);
+
+    bufferlist bl;
+    if (srcoff < srcdata.length()) {
+      if (srcoff + len > srcdata.length()) {
+	bl.substr_of(srcdata, srcoff, srcdata.length() - srcoff);
+      } else {
+	bl.substr_of(srcdata, srcoff, len);
+      }
+    }
+
+    // *copy* the data buffer, since we may modify it later.
+    {
+      bufferlist t;
+      t.append(bl.c_str(), bl.length());
+      t.swap(bl);
+    }
+
+    bufferlist& dstdata = contents[new_obj].data;
+    if (dstdata.length() <= dstoff) {
+      if (bl.length() > 0) {
+        dstdata.append_zero(dstoff - dstdata.length());
+        dstdata.append(bl);
+      }
+    } else {
+      bufferlist value;
+      assert(dstdata.length() > dstoff);
+      dstdata.copy(0, dstoff, value);
+      value.append(bl);
+      if (value.length() < dstdata.length())
+        dstdata.copy(value.length(),
+		     dstdata.length() - value.length(), value);
+      value.swap(dstdata);
+    }
+
+    // remove source
+    contents.erase(old_obj);
+
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
+    return status;
+  }
+
   int setattrs() {
     Mutex::Locker locker(lock);
     EnterExit ee("setattrs");
@@ -3897,6 +3989,8 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
       test_obj.write();
     } else if (val > 500) {
       test_obj.clone();
+    } else if (val > 475) {
+      test_obj.move_ranges_destroy_src();
     } else if (val > 450) {
       test_obj.clone_range();
     } else if (val > 300) {
