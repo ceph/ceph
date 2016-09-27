@@ -517,7 +517,7 @@ void GroupSnapshot::dump(Formatter *f) const {
 }
 
 void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
-  o.push_back(new GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_PENDING));
+  o.push_back(new GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_INCOMPLETE));
   o.push_back(new GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
 }
 void TrashImageSpec::encode(bufferlist& bl) const {
