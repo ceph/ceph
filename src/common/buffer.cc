@@ -2432,7 +2432,7 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
       if (row_is_zeros) {
 	if (was_zeros) {
 	  if (!did_star) {
-	    out << "*\n";
+	    out << "\n*";
 	    did_star = true;
 	  }
 	  continue;
