@@ -7370,7 +7370,6 @@ void BlueStore::_wctx_finish(
   OnodeRef o,
   WriteContext *wctx)
 {
-  set<pair<bool, BlobRef> > blobs2remove;
   auto oep = wctx->old_extents.begin();
   while (oep != wctx->old_extents.end()) {
     auto &lo = *oep;
