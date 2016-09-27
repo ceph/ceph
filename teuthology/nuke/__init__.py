@@ -315,54 +315,31 @@ def nuke_helper(ctx, should_unlock):
             log.info("Will attempt to connect via SSH")
             remote = Remote(host)
             remote.connect()
-
     add_remotes(ctx, None)
     connect(ctx, None)
-
-    log.info("Clearing teuthology firewall rules...")
     clear_firewall(ctx)
-    log.info("Cleared teuthology firewall rules.")
-
-    log.info('Unmount ceph-fuse and killing daemons...')
     shutdown_daemons(ctx)
-    log.info('All daemons killed.')
     kill_valgrind(ctx)
     # Try to remove packages before reboot
     remove_installed_packages(ctx)
-
     remotes = ctx.cluster.remotes.keys()
     reboot(ctx, remotes)
     # shutdown daemons again incase of startup
-    log.info('Stop daemons after restart...')
     shutdown_daemons(ctx)
-    log.info('All daemons killed.')
-    log.info('Unmount any osd data directories...')
     remove_osd_mounts(ctx)
-    log.info('Unmount any osd tmpfs dirs...')
     remove_osd_tmpfs(ctx)
-    log.info("Terminating Hadoop services...")
     kill_hadoop(ctx)
-    log.info("Remove kernel mounts...")
     remove_kernel_mounts(ctx)
-
-    log.info("Force remove ceph packages")
     remove_ceph_packages(ctx)
-
-    log.info('Synchronizing clocks...')
     synch_clocks(remotes)
-
     log.info('Making sure firmware.git is not locked...')
     ctx.cluster.run(args=['sudo', 'rm', '-f',
                           '/lib/firmware/updates/.git/index.lock', ])
-
     remove_configuration_files(ctx)
-    log.info('Removing any multipath config/pkgs...')
     undo_multipath(ctx)
-    log.info('Resetting syslog output locations...')
     reset_syslog_dir(ctx)
     remove_ceph_data(ctx)
     remove_testing_tree(ctx)
-    log.info('Filesystem cleared.')
     remove_yum_timedhosts(ctx)
     # Once again remove packages after reboot
     remove_installed_packages(ctx)

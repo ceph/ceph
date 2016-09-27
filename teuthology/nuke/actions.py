@@ -16,97 +16,108 @@ def clear_firewall(ctx):
     identified by containing a comment with 'teuthology' in it.  Non-teuthology
     firewall rules are unaffected.
     """
+    log.info("Clearing teuthology firewall rules...")
     ctx.cluster.run(
         args=[
             "sudo", "sh", "-c",
             "iptables-save | grep -v teuthology | iptables-restore"
         ],
     )
+    log.info("Cleared teuthology firewall rules.")
 
 
 def shutdown_daemons(ctx):
+    log.info('Unmounting ceph-fuse and killing daemons...')
     ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                           'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
                           'sudo', 'systemctl', 'stop', 'ceph.target'],
                     check_status=False, timeout=180)
     ctx.cluster.run(
-            args=[
-                'if', 'grep', '-q', 'ceph-fuse', '/etc/mtab', run.Raw(';'),
-                'then',
-                'grep', 'ceph-fuse', '/etc/mtab', run.Raw('|'),
-                'grep', '-o', " /.* fuse", run.Raw('|'),
-                'grep', '-o', "/.* ", run.Raw('|'),
-                'xargs', '-n', '1', 'sudo', 'fusermount', '-u', run.Raw(';'),
-                'fi',
-                run.Raw(';'),
-                'if', 'grep', '-q', 'rbd-fuse', '/etc/mtab', run.Raw(';'),
-                'then',
-                'grep', 'rbd-fuse', '/etc/mtab', run.Raw('|'),
-                'grep', '-o', " /.* fuse", run.Raw('|'),
-                'grep', '-o', "/.* ", run.Raw('|'),
-                'xargs', '-n', '1', 'sudo', 'fusermount', '-u', run.Raw(';'),
-                'fi',
-                run.Raw(';'),
-                'sudo',
-                'killall',
-                '--quiet',
-                'ceph-mon',
-                'ceph-osd',
-                'ceph-mds',
-                'ceph-fuse',
-                'ceph-disk',
-                'radosgw',
-                'ceph_test_rados',
-                'rados',
-                'rbd-fuse',
-                'apache2',
-                run.Raw('||'),
-                'true',  # ignore errors from ceph binaries not being found
-            ],
-            timeout=120,
-        )
+        args=[
+            'if', 'grep', '-q', 'ceph-fuse', '/etc/mtab', run.Raw(';'),
+            'then',
+            'grep', 'ceph-fuse', '/etc/mtab', run.Raw('|'),
+            'grep', '-o', " /.* fuse", run.Raw('|'),
+            'grep', '-o', "/.* ", run.Raw('|'),
+            'xargs', '-n', '1', 'sudo', 'fusermount', '-u', run.Raw(';'),
+            'fi',
+            run.Raw(';'),
+            'if', 'grep', '-q', 'rbd-fuse', '/etc/mtab', run.Raw(';'),
+            'then',
+            'grep', 'rbd-fuse', '/etc/mtab', run.Raw('|'),
+            'grep', '-o', " /.* fuse", run.Raw('|'),
+            'grep', '-o', "/.* ", run.Raw('|'),
+            'xargs', '-n', '1', 'sudo', 'fusermount', '-u', run.Raw(';'),
+            'fi',
+            run.Raw(';'),
+            'sudo',
+            'killall',
+            '--quiet',
+            'ceph-mon',
+            'ceph-osd',
+            'ceph-mds',
+            'ceph-fuse',
+            'ceph-disk',
+            'radosgw',
+            'ceph_test_rados',
+            'rados',
+            'rbd-fuse',
+            'apache2',
+            run.Raw('||'),
+            'true',  # ignore errors from ceph binaries not being found
+        ],
+        timeout=120,
+    )
+    log.info('All daemons killed.')
 
 
 def kill_hadoop(ctx):
+    log.info("Terminating Hadoop services...")
     ctx.cluster.run(args=[
-            "ps", "-ef",
-            run.Raw("|"), "grep", "java.*hadoop",
-            run.Raw("|"), "grep", "-v", "grep",
-            run.Raw("|"), 'awk', '{print $2}',
-            run.Raw("|"), 'xargs', 'kill', '-9',
-            ], check_status=False, timeout=60)
+        "ps", "-ef",
+        run.Raw("|"), "grep", "java.*hadoop",
+        run.Raw("|"), "grep", "-v", "grep",
+        run.Raw("|"), 'awk', '{print $2}',
+        run.Raw("|"), 'xargs', 'kill', '-9',
+        ],
+        check_status=False,
+        timeout=60
+    )
+
 
 def kill_valgrind(ctx):
     # http://tracker.ceph.com/issues/17084
     ctx.cluster.run(
-        args=['sudo', 'pkill', '-f', '-9', 'valgrind.bin',],
+        args=['sudo', 'pkill', '-f', '-9', 'valgrind.bin'],
         check_status=False,
         timeout=20,
     )
+
 
 def remove_kernel_mounts(ctx):
     """
     properly we should be able to just do a forced unmount,
     but that doesn't seem to be working, so you should reboot instead
     """
-    log.info('clearing kernel mount from all nodes')
+    log.info("Removing kernel mounts...")
     ctx.cluster.run(
-            args=[
-                'grep', 'ceph', '/etc/mtab', run.Raw('|'),
-                'grep', '-o', "on /.* type", run.Raw('|'),
-                'grep', '-o', "/.* ", run.Raw('|'),
-                'xargs', '-r',
-                'sudo', 'umount', '-f', run.Raw(';'),
-            ],
-            check_status=False,
-            timeout=60
-        )
+        args=[
+            'grep', 'ceph', '/etc/mtab', run.Raw('|'),
+            'grep', '-o', "on /.* type", run.Raw('|'),
+            'grep', '-o', "/.* ", run.Raw('|'),
+            'xargs', '-r',
+            'sudo', 'umount', '-f', run.Raw(';'),
+        ],
+        check_status=False,
+        timeout=60
+    )
 
 
 def remove_osd_mounts(ctx):
     """
     unmount any osd data mounts (scratch disks)
     """
+    log.info('Unmount any osd data directories...')
     ctx.cluster.run(
         args=[
             'grep',
@@ -126,6 +137,7 @@ def remove_osd_tmpfs(ctx):
     """
     unmount tmpfs mounts
     """
+    log.info('Unmount any osd tmpfs dirs...')
     ctx.cluster.run(
         args=[
             'egrep', 'tmpfs\s+/mnt', '/etc/mtab', run.Raw('|'),
@@ -167,6 +179,7 @@ def reboot(ctx, remotes):
 
 
 def reset_syslog_dir(ctx):
+    log.info('Resetting syslog output locations...')
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -229,6 +242,7 @@ def remove_ceph_packages(ctx):
     in many cases autocorrect will not work due to missing packages
     due to repo changes
     """
+    log.info("Force remove ceph packages")
     ceph_packages_to_remove = ['ceph-common', 'ceph-mon', 'ceph-osd',
                                'libcephfs1', 'librados2', 'librgw2', 'librbd1',
                                'ceph-selinux', 'python-cephfs', 'ceph-base',
@@ -271,9 +285,9 @@ def remove_ceph_packages(ctx):
             log.info('Remove any ceph packages')
             remote.run(
                 args=[
-                     'sudo', 'dpkg', '--remove', '--force-remove-reinstreq',
-                     run.Raw(pkgs)
-                     ],
+                    'sudo', 'dpkg', '--remove', '--force-remove-reinstreq',
+                    run.Raw(pkgs)
+                ],
                 check_status=False
             )
             log.info("Autoclean")
@@ -340,11 +354,11 @@ def remove_configuration_files(ctx):
     a default section in its config with custom locations.
     """
     ctx.cluster.run(
-            args=[
-                'rm', '-f', '/home/ubuntu/.cephdeploy.conf'
-            ],
-            timeout=30
-        )
+        args=[
+            'rm', '-f', '/home/ubuntu/.cephdeploy.conf'
+        ],
+        timeout=30
+    )
 
 
 def undo_multipath(ctx):
@@ -353,6 +367,7 @@ def undo_multipath(ctx):
     remove the packages/daemon that manages them so they don't
     come back unless specifically requested by the test.
     """
+    log.info('Removing any multipath config/pkgs...')
     for remote in ctx.cluster.remotes.iterkeys():
         remote.run(
             args=[
@@ -364,6 +379,7 @@ def undo_multipath(ctx):
 
 
 def synch_clocks(remotes):
+    log.info('Synchronizing clocks...')
     for remote in remotes:
         remote.run(
             args=[
@@ -405,6 +421,4 @@ def check_console(hostname):
     if console.check_status(timeout=timeout):
         log.info('console ready on %s' % cname)
     else:
-        log.error(
-            "Failed to get console status for %s, " % cname
-        )
+        log.error("Failed to get console status for %s, " % cname)
