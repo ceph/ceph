@@ -2359,7 +2359,6 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   }
 
 
-
 }
 
 std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts) {
