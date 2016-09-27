@@ -6488,14 +6488,6 @@ int BlueStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  // delayed csum calculation?
-  for (auto& d : txc->deferred_csum) {
-    dout(20) << __func__ << "  deferred csum calc blob " << d.blob
-	     << " b_off 0x" << std::hex << d.b_off << std::dec
-	     << dendl;
-    d.blob->dirty_blob().calc_csum(d.b_off, d.data);
-  }
-
   _txc_write_nodes(txc, txc->t);
   // journal wal items
   if (txc->wal_txn) {
@@ -7203,7 +7195,7 @@ void BlueStore::_do_write_small(
 	});
       assert(r == 0);
       if (b->get_blob().csum_type) {
-	txc->add_deferred_csum(b, b_off, padded);
+	b->dirty_blob().calc_csum(b_off, padded);
       }
       op->data.claim(padded);
       dout(20) << __func__ << "  wal write 0x" << std::hex << b_off << "~"
@@ -8145,14 +8137,6 @@ int BlueStore::_do_clone_range(
 	}
       }
       txc->write_shared_blob(e.blob->shared_blob);
-      // ugly: duplicate deferred csum work, if any.
-      for (auto& dc : txc->deferred_csum) {
-	if (dc.blob == e.blob) {
-	  dout(20) << __func__ << "  duplicating deferred csum for blob "
-		   << *e.blob << dendl;
-	  txc->add_deferred_csum(cb, dc.b_off, dc.data);
-	}
-      }
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
     // dup extent
