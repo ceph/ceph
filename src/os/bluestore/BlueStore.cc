@@ -7458,8 +7458,7 @@ int BlueStore::_do_write(
   uint64_t end = offset + length;
 
   WriteContext wctx;
-  wctx.fadvise_flags = fadvise_flags;
-  if (wctx.fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
   }
