@@ -20,6 +20,7 @@
 #include "librbd/journal/CreateRequest.h"
 
 #include <boost/scope_exit.hpp>
+#include <utility>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -670,50 +671,56 @@ int Journal<I>::demote() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Mutex::Locker locker(m_lock);
-  assert(m_journaler != nullptr && is_tag_owner(m_lock));
-
-  cls::journal::Client client;
-  int r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
-  if (r < 0) {
-    lderr(cct) << this << " " << __func__ << ": "
-               << "failed to retrieve client: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
-  journal::TagPredecessor predecessor;
-  predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
-  if (!client.commit_position.object_positions.empty()) {
-    auto position = client.commit_position.object_positions.front();
-    predecessor.commit_valid = true;
-    predecessor.tag_tid = position.tag_tid;
-    predecessor.entry_tid = position.entry_tid;
-  }
-
-  cls::journal::Tag new_tag;
-  r = allocate_journaler_tag(cct, m_journaler, client, m_tag_class,
-                             predecessor, ORPHAN_MIRROR_UUID, &new_tag);
-  if (r < 0) {
-    return r;
-  }
-
-  bufferlist::iterator tag_data_bl_it = new_tag.data.begin();
-  r = C_DecodeTag::decode(&tag_data_bl_it, &m_tag_data);
-  if (r < 0) {
-    lderr(cct) << this << " " << __func__ << ": "
-               << "failed to decode newly allocated tag" << dendl;
-    return r;
-  }
-
-  journal::EventEntry event_entry{journal::DemoteEvent{}};
-  bufferlist event_entry_bl;
-  ::encode(event_entry, event_entry_bl);
-
-  m_tag_tid = new_tag.tid;
-  Future future = m_journaler->append(m_tag_tid, event_entry_bl);
+  int r;
   C_SaferCond ctx;
-  future.flush(&ctx);
+  Future future;
+  C_SaferCond flush_ctx;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_journaler != nullptr && is_tag_owner(m_lock));
+
+    cls::journal::Client client;
+    r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
+    if (r < 0) {
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
+    journal::TagPredecessor predecessor;
+    predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
+    if (!client.commit_position.object_positions.empty()) {
+      auto position = client.commit_position.object_positions.front();
+      predecessor.commit_valid = true;
+      predecessor.tag_tid = position.tag_tid;
+      predecessor.entry_tid = position.entry_tid;
+    }
+
+    cls::journal::Tag new_tag;
+    r = allocate_journaler_tag(cct, m_journaler, client, m_tag_class,
+                               predecessor, ORPHAN_MIRROR_UUID, &new_tag);
+    if (r < 0) {
+      return r;
+    }
+
+    bufferlist::iterator tag_data_bl_it = new_tag.data.begin();
+    r = C_DecodeTag::decode(&tag_data_bl_it, &m_tag_data);
+    if (r < 0) {
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to decode newly allocated tag" << dendl;
+      return r;
+    }
+
+    journal::EventEntry event_entry{journal::DemoteEvent{}};
+    bufferlist event_entry_bl;
+    ::encode(event_entry, event_entry_bl);
+
+    m_tag_tid = new_tag.tid;
+    future = m_journaler->append(m_tag_tid, event_entry_bl);
+    future.flush(&ctx);
+  }
 
   r = ctx.wait();
   if (r < 0) {
@@ -723,9 +730,11 @@ int Journal<I>::demote() {
     return r;
   }
 
-  m_journaler->committed(future);
-  C_SaferCond flush_ctx;
-  m_journaler->flush_commit_position(&flush_ctx);
+  {
+    Mutex::Locker l(m_lock);
+    m_journaler->committed(future);
+    m_journaler->flush_commit_position(&flush_ctx);
+  }
 
   r = flush_ctx.wait();
   if (r < 0) {
@@ -858,20 +867,23 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       bool flush_entry) {
   assert(!bufferlists.empty());
 
-  Futures futures;
   uint64_t tid;
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
 
-    Mutex::Locker event_locker(m_event_lock);
     tid = ++m_event_tid;
     assert(tid != 0);
+  }
 
-    for (auto &bl : bufferlists) {
-      assert(bl.length() <= m_max_append_size);
-      futures.push_back(m_journaler->append(m_tag_tid, bl));
-    }
+  Futures futures;
+  for (auto &bl : bufferlists) {
+    assert(bl.length() <= m_max_append_size);
+    futures.push_back(m_journaler->append(m_tag_tid, bl));
+  }
+
+  {
+    Mutex::Locker event_locker(m_event_lock);
     m_events[tid] = Event(futures, requests, offset, length);
   }
 
@@ -890,6 +902,7 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
   } else {
     futures.back().wait(on_safe);
   }
+
   return tid;
 }
 
