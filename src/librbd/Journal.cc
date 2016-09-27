@@ -380,14 +380,14 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
 
   cls::journal::Client client;
   cls::journal::Tag tag;
-  journal::TagData tag_data;
 
   assert(non_primary ^ primary_mirror_uuid.empty());
   std::string mirror_uuid = (non_primary ? primary_mirror_uuid :
                                            LOCAL_MIRROR_UUID);
+  journal::TagPredecessor predecessor;
   r = allocate_journaler_tag(cct, &journaler, client,
-                             cls::journal::Tag::TAG_CLASS_NEW,
-                             tag_data, mirror_uuid, &tag);
+			     cls::journal::Tag::TAG_CLASS_NEW,
+                             predecessor, mirror_uuid, &tag);
 
   bufferlist client_data;
   ::encode(journal::ClientData{journal::ImageClientMeta{tag.tag_class}},
