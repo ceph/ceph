@@ -171,11 +171,11 @@ Development-mode cluster
 You can start a development-mode Ceph cluster, after compiling the source,
 with::
 
-    cd src
-    install -d -m0755 out dev/osd0
-    ./vstart.sh -n -x -l
+    cd build
+    make vstart
+    ../src/vstart.sh -n -x -l
     # check that it's there
-    ./ceph health
+    ./bin/ceph health
 
 For more ``vstart.sh`` examples, see :doc:`/dev/quick_guide`.
 
