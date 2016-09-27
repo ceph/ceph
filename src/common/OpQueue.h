@@ -37,10 +37,15 @@ class OpQueue {
   public:
     // How many Ops are in the queue
     virtual unsigned length() const = 0;
-    // Ops will be removed f evaluates to true, f may have sideeffects
+    // Ops will be removed f evaluates to true, f may have side effects.
+    // Must visit operations from back to front, due to its use with
+    // OSD::SharedOpQueue::Pred .
     virtual void remove_by_filter(
 	std::function<bool (const T&)> f) = 0;
-    // Ops of this priority should be deleted immediately
+    // Ops of this priority should be deleted immediately. If out exists
+    // then items must be added to the front in front-to-back order. The
+    // typical strategy is to visit items in reverse order and use push_front
+    // to insert them at the front.
     virtual void remove_by_class(K k, std::list<T> *out) = 0;
     // Enqueue op in the back of the strict queue
     virtual void enqueue_strict(K cl, unsigned priority, T item) = 0;
