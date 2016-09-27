@@ -23,7 +23,7 @@ from teuthology.orchestra import run
 import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 
-CEPH_ROLE_TYPES = ['mon', 'osd', 'mds', 'rgw']
+CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +38,9 @@ def generate_caps(type_):
         osd=dict(
             mon='allow *',
             osd='allow *',
+        ),
+        mgr=dict(
+            mon='allow *',
         ),
         mds=dict(
             mon='allow *',
@@ -598,6 +601,35 @@ def cluster(ctx, config):
         ),
     )
 
+    log.info('Setting up mgr nodes...')
+    mgrs = ctx.cluster.only(teuthology.is_type('mgr', cluster_name))
+    for remote, roles_for_host in mgrs.remotes.iteritems():
+        for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
+                                                     cluster_name):
+            _, _, id_ = teuthology.split_role(role)
+            mgr_dir = '/var/lib/ceph/mgr/{cluster}-{id}'.format(
+                cluster=cluster_name,
+                id=id_,
+            )
+            remote.run(
+                args=[
+                    'sudo',
+                    'mkdir',
+                    '-p',
+                    mgr_dir,
+                    run.Raw('&&'),
+                    'sudo',
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    coverage_dir,
+                    'ceph-authtool',
+                    '--create-keyring',
+                    '--gen-key',
+                    '--name=mgr.{id}'.format(id=id_),
+                    mgr_dir + '/keyring',
+                ],
+            )
+
     log.info('Setting up mds nodes...')
     mdss = ctx.cluster.only(teuthology.is_type('mds', cluster_name))
     for remote, roles_for_host in mdss.remotes.iteritems():
@@ -753,7 +785,7 @@ def cluster(ctx, config):
     keys_fp = StringIO()
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for type_ in ['mds', 'osd']:
+        for type_ in ['mgr',  'mds', 'osd']:
             for role in teuthology.cluster_roles_of_type(roles_for_host, type_, cluster_name):
                 _, _, id_ = teuthology.split_role(role)
                 data = teuthology.get_file(
@@ -1516,6 +1548,7 @@ def task(ctx, config):
             cluster=config['cluster'],
         )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
+        lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: cephfs_setup(ctx=ctx, config=config),
