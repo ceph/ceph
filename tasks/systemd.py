@@ -66,8 +66,10 @@ def task(ctx, config):
         name = remote.shortname
         mon_name = 'ceph-mon@' + name + '.service'
         mds_name = 'ceph-mds@' + name + '.service'
+        mgr_name = 'ceph-mgr@' + name + '.service'
         mon_role_name = 'mon.' + name
         mds_role_name = 'mds.' + name
+        mgr_role_name = 'mgr.' + name
         m_osd = re.search('--id (\d+) --setuser ceph', r.stdout.getvalue())
         if m_osd:
             osd_service = 'ceph-osd@{m}.service'.format(m=m_osd.group(1))
@@ -97,6 +99,18 @@ def task(ctx, config):
             else:
                 log.info("Failed to stop ceph mon service")
             remote.run(args=['sudo', 'systemctl', 'start', mon_name])
+            time.sleep(4)
+        if mgr_role_name in roles:
+            remote.run(args=['sudo', 'systemctl', 'status', mgr_name])
+            remote.run(args=['sudo', 'systemctl', 'stop', mgr_name])
+            time.sleep(4)  # immediate check will result in deactivating state
+            r = remote.run(args=['sudo', 'systemctl', 'status', mgr_name],
+                           stdout=StringIO(), check_status=False)
+            if r.stdout.getvalue().find('Active: inactive'):
+                log.info("Sucessfully stopped single ceph mgr service")
+            else:
+                log.info("Failed to stop ceph mgr service")
+            remote.run(args=['sudo', 'systemctl', 'start', mgr_name])
             time.sleep(4)
         if mds_role_name in roles:
             remote.run(args=['sudo', 'systemctl', 'status', mds_name])

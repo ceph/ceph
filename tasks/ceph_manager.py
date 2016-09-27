@@ -888,6 +888,9 @@ class CephManager:
     """
     Ceph manager object.
     Contains several local functions that form a bulk of this module.
+
+    Note: this class has nothing to do with the Ceph daemon (ceph-mgr) of
+    the same name.
     """
 
     REPLICATED_POOL = 1
