@@ -304,22 +304,30 @@ def remove_installed_packages(ctx):
         )
     )
     install_task.remove_sources(ctx, conf)
+
+
+def remove_ceph_data(ctx):
+    log.info("Removing ceph data...")
+    ctx.cluster.run(
+        args=[
+            'sudo', 'rm', '-rf', '/etc/ceph',
+        ],
+    )
     install_task.purge_data(ctx)
 
 
 def remove_testing_tree(ctx):
+    log.info('Clearing filesystem of test data...')
     ctx.cluster.run(
-            args=[
-                'sudo', 'rm', '-rf', get_testdir(ctx),
-                # just for old time's sake
-                run.Raw('&&'),
-                'sudo', 'rm', '-rf', '/tmp/cephtest',
-                run.Raw('&&'),
-                'sudo', 'rm', '-rf', '/home/ubuntu/cephtest',
-                run.Raw('&&'),
-                'sudo', 'rm', '-rf', '/etc/ceph',
-            ],
-        )
+        args=[
+            'sudo', 'rm', '-rf', get_testdir(ctx),
+            # just for old time's sake
+            run.Raw('&&'),
+            'sudo', 'rm', '-rf', '/tmp/cephtest',
+            run.Raw('&&'),
+            'sudo', 'rm', '-rf', '/home/ubuntu/cephtest',
+        ],
+    )
 
 
 def remove_configuration_files(ctx):

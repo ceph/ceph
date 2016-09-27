@@ -27,7 +27,8 @@ from .actions import (
     reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
     remove_kernel_mounts, remove_ceph_packages, synch_clocks,
     remove_configuration_files, undo_multipath, reset_syslog_dir,
-    remove_testing_tree, remove_yum_timedhosts, kill_valgrind,
+    remove_ceph_data, remove_testing_tree, remove_yum_timedhosts,
+    kill_valgrind,
 )
 
 log = logging.getLogger(__name__)
@@ -359,7 +360,7 @@ def nuke_helper(ctx, should_unlock):
     undo_multipath(ctx)
     log.info('Resetting syslog output locations...')
     reset_syslog_dir(ctx)
-    log.info('Clearing filesystem of test data...')
+    remove_ceph_data(ctx)
     remove_testing_tree(ctx)
     log.info('Filesystem cleared.')
     remove_yum_timedhosts(ctx)
