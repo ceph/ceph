@@ -2621,16 +2621,6 @@ public:
     can_local_rollback = other.can_local_rollback;
     rollback_info_completed = other.rollback_info_completed;
   }
-  void claim_append(ObjectModDesc &other) {
-    if (!can_local_rollback || rollback_info_completed)
-      return;
-    if (!other.can_local_rollback) {
-      mark_unrollbackable();
-      return;
-    }
-    bl.claim_append(other.bl);
-    rollback_info_completed = other.rollback_info_completed;
-  }
   void swap(ObjectModDesc &other) {
     bl.swap(other.bl);
 
