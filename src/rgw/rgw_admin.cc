@@ -4835,20 +4835,22 @@ next:
 
     int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
 
+    formatter->open_array_section("entries");
+
     for (int i = 0; i < max_shards; i++) {
       RGWRados::BucketShard bs(store);
       int shard_id = (bucket_info.num_shards > 0  ? i : -1);
       int ret = bs.init(bucket, shard_id);
+      marker.clear();
+
       if (ret < 0) {
         cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
-      formatter->open_array_section("entries");
-
       do {
         entries.clear();
-        ret = store->bi_list(bs, marker, max_entries, &entries, &is_truncated);
+        ret = store->bi_list(bs, object, marker, max_entries, &entries, &is_truncated);
         if (ret < 0) {
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -4862,9 +4864,10 @@ next:
         }
         formatter->flush(cout);
       } while (is_truncated);
-      formatter->close_section();
       formatter->flush(cout);
     }
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
@@ -5086,7 +5089,7 @@ next:
       marker.clear();
       while (is_truncated) {
         entries.clear();
-        ret = store->bi_list(bucket, i, marker, max_entries, &entries, &is_truncated);
+        ret = store->bi_list(bucket, i, string(), marker, max_entries, &entries, &is_truncated);
         if (ret < 0) {
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
