@@ -7267,17 +7267,13 @@ void BlueStore::_do_write_big(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  uint64_t max_blob_len = length;
-  if (wctx->compress) {
-    max_blob_len = MIN(length, wctx->comp_blob_size);
-  }
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " max_blob_len 0x" << max_blob_len
+	   << " target_blob_size 0x" << wctx->target_blob_size
 	   << " compress " << (int)wctx->compress
 	   << std::dec << dendl;
   while (length > 0) {
     BlobRef b = c->new_blob();
-    auto l = MIN(max_blob_len, length);
+    auto l = MIN(wctx->target_blob_size, length);
     bufferlist t;
     blp.copy(l, t);
     _buffer_cache_write(txc, b, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
@@ -7678,13 +7674,22 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
-    wctx.comp_blob_size = comp_max_blob_size.load();
     wctx.csum_order = min_alloc_size_order;
+    if (wctx.compress) {
+      wctx.target_blob_size = comp_max_blob_size.load();
+    }
   } else {
-    wctx.comp_blob_size = comp_min_blob_size.load();
+    if (wctx.compress) {
+      wctx.target_blob_size = comp_min_blob_size.load();
+    }
   }
+  if (wctx.target_blob_size == 0 ||
+      wctx.target_blob_size > g_conf->bluestore_max_blob_size) {
+    wctx.target_blob_size = g_conf->bluestore_max_blob_size;
+  }
+
   dout(20) << __func__ << " prefer csum_order " << wctx.csum_order
-	   << " comp_blob_size 0x" << std::hex << wctx.comp_blob_size
+	   << " target_blob_size 0x" << std::hex << wctx.target_blob_size
 	   << std::dec << dendl;
 
   uint64_t gc_start_offset = offset, gc_end_offset = end;
