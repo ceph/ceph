@@ -1724,7 +1724,6 @@ private:
   // write ops
 
   struct WriteContext {
-    unsigned fadvise_flags = 0;  ///< write flags
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
