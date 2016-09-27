@@ -2686,6 +2686,11 @@ next:
       return EINVAL;
     }
 
+    if (num_shards > (int)store->get_max_bucket_shards()) {
+      cerr << "ERROR: num_shards too high, max value: " << store->get_max_bucket_shards() << std::endl;
+      return EINVAL;
+    }
+
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
     int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket, &attrs);
