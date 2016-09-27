@@ -89,8 +89,14 @@ namespace ceph {
     inline void remove_by_class(Client cl,
 				std::list<Request> *out) override final {
       queue.remove_by_filter(
-	[&] (const Request& r) ->bool { return cl == r.second.get_owner(); },
-	out);
+	[&cl, out] (const Request& r) -> bool {
+	  if (cl == r.second.get_owner()) {
+	    out->push_front(r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	});
     }
 
     inline void enqueue_strict(Client cl,

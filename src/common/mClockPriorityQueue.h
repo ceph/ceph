@@ -48,6 +48,7 @@ namespace ceph {
       unsigned ret = 0;
       for (typename ListPairs::iterator i = l->end();
 	   i != l->begin();
+	   /* no inc */
 	) {
 	auto next = i;
 	--next;
@@ -139,7 +140,9 @@ namespace ceph {
 	assert(cur != q.end());
 	cur->second.pop_front();
 	if (cur->second.empty()) {
-	  q.erase(cur++);
+	  auto i = cur;
+	  ++cur;
+	  q.erase(i);
 	} else {
 	  ++cur;
 	}
@@ -158,23 +161,21 @@ namespace ceph {
 	return q.empty();
       }
 
-      void remove_by_filter(std::function<bool (const T&)> f,
-			    std::list<T>* out = nullptr) {
+      void remove_by_filter(std::function<bool (const T&)> f) {
 	for (typename Classes::iterator i = q.begin();
 	     i != q.end();
 	     /* no-inc */) {
-	  size -= filter_list_pairs(&(i->second), f, out);
+	  size -= filter_list_pairs(&(i->second), f);
 	  if (i->second.empty()) {
 	    if (cur == i) {
 	      ++cur;
 	    }
-	    q.erase(i++);
+	    i = q.erase(i);
 	  } else {
 	    ++i;
 	  }
 	}
-	if (cur == q.end())
-	  cur = q.begin();
+	if (cur == q.end()) cur = q.begin();
       }
 
       void remove_by_class(K k, std::list<T> *out) {
@@ -187,17 +188,12 @@ namespace ceph {
 	  ++cur;
 	}
 	if (out) {
-	  for (typename ListPairs::reverse_iterator j =
-		 i->second.rbegin();
-	       j != i->second.rend();
-	       ++j) {
+	  for (auto j = i->second.rbegin(); j != i->second.rend(); ++j) {
 	    out->push_front(j->second);
 	  }
 	}
 	q.erase(i);
-	if (cur == q.end()) {
-	  cur = q.begin();
-	}
+	if (cur == q.end()) cur = q.begin();
       }
 
       void dump(ceph::Formatter *f) const {
@@ -238,65 +234,59 @@ namespace ceph {
       return total;
     }
 
-    // we need this version to override pure virtual function
-    void remove_by_filter(std::function<bool (const T&)> filter) override final {
-      remove_by_filter(filter, nullptr);
-    }
+    // be sure to do things in reverse priority order and push_front
+    // to the list so items end up on list in front-to-back priority
+    // order
+    void
+      remove_by_filter(std::function<bool (const T&)> filter_accum)
+      override final {
+      queue.remove_by_req_filter(filter_accum, true);
 
-    // this offers more functionality than the pure virtual function
-    // we're overriding
-    void remove_by_filter(std::function<bool (const T&)> filter,
-			  std::list<T> *out) {
+      for (auto i = queue_front.rbegin(); i != queue_front.rend(); /* no-inc */) {
+	if (filter_accum(i->second)) {
+	  i = decltype(i){ queue_front.erase(std::next(i).base()) };
+	} else {
+	  ++i;
+	}
+      }
+
       for (typename SubQueues::iterator i = high_queue.begin();
 	   i != high_queue.end();
 	   /* no-inc */ ) {
-	  i->second.remove_by_filter(filter, out);
+	i->second.remove_by_filter(filter_accum);
 	if (i->second.empty()) {
-	  high_queue.erase(i++);
+	  i = high_queue.erase(i);
 	} else {
 	  ++i;
 	}
-      }
-
-      for (auto i = queue_front.begin(); i != queue_front.end(); /* no-inc */) {
-	if (filter(i->second)) {
-	  if (nullptr != out) out->push_back(i->second);
-	  i = queue_front.erase(i);
-	} else {
-	  ++i;
-	}
-      }
-
-      if (out) {
-	queue.remove_by_req_filter(filter, *out);
-      } else {
-	queue.remove_by_req_filter(filter);
       }
     }
 
     void remove_by_class(K k, std::list<T> *out = nullptr) override final {
+      if (out) {
+	queue.remove_by_client(k,
+			       true,
+			       [&out] (const T& t) { out->push_front(t); });
+      } else {
+	queue.remove_by_client(k, true);
+      }
+
+      for (auto i = queue_front.rbegin(); i != queue_front.rend(); /* no-inc */) {
+	if (k == i->first) {
+	  if (nullptr != out) out->push_front(i->second);
+	  i = decltype(i){ queue_front.erase(std::next(i).base()) };
+	} else {
+	  ++i;
+	}
+      }
+
       for (auto i = high_queue.begin(); i != high_queue.end(); /* no-inc */) {
 	i->second.remove_by_class(k, out);
 	if (i->second.empty()) {
-	  high_queue.erase(i++);
+	  i = high_queue.erase(i);
 	} else {
 	  ++i;
 	}
-      }
-
-      for (auto i = queue_front.begin(); i != queue_front.end(); /* no-inc */) {
-	if (k == i->first) {
-	  if (nullptr != out) out->push_back(i->second);
-	  i = queue_front.erase(i);
-	} else {
-	  ++i;
-	}
-      }
-
-      if (out) {
-	queue.remove_by_client(k, *out);
-      } else {
-	queue.remove_by_client(k);
       }
     }
 

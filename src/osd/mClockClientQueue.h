@@ -80,7 +80,8 @@ namespace ceph {
     }
 
     // Ops will be removed f evaluates to true, f may have sideeffects
-    inline void remove_by_filter(std::function<bool(const Request&)> f) override final {
+    inline void
+    remove_by_filter(std::function<bool(const Request&)> f) override final {
       queue.remove_by_filter(f);
     }
 
@@ -88,8 +89,14 @@ namespace ceph {
     inline void remove_by_class(Client cl,
 				std::list<Request> *out) override final {
       queue.remove_by_filter(
-	[&] (const Request& r) ->bool { return cl == r.second.get_owner(); },
-	out);
+	[&cl, out] (const Request& r) -> bool {
+	  if (cl == r.second.get_owner()) {
+	    out->push_front(r);
+	    return true;
+	  } else {
+	    return false;
+	  }
+	});
     }
 
     inline void enqueue_strict(Client cl,
