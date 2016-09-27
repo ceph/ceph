@@ -243,6 +243,8 @@ namespace librbd {
     void snap_unset();
     librados::snap_t get_snap_id(cls::rbd::SnapshotNamespace in_snap_namespace,
 				 std::string in_snap_name) const;
+    librados::snap_t get_snap_id_from_namespace(
+      cls::rbd::SnapshotNamespace in_snap_namespace) const;
     const SnapInfo* get_snap_info(librados::snap_t in_snap_id) const;
     int get_snap_name(librados::snap_t in_snap_id,
 		      std::string *out_snap_name) const;

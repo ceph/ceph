@@ -170,6 +170,22 @@ typedef struct {
 } rbd_group_spec_t;
 
 typedef enum {
+  GROUP_SNAP_STATE_PENDING,
+  GROUP_SNAP_STATE_COMPLETE
+} rbd_group_snap_state_t;
+
+typedef struct {
+  char *name;
+  rbd_group_snap_state_t state;
+} rbd_group_snap_spec_t;
+
+typedef enum {
+  SNAP_NAMESPACE_TYPE_USER = 0,
+  SNAP_NAMESPACE_TYPE_GROUP = 1,
+  SNAP_NAMESPACE_TYPE_UNKNOWN = -1,
+} rbd_snap_namespace_type_t;
+
+typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
   RBD_LOCK_MODE_SHARED = 1,
 } rbd_lock_mode_t;
@@ -917,12 +933,25 @@ CEPH_RBD_API int rbd_image_get_group(rados_ioctx_t image_p,
 				     const char *image_name,
 				     rbd_group_spec_t *group_spec);
 CEPH_RBD_API void rbd_group_spec_cleanup(rbd_group_spec_t *group_spec);
-CEPH_RBD_API void rbd_group_image_status_cleanup(
-						rbd_group_image_status_t *image
-						);
-CEPH_RBD_API void rbd_group_image_status_list_cleanup(
-					      rbd_group_image_status_t *images,
-					      size_t len);
+CEPH_RBD_API void rbd_group_image_status_cleanup(rbd_group_image_status_t *image);
+CEPH_RBD_API void rbd_group_image_status_list_cleanup(rbd_group_image_status_t *images,
+                                                      size_t len);
+CEPH_RBD_API int rbd_group_snap_create(rados_ioctx_t group_p,
+                                       const char *group_name,
+                                       const char *snap_name);
+CEPH_RBD_API int rbd_group_snap_remove(rados_ioctx_t group_p,
+                                       const char *group_name,
+                                       const char *snap_name);
+CEPH_RBD_API int rbd_group_snap_list(rados_ioctx_t group_p,
+                                     const char *group_name,
+                                     rbd_group_snap_spec_t *snaps,
+                                     size_t *snaps_size);
+CEPH_RBD_API void rbd_group_snap_list_cleanup(rbd_group_snap_spec_t *snaps,
+                                              size_t len);
+CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
+					     uint64_t snap_id,
+					     rbd_snap_namespace_type_t *namespace_type);
+
 #ifdef __cplusplus
 }
 #endif

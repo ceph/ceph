@@ -339,7 +339,7 @@ WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
 SnapshotNamespaceType get_namespace_type(const SnapshotNamespace& snapshot_namespace);
 
 enum GroupSnapshotState {
-  GROUP_SNAPSHOT_STATE_PENDING = 0,
+  GROUP_SNAPSHOT_STATE_INCOMPLETE = 0,
   GROUP_SNAPSHOT_STATE_COMPLETE = 1,
 };
 
