@@ -38,7 +38,10 @@ def task(ctx, config):
     def run_one(num):
         """Run test spawn from gevent"""
         start = time.time()
-        benchcontext = copy.copy(config.get('radosbench'))
+        if not config.get('radosbench'):
+            benchcontext = {}
+        else:
+            benchcontext = copy.copy(config.get('radosbench'))
         iterations = 0
         while time.time() - start < int(config.get('time', 600)):
             log.info("Starting iteration %s of segment %s"%(iterations, num))
