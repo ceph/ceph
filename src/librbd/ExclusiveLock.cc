@@ -687,6 +687,7 @@ void ExclusiveLock<I>::handle_shutdown_released(int r) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.exclusive_lock = nullptr;
   }
 
@@ -694,7 +695,6 @@ void ExclusiveLock<I>::handle_shutdown_released(int r) {
     lderr(cct) << "failed to shut down exclusive lock: " << cpp_strerror(r)
                << dendl;
   } else {
-    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.aio_work_queue->unblock_writes();
   }
 
@@ -709,10 +709,10 @@ void ExclusiveLock<I>::handle_shutdown(int r) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.exclusive_lock = nullptr;
   }
 
-  m_image_ctx.aio_work_queue->clear_require_lock_on_read();
   m_image_ctx.aio_work_queue->unblock_writes();
   m_image_ctx.image_watcher->flush(util::create_context_callback<
     ExclusiveLock<I>, &ExclusiveLock<I>::complete_shutdown>(this));
