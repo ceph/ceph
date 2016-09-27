@@ -64,8 +64,6 @@ using namespace librados;
 
 #define dout_subsys ceph_subsys_rgw
 
-#define MAX_BUCKET_INDEX_SHARDS_PRIME 7877
-
 using namespace std;
 
 static RGWCache<RGWRados> cached_rados_provider;
