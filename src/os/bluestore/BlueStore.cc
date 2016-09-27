@@ -1888,6 +1888,8 @@ int BlueStore::ExtentMap::compress_extent_map(uint64_t offset, uint64_t length)
   if (p != extent_map.begin()) {
     --p;  // start to the left of offset
   }
+  // the caller should have just written to this region
+  assert(p != extent_map.end());
 
   // identify the *next* shard
   auto pshard = shards.begin();
