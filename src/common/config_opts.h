@@ -727,6 +727,7 @@ OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping 
 OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbeat tcp socket and set dscp as CS6 on it if true
+OPTION(osd_rep_deep_scrub_sleep, OPT_FLOAT, 0)         // seconds to sleep during replicated deep scrub reading
 
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
@@ -765,6 +766,7 @@ OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
 OPTION(osd_scrub_interval_randomize_ratio, OPT_FLOAT, 0.5) // randomize the scheduled scrub in the span of [min,min*(1+randomize_ratio))
 OPTION(osd_scrub_chunk_min, OPT_INT, 5)
 OPTION(osd_scrub_chunk_max, OPT_INT, 25)
+OPTION(osd_deep_map_chunk_max, OPT_U32, 25)  // Replica deep-scrub map (snapshots can exceed osd_scrub_chunk_max, so divide up deep scrubbing)
 OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
 OPTION(osd_scrub_auto_repair, OPT_BOOL, false)   // whether auto-repair inconsistencies upon deep-scrubbing
 OPTION(osd_scrub_auto_repair_num_errors, OPT_U32, 5)   // only auto-repair when number of errors is below this threshold
@@ -878,6 +880,12 @@ OPTION(osd_scrub_cost, OPT_U32, 50<<20)
 OPTION(osd_recovery_priority, OPT_U32, 5)
 // set default cost equal to 20MB io
 OPTION(osd_recovery_cost, OPT_U32, 20<<20)
+
+OPTION(osd_scrub_map_priority, OPT_U32, 63)  // Using straight client priority for now
+// set default cost of initial non-deep scan to 25K
+OPTION(osd_scrub_map_start_cost, OPT_U32, 25<<10)
+// set default cost equal to 50MB io per object for deep scrub
+OPTION(osd_scrub_map_deep_per_obj_cost, OPT_U32, 50<<20)
 
 /**
  * osd_recovery_op_warn_multiple scales the normal warning threshhold,

@@ -175,6 +175,10 @@ void PGQueueable::RunVis::operator()(const PGRecovery &op) {
   return osd->do_recovery(pg.get(), op.epoch_queued, op.reserved_pushes, handle);
 }
 
+void PGQueueable::RunVis::operator()(const PGBuildScrubMap &op) {
+  return pg->do_build_scrub_map(op.epoch_queued, handle);
+}
+
 //Initial features in new superblock.
 //Features here are also automatically upgraded
 CompatSet OSD::get_osd_initial_compat_set() {
@@ -1053,7 +1057,7 @@ bool OSDService::can_inc_scrubs_pending()
   Mutex::Locker l(sched_scrub_lock);
 
   if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
-    dout(20) << __func__ << scrubs_pending << " -> " << (scrubs_pending+1)
+    dout(20) << __func__ << " " << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     can_inc = true;
   } else {

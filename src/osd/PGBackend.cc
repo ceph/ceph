@@ -353,15 +353,13 @@ PGBackend *PGBackend::build_pg_backend(
  * pg lock may or may not be held
  */
 void PGBackend::be_scan_list(
-  ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
+  ScrubMap &map, const vector<hobject_t> &ls, uint32_t seed,
   ThreadPool::TPHandle &handle)
 {
-  dout(10) << __func__ << " scanning " << ls.size() << " objects"
-           << (deep ? " deeply" : "") << dendl;
-  int i = 0;
+  dout(10) << __func__ << " scanning " << ls.size() << " objects" << dendl;
   for (vector<hobject_t>::const_iterator p = ls.begin();
        p != ls.end();
-       ++p, i++) {
+       ++p) {
     handle.reset_tp_timeout();
     hobject_t poid = *p;
 
@@ -382,11 +380,6 @@ void PGBackend::be_scan_list(
 	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	o.attrs);
 
-      // calculate the CRC32 on deep scrubs
-      if (deep) {
-	be_deep_scrub(*p, seed, o, handle);
-      }
-
       dout(25) << __func__ << "  " << poid << dendl;
     } else if (r == -ENOENT) {
       dout(25) << __func__ << "  " << poid << " got " << r
@@ -400,6 +393,35 @@ void PGBackend::be_scan_list(
       derr << __func__ << " got: " << cpp_strerror(r) << dendl;
       assert(0);
     }
+  }
+}
+
+/*
+ * pg lock will be held
+ */
+void PGBackend::be_deep_scan_list(
+  ScrubMap &map, vector<hobject_t> &ls, uint32_t seed,
+  ThreadPool::TPHandle &handle)
+{
+  dout(10) << __func__ << " deep scanning: " << ls.size() << " objects left" << dendl;
+
+  if (g_conf->osd_rep_deep_scrub_sleep > 0) {
+    handle.suspend_tp_timeout();
+    utime_t t;
+    t.set_from_double(g_conf->osd_rep_deep_scrub_sleep);
+    t.sleep();
+    dout(20) << __func__ << " slept for " << t << dendl;
+  }
+
+  for (int i = 0; i < g_conf->osd_deep_map_chunk_max && !ls.empty() ; ++i) {
+    handle.reset_tp_timeout();
+    hobject_t poid = ls.back();
+    ls.pop_back();
+
+    auto oi = map.objects.find(poid);
+    if (oi != map.objects.end())
+      // calculate the CRC32 on deep scrubs
+      be_deep_scrub(poid, seed, oi->second, handle);
   }
 }
 

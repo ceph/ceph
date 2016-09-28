@@ -351,12 +351,21 @@ struct PGRecovery {
 };
 
 
+struct PGBuildScrubMap {
+  epoch_t epoch_queued;
+  explicit PGBuildScrubMap(epoch_t e) : epoch_queued(e) {}
+  ostream &operator<<(ostream &rhs) {
+    return rhs << "PGBuildScrubMap";
+  }
+};
+
 class PGQueueable {
   typedef boost::variant<
     OpRequestRef,
     PGSnapTrim,
     PGScrub,
-    PGRecovery
+    PGRecovery,
+    PGBuildScrubMap
     > QVariant;
   QVariant qvariant;
   int cost; 
@@ -373,6 +382,7 @@ class PGQueueable {
     void operator()(const PGSnapTrim &op);
     void operator()(const PGScrub &op);
     void operator()(const PGRecovery &op);
+    void operator()(const PGBuildScrubMap &op);
   };
 public:
   // cppcheck-suppress noExplicitConstructor
@@ -394,6 +404,11 @@ public:
       owner(owner) {}
   PGQueueable(
     const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
+    const entity_inst_t &owner)
+    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
+      owner(owner) {}
+  PGQueueable(
+    const PGBuildScrubMap &op, int cost, unsigned priority, utime_t start_time,
     const entity_inst_t &owner)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner) {}
@@ -902,6 +917,17 @@ public:
 	  PGScrub(pg->get_osdmap()->get_epoch()),
 	  cct->_conf->osd_scrub_cost,
 	  pg->get_scrub_priority(),
+	  ceph_clock_now(cct),
+	  entity_inst_t())));
+  }
+  void queue_for_build_scrub_map(PG *pg, unsigned cost) {
+    op_wq.queue(
+      make_pair(
+	pg,
+	PGQueueable(
+	  PGBuildScrubMap(pg->get_osdmap()->get_epoch()),
+	  cost,
+	  cct->_conf->osd_scrub_map_priority,
 	  ceph_clock_now(cct),
 	  entity_inst_t())));
   }

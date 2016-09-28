@@ -1629,7 +1629,7 @@ void ReplicatedPG::do_request(
     break;
 
   case MSG_OSD_REP_SCRUB:
-    replica_scrub(op, handle);
+    do_scrub_map_op(op, handle);
     break;
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
@@ -8542,24 +8542,14 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
   assert(applied_version > last_update_applied);
   assert(applied_version <= info.last_update);
   last_update_applied = applied_version;
-  if (is_primary()) {
-    if (scrubber.active) {
-      if (last_update_applied == scrubber.subset_last_update) {
-        requeue_scrub();
-      }
-    } else {
-      assert(scrubber.start == scrubber.end);
-    }
-  } else {
-    if (scrubber.active_rep_scrub) {
-      if (last_update_applied == static_cast<MOSDRepScrub*>(
+  if (scrubber.active_rep_scrub && scrubber.map_state == PG::Scrubber::NOT_BUILDING) {
+    if (last_update_applied == static_cast<MOSDRepScrub*>(
 	    scrubber.active_rep_scrub->get_req())->scrub_to) {
-	osd->op_wq.queue(
+      osd->op_wq.queue(
 	  make_pair(
 	    this,
 	    scrubber.active_rep_scrub));
 	scrubber.active_rep_scrub = OpRequestRef();
-      }
     }
   }
 }
@@ -9760,9 +9750,14 @@ void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (!deleting && active_pushes == 0
+  if (!deleting && active_pushes == 0 &&
+      scrubber.active_rep_scrub && scrubber.map_state == PG::Scrubber::NOT_BUILDING
       && scrubber.is_chunky_scrub_active()) {
-    requeue_scrub();
+      osd->op_wq.queue(
+        make_pair(
+	  this,
+	  scrubber.active_rep_scrub));
+    scrubber.active_rep_scrub = OpRequestRef();
   }
 
   unlock();
@@ -9778,8 +9773,9 @@ void ReplicatedPG::_applied_recovered_object_replica()
 
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0 &&
-      scrubber.active_rep_scrub && static_cast<MOSDRepScrub*>(
-	scrubber.active_rep_scrub->get_req())->chunky) {
+      scrubber.active_rep_scrub
+      && scrubber.map_state == PG::Scrubber::NOT_BUILDING &&
+      static_cast<MOSDRepScrub*>(scrubber.active_rep_scrub->get_req())->chunky) {
     osd->op_wq.queue(
       make_pair(
 	this,
@@ -12756,11 +12752,11 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
  *              [Snapset clones 4]
  * EOL                  obj4 snap 4, (expected)
  */
-void ReplicatedPG::_scrub(
+void ReplicatedPG::scrub_snapshot_metadata(
   ScrubMap &scrubmap,
   const map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest)
 {
-  dout(10) << "_scrub" << dendl;
+  dout(10) << __func__ << dendl;
 
   coll_t c(info.pgid);
   bool repair = state_test(PG_STATE_REPAIR);
@@ -12897,7 +12893,8 @@ void ReplicatedPG::_scrub(
       ++scrubber.shallow_errors;
       soid_error.set_headless();
       scrubber.store->add_snap_error(pool.id, soid_error);
-      head_error.set_clone(soid.snap);
+      if (head && soid.get_head() == head->get_head())
+	head_error.set_clone(soid.snap);
       continue;
     }
 
@@ -12938,7 +12935,6 @@ void ReplicatedPG::_scrub(
 		<< " can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
 	  head_error.set_ss_attr_corrupted();
-	  head_error.set_ss_attr_missing(); // Not available too
         }
       }
 
@@ -13079,7 +13075,7 @@ void ReplicatedPG::_scrub(
     ++scrubber.num_digest_updates_pending;
   }
 
-  dout(10) << "_scrub (" << mode << ") finish" << dendl;
+  dout(10) << __func__ << " (" << mode << ") finish" << dendl;
 }
 
 void ReplicatedPG::_scrub_clear_state()
