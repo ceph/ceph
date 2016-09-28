@@ -1776,11 +1776,18 @@ void BlueStore::ExtentMap::fault_range(
 {
   dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  auto p = seek_shard(offset);
+  auto start = seek_shard(offset);
   auto last = seek_shard(offset + length);
+
+  if (start < 0)
+    return;
+
+  assert(last >= start);
   bool first_key = true;
   string key;
-  while (p != shards.end()) {
+  while (start <= last) {
+    assert((size_t)start < shards.size());
+    auto p = &shards[start];
     if (!p->loaded) {
       if (first_key) {
         get_extent_shard_key(onode->key, p->offset, &key);
@@ -1801,10 +1808,7 @@ void BlueStore::ExtentMap::fault_range(
       assert(p->dirty == false);
       assert(v.length() == p->shard_info->bytes);
     }
-    if (p == last) {
-      break;
-    }
-    ++p;
+    ++start;
   }
 }
 
@@ -1820,12 +1824,18 @@ void BlueStore::ExtentMap::dirty_range(
     inline_bl.clear();
     return;
   }
-  auto p = seek_shard(offset);
+  auto start = seek_shard(offset);
   auto last = seek_shard(offset + length);
-  while (p != shards.end()) {
+  if (start < 0)
+    return;
+
+  assert(last >= start);
+  while (start <= last) {
+    assert((size_t)start < shards.size());
+    auto p = &shards[start];
     if (!p->loaded) {
       dout(20) << __func__ << " shard 0x" << std::hex << p->offset << std::dec
-	       << " is not loaded, can't mark dirty" << dendl;
+               << " is not loaded, can't mark dirty" << dendl;
       assert(0 == "can't mark unloaded shard dirty");
     }
     if (!p->dirty) {
@@ -1833,10 +1843,7 @@ void BlueStore::ExtentMap::dirty_range(
 	       << std::dec << " dirty" << dendl;
       p->dirty = true;
     }
-    if (p == last) {
-      break;
-    }
-    ++p;
+    ++start;
   }
 }
 
