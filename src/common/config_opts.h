@@ -675,6 +675,7 @@ OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT, 1) // numb
 OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT, 20)
 OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT, 1)
 
+OPTION(osd_map_request_full_on_boot, OPT_BOOL, false)
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 200)

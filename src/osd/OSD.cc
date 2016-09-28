@@ -4868,10 +4868,21 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   }
 
   // get all the latest maps
-  if (osdmap->get_epoch() + 1 >= oldest)
-    osdmap_subscribe(osdmap->get_epoch() + 1, false);
-  else
+  if (osdmap->get_epoch() + 1 >= oldest) {
+    epoch_t e = osdmap->get_epoch() + 1;
+    if (g_conf->osd_map_request_full_on_boot) {
+      e++;
+      request_full_map(e, e);
+    }
+    osdmap_subscribe(e, false);
+  } else {
+    epoch_t e = oldest - 1;
+    if (g_conf->osd_map_request_full_on_boot) {
+      e++;
+      request_full_map(e, e);
+    }
     osdmap_subscribe(oldest - 1, true);
+  }
 }
 
 void OSD::start_waiting_for_healthy()
