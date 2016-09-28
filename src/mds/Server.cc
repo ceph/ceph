@@ -963,6 +963,7 @@ void Server::force_clients_readonly()
 void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEvent *le, MDSInternalContextBase *fin)
 {
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
+  assert(!mdr->has_completed);
 
   // note trace items for eventual reply.
   mdr->tracei = in;
