@@ -25,6 +25,7 @@
 #include "common/LogClient.h"
 #include <string>
 
+class CompletionItem;
 namespace Scrub {
   class Store;
 }
@@ -191,6 +192,15 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        bool transaction_applied,
        ObjectStore::Transaction &t) = 0;
 
+     virtual void log_operation(
+       const vector<pg_log_entry_t> &logv,
+       boost::optional<pg_hit_set_history_t> &hset_history,
+       const eversion_t &trim_to,
+       const eversion_t &trim_rollback_to,
+       bool transaction_applied,
+       ObjectStore::Transaction &t,
+       CompletionItem * comp_item) = 0;
+
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,
        eversion_t lcod) = 0;
@@ -236,6 +246,9 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual LogClientTemp clog_error() = 0;
 
+     virtual void add_completion_q(CompletionItem *) = 0;
+     virtual CompletionItem * new_sub_comp_item(OpRequestRef op) = 0;
+     virtual Context *op_comp_context(Context *c, CompletionItem *comp_item) = 0;
      virtual ~Listener() {}
    };
    Listener *parent;
@@ -318,6 +331,14 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    virtual bool handle_message(
      OpRequestRef op ///< [in] message received
      ) = 0; ///< @return true if the message was handled
+  
+   virtual bool handle_message_op_lock(
+     OpRequestRef op
+   ) { return false; }
+
+   virtual bool can_op_lock(
+     OpRequestRef op
+   ) { return false; }
 
    virtual void check_recovery_sources(const OSDMapRef osdmap) = 0;
 
@@ -495,7 +516,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      Context *on_all_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
-     OpRequestRef op                      ///< [in] op
+     OpRequestRef op,                     ///< [in] op
+     CompletionItem *comp_item
      ) = 0;
 
 
@@ -625,6 +647,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
      CephContext *cct);
+
+   virtual void erase_inprogress_op(ceph_tid_t tid) = 0;
 };
 
 #endif

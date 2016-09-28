@@ -219,6 +219,8 @@ class CephContext;
 typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 class MOSDOp;
 
+class CompletionItem;
+
 class DeletingState {
   Mutex lock;
   Cond cond;
@@ -323,91 +325,91 @@ typedef ceph::shared_ptr<DeletingState> DeletingStateRef;
 
 class OSD;
 
-struct PGScrub {
-  epoch_t epoch_queued;
-  explicit PGScrub(epoch_t e) : epoch_queued(e) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGScrub";
-  }
-};
+class OpQueueItem {
+public:
+  class OrderLocker {
+  public:
+    using Ref = unique_ptr<OrderLocker>;
+    virtual void lock_suspend_timeout(ThreadPool::TPHandle &handle) = 0;
+    virtual void unlock() = 0;
+    virtual ~OrderLocker() {}
+  };
+  // Abstraction for operations queueable in the op queue
+  class OpQueueable {
+  public:
+    using Ref = std::unique_ptr<OpQueueable>;
+    
+    /// Items with the same queue token will end up in the same shard
+    virtual uint32_t get_queue_token() const = 0;
+    
+    /* Items will be dequeued and locked atomically w.r.t. other items with the
+       * same ordering token */
+    virtual void *get_ordering_token() const = 0;
+    virtual OrderLocker::Ref get_order_locker() = 0;
+    
+    virtual boost::optional<OpRequestRef> maybe_get_op() const {
+      return boost::none;
+    }
+    
+    virtual uint64_t get_reserved_pushes() const {
+      return 0;
+    }
+    
+    virtual ostream &print(ostream &rhs) const = 0;
+    
+    virtual void run(OSD *osd, ThreadPool::TPHandle &handle) = 0;
+    virtual ~OpQueueable() {}
+  };
 
-struct PGSnapTrim {
-  epoch_t epoch_queued;
-  explicit PGSnapTrim(epoch_t e) : epoch_queued(e) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGSnapTrim";
-  }
-};
-
-struct PGRecovery {
-  epoch_t epoch_queued;
-  uint64_t reserved_pushes;
-  PGRecovery(epoch_t e, uint64_t reserved_pushes)
-    : epoch_queued(e), reserved_pushes(reserved_pushes) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGRecovery(epoch=" << epoch_queued
-	       << ", reserved_pushes: " << reserved_pushes << ")";
-  }
-};
-
-
-class PGQueueable {
-  typedef boost::variant<
-    OpRequestRef,
-    PGSnapTrim,
-    PGScrub,
-    PGRecovery
-    > QVariant;
-  QVariant qvariant;
-  int cost; 
+private:
+  OpQueueable::Ref qitem;
+  int cost;
   unsigned priority;
   utime_t start_time;
   entity_inst_t owner;
-  struct RunVis : public boost::static_visitor<> {
-    OSD *osd;
-    PGRef &pg;
-    ThreadPool::TPHandle &handle;
-    RunVis(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle)
-      : osd(osd), pg(pg), handle(handle) {}
-    void operator()(const OpRequestRef &op);
-    void operator()(const PGSnapTrim &op);
-    void operator()(const PGScrub &op);
-    void operator()(const PGRecovery &op);
-  };
+
 public:
-  // cppcheck-suppress noExplicitConstructor
-  PGQueueable(OpRequestRef op)
-    : qvariant(op), cost(op->get_req()->get_cost()),
-      priority(op->get_req()->get_priority()),
-      start_time(op->get_req()->get_recv_stamp()),
-      owner(op->get_req()->get_source_inst())
-    {}
-  PGQueueable(
-    const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
+  OpQueueItem(
+    OpQueueable::Ref &&item,
+    int cost,
+    unsigned priority,
+    utime_t start_time,
     const entity_inst_t &owner)
-    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
+    : qitem(std::move(item)),
+      cost(cost),
+      priority(priority),
+      start_time(start_time),
       owner(owner) {}
-  PGQueueable(
-    const PGScrub &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner)
-    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
-      owner(owner) {}
-  PGQueueable(
-    const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner)
-    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
-      owner(owner) {}
-  const boost::optional<OpRequestRef> maybe_get_op() const {
-    const OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
-    return op ? OpRequestRef(*op) : boost::optional<OpRequestRef>();
+  OpQueueItem(OpQueueItem &&) = default;
+  OpQueueItem(const OpQueueItem &) = delete;
+  OpQueueItem &operator=(OpQueueItem &&) = default;
+  OpQueueItem &operator=(const OpQueueItem &) = delete;
+
+  OrderLocker::Ref get_order_locker() {
+    assert(qitem);
+    return qitem->get_order_locker();
+  }
+
+  uint32_t get_queue_token() const {
+    assert(qitem);
+    return qitem->get_queue_token();
+  }
+  void *get_ordering_token() const {
+    assert(qitem);
+    return qitem->get_ordering_token();
+  }
+
+  boost::optional<OpRequestRef> maybe_get_op() const {
+    assert(qitem);
+    return qitem->maybe_get_op();
   }
   uint64_t get_reserved_pushes() const {
-    const PGRecovery *op = boost::get<PGRecovery>(&qvariant);
-    return op ? op->reserved_pushes : 0;
+    assert(qitem);
+    return qitem->get_reserved_pushes();
   }
-  void run(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle) {
-    RunVis v(osd, pg, handle);
-    boost::apply_visitor(v, qvariant);
+  void run(OSD *osd, ThreadPool::TPHandle &handle) {
+    assert(qitem);
+    qitem->run(osd, handle);
   }
   unsigned get_priority() const { return priority; }
   int get_cost() const { return cost; }
@@ -434,7 +436,7 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > &op_wq;
+  ShardedThreadPool::ShardedWQ <OpQueueItem> &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
   GenContextWQ op_gen_wq;
@@ -883,28 +885,18 @@ public:
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
-  void queue_for_snap_trim(PG *pg) {
-    op_wq.queue(
-      make_pair(
-	pg,
-	PGQueueable(
-	  PGSnapTrim(pg->get_osdmap()->get_epoch()),
-	  cct->_conf->osd_snap_trim_cost,
-	  cct->_conf->osd_snap_trim_priority,
-	  ceph_clock_now(cct),
-	  entity_inst_t())));
-  }
-  void queue_for_scrub(PG *pg) {
-    op_wq.queue(
-      make_pair(
-	pg,
-	PGQueueable(
-	  PGScrub(pg->get_osdmap()->get_epoch()),
-	  cct->_conf->osd_scrub_cost,
-	  pg->get_scrub_priority(),
-	  ceph_clock_now(cct),
-	  entity_inst_t())));
-  }
+  void queue_for_snap_trim(PG *pg);
+  void queue_for_scrub(PG *pg);
+  void _queue_op(PG *pg, OpRequestRef op, bool front);
+  void _queue_for_completion(PG *pg, OpRequestRef op, bool front, Context *cb);
+  void _queue_op_with_op_lock(PG *pg, OpRequestRef op, bool front);
+
+  void queue_op(PG *pg, OpRequestRef op) {
+    _queue_op(pg, op, false);
+  };
+  void queue_op_front(PG *pg, OpRequestRef op) {
+    _queue_op(pg, op, true);
+  };
 
 private:
   // -- pg recovery and associated throttling --
@@ -920,19 +912,6 @@ private:
 #endif
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
-  void _queue_for_recovery(
-    pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
-    assert(recovery_lock.is_locked_by_me());
-    pair<PGRef, PGQueueable> to_queue = make_pair(
-      p.second,
-      PGQueueable(
-	PGRecovery(p.first, reserved_pushes),
-	cct->_conf->osd_recovery_cost,
-	cct->_conf->osd_recovery_priority,
-	ceph_clock_now(cct),
-	entity_inst_t()));
-    op_wq.queue(to_queue);
-  }
 public:
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
@@ -987,6 +966,9 @@ public:
     _maybe_queue_recovery();
   }
 
+  void _queue_for_recovery(
+    std::pair<epoch_t, PGRef> p,
+    uint64_t reserved_pushes);
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
@@ -1174,7 +1156,6 @@ public:
     }
   }
 #endif
-
   explicit OSDService(OSD *osd);
   ~OSDService();
 };
@@ -1739,87 +1720,90 @@ private:
   const io_queue op_queue;
   const unsigned int op_prio_cutoff;
 
-  friend class PGQueueable;
-  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
+  friend class OpQueueItem;
+  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ <OpQueueItem> {
 
     struct ShardData {
       Mutex sdata_lock;
       Cond sdata_cond;
       Mutex sdata_op_ordering_lock;
-      map<PG*, list<PGQueueable> > pg_for_processing;
-      std::unique_ptr<OpQueue< pair<PGRef, PGQueueable>, entity_inst_t>> pqueue;
+      map<void*, list<OpQueueItem> > ordering_queues;
+      std::unique_ptr<OpQueue<OpQueueItem, entity_inst_t>> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
 	io_queue opqueue)
 	: sdata_lock(lock_name.c_str(), false, true, false, cct),
-	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true, false, cct) {
-	    if (opqueue == weightedpriority) {
-	      pqueue = std::unique_ptr
-		<WeightedPriorityQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new WeightedPriorityQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
-		    max_tok_per_prio, min_cost));
-	    } else if (opqueue == prioritized) {
-	      pqueue = std::unique_ptr
-		<PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
-		    max_tok_per_prio, min_cost));
-	    }
-	  }
+	  sdata_op_ordering_lock(
+	    ordering_lock.c_str(), false, true, false, cct) {
+	if (opqueue == weightedpriority) {
+	  pqueue.reset( 
+	    new WeightedPriorityQueue<OpQueueItem, entity_inst_t>(
+	      max_tok_per_prio, min_cost));
+	} else if (opqueue == prioritized) {
+	  pqueue.reset(
+	    new PrioritizedQueue<OpQueueItem, entity_inst_t>(
+	      max_tok_per_prio, min_cost));
+	}
+      }
     };
     
-    vector<ShardData*> shard_list;
+    vector<unique_ptr<ShardData>> shard_list;
     OSD *osd;
     uint32_t num_shards;
 
   public:
-    ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, time_t si, ShardedThreadPool* tp):
-      ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> >(ti, si, tp),
-      osd(o), num_shards(pnum_shards) {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	char lock_name[32] = {0};
-	snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
-	char order_lock[32] = {0};
+    ShardedOpWQ(
+      uint32_t pnum_shards,
+      OSD *o,
+      time_t ti,
+      time_t si,
+      ShardedThreadPool* tp)
+      : ShardedThreadPool::ShardedWQ<OpQueueItem>(ti, si, tp),
+	osd(o), num_shards(pnum_shards) {
+      shard_list.reserve(num_shards);
+      for(unsigned i = 0; i < num_shards; i++) {
+	char queue_lock_name[32] = {0};
 	snprintf(
-	  order_lock, sizeof(order_lock), "%s.%d",
-	  "OSD:ShardedOpWQ:order:", i);
-	ShardData* one_shard = new ShardData(
-	  lock_name, order_lock,
-	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue);
-	shard_list.push_back(one_shard);
+	  queue_lock_name, sizeof(queue_lock_name),
+	  "%s.%d", "OSD:ShardedOpWQ:", i);
+	char order_lock_name[32] = {0};
+	snprintf(
+	  order_lock_name, sizeof(order_lock_name),
+	  "%s.%d", "OSD:ShardedOpWQ:order:", i);
+	shard_list.emplace_back(
+	  unique_ptr<ShardData>(new ShardData(
+	    queue_lock_name, order_lock_name,
+	    osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
+	    osd->cct->_conf->osd_op_pq_min_cost,
+	    osd->cct,
+	    osd->op_queue)));
       }
     }
     
-    ~ShardedOpWQ() {
-      while(!shard_list.empty()) {
-	delete shard_list.back();
-	shard_list.pop_back();
-      }
-    }
-
     void _process(uint32_t thread_index, heartbeat_handle_d *hb);
-    void _enqueue(pair <PGRef, PGQueueable> item);
-    void _enqueue_front(pair <PGRef, PGQueueable> item);
+    void _enqueue(OpQueueItem &&item);
+    void _enqueue_front(OpQueueItem &&item);
       
     void return_waiting_threads() {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
-	assert (NULL != sdata); 
-	sdata->sdata_lock.Lock();
-	sdata->sdata_cond.Signal();
-	sdata->sdata_lock.Unlock();
+      for (auto &&i: shard_list) {
+	assert(i);
+	i->sdata_lock.Lock();
+	i->sdata_cond.Signal();
+	i->sdata_lock.Unlock();
       }
     }
 
     void dump(Formatter *f) {
       for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
-	char lock_name[32] = {0};
-	snprintf(lock_name, sizeof(lock_name), "%s%d", "OSD:ShardedOpWQ:", i);
-	assert (NULL != sdata);
+	auto &&sdata = shard_list[i];
+
+	char queue_name[32] = {0};
+	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
+	assert(NULL != sdata);
+
 	sdata->sdata_op_ordering_lock.Lock();
-	f->open_object_section(lock_name);
+	f->open_object_section(queue_name);
 	sdata->pqueue->dump(f);
 	f->close_section();
 	sdata->sdata_op_ordering_lock.Unlock();
@@ -1828,12 +1812,12 @@ private:
 
     /// Must be called on ops queued back to front
     struct Pred {
-      PG *pg;
+      void *token;
       list<OpRequestRef> *out_ops;
       uint64_t reserved_pushes_to_free;
-      Pred(PG *pg, list<OpRequestRef> *out_ops = 0)
-	: pg(pg), out_ops(out_ops), reserved_pushes_to_free(0) {}
-      void accumulate(const PGQueueable &op) {
+      Pred(void *token, list<OpRequestRef> *out_ops = 0)
+	: token(token), out_ops(out_ops), reserved_pushes_to_free(0) {}
+      void accumulate(const OpQueueItem &op) {
 	reserved_pushes_to_free += op.get_reserved_pushes();
 	if (out_ops) {
 	  boost::optional<OpRequestRef> mop = op.maybe_get_op();
@@ -1841,9 +1825,9 @@ private:
 	    out_ops->push_front(*mop);
 	}
       }
-      bool operator()(const pair<PGRef, PGQueueable> &op) {
-	if (op.first == pg) {
-	  accumulate(op.second);
+      bool operator()(const OpQueueItem &op) {
+	if (op.get_ordering_token() == token) {
+	  accumulate(op);
 	  return true;
 	} else {
 	  return false;
@@ -1859,27 +1843,25 @@ private:
     }
 
     void dequeue_and_get_ops(PG *pg, list<OpRequestRef> *dequeued) {
-      ShardData* sdata = NULL;
       assert(pg != NULL);
       uint32_t shard_index = pg->get_pgid().ps()% shard_list.size();
-      sdata = shard_list[shard_index];
-      assert(sdata != NULL);
+      auto &&sdata = shard_list[shard_index];
+      assert(sdata);
       sdata->sdata_op_ordering_lock.Lock();
 
       Pred f(pg, dequeued);
 
-      // items in pqueue are behind items in pg_for_processing
+      // items in pqueue are behind items in ordering_queues
       sdata->pqueue->remove_by_filter(f);
 
-      map<PG *, list<PGQueueable> >::const_iterator iter =
-	sdata->pg_for_processing.find(pg);
-      if (iter != sdata->pg_for_processing.cend()) {
-	for (auto i = iter->second.crbegin();
-	     i != iter->second.crend();
+      auto iter = sdata->ordering_queues.find(pg);
+      if (iter != sdata->ordering_queues.end()) {
+	for (auto i = iter->second.rbegin();
+	     i != iter->second.rend();
 	     ++i) {
 	  f.accumulate(*i);
 	}
-	sdata->pg_for_processing.erase(iter);
+	sdata->ordering_queues.erase(iter);
       }
 
       sdata->sdata_op_ordering_lock.Unlock();
@@ -1888,8 +1870,8 @@ private:
  
     bool is_shard_empty(uint32_t thread_index) {
       uint32_t shard_index = thread_index % num_shards; 
-      ShardData* sdata = shard_list[shard_index];
-      assert(NULL != sdata);
+      auto &&sdata = shard_list[shard_index];
+      assert(sdata);
       Mutex::Locker l(sdata->sdata_op_ordering_lock);
       return sdata->pqueue->empty();
     }

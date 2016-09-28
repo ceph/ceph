@@ -263,6 +263,7 @@ public:
   template<class T> class BlessedGenContext;
   class BlessedContext;
   Context *bless_context(Context *c);
+  Context *op_comp_context(Context *c, CompletionItem *comp_item);
 
   GenContext<ThreadPool::TPHandle&> *bless_gencontext(
     GenContext<ThreadPool::TPHandle&> *c);
@@ -337,7 +338,22 @@ public:
       info.hit_set = *hset_history;
       dirty_info = true;
     }
-    append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
+    append_log(logv, trim_to, trim_rollback_to, t, transaction_applied, NULL);
+  }
+
+  void log_operation(
+    const vector<pg_log_entry_t> &logv,
+    boost::optional<pg_hit_set_history_t> &hset_history,
+    const eversion_t &trim_to,
+    const eversion_t &trim_rollback_to,
+    bool transaction_applied,
+    ObjectStore::Transaction &t,
+    CompletionItem * comp_item) {
+    if (hset_history) {
+      info.hit_set = *hset_history;
+      dirty_info = true;
+    }
+    append_log(logv, trim_to, trim_rollback_to, t, transaction_applied, comp_item);
   }
 
   struct C_OSD_OnApplied : Context {
@@ -520,6 +536,11 @@ public:
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_finish;
     list<std::function<void()>> on_success;
+
+    list<std::function<void()>> on_applied_op_lock;
+    list<std::function<void()>> on_committed_op_lock;
+    list<std::function<void()>> on_success_op_lock;
+    list<std::function<void()>> on_finish_op_lock;
     template <typename F>
     void register_on_finish(F &&f) {
       on_finish.emplace_back(std::forward<F>(f));
@@ -535,6 +556,22 @@ public:
     template <typename F>
     void register_on_commit(F &&f) {
       on_committed.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_finish_op_lock(F &&f) {
+      on_finish_op_lock.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_success_op_lock(F &&f) {
+      on_success_op_lock.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_applied_op_lock(F &&f) {
+      on_applied_op_lock.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_commit_op_lock(F &&f) {
+      on_committed_op_lock.emplace_back(std::forward<F>(f));
     }
 
     bool sent_ack;
@@ -654,16 +691,17 @@ public:
   /*
    * State on the PG primary associated with the replicated mutation
    */
-  class RepGather {
+
+  class RepGather: public CompletionItem {
   public:
     hobject_t hoid;
     OpRequestRef op;
     xlist<RepGather*>::item queue_item;
     int nref;
 
-    eversion_t v;
-
     ceph_tid_t rep_tid;
+
+    eversion_t v;
 
     bool rep_aborted, rep_done;
 
@@ -680,6 +718,18 @@ public:
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
+
+    list<std::function<void()>> on_applied_op_lock;
+    list<std::function<void()>> on_committed_op_lock;
+    list<std::function<void()>> on_success_op_lock;
+    list<std::function<void()>> on_finish_op_lock;
+
+    Mutex comp_lock;
+    pg_shard_t shard;
+    version_t epoch;
+    /* update_peer_last_complete_ondisk() */
+    pg_shard_t fromosd;
+    eversion_t fromlcod;
     
     RepGather(OpContext *c, ceph_tid_t rt,
 	      eversion_t lc) :
@@ -695,7 +745,12 @@ public:
       on_applied(std::move(c->on_applied)),
       on_committed(std::move(c->on_committed)),
       on_success(std::move(c->on_success)),
-      on_finish(std::move(c->on_finish)) {}
+      on_finish(std::move(c->on_finish)),
+      on_applied_op_lock(std::move(c->on_applied_op_lock)),
+      on_committed_op_lock(std::move(c->on_committed_op_lock)),
+      on_success_op_lock(std::move(c->on_success_op_lock)),
+      on_finish_op_lock(std::move(c->on_finish_op_lock)),
+      comp_lock("RepGather::lock") {}
 
     RepGather(
       ObcLockManager &&manager,
@@ -708,10 +763,21 @@ public:
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
       pg_local_last_complete(lc),
-      lock_manager(std::move(manager)) {
+      lock_manager(std::move(manager)),
+      comp_lock("RepGather::lock") {
       if (on_complete) {
 	on_success.push_back(std::move(*on_complete));
       }
+    }
+    
+    RepGather(ceph_tid_t rt, OpRequestRef op) :
+      op(op),
+      queue_item(this),
+      nref(1),
+      rep_tid(rt),
+      rep_aborted(false), rep_done(false),
+      all_applied(false), all_committed(false),
+      comp_lock("RepGather::lock") {
     }
 
     RepGather *get() {
@@ -722,12 +788,81 @@ public:
       assert(nref > 0);
       if (--nref == 0) {
 	assert(on_applied.empty());
+	/*
+	generic_dout(0) << "deleting " << this << " rep_tid: " 
+			<< rep_tid << " comp_item " << comp_item << dendl;
+	*/
 	delete this;
-	//generic_dout(0) << "deleting " << this << dendl;
       }
     }
+    void lock() {
+      comp_lock.Lock();
+    }
+    void unlock() {
+      comp_lock.Unlock();
+    }
+    ceph_tid_t get_tid() {
+      return rep_tid;
+    }
+    OpRequestRef get_op() {
+      return op;
+    }
+    void set_applied() {
+      all_applied = true;
+    }
+    void set_committed() {
+      all_committed = true;
+    }
+    bool is_completed() {
+      return (all_applied && all_committed);
+    }
   };
+  class RepSub: public CompletionItem {
+  public:
+    OpRequestRef op;
+    xlist<RepSub*>::item queue_item;
+    ceph_tid_t rep_tid;
+    Mutex comp_lock;
+    /* last_compete_on_disk */
+    eversion_t lcod;
+    /* last_update_applied */
+    eversion_t lua;
+    int ackerosd;
+    bool all_applied;
+    bool all_committed;
 
+    RepSub(ceph_tid_t rt, OpRequestRef op) :
+      op(op),
+      queue_item(this),
+      rep_tid(rt),
+      comp_lock("RepSub::lock"),
+      ackerosd(-1),
+      all_applied(false),
+      all_committed(false) {
+    }
+    void lock() {
+      comp_lock.Lock();
+    }
+    void unlock() {
+      comp_lock.Unlock();
+    }
+    ceph_tid_t get_tid() {
+      return rep_tid;
+    }
+    OpRequestRef get_op() {
+      return op;
+    }
+    void set_applied() {
+      all_applied = true;
+    }
+    void set_committed() {
+      all_committed = true;
+    }
+    bool is_completed() {
+      return (all_applied && all_committed);
+    }
+    
+  };
 
 protected:
 
@@ -832,6 +967,7 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
+  xlist<RepSub*> repop_sub_queue;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
@@ -843,9 +979,16 @@ protected:
     OpContext *ctx,
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
+  RepGather *new_repop(
+    OpContext *ctx,
+    ObjectContextRef obc,
+    ceph_tid_t rep_tid,
+    int type);
   boost::intrusive_ptr<RepGather> new_repop(
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete);
+  RepGather *new_repop(
+    OpRequestRef op, ceph_tid_t rep_tid);
   void remove_repop(RepGather *repop);
 
   OpContextUPtr simple_opc_create(ObjectContextRef obc);
@@ -1397,6 +1540,8 @@ public:
   int do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op, bufferlist& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
+  
+  bool can_op_lock(OpRequestRef& op);
 private:
   int do_scrub_ls(MOSDOp *op, OSDOp *osd_op);
   hobject_t earliest_backfill() const;
@@ -1578,6 +1723,18 @@ public:
     ObjectContextRef obc,
     map<string, bufferlist> *out,
     bool user_only = false);
+public:
+
+  bool do_completion(bool need_lock);
+  void add_completion_q(CompletionItem *comp_item);
+  void do_primary_comp(CompletionItem * comp_item);
+  void do_sub_comp(CompletionItem * comp_item);
+  void repop_queue_lock(ThreadPool::TPHandle &handle);
+  void repop_queue_unlock();
+  RepSub *new_repop_sub(OpRequestRef op, ceph_tid_t rep_tid, int type);
+  CompletionItem *new_sub_comp_item(OpRequestRef op);
+private:
+  Mutex _repop_queue_lock;
 };
 
 inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
@@ -1605,6 +1762,5 @@ inline ostream& operator<<(ostream& out,
 
 void intrusive_ptr_add_ref(ReplicatedPG::RepGather *repop);
 void intrusive_ptr_release(ReplicatedPG::RepGather *repop);
-
 
 #endif

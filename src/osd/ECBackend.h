@@ -55,14 +55,17 @@ public:
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_applied(
-    ceph_tid_t tid, eversion_t version);
+    ceph_tid_t tid, eversion_t version, 
+    epoch_t epoch, CompletionItem *comp_item);
   void sub_write_committed(
-    ceph_tid_t tid, eversion_t version, eversion_t last_complete);
+    ceph_tid_t tid, eversion_t version, eversion_t last_complete,
+    epoch_t epoch, CompletionItem *comp_item);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    Context *on_local_applied_sync = 0
+    Context *on_local_applied_sync = 0,
+    CompletionItem *comp_item = 0
     );
   void handle_sub_read(
     pg_shard_t from,
@@ -105,7 +108,8 @@ public:
     Context *on_all_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
-    OpRequestRef op
+    OpRequestRef op,
+    CompletionItem *comp_item
     );
 
   int objects_read_sync(
@@ -366,6 +370,8 @@ public:
 
     set<pg_shard_t> pending_commit;
     set<pg_shard_t> pending_apply;
+  
+    CompletionItem *comp_item;
 
     map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> unstable_hash_infos;
     ~Op() {
@@ -505,6 +511,9 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size) {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
+  void erase_inprogress_op(ceph_tid_t tid);
+  bool handle_message_op_lock(OpRequestRef op);
+  bool can_op_lock(OpRequestRef op);
 };
 
 #endif

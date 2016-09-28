@@ -88,7 +88,7 @@ TEST_F(PrioritizedQueueTest, lowest_among_eligible_otherwise_highest) {
     } else {
       num_high_cost++;
     }
-    pq.enqueue(Klass(0), priority, cost, item);
+    pq.enqueue(Klass(0), priority, cost, Item(item));
   }
   // the token in all buckets is 0 at the beginning, so dequeue() should pick
   // the first one with the highest priority.
@@ -140,7 +140,7 @@ TEST_F(PrioritizedQueueTest, fairness_by_class) {
     Klass k = ITEM_TO_CLASS(item);
     unsigned priority = 0;
     unsigned cost = 1;
-    pq.enqueue(k, priority, cost, item);
+    pq.enqueue(k, priority, cost, Item(item));
   }
   // just sample first 1/2 of the items
   // if i pick too small a dataset, the result won't be statisitcally
@@ -187,7 +187,7 @@ TEST_F(PrioritizedQueueTest, remove_by_filter) {
   unsigned num_to_remove = 0;
   for (unsigned i = 0; i < item_size; i++) {
     const Item& item = items[i];
-    pq.enqueue(Klass(1), 0, 10, item);
+    pq.enqueue(Klass(1), 0, 10, Item(item));
     if (pred(item)) {
       num_to_remove++;
     }
@@ -225,7 +225,7 @@ TEST_F(PrioritizedQueueTest, remove_by_class) {
   for (int i = 0; i < item_size; i++) {
     const Item& item = items[i];
     Klass k = ITEM_TO_CLASS(item);
-    pq.enqueue(k, 0, 0, item);
+    pq.enqueue(k, 0, 0, Item(item));
     if (k == class_to_remove) {
       num_to_remove++;
     }
