@@ -2891,18 +2891,16 @@ void Server::_lookup_ino_2(MDRequestRef& mdr, int r)
 void Server::handle_client_open(MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
+  dout(7) << "open on " << req->get_filepath() << dendl;
 
   int flags = req->head.args.open.flags;
   int cmode = ceph_flags_to_mode(flags);
-
-  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
-
-  dout(7) << "open on " << req->get_filepath() << dendl;
-
   if (cmode < 0) {
     respond_to_request(mdr, -EINVAL);
     return;
   }
+  
+  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
 
   if ((cmode & CEPH_FILE_MODE_WR) && mdcache->is_readonly()) {
     dout(7) << "read-only FS" << dendl;
