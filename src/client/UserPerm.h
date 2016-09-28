@@ -23,14 +23,20 @@ private:
   int gid_count;
   gid_t *gids;
   bool alloced_gids;
-  void deep_copy(UserPerm& a, const UserPerm& b) {
-    a.m_uid = b.m_uid;
-    a.m_gid = b.m_gid;
-    a.gid_count = b.gid_count;
-    a.gids = new gid_t[gid_count];
-    a.alloced_gids = true;
-    for (int i = 0; i < gid_count; ++i) {
-      a.gids[i] = b.gids[i];
+  void deep_copy_from(const UserPerm& b) {
+    if (alloced_gids) {
+      delete[] gids;
+      alloced_gids = false;
+    }
+    m_uid = b.m_uid;
+    m_gid = b.m_gid;
+    gid_count = b.gid_count;
+    if (gid_count) {
+      gids = new gid_t[gid_count];
+      alloced_gids = true;
+      for (int i = 0; i < gid_count; ++i) {
+	gids[i] = b.gids[i];
+      }
     }
   }
 public:
@@ -38,8 +44,8 @@ public:
 	       gids(NULL), alloced_gids(false) {}
   UserPerm(int uid, int gid) : m_uid(uid), m_gid(gid), gid_count(0),
 			       gids(NULL), alloced_gids(false) {}
-  UserPerm(const UserPerm& o) {
-    deep_copy(*this, o);
+  UserPerm(const UserPerm& o) : UserPerm() {
+    deep_copy_from(o);
   }
   UserPerm(UserPerm && o) {
     m_uid = o.m_uid;
@@ -52,10 +58,10 @@ public:
   }
   ~UserPerm() {
     if (alloced_gids)
-      delete gids;
+      delete[] gids;
   }
   UserPerm& operator=(const UserPerm o) {
-    deep_copy(*this, o);
+    deep_copy_from(o);
     return *this;
   }
 
