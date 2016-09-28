@@ -5,6 +5,7 @@ import unittest
 from unittest import suite, loader, case
 from teuthology.task import interactive
 from tasks.cephfs.filesystem import Filesystem, MDSCluster
+from tasks.mgr.mgr_test_case import MgrCluster
 
 log = logging.getLogger(__name__)
 
@@ -116,15 +117,21 @@ def task(ctx, config):
     """
     fs = Filesystem(ctx)
     mds_cluster = MDSCluster(ctx)
+    mgr_cluster = MgrCluster(ctx)
 
     # Mount objects, sorted by ID
-    mounts = [v for k, v in sorted(ctx.mounts.items(), lambda a, b: cmp(a[0], b[0]))]
+    if (hasattr(ctx, 'mounts')):
+        mounts = [v for k, v in sorted(ctx.mounts.items(), lambda a, b: cmp(a[0], b[0]))]
+    else:
+        # The test configuration has a filesystem but no fuse/kclient mounts
+        mounts = []
 
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
         "mounts": mounts,
         "fs": fs,
-        "mds_cluster": mds_cluster
+        "mds_cluster": mds_cluster,
+        "mgr_cluster": mgr_cluster,
     })
 
     fail_on_skip = config.get('fail_on_skip', True)
@@ -132,6 +139,7 @@ def task(ctx, config):
     # Put useful things onto ctx for interactive debugging
     ctx.fs = fs
     ctx.mds_cluster = mds_cluster
+    ctx.mgr_cluster = mgr_cluster
 
     # Depending on config, either load specific modules, or scan for moduless
     if config and 'modules' in config and config['modules']:
