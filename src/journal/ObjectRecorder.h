@@ -51,7 +51,7 @@ public:
     return m_oid;
   }
 
-  bool append_unlock(const AppendBuffers &append_buffers);
+  bool append_unlock(AppendBuffers &&append_buffers);
   void flush(Context *on_safe);
   void flush(const FutureImplPtr &future);
 
