@@ -176,6 +176,7 @@ struct MockImageCtx {
   MOCK_METHOD1(notify_update, void(Context *));
 
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
+  MOCK_CONST_METHOD1(set_journal_policy, void(journal::Policy*));
 
   MOCK_METHOD7(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
                                          size_t, uint64_t, Context *, int));

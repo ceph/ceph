@@ -39,6 +39,7 @@ set(librbd_internal_srcs
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
+  image/SetFlagsRequest.cc
   image/SetSnapRequest.cc
   image_watcher/Notifier.cc
   image_watcher/NotifyLockOwner.cc
@@ -47,16 +48,22 @@ set(librbd_internal_srcs
   journal/CreateRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
+  mirror/DisableRequest.cc
+  mirror/EnableRequest.cc
+  object_map/CreateRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
-  object_map/Request.cc
   object_map/RefreshRequest.cc
+  object_map/RemoveRequest.cc
+  object_map/Request.cc
   object_map/ResizeRequest.cc
   object_map/SnapshotCreateRequest.cc
   object_map/SnapshotRemoveRequest.cc
   object_map/SnapshotRollbackRequest.cc
   object_map/UnlockRequest.cc
   object_map/UpdateRequest.cc
+  operation/DisableFeaturesRequest.cc
+  operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
   operation/ObjectMapIterate.cc
   operation/RebuildObjectMapRequest.cc
