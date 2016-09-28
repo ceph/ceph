@@ -3056,6 +3056,9 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->ops = op->ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
+  m->trace = op->trace;
+  if (!m->trace && cct->_conf->osdc_blkin_trace_all)
+    m->trace.init("objecter op", &trace_endpoint);
 
   if (op->replay_version != eversion_t())
     m->set_version(op->replay_version);  // we're replaying this op!

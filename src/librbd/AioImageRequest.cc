@@ -279,7 +279,7 @@ void AioImageRead<I>::send_request() {
   auto &image_extents = this->m_image_extents;
   if (image_ctx.object_cacher && image_ctx.readahead_max_bytes > 0 &&
       !(m_op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
-    readahead(get_image_ctx(&image_ctx), image_extents);
+    readahead(get_image_ctx(&image_ctx), image_extents, &this->trace);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -335,7 +335,7 @@ void AioImageRead<I>::send_request() {
                                                                     req);
         image_ctx.aio_read_from_cache(extent.oid, extent.objectno,
                                       &req->data(), extent.length,
-                                      extent.offset, cache_comp, m_op_flags);
+                                      extent.offset, cache_comp, m_op_flags, &this->trace);
       } else {
         req->send();
       }
@@ -517,7 +517,7 @@ void AioImageWrite<I>::send_object_cache_requests(const ObjectExtents &object_ex
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
                              object_extent.offset, req_comp, m_op_flags,
-                               journal_tid);
+                               journal_tid, &this->trace);
   }
 }
 

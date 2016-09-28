@@ -258,8 +258,8 @@
 /* Version number of package */
 #cmakedefine VERSION "@VERSION@"
 
-/* Defined if pthread_setname_np() is available */
-#cmakedefine HAVE_PTHREAD_SETNAME_NP 1
+/* Defined if blkin enabled */
+#cmakedefine WITH_BLKIN
 
 /* Defined if pthread_set_name_np() is available */
 #cmakedefine HAVE_PTHREAD_SET_NAME_NP

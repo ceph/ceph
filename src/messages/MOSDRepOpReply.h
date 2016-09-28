@@ -29,7 +29,7 @@
  */
 
 class MOSDRepOpReply : public Message {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch;
@@ -66,6 +66,9 @@ public:
 
     ::decode(from, p);
     final_decode_needed = false;
+    if (header.version >= 2) {
+      decode_trace(p);
+    }
   }
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
@@ -75,6 +78,7 @@ public:
     ::encode(result, payload);
     ::encode(last_complete_ondisk, payload);
     ::encode(from, payload);
+    encode_trace(payload, features);
   }
 
   epoch_t get_map_epoch() { return map_epoch; }

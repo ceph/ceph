@@ -1652,6 +1652,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
@@ -1713,6 +1714,11 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                          cct->_conf->osd_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                            cct->_conf->osd_op_history_duration);
+#ifdef WITH_BLKIN
+  std::stringstream ss;
+  ss << "osd." << whoami;
+  trace_endpoint.copy_name(ss.str());
+#endif
 }
 
 OSD::~OSD()
@@ -5970,6 +5976,8 @@ void OSD::ms_fast_dispatch(Message *m)
     tracepoint(osd, ms_fast_dispatch, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
+  if (m->trace)
+    op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
   OSDMapRef nextmap = service.get_nextmap_reserved();
   Session *session = static_cast<Session*>(m->get_connection()->get_priv());
   if (session) {
@@ -6326,6 +6334,8 @@ void OSD::_dispatch(Message *m)
   default:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
+      if (m->trace)
+        op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
       // no map?  starting up?
       if (!osdmap) {
         dout(7) << "no OSDMap, not booted" << dendl;
@@ -8712,10 +8722,16 @@ bool OSD::op_is_discardable(MOSDOp *op)
 void OSD::enqueue_op(PGRef pg, OpRequestRef& op)
 {
   utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
-  dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
-	   << " cost " << op->get_req()->get_cost()
-	   << " latency " << latency
+  auto priority = op->get_req()->get_priority();
+  auto cost = op->get_req()->get_cost();
+
+  dout(15) << "enqueue_op " << op << " prio " << priority
+	   << " cost " << cost << " latency " << latency
 	   << " " << *(op->get_req()) << dendl;
+  op->osd_trace.event("enqueue op");
+  op->osd_trace.keyval("priority", priority);
+  op->osd_trace.keyval("cost", cost);
+
   pg->queue_op(op);
 }
 
@@ -8902,6 +8918,7 @@ void OSD::dequeue_op(
     return;
 
   op->mark_reached_pg();
+  op->osd_trace.event("dequeue_op");
 
   pg->do_request(op, handle);
 

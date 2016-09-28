@@ -3217,7 +3217,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   };
 
   void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents)
+                 const vector<pair<uint64_t,uint64_t> >& image_extents,
+                 ZTracer::Trace *trace)
   {
     uint64_t total_bytes = 0;
     for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();

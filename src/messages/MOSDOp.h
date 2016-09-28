@@ -33,7 +33,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -333,6 +333,8 @@ struct ceph_osd_request_head {
       ::encode(flags, payload);
       ::encode(reassert_version, payload);
       ::encode(reqid, payload);
+      encode_trace(payload, features);
+
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
       ::encode(oloc, payload);
@@ -357,12 +359,16 @@ struct ceph_osd_request_head {
     p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version >= 7) {
 	  ::decode(pgid, p);
 	  ::decode(osdmap_epoch, p);
 	  ::decode(flags, p);
 	  ::decode(reassert_version, p);
 	  ::decode(reqid, p);
+
+      if (header.version >= 8) {
+        decode_trace(p);
+      }
     } else if (header.version < 2) {
       // old decode
       ::decode(client_inc, p);

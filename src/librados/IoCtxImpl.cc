@@ -743,23 +743,31 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  ::ObjectOperation *o,
 					  AioCompletionImpl *c,
 					  int flags,
-					  bufferlist *pbl)
+					  bufferlist *pbl,
+            const blkin_trace_info *trace_info)
 {
   Context *onack = new C_aio_Ack(c);
 
   c->is_read = true;
   c->io = this;
 
+  ZTracer::Trace trace;
+  if (trace_info) {
+    trace.init("rados operate read", &objecter->trace_endpoint, trace_info);
+    trace.event("rados operate read init root span");
+  }
+
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
-		 onack, &c->objver);
+		 onack, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(objecter_op, &c->tid);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
-				     const SnapContext& snap_context, int flags)
+				     const SnapContext& snap_context, int flags,
+             const blkin_trace_info *trace_info)
 {
   auto ut = ceph::real_clock::now(client->cct);
   /* can't write to a snapshot */
@@ -772,17 +780,24 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   c->io = this;
   queue_aio_write(c);
 
+  ZTracer::Trace trace;
+  if (trace_info) {
+    trace.init("rados operate", &objecter->trace_endpoint, trace_info);
+    trace.event("rados operate init root span");
+  }
+
   Objecter::Op *op = objecter->prepare_mutate_op(
     oid, oloc, *o, snap_context, ut, flags, onack,
-    oncommit, &c->objver);
+    oncommit, &c->objver, &trace);
   objecter->op_submit(op, &c->tid);
-
+  if (trace_info)
+    trace.event("rados operate op submitted");
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
-				  uint64_t snapid)
+				  uint64_t snapid, const blkin_trace_info *info)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -793,17 +808,21 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->io = this;
   c->blp = pbl;
 
+  ZTracer::Trace trace;
+  if (info)
+    trace.init("rados read", &objecter->trace_endpoint, info);
+
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
     off, len, snapid, pbl, 0,
-    onack, &c->objver);
+    onack, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
-				  uint64_t snapid)
+				  uint64_t snapid, const blkin_trace_info *info)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -817,10 +836,14 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->blp = &c->bl;
   c->out_buf = buf;
 
+  ZTracer::Trace trace;
+  if (info)
+    trace.init("rados read", &objecter->trace_endpoint, info);
+
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
     off, len, snapid, &c->bl, 0,
-    onack, &c->objver);
+    onack, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
@@ -863,7 +886,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
-				   uint64_t off)
+				   uint64_t off, const blkin_trace_info *info)
 {
   auto ut = ceph::real_clock::now(client->cct);
   ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
@@ -877,13 +900,17 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
+  ZTracer::Trace trace;
+  if (info)
+    trace.init("rados write", &objecter->trace_endpoint, info);
+
   c->io = this;
   queue_aio_write(c);
 
   Objecter::Op *o = objecter->prepare_write_op(
     oid, oloc,
     off, len, snapc, bl, ut, 0,
-    onack, onsafe, &c->objver);
+    onack, onsafe, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
 
   return 0;
