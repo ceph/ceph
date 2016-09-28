@@ -575,21 +575,28 @@ public:
     /// initialize Shards from the onode
     void init_shards(Onode *on, bool loaded, bool dirty);
 
-    /// return shard containing offset
-    vector<Shard>::iterator seek_shard(uint32_t offset) {
-      // fixme: we could do a binary search here
-      // we want the right-most shard that has an offset <= @offset.
-      vector<Shard>::iterator p = shards.begin();
-      while (p != shards.end() &&
-	     p->offset <= offset) {
-	++p;
+    /// return index of shard containing offset
+    /// or -1 if not found
+    int seek_shard(uint32_t offset) {
+      size_t end = shards.size();
+      size_t mid, left = 0;
+      size_t right = end; // one passed the right end
+
+      while (left < right) {
+        mid = left + (right - left) / 2;
+        if (offset >= shards[mid].offset) {
+          size_t next = mid + 1;
+          if (next >= end || offset < shards[next].offset)
+            return mid;
+          //continue to search forwards
+          left = next;
+        } else {
+          //continue to search backwards
+          right = mid;
+        }
       }
-      if (p != shards.begin()) {
-	assert(p == shards.end() || p->offset > offset);
-	--p;
-	assert(p->offset <= offset);
-      }
-      return p;
+
+      return -1; // not found
     }
 
     /// ensure that a range of the map is loaded
