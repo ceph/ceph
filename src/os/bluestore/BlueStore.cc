@@ -2372,7 +2372,8 @@ void BlueStore::_init_logger()
     "Average checksum latency");
   b.add_u64(l_bluestore_compress_success_count, "compress_success_count",
     "Sum for beneficial compress ops");
-
+  b.add_u64(l_bluestore_compress_rejected_count, "compress_rejected_count",
+    "Sum for compress ops rejected due to low net gain of space");
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes",
     "Sum for write-op padded bytes");
   b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops",
@@ -7331,10 +7332,10 @@ int BlueStore::_do_alloc_write(
         // pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
 	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
-	dout(20) << __func__ << hex << "  compressed 0x" << wi.blob_length
+	dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
 		 << " -> 0x" << rawlen << " => 0x" << newlen
 		 << " with " << (int)chdr.type
-		 << dec << dendl;
+		 << std::dec << dendl;
 	txc->statfs_delta.compressed() += rawlen;
 	txc->statfs_delta.compressed_original() += l->length();
 	txc->statfs_delta.compressed_allocated() += newlen;
@@ -7346,11 +7347,12 @@ int BlueStore::_do_alloc_write(
 	compressed = true;
         logger->inc(l_bluestore_compress_success_count);
       } else {
-	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
+	dout(20) << __func__ << std::hex << "  compressed 0x" << l->length()
                  << " -> 0x" << rawlen << " with " << (int)chdr.type
                  << ", which is more than required 0x" << dstlen
                  << ", leaving uncompressed"
-                 << dec << dendl;
+                 << std::dec << dendl;
+        logger->inc(l_bluestore_compress_rejected_count);
       }
       logger->tinc(l_bluestore_compress_lat, ceph_clock_now(g_ceph_context) - start);
     }
@@ -7373,16 +7375,17 @@ int BlueStore::_do_alloc_write(
 
     int r = alloc->alloc_extents(final_length, min_alloc_size, max_alloc_size,
                                  hint, &extents, &count);
-
-    need -= final_length;
     assert(r == 0);
+    need -= final_length;
+    txc->statfs_delta.allocated() += final_length;
+    assert(count > 0);
+    hint = extents[count - 1].end();
+
     bluestore_blob_t& dblob = b->dirty_blob();
     for (int i = 0; i < count; i++) {
       bluestore_pextent_t e = bluestore_pextent_t(extents[i]);
       txc->allocated.insert(e.offset, e.length);
-      txc->statfs_delta.allocated() += e.length;
       dblob.extents.push_back(e);
-      hint = e.end();
     }
 
     dout(20) << __func__ << " blob " << *b
@@ -7426,7 +7429,6 @@ void BlueStore::_wctx_finish(
   OnodeRef o,
   WriteContext *wctx)
 {
-  set<pair<bool, BlobRef> > blobs2remove;
   auto oep = wctx->old_extents.begin();
   while (oep != wctx->old_extents.end()) {
     auto &lo = *oep;
@@ -7515,8 +7517,7 @@ int BlueStore::_do_write(
   uint64_t end = offset + length;
 
   WriteContext wctx;
-  wctx.fadvise_flags = fadvise_flags;
-  if (wctx.fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
   }
@@ -7637,6 +7638,8 @@ int BlueStore::_zero(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
+  o->exists = true;
+  _assign_nid(txc, o);
   int r = _do_zero(txc, c, o, offset, length);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
@@ -7653,8 +7656,6 @@ int BlueStore::_do_zero(TransContext *txc,
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
   int r = 0;
-  o->exists = true;
-  _assign_nid(txc, o);
 
   _dump_onode(o);
 
