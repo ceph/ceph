@@ -1370,10 +1370,10 @@ private:
     default: return "???";
     }
   }
-  CompressionMode comp_mode = COMP_NONE;      ///< compression mode
+  std::atomic<int> comp_mode = {COMP_NONE}; ///< compression mode
   CompressorRef compressor;
-  uint64_t comp_min_blob_size = 0;
-  uint64_t comp_max_blob_size = 0;
+  std::atomic<uint64_t> comp_min_blob_size = {0};
+  std::atomic<uint64_t> comp_max_blob_size = {0};
 
   // --------------------------------------------------------
   // private methods
