@@ -44,6 +44,8 @@ set(unittest_librbd_srcs
   object_map/test_mock_SnapshotRollbackRequest.cc
   object_map/test_mock_UnlockRequest.cc
   object_map/test_mock_UpdateRequest.cc
+  operation/test_mock_DisableFeaturesRequest.cc
+  operation/test_mock_EnableFeaturesRequest.cc
   operation/test_mock_Request.cc
   operation/test_mock_ResizeRequest.cc
   operation/test_mock_SnapshotCreateRequest.cc

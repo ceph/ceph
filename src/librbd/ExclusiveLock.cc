@@ -82,7 +82,7 @@ bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
   Mutex::Locker locker(m_lock);
 
   bool accept_requests = (!is_shutdown() && m_state == STATE_LOCKED &&
-                          !m_request_blocked);
+                          m_request_blocked_count == 0);
   *ret_val = m_request_blocked_ret_val;
 
   ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
@@ -93,9 +93,10 @@ bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
 template <typename I>
 void ExclusiveLock<I>::block_requests(int r) {
   Mutex::Locker locker(m_lock);
-  assert(!m_request_blocked);
-  m_request_blocked = true;
-  m_request_blocked_ret_val = r;
+  m_request_blocked_count++;
+  if (m_request_blocked_ret_val == 0) {
+    m_request_blocked_ret_val = r;
+  }
 
   ldout(m_image_ctx.cct, 20) << this << " " << __func__ << dendl;
 }
@@ -103,9 +104,11 @@ void ExclusiveLock<I>::block_requests(int r) {
 template <typename I>
 void ExclusiveLock<I>::unblock_requests() {
   Mutex::Locker locker(m_lock);
-  assert(m_request_blocked);
-  m_request_blocked = false;
-  m_request_blocked_ret_val = 0;
+  assert(m_request_blocked_count > 0);
+  m_request_blocked_count--;
+  if (m_request_blocked_count == 0) {
+    m_request_blocked_ret_val = 0;
+  }
 
   ldout(m_image_ctx.cct, 20) << this << " " << __func__ << dendl;
 }
@@ -684,6 +687,7 @@ void ExclusiveLock<I>::handle_shutdown_released(int r) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.exclusive_lock = nullptr;
   }
 
@@ -691,7 +695,6 @@ void ExclusiveLock<I>::handle_shutdown_released(int r) {
     lderr(cct) << "failed to shut down exclusive lock: " << cpp_strerror(r)
                << dendl;
   } else {
-    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.aio_work_queue->unblock_writes();
   }
 
@@ -706,10 +709,10 @@ void ExclusiveLock<I>::handle_shutdown(int r) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.exclusive_lock = nullptr;
   }
 
-  m_image_ctx.aio_work_queue->clear_require_lock_on_read();
   m_image_ctx.aio_work_queue->unblock_writes();
   m_image_ctx.image_watcher->flush(util::create_context_callback<
     ExclusiveLock<I>, &ExclusiveLock<I>::complete_shutdown>(this));

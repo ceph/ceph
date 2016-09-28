@@ -5,6 +5,7 @@
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
+#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -53,6 +54,17 @@ template <typename I>
 int MirroringWatcher<I>::notify_image_updated(
     librados::IoCtx &io_ctx, cls::rbd::MirrorImageState mirror_image_state,
     const std::string &image_id, const std::string &global_image_id) {
+  C_SaferCond cond;
+  notify_image_updated(io_ctx, mirror_image_state, image_id, global_image_id,
+                       &cond);
+  return cond.wait();
+}
+
+template <typename I>
+int MirroringWatcher<I>::notify_image_updated(
+    librados::IoCtx &io_ctx, cls::rbd::MirrorImageState mirror_image_state,
+    const std::string &image_id, const std::string &global_image_id,
+    Context *on_finish) {
   CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
   ldout(cct, 20) << dendl;
 
@@ -60,8 +72,9 @@ int MirroringWatcher<I>::notify_image_updated(
   ::encode(NotifyMessage{ImageUpdatedPayload{mirror_image_state, image_id,
                                              global_image_id}},
            bl);
-
-  int r = io_ctx.notify2(RBD_MIRRORING, bl, NOTIFY_TIMEOUT_MS, nullptr);
+  librados::AioCompletion *comp = util::create_rados_ack_callback(on_finish);
+  int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
+                            nullptr);
   if (r < 0) {
     lderr(cct) << ": error encountered sending image updated notification: "
                << cpp_strerror(r) << dendl;

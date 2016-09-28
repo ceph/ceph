@@ -229,6 +229,24 @@ void DemoteEvent::decode(__u8 version, bufferlist::iterator& it) {
 void DemoteEvent::dump(Formatter *f) const {
 }
 
+void UpdateFeaturesEvent::encode(bufferlist& bl) const {
+  OpEventBase::encode(bl);
+  ::encode(features, bl);
+  ::encode(enabled, bl);
+}
+
+void UpdateFeaturesEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(features, it);
+  ::decode(enabled, it);
+}
+
+void UpdateFeaturesEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_unsigned("features", features);
+  f->dump_bool("enabled", enabled);
+}
+
 void UnknownEvent::encode(bufferlist& bl) const {
   assert(false);
 }
@@ -299,6 +317,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_DEMOTE:
     event = DemoteEvent();
     break;
+  case EVENT_TYPE_UPDATE_FEATURES:
+    event = UpdateFeaturesEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -352,6 +373,9 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(FlattenEvent(123)));
 
   o.push_back(new EventEntry(DemoteEvent()));
+
+  o.push_back(new EventEntry(UpdateFeaturesEvent()));
+  o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true)));
 }
 
 // Journal Client
@@ -602,6 +626,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_DEMOTE:
     out << "Demote";
+    break;
+  case EVENT_TYPE_UPDATE_FEATURES:
+    out << "UpdateFeatures";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

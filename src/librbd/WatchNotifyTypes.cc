@@ -266,6 +266,21 @@ void RenamePayload::dump(Formatter *f) const {
   f->dump_string("image_name", image_name);
 }
 
+void UpdateFeaturesPayload::encode(bufferlist &bl) const {
+  ::encode(features, bl);
+  ::encode(enabled, bl);
+}
+
+void UpdateFeaturesPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  ::decode(features, iter);
+  ::decode(enabled, iter);
+}
+
+void UpdateFeaturesPayload::dump(Formatter *f) const {
+  f->dump_unsigned("features", features);
+  f->dump_bool("enabled", enabled);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   assert(false);
 }
@@ -339,6 +354,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_RENAME:
     payload = RenamePayload();
     break;
+  case NOTIFY_OP_UPDATE_FEATURES:
+    payload = UpdateFeaturesPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -367,6 +385,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(SnapUnprotectPayload("foo")));
   o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(RenamePayload("foo")));
+  o.push_back(new NotifyMessage(UpdateFeaturesPayload(1, true)));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -441,6 +460,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_RENAME:
     out << "Rename";
+    break;
+  case NOTIFY_OP_UPDATE_FEATURES:
+    out << "UpdateFeatures";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

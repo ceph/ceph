@@ -395,7 +395,8 @@ TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
   open_remote_image(&ictx);
   uint64_t features;
   ASSERT_EQ(0, librbd::get_features(ictx, &features));
-  ASSERT_EQ(0, librbd::update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
+                                                 false));
   close_image(ictx);
 
   create_replayer<>();
@@ -436,7 +437,8 @@ TEST_F(TestImageReplayer, ErrorNoJournal)
   open_remote_image(&ictx);
   uint64_t features;
   ASSERT_EQ(0, librbd::get_features(ictx, &features));
-  ASSERT_EQ(0, librbd::update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
+                                                 false));
   close_image(ictx);
 
   C_SaferCond cond;
@@ -910,6 +912,96 @@ TEST_F(TestImageReplayer, Disconnect)
   m_replayer->start(&cond6);
   ASSERT_EQ(0, cond6.wait());
   wait_for_replay_complete();
+
+  stop();
+}
+
+TEST_F(TestImageReplayer, UpdateFeatures)
+{
+  const uint64_t FEATURES_TO_UPDATE =
+    RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF;
+
+  uint64_t features;
+  librbd::ImageCtx *ictx;
+
+  // Make sure the features we will update are disabled initially
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  features &= FEATURES_TO_UPDATE;
+  if (features) {
+    ASSERT_EQ(0, ictx->operations->update_features(FEATURES_TO_UPDATE,
+                                                   false));
+  }
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(0U, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  bootstrap();
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(0U, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  open_local_image(&ictx);
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(0U, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  // Start replay and update features
+
+  start();
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, ictx->operations->update_features(FEATURES_TO_UPDATE,
+                                                 true));
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(FEATURES_TO_UPDATE, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(FEATURES_TO_UPDATE, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, ictx->operations->update_features(FEATURES_TO_UPDATE,
+                                                 false));
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(0U, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_EQ(0U, features & FEATURES_TO_UPDATE);
+  close_image(ictx);
+
+  // Test update_features error does not stop replication
+
+  open_remote_image(&ictx);
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+  ASSERT_NE(0U, features & RBD_FEATURE_EXCLUSIVE_LOCK);
+  ASSERT_EQ(-EINVAL, ictx->operations->update_features(RBD_FEATURE_EXCLUSIVE_LOCK,
+                                                       false));
+  generate_test_data();
+  for (int i = 0; i < TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  for (int i = 0; i < TEST_IO_COUNT; ++i) {
+    read_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  close_image(ictx);
 
   stop();
 }

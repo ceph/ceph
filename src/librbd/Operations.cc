@@ -12,6 +12,8 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/operation/DisableFeaturesRequest.h"
+#include "librbd/operation/EnableFeaturesRequest.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "librbd/operation/ObjectMapIterate.h"
@@ -1214,6 +1216,84 @@ void Operations<I>::execute_snap_set_limit(const uint64_t limit,
   operation::SnapshotLimitRequest<I> *request =
     new operation::SnapshotLimitRequest<I>(m_image_ctx, on_finish, limit);
   request->send();
+}
+
+template <typename I>
+int Operations<I>::update_features(uint64_t features, bool enabled) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": features=" << features
+                << ", enabled=" << enabled << dendl;
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  } else if (m_image_ctx.old_format) {
+    lderr(cct) << "old-format images do not support features" << dendl;
+    return -EINVAL;
+  }
+
+  uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
+                           RBD_FEATURES_DISABLE_ONLY);
+  if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
+      (!enabled && (features & disable_mask) != features)) {
+    lderr(cct) << "cannot update immutable features" << dendl;
+    return -EINVAL;
+  }
+  if (features == 0) {
+    lderr(cct) << "update requires at least one feature" << dendl;
+    return -EINVAL;
+  }
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (enabled && (features & m_image_ctx.features) != 0) {
+      lderr(cct) << "one or more requested features are already enabled"
+		 << dendl;
+      return -EINVAL;
+    }
+    if (!enabled && (features & ~m_image_ctx.features) != 0) {
+      lderr(cct) << "one or more requested features are already disabled"
+		 << dendl;
+      return -EINVAL;
+    }
+  }
+
+  r = invoke_async_request("update_features", false,
+                           boost::bind(&Operations<I>::execute_update_features,
+                                       this, features, enabled, _1, 0),
+                           boost::bind(&ImageWatcher<I>::notify_update_features,
+                                       m_image_ctx.image_watcher, features,
+                                       enabled, _1));
+  ldout(cct, 2) << "update_features finished" << dendl;
+  return r;
+}
+
+template <typename I>
+void Operations<I>::execute_update_features(uint64_t features, bool enabled,
+                                            Context *on_finish,
+                                            uint64_t journal_op_tid) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": features=" << features
+                << ", enabled=" << enabled << dendl;
+
+  if (enabled) {
+    operation::EnableFeaturesRequest<I> *req =
+      new operation::EnableFeaturesRequest<I>(
+        m_image_ctx, on_finish, journal_op_tid, features);
+    req->send();
+  } else {
+    operation::DisableFeaturesRequest<I> *req =
+      new operation::DisableFeaturesRequest<I>(
+        m_image_ctx, on_finish, journal_op_tid, features);
+    req->send();
+  }
 }
 
 template <typename I>

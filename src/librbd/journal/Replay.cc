@@ -89,6 +89,11 @@ struct ExecuteOp : public Context {
     image_ctx.operations->execute_snap_set_limit(event.limit, on_op_complete);
   }
 
+  void execute(const journal::UpdateFeaturesEvent &_) {
+    image_ctx.operations->execute_update_features(event.features, event.enabled,
+						  on_op_complete, event.op_tid);
+  }
+
   virtual void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     if (r < 0) {
@@ -656,6 +661,31 @@ void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
 							   on_op_complete));
 
   on_ready->complete(0);
+}
+
+template <typename I>
+void Replay<I>::handle_event(const journal::UpdateFeaturesEvent &event,
+			     Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << ": Update features event" << dendl;
+
+  Mutex::Locker locker(m_lock);
+  OpEvent *op_event;
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
+  // avoid lock cycles
+  m_image_ctx.op_work_queue->queue(new C_RefreshIfRequired<I>(
+    m_image_ctx, new ExecuteOp<I, journal::UpdateFeaturesEvent>(
+      m_image_ctx, event, on_op_complete)), 0);
+
+  // do not process more events until the state machine is ready
+  // since it will affect IO
+  op_event->op_in_progress = true;
+  op_event->on_start_ready = on_ready;
 }
 
 template <typename I>
