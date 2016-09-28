@@ -7317,16 +7317,17 @@ int BlueStore::_do_alloc_write(
 
     int r = alloc->alloc_extents(final_length, min_alloc_size, max_alloc_size,
                                  hint, &extents, &count);
-
-    need -= final_length;
     assert(r == 0);
+    need -= final_length;
+    txc->statfs_delta.allocated() += final_length;
+    assert(count > 0);
+    hint = extents[count - 1].end();
+
     bluestore_blob_t& dblob = b->dirty_blob();
     for (int i = 0; i < count; i++) {
       bluestore_pextent_t e = bluestore_pextent_t(extents[i]);
       txc->allocated.insert(e.offset, e.length);
-      txc->statfs_delta.allocated() += e.length;
       dblob.extents.push_back(e);
-      hint = e.end();
     }
 
     dout(20) << __func__ << " blob " << *b
