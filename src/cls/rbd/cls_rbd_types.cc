@@ -264,6 +264,11 @@ std::string GroupImageSpec::image_key() {
   }
 }
 
+void GroupImageSpec::generate_test_instances(std::list<GroupImageSpec*> &o) {
+  o.push_back(new GroupImageSpec("10152ae8944a", 0));
+  o.push_back(new GroupImageSpec("1018643c9869", 3));
+}
+
 void GroupImageStatus::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
   ::encode(spec, bl);
@@ -294,6 +299,14 @@ void GroupImageStatus::dump(Formatter *f) const {
   f->dump_string("state", state_to_string());
 }
 
+void GroupImageStatus::generate_test_instances(std::list<GroupImageStatus*> &o) {
+  o.push_back(new GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_ATTACHED));
+  o.push_back(new GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_ATTACHED));
+  o.push_back(new GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
+  o.push_back(new GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
+}
+
+
 void GroupSpec::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
   ::encode(pool_id, bl);
@@ -317,22 +330,27 @@ bool GroupSpec::is_valid() const {
   return (!group_id.empty()) && (pool_id != -1);
 }
 
+void GroupSpec::generate_test_instances(std::list<GroupSpec *> &o) {
+  o.push_back(new GroupSpec("10152ae8944a", 0));
+  o.push_back(new GroupSpec("1018643c9869", 3));
+}
+
 void GroupSnapshotNamespace::encode(bufferlist& bl) const {
   ::encode(group_pool, bl);
   ::encode(group_id, bl);
-  ::encode(snapshot_id, bl);
+  ::encode(group_snapshot_id, bl);
 }
 
 void GroupSnapshotNamespace::decode(bufferlist::iterator& it) {
   ::decode(group_pool, it);
   ::decode(group_id, it);
-  ::decode(snapshot_id, it);
+  ::decode(group_snapshot_id, it);
 }
 
 void GroupSnapshotNamespace::dump(Formatter *f) const {
   f->dump_int("group_pool", group_pool);
   f->dump_string("group_id", group_id);
-  f->dump_int("snapshot_id", snapshot_id);
+  f->dump_string("group_snapshot_id", group_snapshot_id);
 }
 
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
@@ -388,8 +406,7 @@ public:
   }
 };
 
-
-SnapshotNamespaceType SnapshotNamespaceOnDisk::get_namespace_type() const {
+SnapshotNamespaceType get_namespace_type(const SnapshotNamespace& snapshot_namespace) {
   return static_cast<SnapshotNamespaceType>(boost::apply_visitor(GetTypeVisitor(),
 								 snapshot_namespace));
 }
@@ -426,8 +443,8 @@ void SnapshotNamespaceOnDisk::dump(Formatter *f) const {
 
 void SnapshotNamespaceOnDisk::generate_test_instances(std::list<SnapshotNamespaceOnDisk *> &o) {
   o.push_back(new SnapshotNamespaceOnDisk(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(0, "10152ae8944a", 1)));
-  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(5, "1018643c9869", 3)));
+  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(0, "10152ae8944a", "2118643c9732")));
+  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(5, "1018643c9869", "33352be8933c")));
 }
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns) {
@@ -439,7 +456,7 @@ std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
   os << "[group"
      << " group_pool=" << ns.group_pool
      << " group_id=" << ns.group_id
-     << " snapshot_id=" << ns.snapshot_id << "]";
+     << " group_snapshot_id=" << ns.group_snapshot_id << "]";
   return os;
 }
 
@@ -448,6 +465,61 @@ std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   return os;
 }
 
+void ImageSnapshotSpec::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(pool, bl);
+  ::encode(image_id, bl);
+  ::encode(snap_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ImageSnapshotSpec::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(pool, it);
+  ::decode(image_id, it);
+  ::decode(snap_id, it);
+  DECODE_FINISH(it);
+}
+
+void ImageSnapshotSpec::dump(Formatter *f) const {
+  f->dump_int("pool", pool);
+  f->dump_string("image_id", image_id);
+  f->dump_int("snap_id", snap_id);
+}
+
+void ImageSnapshotSpec::generate_test_instances(std::list<ImageSnapshotSpec *> &o) {
+  o.push_back(new ImageSnapshotSpec(0, "myimage", 2));
+  o.push_back(new ImageSnapshotSpec(1, "testimage", 7));
+}
+
+void GroupSnapshot::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(id, bl);
+  ::encode(name, bl);
+  ::encode(state, bl);
+  ::encode(snaps, bl);
+  ENCODE_FINISH(bl);
+}
+
+void GroupSnapshot::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(id, it);
+  ::decode(name, it);
+  ::decode(state, it);
+  ::decode(snaps, it);
+  DECODE_FINISH(it);
+}
+
+void GroupSnapshot::dump(Formatter *f) const {
+  f->dump_string("id", id);
+  f->dump_string("name", name);
+  f->dump_int("state", state);
+}
+
+void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
+  o.push_back(new GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_PENDING));
+  o.push_back(new GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
+}
 void TrashImageSpec::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   ::encode(source, bl);
