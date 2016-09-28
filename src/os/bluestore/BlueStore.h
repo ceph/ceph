@@ -1097,8 +1097,6 @@ public:
 	: blob(b), b_off(bo), data(bl) {}
     };
 
-    list<DeferredCsum> deferred_csum;
-
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -1122,10 +1120,6 @@ public:
     }
     void write_shared_blob(SharedBlobRef &sb) {
       shared_blobs.insert(sb);
-    }
-
-    void add_deferred_csum(BlobRef& b, uint64_t bo, bufferlist& bl) {
-      deferred_csum.emplace_back(TransContext::DeferredCsum(b, bo, bl));
     }
   };
 
