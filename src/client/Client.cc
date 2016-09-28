@@ -9947,8 +9947,6 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid,
 		       int gid, InodeRef *inp)
 {
-  Mutex::Locker lock(client_lock);
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_setattrx " << vino << " mask " << hex << mask << dec
@@ -9978,6 +9976,7 @@ int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid,
 int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask, int uid,
 		       int gid)
 {
+  Mutex::Locker lock(client_lock);
   InodeRef target(in);
   int res = _ll_setattrx(in, stx, mask, uid, gid, &target);
   if (res == 0) {
@@ -9993,9 +9992,9 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
 		       int gid)
 {
   struct ceph_statx stx;
-
   stat_to_statx(attr, &stx);
 
+  Mutex::Locker lock(client_lock);
   InodeRef target(in);
   int res = _ll_setattrx(in, &stx, mask, uid, gid, &target);
   if (res == 0) {
