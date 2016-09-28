@@ -134,14 +134,14 @@ public:
     return snap == CEPH_NOSNAP;
   }
 
-  /// @return true if object is neither head nor snapdir
+  /// @return true if object is neither head nor snapdir nor max
   bool is_snap() const {
-    return (snap != CEPH_NOSNAP) && (snap != CEPH_SNAPDIR);
+    return !is_max() && !is_head() && !is_snapdir();
   }
 
   /// @return true iff the object should have a snapset in it's attrs
   bool has_snapset() const {
-    return !is_snap();
+    return is_head() || is_snapdir();
   }
 
   /* Do not use when a particular hash function is needed */
