@@ -7,8 +7,8 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
-#include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadata.h"
 #include "cls/journal/cls_journal_types.h"
 #include <functional>
