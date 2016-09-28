@@ -332,7 +332,7 @@ void GroupSnapshotNamespace::decode(bufferlist::iterator& it) {
 void GroupSnapshotNamespace::dump(Formatter *f) const {
   f->dump_int("group_pool", group_pool);
   f->dump_string("group_id", group_id);
-  f->dump_int("snapshot_id", snapshot_id);
+  f->dump_string("snapshot_id", snapshot_id);
 }
 
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
@@ -426,8 +426,8 @@ void SnapshotNamespaceOnDisk::dump(Formatter *f) const {
 
 void SnapshotNamespaceOnDisk::generate_test_instances(std::list<SnapshotNamespaceOnDisk *> &o) {
   o.push_back(new SnapshotNamespaceOnDisk(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(0, "10152ae8944a", 1)));
-  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(5, "1018643c9869", 3)));
+  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(0, "10152ae8944a", "2118643c9732")));
+  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(5, "1018643c9869", "33352be8933c")));
 }
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns) {
@@ -446,6 +446,55 @@ std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   os << "[unknown]";
   return os;
+}
+
+void ImageSnapshotRef::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(pool, bl);
+  ::encode(image_id, bl);
+  ::encode(snap_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ImageSnapshotRef::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(pool, it);
+  ::decode(image_id, it);
+  ::decode(snap_id, it);
+  DECODE_FINISH(it);
+}
+
+void GroupSnapshot::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(id, bl);
+  ::encode(name, bl);
+  ::encode(state, bl);
+  ::encode(snaps, bl);
+  ENCODE_FINISH(bl);
+}
+
+void GroupSnapshot::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(id, it);
+  ::decode(name, it);
+  ::decode(state, it);
+  ::decode(snaps, it);
+  DECODE_FINISH(it);
+}
+
+void GroupSnapshot::dump(Formatter *f) const {
+  f->dump_string("id", id);
+  f->dump_string("name", name);
+  f->dump_int("state", state);
+}
+
+static void generate_test_instances(std::list<GroupSnapshot *> &o) {
+}
+
+std::string GroupSnapshot::snap_key() const {
+  ostringstream oss;
+  oss << RBD_GROUP_SNAP_KEY_PREFIX << id;
+  return oss.str();
 }
 
 } // namespace rbd
