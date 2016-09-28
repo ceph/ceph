@@ -680,6 +680,7 @@ OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 200)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
+OPTION(osd_ignore_bad_map_crc, OPT_BOOL, false) // do not ask for full map upon CRC mismatch
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 // shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds

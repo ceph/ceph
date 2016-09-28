@@ -6808,10 +6808,12 @@ void OSD::handle_osd_map(MOSDMap *m)
 	dout(20) << "my encoded map was:\n";
 	fbl.hexdump(*_dout);
 	*_dout << dendl;
-	delete o;
-	request_full_map(e, last);
-	last = e - 1;
-	break;
+	if (!g_conf->osd_ignore_bad_map_crc) {
+	  delete o;
+	  request_full_map(e, last);
+	  last = e - 1;
+	  break;
+	}
       }
       got_full_map(e);
 
