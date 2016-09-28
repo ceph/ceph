@@ -2333,6 +2333,9 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 
       entries->push_back(entry);
       count++;
+      if (count >= (int)max) {
+        return count;
+      }
       start_key = entry.idx;
     }
   } while (!keys.empty());
@@ -2514,7 +2517,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 #define MAX_BI_LIST_ENTRIES 1000
   int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
   string start_key = op.marker;
-  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries);
+  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries) + 1; /* one extra entry for identifying truncation */
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_plain_entries retured ret=%d", __func__, ret);
     return ret;
@@ -2529,10 +2532,20 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return ret;
   }
 
+  count += ret;
+
   ret = list_olh_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
     return ret;
+  }
+
+  count += ret;
+
+  op_ret.is_truncated = (count >= max);
+  while (count >= max) {
+    op_ret.entries.pop_back();
+    count--;
   }
 
   ::encode(op_ret, *out);
