@@ -652,7 +652,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   struct rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_set_tag_timeout(): failed to read header\n");
     return rc;
   }
 
@@ -713,7 +713,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   struct rgw_bucket_dir_header header;
   rc = read_bucket_header(hctx, &header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
+    CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to read header\n");
     return rc;
   }
 
