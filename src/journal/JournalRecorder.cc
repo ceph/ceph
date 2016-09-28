@@ -105,10 +105,7 @@ Future JournalRecorder::append(uint64_t tag_tid,
            entry_bl);
   assert(entry_bl.length() <= m_journal_metadata->get_object_size());
 
-  AppendBuffers append_buffers;
-  append_buffers.push_back(std::make_pair(future, entry_bl));
-  bool object_full = object_ptr->append_unlock(append_buffers);
-
+  bool object_full = object_ptr->append_unlock({{future, entry_bl}});
   if (object_full) {
     ldout(m_cct, 10) << "object " << object_ptr->get_oid() << " now full"
                      << dendl;
@@ -284,8 +281,7 @@ void JournalRecorder::create_next_object_recorder_unlock(
       new_object_recorder->get_object_number());
   }
 
-  new_object_recorder->append_unlock(append_buffers);
-
+  new_object_recorder->append_unlock(std::move(append_buffers));
   m_object_ptrs[splay_offset] = new_object_recorder;
 }
 

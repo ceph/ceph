@@ -119,14 +119,14 @@ TEST_F(TestObjectRecorder, Append) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(2U, object->get_pending_appends());
 
   C_SaferCond cond;
@@ -151,14 +151,14 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(0U, object->get_pending_appends());
 
   C_SaferCond cond;
@@ -182,14 +182,14 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(0U, object->get_pending_appends());
 
   C_SaferCond cond;
@@ -213,13 +213,13 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -243,13 +243,13 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               payload);
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_TRUE(object->append_unlock(append_buffers));
+  ASSERT_TRUE(object->append_unlock(std::move(append_buffers)));
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -272,7 +272,7 @@ TEST_F(TestObjectRecorder, Flush) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   C_SaferCond cond1;
@@ -300,7 +300,7 @@ TEST_F(TestObjectRecorder, FlushFuture) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   C_SaferCond cond;
@@ -336,7 +336,7 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
   lock->Unlock();
   ASSERT_FALSE(append_buffer.first->is_flush_in_progress());
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
 
   // should automatically flush once its attached to the object
   C_SaferCond cond;
@@ -360,7 +360,7 @@ TEST_F(TestObjectRecorder, Close) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(append_buffers));
+  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
   ASSERT_EQ(1U, object->get_pending_appends());
 
   lock->Lock();
@@ -403,7 +403,7 @@ TEST_F(TestObjectRecorder, Overflow) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1, append_buffer2};
   lock1->Lock();
-  ASSERT_TRUE(object1->append_unlock(append_buffers));
+  ASSERT_TRUE(object1->append_unlock(std::move(append_buffers)));
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -415,7 +415,7 @@ TEST_F(TestObjectRecorder, Overflow) {
   append_buffers = {append_buffer3};
 
   lock2->Lock();
-  ASSERT_FALSE(object2->append_unlock(append_buffers));
+  ASSERT_FALSE(object2->append_unlock(std::move(append_buffers)));
   append_buffer3.first->flush(NULL);
 
   bool overflowed = false;
