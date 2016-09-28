@@ -93,9 +93,6 @@ void NetworkStack::start()
     return ;
   }
 
-  if (started) {
-    return ;
-  }
   for (unsigned i = 0; i < num_workers; ++i) {
     if (workers[i]->is_init())
       continue;
