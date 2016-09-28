@@ -2281,6 +2281,8 @@ int main(int argc, char **argv)
   int bypass_gc = false;
   int inconsistent_index = false;
 
+  int verbose = false;
+
   int extra_info = false;
 
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
@@ -2370,6 +2372,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
+    } else if (ceph_argparse_binary_flag(args, i, &verbose, NULL, "--verbose", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
@@ -5072,6 +5076,11 @@ next:
     new_bucket_info.num_shards = num_shards;
     new_bucket_info.objv_tracker.clear();
 
+    cout << "*** NOTICE: operation will not remove old bucket index objects ***" << std::endl;
+    cout << "***         these will need to be removed manually             ***" << std::endl;
+    cout << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
+    cout << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
+
     ret = store->init_bucket_index(new_bucket_info.bucket, new_bucket_info.num_shards);
     if (ret < 0) {
       cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
@@ -5092,10 +5101,16 @@ next:
     int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
 
     BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
-
-    formatter->open_array_section("entries");
+    
+    if (verbose) {
+      formatter->open_array_section("entries");
+    }
 
     uint64_t total_entries = 0;
+
+    if (!verbose) {
+      cout << "total entries:";
+    }
 
     for (int i = 0; i < num_source_shards; ++i) {
       bool is_truncated = true;
@@ -5110,14 +5125,16 @@ next:
 
         list<rgw_cls_bi_entry>::iterator iter;
         for (iter = entries.begin(); iter != entries.end(); ++iter) {
-          formatter->open_object_section("entry");
+          rgw_cls_bi_entry& entry = *iter;
+          if (verbose) {
+            formatter->open_object_section("entry");
 
-          encode_json("shard_id", i, formatter);
-          encode_json("num_entry", total_entries, formatter);
+            encode_json("shard_id", i, formatter);
+            encode_json("num_entry", total_entries, formatter);
+            encode_json("entry", entry, formatter);
+          }
           total_entries++;
 
-          rgw_cls_bi_entry& entry = *iter;
-          encode_json("entry", entry, formatter);
           marker = entry.idx;
 
           int target_shard_id;
@@ -5139,13 +5156,22 @@ next:
           if (ret < 0) {
             return ret;
           }
-          formatter->close_section();
-          formatter->flush(cout);
+          if (verbose) {
+            formatter->close_section();
+            formatter->flush(cout);
+            formatter->flush(cout);
+          } else if (!(total_entries % 1000)) {
+            cout << " " << total_entries;
+          }
         }
       }
     }
-    formatter->close_section();
-    formatter->flush(cout);
+    if (verbose) {
+      formatter->close_section();
+      formatter->flush(cout);
+    } else {
+      cout << " " << total_entries << std::endl;
+    }
 
     ret = target_shards_mgr.finish();
     if (ret < 0) {
