@@ -47,7 +47,7 @@ Options
 
 .. option:: -r
 
-    Start radosgw (ceph needs to be compiled with --radosgw), create an apache2 configuration file, and start apache2 with it (needs apache2 with mod_fastcgi) on port starting from 8000.
+    Start radosgw on port starting from 8000.
 
 .. option:: --nodaemon
 
