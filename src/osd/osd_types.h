@@ -3536,6 +3536,14 @@ struct ScrubMap {
   eversion_t incr_since;
 
   void merge_incr(const ScrubMap &l);
+  void insert(const ScrubMap &r) {
+    objects.insert(r.objects.begin(), r.objects.end());
+  }
+  void swap(ScrubMap &r) {
+    ::swap(objects, r.objects);
+    ::swap(valid_through, r.valid_through);
+    ::swap(incr_since, r.incr_since);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl, int64_t pool=-1);

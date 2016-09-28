@@ -110,6 +110,14 @@ public:
     return ret;
   }
 
+  hobject_t get_object_boundary() const {
+    if (is_max())
+      return *this;
+    hobject_t ret = *this;
+    ret.snap = 0;
+    return ret;
+  }
+
   /// @return head version of this hobject_t
   hobject_t get_head() const {
     hobject_t ret(*this);
