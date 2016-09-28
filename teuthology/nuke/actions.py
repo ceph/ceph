@@ -56,6 +56,7 @@ def shutdown_daemons(ctx):
             'ceph-mon',
             'ceph-osd',
             'ceph-mds',
+            'ceph-mgr',
             'ceph-fuse',
             'ceph-disk',
             'radosgw',
@@ -247,7 +248,7 @@ def remove_ceph_packages(ctx):
                                'libcephfs1', 'librados2', 'librgw2', 'librbd1',
                                'ceph-selinux', 'python-cephfs', 'ceph-base',
                                'python-rbd', 'python-rados', 'ceph-mds',
-                               'libcephfs-java', 'libcephfs-jni',
+                               'ceph-mgr', 'libcephfs-java', 'libcephfs-jni',
                                'ceph-deploy', 'libapache2-mod-fastcgi'
                                ]
     pkgs = str.join(' ', ceph_packages_to_remove)
