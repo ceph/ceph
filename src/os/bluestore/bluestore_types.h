@@ -299,6 +299,19 @@ struct bluestore_blob_t {
     return csum_data.length() + extents.size() * 16 + 48;
   }
 
+  bool can_split() const {
+    return
+      !has_flag(FLAG_SHARED) &&
+      !has_flag(FLAG_COMPRESSED) &&
+      !has_flag(FLAG_HAS_UNUSED);     // splitting unused set is complex
+  }
+  bool can_split_at(uint32_t blob_offset) const {
+    if (has_csum() &&
+	blob_offset % get_csum_chunk_size() != 0)
+      return false;
+    return true;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
