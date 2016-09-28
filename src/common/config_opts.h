@@ -1108,6 +1108,7 @@ OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
 OPTION(filestore_punch_hole, OPT_BOOL, false)
 OPTION(filestore_seek_data_hole, OPT_BOOL, false)     // (try to) use seek_data/hole
+OPTION(filestore_splice, OPT_BOOL, false)
 OPTION(filestore_fadvise, OPT_BOOL, true)
 //collect device partition information for management application to use
 OPTION(filestore_collect_device_partition_information, OPT_BOOL, true)
