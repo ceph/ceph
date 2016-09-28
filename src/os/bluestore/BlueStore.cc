@@ -2346,7 +2346,8 @@ void BlueStore::_init_logger()
     "Average checksum latency");
   b.add_u64(l_bluestore_compress_success_count, "compress_success_count",
     "Sum for beneficial compress ops");
-
+  b.add_u64(l_bluestore_compress_rejected_count, "compress_rejected_count",
+    "Sum for compress ops rejected due to low net gain of space");
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes",
     "Sum for write-op padded bytes");
   b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops",
@@ -7295,6 +7296,7 @@ int BlueStore::_do_alloc_write(
                  << ", which is more than required 0x" << dstlen
                  << ", leaving uncompressed"
                  << std::dec << dendl;
+        logger->inc(l_bluestore_compress_rejected_count);
       }
       logger->tinc(l_bluestore_compress_lat, ceph_clock_now(g_ceph_context) - start);
     }
