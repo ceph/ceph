@@ -338,7 +338,7 @@ class CephFSVolumeClient(object):
                 # No VMeta update indicates that there was no auth update
                 # in Ceph either. So it's safe to remove corresponding
                 # partial update in AMeta.
-                if auth_id not in vol_meta['auths']:
+                if not vol_meta or auth_id not in vol_meta['auths']:
                     remove_volumes.append(volume)
                     continue
 
