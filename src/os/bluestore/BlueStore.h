@@ -62,6 +62,7 @@ enum {
   l_bluestore_decompress_lat,
   l_bluestore_csum_lat,
   l_bluestore_compress_success_count,
+  l_bluestore_compress_rejected_count,
   l_bluestore_write_pad_bytes,
   l_bluestore_wal_write_ops,
   l_bluestore_wal_write_bytes,
@@ -1724,7 +1725,6 @@ private:
   // write ops
 
   struct WriteContext {
-    unsigned fadvise_flags = 0;  ///< write flags
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
