@@ -710,6 +710,7 @@ WRITE_CLASS_ENCODER(RGWObjManifest)
 struct RGWUploadPartInfo {
   uint32_t num;
   uint64_t size;
+  uint64_t accounted_size{0};
   string etag;
   ceph::real_time modified;
   RGWObjManifest manifest;
@@ -725,6 +726,7 @@ struct RGWUploadPartInfo {
     ::encode(modified, bl);
     ::encode(manifest, bl);
     ::encode(cs_info, bl);
+    ::encode(accounted_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -735,8 +737,12 @@ struct RGWUploadPartInfo {
     ::decode(modified, bl);
     if (struct_v >= 3)
       ::decode(manifest, bl);
-    if (struct_v >= 4)
+    if (struct_v >= 4) {
       ::decode(cs_info, bl);
+      ::decode(accounted_size, bl);
+    } else {
+      accounted_size = size;
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
