@@ -2303,7 +2303,7 @@ void BlueStore::_set_compression()
   }
 
   compressor = nullptr;
-  if (comp_mode != COMP_NONE) {    
+  if (comp_mode.load() != COMP_NONE) {
     const char *alg = 0;
     if (g_conf->bluestore_compression_algorithm == "snappy") {
       alg = "snappy";
@@ -7530,11 +7530,12 @@ int BlueStore::_do_write(
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
+  int comp = comp_mode.load();
   wctx.compress =
-    (comp_mode == COMP_FORCE) ||
-    (comp_mode == COMP_AGGRESSIVE &&
+    (comp == COMP_FORCE) ||
+    (comp == COMP_AGGRESSIVE &&
      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
-    (comp_mode == COMP_PASSIVE &&
+    (comp == COMP_PASSIVE &&
      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
@@ -7543,10 +7544,10 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
-    wctx.comp_blob_size = comp_max_blob_size;
+    wctx.comp_blob_size = comp_max_blob_size.load();
     wctx.csum_order = min_alloc_size_order;
   } else {
-    wctx.comp_blob_size = comp_min_blob_size;
+    wctx.comp_blob_size = comp_min_blob_size.load();
   }
   dout(20) << __func__ << " prefer csum_order " << wctx.csum_order
 	   << " comp_blob_size 0x" << std::hex << wctx.comp_blob_size
