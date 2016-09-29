@@ -295,7 +295,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       s->formatter->open_object_section("object");
       s->formatter->dump_string("name", key.name);
       s->formatter->dump_string("hash", iter->etag);
-      s->formatter->dump_int("bytes", iter->size);
+      s->formatter->dump_int("bytes", iter->accounted_size);
       string single_content_type = iter->content_type;
       if (iter->content_type.size()) {
         // content type might hold multiple values, just dump the last one

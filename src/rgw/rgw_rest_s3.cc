@@ -549,7 +549,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       dump_time(s, "LastModified", &iter->mtime);
       if (!iter->is_delete_marker()) {
 	s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
-	s->formatter->dump_int("Size", iter->size);
+	s->formatter->dump_int("Size", iter->accounted_size);
 	s->formatter->dump_string("StorageClass", "STANDARD");
       }
       dump_owner(s, iter->owner, iter->owner_display_name);
@@ -623,7 +623,7 @@ void RGWListBucket_ObjStore_S3::send_response()
       }
       dump_time(s, "LastModified", &iter->mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
-      s->formatter->dump_int("Size", iter->size);
+      s->formatter->dump_int("Size", iter->accounted_size);
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
       if (s->system_request) {
