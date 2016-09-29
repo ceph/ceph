@@ -4,6 +4,7 @@ overrides:
     log-whitelist:
       - inode wrongly marked free
       - inode table repaired for inode
+      - Scrub error on inode
 
 tasks:
   - cephfs_test_runner:
