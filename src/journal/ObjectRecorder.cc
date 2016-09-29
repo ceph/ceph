@@ -132,12 +132,16 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
     return;
   }
 
-  AppendBuffers::iterator it;
-  for (it = m_append_buffers.begin(); it != m_append_buffers.end(); ++it) {
-    if (it->first == future) {
+  AppendBuffers::reverse_iterator r_it;
+  for (r_it = m_append_buffers.rbegin(); r_it != m_append_buffers.rend();
+       ++r_it) {
+    if (r_it->first == future) {
       break;
     }
   }
+  assert(r_it != m_append_buffers.rend());
+
+  auto it = (++r_it).base();
   assert(it != m_append_buffers.end());
   ++it;
 
