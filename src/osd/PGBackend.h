@@ -319,7 +319,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      OpRequestRef op ///< [in] message received
      ) = 0; ///< @return true if the message was handled
 
-   virtual void check_recovery_sources(const OSDMapRef osdmap) = 0;
+   virtual void check_recovery_sources(const OSDMapRef& osdmap) = 0;
 
 
    /**
