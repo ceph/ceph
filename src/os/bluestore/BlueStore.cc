@@ -1294,6 +1294,11 @@ void BlueStore::Blob::discard_unallocated()
       }
       pos += e.length;
     }
+    if (blob.can_prune_tail()) {
+      dirty_blob();
+      blob.prune_tail();
+      dout(20) << __func__ << " pruned tail, now " << blob << dendl;
+    }
   }
 }
 
