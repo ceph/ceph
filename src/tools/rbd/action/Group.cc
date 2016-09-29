@@ -10,6 +10,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 
 namespace rbd {
 namespace action {
@@ -287,20 +288,19 @@ int execute_list_images(const po::variables_map &vm) {
   if (f)
     f->open_array_section("consistency_groups");
 
-  for (auto i : images) {
-    std::string image_name = i.name;
-    int64_t pool_id = i.pool;
-    int state = i.state;
+  for (auto image : images) {
+    std::string image_name = image.name;
+    int state = image.state;
     std::string state_string;
-    if (cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE == state) {
+    if (GROUP_IMAGE_STATE_INCOMPLETE == state) {
       state_string = "incomplete";
     }
     if (f) {
       f->dump_string("image name", image_name);
-      f->dump_int("pool id", pool_id);
+      f->dump_int("pool", image.pool);
       f->dump_int("state", state);
     } else
-      std::cout << pool_id << "." << image_name << " " << state_string << std::endl;
+      std::cout << image.pool << "/" << image_name << " " << state_string << std::endl;
   }
 
   if (f) {
@@ -310,6 +310,172 @@ int execute_list_images(const po::variables_map &vm) {
 
   return 0;
 }
+
+int execute_group_snap_create(const po::variables_map &vm) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string pool_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (vm.count(at::SNAPSHOT_NAME)) {
+    snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
+  }
+
+  if (snap_name.empty()) {
+    snap_name = utils::get_positional_argument(vm, arg_index++);
+  }
+
+  if (snap_name.empty()) {
+    std::cerr << "rbd: "
+	      << "snapshot name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  librados::IoCtx io_ctx;
+  librados::Rados rados;
+
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  r = rbd.group_snap_create(io_ctx, group_name.c_str(), snap_name.c_str());
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int execute_group_snap_remove(const po::variables_map &vm) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string pool_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (vm.count(at::SNAPSHOT_NAME)) {
+    snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
+  }
+
+  if (snap_name.empty()) {
+    snap_name = utils::get_positional_argument(vm, arg_index++);
+  }
+
+  if (snap_name.empty()) {
+    std::cerr << "rbd: "
+	      << "snapshot name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  librados::IoCtx io_ctx;
+  librados::Rados rados;
+
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  r = rbd.group_snap_remove(io_ctx, group_name.c_str(), snap_name.c_str());
+
+  return r;
+}
+
+int execute_group_snap_list(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string group_name;
+  std::string pool_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (group_name.empty()) {
+    std::cerr << "rbd: "
+              << "consistency group name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  at::Format::Formatter formatter;
+  r = utils::get_formatter(vm, &formatter);
+  if (r < 0) {
+    return r;
+  }
+  Formatter *f = formatter.get();
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  std::vector<librbd::group_snap_spec_t> snaps;
+
+  r = rbd.group_snap_list(io_ctx, group_name.c_str(), &snaps);
+
+  if (r == -ENOENT) {
+    r = 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  TextTable t;
+  if (f) {
+    f->open_array_section("consistency_group_snaps");
+  } else {
+    t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+    t.define_column("STATUS", TextTable::RIGHT, TextTable::RIGHT);
+  }
+
+  for (auto i : snaps) {
+    std::string snap_name = i.name;
+    int state = i.state;
+    std::string state_string;
+    if (GROUP_SNAP_STATE_PENDING == state) {
+      state_string = "pending";
+    } else {
+      state_string = "ok";
+    }
+    if (r < 0) {
+      return r;
+    }
+    if (f) {
+      f->dump_string("snap name", snap_name);
+      f->dump_int("state", state);
+    } else {
+      t << snap_name << state_string << TextTable::endrow;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  } else {
+    std::cout << t;
+  }
+  return 0;
+}
+
 
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
@@ -378,6 +544,32 @@ void get_list_images_arguments(po::options_description *positional,
   at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
+void get_group_snap_create_arguments(po::options_description *positional,
+				  po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+
+  positional->add_options()
+    (at::SNAPSHOT_NAME.c_str(), "snapshot name\n(example: <snapshot-name>)");
+
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+}
+
+void get_group_snap_remove_arguments(po::options_description *positional,
+				  po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+
+  positional->add_options()
+    (at::SNAPSHOT_NAME.c_str(), "snapshot name\n(example: <snapshot-name>)");
+
+  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+}
+
+void get_group_snap_list_arguments(po::options_description *positional,
+                             po::options_description *options) {
+  at::add_format_options(options);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+}
+
 Shell::Action action_create(
   {"group", "create"}, {}, "Create a consistency group.",
   "", &get_create_arguments, &execute_create);
@@ -396,6 +588,15 @@ Shell::Action action_remove_image(
 Shell::Action action_list_images(
   {"group", "image", "list"}, {}, "List images in a consistency group.",
   "", &get_list_images_arguments, &execute_list_images);
+Shell::Action action_group_snap_create(
+  {"group", "snap", "create"}, {}, "Make a snapshot of a group.",
+  "", &get_group_snap_create_arguments, &execute_group_snap_create);
+Shell::Action action_group_snap_remove(
+  {"group", "snap", "remove"}, {}, "Remove a snapshot from a group.",
+  "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
+Shell::Action action_group_snap_list(
+  {"group", "snap", "list"}, {}, "List snapshots of a consistency group.",
+  "", &get_group_snap_list_arguments, &execute_group_snap_list);
 } // namespace group
 } // namespace action
 } // namespace rbd
