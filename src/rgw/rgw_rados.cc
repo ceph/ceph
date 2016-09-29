@@ -6394,7 +6394,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
 
-  r = index_op.complete(poolid, epoch, size,
+  r = index_op.complete(poolid, epoch, size, size,
                         meta.set_mtime, etag, content_type, &acl_bl,
                         meta.category, meta.remove_objs);
   if (r < 0)
@@ -9003,7 +9003,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
       uint64_t epoch = ref.ioctx.get_last_version();
       int64_t poolid = ref.ioctx.get_id();
       real_time mtime = real_clock::now();
-      r = index_op.complete(poolid, epoch, state->size,
+      r = index_op.complete(poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, &acl_bl,
                             RGW_OBJ_CATEGORY_MAIN, NULL);
     } else {
@@ -9238,9 +9238,13 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
   return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags);
 }
 
-int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint64_t size,
-                                    ceph::real_time& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
-                                    list<rgw_obj_key> *remove_objs)
+int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
+                                            uint64_t size, uint64_t accounted_size,
+                                            ceph::real_time& ut, const string& etag,
+                                            const string& content_type,
+                                            bufferlist *acl_bl,
+                                            RGWObjCategory category,
+                                            list<rgw_obj_key> *remove_objs)
 {
   if (blind) {
     return 0;
@@ -9256,7 +9260,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
   RGWObjEnt ent;
   obj.get_index_key(&ent.key);
   ent.size = size;
-  ent.accounted_size = size;
+  ent.accounted_size = accounted_size;
   ent.mtime = ut;
   ent.etag = etag;
   ACLOwner owner;

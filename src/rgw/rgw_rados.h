@@ -2585,7 +2585,8 @@ public:
 
       int prepare(RGWModifyOp);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
-                   ceph::real_time& ut, string& etag, string& content_type,
+                   uint64_t accounted_size, ceph::real_time& ut,
+                   const string& etag, const string& content_type,
                    bufferlist *acl_bl, RGWObjCategory category,
 		   list<rgw_obj_key> *remove_objs);
       int complete_del(int64_t poolid, uint64_t epoch,
