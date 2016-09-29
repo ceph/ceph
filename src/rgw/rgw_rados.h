@@ -127,28 +127,7 @@ struct RGWCompressionInfo {
 };
 WRITE_CLASS_ENCODER(RGWCompressionInfo)
 
-struct RGWBucketCompressionInfo {
-  uint64_t orig_size;
-
-  RGWBucketCompressionInfo() : orig_size(0) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(orig_size, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
-     ::decode(orig_size, bl);
-     DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(RGWBucketCompressionInfo)
-
 int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
-// return 0, if find and read; -EIO, if find and not read; 1 if not find
-int rgw_bucket_compression_info_from_attrset(map<string, bufferlist>& attrs, RGWBucketCompressionInfo& cs_info);
 
 struct RGWOLHInfo {
   rgw_obj target;

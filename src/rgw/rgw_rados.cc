@@ -12941,18 +12941,3 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
     return 0;
   }
 }
-
-int rgw_bucket_compression_info_from_attrset(map<string, bufferlist>& attrs, RGWBucketCompressionInfo& cs_info)
-{
-  map<string, bufferlist>::iterator cmp = attrs.find(RGW_ATTR_COMPRESSION);
-  if (cmp != attrs.end()) {
-    try {
-      ::decode(cs_info, cmp->second);
-    } catch (buffer::error& err) {
-      return -EIO;
-    }
-  } else {
-    return 1;
-  }
-  return 0;
-}
