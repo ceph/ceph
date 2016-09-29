@@ -1014,10 +1014,10 @@ void JournalMetadata::notify_update() {
   m_ioctx.notify2(m_oid, bl, 5000, NULL);
 }
 
-void JournalMetadata::async_notify_update() {
+void JournalMetadata::async_notify_update(Context *on_safe) {
   ldout(m_cct, 10) << "async notifying journal header update" << dendl;
 
-  C_AioNotify *ctx = new C_AioNotify(this);
+  C_AioNotify *ctx = new C_AioNotify(this, on_safe);
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
