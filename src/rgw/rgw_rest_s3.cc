@@ -1068,7 +1068,7 @@ int RGWPutObj_ObjStore_S3::get_params()
     pos = copy_source_bucket_name.find("/");
     if (pos == std::string::npos) {
       ret = -EINVAL;
-      ldout(s->cct, 0) << "x-amz-copy-source bad format" << dendl;
+      ldout(s->cct, 5) << "x-amz-copy-source bad format" << dendl;
       return ret;
     }
     copy_source_object_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
@@ -1079,6 +1079,11 @@ int RGWPutObj_ObjStore_S3::get_params()
     } else {
        copy_source_tenant_name = copy_source_bucket_name.substr(0, pos);
        copy_source_bucket_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
+       if (copy_source_bucket_name.empty()) {
+         ret = -EINVAL;
+         ldout(s->cct, 5) << "source bucket name is empty" << dendl;
+         return ret;
+       }
     }
     ret = store->get_bucket_info(obj_ctx,
                                  copy_source_tenant_name,
@@ -1086,6 +1091,7 @@ int RGWPutObj_ObjStore_S3::get_params()
                                  copy_source_bucket_info,
                                  NULL, &src_attrs);
     if (ret < 0) {
+      ldout(s->cct, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
       return ret;
     }
 
@@ -1096,14 +1102,14 @@ int RGWPutObj_ObjStore_S3::get_params()
       pos = range.find("=");
       if (pos == std::string::npos) {
         ret = -EINVAL;
-        ldout(s->cct, 0) << "x-amz-copy-source-range bad format" << dendl;
+        ldout(s->cct, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
       range = range.substr(pos + 1, range.size());
       pos = range.find("-");
       if (pos == std::string::npos) {
         ret = -EINVAL;
-        ldout(s->cct, 0) << "x-amz-copy-source-range bad format" << dendl;
+        ldout(s->cct, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
       string first = range.substr(0, pos);
