@@ -46,10 +46,13 @@ bool DamageTable::notify_dentry(
     return true;
   }
 
-  DamageEntryRef entry = std::make_shared<DentryDamage>(
-      ino, frag, dname, snap_id);
-  dentries[DirFragIdent(ino, frag)][DentryIdent(dname, snap_id)] = entry;
-  by_id[entry->id] = entry;
+  auto key = DirFragIdent(ino, frag);
+  if (dentries.count(key) == 0) {
+    DamageEntryRef entry = std::make_shared<DentryDamage>(
+        ino, frag, dname, snap_id);
+    dentries[key][DentryIdent(dname, snap_id)] = entry;
+    by_id[entry->id] = entry;
+  }
 
   return false;
 }
@@ -72,9 +75,12 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag)
     return true;
   }
 
-  DamageEntryRef entry = std::make_shared<DirFragDamage>(ino, frag);
-  dirfrags[DirFragIdent(ino, frag)] = entry;
-  by_id[entry->id] = entry;
+  auto key = DirFragIdent(ino, frag);
+  if (dirfrags.count(key) == 0) {
+    DamageEntryRef entry = std::make_shared<DirFragDamage>(ino, frag);
+    dirfrags[key] = entry;
+    by_id[entry->id] = entry;
+  }
 
   return false;
 }
@@ -85,9 +91,11 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino)
     return true;
   }
 
-  auto entry = std::make_shared<BacktraceDamage>(ino);
-  remotes[ino] = entry;
-  by_id[entry->id] = entry;
+  if (remotes.count(ino) == 0) {
+    auto entry = std::make_shared<BacktraceDamage>(ino);
+    remotes[ino] = entry;
+    by_id[entry->id] = entry;
+  }
 
   return false;
 }
