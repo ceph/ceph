@@ -151,7 +151,7 @@ public:
   void committed(uint64_t commit_tid, const CreateContext &create_context);
 
   void notify_update();
-  void async_notify_update();
+  void async_notify_update(Context *on_safe);
 
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
@@ -220,9 +220,10 @@ private:
 
   struct C_AioNotify : public Context {
     JournalMetadata* journal_metadata;
+    Context *on_safe;
 
-    C_AioNotify(JournalMetadata *_journal_metadata)
-      : journal_metadata(_journal_metadata) {
+    C_AioNotify(JournalMetadata *_journal_metadata, Context *_on_safe)
+      : journal_metadata(_journal_metadata), on_safe(_on_safe) {
       journal_metadata->m_async_op_tracker.start_op();
     }
     virtual ~C_AioNotify() {
@@ -230,6 +231,9 @@ private:
     }
     virtual void finish(int r) {
       journal_metadata->handle_notified(r);
+      if (on_safe != nullptr) {
+        on_safe->complete(0);
+      }
     }
   };
 
@@ -246,7 +250,8 @@ private:
     }
     virtual void finish(int r) {
       if (r == 0) {
-        journal_metadata->async_notify_update();
+        journal_metadata->async_notify_update(on_safe);
+        return;
       }
       if (on_safe != NULL) {
         on_safe->complete(r);
