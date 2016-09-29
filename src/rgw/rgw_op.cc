@@ -2468,7 +2468,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
   }
 
-  bl_aux.copy(0, bl_aux.length(), bl);
+  bl.claim_append(bl_aux);
 
   return ret;
 }
@@ -2576,7 +2576,8 @@ void RGWPutObj::execute()
     if (!copy_source) {
       len = get_data(data_in);
     } else {
-      op_ret = get_data(fst, lst, data_in);
+      uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
+      op_ret = get_data(fst, cur_lst, data_in);
       if (op_ret < 0)
         goto done;
       len = data_in.length();
