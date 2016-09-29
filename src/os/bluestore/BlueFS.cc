@@ -1692,12 +1692,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len, vector<bluefs_extent_t> *ev)
   }
   if (r < 0) {
     if (id != BDEV_SLOW) {
-      if (bdev[id])
-	derr << __func__ << " failed to allocate 0x" << std::hex << left
-	     << " on bdev " << (int)id
-	     << ", free 0x" << alloc[id]->get_free()
-	     << "; fallback to bdev " << (int)id + 1
-	     << std::dec << dendl;
+      if (bdev[id]) {
+	dout(1) << __func__ << " failed to allocate 0x" << std::hex << left
+		<< " on bdev " << (int)id
+		<< ", free 0x" << alloc[id]->get_free()
+		<< "; fallback to bdev " << (int)id + 1
+		<< std::dec << dendl;
+      }
       return _allocate(id + 1, len, ev);
     }
     if (bdev[id])
