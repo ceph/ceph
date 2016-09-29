@@ -137,8 +137,8 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   }
 
   std::string group_string = "";
-  if (-1 != group_spec.pool)
-    group_string = stringify(group_spec.pool) + "." + group_spec.name;
+  if ("" != group_spec.pool)
+    group_string = group_spec.pool + "/" + group_spec.name;
 
   if (f) {
     f->open_object_section("image");

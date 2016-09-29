@@ -45,6 +45,7 @@ static const std::string JOURNAL_SPEC("journal-spec");
 static const std::string PATH_NAME("path-name");
 
 // optional arguments
+static const std::string ALL_NAME("all");
 static const std::string CONFIG_PATH("conf");
 static const std::string POOL_NAME("pool");
 static const std::string DEST_POOL_NAME("dest-pool");
@@ -120,6 +121,9 @@ std::string get_description_prefix(ArgumentModifier modifier);
 
 void add_special_pool_option(boost::program_options::options_description *opt,
 			     std::string prefix);
+
+void add_all_option(boost::program_options::options_description *opt,
+		    std::string description);
 
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,

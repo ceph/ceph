@@ -68,6 +68,13 @@ void add_special_pool_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_all_option(po::options_description *opt, std::string description) {
+  std::string name = ALL_NAME + ",a";
+
+  opt->add_options()
+    (name.c_str(), po::bool_switch(), description.c_str());
+}
+
 void add_pool_option(po::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix) {
