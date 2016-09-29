@@ -153,6 +153,11 @@ ostream& operator<<(ostream& out, const CInode& in)
   return out;
 }
 
+void CInode::print(ostream& out)
+{
+  out << *this;
+}
+
 CInode::CInode(MDCache *_mdcache) :
   CObject("CInode"), mdcache(_mdcache),
   latest_projected_xattrs(NULL),

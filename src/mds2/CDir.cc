@@ -71,6 +71,11 @@ ostream& operator<<(ostream& out, const CDir& dir)
   return out;
 }
 
+void CDir::print(ostream& out)
+{
+  out << *this;
+}
+
 CDir::CDir(CInode *in) :
   CObject("CDir"), mdcache(in->mdcache), inode(in),
   projected_version(0),

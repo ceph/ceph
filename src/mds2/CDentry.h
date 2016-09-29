@@ -134,6 +134,8 @@ public:
 protected:
   void first_get();
   void last_put();
+public:
+  void print(ostream& out);
 public: // crap
   static snapid_t first, last;
 };

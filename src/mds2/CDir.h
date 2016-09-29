@@ -176,6 +176,8 @@ public:
 
 public:
    elist<CDir*>::item item_dirty, item_new;
+public:
+   void print(ostream& out);
 protected:
   void first_get();
   void last_put();

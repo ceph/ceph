@@ -221,10 +221,12 @@ public:
     last_wait_seq(0) {}
 
   virtual ~CObject() {}
+  virtual void print(std::ostream& out) = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out, CObject &o)
 {
+  o.print(out);
   return out;
 }
 
