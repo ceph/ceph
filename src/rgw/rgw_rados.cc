@@ -5196,26 +5196,9 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
         goto done;
       }
 
-      RGWObjEnt ent = eiter->second;
-      ent.key = obj;
-      ent.ns = ns;
-      rgw_obj cs_obj(bucket, obj);
-      bufferlist attr;
-      map<string, bufferlist> attrset;
-      int y = store->raw_obj_stat(cs_obj, NULL, NULL, NULL, &attrset, NULL, NULL);
-      map<string, bufferlist>::iterator cmp = attrset.find(RGW_ATTR_COMPRESSION);
-      if (!y && cmp != attrset.end()) {
-        RGWCompressionInfo cs_info;
-        bufferlist::iterator bliter = cmp->second.begin();
-        try {
-          ::decode(cs_info, bliter);
-        } catch (buffer::error& err) {
-          ldout(cct, 20) << "Failed to get decompressed obj size" << dendl;
-        }
-        if (cs_info.compression_type != "none")
-          ent.size = cs_info.orig_size;
-      }
-      result->push_back(ent);
+      entry.key = obj;
+      entry.ns = ns;
+      result->emplace_back(std::move(entry));
       count++;
     }
 
@@ -11924,8 +11907,8 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, int shard_id, rgw_obj_key& sta
       }
     }
     if (r >= 0) {
-      m[name] = e;
       ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.key.name << "[" << e.key.instance << "]" << dendl;
+      m[name] = std::move(e);
       ++count;
     }
 
