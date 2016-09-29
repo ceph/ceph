@@ -137,8 +137,8 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   }
 
   std::string group_string = "";
-  if (-1 != group_spec.pool)
-    group_string = stringify(group_spec.pool) + "." + group_spec.name;
+  if (RBD_GROUP_INVALID_POOL != group_spec.pool)
+    group_string = group_spec.pool + "/" + group_spec.name;
 
   struct timespec create_timestamp;
   image.get_create_timestamp(&create_timestamp);
