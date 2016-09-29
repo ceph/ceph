@@ -1093,7 +1093,7 @@ protected:
   void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
-  void check_recovery_sources(const OSDMapRef map);
+  void check_recovery_sources(const OSDMapRef& map);
 
   int recover_missing(
     const hobject_t& oid,

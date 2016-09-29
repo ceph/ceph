@@ -1171,7 +1171,7 @@ struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
 };
 
 void ECBackend::filter_read_op(
-  const OSDMapRef osdmap,
+  const OSDMapRef& osdmap,
   ReadOp &op)
 {
   set<hobject_t, hobject_t::BitwiseComparator> to_cancel;
@@ -1232,7 +1232,7 @@ void ECBackend::filter_read_op(
   }
 }
 
-void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
+void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
 {
   set<ceph_tid_t> tids_to_filter;
   for (map<pg_shard_t, set<ceph_tid_t> >::iterator 

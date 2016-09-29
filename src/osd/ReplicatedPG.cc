@@ -10433,7 +10433,7 @@ void ReplicatedPG::cancel_pull(const hobject_t &soid)
   finish_degraded_object(soid);
 }
 
-void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
+void ReplicatedPG::check_recovery_sources(const OSDMapRef& osdmap)
 {
   /*
    * check that any peers we are planning to (or currently) pulling
@@ -10465,7 +10465,7 @@ void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
   }
 }
 
-void PG::MissingLoc::check_recovery_sources(const OSDMapRef osdmap)
+void PG::MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
 {
   set<pg_shard_t> now_down;
   for (set<pg_shard_t>::iterator p = missing_loc_sources.begin();

@@ -155,7 +155,7 @@ void ReplicatedBackend::recover_object(
   }
 }
 
-void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
+void ReplicatedBackend::check_recovery_sources(const OSDMapRef& osdmap)
 {
   for(map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator i = pull_from_peer.begin();
       i != pull_from_peer.end();
