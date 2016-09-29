@@ -2540,7 +2540,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, real_time *mtime, real_
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
 
-  r = obj_op.write_meta(obj_len, attrs);
+  r = obj_op.write_meta(obj_len, obj_len, attrs);
   if (r < 0) {
     return r;
   }
@@ -6245,13 +6245,14 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
  * obj: the object name/key
  * data: the object contents/value
  * size: the amount of data to write (data must be this long)
+ * accounted_size: original size of data before compression, encryption
  * mtime: if non-NULL, writes the given mtime to the bucket storage
  * attrs: all the given attrs are written to bucket storage for the given object
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Write::write_meta(uint64_t size,
-                  map<string, bufferlist>& attrs)
+int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
+                                        map<string, bufferlist>& attrs)
 {
   rgw_bucket bucket;
   rgw_rados_ref ref;
@@ -6357,7 +6358,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   int64_t poolid;
 
   bool orig_exists = state->exists;
-  uint64_t orig_size = state->size;
+  uint64_t orig_size = state->accounted_size;
 
   bool versioned_target = (meta.olh_epoch > 0 || !obj.get_instance().empty());
 
@@ -6394,7 +6395,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
 
-  r = index_op.complete(poolid, epoch, size, size,
+  r = index_op.complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type, &acl_bl,
                         meta.category, meta.remove_objs);
   if (r < 0)
@@ -6429,7 +6430,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   meta.canceled = false;
 
   /* update quota cache */
-  store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
+  store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1),
+                                     accounted_size, orig_size);
   return 0;
 
 done_cancel:
@@ -7536,7 +7538,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.olh_epoch = olh_epoch;
   write_op.meta.delete_at = delete_at;
 
-  ret = write_op.write_meta(obj_size, attrs);
+  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs);
   if (ret < 0) {
     goto done_ret;
   }

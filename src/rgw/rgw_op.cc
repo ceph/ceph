@@ -2673,7 +2673,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, re
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
 
-  int r = head_obj_op.write_meta(s->obj_size, attrs);
+  int r = head_obj_op.write_meta(obj_len, obj_len, attrs);
   if (r < 0)
     return r;
 
@@ -4582,7 +4582,7 @@ void RGWInitMultipart::execute()
     obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
 
-    op_ret = obj_op.write_meta(0, attrs);
+    op_ret = obj_op.write_meta(0, 0, attrs);
   } while (op_ret == -EEXIST);
 }
 
@@ -4954,7 +4954,7 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
-  op_ret = obj_op.write_meta(ofs, attrs);
+  op_ret = obj_op.write_meta(ofs, ofs, attrs);
   if (op_ret < 0)
     return;
 
