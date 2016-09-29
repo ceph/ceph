@@ -3356,9 +3356,10 @@ protected:
   RGWBucketInfo bucket_info;
   bool canceled;
 
-  virtual int do_complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
+  virtual int do_complete(size_t accounted_size, const string& etag,
+                          ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
+                          const char *if_match, const char *if_nomatch) = 0;
 
 public:
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
@@ -3372,9 +3373,10 @@ public:
     return 0;
   }
 
-  virtual int complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
-                       map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                       const char *if_match = NULL, const char *if_nomatch = NULL);
+  int complete(size_t accounted_size, const string& etag,
+               ceph::real_time *mtime, ceph::real_time set_mtime,
+               map<string, bufferlist>& attrs, ceph::real_time delete_at,
+               const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
 
@@ -3444,9 +3446,10 @@ protected:
   RGWObjManifest::generator manifest_gen;
 
   int write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool exclusive);
-  virtual int do_complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
-                          map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match = NULL, const char *if_nomatch = NULL);
+  int do_complete(size_t accounted_size, const string& etag,
+                  ceph::real_time *mtime, ceph::real_time set_mtime,
+                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
+                  const char *if_match, const char *if_nomatch) override;
 
   int prepare_next_part(off_t ofs);
   int complete_parts();
