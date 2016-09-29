@@ -9087,8 +9087,6 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
   // remove from session
   mdr->item_session_request.remove_myself();
 
-  bool was_replay = mdr->client_request && mdr->client_request->is_replay();
-
   // remove from map
   active_requests.erase(mdr->reqid);
 
