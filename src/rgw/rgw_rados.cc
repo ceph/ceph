@@ -8476,8 +8476,23 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
 
   s->exists = true;
   s->has_attrs = true;
+  s->accounted_size = s->size;
 
-  map<string, bufferlist>::iterator iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
+  auto iter = s->attrset.find(RGW_ATTR_COMPRESSION);
+  if (iter != s->attrset.end()) {
+    // use uncompressed size for accounted_size
+    try {
+      RGWCompressionInfo info;
+      auto p = iter->second.begin();
+      ::decode(info, p);
+      s->accounted_size = info.orig_size;
+    } catch (buffer::error&) {
+      dout(0) << "ERROR: could not decode compression info for object: " << obj << dendl;
+      return -EIO;
+    }
+  }
+
+  iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
   if (iter != s->attrset.end()) {
     bufferlist bl = iter->second;
     bufferlist::iterator it = bl.begin();

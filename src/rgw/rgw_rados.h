@@ -749,7 +749,8 @@ struct RGWObjState {
   bool is_atomic;
   bool has_attrs;
   bool exists;
-  uint64_t size;
+  uint64_t size; //< size of raw object
+  uint64_t accounted_size{0}; //< size before compression, encryption
   ceph::real_time mtime;
   uint64_t epoch;
   bufferlist obj_tag;
@@ -781,6 +782,7 @@ struct RGWObjState {
     has_attrs = rhs.has_attrs;
     exists = rhs.exists;
     size = rhs.size;
+    accounted_size = rhs.accounted_size;
     mtime = rhs.mtime;
     epoch = rhs.epoch;
     if (rhs.obj_tag.length()) {
