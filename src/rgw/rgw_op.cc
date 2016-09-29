@@ -2585,9 +2585,10 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 
 protected:
   int prepare(RGWRados *store, string *oid_rand);
-  int do_complete(string& etag, real_time *mtime, real_time set_mtime,
-                  map<string, bufferlist>& attrs, real_time delete_at,
-                  const char *if_match = NULL, const char *if_nomatch = NULL);
+  int do_complete(size_t accounted_size, const string& etag, real_time *mtime,
+                  real_time set_mtime, map<string, bufferlist>& attrs,
+                  real_time delete_at, const char *if_match,
+                  const char *if_nomatch) override;
 
 public:
   bool immutable_head() { return true; }
@@ -2659,9 +2660,13 @@ static bool is_v2_upload_id(const string& upload_id)
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, real_time set_mtime,
-                                              map<string, bufferlist>& attrs, real_time delete_at,
-                                              const char *if_match, const char *if_nomatch)
+int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
+                                              const string& etag,
+                                              real_time *mtime, real_time set_mtime,
+                                              map<string, bufferlist>& attrs,
+                                              real_time delete_at,
+                                              const char *if_match,
+                                              const char *if_nomatch)
 {
   complete_writing_data();
 
@@ -2673,7 +2678,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, re
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
 
-  int r = head_obj_op.write_meta(obj_len, obj_len, attrs);
+  int r = head_obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0)
     return r;
 
@@ -2697,8 +2702,8 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, re
   }
   info.num = atoi(part_num.c_str());
   info.etag = etag;
-  info.size = s->obj_size;
-  info.accounted_size = s->obj_size; // TODO
+  info.size = obj_len;
+  info.accounted_size = accounted_size;
   info.modified = real_clock::now();
   info.manifest = manifest;
 
@@ -3124,8 +3129,8 @@ void RGWPutObj::execute()
     emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
-  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
-			      if_match, if_nomatch);
+  op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
+                               delete_at, if_match, if_nomatch);
 
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
@@ -3289,7 +3294,7 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
   }
 
-  op_ret = processor.complete(etag, NULL, real_time(), attrs, delete_at);
+  op_ret = processor.complete(s->obj_size, etag, NULL, real_time(), attrs, delete_at);
 }
 
 
@@ -4957,7 +4962,7 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
-  op_ret = obj_op.write_meta(ofs, ofs, attrs);
+  op_ret = obj_op.write_meta(ofs, accounted_size, attrs);
   if (op_ret < 0)
     return;
 

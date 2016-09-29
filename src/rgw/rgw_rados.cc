@@ -2197,11 +2197,12 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
-int RGWPutObjProcessor::complete(string& etag, real_time *mtime, real_time set_mtime,
+int RGWPutObjProcessor::complete(size_t accounted_size, const string& etag,
+                                 real_time *mtime, real_time set_mtime,
                                  map<string, bufferlist>& attrs, real_time delete_at,
-                                 const char *if_match, const char * if_nomatch)
+                                 const char *if_match, const char *if_nomatch)
 {
-  int r = do_complete(etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch);
+  int r = do_complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch);
   if (r < 0)
     return r;
 
@@ -2511,8 +2512,10 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, real_time *mtime, real_time set_mtime,
-                                           map<string, bufferlist>& attrs, real_time delete_at,
+int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& etag,
+                                           real_time *mtime, real_time set_mtime,
+                                           map<string, bufferlist>& attrs,
+                                           real_time delete_at,
                                            const char *if_match,
                                            const char *if_nomatch) {
   int r = complete_writing_data();
@@ -2540,7 +2543,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, real_time *mtime, real_
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
 
-  r = obj_op.write_meta(obj_len, obj_len, attrs);
+  r = obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0) {
     return r;
   }
@@ -6733,8 +6736,9 @@ public:
     return data_len;
   }
 
-  int complete(string& etag, real_time *mtime, real_time set_mtime, map<string, bufferlist>& attrs, real_time delete_at) {
-    return processor->complete(etag, mtime, set_mtime, attrs, delete_at);
+  int complete(const string& etag, real_time *mtime, real_time set_mtime,
+               map<string, bufferlist>& attrs, real_time delete_at) {
+    return processor->complete(data_len, etag, mtime, set_mtime, attrs, delete_at);
   }
 
   bool is_canceled() {
@@ -7638,7 +7642,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
   }
 
-  ret = processor.complete(etag, mtime, set_mtime, attrs, delete_at);
+  // XXX: need to copy over compression attr and its orig_size here?
+  ret = processor.complete(ofs, etag, mtime, set_mtime, attrs, delete_at);
 
   return ret;
 }
