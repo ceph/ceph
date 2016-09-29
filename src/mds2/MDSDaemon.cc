@@ -770,6 +770,15 @@ void MDSDaemon::respawn()
 }
 
 
+bool MDSDaemon::ms_can_fast_dispatch(Message *m) const
+{
+  return mds_rank && mds_rank->is_deferrable_message(m);
+}
+
+void MDSDaemon::ms_fast_dispatch(Message *m)
+{
+  mds_rank->ms_dispatch(m, true);
+}
 
 bool MDSDaemon::ms_dispatch(Message *m)
 {
@@ -795,7 +804,7 @@ bool MDSDaemon::ms_dispatch(Message *m)
 
   // Not core, try it as a rank message
   if (mds_rank) {
-    return mds_rank->ms_dispatch(m);
+    return mds_rank->ms_dispatch(m, false);
   } else {
     return false;
   }

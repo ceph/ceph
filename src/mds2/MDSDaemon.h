@@ -106,6 +106,9 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void reset_tick();
 
  private:
+  bool ms_can_fast_dispatch_any() const { return true; }
+  bool ms_can_fast_dispatch(Message *m) const;
+  void ms_fast_dispatch(Message *m);
   bool ms_dispatch(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,

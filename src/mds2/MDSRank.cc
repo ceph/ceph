@@ -278,12 +278,13 @@ void MDSRank::respawn()
 }
 
 
-bool MDSRankDispatcher::ms_dispatch(Message *m)
+bool MDSRankDispatcher::ms_dispatch(Message *m, bool is_fast)
 {
   if (is_deferrable_message(m)) {
     msg_wq.queue(m);
     return true;
   }
+  assert(!is_fast);
   return false;
 }
 

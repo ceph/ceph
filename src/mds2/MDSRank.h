@@ -120,13 +120,14 @@ public:
   void damaged() { assert(0); }
   void damaged_unlocked() { assert(0); }
 
+  bool is_deferrable_message(Message *m);
+
 protected:
   // Flag to indicate we entered shutdown: anyone seeing this to be true
   // after taking mds_lock must drop out.
   bool stopping;
 
   // Dispatch, retry, queues
-  bool is_deferrable_message(Message *m);
   void handle_deferrable_message(Message *m);
 
   ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
@@ -432,7 +433,7 @@ public:
     bool *need_reply);
 
   // Call into me from MDS::ms_dispatch
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m, bool is_fast);
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
