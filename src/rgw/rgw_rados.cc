@@ -7968,6 +7968,7 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     s.category = category;
     s.size += header_stats.total_size;
     s.size_rounded += header_stats.total_size_rounded;
+    s.size_utilized += header_stats.actual_size;
     s.num_objects += header_stats.num_entries;
   }
 }
