@@ -1104,7 +1104,7 @@ int RGWPutObj_ObjStore_S3::get_params()
         ldout(s->cct, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
-      range = range.substr(pos + 1, range.size());
+      range = range.substr(pos + 1);
       pos = range.find("-");
       if (pos == std::string::npos) {
         ret = -EINVAL;
@@ -1112,7 +1112,7 @@ int RGWPutObj_ObjStore_S3::get_params()
         return ret;
       }
       string first = range.substr(0, pos);
-      string last = range.substr(pos + 1, range.size());
+      string last = range.substr(pos + 1);
       copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
       copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
     }
