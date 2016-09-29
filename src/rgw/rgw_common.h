@@ -1375,7 +1375,8 @@ struct RGWObjEnt {
   std::string ns;
   rgw_user owner;
   std::string owner_display_name;
-  uint64_t size;
+  uint64_t size{0};
+  uint64_t accounted_size{0};
   ceph::real_time mtime;
   string etag;
   string content_type;
@@ -1383,7 +1384,7 @@ struct RGWObjEnt {
   uint32_t flags;
   uint64_t versioned_epoch;
 
-  RGWObjEnt() : size(0), flags(0), versioned_epoch(0) {}
+  RGWObjEnt() : flags(0), versioned_epoch(0) {}
 
   void dump(Formatter *f) const;
 
