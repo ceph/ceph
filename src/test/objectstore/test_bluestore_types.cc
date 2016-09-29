@@ -695,6 +695,38 @@ TEST(bluestore_blob_t, can_split_at)
   ASSERT_FALSE(a.can_split_at(0x2800));
 }
 
+TEST(bluestore_blob_t, prune_tail)
+{
+  bluestore_blob_t a;
+  a.flags = bluestore_blob_t::FLAG_MUTABLE;
+  a.extents.emplace_back(bluestore_pextent_t(0x10000, 0x2000));
+  a.extents.emplace_back(bluestore_pextent_t(0x20000, 0x2000));
+  ASSERT_FALSE(a.can_prune_tail());
+  a.extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  ASSERT_TRUE(a.can_prune_tail());
+  a.prune_tail();
+  ASSERT_FALSE(a.can_prune_tail());
+  ASSERT_EQ(2u, a.extents.size());
+  ASSERT_EQ(0x4000u, a.get_logical_length());
+
+  a.extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  a.init_csum(bluestore_blob_t::CSUM_CRC32C_8, 12, 0x6000);
+  ASSERT_EQ(6u, a.csum_data.length());
+  ASSERT_TRUE(a.can_prune_tail());
+  a.prune_tail();
+  ASSERT_FALSE(a.can_prune_tail());
+  ASSERT_EQ(2u, a.extents.size());
+  ASSERT_EQ(0x4000u, a.get_logical_length());
+  ASSERT_EQ(4u, a.csum_data.length());
+
+  bluestore_blob_t b;
+  b.extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  ASSERT_FALSE(a.can_prune_tail());
+}
+
 TEST(Blob, split)
 {
   BlueStore::Cache *cache = BlueStore::Cache::create("lru", NULL);
