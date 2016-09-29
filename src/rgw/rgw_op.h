@@ -87,8 +87,6 @@ RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
   }
   int read_bucket_cors();
   bool generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age);
-  // obj_size can be positive or negative
-  int update_compressed_bucket_size(uint64_t obj_size, RGWBucketCompressionInfo& bucket_size);
 
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }

@@ -775,16 +775,6 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   return true;
 }
 
-int RGWOp::update_compressed_bucket_size(uint64_t obj_size, RGWBucketCompressionInfo& bucket_size)
-{
-  bucket_size.orig_size += obj_size;
-  bufferlist bs;
-  ::encode(bucket_size, bs);
-  s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
-  return store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-                                         &s->bucket_attrs);
-}
-
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
                                        const RGWObjEnt& ent,
                                        RGWAccessControlPolicy * const bucket_policy,
@@ -1891,12 +1881,6 @@ void RGWStatBucket::execute()
       op_ret = -EINVAL;
     }
   }
-  RGWBucketCompressionInfo bcs;
-  int res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bcs);
-  if (!res)
-    bucket.size = bcs.orig_size;
-  if (res < 0)
-      lderr(s->cct) << "Failed to read decompressed bucket size" << dendl;
 }
 
 int RGWListBucket::verify_permission()
@@ -3068,15 +3052,6 @@ void RGWPutObj::execute()
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  // add attr to bucket to know original  size of data
-  res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bucket_size);
-  if (res < 0)
-    lderr(s->cct) << "ERROR: failed to read decompressed bucket size, cannot update stat" << dendl;
-  op_ret = update_compressed_bucket_size(s->obj_size, bucket_size);
-  if (op_ret < 0)
-    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
-         << " returned err=" << op_ret << dendl;
-
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
   etag = calc_md5;
@@ -3697,27 +3672,6 @@ void RGWDeleteObj::execute()
       if (op_ret >= 0) {
         delete_marker = del_op.result.delete_marker;
         version_id = del_op.result.version_id;
-        RGWBucketCompressionInfo bucket_size;
-        int res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bucket_size);
-        if (res < 0)
-          lderr(s->cct) << "ERROR: failed to read decompressed bucket size, cannot update stat" << dendl;
-        if (!res) {
-          uint64_t deleted_size;
-          bool tmp;
-          RGWCompressionInfo cs_info;
-          res = rgw_compression_info_from_attrset(attrs, tmp, cs_info);
-          if (res < 0) {
-            lderr(s->cct) << "ERROR: failed to decode compression info, cannot update stat" << dendl;
-            deleted_size = s->obj_size;
-          } else {
-            if (tmp) 
-              deleted_size = cs_info.orig_size;
-            else
-              deleted_size = s->obj_size;
-          }
-          if (update_compressed_bucket_size(-deleted_size, bucket_size) < 0)
-            lderr(s->cct) << "ERROR: failed to update bucket stat" << dendl;
-        }
       }
 
       /* Check whether the object has expired. Swift API documentation
@@ -5075,18 +5029,6 @@ void RGWAbortMultipart::execute()
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_BUCKET;
   }
-
-  if (!op_ret) {
-    RGWBucketCompressionInfo bucket_size;
-    int res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bucket_size);
-    if (res < 0)
-      lderr(s->cct) << "ERROR: failed to read decompressed bucket size, cannot update stat" << dendl;
-    if (!res) {
-      if (update_compressed_bucket_size(-deleted_size, bucket_size) < 0)
-            lderr(s->cct) << "ERROR: failed to update bucket stat" << dendl;
-    }
-  }
-
 }
 
 int RGWListMultipart::verify_permission()
