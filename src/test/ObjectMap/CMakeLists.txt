@@ -11,6 +11,7 @@ target_link_libraries(ceph_test_object_map
   ${UNITTEST_LIBS}
   global
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
 
@@ -26,6 +27,7 @@ target_link_libraries(ceph_test_keyvaluedb_atomicity
   ${UNITTEST_LIBS}
   global
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
 
@@ -42,6 +44,7 @@ target_link_libraries(ceph_test_keyvaluedb_iterators
   ${UNITTEST_LIBS}
   global
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
 

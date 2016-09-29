@@ -101,7 +101,7 @@ if(WITH_LIBCEPHFS)
 endif(WITH_LIBCEPHFS)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
-target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES})
+target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES} ${ALLOC_LIBS})
 
 # bench_log
 set(bench_log_srcs
@@ -123,7 +123,7 @@ target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
 add_executable(test_trans
   test_trans.cc
   )
-target_link_libraries(test_trans os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(test_trans os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 
 ## Benchmarks
 
@@ -156,7 +156,7 @@ endif(WITH_KVS)
 
 # ceph_objectstore_bench
 add_executable(ceph_objectstore_bench objectstore_bench.cc)
-target_link_libraries(ceph_objectstore_bench global ${BLKID_LIBRARIES} os)
+target_link_libraries(ceph_objectstore_bench global ${BLKID_LIBRARIES} os ${ALLOC_LIBS})
 
 if(${WITH_RADOSGW})
   # test_cors
@@ -340,6 +340,7 @@ target_link_libraries(ceph_test_rgw_token
   global
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 
 # librgw_file_gp (just the rgw_file get-put bucket ops)
@@ -380,7 +381,7 @@ if(PERF_LOCAL_FLAGS)
   set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
     ${PERF_LOCAL_FLAGS})
 endif()
-target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
+target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS} ${ALLOC_LIBS})
 
 # ceph_xattr_bench
 add_executable(ceph_xattr_bench
@@ -396,6 +397,7 @@ target_link_libraries(ceph_xattr_bench
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS}
   )
 
 install(TARGETS
@@ -422,6 +424,7 @@ target_link_libraries(ceph_test_filejournal
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS
   ceph_test_filejournal
@@ -467,6 +470,7 @@ if(WITH_FUSE)
     os
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
+    ${ALLOC_LIBS}
     )
 endif(WITH_FUSE)
 
