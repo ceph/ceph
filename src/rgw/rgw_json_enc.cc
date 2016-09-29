@@ -594,9 +594,9 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
 void RGWStorageStats::dump(Formatter *f) const
 {
   encode_json("size", size, f);
-  encode_json("size_rounded", size_rounded, f);
-  encode_json("num_kb", rgw_rounded_kb(size), f);
-  encode_json("num_kb_rounded", rgw_rounded_kb(size_rounded), f);
+  encode_json("size_actual", size_rounded, f);
+  encode_json("size_kb", rgw_rounded_kb(size), f);
+  encode_json("size_kb_actual", rgw_rounded_kb(size_rounded), f);
   encode_json("num_objects", num_objects, f);
 }
 
