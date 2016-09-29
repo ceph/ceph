@@ -2467,10 +2467,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return r;
     } else {
       bool rollback = false;
-      BOOST_SCOPE_EXIT_ALL(ictx, rollback) {
+      BOOST_SCOPE_EXIT_ALL(ictx, &mirror_image_internal, &rollback) {
         if (rollback) {
           CephContext *cct = ictx->cct;
-          cls::rbd::MirrorImage mirror_image_internal;
           mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
           int r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id, mirror_image_internal);
           if (r < 0) {
@@ -2480,46 +2479,50 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         }
       };
 
-      RWLock::RLocker l(ictx->snap_lock);
-      map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
-      for (auto &info : snap_info) {
-        librbd::parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
-        map< pair<int64_t, string>, set<string> > image_info;
+      {
+        RWLock::RLocker l(ictx->snap_lock);
+        map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
+        for (auto &info : snap_info) {
+          librbd::parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
+          map< pair<int64_t, string>, set<string> > image_info;
 
-        r = list_children_info(ictx, parent_spec, image_info);
-        if (r < 0) {
-          rollback = true;
-          return r;
-        }
-        if (image_info.empty())
-          continue;
-
-        Rados rados(ictx->md_ctx);
-        for (auto &info: image_info) {
-          IoCtx ioctx;
-          r = rados.ioctx_create2(info.first.first, ioctx);
+          r = list_children_info(ictx, parent_spec, image_info);
           if (r < 0) {
             rollback = true;
-            lderr(cct) << "Error accessing child image pool " << info.first.second  << dendl; 
             return r;
           }
-          for (auto &id_it : info.second) {
-            cls::rbd::MirrorImage mirror_image_internal;
-            r = cls_client::mirror_image_get(&ioctx, id_it, &mirror_image_internal);
-            if (r != -ENOENT) {
+          if (image_info.empty())
+            continue;
+
+          Rados rados(ictx->md_ctx);
+          for (auto &info: image_info) {
+            IoCtx ioctx;
+            r = rados.ioctx_create2(info.first.first, ioctx);
+            if (r < 0) {
               rollback = true;
-              lderr(cct) << "mirroring is enabled on one or more children " << dendl;
-              return -EBUSY;
+              lderr(cct) << "Error accessing child image pool " << info.first.second  << dendl;
+              return r;
+            }
+            for (auto &id_it : info.second) {
+              cls::rbd::MirrorImage mirror_image_internal;
+              r = cls_client::mirror_image_get(&ioctx, id_it, &mirror_image_internal);
+              if (r != -ENOENT) {
+                rollback = true;
+                lderr(cct) << "mirroring is enabled on one or more children " << dendl;
+                return -EBUSY;
+              }
             }
           }
         }
       }
+
+      r = mirror_image_disable_internal(ictx, force);
+      if (r < 0) {
+        rollback = true;
+        return r;
+      }
     }
 
-    r = mirror_image_disable_internal(ictx, force);
-    if (r < 0) {
-      return r;
-    }
     return 0;
   }
 
