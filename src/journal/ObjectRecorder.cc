@@ -254,7 +254,6 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
     if (r == -EOVERFLOW || m_overflowed) {
       if (iter != m_in_flight_appends.end()) {
         m_overflowed = true;
-        append_overflowed(tid);
       } else {
         // must have seen an overflow on a previous append op
         assert(r == -EOVERFLOW && m_overflowed);
@@ -262,6 +261,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
 
       // notify of overflow once all in-flight ops are complete
       if (m_in_flight_tids.empty() && !m_aio_scheduled) {
+        append_overflowed();
         notify_handler();
       }
       return;
@@ -293,13 +293,12 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   m_in_flight_flushes_cond.Signal();
 }
 
-void ObjectRecorder::append_overflowed(uint64_t tid) {
+void ObjectRecorder::append_overflowed() {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " append overflowed"
                    << dendl;
 
   assert(m_lock->is_locked());
   assert(!m_in_flight_appends.empty());
-  assert(m_in_flight_appends.begin()->first == tid);
 
   cancel_append_task();
 
