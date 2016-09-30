@@ -1072,6 +1072,14 @@ int RGWPutObj_ObjStore_S3::get_params()
     }
     copy_source_object_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
     copy_source_bucket_name = copy_source_bucket_name.substr(0, pos);
+#define VERSION_ID_STR "?versionId="
+    pos = copy_source_object_name.find(VERSION_ID_STR);
+    if (pos == std::string::npos) {
+      url_decode(copy_source_object_name, copy_source_object_name);
+    } else {
+      copy_source_version_id = copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
+      url_decode(copy_source_object_name.substr(0, pos), copy_source_object_name);
+    }
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
        copy_source_tenant_name = s->src_tenant_name;

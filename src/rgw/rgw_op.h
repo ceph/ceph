@@ -656,6 +656,7 @@ protected:
   string copy_source_tenant_name;
   string copy_source_bucket_name;
   string copy_source_object_name;
+  string copy_source_version_id;
   off_t copy_source_range_fst;
   off_t copy_source_range_lst;
   string etag;
