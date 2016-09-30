@@ -2365,13 +2365,14 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
 {
-  *again = false;
   *phandle = NULL;
   uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < max_write_size)
+  if (pending_data_bl.length() < max_write_size) {
+    *again = false;
     return 0;
+  }
 
   pending_data_bl.splice(0, max_write_size, &bl);
 
