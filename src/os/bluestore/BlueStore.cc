@@ -63,7 +63,7 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 #define BLOBID_FLAG_ZEROOFFSET 0x2  // blob_offset is 0
 #define BLOBID_FLAG_SAMELENGTH 0x4  // length matches previous extent
 #define BLOBID_FLAG_SPANNING   0x8  // has spanning blob id
-#define BLOBID_FLAG_BLOB_DEPTH 0x16 // has blob overlapping count of 1
+#define BLOBID_FLAG_DEPTH     0x10  // has depth != 1
 #define BLOBID_SHIFT_BITS        5
 
 /*
@@ -1645,8 +1645,8 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
     } else {
       prev_len = p->length;
     }
-    if (p->blob_depth == 1) {
-      blobid |= BLOBID_FLAG_BLOB_DEPTH;
+    if (p->blob_depth != 1) {
+      blobid |= BLOBID_FLAG_DEPTH;
     }
     small_encode_varint(blobid, bl);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
@@ -1659,7 +1659,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       small_encode_varint_lowz(p->length, bl);
     }
     pos = p->logical_offset + p->length;
-    if ((blobid & BLOBID_FLAG_BLOB_DEPTH) == 0) {
+    if (blobid & BLOBID_FLAG_DEPTH) {
       small_encode_varint_lowz(p->blob_depth, bl);
     }
     if (include_blob) {
@@ -1707,7 +1707,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
     }
     le->length = prev_len;
 
-    if ((blobid & BLOBID_FLAG_BLOB_DEPTH) == 0) {
+    if (blobid & BLOBID_FLAG_DEPTH) {
       small_decode_varint_lowz(le->blob_depth, p);
     } else {
       le->blob_depth = 1;
