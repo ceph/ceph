@@ -3203,16 +3203,16 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
-  if (!s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE") &&
-       s->info.env->get("HTTP_X_AMZ_COPY_SOURCE")) {
+  const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
 
-      ret = RGWCopyObj::parse_copy_location(s->copy_source,
-                                            s->init_state.src_bucket,
-                                            s->src_object);
-      if (!ret) {
-          ldout(s->cct, 0) << "failed to parse copy location" << dendl;
-          return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
-      }
+  if (copy_source && !s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) {
+    ret = RGWCopyObj::parse_copy_location(copy_source,
+                                          s->init_state.src_bucket,
+                                          s->src_object);
+    if (!ret) {
+      ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+      return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
+    }
   }
 
   return RGWHandler_REST::init(store, s, cio);
