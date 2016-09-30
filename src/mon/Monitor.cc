@@ -73,6 +73,7 @@
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
+#include "MgrMonitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
@@ -206,6 +207,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
+  paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
 
   health_monitor = new HealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
@@ -240,6 +242,8 @@ PaxosService *Monitor::get_paxos_service_by_name(const string& name)
     return paxos_service[PAXOS_LOG];
   if (name == "auth")
     return paxos_service[PAXOS_AUTH];
+  if (name == "mgr")
+    return paxos_service[PAXOS_MGR];
 
   assert(0 == "given name does not match known paxos service");
   return NULL;
@@ -1910,6 +1914,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
   Metadata my_meta;
   collect_sys_info(&my_meta, g_ceph_context);
+  my_meta["addr"] = stringify(messenger->get_myaddr());
   update_mon_metadata(rank, std::move(my_meta));
 }
 
@@ -2461,6 +2466,10 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("fsmap");
     mdsmon()->fsmap.print_summary(f, NULL);
     f->close_section();
+
+    f->open_object_section("mgrmap");
+    mgrmon()->get_map().print_summary(f, nullptr);
+    f->close_section();
     f->close_section();
   } else {
     ss << "    cluster " << monmap->get_fsid() << "\n";
@@ -2471,6 +2480,11 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
        << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
     if (mdsmon()->fsmap.any_filesystems()) {
       ss << "      fsmap " << mdsmon()->fsmap << "\n";
+    }
+    if (mgrmon()->in_use()) {
+      ss << "        mgr ";
+      mgrmon()->get_map().print_summary(nullptr, &ss);
+      ss << "\n";
     }
 
     osdmon()->osdmap.print_summary(NULL, ss);
@@ -2796,6 +2810,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
+  if (module == "mgr") {
+    mgrmon()->dispatch(op);
+    return;
+  }
+
   if (prefix == "fsid") {
     if (f) {
       f->open_object_section("fsid");
@@ -2890,10 +2909,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      pgmon()->dump_fs_stats(ds, f.get(), verbose);
+      pgmon()->pg_map.dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      pgmon()->dump_pool_stats(ds, f.get(), verbose);
+      pgmon()->pg_map.dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
@@ -3623,6 +3642,10 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_MDSMAP]->dispatch(op);
       break;
 
+    // Mgrs
+    case MSG_MGR_BEACON:
+      paxos_service[PAXOS_MGR]->dispatch(op);
+      break;
 
     // pg
     case CEPH_MSG_STATFS:
@@ -4312,6 +4335,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       check_sub(s->sub_map["monmap"]);
     } else if (logmon()->sub_name_to_id(p->first) >= 0) {
       logmon()->check_sub(s->sub_map[p->first]);
+    } else if (p->first == "mgrmap" || p->first == "mgrdigest") {
+      mgrmon()->check_sub(s->sub_map[p->first]);
     }
   }
 

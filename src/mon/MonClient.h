@@ -38,7 +38,6 @@ class MAuthRotating;
 class MPing;
 class LogClient;
 class AuthSupported;
-class AuthAuthorizeHandlerRegistry;
 class AuthMethodList;
 class Messenger;
 // class RotatingKeyRing;
@@ -125,10 +124,6 @@ private:
   Mutex monc_lock;
   SafeTimer timer;
   Finisher finisher;
-
-  // Added to support session signatures.  PLR
-
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
 
   bool initialized;
   bool no_keyring_disabled_cephx;
@@ -370,6 +365,7 @@ public:
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
+  entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
 
   void send_auth_message(Message *m) {
     _send_mon_message(m, true);
@@ -434,6 +430,22 @@ public:
    * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
    */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
+
+  /**
+   * Run a callback within our lock, with a reference
+   * to the MonMap
+   */
+  template<typename Callback, typename...Args>
+  auto with_monmap(Callback&& cb, Args&&...args) ->
+    typename std::enable_if<
+      std::is_void<
+    decltype(cb(const_cast<const MonMap&>(monmap),
+		std::forward<Args>(args)...))>::value,
+      void>::type {
+    Mutex::Locker l(monc_lock);
+    std::forward<Callback>(cb)(const_cast<const MonMap&>(monmap),
+			       std::forward<Args>(args)...);
+  }
 
 private:
   struct version_req_d {

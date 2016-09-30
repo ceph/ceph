@@ -32,6 +32,7 @@
 #include "common/TrackedOp.h"
 #include "common/Finisher.h"
 #include "common/cmdparse.h"
+#include "mgr/MgrClient.h"
 
 #include "MDSRank.h"
 #include "MDSMap.h"
@@ -81,6 +82,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   Messenger    *messenger;
   MonClient    *monc;
+  MgrClient     mgrc;
   MDSMap       *mdsmap;
   LogClient    log_client;
   LogChannelRef clog;

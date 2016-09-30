@@ -11,6 +11,7 @@ set(lib_mon_srcs
   PaxosService.cc
   OSDMonitor.cc
   MDSMonitor.cc
+  MgrMonitor.cc
   MonmapMonitor.cc
   LogMonitor.cc
   AuthMonitor.cc

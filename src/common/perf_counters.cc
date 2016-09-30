@@ -55,11 +55,32 @@ void PerfCountersCollection::add(class PerfCounters *l)
   }
 
   m_loggers.insert(l);
+
+  for (unsigned int i = 0; i < l->m_data.size(); ++i) {
+    PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
+
+    std::string path = l->get_name();
+    path += ".";
+    path += data.name;
+
+    by_path[path] = &data;
+  }
 }
 
 void PerfCountersCollection::remove(class PerfCounters *l)
 {
   Mutex::Locker lck(m_lock);
+
+  for (unsigned int i = 0; i < l->m_data.size(); ++i) {
+    PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
+
+    std::string path = l->get_name();
+    path += ".";
+    path += data.name;
+
+    by_path.erase(path);
+  }
+
   perf_counters_set_t::iterator i = m_loggers.find(l);
   assert(i != m_loggers.end());
   m_loggers.erase(i);
@@ -73,6 +94,8 @@ void PerfCountersCollection::clear()
   for (; i != i_end; ) {
     m_loggers.erase(i++);
   }
+
+  by_path.clear();
 }
 
 bool PerfCountersCollection::reset(const std::string &name)
@@ -130,6 +153,14 @@ void PerfCountersCollection::dump_formatted(
     }
   }
   f->close_section();
+}
+
+void PerfCountersCollection::with_counters(std::function<void(
+      const PerfCountersCollection::CounterMap &)> fn) const
+{
+  Mutex::Locker lck(m_lock);
+
+  fn(by_path);
 }
 
 // ---------------------------
@@ -449,3 +480,4 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
   m_perf_counters = NULL;
   return ret;
 }
+
