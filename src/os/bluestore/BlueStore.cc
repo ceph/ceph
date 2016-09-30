@@ -7705,6 +7705,7 @@ int BlueStore::_do_write(
         head_bl.claim_append(bl);
         bl.swap(head_bl);
         offset = gc_start_offset;
+	length = end - offset;
       } else {
         o->extent_map.fault_range(db, gc_start_offset, read_len);
         _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, &wctx);
