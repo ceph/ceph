@@ -1208,8 +1208,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   {
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
+
+    // determine appropriate features
+    uint64_t features = mon->quorum_features;
+    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
+      features &= ~CEPH_FEATURE_SERVER_JEWEL;
+    }
+    dout(10) << __func__ << " encoding full map with " << features << dendl;
+
     bufferlist fullbl;
-    ::encode(tmp, fullbl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+    ::encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
     pending_inc.full_crc = tmp.get_crc();
 
     // include full map in the txn.  note that old monitors will
