@@ -90,13 +90,14 @@ extern const mds_rank_t MDS_RANK_NONE;
 class mds_role_t
 {
   public:
-  mds_rank_t rank;
   fs_cluster_id_t fscid;
+  mds_rank_t rank;
+
   mds_role_t(fs_cluster_id_t fscid_, mds_rank_t rank_)
-    : rank(rank_), fscid(fscid_)
+    : fscid(fscid_), rank(rank_)
   {}
   mds_role_t()
-    : rank(MDS_RANK_NONE), fscid(FS_CLUSTER_ID_NONE)
+    : fscid(FS_CLUSTER_ID_NONE), rank(MDS_RANK_NONE)
   {}
   bool operator<(mds_role_t const &rhs) const
   {
