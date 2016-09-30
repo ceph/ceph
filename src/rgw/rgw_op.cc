@@ -2226,8 +2226,7 @@ int RGWPutObj::verify_permission()
     RGWAccessControlPolicy cs_policy(s->cct);
     map<string, bufferlist> cs_attrs;
     rgw_bucket cs_bucket(copy_source_bucket_info.bucket);
-    rgw_obj_key cs_object(copy_source_object_name);
-    rgw_obj cs_obj(cs_bucket, cs_object);
+    rgw_obj_key cs_object(copy_source_object_name, copy_source_version_id);
 
     /* check source object permissions */
     if (read_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_policy, cs_bucket, cs_object) < 0) {
@@ -2453,8 +2452,9 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   new_ofs = fst;
   new_end = lst;
 
-  rgw_obj_key obj_key(copy_source_object_name);
-  rgw_obj obj(copy_source_bucket_info.bucket, obj_key);
+  rgw_obj_key obj_key(copy_source_object_name, copy_source_version_id);
+  rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
+  obj.set_instance(obj_key.instance);
 
   RGWRados::Object op_target(store, copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
