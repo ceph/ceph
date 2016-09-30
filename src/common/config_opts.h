@@ -973,8 +973,9 @@ OPTION(bluestore_min_alloc_size_ssd, OPT_U32, 4*1024)
 OPTION(bluestore_max_alloc_size, OPT_U32, 0)
 OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
-OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
-OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
+OPTION(bluestore_compression_min_blob_size, OPT_U32, 128*1024)
+OPTION(bluestore_compression_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size, OPT_U32, 512*1024)
 OPTION(bluestore_gc_max_blob_depth, OPT_U32, 3)
 OPTION(bluestore_gc_merge_data, OPT_BOOL, true)
 /*

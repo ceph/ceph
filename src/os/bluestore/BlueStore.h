@@ -1721,11 +1721,11 @@ private:
   // write ops
 
   struct WriteContext {
-    bool buffered = false;       ///< buffered write
-    bool compress = false;       ///< compressed write
-    uint64_t comp_blob_size = 0; ///< target compressed blob size
-    uint8_t blob_depth = 0;       ///< depth of the logical extent
-    unsigned csum_order = 0;     ///< target checksum chunk order
+    bool buffered = false;          ///< buffered write
+    bool compress = false;          ///< compressed write
+    uint64_t target_blob_size = 0;  ///< target (max) blob size
+    uint8_t blob_depth = 0;         ///< depth of the logical extent
+    unsigned csum_order = 0;        ///< target checksum chunk order
 
     extent_map_t old_extents;       ///< must deref these blobs
 
