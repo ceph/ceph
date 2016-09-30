@@ -1602,8 +1602,7 @@ static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs,
 					bool need_to_wait)
 {
-  bool again;
-
+  bool again = false;
   do {
     void *handle;
     rgw_obj obj;

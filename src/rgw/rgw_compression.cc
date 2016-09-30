@@ -11,7 +11,9 @@
 int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
 {
   bufferlist in_bl;
-
+  if (*again) {
+    return next->handle_data(in_bl, ofs, phandle, pobj, again);
+  }
   if (bl.length() > 0) {
     // compression stuff
     if ((ofs > 0 && compressed) ||                                // if previous part was compressed
@@ -57,7 +59,6 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
     }
     // end of compression stuff
   }
-
   return next->handle_data(in_bl, ofs, phandle, pobj, again);
 }
 
@@ -131,6 +132,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     first_data = false;
 
   cur_ofs += bl_len;
+
   return next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
 }
 
