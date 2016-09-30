@@ -5403,6 +5403,21 @@ void FileStore::set_xattr_limits_via_conf()
     m_filestore_max_inline_xattrs = fs_xattrs;
 }
 
+int FileStore::apply_layout_settings(const coll_t &cid)
+{
+  dout(20) << __func__ << " " << cid << dendl;
+  Index index;
+  int r = get_index(cid, &index);
+  if (r < 0) {
+    dout(10) << "Error getting index for " << cid << ": " << cpp_strerror(r)
+	     << dendl;
+    return r;
+  }
+
+  return index->apply_layout_settings();
+}
+
+
 // -- FSSuperblock --
 
 void FSSuperblock::encode(bufferlist &bl) const
