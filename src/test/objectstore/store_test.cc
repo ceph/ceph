@@ -5297,6 +5297,9 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
   g_ceph_context->_conf->set_val("bluestore_onode_cache_size", "500");
 
+  // use a large enough block device that we'll exceed 32 bit LBAs
+  g_ceph_context->_conf->set_val("bluestore_block_size", "1024000000000");
+
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);
