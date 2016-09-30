@@ -65,6 +65,8 @@ set(librbd_internal_srcs
   operation/DisableFeaturesRequest.cc
   operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
+  operation/MetadataRemoveRequest.cc
+  operation/MetadataSetRequest.cc
   operation/ObjectMapIterate.cc
   operation/RebuildObjectMapRequest.cc
   operation/RenameRequest.cc

@@ -195,8 +195,6 @@ namespace librbd {
   int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
-  int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
-  int metadata_remove(ImageCtx *ictx, const std::string &key);
 
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);

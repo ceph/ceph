@@ -472,8 +472,8 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteSnaps) {
 }
 
 TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
-  ASSERT_EQ(0, metadata_set(m_remote_image_ctx,
-			    "conf_rbd_skip_partial_discard", "false"));
+  ASSERT_EQ(0, m_remote_image_ctx->operations->metadata_set(
+              "conf_rbd_skip_partial_discard", "false"));
   // scribble some data
   interval_set<uint64_t> one;
   scribble(m_remote_image_ctx, 10, 102400, &one);
