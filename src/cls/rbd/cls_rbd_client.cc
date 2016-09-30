@@ -1013,22 +1013,40 @@ namespace librbd {
       rados_op->exec("rbd", "object_map_snap_remove", in);
     }
 
+    void metadata_set(librados::ObjectWriteOperation *op,
+                     const map<string, bufferlist> &data)
+    {
+      bufferlist bl;
+      ::encode(data, bl);
+
+      op->exec("rbd", "metadata_set", bl);
+    }
+
     int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
                      const map<string, bufferlist> &data)
     {
-      bufferlist in;
-      ::encode(data, in);
-      bufferlist out;
-      return ioctx->exec(oid, "rbd", "metadata_set", in, out);
+      librados::ObjectWriteOperation op;
+      metadata_set(&op, data);
+
+      return ioctx->operate(oid, &op);
+    }
+
+    void metadata_remove(librados::ObjectWriteOperation *op,
+                         const std::string &key)
+    {
+      bufferlist bl;
+      ::encode(key, bl);
+
+      op->exec("rbd", "metadata_remove", bl);
     }
 
     int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
-                        const std::string &key)
+                     const std::string &key)
     {
-      bufferlist in;
-      ::encode(key, in);
-      bufferlist out;
-      return ioctx->exec(oid, "rbd", "metadata_remove", in, out);
+      librados::ObjectWriteOperation op;
+      metadata_remove(&op, key);
+
+      return ioctx->operate(oid, &op);
     }
 
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,

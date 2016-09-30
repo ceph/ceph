@@ -38,6 +38,8 @@ enum EventType {
   EVENT_TYPE_DEMOTE          = 13,
   EVENT_TYPE_SNAP_LIMIT      = 14,
   EVENT_TYPE_UPDATE_FEATURES = 15,
+  EVENT_TYPE_METADATA_SET    = 16,
+  EVENT_TYPE_METADATA_REMOVE = 17,
 };
 
 struct AioDiscardEvent {
@@ -306,6 +308,39 @@ struct UpdateFeaturesEvent : public OpEventBase {
   void dump(Formatter *f) const;
 };
 
+struct MetadataSetEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_METADATA_SET;
+
+  string key;
+  string value;
+
+  MetadataSetEvent() {
+  }
+  MetadataSetEvent(uint64_t op_tid, const string &_key, const string &_value)
+    : OpEventBase(op_tid), key(_key), value(_value) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct MetadataRemoveEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_METADATA_REMOVE;
+
+  string key;
+
+  MetadataRemoveEvent() {
+  }
+  MetadataRemoveEvent(uint64_t op_tid, const string &_key)
+    : OpEventBase(op_tid), key(_key) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownEvent {
   static const EventType TYPE = static_cast<EventType>(-1);
 
@@ -330,6 +365,8 @@ typedef boost::variant<AioDiscardEvent,
                        DemoteEvent,
 		       SnapLimitEvent,
                        UpdateFeaturesEvent,
+                       MetadataSetEvent,
+                       MetadataRemoveEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {
