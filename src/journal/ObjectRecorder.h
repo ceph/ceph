@@ -164,7 +164,7 @@ private:
   void send_appends(AppendBuffers *append_buffers);
   void send_appends_aio();
 
-  void notify_handler();
+  void notify_handler_unlock();
 };
 
 } // namespace journal
