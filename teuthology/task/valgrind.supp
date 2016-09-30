@@ -354,9 +354,9 @@
 	...
 }
 {
-	more rocksdb env leaks
+	rocksdb::Env::Default()
 	Memcheck:Leak
 	...
-	fun:rocksdb::Env::Default*
+	fun:*rocksdb*Env*Default*
 	...
 }
