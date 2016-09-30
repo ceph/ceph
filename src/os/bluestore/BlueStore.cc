@@ -194,7 +194,7 @@ static string pretty_binary_string(const string& in)
 
 static void _key_encode_shard(shard_id_t shard, string *key)
 {
-  key->push_back((char)((uint8_t)shard + (uint8_t)0x80));
+  key->push_back((char)((uint8_t)shard.id + (uint8_t)0x80));
 }
 static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
 {
@@ -276,11 +276,9 @@ static void get_object_key(const ghobject_t& oid, string *key)
     // is a key... could be < = or >.
     append_escaped(oid.hobj.get_key(), key);
     // (ASCII chars < = and > sort in that order, yay)
-    if (oid.hobj.get_key() < oid.hobj.oid.name) {
-      key->append("<");
-      append_escaped(oid.hobj.oid.name, key);
-    } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
-      key->append(">");
+    int r = oid.hobj.get_key().compare(oid.hobj.oid.name);
+    if (r) {
+      key->append(r > 0 ? ">" : "<");
       append_escaped(oid.hobj.oid.name, key);
     } else {
       // same as no key
