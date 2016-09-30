@@ -1228,7 +1228,6 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 
 void BlueStore::Blob::discard_unallocated()
 {
-  get_blob();
   size_t pos = 0;
   if (blob.is_compressed()) {
     bool discard = false;
