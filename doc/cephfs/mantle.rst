@@ -51,12 +51,12 @@ Mantle with `vstart.sh`
 
 ::
 
-    ./vstart.sh -n -l
+    cd build
+    ../src/vstart.sh -n -l
     for i in a b c; do 
-      ./ceph --admin-daemon out/mds.$i.asok config set debug_ms 0
-      ./ceph --admin-daemon out/mds.$i.asok config set debug_mds 0
-      ./ceph --admin-daemon out/mds.$i.asok config set debug_mds_balancer 2
-      ./ceph --admin-daemon out/mds.$i.asok config set mds_beacon_grace 1500
+      bin/ceph --admin-daemon out/mds.$i.asok config set debug_ms 0
+      bin/ceph --admin-daemon out/mds.$i.asok config set debug_mds 2
+      bin/ceph --admin-daemon out/mds.$i.asok config set mds_beacon_grace 1500
     done
 
 
@@ -64,23 +64,23 @@ Mantle with `vstart.sh`
 
 ::
 
-    ./rados put --pool=cephfs_metadata_a greedyspill.lua mds/balancers/greedyspill.lua
+    bin/rados put --pool=cephfs_metadata_a greedyspill.lua ../src/mds/balancers/greedyspill.lua
 
 
 3. Activate Mantle:
 
 ::
 
-    ./ceph mds set allow_multimds true --yes-i-really-mean-it
-    ./ceph mds set max_mds 5
-    ./ceph mds set balancer greedyspill.lua
+    bin/ceph mds set allow_multimds true --yes-i-really-mean-it
+    bin/ceph mds set max_mds 5
+    bin/ceph fs set cephfs_a balancer greedyspill.lua
 
 
 4. Mount CephFS in another window:
 
 ::
 
-     ./ceph-fuse /cephfs -o allow_other &
+     bin/ceph-fuse /cephfs -o allow_other &
      tail -f out/mds.a.log
 
 
@@ -89,8 +89,7 @@ Mantle with `vstart.sh`
    last MDS tries to check the load of its neighbor, which does not exist.
 
 5. Run a simple benchmark. In our case, we use the Docker mdtest image to
-   create load. Assuming that CephFS is mounted in the first container, we can
-   share the mount and run 3 clients using: 
+   create load:
 
 ::
 
@@ -213,6 +212,27 @@ jargon: a dummy value is pushed onto the stack and the next iterator replaces
 the top of the stack with a (k, v) pair. After reading each value, pop that
 value but keep the key for the next call to `lua_next`. 
 
+Reading from RADOS
+~~~~~~~~~~~~~~~~~~
+
+All MDSs will read balancing code from RADOS when the balancer version changes
+in the MDS Map. The balancer pulls the Lua code from RADOS synchronously. We do
+this with a timeout: if the asynchronous read does not come back within half
+the balancing tick interval the operation is cancelled and a Connection Timeout
+error is returned. By default, the balancing tick interval is 10 seconds, so
+Mantle will use a 5 second second timeout. This design allows Mantle to
+immediately return an error if anything RADOS-related goes wrong.
+
+We use this implementation because we do not want to do a blocking OSD read
+from inside the global MDS lock. Doing so would bring down the MDS cluster if
+any of the OSDs are not responsive -- this is tested in the ceph-qa-suite by
+setting all OSDs to down/out and making sure the MDS cluster stays active.
+
+One approach would be to asynchronously fire the read when handling the MDS Map
+and fill in the Lua code in the background. We cannot do this because the MDS
+does not support daemon-local fallbacks and the balancer assumes that all MDSs
+come to the same decision at the same time (e.g., importers, exporters, etc.).
+
 Debugging
 ~~~~~~~~
 
@@ -227,6 +247,10 @@ the cls logging interface:
 It is implemented by passing a function that wraps the `dout` logging framework
 (`dout_wrapper`) to Lua with the `lua_register()` primitive. The Lua code is
 actually calling the `dout` function in C++.
+
+Warning and Info messages are centralized using the clog/Beacon. Successful
+messages are only sent on version changes by the first MDS to avoid spamming
+the `ceph -w` utility. These messages are used for the integration tests.
 
 Testing
 ~~~~~~

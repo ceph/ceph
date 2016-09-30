@@ -184,6 +184,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("metadata_pool", metadata_pool);
   f->dump_bool("enabled", enabled);
   f->dump_string("fs_name", fs_name);
+  f->dump_string("balancer", balancer);
 }
 
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
@@ -226,6 +227,7 @@ void MDSMap::print(ostream& out) const
   out << "data_pools\t" << data_pools << "\n";
   out << "metadata_pool\t" << metadata_pool << "\n";
   out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
+  out << "balancer\t" << balancer << "\n";
 
   multimap< pair<mds_rank_t, unsigned>, mds_gid_t > foo;
   for (const auto &p : mds_info) {
@@ -487,7 +489,6 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(session_autoclose, bl);
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
-    ::encode(balancer, bl);
     __u32 n = mds_info.size();
     ::encode(n, bl);
     for (map<mds_gid_t, mds_info_t>::const_iterator i = mds_info.begin();
@@ -516,7 +517,6 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(session_autoclose, bl);
     ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
-    ::encode(balancer, bl);
     __u32 n = mds_info.size();
     ::encode(n, bl);
     for (map<mds_gid_t, mds_info_t>::const_iterator i = mds_info.begin();
@@ -544,7 +544,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(epoch, bl);
   ::encode(flags, bl);
   ::encode(last_failure, bl);
@@ -553,13 +553,12 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(session_autoclose, bl);
   ::encode(max_file_size, bl);
   ::encode(max_mds, bl);
-  ::encode(balancer, bl);
   ::encode(mds_info, bl, features);
   ::encode(data_pools, bl);
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 10;
+  __u16 ev = 11;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -578,6 +577,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
   ::encode(damaged, bl);
+  ::encode(balancer, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -586,7 +586,7 @@ void MDSMap::decode(bufferlist::iterator& p)
   std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
 
   cached_up_features = 0;
-  DECODE_START_LEGACY_COMPAT_LEN_16(6, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
   ::decode(epoch, p);
   ::decode(flags, p);
   ::decode(last_failure, p);
@@ -595,7 +595,6 @@ void MDSMap::decode(bufferlist::iterator& p)
   ::decode(session_autoclose, p);
   ::decode(max_file_size, p);
   ::decode(max_mds, p);
-  ::decode(balancer, p);
   ::decode(mds_info, p);
   if (struct_v < 3) {
     __u32 n;
@@ -682,6 +681,10 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   if (ev >= 9) {
     ::decode(damaged, p);
+  }
+
+  if (ev >= 11) {
+  ::decode(balancer, p);
   }
   DECODE_FINISH(p);
 }

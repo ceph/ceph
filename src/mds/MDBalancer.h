@@ -24,6 +24,7 @@ using std::map;
 
 #include "include/types.h"
 #include "common/Clock.h"
+#include "common/Cond.h"
 #include "CInode.h"
 
 
@@ -44,6 +45,8 @@ class MDBalancer {
 
   int last_epoch_under;  
   int last_epoch_over; 
+  string bal_code;
+  string bal_version;
 
   utime_t last_heartbeat;
   utime_t last_fragment;
@@ -88,7 +91,7 @@ public:
 
   int proc_message(Message *m);
   
-  int localize_balancer(string const balancer);
+  int localize_balancer();
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
 

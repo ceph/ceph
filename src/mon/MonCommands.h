@@ -330,7 +330,7 @@ COMMAND_WITH_FLAG("mds set_max_mds " \
 	"set max MDS index", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("mds set " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-	"|allow_new_snaps|inline_data|allow_multimds|allow_dirfrags|balancer " \
+	"|allow_new_snaps|inline_data|allow_multimds|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
@@ -398,7 +398,7 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags " \
+        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags|balancer " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")

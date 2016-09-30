@@ -171,24 +171,45 @@ mds_load_t MDBalancer::get_load(utime_t now)
   return load;
 }
 
-int MDBalancer::localize_balancer(string const balancer)
+/*
+ * Read synchronously from RADOS using a timeout. We cannot do daemon-local
+ * fallbacks (i.e. kick off async read when we are processing the map and
+ * check status when we get here) with the way the mds is structured.
+ */
+int MDBalancer::localize_balancer()
 {
-  int64_t pool_id = mds->mdsmap->get_metadata_pool();
-  string fname = "/tmp/" + balancer;
+  /* reset everything */
+  bool ack = false;
+  int r = 0;
+  bufferlist lua_src;
+  Mutex lock("lock");
+  Cond cond;
 
-  dout(15) << "looking for balancer=" << balancer << " in RADOS pool_id=" << pool_id << dendl;
-  object_t oid = object_t(balancer);
-  object_locator_t oloc(pool_id);
-  bufferlist data;
-  C_SaferCond waiter;
-  mds->objecter->read(oid, oloc, 0, 0, CEPH_NOSNAP, &data, 0, &waiter);
-  int r = waiter.wait();
-  if (r == 0) {
-    dout(15) << "write data from RADOS into fname=" << fname << " data=" << data.c_str() << dendl;
-    data.write_file(fname.c_str());
-  } else {
-    dout(0) << "tick could not find balancer " << balancer
-            << " in RADOS: " << cpp_strerror(r) << dendl;
+  /* we assume that balancer is in the metadata pool */
+  object_t oid = object_t(mds->mdsmap->get_balancer());
+  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+  ceph_tid_t tid = mds->objecter->read(oid, oloc, 0, 0, CEPH_NOSNAP, &lua_src, 0,
+                                       new C_SafeCond(&lock, &cond, &ack, &r));
+  dout(15) << "launched non-blocking read tid=" << tid
+           << " oid=" << oid << " oloc=" << oloc << dendl;
+
+  /* timeout: if we waste half our time waiting for RADOS, then abort! */
+  double t = ceph_clock_now(g_ceph_context) + g_conf->mds_bal_interval/2;
+  utime_t timeout;
+  timeout.set_from_double(t);
+  lock.Lock();
+  int ret_t = cond.WaitUntil(lock, timeout);
+  lock.Unlock();
+
+  /* success: store the balancer in memory and set the version. */
+  if (!r) {
+    if (ret_t == ETIMEDOUT) {
+      mds->objecter->op_cancel(tid, -ECANCELED);
+      return -ETIMEDOUT;
+    }
+    bal_code.assign(lua_src.to_str());
+    bal_version.assign(oid.name);
+    dout(0) << "localized balancer, bal_code=" << bal_code << dendl;
   }
   return r;
 }
@@ -301,16 +322,14 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       // let's go!
       //export_empties();  // no!
 
-      int r = mantle_prep_rebalance();
-      if (!r) {
-        mds->clog->info() << "mantle succeeded; "
-                          << "balancer=" << mds->mdsmap->get_balancer();
-        return;
+      /* avoid spamming ceph -w if user does not turn mantle on */
+      if (mds->mdsmap->get_balancer() != "") {
+        int r = mantle_prep_rebalance();
+        if (!r) return;
+	mds->clog->warn() << "using old balancer; mantle failed for "
+                          << "balancer=" << mds->mdsmap->get_balancer()
+                          << " : " << cpp_strerror(r);
       }
-
-      mds->clog->warn() << "mantle failed (falling back to original balancer); "
-                        << "balancer=" << mds->mdsmap->get_balancer()
-                        << " : " << cpp_strerror(r);
       prep_rebalance(m->get_beat());
     }
   }
@@ -629,13 +648,16 @@ void MDBalancer::prep_rebalance(int beat)
 
 int MDBalancer::mantle_prep_rebalance()
 {
-  /* pull metadata balancer from RADOS */
-  string const balancer = mds->mdsmap->get_balancer();
-  if (balancer == "" || localize_balancer(balancer))
-    return -ENOENT;
-  ifstream f("/tmp/" + balancer);
-  string script((istreambuf_iterator<char>(f)),
-                 istreambuf_iterator<char>());
+  /* refresh balancer if it has changed */
+  if (bal_version != mds->mdsmap->get_balancer()) {
+    bal_version.assign("");
+    int r = localize_balancer();
+    if (r) return r;
+
+    /* only spam the cluster log from 1 mds on version changes */
+    if (mds->get_nodeid() == 0)
+      mds->clog->info() << "mantle balancer version changed: " << bal_version;
+  }
 
   /* prepare for balancing */
   int cluster_size = mds->get_mds_map()->get_num_in_mds();
@@ -654,17 +676,16 @@ int MDBalancer::mantle_prep_rebalance()
     std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
     mds_load_t &load(r.first->second);
 
-    metrics[i].insert(make_pair("auth.meta_load", load.auth.meta_load()));
-    metrics[i].insert(make_pair("all.meta_load", load.all.meta_load()));
-    metrics[i].insert(make_pair("req_rate", load.req_rate));
-    metrics[i].insert(make_pair("queue_len", load.queue_len));
-    metrics[i].insert(make_pair("cpu_load_avg", load.cpu_load_avg));
+    metrics[i] = {{"auth.meta_load", load.auth.meta_load()},
+                  {"all.meta_load", load.all.meta_load()},
+                  {"req_rate", load.req_rate},
+                  {"queue_len", load.queue_len},
+                  {"cpu_load_avg", load.cpu_load_avg}};
   }
 
   /* execute the balancer */
-  Mantle *mantle = new Mantle();
-  int ret = mantle->balance(script, mds->get_nodeid(), metrics, my_targets);
-  delete mantle;
+  Mantle mantle;
+  int ret = mantle.balance(bal_code, mds->get_nodeid(), metrics, my_targets);
   dout(2) << " mantle decided that new targets=" << my_targets << dendl;
 
   /* mantle doesn't know about cluster size, so check target len here */
