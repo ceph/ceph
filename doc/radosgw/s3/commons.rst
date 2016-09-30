@@ -18,6 +18,8 @@ The second method identifies the bucket via a virtual bucket host name. For exam
 	GET / HTTP/1.1
 	Host: mybucket.cname.domain.com
 
+To configure virtual hosted buckets, you can either set ``rgw_dns_name = cname.domain.com`` in ceph.conf, or add ``cname.domain.com`` to the list of ``hostnames`` in your zonegroup configuration. See `Ceph Object Gateway - Multisite Configuration`_ for more on zonegroups.
+
 .. tip:: We prefer the first method, because the second method requires expensive domain certification and DNS wild cards.
 
 Common Request Headers
@@ -105,3 +107,5 @@ Common Response Status
 +---------------+-----------------------------------+
 | ``500``       | InternalError                     |
 +---------------+-----------------------------------+
+
+.. _`Ceph Object Gateway - Multisite Configuration`: ../../multisite
