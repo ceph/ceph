@@ -391,33 +391,27 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
   return os;
 }
 
-class NBDWatchCtx : public librados::WatchCtx2
+class NBDWatchCtx : public librbd::UpdateWatchCtx
 {
 private:
   int fd;
   librados::IoCtx &io_ctx;
   librbd::Image &image;
-  std::string header_oid;
   unsigned long size;
 public:
   NBDWatchCtx(int _fd,
               librados::IoCtx &_io_ctx,
               librbd::Image &_image,
-              std::string &_header_oid,
               unsigned long _size)
     : fd(_fd)
     , io_ctx(_io_ctx)
     , image(_image)
-    , header_oid(_header_oid)
     , size(_size)
   { }
 
   virtual ~NBDWatchCtx() {}
 
-  virtual void handle_notify(uint64_t notify_id,
-                             uint64_t cookie,
-                             uint64_t notifier_id,
-                             bufferlist& bl)
+  virtual void handle_notify()
   {
     librbd::image_info_t info;
     if (image.stat(info, sizeof(info)) == 0) {
@@ -433,14 +427,6 @@ public:
         size = new_size;
       }
     }
-
-    bufferlist reply;
-    io_ctx.notify_ack(header_oid, notify_id, cookie, reply);
-  }
-
-  virtual void handle_error(uint64_t cookie, int err)
-  {
-    //ignore
   }
 };
 
@@ -607,22 +593,10 @@ static int do_map()
     goto close_nbd;
 
   {
-    string header_oid;
-    uint64_t watcher;
+    uint64_t handle;
 
-    if (old_format != 0) {
-      header_oid = imgname + RBD_SUFFIX;
-    } else {
-      char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-      strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-      prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-      std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
-      header_oid = RBD_HEADER_PREFIX + image_id;
-    }
-
-    NBDWatchCtx watch_ctx(nbd, io_ctx, image, header_oid, info.size);
-    r = io_ctx.watch2(header_oid, &watcher, &watch_ctx);
+    NBDWatchCtx watch_ctx(nbd, io_ctx, image, info.size);
+    r = image.update_watch(&watch_ctx, &handle);
     if (r < 0)
       goto close_nbd;
 
@@ -642,7 +616,8 @@ static int do_map()
       server.stop();
     }
 
-    io_ctx.unwatch2(watcher);
+    r = image.update_unwatch(handle);
+    assert(r == 0);
   }
 
 close_nbd:

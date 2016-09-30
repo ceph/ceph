@@ -427,6 +427,21 @@ private:
       ios->push_back(io);
     } else if (strcmp(event_name, "librbd:write_exit") == 0) {
       completed(thread->latest_io());
+    } else if (strcmp(event_name, "librbd:discard_enter") == 0) {
+      string name(fields.string("name"));
+      string snap_name(fields.string("snap_name"));
+      bool readonly = fields.int64("read_only");
+      uint64_t offset = fields.uint64("off");
+      uint64_t length = fields.uint64("len");
+      imagectx_id_t imagectx = fields.uint64("imagectx");
+      require_image(ts, thread, imagectx, name, snap_name, readonly, ios);
+      action_id_t ionum = next_id();
+      IO::ptr io(new DiscardIO(ionum, ts, threadID, m_recent_completions,
+                                imagectx, offset, length));
+      thread->issued_io(io, &m_latest_ios);
+      ios->push_back(io);
+    } else if (strcmp(event_name, "librbd:discard_exit") == 0) {
+      completed(thread->latest_io());
     } else if (strcmp(event_name, "librbd:aio_read_enter") == 0 ||
                strcmp(event_name, "librbd:aio_read2_enter") == 0) {
       string name(fields.string("name"));
@@ -455,6 +470,21 @@ private:
       require_image(ts, thread, imagectx, name, snap_name, readonly, ios);
       action_id_t ionum = next_id();
       IO::ptr io(new AioWriteIO(ionum, ts, threadID, m_recent_completions,
+                                imagectx, offset, length));
+      thread->issued_io(io, &m_latest_ios);
+      ios->push_back(io);
+      m_pending_ios[completion] = io;
+    } else if (strcmp(event_name, "librbd:aio_discard_enter") == 0) {
+      string name(fields.string("name"));
+      string snap_name(fields.string("snap_name"));
+      bool readonly = fields.int64("read_only");
+      uint64_t offset = fields.uint64("off");
+      uint64_t length = fields.uint64("len");
+      uint64_t completion = fields.uint64("completion");
+      imagectx_id_t imagectx = fields.uint64("imagectx");
+      require_image(ts, thread, imagectx, name, snap_name, readonly, ios);
+      action_id_t ionum = next_id();
+      IO::ptr io(new AioDiscardIO(ionum, ts, threadID, m_recent_completions,
                                 imagectx, offset, length));
       thread->issued_io(io, &m_latest_ios);
       ios->push_back(io);

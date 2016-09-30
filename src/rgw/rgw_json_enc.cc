@@ -506,6 +506,7 @@ void rgw_bucket::dump(Formatter *f) const
   encode_json("index_pool", index_pool, f);
   encode_json("marker", marker, f);
   encode_json("bucket_id", bucket_id, f);
+  encode_json("tenant", tenant, f);
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
@@ -515,6 +516,7 @@ void rgw_bucket::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const

@@ -7,12 +7,11 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
-#include "include/rbd/librbd.hpp"
 #include "common/Mutex.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
-#include <set>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -33,7 +32,9 @@ public:
   Replay(ImageCtxT &image_ctx);
   ~Replay();
 
-  void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
+  int decode(bufferlist::iterator *it, EventEntry *event_entry);
+  void process(const EventEntry &event_entry,
+               Context *on_ready, Context *on_safe);
 
   void shut_down(bool cancel_ops, Context *on_finish);
   void flush(Context *on_finish);
@@ -169,6 +170,7 @@ private:
 
   AioCompletion *create_aio_modify_completion(Context *on_ready,
                                               Context *on_safe,
+                                              aio_type_t aio_type,
                                               bool *flush_required);
   AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(AioCompletion *aio_comp);

@@ -23,6 +23,7 @@ noinst_HEADERS += \
 	journal/FutureImpl.h \
 	journal/Journaler.h \
 	journal/JournalMetadata.h \
+	journal/JournalMetadataListener.h \
 	journal/JournalPlayer.h \
 	journal/JournalRecorder.h \
 	journal/JournalTrimmer.h \
@@ -30,6 +31,7 @@ noinst_HEADERS += \
 	journal/ObjectRecorder.h \
 	journal/ReplayEntry.h \
 	journal/ReplayHandler.h \
+	journal/Settings.h \
 	journal/Utils.h
 DENCODER_DEPS += libjournal.la
 

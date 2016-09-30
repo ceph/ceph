@@ -57,8 +57,15 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
 {
   // try to read the period from rados
   period.set_id(period_id);
+  period.set_epoch(0);
   int r = period.init(store->ctx(), store);
   if (r < 0) {
+    if (store->is_meta_master()) {
+      // can't pull if we're the master
+      ldout(store->ctx(), 1) << "metadata master failed to read period "
+          << period_id << " from local storage: " << cpp_strerror(r) << dendl;
+      return r;
+    }
     ldout(store->ctx(), 14) << "pulling period " << period_id
         << " from master" << dendl;
     // request the period from the master zone

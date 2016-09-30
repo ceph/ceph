@@ -15,7 +15,8 @@
 
 namespace librbd {
 
-class AioObjectRequest;
+class AioCompletion;
+class AioObjectRequestHandle;
 class ImageCtx;
 
 template <typename ImageCtxT = ImageCtx>
@@ -48,7 +49,7 @@ public:
   void fail(int r);
 
 protected:
-  typedef std::list<AioObjectRequest *> AioObjectRequests;
+  typedef std::list<AioObjectRequestHandle *> AioObjectRequests;
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
@@ -57,27 +58,35 @@ protected:
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp) {}
 
   virtual void send_request() = 0;
+  virtual aio_type_t get_aio_type() const = 0;
   virtual const char *get_request_type() const = 0;
 };
 
-class AioImageRead : public AioImageRequest<> {
+template <typename ImageCtxT = ImageCtx>
+class AioImageRead : public AioImageRequest<ImageCtxT> {
 public:
-  AioImageRead(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
+  using typename AioImageRequest<ImageCtxT>::Extents;
+
+  AioImageRead(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                size_t len, char *buf, bufferlist *pbl, int op_flags)
-    : AioImageRequest(image_ctx, aio_comp), m_buf(buf), m_pbl(pbl),
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp), m_buf(buf), m_pbl(pbl),
       m_op_flags(op_flags) {
     m_image_extents.push_back(std::make_pair(off, len));
   }
 
-  AioImageRead(ImageCtx &image_ctx, AioCompletion *aio_comp,
+  AioImageRead(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                const Extents &image_extents, char *buf, bufferlist *pbl,
                int op_flags)
-    : AioImageRequest(image_ctx, aio_comp), m_image_extents(image_extents),
-      m_buf(buf), m_pbl(pbl), m_op_flags(op_flags) {
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp),
+      m_image_extents(image_extents), m_buf(buf), m_pbl(pbl),
+      m_op_flags(op_flags) {
   }
 
 protected:
   virtual void send_request();
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_READ;
+  }
   virtual const char *get_request_type() const {
     return "aio_read";
   }
@@ -88,7 +97,8 @@ private:
   int m_op_flags;
 };
 
-class AbstractAioImageWrite : public AioImageRequest<> {
+template <typename ImageCtxT = ImageCtx>
+class AbstractAioImageWrite : public AioImageRequest<ImageCtxT> {
 public:
   virtual bool is_write_op() const {
     return true;
@@ -99,19 +109,23 @@ public:
   }
 
 protected:
+  using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
+
   typedef std::vector<ObjectExtent> ObjectExtents;
 
   const uint64_t m_off;
   const size_t m_len;
 
-  AbstractAioImageWrite(ImageCtx &image_ctx, AioCompletion *aio_comp,
+  AbstractAioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                         uint64_t off, size_t len)
-    : AioImageRequest(image_ctx, aio_comp), m_off(off), m_len(len),
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp), m_off(off), m_len(len),
       m_synchronous(false) {
   }
 
   virtual void send_request();
 
+  virtual void prune_object_extents(ObjectExtents &object_extents) {
+  }
   virtual uint32_t get_cache_request_count(bool journaling) const {
     return 0;
   }
@@ -121,7 +135,7 @@ protected:
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
                                     AioObjectRequests *aio_object_requests);
-  virtual AioObjectRequest *create_object_request(
+  virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) = 0;
 
@@ -133,15 +147,22 @@ private:
   bool m_synchronous;
 };
 
-class AioImageWrite : public AbstractAioImageWrite {
+template <typename ImageCtxT = ImageCtx>
+class AioImageWrite : public AbstractAioImageWrite<ImageCtxT> {
 public:
-  AioImageWrite(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
+  AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                 size_t len, const char *buf, int op_flags)
-    : AbstractAioImageWrite(image_ctx, aio_comp, off, len), m_buf(buf),
-      m_op_flags(op_flags) {
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, len),
+      m_buf(buf), m_op_flags(op_flags) {
   }
 
 protected:
+  using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
+  using typename AbstractAioImageWrite<ImageCtxT>::ObjectExtents;
+
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_WRITE;
+  }
   virtual const char *get_request_type() const {
     return "aio_write";
   }
@@ -154,7 +175,7 @@ protected:
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
                                     AioObjectRequests *aio_object_requests);
-  virtual AioObjectRequest *create_object_request(
+  virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish);
 
@@ -166,23 +187,31 @@ private:
   int m_op_flags;
 };
 
-class AioImageDiscard : public AbstractAioImageWrite {
+template <typename ImageCtxT = ImageCtx>
+class AioImageDiscard : public AbstractAioImageWrite<ImageCtxT> {
 public:
-  AioImageDiscard(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
+  AioImageDiscard(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
                   uint64_t len)
-    : AbstractAioImageWrite(image_ctx, aio_comp, off, len) {
+    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, len) {
   }
 
 protected:
+  using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
+  using typename AbstractAioImageWrite<ImageCtxT>::ObjectExtents;
+
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_DISCARD;
+  }
   virtual const char *get_request_type() const {
     return "aio_discard";
   }
 
+  virtual void prune_object_extents(ObjectExtents &object_extents) override;
   virtual uint32_t get_cache_request_count(bool journaling) const override;
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
 
-  virtual AioObjectRequest *create_object_request(
+  virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish);
 
@@ -191,10 +220,11 @@ protected:
   virtual void update_stats(size_t length);
 };
 
-class AioImageFlush : public AioImageRequest<> {
+template <typename ImageCtxT = ImageCtx>
+class AioImageFlush : public AioImageRequest<ImageCtxT> {
 public:
-  AioImageFlush(ImageCtx &image_ctx, AioCompletion *aio_comp)
-    : AioImageRequest(image_ctx, aio_comp) {
+  AioImageFlush(ImageCtxT &image_ctx, AioCompletion *aio_comp)
+    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp) {
   }
 
   virtual bool is_write_op() const {
@@ -202,7 +232,12 @@ public:
   }
 
 protected:
+  using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
+
   virtual void send_request();
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_FLUSH;
+  }
   virtual const char *get_request_type() const {
     return "aio_flush";
   }
@@ -211,5 +246,9 @@ protected:
 } // namespace librbd
 
 extern template class librbd::AioImageRequest<librbd::ImageCtx>;
+extern template class librbd::AbstractAioImageWrite<librbd::ImageCtx>;
+extern template class librbd::AioImageWrite<librbd::ImageCtx>;
+extern template class librbd::AioImageDiscard<librbd::ImageCtx>;
+extern template class librbd::AioImageFlush<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_AIO_IMAGE_REQUEST_H

@@ -27,6 +27,7 @@
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
+#include "librbd/LibrbdWriteback.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -662,17 +663,6 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  uint64_t ImageCtx::get_copyup_snap_id() const
-  {
-    assert(snap_lock.is_locked());
-    // copyup requires the largest possible parent overlap,
-    // which is always the oldest snapshot (if any).
-    if (!snaps.empty()) {
-      return snaps.back();
-    }
-    return CEPH_NOSNAP;
-  }
-
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
 				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish,
@@ -790,7 +780,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::register_watch(Context *on_finish) {
     assert(image_watcher == NULL);
-    image_watcher = new ImageWatcher(*this);
+    image_watcher = new ImageWatcher<>(*this);
     image_watcher->register_watch(on_finish);
   }
 
@@ -938,7 +928,8 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_object_flush_interval", false)(
         "rbd_journal_object_flush_bytes", false)(
         "rbd_journal_object_flush_age", false)(
-        "rbd_journal_pool", false);
+        "rbd_journal_pool", false)(
+        "rbd_journal_max_payload_bytes", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -993,6 +984,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_bytes);
     ASSIGN_OPTION(journal_object_flush_age);
     ASSIGN_OPTION(journal_pool);
+    ASSIGN_OPTION(journal_max_payload_bytes);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
@@ -1019,7 +1011,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::notify_update() {
     state->handle_update_notification();
-    ImageWatcher::notify_header_update(md_ctx, header_oid);
+    ImageWatcher<>::notify_header_update(md_ctx, header_oid);
   }
 
   void ImageCtx::notify_update(Context *on_finish) {

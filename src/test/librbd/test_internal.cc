@@ -601,7 +601,6 @@ TEST_F(TestInternal, ResizeCopyup)
 
   librbd::ImageCtx *ictx2;
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-
   ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
 
   bufferptr read_ptr(bl.length());
@@ -611,6 +610,8 @@ TEST_F(TestInternal, ResizeCopyup)
   // verify full / partial object removal properly copyup
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (1 << order) - 32,
+                                         no_op));
+  ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (2 << order) - 32,
                                          no_op));
   ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
 
@@ -630,6 +631,9 @@ TEST_F(TestInternal, ResizeCopyup)
 TEST_F(TestInternal, DiscardCopyup)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
+  REQUIRE(!cct->_conf->rbd_skip_partial_discard);
 
   m_image_name = get_temp_image_name();
   m_image_size = 1 << 14;

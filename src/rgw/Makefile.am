@@ -147,7 +147,8 @@ radosgw_SOURCES = \
 	civetweb/src/civetweb.c \
 	rgw/rgw_main.cc
 
-radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -DNO_SSL_DL -I$(srcdir)/xxHash
+radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -DNO_SSL_DL -I$(srcdir)/xxHash \
+		 ${CIVETWEB_INCLUDE}
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBCIVETWEB_DEPS) $(LIBRGW_DEPS) $(RESOLV_LIBS) \
 	$(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw

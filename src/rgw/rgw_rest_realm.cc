@@ -30,17 +30,18 @@ void RGWOp_Period_Base::send_response()
 
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
 
   if (http_ret < 0) {
     if (!s->err.message.empty()) {
       ldout(s->cct, 4) << "Request failed with " << http_ret
           << ": " << s->err.message << dendl;
     }
+    end_header(s);
     return;
   }
 
   encode_json("period", period, s->formatter);
+  end_header(s, NULL, "application/json", s->formatter->get_len());
   flusher.flush();
 }
 
@@ -262,12 +263,14 @@ void RGWOp_Realm_Get::send_response()
 {
   set_req_state_err(s, http_ret);
   dump_errno(s);
-  end_header(s);
 
-  if (http_ret < 0)
+  if (http_ret < 0) {
+    end_header(s);
     return;
+  }
 
   encode_json("realm", *realm, s->formatter);
+  end_header(s, NULL, "application/json", s->formatter->get_len());
   flusher.flush();
 }
 

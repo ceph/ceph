@@ -156,7 +156,7 @@ TEST_F(TestMockOperationResizeRequest, NoOpSuccess) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, 0);
   ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size, 0, false));
@@ -175,13 +175,13 @@ TEST_F(TestMockOperationResizeRequest, GrowSuccess) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
   expect_grow_object_map(mock_image_ctx);
   expect_block_writes(mock_image_ctx, 0);
   expect_update_header(mock_image_ctx, 0);
-  expect_commit_op_event(mock_image_ctx, 0);
   expect_unblock_writes(mock_image_ctx);
+  expect_commit_op_event(mock_image_ctx, 0);
   ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size * 2, 0, false));
 }
 
@@ -198,7 +198,7 @@ TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
@@ -206,10 +206,27 @@ TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
   expect_invalidate_cache(mock_image_ctx, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_update_header(mock_image_ctx, 0);
-  expect_commit_op_event(mock_image_ctx, 0);
   expect_shrink_object_map(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
+  expect_commit_op_event(mock_image_ctx, 0);
   ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size / 2, 0, false));
+}
+
+TEST_F(TestMockOperationResizeRequest, ShrinkError) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+
+  InSequence seq;
+  expect_block_writes(mock_image_ctx, -EINVAL);
+  expect_unblock_writes(mock_image_ctx);
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, PreBlockWritesError) {
@@ -242,7 +259,7 @@ TEST_F(TestMockOperationResizeRequest, TrimError) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
@@ -264,7 +281,7 @@ TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
 
   MockTrimRequest mock_trim_request;
@@ -287,7 +304,7 @@ TEST_F(TestMockOperationResizeRequest, PostBlockWritesError) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
   expect_grow_object_map(mock_image_ctx);
   expect_block_writes(mock_image_ctx, -EINVAL);
@@ -309,7 +326,7 @@ TEST_F(TestMockOperationResizeRequest, UpdateHeaderError) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, 0);
+  expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
   expect_grow_object_map(mock_image_ctx);
   expect_block_writes(mock_image_ctx, 0);
@@ -334,7 +351,7 @@ TEST_F(TestMockOperationResizeRequest, JournalAppendError) {
 
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
-  expect_append_op_event(mock_image_ctx, -EINVAL);
+  expect_append_op_event(mock_image_ctx, true, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
   ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size, 0, false));
 }

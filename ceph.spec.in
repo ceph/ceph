@@ -20,7 +20,13 @@
 %endif
 %bcond_with make_check
 %bcond_with xio
+%ifnarch s390 s390x
 %bcond_without tcmalloc
+%else
+# no gperftools/tcmalloc on s390(x)
+%bcond_with tcmalloc
+%endif
+%bcond_without libs_compat
 %bcond_with lowmem_builder
 %bcond_with minimal_debugging_information
 %if 0%{?fedora} || 0%{?rhel}
@@ -99,9 +105,13 @@ BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
 BuildRequires:	gcc-c++
 BuildRequires:	gdbm
+%if 0%{with tcmalloc}
+BuildRequires:	gperftools-devel
+%endif
 BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
+BuildRequires:	libatomic_ops-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
@@ -138,13 +148,9 @@ BuildRequires:	systemd
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
-%if 0%{with tcmalloc}
-BuildRequires:	gperftools-devel
-%endif
 BuildRequires:  btrfsprogs
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
-BuildRequires:	libatomic-ops-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
@@ -156,8 +162,6 @@ BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
-BuildRequires:	libatomic_ops-devel
-BuildRequires:	gperftools-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
@@ -218,7 +222,6 @@ Requires:      python-setuptools
 Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
-Requires:      parted
 Requires:      util-linux
 Requires:      hdparm
 Requires:      cryptsetup
@@ -364,6 +367,7 @@ Requires:	gdisk
 %if 0%{?suse_version}
 Requires:	gptfdisk
 %endif
+Requires:       parted
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -664,7 +668,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %endif
 		$CEPH_EXTRA_CONFIGURE_ARGS \
 		%{?_with_ocf} \
-		%{?_with_tcmalloc} \
+%if %{without tcmalloc}
+		--without-tcmalloc \
+%endif
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 # Parallel build settings ...
@@ -730,6 +736,7 @@ ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
+install -m 0644 -D udev/60-ceph-by-parttypeuuid.rules %{buildroot}%{_udevrulesdir}/60-ceph-by-parttypeuuid.rules
 install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}%{_udevrulesdir}/95-ceph-osd.rules
 
 #set up placeholder directories
@@ -1173,6 +1180,7 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %dir %{_udevrulesdir}
+%{_udevrulesdir}/60-ceph-by-parttypeuuid.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-disk.8*

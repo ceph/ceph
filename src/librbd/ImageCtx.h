@@ -7,18 +7,15 @@
 
 #include <list>
 #include <map>
-#include <set>
 #include <string>
 #include <vector>
-#include <boost/optional.hpp>
 
-#include "common/Cond.h"
 #include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
-#include "include/atomic.h"
+
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
@@ -28,7 +25,6 @@
 
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
-#include "librbd/LibrbdWriteback.h"
 #include "librbd/SnapInfo.h"
 #include "librbd/parent_types.h"
 
@@ -46,11 +42,12 @@ namespace librbd {
   class CopyupRequest;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
-  class ImageWatcher;
+  template <typename> class ImageWatcher;
   template <typename> class Journal;
   class LibrbdAdminSocketHook;
   class ObjectMap;
   template <typename> class Operations;
+  class LibrbdWriteback;
 
   namespace exclusive_lock { struct Policy; }
   namespace journal { struct Policy; }
@@ -82,7 +79,7 @@ namespace librbd {
     std::string name;
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
-    ImageWatcher *image_watcher;
+    ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
 
     /**
@@ -185,6 +182,7 @@ namespace librbd {
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
     std::string journal_pool;
+    uint32_t journal_max_payload_bytes;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -259,7 +257,6 @@ namespace librbd {
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
-    uint64_t get_copyup_snap_id() const;
     void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
 			     size_t len, uint64_t off, Context *onfinish,
 			     int fadvise_flags);

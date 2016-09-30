@@ -186,6 +186,14 @@ for i in ${image2} ${image4}; do
   compare_images ${POOL} ${i}
 done
 
+testlog "TEST: snapshot rename"
+snap_name='snap_rename'
+create_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_0"
+for i in `seq 1 20`; do
+  rename_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_$(expr ${i} - 1)" "${snap_name}_${i}"
+done
+wait_for_snap_present ${CLUSTER1} ${POOL} ${image2} "${snap_name}_${i}"
+
 testlog "TEST: disable mirror while daemon is stopped"
 stop_mirror ${CLUSTER1}
 stop_mirror ${CLUSTER2}
@@ -197,5 +205,31 @@ wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+
+testlog "TEST: simple image resync"
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: image resync while replayer is stopped"
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL}/${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: request image resync while daemon is offline"
+stop_mirror ${CLUSTER1}
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+start_mirror ${CLUSTER1}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
 
 echo OK

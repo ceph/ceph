@@ -42,8 +42,7 @@ public:
 
 private:
   typedef std::set<uint8_t> PrefetchSplayOffsets;
-  typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
-  typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
+  typedef std::map<uint8_t, ObjectPlayerPtr> SplayedObjectPlayers;
   typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
   typedef std::set<uint64_t> ObjectNumbers;
 
@@ -116,8 +115,11 @@ private:
 
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
-  uint64_t m_commit_object;
+
+  bool m_commit_position_valid = false;
+  ObjectPosition m_commit_position;
   SplayedObjectPositions m_commit_positions;
+  uint64_t m_active_set;
 
   boost::optional<uint64_t> m_active_tag_tid = boost::none;
   boost::optional<uint64_t> m_prune_tag_tid = boost::none;
@@ -129,10 +131,8 @@ private:
   void prune_tag(uint64_t tag_tid);
   void prune_active_tag(const boost::optional<uint64_t>& tag_tid);
 
-  const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;
   ObjectPlayerPtr get_object_player(uint64_t object_number) const;
-  ObjectPlayerPtr get_next_set_object_player() const;
   bool remove_empty_object_player(const ObjectPlayerPtr &object_player);
 
   void process_state(uint64_t object_number, int r);
@@ -140,9 +140,11 @@ private:
   int process_playback(uint64_t object_number);
 
   void fetch(uint64_t object_num);
+  void fetch(const ObjectPlayerPtr &object_player);
   void handle_fetched(uint64_t object_num, int r);
+  void refetch(bool immediate);
 
-  void schedule_watch();
+  void schedule_watch(bool immediate);
   void handle_watch(uint64_t object_num, int r);
   void handle_watch_assert_active(int r);
 

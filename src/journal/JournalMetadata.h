@@ -13,6 +13,8 @@
 #include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/AsyncOpTracker.h"
+#include "journal/JournalMetadataListener.h"
+#include "journal/Settings.h"
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
@@ -41,14 +43,9 @@ public:
   typedef std::set<Client> RegisteredClients;
   typedef std::list<Tag> Tags;
 
-  struct Listener {
-    virtual ~Listener() {};
-    virtual void handle_update(JournalMetadata *) = 0;
-  };
-
   JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                   librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &client_id, double commit_interval);
+                  const std::string &client_id, const Settings &settings);
   ~JournalMetadata();
 
   void init(Context *on_init);
@@ -62,8 +59,8 @@ public:
   void get_mutable_metadata(uint64_t *minimum_set, uint64_t *active_set,
 			    RegisteredClients *clients, Context *on_finish);
 
-  void add_listener(Listener *listener);
-  void remove_listener(Listener *listener);
+  void add_listener(JournalMetadataListener *listener);
+  void remove_listener(JournalMetadataListener *listener);
 
   void register_client(const bufferlist &data, Context *on_finish);
   void update_client(const bufferlist &data, Context *on_finish);
@@ -77,6 +74,9 @@ public:
   void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 
+  inline const Settings &get_settings() const {
+    return m_settings;
+  }
   inline const std::string &get_client_id() const {
     return m_client_id;
   }
@@ -150,7 +150,7 @@ public:
 
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
-  typedef std::list<Listener*> Listeners;
+  typedef std::list<JournalMetadataListener*> Listeners;
 
   struct CommitEntry {
     uint64_t object_num;
@@ -291,7 +291,7 @@ private:
   CephContext *m_cct;
   std::string m_oid;
   std::string m_client_id;
-  double m_commit_interval;
+  Settings m_settings;
 
   uint8_t m_order;
   uint8_t m_splay_width;

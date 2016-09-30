@@ -4,6 +4,8 @@
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
 
+#include <functional>
+
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/RefCountedObj.h"
@@ -347,6 +349,20 @@ public:
       }
     }
 
+    if (explicit_objs && head_size > 0 && !objs.empty()) {
+      /* patch up manifest due to issue 16435:
+       * the first object in the explicit objs list might not be the one we need to access, use the
+       * head object instead if set. This would happen if we had an old object that was created
+       * when the explicit objs manifest was around, and it got copied.
+       */
+      rgw_obj& obj_0 = objs[0].loc;
+
+      if (!obj_0.get_object().empty() && obj_0.ns.empty()) {
+        objs[0].loc = head_obj;
+        objs[0].size = head_size;
+      }
+    }
+
     if (struct_v >= 4) {
       ::decode(tail_bucket, bl);
     }
@@ -384,8 +400,14 @@ public:
     return (obj_size > head_size);
   }
 
-  void set_head(const rgw_obj& _o) {
+  void set_head(const rgw_obj& _o, uint64_t _s) {
     head_obj = _o;
+    head_size = _s;
+
+    if (explicit_objs && head_size > 0) {
+      objs[0].loc = head_obj;
+      objs[0].size = head_size;
+    }
   }
 
   const rgw_obj& get_head() {
@@ -1333,6 +1355,8 @@ public:
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);
+
+  using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -2442,6 +2466,32 @@ public:
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
 
+  int on_last_entry_in_listing(RGWBucketInfo& bucket_info,
+                               const std::string& obj_prefix,
+                               const std::string& obj_delim,
+                               std::function<int(const RGWObjEnt&)> handler);
+
+  bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const {
+    return bucket_info.has_swift_versioning() &&
+        bucket_info.swift_ver_location.size();
+  }
+
+  int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
+                            const rgw_user& user,               /* in */
+                            RGWBucketInfo& bucket_info,         /* in */
+                            rgw_obj& obj);                      /* in */
+  int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
+                               const rgw_user& user,            /* in */
+                               RGWBucketInfo& bucket_info,      /* in */
+                               rgw_obj& obj,                    /* in */
+                               bool& restored);                 /* out */
+  int copy_obj_to_remote_dest(RGWObjState *astate,
+                              map<string, bufferlist>& src_attrs,
+                              RGWRados::Object::Read& read_op,
+                              const rgw_user& user_id,
+                              rgw_obj& dest_obj,
+                              ceph::real_time *mtime);
+
   enum AttrsMod {
     ATTRSMOD_NONE    = 0,
     ATTRSMOD_REPLACE = 1,
@@ -2479,14 +2529,6 @@ public:
                        struct rgw_err *err,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data);
-  int swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object *source, RGWObjState *state,
-                            rgw_user& user);
-  int copy_obj_to_remote_dest(RGWObjState *astate,
-                              map<string, bufferlist>& src_attrs,
-                              RGWRados::Object::Read& read_op,
-                              const rgw_user& user_id,
-                              rgw_obj& dest_obj,
-                              ceph::real_time *mtime);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
@@ -2730,9 +2772,8 @@ public:
   int get_bucket_stats_async(rgw_bucket& bucket, int shard_id, RGWGetBucketStats_CB *cb);
   int get_user_stats(const rgw_user& user, RGWStorageStats& stats);
   int get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb);
-  void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
-  void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
-  void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
+  void get_bucket_instance_obj(const rgw_bucket& bucket, rgw_obj& obj);
+  void get_bucket_meta_oid(const rgw_bucket& bucket, string& oid);
 
   int put_bucket_entrypoint_info(const string& tenant_name, const string& bucket_name, RGWBucketEntryPoint& entry_point,
                                  bool exclusive, RGWObjVersionTracker& objv_tracker, ceph::real_time mtime,

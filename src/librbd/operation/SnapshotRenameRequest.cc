@@ -6,7 +6,6 @@
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -36,6 +35,21 @@ SnapshotRenameRequest<I>::SnapshotRenameRequest(I &image_ctx,
 						uint64_t snap_id,
 						const std::string &snap_name)
   : Request<I>(image_ctx, on_finish), m_snap_id(snap_id), m_snap_name(snap_name) {
+}
+
+template <typename I>
+journal::Event SnapshotRenameRequest<I>::create_event(uint64_t op_tid) const {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.snap_lock.is_locked());
+
+  std::string src_snap_name;
+  auto snap_info_it = image_ctx.snap_info.find(m_snap_id);
+  if (snap_info_it != image_ctx.snap_info.end()) {
+    src_snap_name = snap_info_it->second.name;
+  }
+
+  return journal::SnapRenameEvent(op_tid, m_snap_id, src_snap_name,
+                                  m_snap_name);
 }
 
 template <typename I>

@@ -878,7 +878,7 @@ protected:
     OpContext *ctx,
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
-  RepGather *new_repop(
+  boost::intrusive_ptr<RepGather> new_repop(
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete);
   void remove_repop(RepGather *repop);

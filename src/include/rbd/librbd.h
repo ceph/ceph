@@ -61,6 +61,8 @@ typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 
 typedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void *ptr);
 
+typedef void (*rbd_update_callback_t)(void *arg);
+
 typedef struct {
   uint64_t id;
   uint64_t size;
@@ -640,6 +642,27 @@ CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
 CEPH_RBD_API int rbd_mirror_image_get_status(rbd_image_t image,
                                              rbd_mirror_image_status_t *mirror_image_status,
                                              size_t status_size);
+
+/**
+ * Register an image metadata change watcher.
+ *
+ * @param image the image to watch
+ * @param handle where to store the internal id assigned to this watch
+ * @param watch_cb what to do when a notify is received on this image
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_update_watch(rbd_image_t image, uint64_t *handle,
+				  rbd_update_callback_t watch_cb, void *arg);
+
+/**
+ * Unregister an image watcher.
+ *
+ * @param image the image to unwatch
+ * @param handle which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_update_unwatch(rbd_image_t image, uint64_t handle);
 
 #ifdef __cplusplus
 }

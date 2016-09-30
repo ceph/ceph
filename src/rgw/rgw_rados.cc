@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <boost/format.hpp>
+#include <boost/optional.hpp>
+
 #include "common/ceph_json.h"
 #include "common/utf8.h"
 
@@ -951,7 +954,7 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
   RGWObjectCtx obj_ctx(store);
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
-    ldout(cct, 0) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
+    ldout(cct, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
   }
   try {
@@ -1878,7 +1881,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
 
   bucket = _b;
   manifest->set_tail_bucket(_b);
-  manifest->set_head(_h);
+  manifest->set_head(_h, 0);
   last_ofs = 0;
 
   if (manifest->get_prefix().empty()) {
@@ -3270,6 +3273,15 @@ int RGWRados::convert_regionmap()
   current_period.set_user_quota(zonegroupmap.user_quota);
   current_period.set_bucket_quota(zonegroupmap.bucket_quota);
 
+  // remove the region_map so we don't try to convert again
+  rgw_obj obj(pool, oid);
+  ret = delete_system_obj(obj);
+  if (ret < 0) {
+    ldout(cct, 0) << "Error could not remove " << obj
+        << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
   return 0;
 }
 
@@ -3325,6 +3337,17 @@ int RGWRados::replace_region_with_zonegroup()
     if (ret != -ENOENT && zoneparams.metadata_heap.name.empty()) {
       zoneparams.metadata_heap = ".rgw.meta";
       return zoneparams.update();
+    }
+    /* update master zone */
+    RGWZoneGroup default_zg(default_zonegroup_name);
+    ret = default_zg.init(cct, this);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << __func__ << ": error in initializing default zonegroup: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    if (ret != -ENOENT && default_zg.master_zone.empty()) {
+      default_zg.master_zone = zoneparams.get_id();
+      return default_zg.update();
     }
     return 0;
   }
@@ -3500,10 +3523,18 @@ int RGWRados::init_zg_from_period(bool *initialized)
   for (iter = current_period.get_map().zonegroups.begin();
        iter != current_period.get_map().zonegroups.end(); ++iter){
     const RGWZoneGroup& zg = iter->second;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints));
+    // use endpoints from the zonegroup's master zone
+    auto master = zg.zones.find(zg.master_zone);
+    if (master == zg.zones.end()) {
+      ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for "
+          "master_zone=" << zg.master_zone << dendl;
+      return -EINVAL;
+    }
+    const auto& endpoints = master->second.endpoints;
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), endpoints));
     if (!current_period.get_master_zonegroup().empty() &&
         zg.get_id() == current_period.get_master_zonegroup()) {
-      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints);
+      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), endpoints);
     }
   }
 
@@ -3536,7 +3567,15 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
   }
   ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
   if (zonegroup.is_master) {
-    rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints);
+    // use endpoints from the zonegroup's master zone
+    auto master = zonegroup.zones.find(zonegroup.master_zone);
+    if (master == zonegroup.zones.end()) {
+      ldout(cct, 0) << "zonegroup " << zonegroup.get_name() << " missing zone for "
+          "master_zone=" << zonegroup.master_zone << dendl;
+      return -EINVAL;
+    }
+    const auto& endpoints = master->second.endpoints;
+    rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), endpoints);
   }
 
   return 0;
@@ -3610,7 +3649,7 @@ int RGWRados::init_complete()
       lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
       return -EINVAL;
     }
-    ldout(cct, 0) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
+    ldout(cct, 1) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
     ret = init_zg_from_local(&creating_defaults);
     if (ret < 0) {
       return ret;
@@ -5078,8 +5117,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
           return r;
 
         /* remove bucket meta instance */
-        string entry;
-        get_bucket_instance_entry(bucket, entry);
+        string entry = bucket.get_key();
         r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
         if (r < 0)
           return r;
@@ -5693,11 +5731,67 @@ int RGWRados::BucketShard::init(rgw_bucket& _bucket, rgw_obj& obj)
 }
 
 
-int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object *source, RGWObjState *state,
-                                    rgw_user& user)
+/* Execute @handler on last item in bucket listing for bucket specified
+ * in @bucket_info. @obj_prefix and @obj_delim narrow down the listing
+ * to objects matching these criterias. */
+int RGWRados::on_last_entry_in_listing(RGWBucketInfo& bucket_info,
+                                       const std::string& obj_prefix,
+                                       const std::string& obj_delim,
+                                       std::function<int(const RGWObjEnt&)> handler)
 {
-  if (!bucket_info.has_swift_versioning() || bucket_info.swift_ver_location.empty()) {
+  RGWRados::Bucket target(this, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.prefix = obj_prefix;
+  list_op.params.delim = obj_delim;
+
+  ldout(cct, 20) << "iterating listing for bucket=" << bucket_info.bucket.name
+                 << ", obj_prefix=" << obj_prefix
+                 << ", obj_delim=" << obj_delim
+                 << dendl;
+
+  bool is_truncated = false;
+
+  boost::optional<RGWObjEnt> last_entry;
+  /* We need to rewind to the last object in a listing. */
+  do {
+    /* List bucket entries in chunks. */
+    static constexpr int MAX_LIST_OBJS = 100;
+    std::vector<RGWObjEnt> entries(MAX_LIST_OBJS);
+
+    int ret = list_op.list_objects(MAX_LIST_OBJS, &entries, nullptr,
+                                   &is_truncated);
+    if (ret < 0) {
+      return ret;
+    } else if (!entries.empty()) {
+      last_entry = last_entry = entries.back();
+    }
+  } while (is_truncated);
+
+  if (last_entry) {
+    return handler(*last_entry);
+  }
+
+  /* Empty listing - no items we can run handler on. */
+  return 0;
+}
+
+
+int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
+                                    const rgw_user& user,
+                                    RGWBucketInfo& bucket_info,
+                                    rgw_obj& obj)
+{
+  if (! swift_versioning_enabled(bucket_info)) {
     return 0;
+  }
+
+  obj_ctx.set_atomic(obj);
+
+  RGWObjState * state = nullptr;
+  int r = get_obj_state(&obj_ctx, obj, &state, false);
+  if (r < 0) {
+    return r;
   }
 
   if (!state->exists) {
@@ -5707,16 +5801,15 @@ int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object
   string client_id;
   string op_id;
 
-  rgw_obj& obj = source->get_obj();
   const string& src_name = obj.get_object();
   char buf[src_name.size() + 32];
   struct timespec ts = ceph::real_clock::to_timespec(state->mtime);
-  snprintf(buf, sizeof(buf), "%03d%s/%lld.%06ld", (int)src_name.size(),
+  snprintf(buf, sizeof(buf), "%03x%s/%lld.%06ld", (int)src_name.size(),
            src_name.c_str(), (long long)ts.tv_sec, ts.tv_nsec / 1000);
 
   RGWBucketInfo dest_bucket_info;
 
-  int r = get_bucket_info(source->get_ctx(), bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, NULL);
+  r = get_bucket_info(obj_ctx, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, NULL);
   if (r < 0) {
     ldout(cct, 10) << "failed to read dest bucket info: r=" << r << dendl;
     return r;
@@ -5727,10 +5820,11 @@ int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object
   }
 
   rgw_obj dest_obj(dest_bucket_info.bucket, buf);
+  obj_ctx.set_atomic(dest_obj);
 
   string no_zone;
 
-  r = copy_obj(source->get_ctx(),
+  r = copy_obj(obj_ctx,
                user,
                client_id,
                op_id,
@@ -5759,11 +5853,119 @@ int RGWRados::swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object
                NULL, /* struct rgw_err *err */
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL); /* void *progress_data */
-  if (r == -ECANCELED || r == -ENOENT) { /* has already been overwritten, meaning another rgw process already copied it out */
+  if (r == -ECANCELED || r == -ENOENT) {
+    /* Has already been overwritten, meaning another rgw process already
+     * copied it out */
     return 0;
   }
 
   return r;
+}
+
+int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
+                                       const rgw_user& user,
+                                       RGWBucketInfo& bucket_info,
+                                       rgw_obj& obj,
+                                       bool& restored)             /* out */
+{
+  if (! swift_versioning_enabled(bucket_info)) {
+    return 0;
+  }
+
+  /* Bucket info of the bucket that stores previous versions of our object. */
+  RGWBucketInfo archive_binfo;
+
+  int ret = get_bucket_info(obj_ctx, bucket_info.bucket.tenant,
+                            bucket_info.swift_ver_location, archive_binfo,
+                            nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* Abort the operation if the bucket storing our archive belongs to someone
+   * else. This is a limitation in comparison to Swift as we aren't taking ACLs
+   * into consideration. For we can live with that.
+   *
+   * TODO: delegate this check to un upper layer and compare with ACLs. */
+  if (bucket_info.owner != archive_binfo.owner) {
+    return -EPERM;
+  }
+
+  /* This code will be executed on latest version of the object. */
+  const auto handler = [&](const RGWObjEnt& entry) -> int {
+    std::string no_client_id;
+    std::string no_op_id;
+    std::string no_zone;
+
+    /* We don't support object versioning of Swift API on those buckets that
+     * are already versioned using the S3 mechanism. This affects also bucket
+     * storing archived objects. Otherwise the delete operation would create
+     * a deletion marker. */
+    if (archive_binfo.versioned()) {
+      restored = false;
+      return -ERR_PRECONDITION_FAILED;
+    }
+
+    /* We are requesting ATTRSMOD_NONE so the attr attribute is perfectly
+     * irrelevant and may be safely skipped. */
+    std::map<std::string, ceph::bufferlist> no_attrs;
+
+    rgw_obj archive_obj(archive_binfo.bucket, entry.key);
+    obj_ctx.set_atomic(archive_obj);
+    obj_ctx.set_atomic(obj);
+
+    int ret = copy_obj(obj_ctx,
+                       user,
+                       no_client_id,
+                       no_op_id,
+                       nullptr,       /* req_info *info */
+                       no_zone,
+                       obj,           /* dest obj */
+                       archive_obj,   /* src obj */
+                       bucket_info,   /* dest bucket info */
+                       archive_binfo, /* src bucket info */
+                       nullptr,       /* time_t *src_mtime */
+                       nullptr,       /* time_t *mtime */
+                       nullptr,       /* const time_t *mod_ptr */
+                       nullptr,       /* const time_t *unmod_ptr */
+                       false,         /* bool high_precision_time */
+                       nullptr,       /* const char *if_match */
+                       nullptr,       /* const char *if_nomatch */
+                       RGWRados::ATTRSMOD_NONE,
+                       true,          /* bool copy_if_newer */
+                       no_attrs,
+                       RGW_OBJ_CATEGORY_MAIN,
+                       0,             /* uint64_t olh_epoch */
+                       real_time(),   /* time_t delete_at */
+                       nullptr,       /* string *version_id */
+                       nullptr,       /* string *ptag */
+                       nullptr,       /* string *petag */
+                       nullptr,       /* struct rgw_err *err */
+                       nullptr,       /* void (*progress_cb)(off_t, void *) */
+                       nullptr);      /* void *progress_data */
+    if (ret == -ECANCELED || ret == -ENOENT) {
+      /* Has already been overwritten, meaning another rgw process already
+       * copied it out */
+      return 0;
+    } else if (ret < 0) {
+      return ret;
+    } else {
+      restored = true;
+    }
+
+    /* Need to remove the archived copy. */
+    ret = delete_obj(obj_ctx, archive_binfo, archive_obj,
+                     archive_binfo.versioning_status());
+
+    return ret;
+  };
+
+  const std::string& obj_name = obj.get_object();
+  const auto prefix = boost::str(boost::format("%03x%s") % obj_name.size()
+                                                         % obj_name);
+
+  return on_last_entry_in_listing(archive_binfo, prefix, std::string(),
+                                  handler);
 }
 
 /**
@@ -5901,10 +6103,6 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     index_op.set_bilog_flags(RGW_BILOG_FLAG_VERSIONED_OP);
   }
 
-  r = store->swift_versioning_copy(bucket_info, target, state, meta.owner);
-  if (r < 0) {
-    goto done_cancel;
-  }
 
   r = index_op.prepare(CLS_RGW_OP_ADD);
   if (r < 0)
@@ -6877,8 +7075,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       goto done_ret;
     }
 
-    pmanifest->set_head(dest_obj);
-    pmanifest->set_head_size(first_chunk.length());
+    pmanifest->set_head(dest_obj, first_chunk.length());
+  } else {
+    pmanifest->set_head(dest_obj, 0);
   }
 
   write_op.meta.data = &first_chunk;
@@ -7044,8 +7243,8 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
 int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker)
 {
   librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  map<int, string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
   if (r < 0)
     return r;
 
@@ -7080,11 +7279,15 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   /* if the bucket is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    string entry;
-    get_bucket_instance_entry(bucket, entry);
+    string entry = bucket.get_key();
     r= rgw_bucket_instance_remove_entry(this, entry, &objv_tracker);
     if (r < 0) {
       return r;
+    }
+    /* remove bucket index objects*/
+    map<int, string>::const_iterator biter;
+    for (biter = bucket_objs.begin(); biter != bucket_objs.end(); ++biter) {
+      index_ctx.remove(biter->second);
     }
   }
   return 0;
@@ -7546,10 +7749,6 @@ int RGWRados::Object::Delete::delete_obj()
 
   index_op.set_bilog_flags(params.bilog_flags);
 
-  r = store->swift_versioning_copy(bucket_info, target, state, params.bucket_owner);
-  if (r < 0) {
-    return r;
-  }
 
   r = index_op.prepare(CLS_RGW_OP_DEL);
   if (r < 0)
@@ -7825,6 +8024,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
     try {
       ::decode(s->manifest, miter);
       s->has_manifest = true;
+      s->manifest.set_head(obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
+                                             broken due to old bugs */
       s->size = s->manifest.get_obj_size();
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
@@ -10276,23 +10477,12 @@ int RGWRados::get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx
   return 0;
 }
 
-void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
+void RGWRados::get_bucket_meta_oid(const rgw_bucket& bucket, string& oid)
 {
-  if (bucket.tenant.empty()) {
-    entry = bucket.name + ":" + bucket.bucket_id;
-  } else {
-    entry = bucket.tenant + ":" + bucket.name + ":" + bucket.bucket_id;
-  }
+  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + bucket.get_key(':');
 }
 
-void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
-{
-  string entry;
-  get_bucket_instance_entry(bucket, entry);
-  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
-}
-
-void RGWRados::get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj)
+void RGWRados::get_bucket_instance_obj(const rgw_bucket& bucket, rgw_obj& obj)
 {
   if (!bucket.oid.empty()) {
     obj.init(get_zone_params().domain_root, bucket.oid);
@@ -10311,6 +10501,7 @@ int RGWRados::get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta
     return -EINVAL;
   }
   string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key;
+  rgw_bucket_instance_key_to_oid(oid);
 
   return get_bucket_instance_from_oid(obj_ctx, oid, info, pmtime, pattrs);
 }
@@ -10521,8 +10712,7 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 
   ::encode(info, bl);
 
-  string key;
-  get_bucket_instance_entry(info.bucket, key); /* when we go through meta api, we don't use oid directly */
+  string key = info.bucket.get_key(); /* when we go through meta api, we don't use oid directly */
   int ret = rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
@@ -10652,6 +10842,9 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt& ent = iter->second;
     rgw_bucket& bucket = ent.bucket;
+    ent.count = 0;
+    ent.size = 0;
+    ent.size_rounded = 0;
 
     map<string, rgw_bucket_dir_header> headers;
     int r = cls_bucket_head(bucket, RGW_NO_SHARD, headers);

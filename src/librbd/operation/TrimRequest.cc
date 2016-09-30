@@ -6,7 +6,6 @@
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -46,8 +45,8 @@ public:
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
-    AioObjectRequest *req = new AioObjectTrim(&image_ctx, oid, m_object_no,
-                                              m_snapc, this);
+    AioObjectRequest<> *req = new AioObjectTrim(&image_ctx, oid, m_object_no,
+                                                m_snapc, this);
     req->send();
     return 0;
   }
@@ -195,8 +194,7 @@ void TrimRequest<I>::send_copyup_objects() {
 
     snapc = image_ctx.snapc;
     has_snapshots = !image_ctx.snaps.empty();
-    int r = image_ctx.get_parent_overlap(image_ctx.get_copyup_snap_id(),
-                                           &parent_overlap);
+    int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
     assert(r == 0);
   }
 
@@ -363,7 +361,7 @@ void TrimRequest<I>::send_clean_boundary() {
     ldout(cct, 20) << " ex " << *p << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    AioObjectRequest *req;
+    AioObjectRequest<> *req;
     if (p->offset == 0) {
       req = new AioObjectTrim(&image_ctx, p->oid.name, p->objectno, snapc,
                               req_comp);

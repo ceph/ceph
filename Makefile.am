@@ -15,6 +15,7 @@ EXTRA_DIST += \
 	etc/sysconfig/SuSEfirewall2.d/services/ceph-mon \
 	etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds \
 	udev/50-rbd.rules \
+	udev/60-ceph-by-parttypeuuid.rules \
 	udev/95-ceph-osd.rules \
 	share/known_hosts_drop.ceph.com \
 	share/id_dsa_drop.ceph.com \

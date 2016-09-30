@@ -16,7 +16,7 @@ namespace librbd {
     std::string image_id;
     snapid_t snap_id;
     parent_spec() : pool_id(-1), snap_id(CEPH_NOSNAP) {}
-    parent_spec(uint64_t pool_id, std::string image_id, snapid_t snap_id) :
+    parent_spec(int64_t pool_id, std::string image_id, snapid_t snap_id) :
       pool_id(pool_id), image_id(image_id), snap_id(snap_id) {}
     bool operator==(const parent_spec &other) {
       return ((this->pool_id == other.pool_id) &&

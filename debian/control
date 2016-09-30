@@ -90,7 +90,6 @@ Depends: binutils,
          grep,
          logrotate,
          lsb-release,
-         parted,
          python,
          python-argparse | libpython2.7-stdlib,
          python-pkg-resources,
@@ -179,7 +178,10 @@ Description: debugging symbols for ceph-mon
 
 Package: ceph-osd
 Architecture: linux-any
-Depends: ceph-base (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-base (= ${binary:Version}),
+         parted,
+         ${misc:Depends},
+         ${shlibs:Depends}
 Recommends: ceph-common (= ${binary:Version})
 Replaces: ceph (<< 10)
 Breaks: ceph (<< 10)

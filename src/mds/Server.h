@@ -134,6 +134,7 @@ public:
   void handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
 
   // some helpers
+  bool check_fragment_space(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, const string& dname);

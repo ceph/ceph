@@ -10,9 +10,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/ContextCompletion.h"
 #include "common/Throttle.h"
-#include "common/WorkQueue.h"
 #include "common/event_socket.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/stringify.h"
@@ -26,12 +24,10 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
-#include "librbd/CopyupRequest.h"
 #include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
@@ -45,7 +41,6 @@
 
 #include "journal/Journaler.h"
 
-#include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/variant.hpp>
 #include "include/assert.h"
@@ -1816,6 +1811,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             if (r < 0 && r != -ENOENT) {
               lderr(cct) << "error retrieving mirroring state: "
                 << cpp_strerror(r) << dendl;
+              return r;
             }
 
             if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
@@ -2390,7 +2386,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
-      AioCompletion *comp = AioCompletion::create(ctx);
+      AioCompletion *comp = AioCompletion::create_and_start(ctx, src,
+                                                            AIO_TYPE_READ);
       AioImageRequest<>::aio_read(src, comp, offset, len, NULL, bl,
                                   fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
@@ -2615,7 +2612,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       bufferlist bl;
 
       C_SaferCond ctx;
-      AioCompletion *c = AioCompletion::create(&ctx);
+      AioCompletion *c = AioCompletion::create_and_start(&ctx, ictx,
+                                                         AIO_TYPE_READ);
       AioImageRequest<>::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
 
       int ret = ctx.wait();
@@ -3534,13 +3532,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       (*states)[static_cast<mirror_image_status_state_t>(s.first)] = s.second;
     }
     return 0;
-  }
-
-  void rbd_req_cb(completion_t cb, void *arg)
-  {
-    AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
-    AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
-    req->complete(comp->get_return_value());
   }
 
   struct C_RBD_Readahead : public Context {

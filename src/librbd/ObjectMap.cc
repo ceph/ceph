@@ -3,9 +3,6 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
-#include "librbd/internal.h"
-#include "librbd/object_map/InvalidateRequest.h"
 #include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
@@ -17,6 +14,9 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
+
+#include "include/rados/librados.hpp"
+
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/stringify.h"
@@ -88,6 +88,18 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 			     << "object_no=" << object_no << " r=" << exists
 			     << dendl;
   return exists;
+}
+
+bool ObjectMap::update_required(uint64_t object_no, uint8_t new_state) {
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+  uint8_t state = (*this)[object_no];
+
+  if ((state == new_state) ||
+      (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT) ||
+      (new_state == OBJECT_NONEXISTENT && state != OBJECT_PENDING)) {
+    return false;
+  }
+  return true;
 }
 
 void ObjectMap::open(Context *on_finish) {
