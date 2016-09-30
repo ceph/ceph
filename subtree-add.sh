@@ -6,7 +6,7 @@ if [ -d src/dmclock ] ;then
 else
     git subtree add \
 	--prefix src/dmclock \
-	git@github.com:ceph/dmclock.git master --squash
+	git@github.com:ceph/dmclock.git ceph --squash
 fi
 
 # add other subtree add commands here...
