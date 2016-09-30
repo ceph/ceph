@@ -297,7 +297,7 @@ of cluster membership, configuration, and state.
 Summary:        Ceph Manager Daemon
 License:        LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-with-autoconf-exception and BSD-3-Clause and MIT
 Group:          System Environment/Base
-Requires:       ceph-base = %{version}-%{release}
+Requires:       ceph-base = %{epoch}:%{version}-%{release}
 
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
