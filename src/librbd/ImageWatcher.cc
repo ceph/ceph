@@ -475,11 +475,12 @@ void ImageWatcher<I>::notify_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
 
-  // ExclusiveLock state machine can be dynamically disabled
-  if (m_image_ctx.exclusive_lock == nullptr) {
+  // ExclusiveLock state machine can be dynamically disabled or
+  // race with task cancel
+  if (m_image_ctx.exclusive_lock == nullptr ||
+      m_image_ctx.exclusive_lock->is_lock_owner()) {
     return;
   }
-  assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
 
