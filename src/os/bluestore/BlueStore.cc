@@ -7571,6 +7571,9 @@ bool BlueStore::_do_write_check_depth(
       *gc_end_offset = tp->logical_offset + tp_prev->length;
     }
   }
+  if (*gc_end_offset > o->onode.size) {
+    *gc_end_offset = MAX(end_offset, o->onode.size);
+  }
   dout(20) << __func__ << " depth " << (int)depth
 	   << ", gc 0x" << std::hex << *gc_start_offset << "~"
 	   << (*gc_end_offset - *gc_start_offset)
