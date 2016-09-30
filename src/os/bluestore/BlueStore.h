@@ -1782,12 +1782,13 @@ private:
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
 
-  bool _blobs_need_garbage_collection(OnodeRef o,
-                          uint64_t start_offset,
-                          uint64_t end_offset,
-                          uint8_t  *blob_depth,
-                          uint64_t *gc_start_offset,
-                          uint64_t *gc_end_offset);
+  bool _do_write_check_depth(
+    OnodeRef o,
+    uint64_t start_offset,
+    uint64_t end_offset,
+    uint8_t  *blob_depth,
+    uint64_t *gc_start_offset,
+    uint64_t *gc_end_offset);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,
