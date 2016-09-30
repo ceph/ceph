@@ -2422,7 +2422,7 @@ void BlueStore::_init_logger()
     "Sum for wal write op");
   b.add_u64(l_bluestore_wal_write_bytes, "wal_write_bytes",
     "Sum for wal write bytes");
-  b.add_u64(l_bluestore_write_penalty_read_ops, " write_penalty_read_ops",
+  b.add_u64(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
     "Sum for write penalty read ops");
   b.add_u64(l_bluestore_allocated, "bluestore_allocated",
     "Sum for allocated bytes");
