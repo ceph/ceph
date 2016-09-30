@@ -253,76 +253,79 @@ public:
     ) override;
   void begin_peer_recover(
     pg_shard_t peer,
-    const hobject_t oid);
+    const hobject_t oid) override;
   void on_global_recover(
     const hobject_t &oid,
-    const object_stat_sum_t &stat_diff);
-  void failed_push(pg_shard_t from, const hobject_t &soid);
-  void cancel_pull(const hobject_t &soid);
+    const object_stat_sum_t &stat_diff) override;
+  void failed_push(pg_shard_t from, const hobject_t &soid) override;
+  void cancel_pull(const hobject_t &soid) override;
 
   template<class T> class BlessedGenContext;
   class BlessedContext;
-  Context *bless_context(Context *c);
+  Context *bless_context(Context *c) override;
 
   GenContext<ThreadPool::TPHandle&> *bless_gencontext(
-    GenContext<ThreadPool::TPHandle&> *c);
+    GenContext<ThreadPool::TPHandle&> *c) override;
     
-  void send_message(int to_osd, Message *m) {
+  void send_message(int to_osd, Message *m) override {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
   }
-  void queue_transaction(ObjectStore::Transaction&& t, OpRequestRef op) {
+  void queue_transaction(ObjectStore::Transaction&& t,
+			 OpRequestRef op) override {
     osd->store->queue_transaction(osr.get(), std::move(t), 0, 0, 0, op);
   }
-  void queue_transactions(vector<ObjectStore::Transaction>& tls, OpRequestRef op) {
+  void queue_transactions(vector<ObjectStore::Transaction>& tls,
+			  OpRequestRef op) override {
     osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op, NULL);
   }
-  epoch_t get_epoch() const {
+  epoch_t get_epoch() const override {
     return get_osdmap()->get_epoch();
   }
-  const set<pg_shard_t> &get_actingbackfill_shards() const {
+  const set<pg_shard_t> &get_actingbackfill_shards() const override {
     return actingbackfill;
   }
-  const set<pg_shard_t> &get_acting_shards() const {
+  const set<pg_shard_t> &get_acting_shards() const override {
     return actingset;
   }
-  const set<pg_shard_t> &get_backfill_shards() const {
+  const set<pg_shard_t> &get_backfill_shards() const override {
     return backfill_targets;
   }
 
-  std::string gen_dbg_prefix() const { return gen_prefix(); }
+  std::string gen_dbg_prefix() const override { return gen_prefix(); }
   
-  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards() const {
+  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>
+    &get_missing_loc_shards() const override {
     return missing_loc.get_missing_locs();
   }
-  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
+  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
     return peer_missing;
   }
   using PGBackend::Listener::get_shard_missing;
-  const map<pg_shard_t, pg_info_t> &get_shard_info() const {
+  const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
     return peer_info;
   }
   using PGBackend::Listener::get_shard_info;  
-  const pg_missing_tracker_t &get_local_missing() const {
+  const pg_missing_tracker_t &get_local_missing() const override {
     return pg_log.get_missing();
   }
-  const PGLog &get_log() const {
+  const PGLog &get_log() const override {
     return pg_log;
   }
-  bool pgb_is_primary() const {
+  bool pgb_is_primary() const override {
     return is_primary();
   }
-  OSDMapRef pgb_get_osdmap() const {
+  OSDMapRef pgb_get_osdmap() const override {
     return get_osdmap();
   }
-  const pg_info_t &get_info() const {
+  const pg_info_t &get_info() const override {
     return info;
   }
-  const pg_pool_t &get_pool() const {
+  const pg_pool_t &get_pool() const override {
     return pool.info;
   }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs) {
+    map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
 
@@ -332,7 +335,7 @@ public:
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
     bool transaction_applied,
-    ObjectStore::Transaction &t) {
+    ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
       dirty_info = true;
@@ -357,11 +360,11 @@ public:
     }
   };
   void op_applied(
-    const eversion_t &applied_version);
+    const eversion_t &applied_version) override;
 
   bool should_send_op(
     pg_shard_t peer,
-    const hobject_t &hoid) {
+    const hobject_t &hoid) override {
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
@@ -376,55 +379,55 @@ public:
   
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
-    eversion_t lcod) {
+    eversion_t lcod) override {
     peer_last_complete_ondisk[fromosd] = lcod;
   }
 
   void update_last_complete_ondisk(
-    eversion_t lcod) {
+    eversion_t lcod) override {
     last_complete_ondisk = lcod;
   }
 
   void update_stats(
-    const pg_stat_t &stat) {
+    const pg_stat_t &stat) override {
     info.stats = stat;
   }
 
   void schedule_recovery_work(
-    GenContext<ThreadPool::TPHandle&> *c);
+    GenContext<ThreadPool::TPHandle&> *c) override;
 
-  pg_shard_t whoami_shard() const {
+  pg_shard_t whoami_shard() const override {
     return pg_whoami;
   }
-  spg_t primary_spg_t() const {
+  spg_t primary_spg_t() const override {
     return spg_t(info.pgid.pgid, primary.shard);
   }
-  pg_shard_t primary_shard() const {
+  pg_shard_t primary_shard() const override {
     return primary;
   }
-  uint64_t min_peer_features() const {
+  uint64_t min_peer_features() const override {
     return get_min_peer_features();
   }
-  bool sort_bitwise() const {
+  bool sort_bitwise() const override {
     return get_sort_bitwise();
   }
 
   void send_message_osd_cluster(
-    int peer, Message *m, epoch_t from_epoch);
+    int peer, Message *m, epoch_t from_epoch) override;
   void send_message_osd_cluster(
-    Message *m, Connection *con);
+    Message *m, Connection *con) override;
   void send_message_osd_cluster(
-    Message *m, const ConnectionRef& con);
-  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
-  entity_name_t get_cluster_msgr_name() {
+    Message *m, const ConnectionRef& con) override;
+  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
+  entity_name_t get_cluster_msgr_name() override {
     return osd->get_cluster_msgr_name();
   }
 
-  PerfCounters *get_logger();
+  PerfCounters *get_logger() override;
 
-  ceph_tid_t get_tid() { return osd->get_tid(); }
+  ceph_tid_t get_tid() override { return osd->get_tid(); }
 
-  LogClientTemp clog_error() { return osd->clog->error(); }
+  LogClientTemp clog_error() override { return osd->clog->error(); }
 
   struct watch_disconnect_t {
     uint64_t cookie;
@@ -893,11 +896,11 @@ protected:
   boost::scoped_ptr<TierAgentState> agent_state;
 
   void agent_setup();       ///< initialize agent state
-  bool agent_work(int max) ///< entry point to do some agent work
+  bool agent_work(int max) override ///< entry point to do some agent work
   {
     return agent_work(max, max);
   }
-  bool agent_work(int max, int agent_flush_quota);
+  bool agent_work(int max, int agent_flush_quota) override;
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
   bool agent_maybe_evict(ObjectContextRef& obc, bool after_flush);  ///< maybe evict
 
@@ -910,15 +913,15 @@ protected:
   void agent_estimate_temp(const hobject_t& oid, int *temperature);
 
   /// stop the agent
-  void agent_stop();
-  void agent_delay();
+  void agent_stop() override;
+  void agent_delay() override;
 
   /// clear agent state
-  void agent_clear();
+  void agent_clear() override;
 
   /// choose (new) agent mode(s), returns true if op is requeued
   bool agent_choose_mode(bool restart = false, OpRequestRef op = OpRequestRef());
-  void agent_choose_mode_restart();
+  void agent_choose_mode_restart() override;
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
@@ -962,8 +965,8 @@ protected:
 
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
-  void check_blacklisted_watchers();
-  void get_watchers(list<obj_watch_item_t> &pg_watchers);
+  void check_blacklisted_watchers() override;
+  void get_watchers(list<obj_watch_item_t> &pg_watchers) override;
   void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
@@ -1029,7 +1032,7 @@ protected:
   set<hobject_t, hobject_t::Comparator> backfills_in_flight;
   map<hobject_t, pg_stat_t, hobject_t::Comparator> pending_backfill_updates;
 
-  void dump_recovery_info(Formatter *f) const {
+  void dump_recovery_info(Formatter *f) const override {
     f->open_array_section("backfill_targets");
     for (set<pg_shard_t>::const_iterator p = backfill_targets.begin();
         p != backfill_targets.end(); ++p)
@@ -1093,7 +1096,7 @@ protected:
   void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
-  void check_recovery_sources(const OSDMapRef& map);
+  void check_recovery_sources(const OSDMapRef& map) override ;
 
   int recover_missing(
     const hobject_t& oid,
@@ -1194,13 +1197,13 @@ protected:
   void complete_read_ctx(int result, OpContext *ctx);
   
   // pg on-disk content
-  void check_local();
+  void check_local() override;
 
-  void _clear_recovery_state();
+  void _clear_recovery_state() override;
 
   bool start_recovery_ops(
     uint64_t max,
-    ThreadPool::TPHandle &handle, uint64_t *started);
+    ThreadPool::TPHandle &handle, uint64_t *started) override;
 
   uint64_t recover_primary(uint64_t max, ThreadPool::TPHandle &handle);
   uint64_t recover_replicas(uint64_t max, ThreadPool::TPHandle &handle);
@@ -1317,18 +1320,20 @@ protected:
 
   // -- scrub --
   virtual bool _range_available_for_scrub(
-    const hobject_t &begin, const hobject_t &end);
+    const hobject_t &begin, const hobject_t &end) override;
   virtual void _scrub(
     ScrubMap &map,
-    const std::map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest);
-  virtual void _scrub_clear_state();
-  virtual void _scrub_finish();
+    const std::map<hobject_t, pair<uint32_t, uint32_t>,
+    hobject_t::BitwiseComparator> &missing_digest) override;
+  virtual void _scrub_clear_state() override;
+  virtual void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
 
-  virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
+  virtual void _split_into(pg_t child_pgid, PG *child,
+			   unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
-  void calc_trim_to();
+  void calc_trim_to() override;
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
@@ -1374,21 +1379,21 @@ public:
 
   void do_request(
     OpRequestRef& op,
-    ThreadPool::TPHandle &handle);
-  void do_op(OpRequestRef& op);
+    ThreadPool::TPHandle &handle) override;
+  void do_op(OpRequestRef& op) override;
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
-  void do_sub_op(OpRequestRef op);
-  void do_sub_op_reply(OpRequestRef op);
+  void do_sub_op(OpRequestRef op) override;
+  void do_sub_op_reply(OpRequestRef op) override;
   void do_scan(
     OpRequestRef op,
-    ThreadPool::TPHandle &handle);
-  void do_backfill(OpRequestRef op);
+    ThreadPool::TPHandle &handle) override;
+  void do_backfill(OpRequestRef op) override;
 
   OpContextUPtr trim_object(const hobject_t &coid);
-  void snap_trimmer(epoch_t e);
+  void snap_trimmer(epoch_t e) override;
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
@@ -1405,7 +1410,8 @@ private:
   uint64_t temp_seq; ///< last id for naming temp objects
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
-  hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
+  hobject_t get_temp_recovery_object(eversion_t version,
+				     snapid_t snap) override;
   int get_recovery_op_priority() const {
       int pri = 0;
       pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
@@ -1437,7 +1443,7 @@ public:
     int split_bits,
     int seed,
     const pg_pool_t *pool,
-    ObjectStore::Transaction *t) {
+    ObjectStore::Transaction *t) override {
     coll_t target = coll_t(child);
     PG::_create(*t, child, split_bits);
     t->split_collection(
@@ -1540,14 +1546,14 @@ public:
   void do_update_log_missing_reply(
     OpRequestRef &op);
 
-  void on_role_change();
-  void on_pool_change();
-  void _on_new_interval();
-  void on_change(ObjectStore::Transaction *t);
-  void on_activate();
-  void on_flushed();
-  void on_removal(ObjectStore::Transaction *t);
-  void on_shutdown();
+  void on_role_change() override;
+  void on_pool_change() override;
+  void _on_new_interval() override;
+  void on_change(ObjectStore::Transaction *t) override;
+  void on_activate() override;
+  void on_flushed() override;
+  void on_removal(ObjectStore::Transaction *t) override;
+  void on_shutdown() override;
 
   // attr cache handling
   void replace_cached_attrs(
