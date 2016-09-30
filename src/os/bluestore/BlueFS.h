@@ -248,8 +248,10 @@ private:
   int _allocate(uint8_t bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
-  void wait_for_aio(FileWriter *h);  // safe to call without a lock
   int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
+
+  void _claim_completed_aios(FileWriter *h, list<FS::aio_t> *ls);
+  void wait_for_aio(FileWriter *h);  // safe to call without a lock
 
   int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
 			  uint64_t want_seq = 0,
