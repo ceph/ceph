@@ -163,7 +163,8 @@ void bluestore_extent_ref_map_t::_check() const
   }
 }
 
-void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint32_t,record_t>::iterator& p)
+void bluestore_extent_ref_map_t::_maybe_merge_left(
+  map<uint64_t,record_t>::iterator& p)
 {
   if (p == ref_map.begin())
     return;
@@ -177,9 +178,9 @@ void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint32_t,record_t>::itera
   }
 }
 
-void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
+void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 {
-  map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  auto p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
@@ -195,9 +196,9 @@ void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
     }
     if (p->first > offset) {
       // gap
-      uint32_t newlen = MIN(p->first - offset, length);
+      uint64_t newlen = MIN(p->first - offset, length);
       p = ref_map.insert(
-	map<uint32_t,record_t>::value_type(offset,
+	map<uint64_t,record_t>::value_type(offset,
 					   record_t(newlen, 1))).first;
       offset += newlen;
       length -= newlen;
@@ -208,9 +209,9 @@ void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
     if (p->first < offset) {
       // split off the portion before offset
       assert(p->first + p->second.length > offset);
-      uint32_t left = p->first + p->second.length - offset;
+      uint64_t left = p->first + p->second.length - offset;
       p->second.length = offset - p->first;
-      p = ref_map.insert(map<uint32_t,record_t>::value_type(
+      p = ref_map.insert(map<uint64_t,record_t>::value_type(
 			   offset, record_t(left, p->second.refs))).first;
       // continue below
     }
@@ -235,10 +236,10 @@ void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
 }
 
 void bluestore_extent_ref_map_t::put(
-  uint32_t offset, uint32_t length,
+  uint64_t offset, uint32_t length,
   vector<bluestore_pextent_t> *release)
 {
-  map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
       assert(0 == "put on missing extent (nothing before)");
@@ -249,9 +250,9 @@ void bluestore_extent_ref_map_t::put(
     }
   }
   if (p->first < offset) {
-    uint32_t left = p->first + p->second.length - offset;
+    uint64_t left = p->first + p->second.length - offset;
     p->second.length = offset - p->first;
-    p = ref_map.insert(map<uint32_t,record_t>::value_type(
+    p = ref_map.insert(map<uint64_t,record_t>::value_type(
 			 offset, record_t(left, p->second.refs))).first;
   }
   while (length > 0) {
@@ -288,9 +289,9 @@ void bluestore_extent_ref_map_t::put(
   _check();
 }
 
-bool bluestore_extent_ref_map_t::contains(uint32_t offset, uint32_t length) const
+bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const
 {
-  map<uint32_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
       return false; // nothing before
@@ -307,7 +308,7 @@ bool bluestore_extent_ref_map_t::contains(uint32_t offset, uint32_t length) cons
       return false;
     if (p->first + p->second.length >= offset + length)
       return true;
-    uint32_t overlap = p->first + p->second.length - offset;
+    uint64_t overlap = p->first + p->second.length - offset;
     offset += overlap;
     length -= overlap;
     ++p;
@@ -316,10 +317,10 @@ bool bluestore_extent_ref_map_t::contains(uint32_t offset, uint32_t length) cons
 }
 
 bool bluestore_extent_ref_map_t::intersects(
-  uint32_t offset,
+  uint64_t offset,
   uint32_t length) const
 {
-  map<uint32_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  auto p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
@@ -341,10 +342,10 @@ void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
     auto p = ref_map.begin();
     small_encode_varint_lowz(p->first, bl);
     p->second.encode(bl);
-    int32_t pos = p->first;
+    int64_t pos = p->first;
     while (--n) {
       ++p;
-      small_encode_varint_lowz((int64_t)p->first - pos, bl);
+      small_encode_varint_lowz(p->first - pos, bl);
       p->second.encode(bl);
       pos = p->first;
     }
@@ -381,7 +382,8 @@ void bluestore_extent_ref_map_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluestore_extent_ref_map_t::generate_test_instances(list<bluestore_extent_ref_map_t*>& o)
+void bluestore_extent_ref_map_t::generate_test_instances(
+  list<bluestore_extent_ref_map_t*>& o)
 {
   o.push_back(new bluestore_extent_ref_map_t);
   o.push_back(new bluestore_extent_ref_map_t);
