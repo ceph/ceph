@@ -3905,6 +3905,9 @@ void RGWPutACLs::execute()
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   }
+  if (op_ret == -ECANCELED) {
+    op_ret = 0; /* lost a race, but it's ok because acls are immutable */
+  }
 }
 
 static void get_lc_oid(struct req_state *s, string& oid)
