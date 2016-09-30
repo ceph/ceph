@@ -87,6 +87,7 @@ enum {
   l_bluestore_write_small_new,
   l_bluestore_txc,
   l_bluestore_onode_reshard,
+  l_bluestore_gc_bytes,
   l_bluestore_last
 };
 
@@ -505,12 +506,13 @@ public:
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
+    uint8_t  blob_depth;              /// blob overlapping count
     BlobRef blob;                     ///< the blob with our data
 
     explicit Extent() {}
     explicit Extent(uint32_t lo) : logical_offset(lo) {}
-    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
-      : logical_offset(lo), blob_offset(o), length(l), blob(b) {}
+    Extent(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b)
+      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd), blob(b){}
 
     // comparators for intrusive_set
     friend bool operator<(const Extent &a, const Extent &b) {
@@ -621,8 +623,8 @@ public:
     extent_map_t::iterator seek_lextent(uint64_t offset);
 
     /// add a new Extent
-    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
-      extent_map.insert(*new Extent(lo, o, l, b));
+    void add(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b) {
+      extent_map.insert(*new Extent(lo, o, l, bd, b));
     }
 
     /// remove (and delete) an Extent
@@ -644,8 +646,8 @@ public:
     /// put new lextent into lextent_map overwriting existing ones if
     /// any and update references accordingly
     Extent *set_lextent(uint64_t logical_offset,
-			uint64_t offset, uint64_t length, BlobRef b,
-			extent_map_t *old_extents);
+			uint64_t offset, uint64_t length, uint8_t blob_depth,
+                        BlobRef b, extent_map_t *old_extents);
 
   };
 
@@ -1722,6 +1724,7 @@ private:
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
+    uint8_t blob_depth = 0;       ///< depth of the logical extent
     unsigned csum_order = 0;     ///< target checksum chunk order
 
     extent_map_t old_extents;       ///< must deref these blobs
@@ -1778,12 +1781,28 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+
+  bool _blobs_need_garbage_collection(OnodeRef o,
+                          uint64_t start_offset,
+                          uint64_t end_offset,
+                          uint8_t  *blob_depth,
+                          uint64_t *gc_start_offset,
+                          uint64_t *gc_end_offset);
+
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
 		bufferlist& bl,
 		uint32_t fadvise_flags);
+  void _do_write_data(TransContext *txc,
+                      CollectionRef& c,
+                      OnodeRef o,
+                      uint64_t offset,
+                      uint64_t length,
+                      bufferlist& bl,
+                      WriteContext *wctx);
+
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o);

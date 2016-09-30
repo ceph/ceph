@@ -896,6 +896,243 @@ TEST_P(StoreTest, CompressionTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, garbageCollection) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  int64_t waste1, waste2;
+  coll_t cid;
+  int buf_len = 256 * 1024;
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_merge_gc_data", "true"); 
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 5, in);
+    ASSERT_EQ(-ENOENT, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  std::string data;
+  data.resize(buf_len);
+
+  {
+    { 
+      bool exists = store->exists(cid, hoid);
+      ASSERT_TRUE(!exists);
+
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+
+      exists = store->exists(cid, hoid);
+      ASSERT_EQ(true, exists);
+    } 
+    bufferlist bl;
+
+    for(size_t i = 0; i < data.size(); i++)
+      data[i] = 'R';
+
+    bl.append(data);
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 0, bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, buf_len - 4096, bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 2 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      waste1 = statfs.allocated - statfs.stored;
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 3 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      waste2 = statfs.allocated - statfs.stored;
+      ASSERT_GE(waste1, waste2);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      cerr << "Cleaning" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+  {
+    {
+      bool exists = store->exists(cid, hoid);
+      ASSERT_TRUE(!exists);
+
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+
+      exists = store->exists(cid, hoid);
+      ASSERT_EQ(true, exists);
+    } 
+    bufferlist bl;
+
+    for(size_t i = 0; i < data.size(); i++)
+      data[i] = i  % 256;
+    bl.append(data);
+
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 3 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 2 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, buf_len - 4096, bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      waste1 = statfs.allocated - statfs.stored;
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 50 * 1024, bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      waste2 = statfs.allocated - statfs.stored;
+      ASSERT_GE(waste1, waste2);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      cerr << "Cleaning" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+     }
+  }
+  {
+    {
+      bool exists = store->exists(cid, hoid);
+      ASSERT_TRUE(!exists);
+
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+
+      exists = store->exists(cid, hoid);
+      ASSERT_EQ(true, exists);
+    } 
+    bufferlist bl;
+    for(size_t i = 0; i < data.size(); i++)
+      data[i] = i  % 256;
+    bl.append(data);
+
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 5 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 4 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 3 * (buf_len - 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, buf_len - 4096, bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 40 * 1024, bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      waste1 = statfs.allocated - statfs.stored;
+    }
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid, 5 * (buf_len - 3 * 4096), bl.length(), bl);
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      struct store_statfs_t statfs;
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      waste2 = statfs.allocated - statfs.stored;
+      ASSERT_GE(waste1, waste2);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      t.remove_collection(cid);
+      cerr << "Cleaning" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+     }
+  }
+  g_conf->set_val("bluestore_compression", "none");
+  g_ceph_context->_conf->apply_changes(NULL);
+}
+
 TEST_P(StoreTest, SimpleObjectTest) {
   ObjectStore::Sequencer osr("test");
   int r;
