@@ -1164,9 +1164,9 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
 {
   out << "SharedBlob(" << &sb;
-  if (sb.parent_set) {
-    out << " shared sbid 0x" << std::hex << sb.sbid << std::dec
-	<< " parent_set " << sb.parent_set;
+  if (sb.sbid) {
+    out << " sbid 0x" << std::hex << sb.sbid << std::dec;
+    assert(sb.parent_set);
   }
   if (sb.loaded) {
     out << " loaded " << sb.shared_blob;
