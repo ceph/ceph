@@ -1311,7 +1311,7 @@ void RGWPutObj_ObjStore_S3::send_response()
 	s->cct->_conf->rgw_s3_success_create_obj_status);
       set_req_state_err(s, op_ret);
     }
-    if (!s->info.env->get("HTTP_X_AMZ_COPY_SOURCE")) {
+    if (!copy_source) {
       dump_etag(s, etag.c_str());
       dump_content_length(s, 0);
     } else {
