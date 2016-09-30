@@ -194,7 +194,7 @@ static string pretty_binary_string(const string& in)
 
 static void _key_encode_shard(shard_id_t shard, string *key)
 {
-  key->push_back((char)((uint8_t)shard + (uint8_t)0x80));
+  key->push_back((char)((uint8_t)shard.id + (uint8_t)0x80));
 }
 static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
 {
