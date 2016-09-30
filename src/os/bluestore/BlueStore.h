@@ -1071,7 +1071,6 @@ public:
 
       void encode(bufferlist& bl) {
         for (size_t i = 0; i < STATFS_LAST; i++) {
-          //::encode(ceph_le64(values[i]), bl);
           ::encode(values[i], bl);
         }
       }
@@ -1088,15 +1087,6 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
-    struct DeferredCsum {
-      BlobRef blob;
-      uint64_t b_off;
-      bufferlist data;
-
-      DeferredCsum(BlobRef& b, uint64_t bo, bufferlist& bl)
-	: blob(b), b_off(bo), data(bl) {}
-    };
-
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -1108,11 +1098,9 @@ public:
 	wal_txn(NULL),
 	ioc(this),
 	start(ceph_clock_now(g_ceph_context)) {
-      //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
       delete wal_txn;
-      //cout << "txc del " << this << std::endl;
     }
 
     void write_onode(OnodeRef &o) {
