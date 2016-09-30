@@ -264,7 +264,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     obj.set_in_extra_data(true);
   } else {
     obj = rgw_obj(bucket, object.name);
-    obj.set_instance(s->object.instance);
+    obj.set_instance(object.instance);
   }
   int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj);
   if (ret == -ENOENT && !object.empty()) {
