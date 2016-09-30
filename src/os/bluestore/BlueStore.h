@@ -523,6 +523,11 @@ public:
       return a.logical_offset == b.logical_offset;
     }
 
+    uint32_t blob_end() {
+      return logical_offset + blob->get_blob().get_logical_length() -
+	blob_offset;
+    }
+
     bool blob_escapes_range(uint32_t o, uint32_t l) {
       uint32_t bstart = logical_offset - blob_offset;
       return (bstart < o ||
