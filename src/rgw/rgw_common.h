@@ -1357,8 +1357,6 @@ struct req_state {
   string req_id;
   string trans_id;
 
-  const char *copy_source;
-
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
 };
