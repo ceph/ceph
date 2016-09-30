@@ -1767,10 +1767,12 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
     // As additional checks:
     // - if the Host header is an IP, we're using path-style access without DNS
     // - Also check that the Host header is a valid bucket name before using it.
+    // - Don't enable virtual hosting if no hostnames are configured
     if (subdomain.empty()
         && (domain.empty() || domain != info.host)
         && !looks_like_ip_address(info.host.c_str())
-        && RGWHandler_REST::validate_bucket_name(info.host) == 0) {
+        && RGWHandler_REST::validate_bucket_name(info.host) == 0
+        && !(hostnames_set.empty() && hostnames_s3website_set.empty())) {
       subdomain.append(info.host);
       in_hosted_domain = 1;
     }
