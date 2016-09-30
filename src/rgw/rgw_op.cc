@@ -2491,6 +2491,11 @@ int RGWPutObj::verify_permission()
     rgw_bucket cs_bucket(copy_source_bucket_info.bucket);
     rgw_obj_key cs_object(copy_source_object_name, copy_source_version_id);
 
+    rgw_obj obj(cs_bucket, cs_object.name);
+    obj.set_instance(cs_object.instance);
+    store->set_atomic(s->obj_ctx, obj);
+    store->set_prefetch_data(s->obj_ctx, obj);
+
     /* check source object permissions */
     if (read_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_policy, cs_bucket, cs_object) < 0) {
       return -EACCES;
