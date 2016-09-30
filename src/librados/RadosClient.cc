@@ -68,6 +68,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     conf(cct_->_conf),
     state(DISCONNECTED),
     monclient(cct_),
+    mgrclient(cct_, nullptr),
     messenger(NULL),
     instance_id(0),
     objecter(NULL),
@@ -262,15 +263,18 @@ int librados::RadosClient::connect()
   objecter->set_balanced_budget();
 
   monclient.set_messenger(messenger);
+  mgrclient.set_messenger(messenger);
 
   objecter->init();
+  messenger->add_dispatcher_head(&mgrclient);
   messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
 
   messenger->start();
 
   ldout(cct, 1) << "setting wanted keys" << dendl;
-  monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
+  monclient.set_want_keys(
+      CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MGR);
   ldout(cct, 1) << "calling monclient init" << dendl;
   err = monclient.init();
   if (err) {
@@ -287,13 +291,17 @@ int librados::RadosClient::connect()
   }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
+  // MgrClient needs this (it doesn't have MonClient reference itself)
+  monclient.sub_want("mgrmap", 0, 0);
+  monclient.renew_subs();
+
+  mgrclient.init();
+
   objecter->set_client_incarnation(0);
   objecter->start();
   lock.Lock();
 
   timer.init();
-
-  monclient.renew_subs();
 
   finisher.start();
 
@@ -350,6 +358,8 @@ void librados::RadosClient::shutdown()
   if (need_objecter) {
     objecter->shutdown();
   }
+  mgrclient.shutdown();
+
   monclient.shutdown();
   if (messenger) {
     messenger->shutdown();
@@ -801,6 +811,24 @@ int librados::RadosClient::mon_command(const vector<string>& cmd,
   return rval;
 }
 
+
+int librados::RadosClient::mgr_command(const vector<string>& cmd,
+				       const bufferlist &inbl,
+				       bufferlist *outbl, string *outs)
+{
+  Mutex::Locker l(lock);
+
+  C_SaferCond cond;
+  mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+
+  lock.Unlock();
+  int r = cond.wait();
+  lock.Lock();
+
+  return r;
+}
+
+
 int librados::RadosClient::mon_command(int rank, const vector<string>& cmd,
 				       const bufferlist &inbl,
 				       bufferlist *outbl, string *outs)
@@ -926,6 +954,7 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
   // (re)start watch
   ldout(cct, 10) << __func__ << " add cb " << (void*)cb << " level " << level << dendl;
   monclient.sub_want(watch_level, 0, 0);
+
   monclient.renew_subs();
   log_cb = cb;
   log_cb_arg = arg;

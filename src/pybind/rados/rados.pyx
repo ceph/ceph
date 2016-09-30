@@ -155,6 +155,10 @@ cdef extern from "rados/librados.h" nogil:
                           const char *inbuf, size_t inbuflen,
                           char **outbuf, size_t *outbuflen,
                           char **outs, size_t *outslen)
+    int rados_mgr_command(rados_t cluster, const char **cmd, size_t cmdlen,
+                          const char *inbuf, size_t inbuflen,
+                          char **outbuf, size_t *outbuflen,
+                          char **outs, size_t *outslen)
     int rados_mon_command_target(rados_t cluster, const char *name, const char **cmd, size_t cmdlen,
                                  const char *inbuf, size_t inbuflen,
                                  char **outbuf, size_t *outbuflen,
@@ -1210,6 +1214,47 @@ Rados object in state %s." % self.state)
         try:
             with nogil:
                 ret = rados_osd_command(self.cluster, _osdid,
+                                        <const char **>_cmd, _cmdlen,
+                                        <const char*>_inbuf, _inbuf_len,
+                                        &_outbuf, &_outbuf_len,
+                                        &_outs, &_outs_len)
+
+            my_outs = decode_cstr(_outs[:_outs_len])
+            my_outbuf = _outbuf[:_outbuf_len]
+            if _outs_len:
+                rados_buffer_free(_outs)
+            if _outbuf_len:
+                rados_buffer_free(_outbuf)
+            return (ret, my_outbuf, my_outs)
+        finally:
+            free(_cmd)
+
+    def mgr_command(self, cmd, inbuf, timeout=0):
+        """
+        returns (int ret, string outbuf, string outs)
+        """
+        # NOTE(sileht): timeout is ignored because C API doesn't provide
+        # timeout argument, but we keep it for backward compat with old python binding
+        self.require_state("connected")
+
+        cmd = cstr_list(cmd, 'cmd')
+        inbuf = cstr(inbuf, 'inbuf')
+
+        cdef:
+            char **_cmd = to_bytes_array(cmd)
+            size_t _cmdlen = len(cmd)
+
+            char *_inbuf = inbuf
+            size_t _inbuf_len = len(inbuf)
+
+            char *_outbuf
+            size_t _outbuf_len
+            char *_outs
+            size_t _outs_len
+
+        try:
+            with nogil:
+                ret = rados_mgr_command(self.cluster,
                                         <const char **>_cmd, _cmdlen,
                                         <const char*>_inbuf, _inbuf_len,
                                         &_outbuf, &_outbuf_len,

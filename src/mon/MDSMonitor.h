@@ -40,8 +40,6 @@ class MDSMonitor : public PaxosService {
  public:
   // mds maps
   FSMap fsmap;           // current
-  bufferlist fsmap_bl;   // encoded
-
   FSMap pending_fsmap;  // current + pending updates
 
   // my helpers

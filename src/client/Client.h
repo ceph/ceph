@@ -42,6 +42,7 @@ using std::fstream;
 #include "common/Finisher.h"
 #include "common/compiler_extensions.h"
 #include "common/cmdparse.h"
+#include "common/CommandTable.h"
 
 #include "osdc/ObjectCacher.h"
 
@@ -83,14 +84,12 @@ enum {
 };
 
 
-struct CommandOp
+class MDSCommandOp : public CommandOp
 {
-  ConnectionRef con;
+  public:
   mds_gid_t     mds_gid;
-  ceph_tid_t    tid;
-  Context      *on_finish;
-  bufferlist   *outbl;
-  std::string  *outs;
+
+  MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
 };
 
 /* error code for ceph_fuse */
@@ -326,7 +325,7 @@ protected:
   FSMapUser *fsmap_user;
 
   // MDS command state
-  std::map<ceph_tid_t, CommandOp> commands;
+  CommandTable<MDSCommandOp> command_table;
   void handle_command_reply(MCommandReply *m);
   int fetch_fsmap(bool user);
   int resolve_mds(

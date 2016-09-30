@@ -1645,6 +1645,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   client_messenger(external_messenger),
   objecter_messenger(osdc_messenger),
   monc(mc),
+  mgrc(cct_, client_messenger),
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
@@ -2174,10 +2175,48 @@ int OSD::init()
 
   objecter_messenger->add_dispatcher_head(service.objecter);
 
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD
+                      | CEPH_ENTITY_TYPE_MGR);
   r = monc->init();
   if (r < 0)
     goto out;
+
+  /**
+   * FIXME: this is a placeholder implementation that unconditionally
+   * sends every is_primary PG's stats every time we're called, unlike
+   * the existing mon PGStats mechanism that uses pg_stat_queue and acks.
+   * This has equivalent cost to the existing worst case where all
+   * PGs are busy and their stats are always enqueued for sending.
+   */
+  mgrc.set_pgstats_cb([this](){
+      RWLock::RLocker l(map_lock);
+      
+      utime_t had_for = ceph_clock_now(cct) - had_map_since;
+      osd_stat_t cur_stat = service.get_osd_stat();
+      cur_stat.fs_perf_stat = store->get_cur_stats();
+
+      MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+      m->osd_stat = cur_stat;
+
+      RWLock::RLocker lpg(pg_map_lock);
+      for (const auto &i : pg_map) {
+        PG *pg = i.second;
+        if (!pg->is_primary()) {
+          continue;
+        }
+
+        pg->pg_stats_publish_lock.Lock();
+        if (pg->pg_stats_publish_valid) {
+          m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
+        }
+        pg->pg_stats_publish_lock.Unlock();
+      }
+
+      return m;
+  });
+
+  mgrc.init();
+  client_messenger->add_dispatcher_head(&mgrc);
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
@@ -2252,6 +2291,9 @@ int OSD::init()
   // subscribe to any pg creations
   monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
 
+  // MgrClient needs this (it doesn't have MonClient reference itself)
+  monc->sub_want("mgrmap", 0, 0);
+
   // we don't need to ask for an osdmap here; objecter will
   //monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
 
@@ -2261,6 +2303,7 @@ int OSD::init()
 
   return 0;
 monout:
+  mgrc.shutdown();
   monc->shutdown();
 
 out:
@@ -2757,6 +2800,7 @@ int OSD::shutdown()
   store = 0;
   dout(10) << "Store synced" << dendl;
 
+  mgrc.shutdown();
   monc->shutdown();
   osd_lock.Unlock();
 
@@ -4730,7 +4774,8 @@ void OSD::ms_handle_connect(Connection *con)
 
 void OSD::ms_handle_fast_connect(Connection *con)
 {
-  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
+      con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(cct);
@@ -4748,7 +4793,8 @@ void OSD::ms_handle_fast_connect(Connection *con)
 
 void OSD::ms_handle_fast_accept(Connection *con)
 {
-  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
+      con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(cct);
@@ -4976,8 +5022,6 @@ void OSD::_send_boot()
 
 void OSD::_collect_metadata(map<string,string> *pm)
 {
-  (*pm)["ceph_version"] = pretty_version_to_str();
-
   // config info
   (*pm)["osd_data"] = dev_path;
   (*pm)["osd_journal"] = journal_path;
@@ -5837,6 +5881,7 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
+  dout(20) << "OSD::ms_dispatch: " << *m << dendl;
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
     service.got_stop_ack();
     m->put();
@@ -6010,11 +6055,14 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   if (force_new) {
     /* the MonClient checks keys every tick(), so we should just wait for that cycle
        to get through */
-    if (monc->wait_auth_rotating(10) < 0)
+    if (monc->wait_auth_rotating(10) < 0) {
+      derr << "OSD::ms_get_authorizer wait_auth_rotating failed" << dendl;
       return false;
+    }
   }
 
   *authorizer = monc->auth->build_authorizer(dest_type);
+  derr << "OSD::ms_get_authorizer build_authorizer returned " << *authorizer << dendl;
   return *authorizer != NULL;
 }
 
@@ -6031,6 +6079,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
      * this makes the 'cluster' consistent w/ monitor's usage.
      */
   case CEPH_ENTITY_TYPE_OSD:
+  case CEPH_ENTITY_TYPE_MGR:
     authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
     break;
   default:

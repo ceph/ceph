@@ -142,6 +142,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   assert(version > fsmap.epoch);
 
   // read and decode
+  bufferlist fsmap_bl;
   fsmap_bl.clear();
   int err = get_version(version, fsmap_bl);
   assert(err == 0);

@@ -215,6 +215,7 @@ void Beacon::_send()
   if (want_state == MDSMap::STATE_BOOT) {
     map<string, string> sys_info;
     collect_sys_info(&sys_info, cct);
+    sys_info["addr"] = stringify(monc->get_myaddr());
     beacon->set_sys_info(sys_info);
   }
   monc->send_mon_message(beacon);

@@ -68,52 +68,6 @@ enum perfcounter_type_d
 class PerfCounters
 {
 public:
-  template <typename T>
-  struct avg_tracker {
-    pair<uint64_t, T> last;
-    pair<uint64_t, T> cur;
-    avg_tracker() : last(0, 0), cur(0, 0) {}
-    T avg() const {
-      if (cur.first == last.first)
-	return cur.first ?
-	  cur.second / cur.first :
-	  0; // no change, report avg over all time
-      return (cur.second - last.second) / (cur.first - last.first);
-    }
-    void consume_next(const pair<uint64_t, T> &next) {
-      last = cur;
-      cur = next;
-    }
-  };
-
-  ~PerfCounters();
-
-  void inc(int idx, uint64_t v = 1);
-  void dec(int idx, uint64_t v = 1);
-  void set(int idx, uint64_t v);
-  uint64_t get(int idx) const;
-
-  void tset(int idx, utime_t v);
-  void tinc(int idx, utime_t v);
-  void tinc(int idx, ceph::timespan v);
-  utime_t tget(int idx) const;
-
-  void reset();
-  void dump_formatted(ceph::Formatter *f, bool schema,
-      const std::string &counter = "");
-  pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
-
-  const std::string& get_name() const;
-  void set_name(std::string s) {
-    m_name = s;
-  }
-
-private:
-  PerfCounters(CephContext *cct, const std::string &name,
-	     int lower_bound, int upper_bound);
-  PerfCounters(const PerfCounters &rhs);
-  PerfCounters& operator=(const PerfCounters &rhs);
-
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d {
     perf_counter_data_any_d()
@@ -176,6 +130,53 @@ private:
       return make_pair(sum, count);
     }
   };
+
+  template <typename T>
+  struct avg_tracker {
+    pair<uint64_t, T> last;
+    pair<uint64_t, T> cur;
+    avg_tracker() : last(0, 0), cur(0, 0) {}
+    T avg() const {
+      if (cur.first == last.first)
+	return cur.first ?
+	  cur.second / cur.first :
+	  0; // no change, report avg over all time
+      return (cur.second - last.second) / (cur.first - last.first);
+    }
+    void consume_next(const pair<uint64_t, T> &next) {
+      last = cur;
+      cur = next;
+    }
+  };
+
+  ~PerfCounters();
+
+  void inc(int idx, uint64_t v = 1);
+  void dec(int idx, uint64_t v = 1);
+  void set(int idx, uint64_t v);
+  uint64_t get(int idx) const;
+
+  void tset(int idx, utime_t v);
+  void tinc(int idx, utime_t v);
+  void tinc(int idx, ceph::timespan v);
+  utime_t tget(int idx) const;
+
+  void reset();
+  void dump_formatted(ceph::Formatter *f, bool schema,
+      const std::string &counter = "");
+  pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
+
+  const std::string& get_name() const;
+  void set_name(std::string s) {
+    m_name = s;
+  }
+
+private:
+  PerfCounters(CephContext *cct, const std::string &name,
+	     int lower_bound, int upper_bound);
+  PerfCounters(const PerfCounters &rhs);
+  PerfCounters& operator=(const PerfCounters &rhs);
+
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
   CephContext *m_cct;
@@ -190,6 +191,7 @@ private:
   perf_counter_data_vec_t m_data;
 
   friend class PerfCountersBuilder;
+  friend class PerfCountersCollection;
 };
 
 class SortPerfCountersByName {
@@ -218,6 +220,12 @@ public:
       bool schema,
       const std::string &logger = "",
       const std::string &counter = "");
+
+  typedef std::map<std::string,
+          PerfCounters::perf_counter_data_any_d *> CounterMap;
+
+  void with_counters(std::function<void(const CounterMap &)>) const;
+
 private:
   CephContext *m_cct;
 
@@ -225,6 +233,8 @@ private:
   mutable Mutex m_lock;
 
   perf_counters_set_t m_loggers;
+
+  std::map<std::string, PerfCounters::perf_counter_data_any_d *> by_path; 
 
   friend class PerfCountersCollectionTest;
 };

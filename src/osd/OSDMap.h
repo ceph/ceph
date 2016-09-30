@@ -255,7 +255,6 @@ private:
   ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
 
   friend class OSDMonitor;
-  friend class PGMonitor;
 
  public:
   OSDMap() : epoch(0), 
