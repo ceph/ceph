@@ -77,6 +77,23 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
+struct ReplicatedPG::C_OSD_OnApplied : Context {
+  ReplicatedPGRef pg;
+  epoch_t epoch;
+  eversion_t v;
+  C_OSD_OnApplied(
+    ReplicatedPGRef pg,
+    epoch_t epoch,
+    eversion_t v)
+    : pg(pg), epoch(epoch), v(v) {}
+  void finish(int) override {
+    pg->lock();
+    if (!pg->pg_has_reset_since(epoch))
+      pg->op_applied(v);
+    pg->unlock();
+  }
+};
+
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
