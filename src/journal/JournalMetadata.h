@@ -153,6 +153,8 @@ public:
   void notify_update();
   void async_notify_update(Context *on_safe);
 
+  void wait_for_ops();
+
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::list<JournalMetadataListener*> Listeners;

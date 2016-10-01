@@ -141,6 +141,7 @@ private:
   std::string m_header_oid;
   std::string m_object_oid_prefix;
 
+  bool m_initialized = false;
   JournalMetadata *m_metadata = nullptr;
   JournalPlayer *m_player = nullptr;
   JournalRecorder *m_recorder = nullptr;
