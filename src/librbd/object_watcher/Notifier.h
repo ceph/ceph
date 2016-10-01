@@ -1,26 +1,27 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_IMAGE_WATCHER_NOTIFIER_H
-#define CEPH_LIBRBD_IMAGE_WATCHER_NOTIFIER_H
+#ifndef CEPH_LIBRBD_OBJECT_WATCHER_NOTIFIER_H
+#define CEPH_LIBRBD_OBJECT_WATCHER_NOTIFIER_H
 
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
+#include "include/rados/librados.hpp"
 #include "common/Mutex.h"
+#include "common/WorkQueue.h"
 #include <list>
 
 namespace librbd {
 
-struct ImageCtx;
-
-namespace image_watcher {
+namespace object_watcher {
 
 class Notifier {
 public:
   static const uint64_t NOTIFY_TIMEOUT;
 
-  Notifier(ImageCtx &image_ctx);
+  Notifier(ContextWQ *work_queue, librados::IoCtx &ioctx,
+           const std::string &oid);
   ~Notifier();
 
   void flush(Context *on_finish);
@@ -41,7 +42,10 @@ private:
     }
   };
 
-  ImageCtx &m_image_ctx;
+  ContextWQ *m_work_queue;
+  librados::IoCtx m_ioctx;
+  CephContext *m_cct;
+  std::string m_oid;
 
   Mutex m_aio_notify_lock;
   size_t m_pending_aio_notifies = 0;
@@ -51,7 +55,7 @@ private:
 
 };
 
-} // namespace image_watcher
+} // namespace object_watcher
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_IMAGE_WATCHER_NOTIFIER_H
+#endif // CEPH_LIBRBD_OBJECT_WATCHER_NOTIFIER_H
