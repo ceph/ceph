@@ -1029,6 +1029,12 @@ void JournalMetadata::async_notify_update(Context *on_safe) {
   comp->release();
 }
 
+void JournalMetadata::wait_for_ops() {
+  C_SaferCond ctx;
+  m_async_op_tracker.wait_for_ops(&ctx);
+  ctx.wait();
+}
+
 void JournalMetadata::handle_notified(int r) {
   ldout(m_cct, 10) << "notified journal header update: r=" << r << dendl;
 }
