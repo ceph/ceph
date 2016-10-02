@@ -78,6 +78,7 @@ public:
   bool init(const std::string &path);
 
   void chown(uid_t uid, gid_t gid);
+  void chmod(mode_t mode);
 
 private:
   AdminSocket(const AdminSocket& rhs);
