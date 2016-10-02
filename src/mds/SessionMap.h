@@ -104,9 +104,7 @@ public:
 
   void push_pv(version_t pv)
   {
-    if (!projected.empty()) {
-      assert(projected.back() != pv);
-    }
+    assert(projected.empty() || projected.back() != pv);
     projected.push_back(pv);
   }
 
