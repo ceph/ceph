@@ -1301,7 +1301,6 @@ void ReplicatedBackend::calc_head_subsets(
     data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
     dout(10) << "calc_head_subsets " << head
              << "  data_subset " << data_subset << dendl;
-    return;
   }
 
   if (get_parent()->get_pool().allow_incomplete_clones()) {
@@ -1317,33 +1316,38 @@ void ReplicatedBackend::calc_head_subsets(
 
   interval_set<uint64_t> cloning;
   interval_set<uint64_t> prev;
+  hobject_t c = head;
   if (size)
     prev.insert(0, size);
 
   for (int j=snapset.clones.size()-1; j>=0; j--) {
-    hobject_t c = head;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
     if (!missing.is_missing(c) &&
 	cmp(c, last_backfill, get_parent()->sort_bitwise()) < 0) {
       dout(10) << "calc_head_subsets " << head << " has prev " << c
 	       << " overlap " << prev << dendl;
-      clone_subsets[c] = prev;
-      cloning.union_of(prev);
+      cloning = prev;
       break;
     }
     dout(10) << "calc_head_subsets " << head << " does not have prev " << c
 	     << " overlap " << prev << dendl;
   }
 
+  cloning.intersection_of(data_subset);
+  if (cloning.empty()) {
+    dout(10) << "skipping clone, nothing needs to clone" << dendl;
+    return;
+  }
 
   if (cloning.num_intervals() > cct->_conf->osd_recover_clone_overlap_limit) {
     dout(10) << "skipping clone, too many holes" << dendl;
-    clone_subsets.clear();
     cloning.clear();
+    return;
   }
 
   // what's left for us to push?
+  clone_subset[c] = cloning;
   data_subset.subtract(cloning);
 
   dout(10) << "calc_head_subsets " << head
