@@ -11230,7 +11230,8 @@ bool ReplicatedPG::_range_available_for_scrub(
   next.second = object_contexts.lookup(begin);
   next.first = begin;
   bool more = true;
-  while (more && next.first < end) {
+  // inclusive upper bound, @see write_blocked_by_scrub
+  while (more && next.first <= end) {
     if (next.second && next.second->is_blocked()) {
       next.second->requeue_scrub_on_unblock = true;
       dout(10) << __func__ << ": scrub delayed, "
