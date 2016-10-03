@@ -13,20 +13,6 @@
 #
 
 #
-# Return true if the working tree is after the release that made
-# make -j8 check possible
-#
-function can_parallel_make_check() {
-    local commit=$(git rev-parse tags/v0.88^{})
-    git rev-list HEAD | grep --quiet $commit
-}
-
-function maybe_parallel_make_check() {
-    if can_parallel_make_check ; then
-        echo -j$(get_processors)
-    fi
-}
-#
 # Return MAX(1, (number of processors / 2)) by default or NPROC
 #
 function get_processors() {
@@ -43,11 +29,7 @@ function get_processors() {
 
 DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
 BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-if can_parallel_make_check ; then
-	CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-else
-	CHECK_MAKEOPTS=""
-fi
+CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
 
 function run() {
     local install_cmd
@@ -71,27 +53,16 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
-    export TMPDIR=$(mktemp -d --tmpdir ceph.XXX)
-    if test -x ./do_cmake.sh ; then
-        $DRY_RUN ./do_cmake.sh $@ || return 1
-        $DRY_RUN cd build
-        $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-        $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
-    else
-        $DRY_RUN ./autogen.sh || return 1
-        $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
-            CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
-        $DRY_RUN make $BUILD_MAKEOPTS || return 1
-        $DRY_RUN make $CHECK_MAKEOPTS check || return 1
-        $DRY_RUN make dist || return 1
-    fi
-    rm -rf $TMPDIR
+    $DRY_RUN ./do_cmake.sh $@ || return 1
+    $DRY_RUN cd build
+    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+    $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
 }
 
 function main() {
     if run "$@" ; then
-        echo "make check: successful run on $(git rev-parse HEAD)"
         rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
+        echo "cmake check: successful run on $(git rev-parse HEAD)"
         return 0
     else
         rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
