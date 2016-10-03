@@ -50,8 +50,7 @@ static string make_key(const string &prefix, const string &value)
   return out;
 }
 
-void MemDB::_encode(btree::btree_map<string,
-                      bufferptr>:: iterator iter, bufferlist &bl)
+void MemDB::_encode(mdb_iter_t iter, bufferlist &bl)
 {
   ::encode(iter->first, bl);
   ::encode(iter->second, bl);
@@ -77,8 +76,8 @@ void MemDB::_save()
     return;
   }
   bufferlist bl;
-  btree::btree_map<string, bufferptr>::iterator iter = m_btree.begin();
-  while (iter != m_btree.end()) {
+  mdb_iter_t iter = m_map.begin();
+  while (iter != m_map.end()) {
     dout(10) << __func__ << " Key:"<< iter->first << dendl;
     _encode(iter, bl);
     iter++;
@@ -123,7 +122,7 @@ int MemDB::_load()
     bytes_done += ::decode_file(fd, datap);
 
     dout(10) << __func__ << " Key:"<< key << dendl;
-    m_btree[key] = datap;
+    m_map[key] = datap;
     m_total_bytes += datap.length();
   }
   VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -266,10 +265,10 @@ int MemDB::_setkey(ms_op_t &op)
      */
     assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
-    m_btree.erase(key);
+    m_map.erase(key);
   }
 
-  m_btree[key] = bufferptr((char *) bl.c_str(), bl.length());
+  m_map[key] = bufferptr((char *) bl.c_str(), bl.length());
   iterator_seq_no++;
   return 0;
 }
@@ -288,7 +287,7 @@ int MemDB::_rmkey(ms_op_t &op)
   /*
    * Erase will call the destructor for bufferptr.
    */
-  return m_btree.erase(key);
+  return m_map.erase(key);
 }
 
 std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(std::string prefix)
@@ -328,14 +327,14 @@ int MemDB::_merge(ms_op_t &op)
      * Merge non existent.
      */
     mop->merge_nonexistent(bl.c_str(), bl.length(), &new_val);
-    m_btree[key] = bufferptr(new_val.c_str(), new_val.length());
+    m_map[key] = bufferptr(new_val.c_str(), new_val.length());
   } else {
     /*
      * Merge existing.
      */
     std::string new_val;
     mop->merge(bl_old.c_str(), bl_old.length(), bl.c_str(), bl.length(), &new_val);
-    m_btree[key] = bufferptr(new_val.c_str(), new_val.length());
+    m_map[key] = bufferptr(new_val.c_str(), new_val.length());
     bytes_adjusted -= bl_old.length();
     bl_old.clear();
   }
@@ -353,12 +352,12 @@ bool MemDB::_get(const string &prefix, const string &k, bufferlist *out)
 {
   string key = make_key(prefix, k);
 
-  btree::btree_map<string, bufferptr>::iterator iter = m_btree.find(key);
-  if (iter == m_btree.end()) {
+  mdb_iter_t iter = m_map.find(key);
+  if (iter == m_map.end()) {
     return false;
   }
 
-  out->push_back((m_btree[key].clone()));
+  out->push_back((m_map[key].clone()));
   return true;
 }
 
@@ -406,14 +405,37 @@ bool MemDB::MDBWholeSpaceIteratorImpl::valid()
 }
 
 bool MemDB::MDBWholeSpaceIteratorImpl::iterator_validate() {
+
   if (this_seq_no != *global_seq_no) {
     auto key = m_key_value.first;
     assert(!key.empty());
-    m_iter = m_btree_p->lower_bound(key);
-    if (m_iter == m_btree_p->end()) {
-      return false;
+
+    bool restart_iter = false;
+    if (!m_using_btree) {
+      /*
+       * Map is modified and marker key does not exists, 
+       * restart the iterator from next key.
+       */
+      if (m_map_p->find(key) == m_map_p->end()) {
+        restart_iter = true;
+      }
+    } else {
+      restart_iter = true;
     }
+
+    if (restart_iter) {
+      m_iter = m_map_p->lower_bound(key);
+      if (m_iter == m_map_p->end()) {
+        return false;
+      }
+    }
+
+    /*
+     * This iter is valid now.
+     */
+    this_seq_no = *global_seq_no;
   }
+
   return true;
 }
 
@@ -455,14 +477,14 @@ bufferlist MemDB::MDBWholeSpaceIteratorImpl::value()
 
 int MemDB::MDBWholeSpaceIteratorImpl::next()
 {
-  std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  std::lock_guard<std::mutex> l(*m_map_lock_p);
   if (!iterator_validate()) {
     free_last();
     return -1;
   }
   free_last();
   m_iter++;
-  if (m_iter != m_btree_p->end()) {
+  if (m_iter != m_map_p->end()) {
     fill_current();
     return 0;
   } else {
@@ -472,13 +494,13 @@ int MemDB::MDBWholeSpaceIteratorImpl::next()
 
 int MemDB::MDBWholeSpaceIteratorImpl:: prev()
 {
-  std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  std::lock_guard<std::mutex> l(*m_map_lock_p);
   if (!iterator_validate()) {
     free_last();
     return -1;
   }
   free_last();
-  if (m_iter != m_btree_p->begin()) {
+  if (m_iter != m_map_p->begin()) {
     m_iter--;
     fill_current();
     return 0;
@@ -492,15 +514,15 @@ int MemDB::MDBWholeSpaceIteratorImpl:: prev()
  */
 int MemDB::MDBWholeSpaceIteratorImpl::seek_to_first(const std::string &k)
 {
-  std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  std::lock_guard<std::mutex> l(*m_map_lock_p);
   free_last();
   if (k.empty()) {
-    m_iter = m_btree_p->begin();
+    m_iter = m_map_p->begin();
   } else {
-    m_iter = m_btree_p->lower_bound(k);
+    m_iter = m_map_p->lower_bound(k);
   }
   
-  if (m_iter == m_btree_p->end()) {
+  if (m_iter == m_map_p->end()) {
     return -1;
   }
   fill_current();
@@ -509,16 +531,16 @@ int MemDB::MDBWholeSpaceIteratorImpl::seek_to_first(const std::string &k)
 
 int MemDB::MDBWholeSpaceIteratorImpl::seek_to_last(const std::string &k)
 {
-  std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  std::lock_guard<std::mutex> l(*m_map_lock_p);
   free_last();
   if (k.empty()) {
-    m_iter = m_btree_p->end();
+    m_iter = m_map_p->end();
     m_iter--;
   } else {
-    m_iter = m_btree_p->lower_bound(k);
+    m_iter = m_map_p->lower_bound(k);
   }
 
-  if (m_iter == m_btree_p->end()) {
+  if (m_iter == m_map_p->end()) {
     return -1;
   }
   fill_current();
@@ -538,12 +560,12 @@ KeyValueDB::WholeSpaceIterator MemDB::_get_snapshot_iterator()
 int MemDB::MDBWholeSpaceIteratorImpl::upper_bound(const std::string &prefix,
     const std::string &after) {
 
-  std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  std::lock_guard<std::mutex> l(*m_map_lock_p);
 
   dtrace << "upper_bound " << prefix.c_str() << after.c_str() << dendl;
   string k = make_key(prefix, after);
-  m_iter = m_btree_p->upper_bound(k);
-  if (m_iter != m_btree_p->end()) {
+  m_iter = m_map_p->upper_bound(k);
+  if (m_iter != m_map_p->end()) {
     fill_current();
     return 0;
   }
@@ -552,11 +574,11 @@ int MemDB::MDBWholeSpaceIteratorImpl::upper_bound(const std::string &prefix,
 
 int MemDB::MDBWholeSpaceIteratorImpl::lower_bound(const std::string &prefix,
     const std::string &to) {
-  std::lock_guard<std::mutex> l(*m_btree_lock_p);
+  std::lock_guard<std::mutex> l(*m_map_lock_p);
   dtrace << "lower_bound " << prefix.c_str() << to.c_str() << dendl;
   string k = make_key(prefix, to);
-  m_iter = m_btree_p->lower_bound(k);
-  if (m_iter != m_btree_p->end()) {
+  m_iter = m_map_p->lower_bound(k);
+  if (m_iter != m_map_p->end()) {
     fill_current();
     return 0;
   }
