@@ -75,6 +75,8 @@ enum {
   l_bluestore_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
+  l_bluestore_extents,
+  l_bluestore_blobs,
   l_bluestore_buffers,
   l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
@@ -207,10 +209,17 @@ public:
     Cache *cache;
     map<uint64_t, state_list_t> writing_map;
 
-    BufferSpace(Cache *c) : cache(c) {}
+    BufferSpace(Cache *c) : cache(c) {
+      if (cache) {
+	cache->add_blob();
+      }
+    }
     ~BufferSpace() {
       assert(buffer_map.empty());
       assert(writing_map.empty());
+      if (cache) {
+	cache->rm_blob();
+      }
     }
 
     void _add_buffer(Buffer *b, int level, Buffer *near) {
@@ -512,10 +521,24 @@ public:
     uint8_t  blob_depth;              /// blob overlapping count
     BlobRef blob;                     ///< the blob with our data
 
-    explicit Extent() {}
-    explicit Extent(uint32_t lo) : logical_offset(lo) {}
+    /// ctor for lookup only
+    explicit Extent(uint32_t lo) : logical_offset(lo) { }
+    /// ctor for delayed intitialization (see decode_some())
+    explicit Extent(Cache *cache) {
+      cache->add_extent();
+    }
+    /// ctor for general usage
     Extent(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b)
-      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd), blob(b){}
+      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd), blob(b) {
+      if (blob) {
+	blob->shared_blob->bc.cache->add_extent();
+      }
+    }
+    ~Extent() {
+      if (blob) {
+	blob->shared_blob->bc.cache->rm_extent();
+      }
+    }
 
     // comparators for intrusive_set
     friend bool operator<(const Extent &a, const Extent &b) {
@@ -702,6 +725,9 @@ public:
     PerfCounters *logger;
     std::recursive_mutex lock;          ///< protect lru and other structures
 
+    std::atomic<uint64_t> num_extents = {0};
+    std::atomic<uint64_t> num_blobs = {0};
+
     static Cache *create(string type, PerfCounters *logger);
 
     virtual ~Cache() {}
@@ -715,9 +741,25 @@ public:
     virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
     virtual void _touch_buffer(Buffer *b) = 0;
 
+    void add_extent() {
+      ++num_extents;
+    }
+    void rm_extent() {
+      --num_extents;
+    }
+
+    void add_blob() {
+      ++num_blobs;
+    }
+    void rm_blob() {
+      --num_blobs;
+    }
+
     virtual void trim(uint64_t onode_max, uint64_t buffer_max) = 0;
 
-    virtual void add_stats(uint64_t *onodes, uint64_t *buffers,
+    virtual void add_stats(uint64_t *onodes, uint64_t *extents,
+			   uint64_t *blobs,
+			   uint64_t *buffers,
 			   uint64_t *bytes) = 0;
 
 #ifdef DEBUG_CACHE
@@ -791,10 +833,14 @@ public:
 
     void trim(uint64_t onode_max, uint64_t buffer_max) override;
 
-    void add_stats(uint64_t *onodes, uint64_t *buffers,
+    void add_stats(uint64_t *onodes, uint64_t *extents,
+		   uint64_t *blobs,
+		   uint64_t *buffers,
 		   uint64_t *bytes) override {
       std::lock_guard<std::recursive_mutex> l(lock);
       *onodes += onode_lru.size();
+      *extents += num_extents;
+      *blobs += num_blobs;
       *buffers += buffer_lru.size();
       *bytes += buffer_size;
     }
@@ -874,10 +920,14 @@ public:
 
     void trim(uint64_t onode_max, uint64_t buffer_max) override;
 
-    void add_stats(uint64_t *onodes, uint64_t *buffers,
+    void add_stats(uint64_t *onodes, uint64_t *extents,
+		   uint64_t *blobs,
+		   uint64_t *buffers,
 		   uint64_t *bytes) override {
       std::lock_guard<std::recursive_mutex> l(lock);
       *onodes += onode_lru.size();
+      *extents += num_extents;
+      *blobs += num_blobs;
       *buffers += buffer_hot.size() + buffer_warm_in.size();
       *bytes += buffer_bytes;
     }

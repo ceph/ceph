@@ -1695,7 +1695,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   uint64_t prev_len = 0;
   unsigned n = 0;
   while (!p.end()) {
-    Extent *le = new Extent();
+    Extent *le = new Extent(onode->c->cache);
     uint64_t blobid;
     small_decode_varint(blobid, p);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
@@ -2441,6 +2441,10 @@ void BlueStore::_init_logger()
     "Sum for onode-lookups hit in the cache");
   b.add_u64(l_bluestore_onode_misses, "bluestore_onode_misses",
     "Sum for onode-lookups missed in the cache");
+  b.add_u64(l_bluestore_extents, "bluestore_extents",
+	    "Number of extents in cache");
+  b.add_u64(l_bluestore_blobs, "bluestore_blobs",
+	    "Number of blobs in cache");
   b.add_u64(l_bluestore_buffers, "bluestore_buffers",
 	    "Number of buffers in cache");
   b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
@@ -4525,12 +4529,17 @@ void BlueStore::_reap_collections()
 void BlueStore::_update_cache_logger()
 {
   uint64_t num_onodes = 0;
+  uint64_t num_extents = 0;
+  uint64_t num_blobs = 0;
   uint64_t num_buffers = 0;
   uint64_t num_buffer_bytes = 0;
   for (auto c : cache_shards) {
-    c->add_stats(&num_onodes, &num_buffers, &num_buffer_bytes);
+    c->add_stats(&num_onodes, &num_extents, &num_blobs,
+		 &num_buffers, &num_buffer_bytes);
   }
   logger->set(l_bluestore_onodes, num_onodes);
+  logger->set(l_bluestore_extents, num_extents);
+  logger->set(l_bluestore_blobs, num_blobs);
   logger->set(l_bluestore_buffers, num_buffers);
   logger->set(l_bluestore_buffer_bytes, num_buffer_bytes);
 }
