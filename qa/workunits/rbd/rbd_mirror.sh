@@ -51,34 +51,50 @@ testlog "TEST: stop/start/restart mirror via admin socket"
 admin_daemon ${CLUSTER1} rbd mirror stop
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+stopped'
 
 admin_daemon ${CLUSTER1} rbd mirror start
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror restart
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror stop
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+stopped'
 
 admin_daemon ${CLUSTER1} rbd mirror restart
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+stopped'
 
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror start
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
@@ -86,6 +102,8 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
 admin_daemon ${CLUSTER1} rbd mirror flush
 admin_daemon ${CLUSTER1} rbd mirror status
