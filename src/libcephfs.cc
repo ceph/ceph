@@ -502,6 +502,13 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
   return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, st, stmask);
 }
 
+extern "C" int ceph_dirfd(struct ceph_mount_info *cmount, struct ceph_dir_result * dirp)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->dirfd(reinterpret_cast<dir_result_t*>(dirp));
+}
+
 extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
 			     char *buf, int buflen)
 {

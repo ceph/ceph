@@ -445,6 +445,38 @@ TEST(LibCephFS, DirLs) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, DirFd) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  pid_t mypid = getpid();
+  struct ceph_dir_result *dirfd = NULL;
+  char foostr[256];
+  sprintf(foostr, "dirfd%d", mypid);
+  ASSERT_EQ(ceph_mkdir(cmount, foostr, 0777), 0);
+  int fd1 = ceph_open(cmount, foostr, O_RDONLY, 0);
+  ASSERT_GT(fd1, 0);
+  ASSERT_EQ(ceph_opendir(cmount, foostr, &dirfd), 0);
+
+  int fd2 = ceph_dirfd(cmount, dirfd);
+  ASSERT_GT(fd2, 0);
+  struct stat statbuf;
+  ASSERT_EQ(ceph_fstat(cmount, fd2, &statbuf), 0);
+
+  struct dirent *result = ceph_readdir(cmount, dirfd);
+  ASSERT_TRUE(result != NULL);
+
+  ASSERT_EQ(statbuf.st_ino, result->d_ino);
+
+  ASSERT_EQ(ceph_closedir(cmount, dirfd), 0);
+  ASSERT_EQ(ceph_close(cmount, fd1), 0);
+  ASSERT_EQ(ceph_rmdir(cmount, foostr), 0);
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, ManyNestedDirs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);

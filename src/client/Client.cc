@@ -2785,8 +2785,6 @@ void Client::kick_requests_closed(MetaSession *session)
 }
 
 
-
-
 /************
  * leases
  */
@@ -7723,6 +7721,28 @@ int Client::getdir(const char *relpath, list<string>& contents)
   return gr.num;
 }
 
+int Client::dirfd(dir_result_t *dirp)
+{
+  Mutex::Locker lock(client_lock);
+
+  ldout(cct, 10) << "dirfd(" << dirp << ")" << dendl;
+  return _dirfd(dirp);
+}
+
+int Client::_dirfd(dir_result_t *dirp)
+{
+  int fd = -1;
+  for (ceph::unordered_map<int, Fh*>::iterator it = fd_map.begin();
+      it != fd_map.end(); ++it) {
+    Fh *fh = it->second;
+    if (fh->inode == dirp->inode) {
+      fd = it->first;
+      break;
+    }
+  }
+
+  return fd;
+}
 
 /****** file i/o **********/
 int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
