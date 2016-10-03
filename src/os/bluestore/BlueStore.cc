@@ -1076,13 +1076,19 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
 
-void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
+BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
+  auto p = onode_map.find(oid);
+  if (p != onode_map.end()) {
+    dout(30) << __func__ << " " << oid << " " << o
+	     << " raced, returning existing " << p->second << dendl;
+    return p->second;
+  }
   dout(30) << __func__ << " " << oid << " " << o << dendl;
-  assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
   cache->_add_onode(o, 1);
+  return o;
 }
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
@@ -2181,8 +2187,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
   }
   o.reset(on);
-  onode_map.add(oid, o);
-  return o;
+  return onode_map.add(oid, o);
 }
 
 
