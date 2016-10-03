@@ -321,16 +321,18 @@ test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
 compare_images ${POOL} ${image}
 
 testlog " - rbd_mirroring_resync_after_disconnect config option"
-set_image_meta ${CLUSTER1} ${POOL} ${image} \
+set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	       conf_rbd_mirroring_resync_after_disconnect true
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 disconnect_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
 compare_images ${POOL} ${image}
-set_image_meta ${CLUSTER1} ${POOL} ${image} \
+set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	       conf_rbd_mirroring_resync_after_disconnect false
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 disconnect_image ${CLUSTER2} ${POOL} ${image}
 test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
