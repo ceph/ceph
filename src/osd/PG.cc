@@ -4078,6 +4078,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
       case PG::Scrubber::INACTIVE:
         dout(10) << "scrub start" << dendl;
 
+	scrubber.cleaned_meta_map.reset_bitwise(get_sort_bitwise());
+
         publish_stats_to_osd();
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
@@ -4407,7 +4409,7 @@ void PG::scrub_compare_maps()
     }
   }
 
-  ScrubMap for_meta_scrub;
+  ScrubMap for_meta_scrub(get_sort_bitwise());
   if (scrubber.end.is_max() ||
       scrubber.cleaned_meta_map.objects.empty()) {
     scrubber.cleaned_meta_map.swap(for_meta_scrub);
