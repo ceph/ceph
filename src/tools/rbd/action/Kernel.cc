@@ -129,6 +129,8 @@ static int parse_map_options(char *options)
     } else if (!strcmp(this_char, "queue_depth")) {
       if (put_map_option_value("queue_depth", value_char, map_option_int_cb))
         return -EINVAL;
+    } else if (!strcmp(this_char, "lock_on_read")) {
+      put_map_option("lock_on_read", this_char);
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return -EINVAL;
