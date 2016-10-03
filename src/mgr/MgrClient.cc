@@ -166,7 +166,7 @@ bool MgrClient::ms_handle_reset(Connection *con)
   }
   return false;
 #else
-  return true;
+  return false;
 #endif
 }
 
