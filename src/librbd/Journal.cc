@@ -174,7 +174,7 @@ template <typename J>
 int open_journaler(CephContext *cct, J *journaler,
                    cls::journal::Client *client,
                    journal::ImageClientMeta *client_meta,
-                   journal::TagData *tag_data) {
+                   uint64_t *tag_tid, journal::TagData *tag_data) {
   C_SaferCond init_ctx;
   journaler->init(&init_ctx);
   int r = init_ctx.wait();
@@ -204,9 +204,8 @@ int open_journaler(CephContext *cct, J *journaler,
 
   C_SaferCond get_tags_ctx;
   Mutex lock("lock");
-  uint64_t tag_tid;
   C_DecodeTags *tags_ctx = new C_DecodeTags(
-      cct, &lock, &tag_tid, tag_data, &get_tags_ctx);
+      cct, &lock, tag_tid, tag_data, &get_tags_ctx);
   journaler->get_tags(client_meta->tag_class, &tags_ctx->tags, tags_ctx);
 
   r = get_tags_ctx.wait();
@@ -220,18 +219,12 @@ template <typename J>
 int allocate_journaler_tag(CephContext *cct, J *journaler,
                            const cls::journal::Client &client,
                            uint64_t tag_class,
-                           const journal::TagData &prev_tag_data,
+                           const journal::TagPredecessor &predecessor,
                            const std::string &mirror_uuid,
                            cls::journal::Tag *new_tag) {
   journal::TagData tag_data;
-  if (!client.commit_position.object_positions.empty()) {
-    auto position = client.commit_position.object_positions.front();
-    tag_data.predecessor_commit_valid = true;
-    tag_data.predecessor_tag_tid = position.tag_tid;
-    tag_data.predecessor_entry_tid = position.entry_tid;
-  }
-  tag_data.predecessor_mirror_uuid = prev_tag_data.mirror_uuid;
   tag_data.mirror_uuid = mirror_uuid;
+  tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
   ::encode(tag_data, tag_bl);
@@ -536,8 +529,10 @@ int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
   journal::TagData tag_data;
-  int r = open_journaler(cct, &journaler, &client, &client_meta, &tag_data);
+  int r = open_journaler(cct, &journaler, &client, &client_meta, &tag_tid,
+                         &tag_data);
   if (r >= 0) {
     *mirror_uuid = tag_data.mirror_uuid;
   }
@@ -555,9 +550,10 @@ int Journal<I>::request_resync(I *image_ctx) {
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
   journal::TagData tag_data;
   int r = open_journaler(image_ctx->cct, &journaler, &client, &client_meta,
-                         &tag_data);
+                         &tag_tid, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler) {
     journaler.shut_down();
   };
@@ -593,9 +589,10 @@ int Journal<I>::promote(I *image_ctx) {
 
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
+  uint64_t tag_tid;
   journal::TagData tag_data;
   int r = open_journaler(image_ctx->cct, &journaler, &client, &client_meta,
-                         &tag_data);
+                         &tag_tid, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler) {
     journaler.shut_down();
   };
@@ -604,9 +601,21 @@ int Journal<I>::promote(I *image_ctx) {
     return r;
   }
 
+  journal::TagPredecessor predecessor;
+  if (tag_data.mirror_uuid == ORPHAN_MIRROR_UUID) {
+    // orderly promotion -- demotion epoch will have a single entry
+    // so link to our predecessor (demotion) epoch
+    predecessor = journal::TagPredecessor{
+      ORPHAN_MIRROR_UUID, true, tag_tid, 1};
+  } else {
+    // forced promotion -- create an epoch no peers can link against
+    predecessor = journal::TagPredecessor{
+      LOCAL_MIRROR_UUID, true, tag_tid, 0};
+  }
+
   cls::journal::Tag new_tag;
   r = allocate_journaler_tag(cct, &journaler, client, client_meta.tag_class,
-                             tag_data, LOCAL_MIRROR_UUID, &new_tag);
+                             predecessor, LOCAL_MIRROR_UUID, &new_tag);
   if (r < 0) {
     return r;
   }
@@ -696,6 +705,11 @@ bool Journal<I>::is_tag_owner() const {
 }
 
 template <typename I>
+uint64_t Journal<I>::get_tag_tid() const {
+  return m_tag_tid;
+}
+
+template <typename I>
 journal::TagData Journal<I>::get_tag_data() const {
   return m_tag_data;
 }
@@ -716,9 +730,19 @@ int Journal<I>::demote() {
     return r;
   }
 
+  assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
+  journal::TagPredecessor predecessor;
+  predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
+  if (!client.commit_position.object_positions.empty()) {
+    auto position = client.commit_position.object_positions.front();
+    predecessor.commit_valid = true;
+    predecessor.tag_tid = position.tag_tid;
+    predecessor.entry_tid = position.entry_tid;
+  }
+
   cls::journal::Tag new_tag;
   r = allocate_journaler_tag(cct, m_journaler, client, m_tag_class,
-                             m_tag_data, ORPHAN_MIRROR_UUID, &new_tag);
+                             predecessor, ORPHAN_MIRROR_UUID, &new_tag);
   if (r < 0) {
     return r;
   }
@@ -768,9 +792,8 @@ void Journal<I>::allocate_local_tag(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  bool predecessor_commit_valid = false;
-  uint64_t predecessor_tag_tid = 0;
-  uint64_t predecessor_entry_tid = 0;
+  journal::TagPredecessor predecessor;
+  predecessor.mirror_uuid = LOCAL_MIRROR_UUID;
   {
     Mutex::Locker locker(m_lock);
     assert(m_journaler != nullptr && is_tag_owner());
@@ -789,22 +812,18 @@ void Journal<I>::allocate_local_tag(Context *on_finish) {
     assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
     if (!client.commit_position.object_positions.empty()) {
       auto position = client.commit_position.object_positions.front();
-      predecessor_commit_valid = true;
-      predecessor_tag_tid = position.tag_tid;
-      predecessor_entry_tid = position.entry_tid;
+      predecessor.commit_valid = true;
+      predecessor.tag_tid = position.tag_tid;
+      predecessor.entry_tid = position.entry_tid;
     }
   }
 
-  allocate_tag(LOCAL_MIRROR_UUID, LOCAL_MIRROR_UUID, predecessor_commit_valid,
-               predecessor_tag_tid, predecessor_entry_tid, on_finish);
+  allocate_tag(LOCAL_MIRROR_UUID, predecessor, on_finish);
 }
 
 template <typename I>
 void Journal<I>::allocate_tag(const std::string &mirror_uuid,
-                              const std::string &predecessor_mirror_uuid,
-                              bool predecessor_commit_valid,
-                              uint64_t predecessor_tag_tid,
-                              uint64_t predecessor_entry_tid,
+                              const journal::TagPredecessor &predecessor,
                               Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ":  mirror_uuid=" << mirror_uuid
@@ -815,10 +834,7 @@ void Journal<I>::allocate_tag(const std::string &mirror_uuid,
 
   journal::TagData tag_data;
   tag_data.mirror_uuid = mirror_uuid;
-  tag_data.predecessor_mirror_uuid = predecessor_mirror_uuid;
-  tag_data.predecessor_commit_valid = predecessor_commit_valid;
-  tag_data.predecessor_tag_tid = predecessor_tag_tid;
-  tag_data.predecessor_entry_tid = predecessor_entry_tid;
+  tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
   ::encode(tag_data, tag_bl);
