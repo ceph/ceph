@@ -2064,7 +2064,8 @@ BlueStore::Collection::Collection(BlueStore *ns, Cache *c, coll_t cid)
     exists(true),
     // size the shared blob hash table as a ratio of the onode cache size.
     shared_blob_set(MAX(16,
-			g_conf->bluestore_onode_cache_size *
+			g_conf->bluestore_onode_cache_size /
+			store->cache_shards.size() *
 			g_conf->bluestore_shared_blob_hash_table_size_ratio)),
     onode_map(c)
 {
@@ -2188,6 +2189,13 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
   o.reset(on);
   return onode_map.add(oid, o);
+}
+
+void BlueStore::Collection::trim_cache()
+{
+  cache->trim(
+    g_conf->bluestore_onode_cache_size / store->cache_shards.size(),
+    g_conf->bluestore_buffer_cache_size / store->cache_shards.size());
 }
 
 
@@ -4540,10 +4548,7 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
       r = false;
   }
 
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
-
+  c->trim_cache();
   return r;
 }
 
@@ -4581,9 +4586,7 @@ int BlueStore::stat(
     st->st_nlink = 1;
   }
 
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   int r = 0;
   if (_debug_mdata_eio(oid)) {
     r = -EIO;
@@ -4643,9 +4646,7 @@ int BlueStore::read(
 
  out:
   assert(allow_eio || r != -EIO);
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   if (r == 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
@@ -5040,9 +5041,7 @@ int BlueStore::fiemap(
   }
 
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size = 0x(" << m << ")" << std::dec << dendl;
@@ -5091,9 +5090,7 @@ int BlueStore::getattr(
     r = 0;
   }
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   if (r == 0 && _debug_mdata_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
@@ -5139,9 +5136,7 @@ int BlueStore::getattrs(
   }
 
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   if (r == 0 && _debug_mdata_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
@@ -5322,9 +5317,7 @@ int BlueStore::collection_list(
   }
 
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   dout(10) << __func__ << " " << c->cid
 	   << " start " << start << " end " << end << " max " << max
 	   << " = " << r << ", ls.size() = " << ls->size()
@@ -6172,9 +6165,7 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
   }
 
   if (c) {
-    c->cache->trim(
-      g_conf->bluestore_onode_cache_size,
-      g_conf->bluestore_buffer_cache_size);
+    c->trim_cache();
   }
 }
 

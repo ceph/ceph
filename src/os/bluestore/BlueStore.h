@@ -940,6 +940,8 @@ public:
       return false;
     }
 
+    void trim_cache();
+
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
   typedef boost::intrusive_ptr<Collection> CollectionRef;
