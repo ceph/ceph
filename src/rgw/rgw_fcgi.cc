@@ -2,14 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_fcgi.h"
-
 #include "acconfig.h"
 
 std::size_t RGWFCGX::write_data(const char* const buf, const std::size_t len)
 {
   const auto ret = FCGX_PutStr(buf, len, fcgx->out);
   if (ret < 0) {
-    throw RGWRestfulIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(-ret, std::system_category());
   }
   return ret;
 }
@@ -18,7 +17,7 @@ std::size_t RGWFCGX::read_data(char* const buf, const std::size_t len)
 {
   const auto ret = FCGX_GetStr(buf, len, fcgx->in);
   if (ret < 0) {
-    throw RGWRestfulIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(-ret, std::system_category());
   }
   return ret;
 }
