@@ -19,11 +19,13 @@
 #include "common/errno.h"
 #include "common/signal.h"
 #include "common/version.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 #include "include/compat.h"
+#include "include/str_list.h"
 
 #include <pwd.h>
 #include <grp.h>
@@ -454,3 +456,48 @@ int global_init_shutdown_stderr(CephContext *cct)
   return 0;
 }
 
+int global_init_preload_erasure_code(const CephContext *cct)
+{
+  const md_config_t *conf = cct->_conf;
+  string plugins = conf->osd_erasure_code_plugins;
+
+  // validate that this is a not a legacy plugin
+  list<string> plugins_list;
+  get_str_list(plugins, plugins_list);
+  for (list<string>::iterator i = plugins_list.begin();
+       i != plugins_list.end();
+       ++i) {
+	string plugin_name = *i;
+	string replacement = "";
+
+	if (plugin_name == "jerasure_generic" || 
+	    plugin_name == "jerasure_sse3" ||
+	    plugin_name == "jerasure_sse4" ||
+	    plugin_name == "jerasure_neon") {
+	  replacement = "jerasure";
+	}
+	else if (plugin_name == "shec_generic" ||
+		 plugin_name == "shec_sse3" ||
+		 plugin_name == "shec_sse4" ||
+		 plugin_name == "shec_neon") {
+	  replacement = "shec";
+	}
+
+	if (replacement != "") {
+	  dout(0) << "WARNING: osd_erasure_code_plugins contains plugin "
+		  << plugin_name << " that is now deprecated. Please modify the value "
+		  << "for osd_erasure_code_plugins to use "  << replacement << " instead." << dendl;
+	}
+  }
+
+  stringstream ss;
+  int r = ErasureCodePluginRegistry::instance().preload(
+    plugins,
+    conf->erasure_code_dir,
+    &ss);
+  if (r)
+    derr << ss.str() << dendl;
+  else
+    dout(10) << ss.str() << dendl;
+  return r;
+}

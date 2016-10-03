@@ -7,20 +7,14 @@ include_directories(jerasure/jerasure/include)
 include_directories(jerasure/gf-complete/include)
 include_directories(jerasure)
 
-if(TRUE)
-  list(APPEND jerasure_flavors generic)
+# legacy jerasure flavors. these are left here for backward compatibility
+# and should be removed in future versions
+set(jerasure_legacy_flavors generic)
+if(HAVE_ARM)
+  list(APPEND jerasure_legacy_flavors neon)
 endif()
-
-if(HAVE_NEON)
-  list(APPEND jerasure_flavors neon)
-endif()
-
-if(HAVE_SSE)
-  list(APPEND jerasure_flavors sse3)
-endif()
-
-if(INTEL_SSE4_1)
-  list(APPEND jerasure_flavors sse4)
+if(HAVE_INTEL)
+ list(APPEND jerasure_legacy_flavors sse3 sse4)
 endif()
 
 add_subdirectory(jerasure)
@@ -41,10 +35,5 @@ add_library(erasure_code_objs OBJECT ErasureCode.cc)
 add_custom_target(erasure_code_plugins DEPENDS
     ${EC_ISA_LIB}
     ec_lrc
-    ec_jerasure)
-if(TARGET ec_jerasure_sse3)
-  add_dependencies(erasure_code_plugins ec_jerasure_sse3)
-endif()
-if(TARGET ec_jerasure_sse4)
-  add_dependencies(erasure_code_plugins ec_jerasure_sse4)
-endif()
+    ec_jerasure
+    ec_shec)

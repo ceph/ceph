@@ -45,8 +45,6 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "erasure-code/ErasureCodePlugin.h"
-
 #define dout_subsys ceph_subsys_mon
 
 Monitor *mon = NULL;
@@ -179,21 +177,6 @@ void usage()
   cerr << "  --mon-data <directory>\n";
   cerr << "        where the mon store and keyring are located\n";
   generic_server_usage();
-}
-
-int preload_erasure_code()
-{
-  string plugins = g_conf->osd_erasure_code_plugins;
-  stringstream ss;
-  int r = ErasureCodePluginRegistry::instance().preload(
-    plugins,
-    g_conf->erasure_code_dir,
-    &ss);
-  if (r)
-    derr << ss.str() << dendl;
-  else
-    dout(10) << ss.str() << dendl;
-  return r;
 }
 
 int main(int argc, const char **argv) 
@@ -507,7 +490,7 @@ int main(int argc, const char **argv)
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
-    if (preload_erasure_code() < 0)
+    if (global_init_preload_erasure_code(g_ceph_context) < 0)
       prefork.exit(1);
   }
 

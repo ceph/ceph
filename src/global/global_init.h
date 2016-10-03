@@ -88,6 +88,12 @@ void global_init_chdir(const CephContext *cct);
  */
 int global_init_shutdown_stderr(CephContext *cct);
 
+/*
+ * Preload the erasure coding libraries to detect early issues with
+ * configuration.
+ */
+int global_init_preload_erasure_code(const CephContext *cct);
+
 /**
  * print daemon startup banner/warning
  */
