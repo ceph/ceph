@@ -73,6 +73,8 @@ protected:
   // our reports (hook for use by OSD)
   std::function<MPGStats*()> pgstats_cb;
 
+  void reconnect();
+
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);
 
