@@ -2435,10 +2435,16 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_compressed_original, "bluestore_compressed_original",
     "Sum for original bytes that were compressed");
 
+  b.add_u64(l_bluestore_onodes, "bluestore_onodes",
+	    "Number of onodes in cache");
   b.add_u64(l_bluestore_onode_hits, "bluestore_onode_hits",
     "Sum for onode-lookups hit in the cache");
   b.add_u64(l_bluestore_onode_misses, "bluestore_onode_misses",
     "Sum for onode-lookups missed in the cache");
+  b.add_u64(l_bluestore_buffers, "bluestore_buffers",
+	    "Number of buffers in cache");
+  b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
+	    "Number of buffer bytes in cache");
   b.add_u64(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
     "Sum for bytes of read hit in the cache");
   b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
@@ -4516,6 +4522,19 @@ void BlueStore::_reap_collections()
   }
 }
 
+void BlueStore::_update_cache_logger()
+{
+  uint64_t num_onodes = 0;
+  uint64_t num_buffers = 0;
+  uint64_t num_buffer_bytes = 0;
+  for (auto c : cache_shards) {
+    c->add_stats(&num_onodes, &num_buffers, &num_buffer_bytes);
+  }
+  logger->set(l_bluestore_onodes, num_onodes);
+  logger->set(l_bluestore_buffers, num_buffers);
+  logger->set(l_bluestore_buffer_bytes, num_buffer_bytes);
+}
+
 // ---------------
 // read operations
 
@@ -6347,6 +6366,8 @@ void BlueStore::_kv_sync_thread()
 
       // this is as good a place as any ...
       _reap_collections();
+
+      _update_cache_logger();
 
       if (bluefs) {
 	if (!bluefs_gift_extents.empty()) {

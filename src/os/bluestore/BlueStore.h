@@ -72,8 +72,11 @@ enum {
   l_bluestore_compressed,
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
+  l_bluestore_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
+  l_bluestore_buffers,
+  l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
   l_bluestore_write_big,
@@ -714,6 +717,9 @@ public:
 
     virtual void trim(uint64_t onode_max, uint64_t buffer_max) = 0;
 
+    virtual void add_stats(uint64_t *onodes, uint64_t *buffers,
+			   uint64_t *bytes) = 0;
+
 #ifdef DEBUG_CACHE
     virtual void _audit(const char *s) = 0;
 #else
@@ -784,6 +790,14 @@ public:
     }
 
     void trim(uint64_t onode_max, uint64_t buffer_max) override;
+
+    void add_stats(uint64_t *onodes, uint64_t *buffers,
+		   uint64_t *bytes) override {
+      std::lock_guard<std::recursive_mutex> l(lock);
+      *onodes += onode_lru.size();
+      *buffers += buffer_lru.size();
+      *bytes += buffer_size;
+    }
 
 #ifdef DEBUG_CACHE
     void _audit(const char *s) override;
@@ -859,6 +873,14 @@ public:
     }
 
     void trim(uint64_t onode_max, uint64_t buffer_max) override;
+
+    void add_stats(uint64_t *onodes, uint64_t *buffers,
+		   uint64_t *bytes) override {
+      std::lock_guard<std::recursive_mutex> l(lock);
+      *onodes += onode_lru.size();
+      *buffers += buffer_hot.size() + buffer_warm_in.size();
+      *bytes += buffer_bytes;
+    }
 
 #ifdef DEBUG_CACHE
     void _audit(const char *s) override;
@@ -1416,6 +1438,7 @@ private:
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
+  void _update_cache_logger();
 
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
