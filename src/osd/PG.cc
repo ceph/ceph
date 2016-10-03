@@ -3482,10 +3482,16 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   dout(10) << " got " << m->from << " scrub map" << dendl;
   bufferlist::iterator p = m->get_data().begin();
 
-  scrubber.received_maps[m->from].decode(p, info.pgid.pool());
+  ScrubMap &map = scrubber.received_maps[m->from];
+  map.reset_bitwise(get_sort_bitwise());
+  map.decode(p, info.pgid.pool());
   dout(10) << "map version is "
-	     << scrubber.received_maps[m->from].valid_through
-	     << dendl;
+	   << map.valid_through
+	   << dendl;
+
+  // Account for http://tracker.ceph.com/issues/17491
+  if (!map.objects.empty() && map.objects.rbegin()->first == scrubber.end)
+    map.objects.erase(scrubber.end);
 
   --scrubber.waiting_on;
   scrubber.waiting_on_whom.erase(m->from);
@@ -4172,7 +4178,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  if (!_range_available_for_scrub(scrubber.start, candidate_end)) {
 	    // we'll be requeued by whatever made us unavailable for scrub
 	    dout(10) << __func__ << ": scrub blocked somewhere in range "
-		     << "[" << scrubber.start << ", " << candidate_end << ")"
+		     << "[" << scrubber.start << ", " << candidate_end << "]"
 		     << dendl;
 	    done = true;
 	    break;
@@ -4186,7 +4192,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
              p != pg_log.get_log().log.rend();
              ++p) {
           if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
+	      cmp(p->soid, scrubber.end, get_sort_bitwise()) <= 0) {
+	    // inclusive upper bound, @see write_blocked_by_scrub
             scrubber.subset_last_update = p->version;
             break;
           }

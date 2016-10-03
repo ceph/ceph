@@ -5292,7 +5292,7 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 
   // handle hobject_t upgrade
   if (struct_v < 3) {
-    map<hobject_t, object, hobject_t::ComparatorWithDefault> tmp;
+    map<hobject_t, object, hobject_t::ComparatorWithDefault> tmp(objects.key_comp());
     tmp.swap(objects);
     for (map<hobject_t, object, hobject_t::ComparatorWithDefault>::iterator i = tmp.begin();
 	 i != tmp.end();
