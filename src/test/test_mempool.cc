@@ -51,6 +51,9 @@ TEST(test_mempool, mempool_context) {
    EXPECT_NE(Slots.find(4),Slots.end());
    EXPECT_EQ(Slots.find(4)->second.slabs,1u);
    EXPECT_NE(Slots.find(4)->second.bytes,0u);
+
+   EXPECT_EQ(mempool::GetPool(mempool::unittest_1).allocated_bytes(),
+             Slots.find(4)->second.bytes);
 }
 
 int main(int argc, char **argv)

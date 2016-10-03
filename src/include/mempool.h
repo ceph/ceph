@@ -32,9 +32,21 @@
 
 namespace mempool {
 
-struct slab_allocator_base;
+
+#define DEFINE_MEMORY_POOLS_HELPER(f) \
+   f(unittest_1) \
+   f(uniitest_2)   
+
+
+#define P(x) x,
+enum pool_index_t {
+   DEFINE_MEMORY_POOLS_HELPER(P)
+   num_pools        // Must be last.
+};
+#undef P
+
+struct slab_allocator_base_t;
 class pool_t;
-class container_t;
 
 //
 // Doubly linked list membership.
@@ -92,43 +104,32 @@ struct StatsByTypeID_t {
    StatsByTypeID_t() : slots(0), slabs(0), bytes(0) {}
 };
 
-void UpdateStats(std::multimap<size_t,StatsByBytes_t>& map,const slab_allocator_base& b);
-void UpdateStats(std::multimap<size_t,StatsBySlots_t>& map,const slab_allocator_base& b);
-void UpdateStats(std::multimap<size_t,StatsBySlabs_t>& map,const slab_allocator_base& b);
-void UpdateStats(std::map<const char *,StatsByTypeID_t>& map,const slab_allocator_base& b);
-
-
-class container_t 
-{
+//
+// Root of all allocators, this enables the container information to operation easily
+//
+// These fields are "always" accurate ;-)
+//
+struct slab_allocator_base_t {
    list_member_t list_member;
-   const slab_allocator_base &base;
-   pool_t &pool;
+   pool_t *pool;
    shard_t *shard;
-public:
-   container_t(pool_t &p,const slab_allocator_base &b);
-   ~container_t();
-
-protected:
+   const char *typeID;
+   size_t slots;
+   size_t slabs;
+   size_t bytes;
+   slab_allocator_base_t() : pool(nullptr), shard(nullptr), typeID(nullptr), slots(0), slabs(0), bytes(0) {}
    //
    // Helper functions for Stats
    //
-   void VisitByBytes(std::multimap<size_t,StatsByBytes_t>& byBytes) const;
-   void VisitBySlots(std::multimap<size_t,StatsBySlots_t>& bySlots) const;
-   void VisitBySlabs(std::multimap<size_t,StatsBySlabs_t>& bySlabs) const;
-   void VisitByTypeID(std::map<const char *,StatsByTypeID_t>& byTypeID ) const;
+   void UpdateStats(std::multimap<size_t,StatsByBytes_t>& byBytes) const;
+   void UpdateStats(std::multimap<size_t,StatsBySlots_t>& bySlots) const;
+   void UpdateStats(std::multimap<size_t,StatsBySlabs_t>& bySlabs) const;
+   void UpdateStats(std::map<const char *,StatsByTypeID_t>& byTypeID) const;
    //
-   // Helper functions for allocators
+   // Effective constructor
    //
-   void *do_malloc(size_t bytes) {
-      shard->allocated += bytes;
-      return ::malloc(bytes);
-   }
-   void do_free(void *slab,size_t bytes) {
-     shard->allocated -= bytes;
-     ::free(slab);
-   }
-
-   friend class pool_t;
+   void AttachPool(pool_index_t index);
+   ~slab_allocator_base_t();
 };
 
 enum { shard_size = 64 }; // Sharding of headers
@@ -136,17 +137,15 @@ enum { shard_size = 64 }; // Sharding of headers
 class pool_t {
    static std::map<std::string,pool_t *> *pool_head;
    static std::mutex pool_head_lock;
-public:
-private:
    std::string name;
    shard_t shard[shard_size];
    bool debug;
+   friend class slab_allocator_base_t;
 public:
    //
    // How much this pool consumes. O(<shard-size>)
    //
    size_t allocated_bytes() const;
-
    //
    // Aggregate stats by consumed.
    //
@@ -154,7 +153,6 @@ public:
    static void StatsBySlots(const std::string& prefix,std::multimap<size_t,StatsBySlots_t>& bySlots,size_t trim = INT_MAX);
    static void StatsBySlabs(const std::string& prefix,std::multimap<size_t,StatsBySlabs_t>& bySlabs,size_t trim = INT_MAX);
    static void StatsByTypeID(const std::string& prefix,std::map<const char *,StatsByTypeID_t>& byTypeID,size_t trim = INT_MAX);
-protected:
    shard_t* pick_a_shard() {
       size_t me = (size_t)pthread_self(); // Dirt cheap, see: http://fossies.org/dox/glibc-2.24/pthread__self_8c_source.html
       size_t i = (me >> 3) % shard_size;
@@ -181,31 +179,20 @@ public:
    //
    // Tracking of container ctor/dtor
    //
-   void ctorContainer(container_t *container) {
-      container->shard = pick_a_shard();
-      if (debug) {
-         std::unique_lock<std::mutex> lock(container->shard->lock);
-         container->shard->containers.insert(&container->list_member);
-      }
-   }
-   void dtorContainer(container_t *container) {
-      if (debug) {
-         std::unique_lock<std::mutex> lock(container->shard->lock);
-         container->list_member.remove();
-      }
-   }
+   void AttachAllocator(slab_allocator_base_t *base);
+   void DetachAllocator(slab_allocator_base_t *base);
 private:
    //
    // Helpers for per-pool stats
    //
-   template<typename maptype> void VisitPool(void (container_t::*f)(maptype& map) const,maptype& map,size_t trim) const {
+   template<typename maptype> void VisitPool(maptype& map,size_t trim) const {
       for (size_t i = 0; i < shard_size; ++i) {
          std::unique_lock<std::mutex> shard_lock(shard[i].lock);
          for (const list_member_t *p = shard[i].containers.next;
               p != &shard[i].containers;
               p = p->next) {
-            const container_t *c = reinterpret_cast<const container_t *>(p);
-            UpdateStats(map,c->base);
+            const slab_allocator_base_t *c = reinterpret_cast<const slab_allocator_base_t *>(p);
+            c->UpdateStats(map);
             while (map.size() > trim) {
                map.erase(map.begin());
             }
@@ -215,7 +202,6 @@ private:
    template<typename maptype> static void VisitAllPools(
       const std::string& prefix,
       maptype& map,
-      void (container_t::*f)(maptype&) const,
       size_t trim) {
       //
       // Scan all of the pools for prefix match
@@ -224,49 +210,30 @@ private:
       for (auto& p : *pool_head) {
         const pool_t *pool = p.second;
         if (pool && prefix == pool->name.substr(0,std::min(prefix.size(),pool->name.size()))) {
-           pool->VisitPool(f,map,trim);
+           pool->VisitPool(map,trim);
         }
       }
    }
 };
 
-//
-// Finish definition of container_t
-//
-inline container_t::container_t(pool_t &p,const slab_allocator_base &b) : base(b), pool(p) {
-   pool.ctorContainer(this);
-}
-
-inline container_t::~container_t() {
-   pool.dtorContainer(this);
-}
-
-#define DEFINE_MEMORY_POOLS_HELPER(f) \
-   f(unittest_1) \
-   f(uniitest_2)   
-
-
-#define P(x) x,
-enum pool_index_t {
-   DEFINE_MEMORY_POOLS_HELPER(P)
-   num_pools        // Must be last.
-};
-#undef P
-
 pool_t& GetPool(pool_index_t ix);
 
-//
-// Root of all allocators, this enables the container information to operation easily
-//
-// These fields are "always" accurate ;-)
-//
-struct slab_allocator_base {
-   const char *typeID;
-   size_t slots;
-   size_t slabs;
-   size_t bytes;
-   slab_allocator_base() : typeID(nullptr), slots(0), slabs(0), bytes(0) {}
-};
+inline void slab_allocator_base_t::AttachPool(pool_index_t index) {
+   assert(pool == nullptr);
+   pool = &GetPool(index);
+   shard = pool->pick_a_shard();
+   if (pool->debug) {
+      std::unique_lock<std::mutex> lock(shard->lock);
+      shard->containers.insert(&list_member);
+   }
+}
+
+inline slab_allocator_base_t::~slab_allocator_base_t() {
+   if (pool && pool->debug) {
+      std::unique_lock<std::mutex> lock(shard->lock);
+      list_member.remove();
+   }
+}
 
 //
 // The ceph::slab_xxxx containers are made from standard STL containers with a custom allocator.
@@ -323,7 +290,7 @@ struct slab_allocator_base {
 //
 
 template<typename T,size_t stackSize, size_t heapSize>
-class slab_allocator : public slab_allocator_base {
+class slab_allocator : public slab_allocator_base_t {
    struct slab_t;
    struct slabHead_t {
       slabHead_t *prev;
@@ -413,6 +380,7 @@ class slab_allocator : public slab_allocator_base {
          size_t sz = sizeof(slab_t) + (trueSlotSize * slab->slabSize);
          assert(bytes >= sz);
          bytes -= sz;
+         shard->allocated -= sz;
          ::free(slab);
       }
    }
@@ -437,6 +405,7 @@ class slab_allocator : public slab_allocator_base {
        // Allocate the slab and free the slots within.
        //
        slab_t *slab = reinterpret_cast<slab_t *>(::malloc(sz));
+       shard->allocated += sz;
        bytes += sz;
        slabs ++;
        initSlab(slab,slabSize);
@@ -585,7 +554,8 @@ template<
    typename compare = std::less<key> >
    struct map : 
       public std::map<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount> > {
-   map() : container(GetPool(pool_ix),*get_my_actual_allocator()) {
+   map() {
+      get_my_actual_allocator()->AttachPool(pool_ix);
    }
    //
    // Extended operator. reserve is now meaningful.
@@ -620,7 +590,6 @@ private:
       alloc->selfCheck();
       return alloc;
    }
-   container_t container;
 };
 
 template<

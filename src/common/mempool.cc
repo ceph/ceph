@@ -37,6 +37,13 @@ mempool::pool_t& mempool::GetPool(mempool::pool_index_t ix) {
 #undef P
 }
 
+size_t mempool::pool_t::allocated_bytes() const {
+   ssize_t result = 0;
+   for (size_t i = 0; i < shard_size; ++i) {
+       result += shard[i].allocated;
+   }
+   return (size_t) result;
+}
 
 //
 // Accumulate stats sorted by ...
@@ -46,62 +53,62 @@ void mempool::pool_t::StatsBySlots(
   std::multimap<size_t,StatsBySlots_t>& bySlots,
   size_t trim)  
 {
-   VisitAllPools(prefix,bySlots,&mempool::container_t::VisitBySlots,trim);
+   VisitAllPools(prefix,bySlots,trim);
 }
 
 void mempool::pool_t::StatsByBytes(
    const std::string& prefix,
    std::multimap<size_t,StatsByBytes_t>& byBytes,
    size_t trim) {
-   VisitAllPools(prefix,byBytes,&mempool::container_t::VisitByBytes,trim);
+   VisitAllPools(prefix,byBytes,trim);
 }
 
 void mempool::pool_t::StatsBySlabs(
    const std::string& prefix,
    std::multimap<size_t,StatsBySlabs_t>& bySlabs,
    size_t trim) {
-   VisitAllPools(prefix,bySlabs,&mempool::container_t::VisitBySlabs,trim);
+   VisitAllPools(prefix,bySlabs,trim);
 }
 
 void mempool::pool_t::StatsByTypeID(
    const std::string& prefix,
    std::map<const char *,StatsByTypeID_t>& byTypeID,
    size_t trim) {
-   VisitAllPools(prefix,byTypeID,&mempool::container_t::VisitByTypeID,trim);
+   VisitAllPools(prefix,byTypeID,trim);
 }
 
 //
 // Here's where the work is done
 //
-void mempool::UpdateStats(std::multimap<size_t,StatsByBytes_t>&m,const slab_allocator_base& b) {
+void mempool::slab_allocator_base_t::UpdateStats(std::multimap<size_t,StatsByBytes_t>&m) const {
    StatsByBytes_t s;
-   s.typeID = b.typeID;
-   s.slots  = b.slots;
-   s.slabs  = b.slabs;
-   m.insert(std::make_pair(b.bytes,s));  
+   s.typeID = typeID;
+   s.slots  = slots;
+   s.slabs  = slabs;
+   m.insert(std::make_pair(bytes,s));  
 }
 
-void mempool::UpdateStats(std::multimap<size_t,StatsBySlots_t>&m,const slab_allocator_base& b) {
+void mempool::slab_allocator_base_t::UpdateStats(std::multimap<size_t,StatsBySlots_t>&m) const {
    StatsBySlots_t s;
-   s.typeID = b.typeID;
-   s.bytes  = b.bytes;
-   s.slabs  = b.slabs;
-   m.insert(std::make_pair(b.slots,s));  
+   s.typeID = typeID;
+   s.bytes  = bytes;
+   s.slabs  = slabs;
+   m.insert(std::make_pair(slots,s));  
 }
 
-void mempool::UpdateStats(std::multimap<size_t,StatsBySlabs_t>&m,const slab_allocator_base& b) {
+void mempool::slab_allocator_base_t::UpdateStats(std::multimap<size_t,StatsBySlabs_t>&m) const {
    StatsBySlabs_t s;
-   s.typeID = b.typeID;
-   s.slots  = b.slots;
-   s.bytes  = b.bytes;
-   m.insert(std::make_pair(b.slabs,s));  
+   s.typeID = typeID;
+   s.slots  = slots;
+   s.bytes  = bytes;
+   m.insert(std::make_pair(slabs,s));  
 }
 
-void mempool::UpdateStats(std::map<const char *,StatsByTypeID_t>&m,const slab_allocator_base& b) {
-   StatsByTypeID_t &s = m[b.typeID];
-   s.slots  += b.slots;
-   s.slabs  += b.slabs;
-   s.bytes  += b.bytes;
+void mempool::slab_allocator_base_t::UpdateStats(std::map<const char *,StatsByTypeID_t>&m) const {
+   StatsByTypeID_t &s = m[typeID];
+   s.slots  += slots;
+   s.slabs  += slabs;
+   s.bytes  += bytes;
 }
 
 
