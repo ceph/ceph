@@ -874,7 +874,7 @@ public:
       clear();
     }
 
-    void add(const ghobject_t& oid, OnodeRef o);
+    OnodeRef add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
