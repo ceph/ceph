@@ -36,7 +36,7 @@ int RGWRestfulIO::recv_body(char *buf, std::size_t max, bool calculate_hash)
     }
     return sent;
   } catch (RGWRestfulIOEngine::Exception& e) {
-    return e.value();
+    return -e.code().value();
   }
 }
 

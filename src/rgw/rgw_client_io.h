@@ -9,6 +9,7 @@
 #include <streambuf>
 #include <istream>
 #include <stdlib.h>
+#include <system_error>
 
 #include <boost/utility/string_ref.hpp>
 
@@ -43,17 +44,7 @@ class RGWRestfulIOEngine : public RGWClientIO {
   template<typename T> friend class RGWDecoratedRestfulIO;
 
 public:
-  class Exception : public std::exception {
-    int err;
-  public:
-    Exception(const int err)
-      : err(err) {
-    }
-
-    int value() {
-      return err;
-    }
-  };
+  typedef std::system_error Exception;
 
   virtual std::size_t send_status(int status, const char *status_name) = 0;
   virtual std::size_t send_100_continue() = 0;

@@ -17,9 +17,9 @@ std::size_t RGWCivetWeb::write_data(const char *buf, std::size_t len)
   const int ret = mg_write(conn, buf, len);
   if (ret == 0) {
     /* didn't send anything, error out */
-    throw RGWRestfulIOEngine::Exception(-EIO);
+    throw RGWRestfulIOEngine::Exception(EIO, std::system_category());
   } else if (ret < 0) {
-    throw RGWRestfulIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(-ret, std::system_category());
   }
   return ret;
 }
@@ -36,7 +36,7 @@ std::size_t RGWCivetWeb::read_data(char *buf, std::size_t len)
 {
   const int ret = mg_read(conn, buf, len);
   if (ret < 0) {
-    throw RGWRestfulIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(-ret, std::system_category());
   }
   return ret;
 }
@@ -121,9 +121,9 @@ static inline std::size_t safe_mg_printf(Args&&... args)
   const int ret = mg_printf(std::forward<Args>(args)...);
   if (ret == 0) {
     /* didn't send anything, error out */
-    throw RGWRestfulIOEngine::Exception(-EIO);
+    throw RGWRestfulIOEngine::Exception(EIO, std::system_category());
   } else if (ret < 0) {
-    throw RGWRestfulIOEngine::Exception(ret);
+    throw RGWRestfulIOEngine::Exception(-ret, std::system_category());
   }
   return static_cast<std::size_t>(ret);
 }
