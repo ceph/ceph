@@ -316,6 +316,7 @@ enum {
   OPT_BI_GET,
   OPT_BI_PUT,
   OPT_BI_LIST,
+  OPT_BI_PURGE,
   OPT_OLH_GET,
   OPT_OLH_READLOG,
   OPT_QUOTA_SET,
@@ -571,6 +572,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BI_PUT;
     if (strcmp(cmd, "list") == 0)
       return OPT_BI_LIST;
+    if (strcmp(cmd, "purge") == 0)
+      return OPT_BI_PURGE;
   } else if (strcmp(prev_cmd, "period") == 0) {
     if (strcmp(cmd, "delete") == 0)
       return OPT_PERIOD_DELETE;
@@ -4872,6 +4875,51 @@ next:
     }
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BI_PURGE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWBucketInfo cur_bucket_info;
+    rgw_bucket cur_bucket;
+    ret = init_bucket(tenant, bucket_name, string(), cur_bucket_info, cur_bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init current bucket info for bucket_name=" << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    if (cur_bucket_info.bucket.bucket_id == bucket_info.bucket.bucket_id && !yes_i_really_mean_it) {
+      cerr << "specified bucket instance points to a current bucket instance" << std::endl;
+      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
+    }
+
+    int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+    for (int i = 0; i < max_shards; i++) {
+      RGWRados::BucketShard bs(store);
+      int shard_id = (bucket_info.num_shards > 0  ? i : -1);
+      int ret = bs.init(bucket, shard_id);
+      if (ret < 0) {
+        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = store->bi_remove(bs);
+      if (ret < 0) {
+        cerr << "ERROR: failed to remove bucket index object: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    }
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
