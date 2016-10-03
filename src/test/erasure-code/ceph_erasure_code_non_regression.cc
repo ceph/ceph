@@ -40,14 +40,12 @@ class ErasureCodeNonRegression {
   string plugin;
   bool create;
   bool check;
-  bool show_path;
   string base;
   string directory;
   ErasureCodeProfile profile;
 public:
   int setup(int argc, char** argv);
   int run();
-  int run_show_path();
   int run_create();
   int run_check();
   int decode_erasures(ErasureCodeInterfaceRef erasure_code,
@@ -70,8 +68,6 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
      "prefix all paths with base")
     ("parameter,P", po::value<vector<string> >(),
      "add a parameter to the erasure code profile")
-    ("path", po::value<string>(), "content path instead of inferring it from parameters")
-    ("show-path", "display the content path and exit")
     ("create", "create the erasure coded content in the directory")
     ("check", "check the content in the directory matches the chunks and vice versa")
     ;
@@ -114,10 +110,9 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   base = vm["base"].as<string>();
   check = vm.count("check") > 0;
   create = vm.count("create") > 0;
-  show_path = vm.count("show-path") > 0;
 
-  if (!check && !create && !show_path) {
-    cerr << "must specifify either --check, --create or --show-path" << endl;
+  if (!check && !create) {
+    cerr << "must specifify either --check, or --create" << endl;
     return 1;
   }
 
@@ -143,9 +138,6 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     }
   }
 
-  if (vm.count("path"))
-    directory = vm["path"].as<string>();
-
   return 0;
 }
 
@@ -156,15 +148,7 @@ int ErasureCodeNonRegression::run()
     return ret;
   if(check && (ret = run_check()))
     return ret;
-  if(show_path && (ret = run_show_path()))
-    return ret;
   return ret;
-}
-
-int ErasureCodeNonRegression::run_show_path()
-{
-  cout << directory << endl;
-  return 0;
 }
 
 int ErasureCodeNonRegression::run_create()

@@ -5,12 +5,8 @@
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
  * Copyright (C) 2014 Red Hat <contact@redhat.com>
- * Copyright (C) 2015 FUJITSU LIMITED
  *
  * Author: Loic Dachary <loic@dachary.org>
- * Author: Shotaro Kawaguchi <kawaguchi.s@jp.fujitsu.com>
- * Author: Takanori Nakao <nakao.takanori@jp.fujitsu.com>
- * Author: Takeshi Miyamae <miyamae.takeshi@jp.fujitsu.com>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -19,11 +15,17 @@
  * 
  */
 
-#include "ceph_ver.h"
+#ifndef CEPH_ERASURE_CODE_PLUGIN_LRC_H
+#define CEPH_ERASURE_CODE_PLUGIN_LRC_H
 
-extern "C" const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+#include "erasure-code/ErasureCodePlugin.h"
 
-extern "C" int __erasure_code_init(char *plugin_name, char *directory)
-{
-  return -333;
-}
+class ErasureCodePluginLrc : public ErasureCodePlugin {
+public:
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss);
+};
+
+#endif

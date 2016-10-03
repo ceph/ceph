@@ -15,11 +15,20 @@
  * 
  */
 
-#include "ceph_ver.h"
+#ifndef CEPH_ERASURE_CODE_PLUGIN_ISA_H
+#define CEPH_ERASURE_CODE_PLUGIN_ISA_H
 
-extern "C" const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+#include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodeIsaTableCache.h"
 
-extern "C" int __erasure_code_init(char *plugin_name, char *directory)
-{
-  return -333;
-}
+class ErasureCodePluginIsa : public ErasureCodePlugin {
+public:
+  ErasureCodeIsaTableCache tcache;
+
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss);
+};
+
+#endif

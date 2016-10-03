@@ -278,7 +278,11 @@ private:
   int crush_rename_bucket(const string& srcname,
 			  const string& dstname,
 			  ostream *ss);
-  int normalize_profile(ErasureCodeProfile &profile, ostream *ss);
+  void check_legacy_ec_plugin(const string& plugin, 
+			      const string& profile) const;
+  int normalize_profile(const string& profilename, 
+			ErasureCodeProfile &profile,
+			ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
 				   int *ruleset,
