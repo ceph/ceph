@@ -1172,7 +1172,6 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   out << "SharedBlob(" << &sb;
   if (sb.sbid) {
     out << " sbid 0x" << std::hex << sb.sbid << std::dec;
-    assert(sb.parent_set);
   }
   if (sb.loaded) {
     out << " loaded " << sb.shared_blob;
