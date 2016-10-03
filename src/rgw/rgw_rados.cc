@@ -8063,6 +8063,20 @@ int RGWRados::bi_list(BucketShard& bs, const string& filter_obj, const string& m
   return 0;
 }
 
+int RGWRados::bi_remove(BucketShard& bs)
+{
+  int ret = bs.index_ctx.remove(bs.bucket_obj);
+  if (ret == -ENOENT) {
+    ret = 0;
+  }
+  if (ret < 0) {
+    ldout(cct, 5) << "bs.index_ctx.remove(" << bs.bucket_obj << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWRados::bi_list(rgw_bucket& bucket, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
   BucketShard bs(this);
