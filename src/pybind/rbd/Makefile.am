@@ -1,4 +1,7 @@
-EXTRA_DIST += $(srcdir)/pybind/rbd/setup.py $(srcdir)/pybind/rbd/rbd.pyx
+EXTRA_DIST += \
+	$(srcdir)/pybind/rbd/CMakeLists.txt \
+	$(srcdir)/pybind/rbd/setup.py \
+	$(srcdir)/pybind/rbd/rbd.pyx
 
 rbd-pybind-all: librbd.la ${srcdir}/ceph_ver.h
 	cd $(srcdir)/pybind/rbd; $(PY_DISTUTILS) build \

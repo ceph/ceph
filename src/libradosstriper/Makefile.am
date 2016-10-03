@@ -25,3 +25,5 @@ noinst_HEADERS += \
 endif # WITH_RADOSSTRIPER
 endif # WITH_RADOS
 endif # ENABLE_CLIENT
+
+EXTRA_DIST += libradosstriper/CMakeLists.txt

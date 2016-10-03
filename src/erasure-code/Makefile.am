@@ -26,3 +26,5 @@ noinst_HEADERS += \
 	erasure-code/ErasureCode.h \
 	erasure-code/ErasureCodeInterface.h \
 	erasure-code/ErasureCodePlugin.h
+
+EXTRA_DIST += erasure-code/CMakeLists.txt
