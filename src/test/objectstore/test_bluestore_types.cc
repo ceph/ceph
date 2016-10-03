@@ -669,8 +669,10 @@ TEST(Blob, put_ref)
 
 TEST(ExtentMap, find_lextent)
 {
+  BlueStore::LRUCache cache;
   BlueStore::ExtentMap em(nullptr);
   BlueStore::BlobRef br(new BlueStore::Blob);
+  br->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
 
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.find_lextent(100));
@@ -713,8 +715,10 @@ TEST(ExtentMap, find_lextent)
 
 TEST(ExtentMap, seek_lextent)
 {
+  BlueStore::LRUCache cache;
   BlueStore::ExtentMap em(nullptr);
   BlueStore::BlobRef br(new BlueStore::Blob);
+  br->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
 
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(100));
@@ -757,8 +761,10 @@ TEST(ExtentMap, seek_lextent)
 
 TEST(ExtentMap, has_any_lextents)
 {
+  BlueStore::LRUCache cache;
   BlueStore::ExtentMap em(nullptr);
   BlueStore::BlobRef b(new BlueStore::Blob);
+  b->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
 
   ASSERT_FALSE(em.has_any_lextents(0, 0));
   ASSERT_FALSE(em.has_any_lextents(0, 1000));
@@ -799,10 +805,14 @@ TEST(ExtentMap, has_any_lextents)
 
 TEST(ExtentMap, compress_extent_map)
 {
+  BlueStore::LRUCache cache;
   BlueStore::ExtentMap em(nullptr);
   BlueStore::BlobRef b1(new BlueStore::Blob);
   BlueStore::BlobRef b2(new BlueStore::Blob);
   BlueStore::BlobRef b3(new BlueStore::Blob);
+  b1->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
+  b2->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
+  b3->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
 
   em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, 1, b1));
   em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, 1, b2));
