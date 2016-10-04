@@ -46,16 +46,16 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
   return 0;
 }
 
-std::size_t RGWLoadGenIO::write_data(const char* const buf,
-                                     const std::size_t len)
+size_t RGWLoadGenIO::write_data(const char* const buf,
+                                const size_t len)
 {
   return len;
 }
 
-std::size_t RGWLoadGenIO::read_data(char* const buf, const std::size_t len)
+size_t RGWLoadGenIO::read_data(char* const buf, const size_t len)
 {
-  const std::size_t read_len = std::min(left_to_read,
-                                        static_cast<uint64_t>(len));
+  const size_t read_len = std::min(left_to_read,
+                                   static_cast<uint64_t>(len));
   left_to_read -= read_len;
   return read_len;
 }
@@ -96,29 +96,29 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   env.set("SERVER_PORT", port_buf);
 }
 
-std::size_t RGWLoadGenIO::send_status(const int status,
-                                      const char* const status_name)
+size_t RGWLoadGenIO::send_status(const int status,
+                                 const char* const status_name)
 {
   return 0;
 }
 
-std::size_t RGWLoadGenIO::send_100_continue()
+size_t RGWLoadGenIO::send_100_continue()
 {
   return 0;
 }
 
-std::size_t RGWLoadGenIO::send_header(const boost::string_ref& name,
-                                      const boost::string_ref& value)
+size_t RGWLoadGenIO::send_header(const boost::string_ref& name,
+                                 const boost::string_ref& value)
 {
   return 0;
 }
 
-std::size_t RGWLoadGenIO::complete_header()
+size_t RGWLoadGenIO::complete_header()
 {
   return 0;
 }
 
-std::size_t RGWLoadGenIO::send_content_length(const uint64_t len)
+size_t RGWLoadGenIO::send_content_length(const uint64_t len)
 {
   return 0;
 }

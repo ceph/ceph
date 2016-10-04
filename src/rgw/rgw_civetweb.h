@@ -20,25 +20,25 @@ class RGWCivetWeb : public RGWRestfulIOEngine
   bool explicit_keepalive;
   bool explicit_conn_close;
 
-  std::size_t write_data(const char *buf, std::size_t len);
-  std::size_t read_data(char *buf, std::size_t len);
-  std::size_t dump_date_header();
+  size_t write_data(const char *buf, size_t len);
+  size_t read_data(char *buf, size_t len);
+  size_t dump_date_header();
 
 public:
   void init_env(CephContext *cct);
 
-  std::size_t send_status(int status, const char *status_name) override;
-  std::size_t send_100_continue() override;
-  std::size_t send_header(const boost::string_ref& name,
-                          const boost::string_ref& value) override;
-  std::size_t send_content_length(uint64_t len) override;
-  std::size_t complete_header() override;
+  size_t send_status(int status, const char *status_name) override;
+  size_t send_100_continue() override;
+  size_t send_header(const boost::string_ref& name,
+                     const boost::string_ref& value) override;
+  size_t send_content_length(uint64_t len) override;
+  size_t complete_header() override;
 
-  std::size_t recv_body(char* buf, std::size_t max) override {
+  size_t recv_body(char* buf, size_t max) override {
     return read_data(buf, max);
   }
 
-  std::size_t send_body(const char* buf, std::size_t len) override {
+  size_t send_body(const char* buf, size_t len) override {
     return write_data(buf, len);
   }
 

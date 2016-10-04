@@ -59,9 +59,9 @@ int RGWCivetWebFrontend::run()
 
   /* Prepare options for CivetWeb. */
   const std::set<boost::string_ref> rgw_opts = { "port", "prefix" };
-  const std::size_t CW_NUM_OPTS = 2 * (conf_map.size() - rgw_opts.size()) + 1;
+  const size_t CW_NUM_OPTS = 2 * (conf_map.size() - rgw_opts.size()) + 1;
   const char *options[CW_NUM_OPTS];
-  std::size_t i = 0;
+  size_t i = 0;
 
   for (const auto& pair : conf_map) {
     if (! rgw_opts.count(pair.first)) {

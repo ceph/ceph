@@ -4,7 +4,7 @@
 #include "rgw_fcgi.h"
 #include "acconfig.h"
 
-std::size_t RGWFCGX::write_data(const char* const buf, const std::size_t len)
+size_t RGWFCGX::write_data(const char* const buf, const size_t len)
 {
   const auto ret = FCGX_PutStr(buf, len, fcgx->out);
   if (ret < 0) {
@@ -13,7 +13,7 @@ std::size_t RGWFCGX::write_data(const char* const buf, const std::size_t len)
   return ret;
 }
 
-std::size_t RGWFCGX::read_data(char* const buf, const std::size_t len)
+size_t RGWFCGX::read_data(char* const buf, const size_t len)
 {
   const auto ret = FCGX_GetStr(buf, len, fcgx->in);
   if (ret < 0) {
@@ -32,7 +32,7 @@ void RGWFCGX::init_env(CephContext* const cct)
   env.init(cct, (char **)fcgx->envp);
 }
 
-std::size_t RGWFCGX::send_status(const int status, const char* const status_name)
+size_t RGWFCGX::send_status(const int status, const char* const status_name)
 {
   static constexpr size_t STATUS_BUF_SIZE = 128;
 
@@ -43,15 +43,15 @@ std::size_t RGWFCGX::send_status(const int status, const char* const status_name
   return write_data(statusbuf, statuslen);
 }
 
-std::size_t RGWFCGX::send_100_continue()
+size_t RGWFCGX::send_100_continue()
 {
   const auto sent = send_status(100, "Continue");
   flush();
   return sent;
 }
 
-std::size_t RGWFCGX::send_header(const boost::string_ref& name,
-                                 const boost::string_ref& value)
+size_t RGWFCGX::send_header(const boost::string_ref& name,
+                            const boost::string_ref& value)
 {
   char hdrbuf[name.size() + 2 + value.size() + 2 + 1];
   const auto hdrlen = snprintf(hdrbuf, sizeof(hdrbuf),
@@ -64,7 +64,7 @@ std::size_t RGWFCGX::send_header(const boost::string_ref& name,
   return write_data(hdrbuf, hdrlen);
 }
 
-std::size_t RGWFCGX::send_content_length(const uint64_t len)
+size_t RGWFCGX::send_content_length(const uint64_t len)
 {
   static constexpr size_t CONLEN_BUF_SIZE = 128;
 
@@ -75,7 +75,7 @@ std::size_t RGWFCGX::send_content_length(const uint64_t len)
   return write_data(sizebuf, sizelen);
 }
 
-std::size_t RGWFCGX::complete_header()
+size_t RGWFCGX::complete_header()
 {
   static constexpr char HEADER_END[] = "\r\n";
   return write_data(HEADER_END, sizeof(HEADER_END) - 1);

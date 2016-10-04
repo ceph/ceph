@@ -497,8 +497,8 @@ void dump_redirect(struct req_state * const s, const std::string& redirect)
   return dump_header_if_nonempty(s, "Location", redirect);
 }
 
-static std::size_t dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
-                                         const real_time t)
+static size_t dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
+                                    const real_time t)
 {
   const utime_t ut(t);
   time_t secs = static_cast<time_t>(ut.sec());
@@ -517,7 +517,7 @@ void dump_time_header(struct req_state *s, const char *name, real_time t)
 {
   char timestr[TIME_BUF_SIZE];
 
-  const std::size_t len = dump_time_header_impl(timestr, t);
+  const size_t len = dump_time_header_impl(timestr, t);
   if (len == 0) {
     return;
   }
@@ -812,7 +812,7 @@ void dump_range(struct req_state* const s,
   /* dumping range into temp buffer first, as libfcgi will fail to digest
    * %lld */
   char range_buf[128];
-  std::size_t len;
+  size_t len;
 
   if (! total) {
     len = snprintf(range_buf, sizeof(range_buf), "bytes */%lld",
@@ -830,7 +830,7 @@ void dump_range(struct req_state* const s,
 
 int dump_body(struct req_state* const s,
               const char* const buf,
-              const std::size_t len)
+              const size_t len)
 {
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
@@ -851,7 +851,7 @@ int dump_body(struct req_state* const s, const std::string& str)
 
 int recv_body(struct req_state* const s,
               char* const buf,
-              const std::size_t max)
+              const size_t max)
 {
   try {
     return RESTFUL_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
