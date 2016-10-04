@@ -329,6 +329,9 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " pending " << ioc->num_pending.load()
 	   << " running " << ioc->num_running.load()
 	   << dendl;
+  if (ioc->num_pending.load() == 0) {
+    return;
+  }
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
