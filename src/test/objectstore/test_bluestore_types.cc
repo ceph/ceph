@@ -13,6 +13,19 @@
 
 #include <sstream>
 
+#define _STR(x) #x
+#define STRINGIFY(x) _STR(x)
+
+TEST(bluestore, sizeof) {
+#define P(t) cout << STRINGIFY(t) << "\t" << sizeof(t) << std::endl
+  P(BlueStore::Onode);
+  P(BlueStore::Extent);
+  P(BlueStore::Blob);
+  P(BlueStore::SharedBlob);
+  P(bluestore_extent_ref_map_t);
+  P(bluestore_extent_ref_map_t::record_t);
+}
+
 TEST(bluestore_extent_ref_map_t, add)
 {
   bluestore_extent_ref_map_t m;
