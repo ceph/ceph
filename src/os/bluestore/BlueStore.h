@@ -207,7 +207,23 @@ public:
 
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     Cache *cache;
-    map<uint64_t, state_list_t> writing_map;
+
+    // we use a list here instead of std::map because it uses less memory and
+    // we expect this to be very small (very few IOs in flight to the same
+    // Blob at the same time).
+    list<pair<uint64_t,state_list_t>> writing_map;
+
+    list<pair<uint64_t,state_list_t>>::iterator get_writing_map(uint64_t seq) {
+      for (auto p = writing_map.begin(); p != writing_map.end(); ++p) {
+	if (p->first == seq) {
+	  return p;
+	}
+      }
+      writing_map.push_back(make_pair(seq, state_list_t()));
+      auto p = writing_map.end();
+      --p;
+      return p;
+    }
 
     BufferSpace(Cache *c) : cache(c) {
       if (cache) {
@@ -226,7 +242,7 @@ public:
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-        writing_map[b->seq].push_back(*b);
+        get_writing_map(b->seq)->second.push_back(*b);
       } else {
 	cache->_add_buffer(b, level, near);
       }
@@ -239,11 +255,12 @@ public:
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
         uint64_t seq = (*p->second.get()).seq;
-        auto it = writing_map.find(seq);
-        assert(it != writing_map.end());
+        auto it = get_writing_map(seq);
+        assert(!it->second.empty());
         it->second.erase(it->second.iterator_to(*p->second));
-        if (it->second.empty())
+        if (it->second.empty()) {
           writing_map.erase(it);
+	}
       } else {
 	cache->_rm_buffer(p->second.get());
       }
