@@ -15,7 +15,7 @@ from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc
 from teuthology import provision
-from teuthology.packaging import GitbuilderProject
+from teuthology.packaging import get_builder_project
 from teuthology.exceptions import VersionNotFoundError
 from teuthology.job_status import get_status, set_status
 from teuthology.config import config as teuth_config
@@ -254,7 +254,7 @@ def check_packages(ctx, config):
     # We can only do this check if there are a defined sha1 and os_type
     # in the job config.
     if os_type and sha1:
-        package = GitbuilderProject("ceph", ctx.config)
+        package = get_builder_project()("ceph", ctx.config)
         template = "Checking packages for os_type,'{os}' flavor '{flav}' and" \
             " ceph hash '{ver}'"
         log.info(

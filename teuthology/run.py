@@ -356,6 +356,11 @@ def main(args):
     if os_version:
         config["os_version"] = os_version
 
+    # If the job has a 'use_shaman' key, use that value to override the global
+    # config's value.
+    if config.get('use_shaman') is not None:
+        teuth_config.use_shaman = config['use_shaman']
+
     # create a FakeNamespace instance that mimics the old argparse way of doing
     # things we do this so we can pass it to run_tasks without porting those
     # tasks to the new way of doing things right now

@@ -10,6 +10,7 @@ from StringIO import StringIO
 from teuthology.config import config, YamlConfig
 from teuthology.exceptions import ScheduleFailError
 from teuthology.suite import run
+from teuthology import packaging
 
 
 class TestRun(object):
@@ -142,6 +143,7 @@ class TestRun(object):
         m_git_branch_exists,
         m_fetch_repos,
     ):
+        config.use_shaman = False
         config.gitbuilder_host = 'example.com'
         m_package_version_for_hash.return_value = 'ceph_hash'
         m_git_branch_exists.return_value = True
@@ -156,7 +158,7 @@ class TestRun(object):
         }
         self.args = YamlConfig.from_dict(self.args_dict)
         with patch.multiple(
-            'teuthology.suite.util.GitbuilderProject',
+            'teuthology.packaging.GitbuilderProject',
             _get_package_sha1=DEFAULT,
         ) as m:
             assert m != dict()
@@ -165,7 +167,7 @@ class TestRun(object):
                 os_type='ubuntu',
                 os_version='16.04',
             )
-            assert run.util.GitbuilderProject('ceph', conf).sha1 == 'SHA1'
+            assert packaging.GitbuilderProject('ceph', conf).sha1 == 'SHA1'
             run_ = self.klass(self.args)
             assert run_.base_config['kernel']['sha1'] == 'SHA1'
 

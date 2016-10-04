@@ -46,7 +46,7 @@ class TestInstall(object):
         assert result['rpm'] == ['rpm1', 'rpm2']
         assert result['deb'] == default_pkgs['deb']
 
-    @patch("teuthology.task.install._get_gitbuilder_project")
+    @patch("teuthology.task.install._get_builder_project")
     @patch("teuthology.task.install.packaging.get_package_version")
     def test_verify_ceph_version_success(self, m_get_package_version,
                                          m_gitbuilder_project):
@@ -57,7 +57,7 @@ class TestInstall(object):
         m_get_package_version.return_value = "0.89.0"
         install.verify_package_version(Mock(), Mock(), Mock())
 
-    @patch("teuthology.task.install._get_gitbuilder_project")
+    @patch("teuthology.task.install._get_builder_project")
     @patch("teuthology.task.install.packaging.get_package_version")
     def test_verify_ceph_version_failed(self, m_get_package_version,
                                         m_gitbuilder_project):
@@ -72,7 +72,7 @@ class TestInstall(object):
         with pytest.raises(RuntimeError):
             install.verify_package_version(Mock(), config, Mock())
 
-    @patch("teuthology.task.install._get_gitbuilder_project")
+    @patch("teuthology.task.install._get_builder_project")
     @patch("teuthology.task.install.packaging.get_package_version")
     def test_skip_when_using_ceph_deploy(self, m_get_package_version,
                                          m_gitbuilder_project):
