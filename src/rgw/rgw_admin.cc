@@ -71,6 +71,10 @@ void _usage()
   cout << "  bucket stats               returns bucket statistics\n";
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
+  cout << "  bucket reshard             reshard bucket\n";
+  cout << "  bi get                     retrieve bucket index object entries\n";
+  cout << "  bi put                     store bucket index object entries\n";
+  cout << "  bi list                    list raw bucket index entries\n";
   cout << "  object rm                  remove object\n";
   cout << "  object unlink              unlink object from bucket index\n";
   cout << "  objects expire             run expired objects cleanup\n";

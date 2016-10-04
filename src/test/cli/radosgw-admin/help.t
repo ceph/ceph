@@ -22,6 +22,10 @@
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
     bucket check               check bucket index
+    bucket reshard             reshard bucket
+    bi get                     retrieve bucket index object entries
+    bi put                     store bucket index object entries
+    bi list                    list raw bucket index entries
     object rm                  remove object
     object unlink              unlink object from bucket index
     objects expire             run expired objects cleanup
