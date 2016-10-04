@@ -591,7 +591,7 @@ public:
     BlobRef get_spanning_blob(int id);
 
     bool update(Onode *on, KeyValueDB::Transaction t, bool force);
-    void reshard(Onode *on);
+    void reshard(Onode *on, uint64_t min_alloc_size);
 
     /// initialize Shards from the onode
     void init_shards(Onode *on, bool loaded, bool dirty);

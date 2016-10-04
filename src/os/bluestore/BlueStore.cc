@@ -1564,7 +1564,7 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
   return false;
 }
 
-void BlueStore::ExtentMap::reshard(Onode *o)
+void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 {
   // un-span all blobs
   auto p = spanning_blob_map.begin();
@@ -1701,7 +1701,8 @@ void BlueStore::ExtentMap::reshard(Onode *o)
 	  for (const auto& sh : shards) {
 	    if (bstart < sh.offset && bend > sh.offset) {
 	      uint32_t blob_offset = sh.offset - bstart;
-	      if (b->get_blob().can_split_at(blob_offset)) {
+	      if (b->get_blob().can_split_at(blob_offset) &&
+		  blob_offset % min_alloc_size == 0) {
 		dout(20) << __func__ << "    splitting blob, bstart 0x"
 			 << std::hex << bstart
 			 << " blob_offset 0x" << blob_offset
@@ -6206,7 +6207,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 	t->rmkey(PREFIX_OBJ, s.key);
       }
       o->extent_map.fault_range(db, 0, o->onode.size);
-      o->extent_map.reshard(o.get());
+      o->extent_map.reshard(o.get(), min_alloc_size);
       reshard = o->extent_map.update(o.get(), t, true);
       if (reshard) {
 	dout(20) << __func__ << " warning: still wants reshard, check options?"
