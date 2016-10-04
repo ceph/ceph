@@ -61,7 +61,7 @@ int MirroringWatcher<I>::notify_image_updated(
 }
 
 template <typename I>
-int MirroringWatcher<I>::notify_image_updated(
+void MirroringWatcher<I>::notify_image_updated(
     librados::IoCtx &io_ctx, cls::rbd::MirrorImageState mirror_image_state,
     const std::string &image_id, const std::string &global_image_id,
     Context *on_finish) {
@@ -75,12 +75,8 @@ int MirroringWatcher<I>::notify_image_updated(
   librados::AioCompletion *comp = util::create_rados_ack_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
                             nullptr);
-  if (r < 0) {
-    lderr(cct) << ": error encountered sending image updated notification: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  assert(r == 0);
+  comp->release();
 }
 
 template <typename I>
