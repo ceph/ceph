@@ -1726,10 +1726,11 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 	le->assign_blob(blobs[blobid - 1]);
 	assert(le->blob);
       } else {
-	le->assign_blob(new Blob());
-	le->blob->decode(p);
-	blobs[n] = le->blob;
-	onode->c->open_shared_blob(le->blob);
+	Blob *b = new Blob();
+	b->decode(p);
+	blobs[n] = b;
+	onode->c->open_shared_blob(b);
+	le->assign_blob(b);
       }
       // we build ref_map dynamically for non-spanning blobs
       le->blob->ref_map.get(le->blob_offset, le->length);
