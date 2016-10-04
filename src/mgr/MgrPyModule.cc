@@ -79,7 +79,7 @@ int MgrPyModule::serve()
   gstate = PyGILState_Ensure();
 
   auto pValue = PyObject_CallMethod(pClassInstance,
-      (const char*)"serve", (const char*)"()");
+      const_cast<char*>("serve"), nullptr);
 
   if (pValue != NULL) {
     Py_DECREF(pValue);
@@ -102,7 +102,7 @@ void MgrPyModule::shutdown()
   gstate = PyGILState_Ensure();
 
   auto pValue = PyObject_CallMethod(pClassInstance,
-      (const char*)"shutdown", (const char*)"()");
+      const_cast<char*>("shutdown"), nullptr);
 
   if (pValue != NULL) {
     Py_DECREF(pValue);
@@ -122,7 +122,8 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   gstate = PyGILState_Ensure();
 
   // Execute
-  auto pValue = PyObject_CallMethod(pClassInstance, (const char*)"notify", "(ss)",
+  auto pValue = PyObject_CallMethod(pClassInstance,
+       const_cast<char*>("notify"), const_cast<char*>("(ss)"),
        notify_type.c_str(), notify_id.c_str());
 
   if (pValue != NULL) {
@@ -195,7 +196,7 @@ int MgrPyModule::handle_command(
   PyObject *py_cmd = f.get();
 
   auto pResult = PyObject_CallMethod(pClassInstance,
-      (const char*)"handle_command", (const char*)"(O)", py_cmd);
+      const_cast<char*>("handle_command"), const_cast<char*>("(O)"), py_cmd);
 
   Py_DECREF(py_cmd);
 

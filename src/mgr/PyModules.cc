@@ -393,7 +393,7 @@ int PyModules::init()
   } 
 
   // Drop the GIL
-  PyThreadState *tstate = PyEval_SaveThread();
+  PyEval_SaveThread();
   
   return 0;
 }
