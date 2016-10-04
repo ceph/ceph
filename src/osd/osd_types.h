@@ -4000,21 +4000,6 @@ public:
   // attr cache
   map<string, bufferlist> attr_cache;
 
-  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
-    map<string, boost::optional<bufferlist> > to_set;
-    for (set<string>::const_iterator i = changing.begin();
-	 i != changing.end();
-	 ++i) {
-      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
-      if (iter != attr_cache.end()) {
-	to_set[*i] = iter->second;
-      } else {
-	to_set[*i];
-      }
-    }
-    mod->setattrs(to_set);
-  }
-  
   struct RWState {
     enum State {
       RWNONE,
