@@ -6,6 +6,7 @@
 #include "rgw_bucket.h"
 
 #include "common/RWLock.h"
+#include "common/ceph_json.h"
 
 
 struct rgw_datalog_info {
@@ -59,6 +60,18 @@ struct rgw_data_sync_info {
     encode_json("status", s, f);
     encode_json("num_shards", num_shards, f);
   }
+  void decode_json(JSONObj *obj) {
+    std::string s;
+    JSONDecoder::decode_json("status", s, obj);
+    if (s == "building-full-sync-maps") {
+      state = StateBuildingFullSyncMaps;
+    } else if (s == "sync") {
+      state = StateSync;
+    } else {
+      state = StateInit;
+    }
+    JSONDecoder::decode_json("num_shards", num_shards, obj);
+  }
 
   rgw_data_sync_info() : state((int)StateInit), num_shards(0) {}
 };
@@ -108,6 +121,18 @@ struct rgw_data_sync_marker {
     encode_json("pos", pos, f);
     encode_json("timestamp", utime_t(timestamp), f);
   }
+  void decode_json(JSONObj *obj) {
+    int s;
+    JSONDecoder::decode_json("state", s, obj);
+    state = s;
+    JSONDecoder::decode_json("marker", marker, obj);
+    JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
+    JSONDecoder::decode_json("total_entries", total_entries, obj);
+    JSONDecoder::decode_json("pos", pos, obj);
+    utime_t t;
+    JSONDecoder::decode_json("timestamp", t, obj);
+    timestamp = t.to_real_time();
+  }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
 
@@ -134,6 +159,10 @@ struct rgw_data_sync_status {
   void dump(Formatter *f) const {
     encode_json("info", sync_info, f);
     encode_json("markers", sync_markers, f);
+  }
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("info", sync_info, obj);
+    JSONDecoder::decode_json("markers", sync_markers, obj);
   }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_status)
@@ -212,7 +241,7 @@ public:
   int get_shard_info(int shard_id);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int init_sync_status(int num_shards);
-  int run_sync(int num_shards, rgw_data_sync_status& sync_status);
+  int run_sync(int num_shards);
 
   void wakeup(int shard_id, set<string>& keys);
 };
@@ -231,7 +260,6 @@ class RGWDataSyncStatusManager {
   string source_shard_status_oid_prefix;
   rgw_obj source_status_obj;
 
-  rgw_data_sync_status sync_status;
   map<int, rgw_obj> shard_objs;
 
   int num_shards;
@@ -247,12 +275,12 @@ public:
   int init();
   void finalize();
 
-  rgw_data_sync_status& get_sync_status() { return sync_status; }
-
   static string shard_obj_name(const string& source_zone, int shard_id);
   static string sync_status_oid(const string& source_zone);
 
-  int read_sync_status() { return source_log.read_sync_status(&sync_status); }
+  int read_sync_status(rgw_data_sync_status *sync_status) {
+    return source_log.read_sync_status(sync_status);
+  }
   int init_sync_status() { return source_log.init_sync_status(num_shards); }
 
   int read_log_info(rgw_datalog_info *log_info) {
@@ -265,7 +293,7 @@ public:
     return source_log.read_source_log_shards_next(shard_markers, result);
   }
 
-  int run() { return source_log.run_sync(num_shards, sync_status); }
+  int run() { return source_log.run_sync(num_shards); }
 
   void wakeup(int shard_id, set<string>& keys) { return source_log.wakeup(shard_id, keys); }
   void stop() {
@@ -472,5 +500,22 @@ public:
   int run();
 };
 
+
+class RGWDataLogTrimCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http;
+  const int num_shards;
+  const utime_t interval; //< polling interval
+  const std::string& zone; //< my zone id
+  std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
+  std::vector<rgw_data_sync_marker> min_shard_markers; //< min marker per shard
+  std::vector<std::string> last_trim; //< last trimmed marker per shard
+  int ret{0};
+
+ public:
+  RGWDataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
+                   int num_shards, utime_t interval);
+  int operate() override;
+};
 
 #endif
