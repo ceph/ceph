@@ -524,20 +524,23 @@ public:
     /// ctor for lookup only
     explicit Extent(uint32_t lo) : logical_offset(lo) { }
     /// ctor for delayed intitialization (see decode_some())
-    explicit Extent(Cache *cache) {
-      cache->add_extent();
+    explicit Extent() {
     }
     /// ctor for general usage
     Extent(uint32_t lo, uint32_t o, uint32_t l, uint8_t bd, BlobRef& b)
-      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd), blob(b) {
-      if (blob) {
-	blob->shared_blob->bc.cache->add_extent();
-      }
+      : logical_offset(lo), blob_offset(o), length(l), blob_depth(bd) {
+      assign_blob(b);
     }
     ~Extent() {
       if (blob) {
 	blob->shared_blob->bc.cache->rm_extent();
       }
+    }
+
+    void assign_blob(const BlobRef& b) {
+      assert(!blob);
+      blob = b;
+      blob->shared_blob->bc.cache->add_extent();
     }
 
     // comparators for intrusive_set
