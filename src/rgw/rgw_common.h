@@ -1131,7 +1131,11 @@ struct req_state;
 
 class RGWEnv;
 
-class RGWClientIO;
+namespace rgw {
+namespace io {
+class BasicClient;
+}
+}
 
 struct req_info {
   RGWEnv *env;
@@ -1265,7 +1269,7 @@ class RGWRequest;
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
-  RGWClientIO *cio;
+  rgw::io::BasicClient *cio;
   RGWRequest *req; /// XXX: re-remove??
   http_op op;
   RGWOpType op_type;

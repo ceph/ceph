@@ -10,7 +10,7 @@
 
 struct mg_connection;
 
-class RGWCivetWeb : public RGWRestfulIOEngine
+class RGWCivetWeb : public rgw::io::RestfulClient
 {
   RGWEnv env;
   mg_connection *conn;

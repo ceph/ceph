@@ -16,32 +16,35 @@
 #include "include/types.h"
 #include "rgw_common.h"
 
-class RGWClientIO {
+namespace rgw {
+namespace io {
+
+class BasicClient {
 protected:
   virtual void init_env(CephContext *cct) = 0;
 
 public:
-  virtual ~RGWClientIO() {}
+  virtual ~BasicClient() {}
 
   void init(CephContext *cct);
   virtual RGWEnv& get_env() noexcept = 0;
   virtual int complete_request() = 0;
-}; /* RGWClient IO */
+}; /* rgw::io::Client */
 
 
-class RGWClientIOAccounter {
+class Accounter {
 public:
-  virtual ~RGWClientIOAccounter() {}
+  virtual ~Accounter() {}
 
   virtual void set_account(bool enabled) = 0;
 
   virtual uint64_t get_bytes_sent() const = 0;
   virtual uint64_t get_bytes_received() const = 0;
-};
+}; /* rgw::io::Accounter */
 
 
-class RGWRestfulIOEngine : public RGWClientIO {
-  template<typename T> friend class RGWDecoratedRestfulIO;
+class RestfulClient : public BasicClient {
+  template<typename T> friend class DecoratedRestfulClient;
 
 public:
   typedef std::system_error Exception;
@@ -84,15 +87,15 @@ public:
 };
 
 
-/* Abstract decorator over any implementation of RGWRestfulIOEngine. */
+/* Abstract decorator over any implementation of rgw::io::RestfulClient. */
 template <typename DecorateeT>
-class RGWDecoratedRestfulIO : public RGWRestfulIOEngine {
-  template<typename T> friend class RGWDecoratedRestfulIO;
+class DecoratedRestfulClient : public RestfulClient {
+  template<typename T> friend class DecoratedRestfulClient;
 
   typedef typename std::remove_pointer<DecorateeT>::type DerefedDecorateeT;
 
-  static_assert(std::is_base_of<RGWRestfulIOEngine, DerefedDecorateeT>::value,
-                "DecorateeT must be a subclass of RGWRestfulIOEngine");
+  static_assert(std::is_base_of<RestfulClient, DerefedDecorateeT>::value,
+                "DecorateeT must be a subclass of rgw::io::RestfulClient");
 
   DecorateeT decoratee;
 
@@ -120,7 +123,7 @@ protected:
   }
 
 public:
-  RGWDecoratedRestfulIO(DecorateeT&& decoratee)
+  DecoratedRestfulClient(DecorateeT&& decoratee)
     : decoratee(std::move(decoratee)) {
   }
 
@@ -172,6 +175,9 @@ public:
   }
 };
 
+} /* namespace rgw */
+} /* namespace io */
+
 
 /* We're doing this nasty thing only because of extensive usage of templates
  * to implement the static decorator pattern. C++ templates de facto enforce
@@ -182,23 +188,23 @@ public:
 
 
 /* RGWRestfulIO: high level interface to interact with RESTful clients. What
- * differentiates it from RGWRestfulIOEngine is providing more specific APIs
- * like RGWClientIOAccounter or the AWS Auth v4 stuff implemented by filters
+ * differentiates it from rgw::io::RestfulClient is providing more specific APIs
+ * like rgw::io::Accounter or the AWS Auth v4 stuff implemented by filters
  * while hiding the pipelined architecture from clients.
  *
- * RGWClientIOAccounter came in as a part of RGWRestfulIOAccountingEngine. */
-class RGWRestfulIO : public RGWRestfulIOAccountingEngine<RGWRestfulIOEngine*> {
+ * rgw::io::Accounter came in as a part of rgw::io::AccountingFilter. */
+class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
   SHA256 *sha256_hash;
 
 public:
   virtual ~RGWRestfulIO() {}
 
-  RGWRestfulIO(RGWRestfulIOEngine* engine)
-    : RGWRestfulIOAccountingEngine<RGWRestfulIOEngine*>(std::move(engine)),
+  RGWRestfulIO(rgw::io::RestfulClient* engine)
+    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)),
       sha256_hash(nullptr) {
   }
 
-  using RGWDecoratedRestfulIO<RGWRestfulIOEngine*>::recv_body;
+  using DecoratedRestfulClient<RestfulClient*>::recv_body;
   virtual int recv_body(char* buf, size_t max, bool calculate_hash);
   std::string grab_aws4_sha256_hash();
 }; /* RGWRestfulIO */
@@ -210,8 +216,8 @@ static inline RGWRestfulIO* RESTFUL_IO(struct req_state* s) {
   return static_cast<RGWRestfulIO*>(s->cio);
 }
 
-static inline RGWClientIOAccounter* ACCOUNTING_IO(struct req_state* s) {
-  return dynamic_cast<RGWClientIOAccounter*>(s->cio);
+static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
+  return dynamic_cast<rgw::io::Accounter*>(s->cio);
 }
 
 

@@ -266,7 +266,7 @@ public:
 
   static int validate_bucket_name(const string& bucket);
 
-  int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
+  int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio);
   int authorize() override;
   int postauth_init() override;
 
@@ -315,7 +315,7 @@ public:
 
   int init(RGWRados* const store,
            struct req_state* const s,
-           RGWClientIO* const cio) override {
+           rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
     return RGWHandler_REST_SWIFT::init(store, s, cio);
   }
@@ -353,7 +353,7 @@ public:
 
   int init(RGWRados* const store,
            struct req_state* const s,
-           RGWClientIO* const cio) override {
+           rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
     return RGWHandler_REST_SWIFT::init(store, s, cio);
   }
@@ -403,7 +403,7 @@ public:
 
   int init(RGWRados* const store,
            struct req_state* const state,
-           RGWClientIO* const cio) override {
+           rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
     state->format = RGW_FORMAT_JSON;
@@ -456,7 +456,7 @@ public:
 
   int init(RGWRados* const store,
            struct req_state* const state,
-           RGWClientIO* const cio) override {
+           rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
     state->format = RGW_FORMAT_JSON;
@@ -509,7 +509,7 @@ public:
 
   int init(RGWRados* const store,
            struct req_state* const state,
-           RGWClientIO* const cio) override {
+           rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
     state->formatter = new JSONFormatter;
     state->format = RGW_FORMAT_JSON;

@@ -281,7 +281,7 @@ static void dump_status(struct req_state *s, int status,
   s->formatter->set_status(status, status_name);
   try {
     RESTFUL_IO(s)->send_status(status, status_name);
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err="
                      << e.what() << dendl;
   }
@@ -376,7 +376,7 @@ void dump_header(struct req_state* const s,
 {
   try {
     RESTFUL_IO(s)->send_header(name, val);
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_header() returned err="
                      << e.what() << dendl;
   }
@@ -415,7 +415,7 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
 {
   try {
     RESTFUL_IO(s)->send_content_length(len);
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << e.what() << dendl;
   }
@@ -426,7 +426,7 @@ static void dump_chunked_encoding(struct req_state* const s)
 {
   try {
     RESTFUL_IO(s)->send_chunked_transfer_encoding();
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->send_chunked_transfer_encoding()"
                      << " returned err=" << e.what() << dendl;
   }
@@ -708,7 +708,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
 
   try {
     RESTFUL_IO(s)->complete_header();
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->complete_header() returned err="
 		     << e.what() << dendl;
   }
@@ -798,7 +798,7 @@ void dump_continue(struct req_state * const s)
 {
   try {
     RESTFUL_IO(s)->send_100_continue();
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->send_100_continue() returned err="
 		     << e.what() << dendl;
   }
@@ -834,7 +834,7 @@ int dump_body(struct req_state* const s,
 {
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     return -e.code().value();
   }
 }
@@ -855,7 +855,7 @@ int recv_body(struct req_state* const s,
 {
   try {
     return RESTFUL_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     return -e.code().value();
   }
 }
@@ -1797,7 +1797,7 @@ static int64_t parse_content_length(const char *content_length)
   return len;
 }
 
-int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
+int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
 {
   req_info& info = s->info;
 

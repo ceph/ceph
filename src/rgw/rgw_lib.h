@@ -50,8 +50,8 @@ namespace rgw {
 
 /* request interface */
 
-  class RGWLibIO : public RGWClientIO,
-                   public RGWClientIOAccounter
+  class RGWLibIO : public rgw::io::BasicClient,
+                   public rgw::io::Accounter
   {
     RGWUserInfo user_info;
     RGWEnv env;

@@ -9,7 +9,10 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-void RGWClientIO::init(CephContext *cct) {
+namespace rgw {
+namespace io {
+
+void BasicClient::init(CephContext *cct) {
   init_env(cct);
 
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
@@ -22,6 +25,8 @@ void RGWClientIO::init(CephContext *cct) {
   }
 }
 
+} /* namespace io */
+} /* namespace rgw */
 
 int RGWRestfulIO::recv_body(char *buf, size_t max, bool calculate_hash)
 {
@@ -35,7 +40,7 @@ int RGWRestfulIO::recv_body(char *buf, size_t max, bool calculate_hash)
       calc_hash_sha256_update_stream(sha256_hash, buf, sent);
     }
     return sent;
-  } catch (RGWRestfulIOEngine::Exception& e) {
+  } catch (rgw::io::RestfulClient::Exception& e) {
     return -e.code().value();
   }
 }
