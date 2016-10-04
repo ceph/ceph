@@ -327,6 +327,10 @@ public:
 	return cmp_nibblewise(l, r) < 0;
     }
   };
+  template <typename T>
+  using bitwisemap = std::map<hobject_t, T, BitwiseComparator>;
+
+  using bitwiseset = std::set<hobject_t, BitwiseComparator>;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
