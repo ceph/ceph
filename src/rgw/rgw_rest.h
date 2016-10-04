@@ -477,7 +477,7 @@ class RGWRestfulIO;
 class RGWREST {
   RGWRESTMgr mgr;
 
-  static int preprocess(struct req_state *s, RGWClientIO *rio);
+  static int preprocess(struct req_state *s, rgw::io::BasicClient* rio);
 public:
   RGWREST() {}
   RGWHandler_REST *get_handler(RGWRados *store,

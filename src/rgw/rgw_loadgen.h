@@ -32,7 +32,7 @@ struct RGWLoadGenRequestEnv {
 
 /* XXX does RGWLoadGenIO actually want to perform stream/HTTP I/O,
  * or (e.g) are these NOOPs? */
-class RGWLoadGenIO : public RGWRestfulIOEngine
+class RGWLoadGenIO : public rgw::io::RestfulClient
 {
   uint64_t left_to_read;
   RGWLoadGenRequestEnv* req;

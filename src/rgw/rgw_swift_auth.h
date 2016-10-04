@@ -140,7 +140,7 @@ public:
   ~RGWHandler_SWIFT_Auth() {}
   RGWOp *op_get();
 
-  int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio);
   int authorize();
   int postauth_init() { return 0; }
   int read_permissions(RGWOp *op) { return 0; }

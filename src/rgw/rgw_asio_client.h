@@ -24,7 +24,7 @@ class RGWBufferlistBody {
                                             Headers>;
 };
 
-class RGWAsioClientIO : public RGWRestfulIOEngine {
+class RGWAsioClientIO : public rgw::io::RestfulClient {
   using tcp = boost::asio::ip::tcp;
   tcp::socket socket;
 

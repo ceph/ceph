@@ -3186,7 +3186,7 @@ int RGWHandler_REST_S3::postauth_init()
 }
 
 int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
-			    RGWClientIO *cio)
+                             rgw::io::BasicClient *cio)
 {
   int ret;
 
@@ -4135,7 +4135,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 }
 
 int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
-			     RGWClientIO *cio)
+                             rgw::io::BasicClient *cio)
 {
   int ret = RGWHandler_REST_S3::init_from_header(state, RGW_FORMAT_JSON,
 						     true);

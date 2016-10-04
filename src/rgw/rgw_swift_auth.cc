@@ -611,7 +611,7 @@ done:
 }
 
 int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
-				RGWClientIO *cio)
+				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;

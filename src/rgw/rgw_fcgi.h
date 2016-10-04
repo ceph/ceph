@@ -11,7 +11,7 @@
 
 struct FCGX_Request;
 
-class RGWFCGX : public RGWRestfulIOEngine
+class RGWFCGX : public rgw::io::RestfulClient
 {
   FCGX_Request *fcgx;
   RGWEnv env;

@@ -23,10 +23,10 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   RWLock::RLocker lock(env.mutex);
 
   RGWRequest req(env.store->get_new_req_id());
-  auto real_client_io = rgw_restful_io_add_reordering(
-                          rgw_restful_io_add_buffering(
-                            rgw_restful_io_add_chunking(
-                              rgw_restful_io_add_conlen_controlling(
+  auto real_client_io = rgw::io::add_reordering(
+                          rgw::io::add_buffering(
+                            rgw::io::add_chunking(
+                              rgw::io::add_conlen_controlling(
                                 RGWCivetWeb(conn, env.port)))));
   RGWRestfulIO client_io(&real_client_io);
 

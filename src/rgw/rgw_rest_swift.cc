@@ -2347,7 +2347,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
 }
 
 int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
-				RGWClientIO *cio)
+				rgw::io::BasicClient *cio)
 {
   struct req_init_state *t = &s->init_state;
 
