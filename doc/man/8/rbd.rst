@@ -10,7 +10,7 @@ Synopsis
 ========
 
 | **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
-  [ -p | --pool *pool* ] [--size *size* ] [ --object-size *B/K/M* ] [ *command* ... ] 
+  [ -p | --pool *pool* ] [ *command* ... ]
 
 
 Description
@@ -65,19 +65,21 @@ Parameters
      support for cloning and is more easily extensible to allow more
      features in the future.
 
-.. option:: --size size-in-M/G/T
+.. option:: -s size-in-M/G/T, --size size-in-M/G/T
 
-   Specifies the size (in M/G/T) of the new rbd image.
+   Specifies the size of the new rbd image or the new size of the existing rbd
+   image in M/G/T.  If no suffix is given, unit M is assumed.
 
-.. option:: --object-size B/K/M
+.. option:: --object-size size-in-B/K/M
 
-   Specifies the object size in B/K/M, it will be rounded up the nearest power of two.
-   The default object size is 4 MB, smallest is 4K and maximum is 32M.
-
+   Specifies the object size in B/K/M.  Object size will be rounded up the
+   nearest power of two; if no suffix is given, unit B is assumed.  The default
+   object size is 4M, smallest is 4K and maximum is 32M.
 
 .. option:: --stripe-unit size-in-B/K/M
 
-   Specifies the stripe unit size in B/K/M.  See striping section (below) for more details.
+   Specifies the stripe unit size in B/K/M.  If no suffix is given, unit B is
+   assumed.  See striping section (below) for more details.
 
 .. option:: --stripe-count num
 
@@ -182,11 +184,11 @@ Commands
   If image is a clone, information about its parent is also displayed.
   If a snapshot is specified, whether it is protected is shown as well.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
-:command:`clone` [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
+:command:`clone` [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
   Will create a clone (copy-on-write child) of the parent snapshot.
   Object size will be identical to that of the parent image unless
   specified. Size will be the same as the parent snapshot. The --stripe-unit
@@ -220,7 +222,7 @@ Commands
 :command:`export` (*image-spec* | *snap-spec*) [*dest-path*]
   Exports image to dest path (use - for stdout).
 
-:command:`import` [--image-format *format-id*] [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
+:command:`import` [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Creates a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
@@ -358,9 +360,10 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench-write` [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *total-size-to-write-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
+:command:`bench-write` [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
   Generate a series of writes to the image and measure the write throughput and
-  latency.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
+  latency.  If no suffix is given, unit B is assumed for both --io-size and
+  --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq.
 
 Image and snap specs
