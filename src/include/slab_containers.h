@@ -544,7 +544,7 @@ struct slab_list : public std::list<node,
     it ofirst = o.begin();
     it olast  = o.end();
     it mfirst = this->begin();
-    it mlast  = this->end();
+    int n = this->size();
     //
     // copy and erase nodes from other to end of my list
     //
@@ -555,7 +555,7 @@ struct slab_list : public std::list<node,
     //
     // Copy original nodes of my list to other container
     //
-    while (mfirst != mlast) {
+    while (n--) {
       o.push_back(std::move(*mfirst));
       mfirst = this->erase(mfirst);
     }
