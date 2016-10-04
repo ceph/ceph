@@ -318,14 +318,14 @@ public:
   struct SharedBlob : public boost::intrusive::unordered_set_base_hook<> {
     std::atomic_int nref = {0}; ///< reference count
 
+    // these are defined/set if the shared_blob is 'loaded'
+    bool loaded = false;        ///< whether shared_blob_t is loaded
+    bluestore_shared_blob_t shared_blob; ///< the actual shared state
+
     // these are defined/set if the blob is marked 'shared'
     uint64_t sbid = 0;          ///< shared blob id
     string key;                 ///< key in kv store
     SharedBlobSet *parent_set = 0;  ///< containing SharedBlobSet
-
-    // these are defined/set if the shared_blob is 'loaded'
-    bluestore_shared_blob_t shared_blob; ///< the actual shared state
-    bool loaded = false;        ///< whether shared_blob_t is loaded
 
     BufferSpace bc;             ///< buffer cache
 
