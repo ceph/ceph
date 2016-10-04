@@ -318,7 +318,7 @@ class CephFSVolumeClient(object):
 
         log.debug("Recovered from partial auth updates (if any).")
 
-    def _recover_auth_meta(auth_id, auth_meta):
+    def _recover_auth_meta(self, auth_id, auth_meta):
         """
         Call me after locking the auth meta file.
         """
