@@ -649,7 +649,7 @@ C Example
 		}
 		
 		/* Wait for the operation to complete */
-		rados_wait_for_complete(comp);
+		rados_aio_wait_for_complete(comp);
 		
 		/* Release the asynchronous I/O complete handle to avoid memory leaks. */
 		rados_aio_release(comp);		
