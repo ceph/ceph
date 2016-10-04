@@ -27,6 +27,18 @@
 
 namespace librbd {
 
+namespace {
+
+bool flush_object_map(bool is_last_request, uint32_t batch_size, uint32_t threshold) {
+  if (batch_size == 0) {
+    return false;
+  }
+
+  return (is_last_request || (batch_size >= threshold));
+}
+
+} // anonymous namespace
+
 template <typename I>
 AioObjectRequest<I>*
 AioObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
@@ -472,6 +484,35 @@ void AbstractAioObjectWrite::send_pre() {
   }
 }
 
+void AioObjectRemove::send_pre() {
+  RWLock::RLocker snap_lock(m_ictx->snap_lock);
+  if (m_ictx->object_map == nullptr) {
+    m_object_exist = true;
+  } else {
+    // should have been flushed prior to releasing lock
+    assert(m_ictx->exclusive_lock->is_lock_owner());
+    m_object_exist = m_ictx->object_map->object_may_exist(m_object_no);
+
+    uint8_t new_state;
+    pre_object_map_update(&new_state);
+
+    RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+    if (m_ictx->object_map->update_required(m_object_no, new_state)) {
+      ldout(m_ictx->cct, 20) << "send_pre (batch) " << this << " " << m_oid << " "
+                             << m_object_off << "~" << m_object_len
+                             << dendl;
+
+      // don't attemp to flush object map here as it would happen post
+      // object write anyway.
+      bool batched = m_ictx->object_map->aio_batch(m_object_no, new_state, {},
+                                                   OBJECT_MAP_BATCH_LEVEL0);
+      assert(batched);
+    }
+  }
+
+  send_write();
+}
+
 bool AbstractAioObjectWrite::send_post() {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr || !post_object_map_update()) {
@@ -495,6 +536,40 @@ bool AbstractAioObjectWrite::send_post() {
                                                 OBJECT_NONEXISTENT,
       			                  OBJECT_PENDING, ctx);
   assert(updated);
+  return false;
+}
+
+bool AioObjectRemove::send_post() {
+  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+  if (m_ictx->object_map == nullptr) {
+    return true;
+  }
+
+  // should have been flushed prior to releasing lock
+  assert(m_ictx->exclusive_lock->is_lock_owner());
+
+  RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+  if (m_ictx->object_map->update_required(m_object_no, OBJECT_NONEXISTENT) &&
+      post_object_map_update()) {
+    bool batched = m_ictx->object_map->aio_batch(m_object_no, OBJECT_NONEXISTENT,
+                                                 OBJECT_PENDING,
+                                                 OBJECT_MAP_BATCH_LEVEL1);
+    assert(batched);
+  }
+
+  CephContext *cct = m_ictx->cct;
+  if (!flush_object_map(m_completion->is_last_request(), m_ictx->object_map->batch_size(),
+                        cct->_conf->rbd_object_map_batch_size)) {
+    return true;
+  }
+
+  // steal this request to update batched object map
+  ldout(cct, 20) << "send_post (batch) " << this << " " << m_oid << " "
+                 << m_object_off << "~" << m_object_len << dendl;
+  m_state = LIBRBD_AIO_WRITE_POST;
+
+  m_ictx->object_map->aio_update_batch(
+    util::create_context_callback<AioObjectRequest>(this));
   return false;
 }
 

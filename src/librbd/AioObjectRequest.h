@@ -246,10 +246,10 @@ protected:
   virtual void send_write();
   virtual void send_write_op(bool write_guard);
   virtual void handle_write_guard();
+  virtual void send_pre();
+  virtual bool send_post();
 
 private:
-  void send_pre();
-  bool send_post();
   void send_copyup();
 };
 
@@ -323,6 +323,8 @@ protected:
 
   virtual void guard_write();
   virtual void send_write();
+  virtual void send_pre();
+  virtual bool send_post();
 
 private:
   uint8_t m_object_state;
