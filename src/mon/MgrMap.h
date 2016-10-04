@@ -55,15 +55,15 @@ WRITE_CLASS_ENCODER(StandbyInfo)
 class MgrMap
 {
 public:
-  epoch_t epoch;
+  epoch_t epoch = 0;
 
-  // global_id of the ceph-mgr instance selected as a leader
-  uint64_t active_gid;
-  // server address reported by the leader once it is active
+  /// global_id of the ceph-mgr instance selected as a leader
+  uint64_t active_gid = 0;
+  /// server address reported by the leader once it is active
   entity_addr_t active_addr;
-  // whether the nominated leader is active (i.e. has initialized its server)
-  bool available;
-  // the name (foo in mgr.<foo>) of the active daemon
+  /// whether the nominated leader is active (i.e. has initialized its server)
+  bool available = false;
+  /// the name (foo in mgr.<foo>) of the active daemon
   std::string active_name;
 
   std::map<uint64_t, StandbyInfo> standbys;
@@ -138,10 +138,6 @@ public:
       }
     }
   }
-
-  MgrMap()
-    : epoch(0), available(false)
-  {}
 };
 
 WRITE_CLASS_ENCODER_FEATURES(MgrMap)
