@@ -1172,7 +1172,6 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
   out << "SharedBlob(" << &sb;
   if (sb.sbid) {
     out << " sbid 0x" << std::hex << sb.sbid << std::dec;
-    assert(sb.parent_set);
   }
   if (sb.loaded) {
     out << " loaded " << sb.shared_blob;
@@ -1720,14 +1719,14 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
       le->blob_depth = 1;
     }
     if (blobid & BLOBID_FLAG_SPANNING) {
-      le->blob = get_spanning_blob(blobid >> BLOBID_SHIFT_BITS);
+      le->assign_blob(get_spanning_blob(blobid >> BLOBID_SHIFT_BITS));
     } else {
       blobid >>= BLOBID_SHIFT_BITS;
       if (blobid) {
-	le->blob = blobs[blobid - 1];
+	le->assign_blob(blobs[blobid - 1]);
 	assert(le->blob);
       } else {
-	le->blob = new Blob();
+	le->assign_blob(new Blob());
 	le->blob->decode(p);
 	blobs[n] = le->blob;
 	onode->c->open_shared_blob(le->blob);
@@ -2064,7 +2063,8 @@ BlueStore::Collection::Collection(BlueStore *ns, Cache *c, coll_t cid)
     exists(true),
     // size the shared blob hash table as a ratio of the onode cache size.
     shared_blob_set(MAX(16,
-			g_conf->bluestore_onode_cache_size *
+			g_conf->bluestore_onode_cache_size /
+			store->cache_shards.size() *
 			g_conf->bluestore_shared_blob_hash_table_size_ratio)),
     onode_map(c)
 {
@@ -2188,6 +2188,13 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
   o.reset(on);
   return onode_map.add(oid, o);
+}
+
+void BlueStore::Collection::trim_cache()
+{
+  cache->trim(
+    g_conf->bluestore_onode_cache_size / store->cache_shards.size(),
+    g_conf->bluestore_buffer_cache_size / store->cache_shards.size());
 }
 
 
@@ -2414,7 +2421,7 @@ void BlueStore::_init_logger()
     "Sum for wal write op");
   b.add_u64(l_bluestore_wal_write_bytes, "wal_write_bytes",
     "Sum for wal write bytes");
-  b.add_u64(l_bluestore_write_penalty_read_ops, " write_penalty_read_ops",
+  b.add_u64(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
     "Sum for write penalty read ops");
   b.add_u64(l_bluestore_allocated, "bluestore_allocated",
     "Sum for allocated bytes");
@@ -2427,10 +2434,20 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_compressed_original, "bluestore_compressed_original",
     "Sum for original bytes that were compressed");
 
+  b.add_u64(l_bluestore_onodes, "bluestore_onodes",
+	    "Number of onodes in cache");
   b.add_u64(l_bluestore_onode_hits, "bluestore_onode_hits",
     "Sum for onode-lookups hit in the cache");
   b.add_u64(l_bluestore_onode_misses, "bluestore_onode_misses",
     "Sum for onode-lookups missed in the cache");
+  b.add_u64(l_bluestore_extents, "bluestore_extents",
+	    "Number of extents in cache");
+  b.add_u64(l_bluestore_blobs, "bluestore_blobs",
+	    "Number of blobs in cache");
+  b.add_u64(l_bluestore_buffers, "bluestore_buffers",
+	    "Number of buffers in cache");
+  b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
+	    "Number of buffer bytes in cache");
   b.add_u64(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
     "Sum for bytes of read hit in the cache");
   b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
@@ -4508,6 +4525,24 @@ void BlueStore::_reap_collections()
   }
 }
 
+void BlueStore::_update_cache_logger()
+{
+  uint64_t num_onodes = 0;
+  uint64_t num_extents = 0;
+  uint64_t num_blobs = 0;
+  uint64_t num_buffers = 0;
+  uint64_t num_buffer_bytes = 0;
+  for (auto c : cache_shards) {
+    c->add_stats(&num_onodes, &num_extents, &num_blobs,
+		 &num_buffers, &num_buffer_bytes);
+  }
+  logger->set(l_bluestore_onodes, num_onodes);
+  logger->set(l_bluestore_extents, num_extents);
+  logger->set(l_bluestore_blobs, num_blobs);
+  logger->set(l_bluestore_buffers, num_buffers);
+  logger->set(l_bluestore_buffer_bytes, num_buffer_bytes);
+}
+
 // ---------------
 // read operations
 
@@ -4540,10 +4575,7 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
       r = false;
   }
 
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
-
+  c->trim_cache();
   return r;
 }
 
@@ -4581,9 +4613,7 @@ int BlueStore::stat(
     st->st_nlink = 1;
   }
 
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   int r = 0;
   if (_debug_mdata_eio(oid)) {
     r = -EIO;
@@ -4643,9 +4673,7 @@ int BlueStore::read(
 
  out:
   assert(allow_eio || r != -EIO);
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   if (r == 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
@@ -5040,9 +5068,7 @@ int BlueStore::fiemap(
   }
 
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size = 0x(" << m << ")" << std::dec << dendl;
@@ -5091,9 +5117,7 @@ int BlueStore::getattr(
     r = 0;
   }
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   if (r == 0 && _debug_mdata_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
@@ -5139,9 +5163,7 @@ int BlueStore::getattrs(
   }
 
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   if (r == 0 && _debug_mdata_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
@@ -5322,9 +5344,7 @@ int BlueStore::collection_list(
   }
 
  out:
-  c->cache->trim(
-    g_conf->bluestore_onode_cache_size,
-    g_conf->bluestore_buffer_cache_size);
+  c->trim_cache();
   dout(10) << __func__ << " " << c->cid
 	   << " start " << start << " end " << end << " max " << max
 	   << " = " << r << ", ls.size() = " << ls->size()
@@ -6172,9 +6192,7 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
   }
 
   if (c) {
-    c->cache->trim(
-      g_conf->bluestore_onode_cache_size,
-      g_conf->bluestore_buffer_cache_size);
+    c->trim_cache();
   }
 }
 
@@ -6356,6 +6374,8 @@ void BlueStore::_kv_sync_thread()
 
       // this is as good a place as any ...
       _reap_collections();
+
+      _update_cache_logger();
 
       if (bluefs) {
 	if (!bluefs_gift_extents.empty()) {
