@@ -105,6 +105,11 @@ void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
 Journaler::~Journaler() {
   if (m_metadata != nullptr) {
     assert(!m_metadata->is_initialized());
+    if (!m_initialized) {
+      // never initialized -- ensure any in-flight ops are complete
+      // since we wouldn't expect shut_down to be invoked
+      m_metadata->wait_for_ops();
+    }
     m_metadata->put();
     m_metadata = nullptr;
   }
@@ -127,6 +132,7 @@ void Journaler::exists(Context *on_finish) const {
 }
 
 void Journaler::init(Context *on_init) {
+  m_initialized = true;
   m_metadata->init(new C_InitJournaler(this, on_init));
 }
 
