@@ -2950,7 +2950,7 @@ class DataLogTrimCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http;
   const int num_shards;
-  const std::string& zone; //< my zone id
+  const std::string& zone_id; //< my zone id
   std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
   std::vector<rgw_data_sync_marker> min_shard_markers; //< min marker per shard
   std::vector<std::string>& last_trim; //< last trimmed marker per shard
@@ -2961,7 +2961,7 @@ class DataLogTrimCR : public RGWCoroutine {
                    int num_shards, std::vector<std::string>& last_trim)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards),
-      zone(store->get_zone().id),
+      zone_id(store->get_zone().id),
       peer_status(store->zone_conn_map.size()),
       min_shard_markers(num_shards),
       last_trim(last_trim)
@@ -2973,14 +2973,14 @@ class DataLogTrimCR : public RGWCoroutine {
 int DataLogTrimCR::operate()
 {
   reenter(this) {
-    ldout(cct, 10) << "fetching sync status for zone " << zone << dendl;
+    ldout(cct, 10) << "fetching sync status for zone " << zone_id << dendl;
     set_status("fetching sync status");
     yield {
       // query data sync status from each sync peer
       rgw_http_param_pair params[] = {
         { "type", "data" },
         { "status", nullptr },
-        { "source-zone", zone.c_str() },
+        { "source-zone", zone_id.c_str() },
         { nullptr, nullptr }
       };
 
