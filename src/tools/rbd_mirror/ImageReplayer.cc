@@ -726,6 +726,7 @@ void ImageReplayer<I>::handle_replay_ready()
     return;
   }
 
+  m_event_replay_tracker.start_op();
   if (m_replay_tag_valid && m_replay_tag.tid == m_replay_tag_tid) {
     preprocess_entry();
     return;
@@ -878,13 +879,20 @@ template <typename I>
 void ImageReplayer<I>::replay_flush() {
   dout(20) << dendl;
 
+  bool interrupted = false;
   {
     Mutex::Locker locker(m_lock);
     if (m_state != STATE_REPLAYING) {
       dout(20) << "replay interrupted" << dendl;
-      return;
+      interrupted = true;
+    } else {
+      m_state = STATE_REPLAY_FLUSHING;
     }
-    m_state = STATE_REPLAY_FLUSHING;
+  }
+
+  if (interrupted) {
+    m_event_replay_tracker.finish_op();
+    return;
   }
 
   // shut down the replay to flush all IO and ops and create a new
@@ -917,9 +925,11 @@ void ImageReplayer<I>::handle_replay_flush(int r) {
 
   if (r < 0) {
     derr << "replay flush encountered an error: " << cpp_strerror(r) << dendl;
+    m_event_replay_tracker.finish_op();
     handle_replay_complete(r, "replay flush encountered an error");
     return;
   } else if (on_replay_interrupted()) {
+    m_event_replay_tracker.finish_op();
     return;
   }
 
@@ -951,6 +961,7 @@ void ImageReplayer<I>::handle_get_remote_tag(int r) {
   if (r < 0) {
     derr << "failed to retrieve remote tag " << m_replay_tag_tid << ": "
          << cpp_strerror(r) << dendl;
+    m_event_replay_tracker.finish_op();
     handle_replay_complete(r, "failed to retrieve remote tag");
     return;
   }
@@ -998,6 +1009,7 @@ void ImageReplayer<I>::handle_allocate_local_tag(int r) {
 
   if (r < 0) {
     derr << "failed to allocate journal tag: " << cpp_strerror(r) << dendl;
+    m_event_replay_tracker.finish_op();
     handle_replay_complete(r, "failed to allocate journal tag");
     return;
   }
@@ -1015,6 +1027,7 @@ void ImageReplayer<I>::preprocess_entry() {
   int r = m_local_replay->decode(&it, &m_event_entry);
   if (r < 0) {
     derr << "failed to decode journal event" << dendl;
+    m_event_replay_tracker.finish_op();
     handle_replay_complete(r, "failed to decode journal event");
     return;
   }
@@ -1035,6 +1048,7 @@ void ImageReplayer<I>::handle_preprocess_entry(int r) {
 
   if (r < 0) {
     derr << "failed to preprocess journal event" << dendl;
+    m_event_replay_tracker.finish_op();
     handle_replay_complete(r, "failed to preprocess journal event");
     return;
   }
@@ -1051,7 +1065,6 @@ void ImageReplayer<I>::process_entry() {
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
   Context *on_commit = new C_ReplayCommitted(this, std::move(m_replay_entry));
 
-  m_event_replay_tracker.start_op();
   m_local_replay->process(m_event_entry, on_ready, on_commit);
 }
 
