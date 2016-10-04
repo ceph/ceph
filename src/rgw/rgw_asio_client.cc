@@ -78,8 +78,8 @@ void RGWAsioClientIO::init_env(CephContext *cct)
   // TODO: set REMOTE_USER if authenticated
 }
 
-std::size_t RGWAsioClientIO::write_data(const char* const buf,
-                                        const std::size_t len)
+size_t RGWAsioClientIO::write_data(const char* const buf,
+                                   const size_t len)
 {
   boost::system::error_code ec;
   auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
@@ -90,7 +90,7 @@ std::size_t RGWAsioClientIO::write_data(const char* const buf,
   return bytes;
 }
 
-std::size_t RGWAsioClientIO::read_data(char* const buf, const std::size_t max)
+size_t RGWAsioClientIO::read_data(char* const buf, const size_t max)
 {
   // read data from the body's bufferlist
   auto bytes = std::min<unsigned>(max, body_iter.get_remaining());
@@ -108,8 +108,8 @@ void RGWAsioClientIO::flush()
   return;
 }
 
-std::size_t RGWAsioClientIO::send_status(const int status,
-                                         const char* const status_name)
+size_t RGWAsioClientIO::send_status(const int status,
+                                    const char* const status_name)
 {
   static constexpr size_t STATUS_BUF_SIZE = 128;
 
@@ -120,7 +120,7 @@ std::size_t RGWAsioClientIO::send_status(const int status,
   return write_data(statusbuf, statuslen);
 }
 
-std::size_t RGWAsioClientIO::send_100_continue()
+size_t RGWAsioClientIO::send_100_continue()
 {
   const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
   return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
@@ -139,7 +139,7 @@ static size_t dump_date_header(char (&timestr)[TIME_BUF_SIZE])
                   "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp);
 }
 
-std::size_t RGWAsioClientIO::complete_header()
+size_t RGWAsioClientIO::complete_header()
 {
   size_t sent = 0;
 
@@ -160,8 +160,8 @@ std::size_t RGWAsioClientIO::complete_header()
   return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }
 
-std::size_t RGWAsioClientIO::send_header(const boost::string_ref& name,
-                                         const boost::string_ref& value)
+size_t RGWAsioClientIO::send_header(const boost::string_ref& name,
+                                    const boost::string_ref& value)
 {
   char hdrbuf[name.size() + 2 + value.size() + 2 + 1];
   const auto hdrlen = snprintf(hdrbuf, sizeof(hdrbuf), "%.*s: %.*s\r\n",
@@ -172,7 +172,7 @@ std::size_t RGWAsioClientIO::send_header(const boost::string_ref& name,
   return write_data(hdrbuf, hdrlen);
 }
 
-std::size_t RGWAsioClientIO::send_content_length(const uint64_t len)
+size_t RGWAsioClientIO::send_content_length(const uint64_t len)
 {
   static constexpr size_t CONLEN_BUF_SIZE = 128;
 

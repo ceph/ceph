@@ -46,14 +46,14 @@ class RGWRestfulIOEngine : public RGWClientIO {
 public:
   typedef std::system_error Exception;
 
-  virtual std::size_t send_status(int status, const char *status_name) = 0;
-  virtual std::size_t send_100_continue() = 0;
+  virtual size_t send_status(int status, const char *status_name) = 0;
+  virtual size_t send_100_continue() = 0;
 
   /* Send header to client. On success returns number of bytes sent to the direct
    * client of RadosGW. On failure throws int containing errno. boost::string_ref
    * is being used because of length it internally carries. */
-  virtual std::size_t send_header(const boost::string_ref& name,
-                                  const boost::string_ref& value) = 0;
+  virtual size_t send_header(const boost::string_ref& name,
+                             const boost::string_ref& value) = 0;
 
   /* Inform a client about a content length. Takes number of bytes supplied in
    * @len XOR one of the alternative modes for dealing with it passed as @mode.
@@ -64,21 +64,21 @@ public:
    *  - The method must be called EXACTLY ONE time.
    *  - The method must be preceeded with a call to send_status().
    *  - The method must not be called after complete_header(). */
-  virtual std::size_t send_content_length(uint64_t len) = 0;
+  virtual size_t send_content_length(uint64_t len) = 0;
 
-  virtual std::size_t send_chunked_transfer_encoding() {
+  virtual size_t send_chunked_transfer_encoding() {
     /* This is a null implementation. We don't send anything here, even the HTTP
      * header. The intended behaviour should be provided through a decorator or
      * directly by a given front-end. */
     return 0;
   }
 
-  virtual std::size_t complete_header() = 0;
+  virtual size_t complete_header() = 0;
 
   /* Receive body. On success Returns number of bytes sent to the direct
    * client of RadosGW. On failure throws int containing errno. */
-  virtual std::size_t recv_body(char* buf, std::size_t max) = 0;
-  virtual std::size_t send_body(const char* buf, std::size_t len) = 0;
+  virtual size_t recv_body(char* buf, size_t max) = 0;
+  virtual size_t send_body(const char* buf, size_t len) = 0;
 
   virtual void flush() = 0;
 };
@@ -124,38 +124,38 @@ public:
     : decoratee(std::move(decoratee)) {
   }
 
-  std::size_t send_status(const int status,
-                          const char* const status_name) override {
+  size_t send_status(const int status,
+                     const char* const status_name) override {
     return get_decoratee().send_status(status, status_name);
   }
 
-  std::size_t send_100_continue() override {
+  size_t send_100_continue() override {
     return get_decoratee().send_100_continue();
   }
 
-  std::size_t send_header(const boost::string_ref& name,
-                          const boost::string_ref& value) override {
+  size_t send_header(const boost::string_ref& name,
+                     const boost::string_ref& value) override {
     return get_decoratee().send_header(name, value);
   }
 
-  std::size_t send_content_length(const uint64_t len) override {
+  size_t send_content_length(const uint64_t len) override {
     return get_decoratee().send_content_length(len);
   }
 
-  std::size_t send_chunked_transfer_encoding() override {
+  size_t send_chunked_transfer_encoding() override {
     return get_decoratee().send_chunked_transfer_encoding();
   }
 
-  std::size_t complete_header() override {
+  size_t complete_header() override {
     return get_decoratee().complete_header();
   }
 
-  std::size_t recv_body(char* const buf, const std::size_t max) override {
+  size_t recv_body(char* const buf, const size_t max) override {
     return get_decoratee().recv_body(buf, max);
   }
 
-  std::size_t send_body(const char* const buf,
-                        const std::size_t len) override {
+  size_t send_body(const char* const buf,
+                   const size_t len) override {
     return get_decoratee().send_body(buf, len);
   }
 
@@ -199,7 +199,7 @@ public:
   }
 
   using RGWDecoratedRestfulIO<RGWRestfulIOEngine*>::recv_body;
-  virtual int recv_body(char* buf, std::size_t max, bool calculate_hash);
+  virtual int recv_body(char* buf, size_t max, bool calculate_hash);
   std::string grab_aws4_sha256_hash();
 }; /* RGWRestfulIO */
 
@@ -218,12 +218,12 @@ static inline RGWClientIOAccounter* ACCOUNTING_IO(struct req_state* s) {
 class RGWClientIOStreamBuf : public std::streambuf {
 protected:
   RGWRestfulIO &rio;
-  std::size_t const window_size;
-  std::size_t const putback_size;
+  size_t const window_size;
+  size_t const putback_size;
   std::vector<char> buffer;
 
 public:
-  RGWClientIOStreamBuf(RGWRestfulIO &rio, std::size_t ws, std::size_t ps = 1)
+  RGWClientIOStreamBuf(RGWRestfulIO &rio, size_t ws, size_t ps = 1)
     : rio(rio),
       window_size(ws),
       putback_size(ps),

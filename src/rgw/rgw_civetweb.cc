@@ -12,7 +12,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-std::size_t RGWCivetWeb::write_data(const char *buf, std::size_t len)
+size_t RGWCivetWeb::write_data(const char *buf, size_t len)
 {
   const int ret = mg_write(conn, buf, len);
   if (ret == 0) {
@@ -32,7 +32,7 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
 {
 }
 
-std::size_t RGWCivetWeb::read_data(char *buf, std::size_t len)
+size_t RGWCivetWeb::read_data(char *buf, size_t len)
 {
   const int ret = mg_read(conn, buf, len);
   if (ret < 0) {
@@ -116,7 +116,7 @@ void RGWCivetWeb::init_env(CephContext *cct)
 }
 
 template <class... Args>
-static inline std::size_t safe_mg_printf(Args&&... args)
+static inline size_t safe_mg_printf(Args&&... args)
 {
   const int ret = mg_printf(std::forward<Args>(args)...);
   if (ret == 0) {
@@ -125,10 +125,10 @@ static inline std::size_t safe_mg_printf(Args&&... args)
   } else if (ret < 0) {
     throw RGWRestfulIOEngine::Exception(-ret, std::system_category());
   }
-  return static_cast<std::size_t>(ret);
+  return static_cast<size_t>(ret);
 }
 
-std::size_t RGWCivetWeb::send_status(int status, const char *status_name)
+size_t RGWCivetWeb::send_status(int status, const char *status_name)
 {
   mg_set_http_status(conn, status);
 
@@ -136,20 +136,20 @@ std::size_t RGWCivetWeb::send_status(int status, const char *status_name)
                         status_name ? status_name : "");
 }
 
-std::size_t RGWCivetWeb::send_100_continue()
+size_t RGWCivetWeb::send_100_continue()
 {
   const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
   return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
 }
 
-std::size_t RGWCivetWeb::send_header(const boost::string_ref& name,
-                                     const boost::string_ref& value)
+size_t RGWCivetWeb::send_header(const boost::string_ref& name,
+                                const boost::string_ref& value)
 {
   return safe_mg_printf(conn, "%.*s: %.*s\r\n", name.length(), name.data(),
                         value.length(), value.data());
 }
 
-std::size_t RGWCivetWeb::dump_date_header()
+size_t RGWCivetWeb::dump_date_header()
 {
   char timestr[TIME_BUF_SIZE];
 
@@ -169,9 +169,9 @@ std::size_t RGWCivetWeb::dump_date_header()
   return write_data(timestr, strlen(timestr));
 }
 
-std::size_t RGWCivetWeb::complete_header()
+size_t RGWCivetWeb::complete_header()
 {
-  std::size_t sent = dump_date_header();
+  size_t sent = dump_date_header();
 
   if (explicit_keepalive) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
@@ -185,7 +185,7 @@ std::size_t RGWCivetWeb::complete_header()
   return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
 }
 
-std::size_t RGWCivetWeb::send_content_length(uint64_t len)
+size_t RGWCivetWeb::send_content_length(uint64_t len)
 {
   return safe_mg_printf(conn, "Content-Length: %" PRIu64 "\r\n", len);
 }

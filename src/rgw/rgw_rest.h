@@ -441,7 +441,7 @@ class RGWRESTMgr {
   bool should_log;
 protected:
   std::map<std::string, RGWRESTMgr*> resource_mgrs;
-  std::multimap<std::size_t, std::string> resources_by_size;
+  std::multimap<size_t, std::string> resources_by_size;
   RGWRESTMgr* default_mgr;
 
 public:
@@ -601,10 +601,10 @@ extern void dump_access_control(struct req_state *s, const char *origin,
 				uint32_t max_age);
 extern void dump_access_control(req_state *s, RGWOp *op);
 
-extern int dump_body(struct req_state* s, const char* buf, std::size_t len);
+extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
 
-extern int recv_body(struct req_state* s, char* buf, std::size_t max);
+extern int recv_body(struct req_state* s, char* buf, size_t max);
 
 #endif /* CEPH_RGW_REST_H */

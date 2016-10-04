@@ -27,8 +27,8 @@ public:
       total_received(0) {
   }
 
-  std::size_t send_status(const int status,
-                          const char* const status_name) override {
+  size_t send_status(const int status,
+                     const char* const status_name) override {
     const auto sent = RGWDecoratedRestfulIO<T>::send_status(status, status_name);
     if (enabled) {
       total_sent += sent;
@@ -36,7 +36,7 @@ public:
     return sent;
   }
 
-  std::size_t send_100_continue() override {
+  size_t send_100_continue() override {
     const auto sent = RGWDecoratedRestfulIO<T>::send_100_continue();
     if (enabled) {
       total_sent += sent;
@@ -44,8 +44,8 @@ public:
     return sent;
   }
 
-  std::size_t send_header(const boost::string_ref& name,
-                          const boost::string_ref& value) override {
+  size_t send_header(const boost::string_ref& name,
+                     const boost::string_ref& value) override {
     const auto sent = RGWDecoratedRestfulIO<T>::send_header(name, value);
     if (enabled) {
       total_sent += sent;
@@ -53,7 +53,7 @@ public:
     return sent;
   }
 
-  std::size_t send_content_length(const uint64_t len) override {
+  size_t send_content_length(const uint64_t len) override {
     const auto sent = RGWDecoratedRestfulIO<T>::send_content_length(len);
     if (enabled) {
       total_sent += sent;
@@ -61,7 +61,7 @@ public:
     return sent;
   }
 
-  std::size_t send_chunked_transfer_encoding() override {
+  size_t send_chunked_transfer_encoding() override {
     const auto sent = RGWDecoratedRestfulIO<T>::send_chunked_transfer_encoding();
     if (enabled) {
       total_sent += sent;
@@ -69,7 +69,7 @@ public:
     return sent;
   }
 
-  std::size_t complete_header() override {
+  size_t complete_header() override {
     const auto sent = RGWDecoratedRestfulIO<T>::complete_header();
     if (enabled) {
       total_sent += sent;
@@ -77,7 +77,7 @@ public:
     return sent;
   }
 
-  std::size_t recv_body(char* buf, std::size_t max) override {
+  size_t recv_body(char* buf, size_t max) override {
     const auto received = RGWDecoratedRestfulIO<T>::recv_body(buf, max);
     if (enabled) {
       total_received += received;
@@ -85,8 +85,8 @@ public:
     return received;
   }
 
-  std::size_t send_body(const char* const buf,
-                        const std::size_t len) override {
+  size_t send_body(const char* const buf,
+                   const size_t len) override {
     const auto sent = RGWDecoratedRestfulIO<T>::send_body(buf, len);
     if (enabled) {
       total_sent += sent;
@@ -127,16 +127,16 @@ public:
       buffer_data(false) {
   }
 
-  std::size_t send_content_length(const uint64_t len) override;
-  std::size_t send_chunked_transfer_encoding() override;
-  std::size_t complete_header() override;
-  std::size_t send_body(const char* buf, std::size_t len) override;
+  size_t send_content_length(const uint64_t len) override;
+  size_t send_chunked_transfer_encoding() override;
+  size_t complete_header() override;
+  size_t send_body(const char* buf, size_t len) override;
   int complete_request() override;
 };
 
 template <typename T>
-std::size_t RGWRestfulIOBufferingEngine<T>::send_body(const char* const buf,
-                                                      const std::size_t len)
+size_t RGWRestfulIOBufferingEngine<T>::send_body(const char* const buf,
+                                                 const size_t len)
 {
   if (buffer_data) {
     data.append(buf, len);
@@ -147,21 +147,21 @@ std::size_t RGWRestfulIOBufferingEngine<T>::send_body(const char* const buf,
 }
 
 template <typename T>
-std::size_t RGWRestfulIOBufferingEngine<T>::send_content_length(const uint64_t len)
+size_t RGWRestfulIOBufferingEngine<T>::send_content_length(const uint64_t len)
 {
   has_content_length = true;
   return RGWDecoratedRestfulIO<T>::send_content_length(len);
 }
 
 template <typename T>
-std::size_t RGWRestfulIOBufferingEngine<T>::send_chunked_transfer_encoding()
+size_t RGWRestfulIOBufferingEngine<T>::send_chunked_transfer_encoding()
 {
   has_content_length = true;
   return RGWDecoratedRestfulIO<T>::send_chunked_transfer_encoding();
 }
 
 template <typename T>
-std::size_t RGWRestfulIOBufferingEngine<T>::complete_header()
+size_t RGWRestfulIOBufferingEngine<T>::complete_header()
 {
   if (! has_content_length) {
     /* We will dump everything in complete_request(). */
@@ -217,26 +217,26 @@ public:
       chunking_enabled(false) {
   }
 
-  std::size_t send_content_length(const uint64_t len) override {
+  size_t send_content_length(const uint64_t len) override {
     has_content_length = true;
     return RGWDecoratedRestfulIO<T>::send_content_length(len);
   }
 
-  std::size_t send_chunked_transfer_encoding() override {
+  size_t send_chunked_transfer_encoding() override {
     has_content_length = false;
     chunking_enabled = true;
     return RGWDecoratedRestfulIO<T>::send_header("Transfer-Encoding", "chunked");
   }
 
-  std::size_t send_body(const char* buf,
-                        const std::size_t len) override {
+  size_t send_body(const char* buf,
+                   const size_t len) override {
     if (! chunking_enabled) {
       return RGWDecoratedRestfulIO<T>::send_body(buf, len);
     } else {
       static constexpr char HEADER_END[] = "\r\n";
       char sizebuf[32];
       const auto slen = snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
-      std::size_t sent = 0;
+      size_t sent = 0;
 
       sent += RGWDecoratedRestfulIO<T>::send_body(sizebuf, slen);
       sent += RGWDecoratedRestfulIO<T>::send_body(buf, len);
@@ -247,7 +247,7 @@ public:
   }
 
   int complete_request() override {
-    std::size_t sent = 0;
+    size_t sent = 0;
 
     if (chunking_enabled) {
       static constexpr char CHUNKED_RESP_END[] = "0\r\n\r\n";
@@ -284,8 +284,8 @@ public:
       action(ContentLengthAction::UNKNOWN) {
   }
 
-  std::size_t send_status(const int status,
-                          const char* const status_name) override {
+  size_t send_status(const int status,
+                     const char* const status_name) override {
     if (204 == status || 304 == status) {
       action = ContentLengthAction::INHIBIT;
     } else {
@@ -295,7 +295,7 @@ public:
     return RGWDecoratedRestfulIO<T>::send_status(status, status_name);
   }
 
-  std::size_t send_content_length(const uint64_t len) override {
+  size_t send_content_length(const uint64_t len) override {
     switch(action) {
     case ContentLengthAction::FORWARD:
       return RGWDecoratedRestfulIO<T>::send_content_length(len);
@@ -329,8 +329,8 @@ protected:
 
   std::vector<std::pair<std::string, std::string>> headers;
 
-  std::size_t send_header(const boost::string_ref& name,
-                          const boost::string_ref& value) override {
+  size_t send_header(const boost::string_ref& name,
+                     const boost::string_ref& value) override {
     switch (phase) {
     case ReorderState::RGW_EARLY_HEADERS:
     case ReorderState::RGW_STATUS_SEEN:
@@ -351,14 +351,14 @@ public:
       phase(ReorderState::RGW_EARLY_HEADERS) {
   }
 
-  std::size_t send_status(const int status,
-                          const char* const status_name) override {
+  size_t send_status(const int status,
+                     const char* const status_name) override {
     phase = ReorderState::RGW_STATUS_SEEN;
 
     return RGWDecoratedRestfulIO<T>::send_status(status, status_name);
   }
 
-  std::size_t send_content_length(const uint64_t len) override {
+  size_t send_content_length(const uint64_t len) override {
     if (ReorderState::RGW_EARLY_HEADERS == phase) {
       /* Oh great, someone tries to send content length before status. */
       content_length = len;
@@ -368,7 +368,7 @@ public:
     }
   }
 
-  std::size_t complete_header() override {
+  size_t complete_header() override {
     size_t sent = 0;
 
     /* Change state in order to immediately send everything we get. */

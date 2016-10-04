@@ -23,7 +23,7 @@ void RGWClientIO::init(CephContext *cct) {
 }
 
 
-int RGWRestfulIO::recv_body(char *buf, std::size_t max, bool calculate_hash)
+int RGWRestfulIO::recv_body(char *buf, size_t max, bool calculate_hash)
 {
   try {
     const auto sent = recv_body(buf, max);
