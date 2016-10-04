@@ -2146,6 +2146,7 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
       in, mask,
       mdr->client_request->get_caller_uid(),
       mdr->client_request->get_caller_gid(),
+      &mdr->client_request->get_caller_gid_list(),
       mdr->client_request->head.args.setattr.uid,
       mdr->client_request->head.args.setattr.gid);
     if (r < 0) {

@@ -7,7 +7,6 @@
 #include "Dir.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
-#include "UserGroups.h"
 
 #include "mds/flock.h"
 
@@ -288,6 +287,27 @@ int Inode::caps_dirty()
   return dirty_caps | flushing_caps;
 }
 
+const UserPerm* Inode::get_best_perms()
+{
+  const UserPerm *perms = NULL;
+  for (const auto ci : caps) {
+    const UserPerm& iperm = ci.second->latest_perms;
+    if (!perms) { // we don't have any, take what's present
+      perms = &iperm;
+    } else if (iperm.uid() == uid) {
+      if (iperm.gid() == gid) { // we have the best possible, return
+	return &iperm;
+      }
+      if (perms->uid() != uid) { // take uid > gid every time
+	perms = &iperm;
+      }
+    } else if (perms->uid() != uid && iperm.gid() == gid) {
+      perms = &iperm; // a matching gid is better than nothing
+    }
+  }
+  return perms;
+}
+
 bool Inode::have_valid_size()
 {
   // RD+RDCACHE or WR+WRBUFFER => valid size
@@ -310,12 +330,12 @@ Dir *Inode::open_dir()
   return dir;
 }
 
-bool Inode::check_mode(uid_t ruid, UserGroups& groups, unsigned want)
+bool Inode::check_mode(const UserPerm& perms, unsigned want)
 {
-  if (uid == ruid) {
+  if (uid == perms.uid()) {
     // if uid is owner, owner entry determines access
     want = want << 6;
-  } else if (groups.is_in(gid)) {
+  } else if (perms.gid_in_groups(gid)) {
     // if a gid or sgid matches the owning group, group entry determines access
     want = want << 3;
   }
