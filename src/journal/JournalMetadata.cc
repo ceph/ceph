@@ -1014,10 +1014,10 @@ void JournalMetadata::notify_update() {
   m_ioctx.notify2(m_oid, bl, 5000, NULL);
 }
 
-void JournalMetadata::async_notify_update() {
+void JournalMetadata::async_notify_update(Context *on_safe) {
   ldout(m_cct, 10) << "async notifying journal header update" << dendl;
 
-  C_AioNotify *ctx = new C_AioNotify(this);
+  C_AioNotify *ctx = new C_AioNotify(this, on_safe);
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
@@ -1027,6 +1027,12 @@ void JournalMetadata::async_notify_update() {
   assert(r == 0);
 
   comp->release();
+}
+
+void JournalMetadata::wait_for_ops() {
+  C_SaferCond ctx;
+  m_async_op_tracker.wait_for_ops(&ctx);
+  ctx.wait();
 }
 
 void JournalMetadata::handle_notified(int r) {
