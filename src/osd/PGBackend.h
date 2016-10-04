@@ -400,6 +400,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      OpRequestRef op                      ///< [in] op
      ) = 0;
 
+   /// submit callback to be called in order with pending writes
+   virtual void call_write_ordered(std::function<void(void)> &&cb) = 0;
 
    void try_stash(
      const hobject_t &hoid,
