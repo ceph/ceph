@@ -797,7 +797,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
     op_ret = STATUS_CREATED;
   }
 
-  if (!lo_etag.empty()) {
+  if (! lo_etag.empty()) {
     /* Static Large Object of Swift API has two etags represented by
      * following members:
      *  - etag - for the manifest itself (it will be stored in xattrs),
@@ -806,7 +806,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
      * In response for PUT request we have to expose the second one.
      * The first one may be obtained by GET with "multipart-manifest=get"
      * in query string on a given SLO. */
-    dump_etag(s, ("\"" + lo_etag + "\""));
+    dump_etag(s, lo_etag, true /* quoted */);
   } else {
     dump_etag(s, etag);
   }
@@ -1278,8 +1278,8 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   }
 
   if (! op_ret) {
-    if (!lo_etag.empty()) {
-      dump_etag(s, ("\"" + lo_etag + "\""));
+    if (! lo_etag.empty()) {
+      dump_etag(s, lo_etag, true /* quoted */);
     } else {
       auto iter = attrs.find(RGW_ATTR_ETAG);
       if (iter != attrs.end()) {

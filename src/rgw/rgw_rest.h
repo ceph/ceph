@@ -550,14 +550,32 @@ static inline void dump_header_prefixed(struct req_state* s,
                                         Args&&... args) {
   char full_name_buf[name_prefix.size() + name.size() + 1];
   const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
-                            name_prefix.length(), name_prefix.data(),
-                            name.length(), name.data());
+                            static_cast<int>(name_prefix.length()),
+                            name_prefix.data(),
+                            static_cast<int>(name.length()),
+                            name.data());
   boost::string_ref full_name(full_name_buf, len);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
+
+template <class... Args>
+static inline void dump_header_quoted(struct req_state* s,
+                                      const boost::string_ref& name,
+                                      const boost::string_ref& val) {
+  /* We need two extra bytes for quotes. */
+  char qvalbuf[val.size() + 2 + 1];
+  const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
+                            static_cast<int>(val.length()), val.data());
+  return dump_header(s, name, boost::string_ref(qvalbuf, len));
+}
+
 extern void dump_content_length(struct req_state *s, uint64_t len);
-extern void dump_etag(struct req_state *s, const boost::string_ref& etag);
-extern void dump_etag(struct req_state *s, ceph::buffer::list& bl_etag);
+extern void dump_etag(struct req_state *s,
+                      const boost::string_ref& etag,
+                      bool quoted = false);
+extern void dump_etag(struct req_state *s,
+                      ceph::buffer::list& bl_etag,
+                      bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
 extern void dump_last_modified(struct req_state *s, real_time t);
