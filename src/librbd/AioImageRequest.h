@@ -61,16 +61,17 @@ protected:
   AioCompletion *m_aio_comp;
   Extents m_image_extents;
   bool m_bypass_image_cache = false;
-  const ZTracer::Endpoint endp;
+  static const ZTracer::Endpoint m_endp;
   ZTracer::Trace trace;
 
   AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                   Extents &&image_extents,
                   const blkin_trace_info *trace_info = nullptr)
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
-      m_image_extents(image_extents), endp("AioImageRequest") {
-        if (trace_info)
-          trace.init("AioImageRequest", &endp, trace_info);
+      m_image_extents(image_extents) {
+        if (trace_info) {
+          trace.init("AioImageRequest", &m_endp, trace_info);
+        }
 
   }
 

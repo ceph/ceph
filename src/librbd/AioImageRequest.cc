@@ -188,6 +188,9 @@ private:
 } // anonymous namespace
 
 template <typename I>
+const ZTracer::Endpoint AioImageRequest<I>::m_endp = ZTracer::Endpoint("librbd");
+
+template <typename I>
 void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                   Extents &&image_extents, char *buf,
                                   bufferlist *pbl, int op_flags,
