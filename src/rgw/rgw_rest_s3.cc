@@ -2239,12 +2239,11 @@ void RGWPutACLs_ObjStore_S3::send_response()
 
 void RGWGetLC_ObjStore_S3::execute()
 {
-
   config.set_ctx(s->cct);
 
   map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == s->bucket_attrs.end()) {
-    ret = -ENOENT;
+    op_ret = -ENOENT;
     return;
   }
 
@@ -2253,18 +2252,18 @@ void RGWGetLC_ObjStore_S3::execute()
       config.decode(iter);
     } catch (const buffer::error& e) {
       ldout(s->cct, 0) << __func__ <<  "decode life cycle config failed" << dendl;
-      ret = -EIO;
+      op_ret = -EIO;
       return;
     }
 }
 
 void RGWGetLC_ObjStore_S3::send_response()
 {
-  if (ret) {
-    if (ret == -ENOENT) {	
+  if (op_ret) {
+    if (op_ret == -ENOENT) {	
       set_req_state_err(s, ERR_NO_SUCH_LC);
     } else {
-      set_req_state_err(s, ret);
+      set_req_state_err(s, op_ret);
     }
   }
   dump_errno(s);
@@ -2277,8 +2276,8 @@ void RGWGetLC_ObjStore_S3::send_response()
 
 void RGWPutLC_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
+  if (op_ret)
+    set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
@@ -2286,10 +2285,10 @@ void RGWPutLC_ObjStore_S3::send_response()
 
 void RGWDeleteLC_ObjStore_S3::send_response()
 {
-  if (ret == 0)
-      ret = STATUS_NO_CONTENT;
-  if (ret) {   
-    set_req_state_err(s, ret);
+  if (op_ret == 0)
+      op_ret = STATUS_NO_CONTENT;
+  if (op_ret) {   
+    set_req_state_err(s, op_ret);
   }
   dump_errno(s);
   end_header(s, this, "application/xml");

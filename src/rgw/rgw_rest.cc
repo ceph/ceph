@@ -1212,8 +1212,8 @@ int RGWPutLC_ObjStore::get_params()
   if (cl) {
     data = (char *)malloc(cl + 1);
     if (!data) {
-       ret = -ENOMEM;
-       return ret;
+       op_ret = -ENOMEM;
+       return op_ret;
     }
     int read_len;
     int r = STREAM_IO(s)->read(data, cl, &read_len, s->aws4_auth_needs_complete);
@@ -1225,7 +1225,7 @@ int RGWPutLC_ObjStore::get_params()
     len = 0;
   }
 
-  return ret;
+  return op_ret;
 }
 
 static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
