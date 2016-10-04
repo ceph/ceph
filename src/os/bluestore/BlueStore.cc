@@ -1694,7 +1694,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
   uint64_t prev_len = 0;
   unsigned n = 0;
   while (!p.end()) {
-    Extent *le = new Extent(onode->c->cache);
+    Extent *le = new Extent();
     uint64_t blobid;
     small_decode_varint(blobid, p);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
@@ -1719,14 +1719,14 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
       le->blob_depth = 1;
     }
     if (blobid & BLOBID_FLAG_SPANNING) {
-      le->blob = get_spanning_blob(blobid >> BLOBID_SHIFT_BITS);
+      le->assign_blob(get_spanning_blob(blobid >> BLOBID_SHIFT_BITS));
     } else {
       blobid >>= BLOBID_SHIFT_BITS;
       if (blobid) {
-	le->blob = blobs[blobid - 1];
+	le->assign_blob(blobs[blobid - 1]);
 	assert(le->blob);
       } else {
-	le->blob = new Blob();
+	le->assign_blob(new Blob());
 	le->blob->decode(p);
 	blobs[n] = le->blob;
 	onode->c->open_shared_blob(le->blob);
