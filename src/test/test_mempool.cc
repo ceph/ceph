@@ -22,7 +22,24 @@
 #include "gtest/gtest.h"
 #include "include/mempool.h"
 
+void CheckUsage() {
+   map<const char *,mempool::StatsByTypeID_t> m;
+   mempool::pool_t::StatsByTypeID("",m,10000);
+   size_t usage = unittest_1::allocated_bytes();
+   size_t sum = 0;
+   for (auto& p : m) {
+      sum += p.second.bytes;
+   }
+   if (sum != usage) {
+      ceph::TableFormatter jf;
+      mempool::DumpStatsByTypeID("",&jf,100);
+      jf.flush(std::cout);
+   }
+   EXPECT_EQ(sum,usage);
+}
+
 TEST(test_mempool, mempool_context) {
+   CheckUsage();
    unittest_1::map<int,int,3,3> m1;
    m1[1] = 2;
    EXPECT_EQ(m1.size(),size_t(1));
@@ -36,11 +53,13 @@ TEST(test_mempool, mempool_context) {
    EXPECT_NE(Slots.find(1),Slots.end());
    EXPECT_EQ(Slots.find(1)->second.slabs,0u);
    EXPECT_EQ(Slots.find(1)->second.bytes,0u);
+   CheckUsage();
 
    m1[2] = 2;
    m1[3] = 3;
    m1[4] = 4;
 
+   CheckUsage();
    Slots.clear();
    mempool::pool_t::StatsBySlots("",Slots,100);
    EXPECT_EQ(Slots.size(),1u);
@@ -50,6 +69,7 @@ TEST(test_mempool, mempool_context) {
 
    EXPECT_EQ(mempool::GetPool(mempool::unittest_1).allocated_bytes(),
              Slots.find(4)->second.bytes);
+   CheckUsage();
 }
 
 template<typename A, typename B> void eq_elements(const A& a, const B& b) {
@@ -90,18 +110,35 @@ template<typename A,typename B> void do_insert_key(A& a, B& b, int count, int ba
    for (int i = 0; i < count; ++i) {
       a.insert(make_pair(base+i,base+i));
       b.insert(make_pair(base+i,base+i));
+      CheckUsage();
    }
 }
 
 TEST(test_slab_containers, vector_context) {
+   multimap<size_t,mempool::StatsBySlots_t> Slotz;
+   mempool::pool_t::StatsBySlots("",Slotz,100);
+   EXPECT_EQ(Slotz.size(),0u);
+   CheckUsage();
    for (int i = 0; i < 10; ++i) {
       vector<int> a;
       unittest_1::vector<int,4> b,c;
       eq_elements(a,b);
       do_push_back(a,b,i,i);
       eq_elements(a,b);
+      CheckUsage();
+      multimap<size_t,mempool::StatsBySlabs_t> Slabs;
+      mempool::pool_t::StatsBySlabs("",Slabs,100);
+      EXPECT_EQ(Slabs.size(),2u);
+      if (i > 4) {
+	EXPECT_NE(Slabs.find(1),Slabs.end());
+	EXPECT_NE(Slabs.find(1)->second.bytes,0u);
+      } else {
+	EXPECT_NE(Slabs.find(0),Slabs.end());
+        EXPECT_EQ(Slabs.find(0)->second.bytes,0u);
+      }
       c.swap(b);
       eq_elements(a,c);
+      CheckUsage();
       a.clear();
       b.clear();
       c.clear();
@@ -126,6 +163,7 @@ TEST(test_slab_containers, list_context) {
       do_push_back(a,b,i,i);
       c.splice(c.begin(),b,b.begin(),b.end());
       eq_elements(a,c);
+      CheckUsage();
    }
    //
    // Now with reserve calls
@@ -138,10 +176,12 @@ TEST(test_slab_containers, list_context) {
       c.reserve(i);
       do_push_back(a,b,i,i);
       eq_elements(a,b);
+      CheckUsage();
       c.swap(b);
       eq_elements(a,c);
       a.erase(a.begin());
       c.erase(c.begin());
+      CheckUsage();
       eq_elements(a,c);
       a.clear();
       b.clear();
@@ -158,6 +198,7 @@ TEST(test_slab_containers, set_context) {
       unittest_1::set<int,4> b;
       do_insert(a,b,i,i);
       eq_elements(a,b);
+      CheckUsage();
    }
 
    for (int i = 1; i < 10; ++i) {
@@ -169,6 +210,7 @@ TEST(test_slab_containers, set_context) {
       a.erase(a.find(i/2));
       b.erase(b.find(i/2));
       eq_elements(a,b);
+      CheckUsage();
    }
    for (int i = 1; i < 10; ++i) {
       set<int> a;
@@ -180,6 +222,7 @@ TEST(test_slab_containers, set_context) {
       a.erase(a.find(i/2));
       b.erase(b.find(i/2));
       eq_elements(a,b);
+      CheckUsage();
    }
 }
 

@@ -111,6 +111,8 @@ void mempool::slab_allocator_base_t::UpdateStats(std::map<const char *,StatsByTy
    s.bytes  += bytes;
 }
 
+static std::string demangle(const char* name);
+
 void mempool::FormatStatsByBytes(const std::multimap<size_t,StatsByBytes_t>&m, ceph::Formatter *f) {
    f->open_array_section("ByBytes");
    for (auto& p : m) {
@@ -141,7 +143,7 @@ void mempool::FormatStatsBySlabs(const std::multimap<size_t,StatsBySlabs_t>&m, c
 void mempool::FormatStatsByTypeID(const std::map<const char *,StatsByTypeID_t>&m, ceph::Formatter *f) {
    f->open_array_section("ByTypeID");
    for (auto& p : m) {
-      f->dump_string("TypeID",p.first);
+      f->dump_string("TypeID",demangle(p.first));
       p.second.dump(f);
    }
    f->close_section();

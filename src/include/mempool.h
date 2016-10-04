@@ -90,9 +90,10 @@ struct list_member_t {
 };
 
 struct shard_t {
-   std::atomic<ssize_t> allocated;
+   std::atomic<size_t> allocated;
    mutable std::mutex lock;  // Only used for containers list
    list_member_t containers;
+   shard_t() : allocated(0) {}
 };
 
 //
@@ -168,6 +169,8 @@ struct slab_allocator_base_t {
 
 enum { shard_size = 64 }; // Sharding of headers
 
+pool_t& GetPool(pool_index_t ix);
+
 class pool_t {
    static std::map<std::string,pool_t *> *pool_head;
    static std::mutex pool_head_lock;
@@ -240,17 +243,14 @@ private:
       //
       // Scan all of the pools for prefix match
       //
-      std::unique_lock<std::mutex> global_lock(pool_head_lock);
-      for (auto& p : *pool_head) {
-        const pool_t *pool = p.second;
-        if (pool && prefix == pool->name.substr(0,std::min(prefix.size(),pool->name.size()))) {
-           pool->VisitPool(map,trim);
+      for (size_t i = 0; i < num_pools; ++i) {
+        const pool_t &pool = mempool::GetPool((pool_index_t)i);
+        if (prefix == pool.name.substr(0,std::min(prefix.size(),pool.name.size()))) {
+           pool.VisitPool(map,trim);
         }
       }
    }
 };
-
-pool_t& GetPool(pool_index_t ix);
 
 inline void slab_allocator_base_t::AttachPool(pool_index_t index,const char *_typeID) {
    assert(pool == nullptr);
@@ -818,6 +818,7 @@ private:
 //
 template<typename T,size_t stackSize>
 class slab_vector_allocator : public slab_allocator_base_t {
+   const slab_vector_allocator *check;
    T stackSlot[stackSize]; 			// stackSlab is always allocated with the object :)
   
 public:
@@ -832,25 +833,35 @@ public:
 
    template<typename U> struct rebind { typedef slab_vector_allocator<U,stackSize> other; };
 
-   slab_vector_allocator() {
+   slab_vector_allocator() : check(this) {
    }
    ~slab_vector_allocator() {
    }
-
    pointer allocate(size_t cnt,void *p = nullptr) {
-      slots = cnt;
       if (cnt <= stackSize) return stackSlot;
-      slabs = 1;
-      bytes = cnt * sizeof(T);
-      return static_cast<pointer>(::malloc(cnt * sizeof(T)));
+      //
+      // Need a new slab, be sure to track the size of this slab which we put into the allocated chunk.
+      slots += cnt;
+      slabs++;
+      size_t to_allocate = (cnt * sizeof(T)) + sizeof(size_t);
+      bytes += to_allocate;
+      shard->allocated += to_allocate;
+      size_t *chunk = static_cast<size_t *>(::malloc(to_allocate));
+      *chunk = cnt;
+      return reinterpret_cast<pointer>(chunk + 1);
    }
 
    void deallocate(pointer p, size_type s) {
       if (p != stackSlot) {
-         ::free(p);
-         slabs = 0;
-         bytes = 0;
-         slots = 0;
+         size_t *to_free = reinterpret_cast<size_t *>(p);
+         size_t cnt = to_free[-1];
+         ::free(to_free-1);
+         size_t to_deallocate = (cnt * sizeof(T)) + sizeof(size_t);
+         assert(bytes >= to_deallocate);
+         shard->allocated -= to_deallocate;
+         bytes -= to_deallocate;
+         slabs--;
+         slots -= cnt;
       }
    }
 
@@ -874,6 +885,21 @@ public:
    bool operator!=(const slab_vector_allocator&) { return false; }
 
    void selfCheck() {
+      assert(this == check);
+   }
+
+   void swap(slab_vector_allocator& rhs) {
+      //
+      // Helper for vector::swap, gets the accounting right :)
+      // We cheat because we know that their is only a single outstanding slab for each of the participants
+      //
+      assert(slabs == 1);
+      assert(rhs.slabs == 1);
+      std::swap(slots,rhs.slots);
+      ssize_t delta = bytes - rhs.bytes; // difference between bytes, need to adjust shard allocations
+      shard->allocated -= delta;
+      rhs.shard->allocated += delta;
+      std::swap(bytes,rhs.bytes);
    }
 
 private:
@@ -918,7 +944,7 @@ public:
       return *this;
    }
    //
-   // sadly, this previously O(1) operation now becomes O(N) for small N :)
+   // sadly, this previously O(1) operation now becomes O(N) for N less than stackSize. Otherwise it's still O(1) :)
    //
    void swap(vector& rhs) {
       //
@@ -929,6 +955,7 @@ public:
       this->reserve(stackCount + 1);
       rhs.reserve(stackCount + 1);
       this->vector_type::swap(rhs);
+      get_my_actual_allocator()->swap(*rhs.get_my_actual_allocator());
    }
    
 
@@ -956,30 +983,33 @@ private:
 }; // Namespace mempool
 
 //
-// Simple function to compute the size of a heapSlab
-//
-//   we assume that we want heapSlabs to be about 1KBytes.
+// Simple function to compute the size of a heapSlab, in the absence of a default.
 //
 
-enum { _desired_slab_size = 128 }; // approximate preferred allocation size
+enum { _desired_slab_size = 256 }; // approximate preferred allocation size
 
-inline constexpr size_t defaultSlabHeapCount(size_t Slotsize) {
-   return (_desired_slab_size / Slotsize) ? (_desired_slab_size / Slotsize) : size_t(1); // can't uses std::max, it's not constexpr
+inline constexpr size_t defaultSlabHeapCount(size_t Slotsize,size_t overheads) {
+   return (_desired_slab_size / (Slotsize + (overheads * sizeof(void *)))) ?
+          (_desired_slab_size / (Slotsize + (overheads * sizeof(void *)))) : 
+          size_t(1); // can't uses std::max, it's not constexpr
 }
 
 
 #define P(x) \
 namespace x { \
-  template<typename k,typename v, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + sizeof(v) + 2 * sizeof(void *)), typename cmp = std::less<k> > \
+  template<typename k,typename v, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + sizeof(v),3), typename cmp = std::less<k> > \
       using map = mempool::map<mempool::x,k,v,stackSize,heapSize,cmp>; \
-  template<typename k,typename v, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + sizeof(v) + 2 * sizeof(void *)), typename cmp = std::less<k> > \
+  template<typename k,typename v, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + sizeof(v),3), typename cmp = std::less<k> > \
       using multimap = mempool::multimap<mempool::x,k,v,stackSize,heapSize,cmp>; \
-  template<typename k, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + 2 * sizeof(void *)), typename cmp = std::less<k> > \
+  template<typename k, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k),2), typename cmp = std::less<k> > \
       using set = mempool::set<mempool::x,k,stackSize,heapSize,cmp>; \
-  template<typename v, int stackSize, int heapSize  = defaultSlabHeapCount(sizeof(v) + 2 * sizeof(void *)) > \
+  template<typename v, int stackSize, int heapSize  = defaultSlabHeapCount(sizeof(v),2) > \
       using list = mempool::list<mempool::x,v,stackSize,heapSize>; \
-  template<typename v, int stackSize = defaultSlabHeapCount(sizeof(v)) > \
+  template<typename v, int stackSize = defaultSlabHeapCount(sizeof(v),0) > \
       using vector = mempool::vector<mempool::x,v,stackSize>; \
+  inline size_t allocated_bytes() { \
+      return mempool::GetPool(mempool::x).allocated_bytes(); \
+  } \
 };
 
 DEFINE_MEMORY_POOLS_HELPER(P)
