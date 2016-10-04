@@ -1,34 +1,26 @@
 from collections import defaultdict
-import json
-import logging
-import shlex
 from distutils.version import StrictVersion
 
 from django.http import Http404
 import rest_framework
-from rest_framework.exceptions import ParseError, APIException, PermissionDenied
+from rest_framework.exceptions import ParseError
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from rest_framework import status
-from django.contrib.auth.decorators import login_required
 
+from rest_framework import status
 
 from rest.app.serializers.v2 import PoolSerializer, CrushRuleSetSerializer, \
     CrushRuleSerializer, ServerSerializer, RequestSerializer, OsdSerializer, \
     ConfigSettingSerializer, MonSerializer, OsdConfigSerializer
-from rest.app.views.exceptions import ServiceUnavailable
 from rest.app.views.rpc_view import RPCViewSet, DataObject
 from rest.app.types import CRUSH_RULE, POOL, OSD, USER_REQUEST_COMPLETE, \
-    USER_REQUEST_SUBMITTED, OSD_IMPLEMENTED_COMMANDS, MON, OSD_MAP, \
-    SYNC_OBJECT_TYPES, ServiceId, severity_from_str, SEVERITIES, \
-    OsdMap, Config, MonMap, MonStatus, SYNC_OBJECT_STR_TYPE
+    USER_REQUEST_SUBMITTED, OSD_IMPLEMENTED_COMMANDS, OSD_MAP, \
+    SYNC_OBJECT_TYPES, OsdMap, Config, MonMap, MonStatus, SYNC_OBJECT_STR_TYPE
 
 
 from rest.logger import logger
 log = logger()
 
 
-#class RequestViewSet(RPCViewSet, PaginatedMixin):
 class RequestViewSet(RPCViewSet):
     """
 Calamari server requests, tracking long-running operations on the Calamari server.  Some
@@ -398,9 +390,8 @@ Filtering is available on this resource:
         osd_metadata = self.client.get_sync_object(OsdMap, ['osd_metadata'])
 
         osd_id_to_hostname = dict(
-            [(int(osd_id), osd_meta["hostname"]) for osd_id, osd_meta in
+            [(int(oid), osd_meta["hostname"]) for oid, osd_meta in
              osd_metadata.items()])
-
 
         osd['server'] = osd_id_to_hostname.get(osd['osd'], None)
 

@@ -2,21 +2,18 @@
 
 """
 Helpers for writing django views and rest_framework ViewSets that get
-their data from cthulhu with zeroRPC
+their data from calls into the C++ side of ceph-mgr
 """
 
-
-from rest.app.manager.osd_request_factory import OsdRequestFactory
-from rest.app.manager.pool_request_factory import PoolRequestFactory
 
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 
 from rest_framework.response import Response
 
-from rest.app.types import OsdMap, SYNC_OBJECT_STR_TYPE, OSD, OSD_MAP, POOL, CLUSTER, CRUSH_RULE, ServiceId,\
-    NotFound, SERVER
-
+from rest.app.manager.osd_request_factory import OsdRequestFactory
+from rest.app.manager.pool_request_factory import PoolRequestFactory
+from rest.app.types import OsdMap, OSD, OSD_MAP, POOL, CRUSH_RULE, NotFound
 from rest.module import global_instance as rest_plugin
 
 from rest.logger import logger
@@ -203,7 +200,6 @@ class MgrClient(object):
         Create and submit UserRequest for an apply, create, update or delete.
         """
 
-        # nosleep during preparation phase (may touch ClusterMonitor/ServerMonitor state)
         request_factory = self.get_request_factory(obj_type)
         request = getattr(request_factory, method)(*args, **kwargs)
 
@@ -232,7 +228,7 @@ class IsRoleAllowed(BasePermission):
         return True
 
         # TODO: reinstate read vs. read/write limitations on API keys
-        has_permission = False
+        # has_permission = False
         # if request.user.groups.filter(name='readonly').exists():
         #     has_permission = request.method in SAFE_METHODS
         #     view.headers['Allow'] = ', '.join(SAFE_METHODS)
@@ -242,6 +238,7 @@ class IsRoleAllowed(BasePermission):
         #     has_permission = True
         #
         # return has_permission
+
 
 class RPCView(APIView):
     serializer_class = None
