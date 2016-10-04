@@ -407,14 +407,12 @@ public:
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob : public boost::intrusive::set_base_hook<> {
     std::atomic_int nref = {0};     ///< reference count
-    int id = -1;                    ///< id, for spanning blobs only, >= 0
+    int16_t id = -1;                ///< id, for spanning blobs only, >= 0
+    int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
 
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_extent_ref_map_t ref_map;
-
-
-    int last_encoded_id = -1;       ///< (ephemeral) used during encoding only
 
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
