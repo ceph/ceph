@@ -979,6 +979,20 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return _len + _off;
   }
 
+  char *buffer::ptr::push_back(unsigned len) {
+    assert(_raw);
+    assert(len <= unused_tail_length());
+
+    char *c = _raw->data + _off;
+    _len += len;
+    return c;
+  }
+
+  void buffer::ptr::pop_back(unsigned len) {
+    assert(len <= _len);
+    _len -= len;
+  }
+
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
   {
     copy_in(o, l, src, true);
@@ -1749,6 +1763,35 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       append_buffer = raw_combined::create(alen);
       append_buffer.set_length(0);   // unused, so far.
     }
+  }
+
+  char * buffer::list::push_back(unsigned len)
+  {
+    while (1) {
+      // put what we can into the existing append_buffer.
+      unsigned remain = append_buffer.unused_tail_length();
+      if (remain >= len) {
+        char *result = append_buffer.push_back(len);
+        append(append_buffer, append_buffer.end()-len, len);
+        return result;
+      }
+      // make a new append_buffer.  fill out a complete page, factoring in the
+      // raw_combined overhead.
+      size_t need = ROUND_UP_TO(len, sizeof(size_t)) + sizeof(raw_combined);
+      size_t alen = ROUND_UP_TO(need, CEPH_BUFFER_ALLOC_UNIT) -
+	sizeof(raw_combined);
+      append_buffer = raw_combined::create(alen);
+      append_buffer.set_length(0);   // unused, so far.
+    }
+  }
+
+  void buffer::list::pop_back(unsigned len) {
+    assert(!_buffers.empty());
+    assert(_buffers.back().get_raw() == append_buffer.get_raw());
+    assert(_buffers.back().length()  == append_buffer.length());
+    
+    _buffers.back().pop_back(len);
+    append_buffer.pop_back(len);
   }
 
   void buffer::list::append(const ptr& bp)

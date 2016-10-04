@@ -697,6 +697,34 @@ add_executable(unittest_arch
 add_ceph_unittest(unittest_arch ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_arch)
 target_link_libraries(unittest_arch global)
 
+# unittest_enc_dec
+add_executable(unittest_enc_dec
+  test_enc_dec.cc
+  )
+add_ceph_unittest(unittest_enc_dec ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_enc_dec)
+target_link_libraries(unittest_enc_dec global)
+
+# unittest_fast_containers
+add_executable(unittest_fast_containers
+  test_fast_containers.cc
+  )
+add_ceph_unittest(unittest_fast_containers ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_fast_containers)
+target_link_libraries(unittest_fast_containers global)
+
+# unittest_slab_containers
+add_executable(unittest_slab_containers
+  test_slab_containers.cc
+  )
+add_ceph_unittest(unittest_slab_containers ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_slab_containers)
+target_link_libraries(unittest_slab_containers global)
+
+# unittest_mempool
+add_executable(unittest_mempool
+  test_mempool.cc
+  )
+add_ceph_unittest(unittest_mempool ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mempool)
+target_link_libraries(unittest_mempool global)
+
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc

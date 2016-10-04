@@ -435,6 +435,7 @@ set(libcommon_files
   common/Graylog.cc
   common/fs_types.cc
   common/dns_resolve.cc
+  common/mempool.cc
   ${arch_files}
   ${auth_files}
   $<TARGET_OBJECTS:compressor_objs>
