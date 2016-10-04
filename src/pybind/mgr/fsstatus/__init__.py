@@ -1,2 +1,2 @@
 
-from module import *
+from module import *  # NOQA
