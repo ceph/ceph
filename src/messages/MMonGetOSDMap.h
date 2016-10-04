@@ -16,7 +16,7 @@
 #define CEPH_MMONGETOSDMAP_H
 
 #include "msg/Message.h"
-
+#include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 
 class MMonGetOSDMap : public PaxosServiceMessage {
