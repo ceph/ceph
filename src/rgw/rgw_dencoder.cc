@@ -188,6 +188,10 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
   }
 
   location->init_ns(*bucket, oid, ns);
+  
+  // Always overwrite instance with tail_instance
+  // to get the right shadow object location
+  location->set_instance(tail_instance);
 }
 
 
