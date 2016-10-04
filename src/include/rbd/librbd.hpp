@@ -337,6 +337,8 @@ public:
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
+  int aio_write_traced(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c,
+		  const struct blkin_trace_info *trace_info);
   /**
    * read async from image
    *
@@ -358,6 +360,8 @@ public:
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_read2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
+  int aio_read_traced(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c,
+		  const struct blkin_trace_info *trace_info);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();
