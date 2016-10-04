@@ -23,6 +23,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+#undef dout_prefix
+#define dout_prefix (*_dout << "data sync: ")
+
 static string datalog_sync_status_oid_prefix = "datalog.sync-status";
 static string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
 static string datalog_sync_full_sync_index_prefix = "data.full-sync.index";
@@ -112,34 +115,76 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
-class RGWReadDataSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_data_sync_info> {
-  RGWDataSyncEnv *sync_env;
+class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
+  static constexpr int MAX_CONCURRENT_SHARDS = 16;
 
+  RGWDataSyncEnv *env;
+  const int num_shards;
+  int shard_id{0};
+  map<uint32_t, rgw_data_sync_marker>& markers;
+
+ public:
+  RGWReadDataSyncStatusMarkersCR(RGWDataSyncEnv *env, int num_shards,
+                                 map<uint32_t, rgw_data_sync_marker>& markers)
+    : RGWShardCollectCR(env->cct, MAX_CONCURRENT_SHARDS),
+      env(env), num_shards(num_shards), markers(markers)
+  {}
+  bool spawn_next() override;
+};
+
+bool RGWReadDataSyncStatusMarkersCR::spawn_next()
+{
+  if (shard_id >= num_shards) {
+    return false;
+  }
+  using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
+  spawn(new CR(env->async_rados, env->store, env->store->get_zone_params().log_pool,
+               RGWDataSyncStatusManager::shard_obj_name(env->source_zone, shard_id),
+               &markers[shard_id]),
+        false);
+  shard_id++;
+  return true;
+}
+
+class RGWReadDataSyncStatusCoroutine : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
   rgw_data_sync_status *sync_status;
 
 public:
   RGWReadDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
-		      rgw_data_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store,
-									    _sync_env->store->get_zone_params().log_pool,
-									    RGWDataSyncStatusManager::sync_status_oid(_sync_env->source_zone),
-									    &_status->sync_info),
-                                                                            sync_env(_sync_env),
-									    sync_status(_status) {}
-
-  int handle_data(rgw_data_sync_info& data);
+                                 rgw_data_sync_status *_status)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), sync_status(_status)
+  {}
+  int operate() override;
 };
 
-int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
+int RGWReadDataSyncStatusCoroutine::operate()
 {
-  if (retcode == -ENOENT) {
-    return retcode;
-  }
-
-  map<uint32_t, rgw_data_sync_marker>& markers = sync_status->sync_markers;
-  RGWRados *store = sync_env->store;
-  for (int i = 0; i < (int)data.num_shards; i++) {
-    spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
-                                                    RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, i), &markers[i]), true);
+  reenter(this) {
+    // read sync info
+    using ReadInfoCR = RGWSimpleRadosReadCR<rgw_data_sync_info>;
+    yield {
+      bool empty_on_enoent = false; // fail on ENOENT
+      call(new ReadInfoCR(sync_env->async_rados, sync_env->store,
+                          sync_env->store->get_zone_params().log_pool,
+                          RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone),
+                          &sync_status->sync_info, empty_on_enoent));
+    }
+    if (retcode < 0) {
+      ldout(sync_env->cct, 4) << "failed to read sync status info with "
+          << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+    // read shard markers
+    using ReadMarkersCR = RGWReadDataSyncStatusMarkersCR;
+    yield call(new ReadMarkersCR(sync_env, sync_status->sync_info.num_shards,
+                                 sync_status->sync_markers));
+    if (retcode < 0) {
+      ldout(sync_env->cct, 4) << "failed to read sync status markers with "
+          << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+    return set_cr_done();
   }
   return 0;
 }
@@ -594,16 +639,15 @@ int RGWRemoteDataLog::get_shard_info(int shard_id)
 
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
-  if (r == -ENOENT) {
-    r = 0;
-  }
-  return r;
+  // cannot run concurrently with run_sync(), so run in a separate manager
+  RGWCoroutinesManager crs(store->ctx(), nullptr);
+  return crs.run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
 }
 
 int RGWRemoteDataLog::init_sync_status(int num_shards)
 {
-  return run(new RGWInitDataSyncStatusCoroutine(&sync_env, num_shards));
+  RGWCoroutinesManager crs(store->ctx(), nullptr);
+  return crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env, num_shards));
 }
 
 static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
@@ -1484,18 +1528,12 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
   data_sync_cr->wakeup(shard_id, keys);
 }
 
-int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status)
+int RGWRemoteDataLog::run_sync(int num_shards)
 {
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, &sync_status));
-  if (r < 0 && r != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: failed to read sync status from source_zone=" << sync_env.source_zone << " r=" << r << dendl;
-    return r;
-  }
-  
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
   lock.unlock();
-  r = run(data_sync_cr);
+  int r = run(data_sync_cr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
     return r;
@@ -2812,3 +2850,148 @@ string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
   return bucket_status_oid_prefix + "." + source_zone + ":" + bs.get_key();
 }
 
+
+#undef dout_prefix
+#define dout_prefix (*_dout << "data trim: ")
+
+namespace {
+
+/// return the marker that it's safe to trim up to
+const std::string& get_stable_marker(const rgw_data_sync_marker& m)
+{
+  return m.state == m.FullSync ? m.next_step_marker : m.marker;
+}
+
+/// comparison operator for take_min_markers()
+bool operator<(const rgw_data_sync_marker& lhs,
+               const rgw_data_sync_marker& rhs)
+{
+  // sort by stable marker
+  return get_stable_marker(lhs) < get_stable_marker(rhs);
+}
+
+/// populate the container starting with 'dest' with the minimum stable marker
+/// of each shard for all of the peers in [first, last)
+template <typename IterIn, typename IterOut>
+void take_min_markers(IterIn first, IterIn last, IterOut dest)
+{
+  if (first == last) {
+    return;
+  }
+  // initialize markers with the first peer's
+  auto m = dest;
+  for (auto &shard : first->sync_markers) {
+    *m = std::move(shard.second);
+    ++m;
+  }
+  // for remaining peers, replace with smaller markers
+  for (auto p = first + 1; p != last; ++p) {
+    m = dest;
+    for (auto &shard : p->sync_markers) {
+      if (shard.second < *m) {
+        *m = std::move(shard.second);
+      }
+      ++m;
+    }
+  }
+}
+
+// wrapper to update last_trim_marker on success
+class LastTimelogTrimCR : public RGWRadosTimelogTrimCR {
+  CephContext *cct;
+  std::string *last_trim_marker;
+ public:
+  LastTimelogTrimCR(RGWRados *store, const std::string& oid,
+                    const std::string& to_marker, std::string *last_trim_marker)
+    : RGWRadosTimelogTrimCR(store, oid, real_time{}, real_time{},
+                            std::string{}, to_marker),
+      cct(store->ctx()), last_trim_marker(last_trim_marker)
+  {}
+  int request_complete() override {
+    int r = RGWRadosTimelogTrimCR::request_complete();
+    if (r < 0 && r != -ENODATA) {
+      ldout(cct, 1) << "failed to trim datalog: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    ldout(cct, 10) << "datalog trimmed to marker " << to_marker << dendl;
+    *last_trim_marker = to_marker;
+    return 0;
+  }
+};
+
+} // anonymous namespace
+
+RGWDataLogTrimCR::RGWDataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
+                                   int num_shards, utime_t interval)
+  : RGWCoroutine(store->ctx()), store(store), http(http),
+    num_shards(num_shards), interval(interval),
+    zone(store->get_zone().id),
+    peer_status(store->zone_conn_map.size()),
+    min_shard_markers(num_shards),
+    last_trim(num_shards)
+{
+}
+
+int RGWDataLogTrimCR::operate()
+{
+  reenter(this) {
+    for (;;) {
+      yield wait(interval);
+
+      ldout(cct, 10) << "fetching sync status for zone " << zone << dendl;
+      yield {
+        // query data sync status from each sync peer
+        rgw_http_param_pair params[] = {
+          { "type", "data" },
+          { "status", nullptr },
+          { "source-zone", zone.c_str() },
+          { nullptr, nullptr }
+        };
+
+        auto p = peer_status.begin();
+        for (auto& c : store->zone_conn_map) {
+          ldout(cct, 20) << "query sync status from " << c.first << dendl;
+          using StatusCR = RGWReadRESTResourceCR<rgw_data_sync_status>;
+          spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
+                false);
+          ++p;
+        }
+      }
+
+      // must get a successful reply from all peers to consider trimming
+      ret = 0;
+      while (ret == 0 && num_spawned()) {
+        yield wait_for_child();
+        collect_next(&ret);
+      }
+      if (ret < 0) {
+        ldout(cct, 4) << "failed to fetch sync status from all peers" << dendl;
+        drain_all();
+        continue;
+      }
+
+      ldout(cct, 10) << "trimming log shards" << dendl;
+      yield {
+        // determine the minimum marker for each shard
+        take_min_markers(peer_status.begin(), peer_status.end(),
+                         min_shard_markers.begin());
+
+        for (int i = 0; i < num_shards; i++) {
+          const auto& m = min_shard_markers[i];
+          auto& stable = get_stable_marker(m);
+          if (stable <= last_trim[i]) {
+            continue;
+          }
+          ldout(cct, 10) << "trimming log shard " << i
+              << " at marker=" << stable
+              << " last_trim=" << last_trim[i] << dendl;
+          using TrimCR = LastTimelogTrimCR;
+          spawn(new TrimCR(store, store->data_log->get_oid(i),
+                           stable, &last_trim[i]),
+                true);
+        }
+      }
+    }
+  }
+  return 0;
+}
