@@ -1012,10 +1012,9 @@ public:
 
 class RGWGetLC : public RGWOp {
 protected:
-  int ret;
-
+    
 public:
-  RGWGetLC() : ret(0) { }
+  RGWGetLC() { }
   virtual ~RGWGetLC() { }
 
   int verify_permission();
@@ -1029,14 +1028,12 @@ public:
 
 class RGWPutLC : public RGWOp {
 protected:
-  int ret;
   size_t len;
   char *data;
   string cookie;
 
 public:
   RGWPutLC() {
-    ret = 0;
     len = 0;
     data = NULL;
   }
@@ -1066,13 +1063,11 @@ public:
 
 class RGWDeleteLC : public RGWOp {
 protected:
-  int ret;
   size_t len;
   char *data;
 
 public:
   RGWDeleteLC() {
-    ret = 0;
     len = 0;
     data = NULL;
   }

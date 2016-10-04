@@ -3926,26 +3926,25 @@ void RGWPutLC::execute()
   RGWLifecycleConfiguration_S3 *config = NULL;
   RGWLCXMLParser_S3 parser(s->cct);
   RGWLifecycleConfiguration_S3 new_config(s->cct);
-  ret = 0;
 
   if (!parser.init()) {
-    ret = -EINVAL;
+    op_ret = -EINVAL;
     return;
   }
 
-  ret = get_params();
-  if (ret < 0)
+  op_ret = get_params();
+  if (op_ret < 0)
     return;
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!parser.parse(data, len, 1)) {
-    ret = -EACCES;
+    op_ret = -EACCES;
     return;
   }
   config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));
   if (!config) {
-    ret = -EINVAL;
+    op_ret = -EINVAL;
     return;
   }
 
@@ -3955,8 +3954,8 @@ void RGWPutLC::execute()
     *_dout << dendl;
   }
 
-  ret = config->rebuild(store, new_config);
-  if (ret < 0)
+  op_ret = config->rebuild(store, new_config);
+  if (op_ret < 0)
     return;
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
@@ -3969,8 +3968,8 @@ void RGWPutLC::execute()
   map<string, bufferlist> attrs;
   attrs = s->bucket_attrs;
   attrs[RGW_ATTR_LC] = bl;
-  ret =rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
-  if (ret < 0)
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (op_ret < 0)
     return;
   string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;  
   string oid; 
@@ -3983,19 +3982,19 @@ void RGWPutLC::execute()
   l.set_cookie(cookie);
   librados::IoCtx *ctx = store->get_lc_pool_ctx();
   do {
-    ret = l.lock_exclusive(ctx, oid);
-    if (ret == -EBUSY) {
+    op_ret = l.lock_exclusive(ctx, oid);
+    if (op_ret == -EBUSY) {
       dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
       sleep(5);
       continue;
     }
-    if (ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << ret << dendl;
+    if (op_ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << op_ret << dendl;
       break;
     }
-    ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
-    if (ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << ret << dendl;     
+    op_ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
+    if (op_ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << op_ret << dendl;     
     }
     break;
   }while(1);
@@ -4011,7 +4010,7 @@ void RGWDeleteLC::execute()
   rgw_obj obj;
   store->get_bucket_instance_obj(s->bucket, obj);
   store->set_atomic(s->obj_ctx, obj);
-  ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+  op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
   if (op_ret < 0)
     return;
     
@@ -4024,7 +4023,7 @@ void RGWDeleteLC::execute()
         }
       }
     }
-  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
   pair<string, int> entry(shard_id, lc_uninitial);
   string oid; 
@@ -4035,19 +4034,19 @@ void RGWDeleteLC::execute()
   utime_t time(max_lock_secs, 0);
   l.set_duration(time);
   do {
-    ret = l.lock_exclusive(ctx, oid);
-    if (ret == -EBUSY) {
+    op_ret = l.lock_exclusive(ctx, oid);
+    if (op_ret == -EBUSY) {
       dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
       sleep(5);
       continue;
     }
-    if (ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << ret << dendl;
+    if (op_ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << op_ret << dendl;
       break;
     }
-    ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
-    if (ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << ret << dendl;     
+    op_ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
+    if (op_ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << op_ret << dendl;     
     }
     break;
   }while(1);
