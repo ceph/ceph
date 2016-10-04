@@ -27,8 +27,28 @@
 #include <atomic>
 #include <climits>
 #include <typeinfo>
+
+#include <common/Formatter.h>
+
 /**********************
-*/
+
+Memory Pools
+
+A memory pool isn't a physical entity, no is made to the underlying malloc/free strategy or implementation. 
+Rather a memory pool is a method for accounting the consumption of memory of a set of containers.
+
+Memory pools are statically declared (see pool_index_t).
+
+Containers (i.e., stl containers) and objects are declared to be part of a particular pool (again, statically).
+As those containers grow and shrink as well as are created and destroyed the memory consumption is tracked.
+
+The goal is to be able to inexpensively answer the question: How much memory is pool 'x' using?
+
+However, there is also a "debug" mode which enables substantial additional statistics to be tracked.
+It is hoped that the 'debug' mode is inexpensive enough to allow it to be enabled on production systems.
+
+
+**********************/
 
 namespace mempool {
 
@@ -83,18 +103,21 @@ struct StatsByBytes_t {
    size_t slots;
    size_t slabs;
    StatsByBytes_t() : typeID(nullptr), slots(0), slabs(0) {}
+   void dump(ceph::Formatter *f) const;
 };
 struct StatsBySlots_t {
    const char *typeID;
    size_t slabs;
    size_t bytes;
    StatsBySlots_t() : typeID(nullptr), slabs(0), bytes(0) {} 
+   void dump(ceph::Formatter *f) const;
 };
 struct StatsBySlabs_t {
    const char *typeID;
    size_t slots;
    size_t bytes;
    StatsBySlabs_t() : typeID(nullptr), slots(0), bytes(0) {}
+   void dump(ceph::Formatter *f) const;
 };
 
 struct StatsByTypeID_t {
@@ -102,7 +125,18 @@ struct StatsByTypeID_t {
    size_t slabs;
    size_t bytes;
    StatsByTypeID_t() : slots(0), slabs(0), bytes(0) {}
+   void dump(ceph::Formatter *f) const;
 };
+
+void FormatStatsByBytes(const std::multimap<size_t,StatsByBytes_t>&m, ceph::Formatter *f);
+void FormatStatsBySlots(const std::multimap<size_t,StatsBySlots_t>&m, ceph::Formatter *f);
+void FormatStatsBySlabs(const std::multimap<size_t,StatsBySlabs_t>&m, ceph::Formatter *f);
+void FormatStatsByTypeID(const std::map<const char *,StatsByTypeID_t>&m, ceph::Formatter *f);
+
+void DumpStatsByBytes(const std::string& prefix,ceph::Formatter *f,size_t trim = 50);
+void DumpStatsBySlots(const std::string& prefix,ceph::Formatter *f,size_t trim = 50);
+void DumpStatsBySlabs(const std::string& prefix,ceph::Formatter *f,size_t trim = 50);
+void DumpStatsByTypeID(const std::string& prefix,ceph::Formatter *f,size_t trim = 50);
 
 //
 // Root of all allocators, this enables the container information to operation easily
@@ -128,7 +162,7 @@ struct slab_allocator_base_t {
    //
    // Effective constructor
    //
-   void AttachPool(pool_index_t index);
+   void AttachPool(pool_index_t index,const char *typeID);
    ~slab_allocator_base_t();
 };
 
@@ -149,10 +183,10 @@ public:
    //
    // Aggregate stats by consumed.
    //
-   static void StatsByBytes(const std::string& prefix,std::multimap<size_t,StatsByBytes_t>& bybytes,size_t trim = INT_MAX);
-   static void StatsBySlots(const std::string& prefix,std::multimap<size_t,StatsBySlots_t>& bySlots,size_t trim = INT_MAX);
-   static void StatsBySlabs(const std::string& prefix,std::multimap<size_t,StatsBySlabs_t>& bySlabs,size_t trim = INT_MAX);
-   static void StatsByTypeID(const std::string& prefix,std::map<const char *,StatsByTypeID_t>& byTypeID,size_t trim = INT_MAX);
+   static void StatsByBytes(const std::string& prefix,std::multimap<size_t,StatsByBytes_t>& bybytes,size_t trim);
+   static void StatsBySlots(const std::string& prefix,std::multimap<size_t,StatsBySlots_t>& bySlots,size_t trim);
+   static void StatsBySlabs(const std::string& prefix,std::multimap<size_t,StatsBySlabs_t>& bySlabs,size_t trim);
+   static void StatsByTypeID(const std::string& prefix,std::map<const char *,StatsByTypeID_t>& byTypeID,size_t trim);
    shard_t* pick_a_shard() {
       size_t me = (size_t)pthread_self(); // Dirt cheap, see: http://fossies.org/dox/glibc-2.24/pthread__self_8c_source.html
       size_t i = (me >> 3) % shard_size;
@@ -218,10 +252,11 @@ private:
 
 pool_t& GetPool(pool_index_t ix);
 
-inline void slab_allocator_base_t::AttachPool(pool_index_t index) {
+inline void slab_allocator_base_t::AttachPool(pool_index_t index,const char *_typeID) {
    assert(pool == nullptr);
    pool = &GetPool(index);
    shard = pool->pick_a_shard();
+   typeID = _typeID;
    if (pool->debug) {
       std::unique_lock<std::mutex> lock(shard->lock);
       shard->containers.insert(&list_member);
@@ -531,18 +566,6 @@ private:
 };
 
 //
-// Simple function to compute the size of a heapSlab
-//
-//   we assume that we want heapSlabs to be about 1KBytes.
-//
-
-enum { _desired_slab_size = 128 }; // approximate preferred allocation size
-
-inline constexpr size_t defaultSlabHeapCount(size_t Slotsize) {
-   return (_desired_slab_size / Slotsize) ? (_desired_slab_size / Slotsize) : size_t(1); // can't uses std::max, it's not constexpr
-}
-
-//
 // Extended containers
 //
 template<
@@ -550,12 +573,12 @@ template<
    typename key,
    typename value,
    size_t   stackCount, 
-   size_t   heapCount = defaultSlabHeapCount(sizeof(key) + sizeof(value)), 
+   size_t   heapCount, 
    typename compare = std::less<key> >
    struct map : 
       public std::map<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount> > {
    map() {
-      get_my_actual_allocator()->AttachPool(pool_ix);
+      get_my_actual_allocator()->AttachPool(pool_ix,typeid(*this).name());
    }
    //
    // Extended operator. reserve is now meaningful.
@@ -585,20 +608,19 @@ private:
       alloc->selfCheck();
       return alloc;
    }
-   const my_alloc_type * get_my_actual_allocator() const {
-      const my_alloc_type *alloc = reinterpret_cast<const my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
-   }
 };
 
 template<
+   pool_index_t pool_ix,
    typename key,
    typename value,
    size_t   stackCount, 
-   size_t   heapCount = defaultSlabHeapCount(sizeof(key) + sizeof(value)), 
+   size_t   heapCount, 
    typename compare = std::less<key> >
-   struct slab_multimap : public std::multimap<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount> > {
+   struct multimap : public std::multimap<key,value,compare,slab_allocator<std::pair<key,value>,stackCount,heapCount> > {
+   multimap() {
+      get_my_actual_allocator()->AttachPool(pool_ix,typeid(*this).name());
+   }
    //
    // Extended operator. reserve is now meaningful.
    //
@@ -629,11 +651,15 @@ private:
 };
 
 template<
+   pool_index_t pool_ix,
    typename key,
    size_t   stackCount, 
-   size_t   heapCount = defaultSlabHeapCount(sizeof(key)), 
+   size_t   heapCount, 
    typename compare = std::less<key> >
-   struct slab_set : public std::set<key,compare,slab_allocator<key,stackCount,heapCount> > {
+   struct set : public std::set<key,compare,slab_allocator<key,stackCount,heapCount> > {
+   set() {
+      get_my_actual_allocator()->AttachPool(pool_ix,typeid(*this).name());
+   }
    //
    // Extended operator. reserve is now meaningful.
    //
@@ -664,11 +690,15 @@ private:
 };
 
 template<
+   pool_index_t pool_ix,
    typename key,
    size_t   stackCount, 
-   size_t   heapCount = defaultSlabHeapCount(sizeof(key)), 
+   size_t   heapCount, 
    typename compare = std::less<key> >
-   struct slab_multiset : public std::multiset<key,compare,slab_allocator<key,stackCount,heapCount> > {
+   struct multiset : public std::multiset<key,compare,slab_allocator<key,stackCount,heapCount> > {
+   multiset() {
+      get_my_actual_allocator()->AttachPool(pool_ix,typeid(*this).name());
+   }
    //
    // Extended operator. reserve is now meaningful.
    //
@@ -699,25 +729,26 @@ private:
 };
 
 template<
+   pool_index_t pool_ix,
    typename node,
    size_t   stackCount, 
-   size_t   heapCount = defaultSlabHeapCount(sizeof(node)) >
-struct slab_list : public std::list<node,slab_allocator<node,stackCount,heapCount> > {
+   size_t   heapCount >
+   struct list : public std::list<node,slab_allocator<node,stackCount,heapCount> > {
 
    //
    // copy and assignment
    //
-   slab_list() {}
-   slab_list(const slab_list& o) { copy(o); }; // copy
-   slab_list& operator=(const slab_list& o) { copy(o); return *this; }
+   list() { get_my_actual_allocator()->AttachPool(pool_ix, typeid(*this).name()); }
+   list(const list& o) {  get_my_actual_allocator()->AttachPool(pool_ix,typeid(*this).name()); copy(o); }; // copy
+   list& operator=(const list& o) { copy(o); return *this; }
 
    typedef typename std::list<node,slab_allocator<node,stackCount,heapCount>>::iterator it;
    //
    // We support splice, but it requires actually copying each node, so it's O(N) not O(1)
    //
-   void splice(it pos, slab_list& other)        { this->splice(pos, other, other.begin(), other.end()); }
-   void splice(it pos, slab_list& other, it it) { this->splice(pos, other, it, it == other.end() ? it : std::next(it)); }
-   void splice(it pos, slab_list& other, it first, it last) {
+   void splice(it pos, list& other)        { this->splice(pos, other, other.begin(), other.end()); }
+   void splice(it pos, list& other, it it) { this->splice(pos, other, it, it == other.end() ? it : std::next(it)); }
+   void splice(it pos, list& other, it first, it last) {
       while (first != last) {
          pos = std::next(this->insert(pos,*first)); // points after insertion of this element
          first = other.erase(first);
@@ -726,7 +757,7 @@ struct slab_list : public std::list<node,slab_allocator<node,stackCount,heapCoun
    //
    // Swap is supported, but it's O(2N)
    //
-   void swap(slab_list& o) {
+   void swap(list& o) {
       it ofirst = o.begin();
       it olast  = o.end();
       it mfirst = this->begin();
@@ -753,7 +784,7 @@ struct slab_list : public std::list<node,slab_allocator<node,stackCount,heapCoun
 private:
    typedef std::list<node,slab_allocator<node,stackCount,heapCount>> list_type;
 
-   void copy(const slab_list& o) {
+   void copy(const list& o) {
       this->clear();
       for (auto& e : o) {
          this->push_back(e);
@@ -786,7 +817,7 @@ private:
 //  Unlike the more sophisticated allocator above, we always have the right type, so we can save a lot of machinery
 //
 template<typename T,size_t stackSize>
-class slab_vector_allocator {
+class slab_vector_allocator : public slab_allocator_base_t {
    T stackSlot[stackSize]; 			// stackSlab is always allocated with the object :)
   
 public:
@@ -807,12 +838,20 @@ public:
    }
 
    pointer allocate(size_t cnt,void *p = nullptr) {
+      slots = cnt;
       if (cnt <= stackSize) return stackSlot;
+      slabs = 1;
+      bytes = cnt * sizeof(T);
       return static_cast<pointer>(::malloc(cnt * sizeof(T)));
    }
 
    void deallocate(pointer p, size_type s) {
-      if (p != stackSlot) ::free(p);
+      if (p != stackSlot) {
+         ::free(p);
+         slabs = 0;
+         bytes = 0;
+         slots = 0;
+      }
    }
 
    void destroy(pointer p) {
@@ -849,26 +888,28 @@ private:
 //
 // Vector. We rely on having an initial "reserve" call that ensures we wire-in the in-stack memory allocations
 //
-template<typename value,size_t   stackCount >
-   class slab_vector : public std::vector<value,slab_vector_allocator<value,stackCount> > {
+template<pool_index_t pool_index, typename value,size_t   stackCount >
+   class vector : public std::vector<value,slab_vector_allocator<value,stackCount> > {
    typedef std::vector<value,slab_vector_allocator<value,stackCount>> vector_type;
 public:
 
-   slab_vector() {
+   vector() {
+      get_my_actual_allocator()->AttachPool(pool_index,typeid(*this).name());
       this->reserve(stackCount);
    }
 
-   slab_vector(size_t initSize,const value& val = value()) {
+   vector(size_t initSize,const value& val = value()) {
       this->reserve(std::max(initSize,stackCount));
       for (size_t i = 0; i < initSize; ++i) this->push_back(val);
    }
 
-   slab_vector(const slab_vector& rhs) {
+   vector(const std::vector<value>& rhs) {
+      get_my_actual_allocator()->AttachPool(pool_index,typeid(*this).name());
       this->reserve(stackCount);
       *this = rhs;
    }
 
-   slab_vector& operator=(const slab_vector& rhs) {
+   vector& operator=(const std::vector<value>& rhs) {
       this->reserve(rhs.size());
       this->clear();
       for (auto& i : rhs) {
@@ -879,7 +920,7 @@ public:
    //
    // sadly, this previously O(1) operation now becomes O(N) for small N :)
    //
-   void swap(slab_vector& rhs) {
+   void swap(vector& rhs) {
       //
       // Lots of ways to optimize this, but we'll just do something simple....
       //
@@ -912,7 +953,38 @@ private:
 
 };
 
-
 }; // Namespace mempool
+
+//
+// Simple function to compute the size of a heapSlab
+//
+//   we assume that we want heapSlabs to be about 1KBytes.
+//
+
+enum { _desired_slab_size = 128 }; // approximate preferred allocation size
+
+inline constexpr size_t defaultSlabHeapCount(size_t Slotsize) {
+   return (_desired_slab_size / Slotsize) ? (_desired_slab_size / Slotsize) : size_t(1); // can't uses std::max, it's not constexpr
+}
+
+
+#define P(x) \
+namespace x { \
+  template<typename k,typename v, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + sizeof(v) + 2 * sizeof(void *)), typename cmp = std::less<k> > \
+      using map = mempool::map<mempool::x,k,v,stackSize,heapSize,cmp>; \
+  template<typename k,typename v, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + sizeof(v) + 2 * sizeof(void *)), typename cmp = std::less<k> > \
+      using multimap = mempool::multimap<mempool::x,k,v,stackSize,heapSize,cmp>; \
+  template<typename k, int stackSize, int heapSize = defaultSlabHeapCount(sizeof(k) + 2 * sizeof(void *)), typename cmp = std::less<k> > \
+      using set = mempool::set<mempool::x,k,stackSize,heapSize,cmp>; \
+  template<typename v, int stackSize, int heapSize  = defaultSlabHeapCount(sizeof(v) + 2 * sizeof(void *)) > \
+      using list = mempool::list<mempool::x,v,stackSize,heapSize>; \
+  template<typename v, int stackSize = defaultSlabHeapCount(sizeof(v)) > \
+      using vector = mempool::vector<mempool::x,v,stackSize>; \
+};
+
+DEFINE_MEMORY_POOLS_HELPER(P)
+
+#undef P
+
 #endif // _slab_CONTAINERS_H
 
