@@ -419,26 +419,27 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
   dump_header(s, "Accept-Ranges", "bytes");
 }
 
-void dump_etag(struct req_state* const s, const boost::string_ref& etag)
+void dump_etag(struct req_state* const s,
+               const boost::string_ref& etag,
+               const bool quoted)
 {
   if (etag.empty()) {
     return;
   }
 
-  if (s->prot_flags & RGW_REST_SWIFT) {
+  if (s->prot_flags & RGW_REST_SWIFT && ! quoted) {
     return dump_header(s, "etag", etag);
   } else {
-    /* We need two extra bytes for quotes. */
-    char buf[etag.size() + 2 + 1];
-    const auto len = snprintf(buf, sizeof(buf), "\"%s\"", etag.data());
-
-    return dump_header(s, "ETag", boost::string_ref(buf, len));
+    return dump_header_quoted(s, "ETag", etag);
   }
 }
 
-void dump_etag(struct req_state* const s, ceph::buffer::list& bl_etag)
+void dump_etag(struct req_state* const s,
+               ceph::buffer::list& bl_etag,
+               const bool quoted)
 {
-  return dump_etag(s, boost::string_ref(bl_etag.c_str(), bl_etag.length()));
+  return dump_etag(s, boost::string_ref(bl_etag.c_str(), bl_etag.length()),
+                   quoted);
 }
 
 void dump_pair(struct req_state* const s,
@@ -487,7 +488,7 @@ void dump_uri_from_state(struct req_state *s)
       }
     }
   } else {
-    dump_header(s, "Location", "\"" + s->info.request_uri + "\"");
+    dump_header_quoted(s, "Location", s->info.request_uri);
   }
 }
 
