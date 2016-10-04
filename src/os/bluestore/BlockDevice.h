@@ -52,9 +52,8 @@ struct IOContext {
   IOContext(const IOContext& other);
   IOContext &operator=(const IOContext& other);
 
-  bool has_aios() {
-    std::lock_guard<std::mutex> l(lock);
-    return num_pending.load() || num_running.load();
+  bool has_pending_aios() {
+    return num_pending.load();
   }
 
   void aio_wait();
