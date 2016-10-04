@@ -354,9 +354,12 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 void Log::_log_message(const char *s, bool crash)
 {
   if (m_fd >= 0) {
-    int r = safe_write(m_fd, s, strlen(s));
-    if (r >= 0)
-      r = safe_write(m_fd, "\n", 1);
+    size_t len = strlen(s);
+    std::string b;
+    b.reserve(len + 1);
+    b.append(s, len);
+    b += '\n';
+    int r = safe_write(m_fd, b.c_str(), b.size());
     if (r < 0)
       cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
