@@ -32,12 +32,13 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
   pg_t pgid;
   vector<OSDOp> ops;
+  map<object_t, vector<OSDOp> > sub_ops;
   int64_t flags;
   errorcode32_t result;
   eversion_t bad_replay_version;
@@ -105,6 +106,9 @@ public:
   void claim_ops(vector<OSDOp>& o) {
     o.swap(ops);
   }
+  void claim_sub_ops(map<object_t, vector<OSDOp> >& o) {
+    o.swap(sub_ops);
+  }
 
   /**
    * get retry attempt
@@ -130,7 +134,7 @@ public:
   }
   MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data)
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
-      oid(req->oid), pgid(req->pgid), ops(req->ops) {
+      oid(req->oid), pgid(req->pgid), ops(req->ops), sub_ops(req->sub_ops) {
 
     set_tid(req->get_tid());
     result = r;
@@ -146,6 +150,14 @@ public:
       ops[i].op.payload_len = 0;
       if (ignore_out_data)
 	ops[i].outdata.clear();
+    }
+    for (map<object_t, vector<OSDOp> >::iterator p = sub_ops.begin();
+             p != sub_ops.end(); ++p) {
+      for (unsigned i = 0; i < p->second.size(); i++) {
+        p->second[i].op.payload_len = 0;
+        if (ignore_out_data)
+          p->second[i].outdata.clear();
+      }
     }
   }
 private:
@@ -202,6 +214,19 @@ public:
         if (do_redirect) {
           ::encode(redirect, payload);
         }
+
+        __u32 num_sub_ops = sub_ops.size();
+        ::encode(num_sub_ops, payload);
+        for (map<object_t, vector<OSDOp> >::iterator p = sub_ops.begin();
+             p != sub_ops.end(); ++p) {
+          ::encode(p->first, payload);
+          num_ops = p->second.size();
+          ::encode(num_ops, payload);
+          for (unsigned i = 0; i < p->second.size(); ++i) {
+            ::encode(p->second[i].op, payload);
+            ::encode(p->second[i].rval, payload);
+          }
+        }
       }
     }
   }
@@ -234,6 +259,20 @@ public:
       ::decode(do_redirect, p);
       if (do_redirect)
 	::decode(redirect, p);
+
+      __u32 num_sub_ops;
+      ::decode(num_sub_ops, p);
+      for (unsigned i = 0; i < num_sub_ops; ++i) {
+        object_t sub_oid;
+        ::decode(sub_oid, p);
+        vector<OSDOp> &list = sub_ops[sub_oid];
+        ::decode(num_ops, p);
+        list.resize(num_ops);
+        for (unsigned j = 0; j < num_ops; ++j) {
+          ::decode(list[j].op, p);
+          ::decode(list[j].rval, p);
+        }
+      }
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       ::decode(head, p);
@@ -291,6 +330,21 @@ public:
         ::decode(do_redirect, p);
         if (do_redirect) {
 	  ::decode(redirect, p);
+        }
+      }
+      if (header.version >= 8) {
+        __u32 num_sub_ops;
+        ::decode(num_sub_ops, p);
+        for (unsigned i = 0; i < num_sub_ops; ++i) {
+          object_t sub_oid;
+          ::decode(sub_oid, p);
+          vector<OSDOp> &list = sub_ops[sub_oid];
+          ::decode(num_ops, p);
+          list.resize(num_ops);
+          for (unsigned j = 0; j < num_ops; ++j) {
+            ::decode(list[j].op, p);
+            ::decode(list[j].rval, p);
+          }
         }
       }
     }
