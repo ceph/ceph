@@ -584,6 +584,34 @@ void librados::ObjectWriteOperation::cache_unpin()
   o->cache_unpin();
 }
 
+void librados::MultiObjectWriteOperation::prepare_operate()
+{
+  ::ObjectOperation *op = &master.impl->o;
+  for (map<std::string, ObjectWriteOperation*>::iterator p = slaves.begin();
+      p != slaves.end(); ++p) {
+    object_t sub_obj(p->first);
+    ::ObjectOperation *sub_op = &p->second->impl->o;
+    op->sub_ops[sub_obj].swap(sub_op->ops);
+    op->sub_out_rval[sub_obj].swap(sub_op->out_rval);
+  }
+}
+
+librados::ObjectWriteOperation&
+librados::MultiObjectWriteOperation::slave(const std::string &oid)
+{
+  map<std::string, ObjectWriteOperation*>::iterator p = slaves.find(oid);
+  if (p == slaves.end())
+    p = slaves.insert(make_pair(oid, new ObjectWriteOperation())).first;
+  return *p->second;
+}
+
+librados::MultiObjectWriteOperation::~MultiObjectWriteOperation()
+{
+  for (map<std::string, ObjectWriteOperation*>::iterator p = slaves.begin();
+       p != slaves.end(); ++p)
+    delete p->second;
+}
+
 librados::WatchCtx::
 ~WatchCtx()
 {
@@ -1443,6 +1471,15 @@ static int translate_flags(int flags)
   return op_flags;
 }
 
+int librados::IoCtx::operate(const std::string& oid, librados::MultiObjectWriteOperation *o)
+{
+  object_t obj(oid);
+  o->prepare_operate();
+  return io_ctx_impl->operate(obj,
+                              (::ObjectOperation*)o->master.impl,
+                              (ceph::real_time *)o->master.impl->prt);
+}
+
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
@@ -1453,6 +1490,18 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
 {
   object_t obj(oid);
   return io_ctx_impl->operate_read(obj, &o->impl->o, pbl);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::MultiObjectWriteOperation *o)
+{
+  object_t obj(oid);
+  o->prepare_operate();
+  return io_ctx_impl->aio_operate(obj,
+                                  (::ObjectOperation*)o->master.impl,
+                                  c->pc,
+                                  io_ctx_impl->snapc,
+                                  0);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
