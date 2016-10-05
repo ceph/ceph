@@ -98,6 +98,9 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, std::string &imgname, std::string 
   }
 
   m_force_non_primary = !non_primary_global_image_id.empty();
+
+  // TODO
+  m_features &= ~RBD_FEATURE_DATA_POOL;
 }
 
 template<typename I>
@@ -250,7 +253,8 @@ void CreateRequest<I>::create_image() {
 
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_client::create_image(&op, m_size, m_order, m_features, oss.str());
+  cls_client::create_image(&op, m_size, m_order, m_features, oss.str(),
+                           /* TODO */-1);
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
