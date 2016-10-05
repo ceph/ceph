@@ -782,6 +782,12 @@ osd pool create ec 8 8 erasure ec-profile
 EOF
 fi
 
+if [ "$EC_OVERWRITES" -eq 1 ]; then
+    ceph_adm <<EOF
+osd pool set ec debug_white_box_testing_ec_overwrites true
+EOF
+fi
+
 do_cache() {
     while [ -n "$*" ]; do
 	p="$1"

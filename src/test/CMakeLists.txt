@@ -542,6 +542,7 @@ add_ceph_test(cephtool-test-mon.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-mon
 add_ceph_test(cephtool-test-osd.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-osd.sh)
 add_ceph_test(ceph_test_rados.sh ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados.sh)
 add_ceph_test(ceph_test_rados-ec.sh ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados-ec.sh)
+add_ceph_test(ceph_test_rados-ec-overwrites.sh ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados-ec-overwrites.sh)
 add_ceph_test(ceph_test_rados-ct.sh ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados-ct.sh)
 add_ceph_test(cephtool-test-rados.sh ${CMAKE_CURRENT_SOURCE_DIR}/cephtool-test-rados.sh)
 if(WITH_RBD)
