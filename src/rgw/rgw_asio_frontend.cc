@@ -101,7 +101,9 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
     beast::http::response_v1<beast::http::empty_body> response;
     response.status = 400;
     response.reason = "Bad Request";
-    response.version = request.version;
+    /* If the request is so terribly malformed that we can't extract even
+     * the protocol version, we will use HTTP/1.1 as a fallback. */
+    response.version = request.version ? request.version : 11;
     beast::http::prepare(response);
     beast::http::async_write(socket, std::move(response),
                              std::bind(&AsioConnection::on_write,
