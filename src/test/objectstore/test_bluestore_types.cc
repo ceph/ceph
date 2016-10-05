@@ -22,8 +22,18 @@ TEST(bluestore, sizeof) {
   P(BlueStore::Extent);
   P(BlueStore::Blob);
   P(BlueStore::SharedBlob);
+  P(BlueStore::ExtentMap);
+  P(BlueStore::extent_map_t);
+  P(BlueStore::blob_map_t);
+  P(BlueStore::BufferSpace);
   P(bluestore_extent_ref_map_t);
   P(bluestore_extent_ref_map_t::record_t);
+  P(std::atomic_int);
+  P(BlueStore::SharedBlobRef);
+  P(boost::intrusive::set_base_hook<>);
+  P(bufferlist);
+  cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t,uint64_t>) << std::endl;
+  cout << "map<char,char>\t" << sizeof(map<char,char>) << std::endl;
 }
 
 TEST(bluestore_extent_ref_map_t, add)
