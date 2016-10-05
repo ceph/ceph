@@ -93,3 +93,35 @@ void ReplicatedPG::MultiObjectWriteOpContext::decode(bufferlist::iterator &bl)
 
   DECODE_FINISH(bl);
 }
+
+ReplicatedPG::MultiObjectWriteOpContextRef
+ReplicatedPG::multi_object_write_op_create(hobject_t oid, osd_reqid_t reqid)
+{
+  assert(!multi_object_write_ops.count(oid));
+  MultiObjectWriteOpContextRef moc(new MultiObjectWriteOpContext);
+  moc->oid = oid;
+  moc->reqid = reqid;
+  multi_object_write_ops[oid] = moc;
+  return moc;
+}
+
+void ReplicatedPG::multi_object_write_op_destroy(MultiObjectWriteOpContextRef moc)
+{
+  if (moc->destroyed)
+    return;
+
+  auto i = multi_object_write_ops.find(moc->oid);
+  assert(i != multi_object_write_ops.end());
+  multi_object_write_ops.erase(i);
+
+  moc->destroyed = true;
+  assert(moc->waiting.empty());
+}
+
+ReplicatedPG::MultiObjectWriteOpContextRef ReplicatedPG::multi_object_write_op_find(hobject_t oid)
+{
+  auto it = multi_object_write_ops.find(oid);
+  if (it == multi_object_write_ops.end())
+    return MultiObjectWriteOpContextRef();
+  return it->second;
+}
