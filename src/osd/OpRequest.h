@@ -71,6 +71,7 @@ struct OpRequest : public TrackedOp {
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
+  bool is_multi_object_write_operation();
   void set_read();
   void set_write();
   void set_cache();
@@ -80,6 +81,7 @@ struct OpRequest : public TrackedOp {
   void set_promote();
   void set_skip_handle_cache();
   void set_skip_promote();
+  void set_multi_object_write_operation();
 
   struct ClassInfo {
     ClassInfo(const std::string& name, bool read, bool write,

@@ -9220,6 +9220,9 @@ int OSD::init_op_flags(OpRequestRef& op)
   // client flags have no bearing on whether an op is a read, write, etc.
   op->rmw_flags = 0;
 
+  if (m->sub_ops.size())
+    op->set_multi_object_write_operation();
+
   // set bits based on op codes, called methods.
   for (iter = m->ops.begin(); iter != m->ops.end(); ++iter) {
     if (ceph_osd_op_mode_modify(iter->op.op))
@@ -9237,6 +9240,9 @@ int OSD::init_op_flags(OpRequestRef& op)
 
     if (ceph_osd_op_mode_cache(iter->op.op))
       op->set_cache();
+
+    if (ceph_osd_op_type_moc(iter->op.op))
+      op->set_multi_object_write_operation();
 
     // check for ec base pool
     int64_t poolid = m->get_pg().pool();

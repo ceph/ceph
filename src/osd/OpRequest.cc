@@ -112,6 +112,9 @@ bool OpRequest::need_skip_handle_cache() {
 bool OpRequest::need_skip_promote() {
   return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
 }
+bool OpRequest::is_multi_object_write_operation() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_MULTI_OBJECT_WRITE_OPERATION);
+}
 
 void OpRequest::set_rmw_flags(int flags) {
 #ifdef WITH_LTTNG
@@ -132,6 +135,7 @@ void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
 void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
+void OpRequest::set_multi_object_write_operation() { set_rmw_flags(CEPH_OSD_RMW_FLAG_MULTI_OBJECT_WRITE_OPERATION); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
