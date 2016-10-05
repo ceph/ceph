@@ -518,7 +518,7 @@ public:
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
-    uint8_t  blob_depth;              /// blob overlapping count
+    uint8_t  blob_depth = 0;          /// blob overlapping count
     BlobRef blob;                     ///< the blob with our data
 
     /// ctor for lookup only
