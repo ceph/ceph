@@ -19,6 +19,52 @@ namespace librbd {
 
 class ImageCtx;
 
+class ObjectMapView {
+public:
+  ObjectMapView() {}
+
+  inline uint64_t size() const {
+    return m_level0_view.size();
+  }
+
+  ceph::BitVector<2> *level0_map() {
+    return &m_level0_view;
+  }
+
+  bool in_batch_mode(uint64_t object_no);
+  void resize(uint64_t new_size, uint8_t object_state);
+  uint32_t batch_size();
+
+  ceph::BitVector<2u>::Reference operator[](uint64_t object_no);
+  uint8_t operator[](uint64_t object_no) const;
+
+  void sync_view(ImageCtx &image_ctx, uint64_t snap_id, uint8_t view_idx,
+                 Context *on_finish);
+  void update_view(uint64_t object_no, const boost::optional<uint8_t> &current_state,
+                   uint8_t new_state, uint8_t view_idx);
+  void apply_view();
+private:
+  struct View {
+    View() : m_tracked(0) {}
+
+    ceph::BitVector<1> m_lookup;
+    ceph::BitVector<2> m_map_track;
+
+    boost::optional<uint64_t> m_object_start;
+    uint64_t m_object_end;
+
+    boost::optional<uint8_t> m_current_state;
+    uint8_t m_new_state;
+
+    uint32_t m_tracked;
+  };
+
+  ceph::BitVector<2> m_level0_view;
+  View m_level_view[OBJECT_MAP_VIEW_LEVELS];
+
+  void reset_view(uint8_t view_idx);
+};
+
 class ObjectMap {
 public:
   ObjectMap(ImageCtx &image_ctx, uint64_t snap_id);
@@ -66,6 +112,7 @@ private:
   ceph::BitVector<2> m_object_map;
   uint64_t m_snap_id;
 
+  ObjectMapView m_object_map_view;
 };
 
 } // namespace librbd

@@ -29,6 +29,172 @@
 
 namespace librbd {
 
+namespace {
+
+struct C_ObjectMapViewSetSize : public Context {
+  ObjectMapView *object_map_view;
+  uint8_t state;
+  Context *on_finish;
+
+  C_ObjectMapViewSetSize(ObjectMapView *_object_map_view,
+                         uint8_t _state, Context *_on_finish)
+    : object_map_view(_object_map_view), state(_state), on_finish(_on_finish) {}
+
+  virtual void finish(int r) {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    object_map_view->resize(object_map_view->size(), state);
+    on_finish->complete(0);
+  }
+};
+
+
+} // anonymous namespace
+
+ceph::BitVector<2u>::Reference ObjectMapView::operator[](uint64_t object_no) {
+  assert(object_no < m_level0_view.size());
+
+  for (int i = OBJECT_MAP_VIEW_LEVELS-1; i >= 0; --i) {
+    View *level = &m_level_view[i];
+    if (level->m_tracked && (level->m_lookup[object_no] == 1)) {
+      return level->m_map_track[object_no];
+    }
+  }
+
+  return m_level0_view[object_no];
+}
+
+uint8_t ObjectMapView::operator[](uint64_t object_no) const {
+  assert(object_no < m_level0_view.size());
+
+  for (int i = OBJECT_MAP_VIEW_LEVELS-1; i >= 0; --i) {
+    const View *level = &m_level_view[i];
+    if (level->m_tracked && (level->m_lookup[object_no] == 1)) {
+      return level->m_map_track[object_no];
+    }
+  }
+
+  return m_level0_view[object_no];
+}
+
+void ObjectMapView::sync_view(ImageCtx &image_ctx, uint64_t snap_id,
+                              uint8_t view_idx, Context *on_finish) {
+  assert(view_idx < OBJECT_MAP_VIEW_LEVELS);
+
+  View *level = &m_level_view[view_idx];
+  if (!level->m_tracked) {
+    on_finish->complete(0);
+    return;
+  }
+
+  RWLock::WLocker snap_locker(image_ctx.snap_lock);
+  RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
+  object_map::UpdateRequest *req = new object_map::UpdateRequest(
+    image_ctx, &m_level0_view, snap_id, *(level->m_object_start), level->m_object_end+1,
+    level->m_new_state, level->m_current_state, on_finish);
+  req->send();
+}
+
+void ObjectMapView::reset_view(uint8_t view_idx) {
+  assert(view_idx < OBJECT_MAP_VIEW_LEVELS);
+
+  View *level = &m_level_view[view_idx];
+
+  level->m_tracked = 0;
+  level->m_object_start = boost::none;
+  level->m_object_end = 0;
+  level->m_current_state = boost::none;
+  level->m_new_state = 0;
+}
+
+void ObjectMapView::update_view(uint64_t object_no,
+                                const boost::optional<uint8_t> &current_state,
+                                uint8_t new_state, uint8_t view_idx) {
+  assert(view_idx < OBJECT_MAP_VIEW_LEVELS);
+  assert(object_no < m_level0_view.size());
+
+  View *level = &m_level_view[view_idx];
+
+  ++level->m_tracked;
+  level->m_lookup[object_no] = 1;
+  level->m_map_track[object_no] = new_state;
+  if (!level->m_object_start) {
+    level->m_object_start = level->m_object_end = object_no;
+    level->m_current_state = current_state;
+    level->m_new_state = new_state;
+  } else {
+    assert(new_state == level->m_new_state);
+
+    if (object_no < level->m_object_start) {
+      level->m_object_start = object_no;
+    } else if (object_no > level->m_object_end) {
+      level->m_object_end = object_no;
+    }
+  }
+}
+
+void ObjectMapView::apply_view() {
+  for (int i = 0; i < OBJECT_MAP_VIEW_LEVELS; ++i) {
+    View *level = &m_level_view[i];
+    if (!level->m_tracked) {
+      continue;
+    }
+
+    for (uint64_t object_no = *(level->m_object_start); object_no <= level->m_object_end;
+         ++object_no) {
+      if (level->m_lookup[object_no] == 0) {
+        continue;
+      }
+
+      --level->m_tracked;
+      level->m_lookup[object_no] = 0;
+      level->m_map_track[object_no] = OBJECT_NONEXISTENT;
+      m_level0_view[object_no] = level->m_new_state;
+    }
+
+    assert(level->m_tracked == 0);
+    reset_view(i);
+  }
+}
+
+bool ObjectMapView::in_batch_mode(uint64_t object_no) {
+  for (int i = 0; i < OBJECT_MAP_VIEW_LEVELS; ++i) {
+    View *level = &m_level_view[i];
+    if (level->m_tracked && ((object_no > level->m_object_start) &&
+                             (object_no < level->m_object_end))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void ObjectMapView::resize(uint64_t new_size, uint8_t object_state) {
+  for (int i = 0; i < OBJECT_MAP_VIEW_LEVELS; ++i) {
+    View *level = &m_level_view[i];
+
+    reset_view(i);
+
+    // resize map and object lookup for this level
+    level->m_lookup.clear();
+    level->m_lookup.resize(new_size);
+    object_map::ResizeRequest::resize(&level->m_map_track, new_size, object_state);
+  }
+}
+
+uint32_t ObjectMapView::batch_size() {
+  uint32_t batched = 0;
+  for (int i = 0; i < OBJECT_MAP_VIEW_LEVELS; ++i) {
+    View *level = &m_level_view[i];
+    batched += level->m_tracked;
+  }
+
+  return batched;
+}
+
 ObjectMap::ObjectMap(ImageCtx &image_ctx, uint64_t snap_id)
   : m_image_ctx(image_ctx), m_snap_id(snap_id)
 {
