@@ -6967,6 +6967,59 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	   << dendl;
   utime_t now = ceph_clock_now(cct);
 
+  //roll lock entry if trim to locker
+  if (pg_trim_to_locker) {
+    list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
+    while (it->version <= pg_trim_to)
+      ++it;
+    assert(it != pg_log.get_log().log.end());
+    if (pg_log.get_log().is_lock_by(*it)) {
+      MultiObjectWriteOpContextRef moc = multi_object_write_op_find(it->soid);
+      if (!moc) {
+        ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::UNLOCK,
+                                          it->soid,
+                                          ctx->at_version,
+                                          eversion_t(),
+                                          0,
+                                          it->reqid,
+                                          ctx->mtime,
+                                          0));
+        ctx->at_version.version++;
+      } else {
+        assert(moc->reqid == it->reqid);
+        ctx->log.push_back(pg_log_entry_t(it->op,
+                                          it->soid,
+                                          ctx->at_version,
+                                          eversion_t(),
+                                          0,
+                                          it->reqid,
+                                          ctx->mtime,
+                                          0));
+        ctx->at_version.version++;
+      }
+    } else {
+      pg_trim_to_locker = false;
+    }
+  }
+
+  // commit multi object operation
+  if (ctx->multi_object_write_op_ctx) {
+    MultiObjectWriteOpContextRef moc = ctx->multi_object_write_op_ctx;
+    assert(moc->state == MultiObjectWriteOpContext::COMMITTING);
+    ctx->log.push_back(
+      pg_log_entry_t(
+        pg_log_entry_t::COMMIT,
+        moc->oid,
+        ctx->at_version,
+        eversion_t(),
+        0,
+        moc->reqid,
+        ctx->mtime,
+        0)
+      );
+    ctx->at_version.version++;
+  }
+
   // snapset
   bufferlist bss;
 
