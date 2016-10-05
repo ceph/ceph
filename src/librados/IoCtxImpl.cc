@@ -766,6 +766,14 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
+  if (o->sub_ops.size()) {
+    bool kraken = objecter->with_osdmap([](const OSDMap& osdmap) {
+      return osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
+    });
+    if (!kraken)
+      return -EOPNOTSUPP;
+  }
+
   Context *onack = c->wants_ack() ? new C_aio_Ack(c) : NULL;
   Context *oncommit = new C_aio_Safe(c);
 
