@@ -2060,7 +2060,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 			 obc,
 			 r,
 			 missing_oid,
-			 false,
+			 op->is_multi_object_write_operation(), // proxy read/write cannot handle it
 			 in_hit_set))
     return;
 
@@ -2220,6 +2220,69 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops, obc, this);
 
+  if (op->is_multi_object_write_operation()) {
+    if (!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      reply_ctx(ctx, -EOPNOTSUPP);
+      return;
+    }
+
+    if (m->master_reqid == osd_reqid_t()) {
+      ctx->multi_object_write_op_type = OpContext::MASTER;
+    } else {
+      assert(m->ops.size() > 0);
+      switch (m->ops.rbegin()->op.op)
+      {
+        case CEPH_OSD_OP_MOC_LOCK:
+          ctx->multi_object_write_op_type = OpContext::SLAVE_LOCK;
+          break;
+        case CEPH_OSD_OP_MOC_COMMIT:
+          ctx->multi_object_write_op_type = OpContext::SLAVE_COMMIT;
+          break;
+        case CEPH_OSD_OP_MOC_UNLOCK:
+          ctx->multi_object_write_op_type = OpContext::SLAVE_UNLOCK;
+          break;
+      }
+      assert(ctx->is_slave());
+    }
+
+    if (ctx->is_slave() && !m->get_reqid().name.is_osd()) {
+      dout(10) << __func__ << " slave op is internal op" << dendl;
+      reply_ctx(ctx, -EINVAL);
+      return;
+    }
+
+    if (!pool.info.is_replicated()) {
+      dout(10) << __func__ << " multi op only support replicated pool" << dendl;
+      reply_ctx(ctx, -EOPNOTSUPP);
+      return;
+    }
+  }
+
+  MultiObjectWriteOpContextRef moc = multi_object_write_op_find(obc->obs.oi.soid);
+  if (moc) {
+    dout(20) << __func__ << " exist multi op context " << *moc << dendl;
+    assert(moc->state != MultiObjectWriteOpContext::NEW);
+
+    if (moc->state == MultiObjectWriteOpContext::LOADING) {
+      dout(20) << __func__ << " waiting for multi op context loading " << dendl;
+      op->mark_delayed("waiting for multi op context loading");
+      moc->waiting.push_back(op);
+      close_op_ctx(ctx);
+      return;
+    }
+
+    osd_reqid_t op_reqid;
+    if (ctx->is_master())
+      op_reqid = m->get_reqid();
+    else if (ctx->is_slave())
+      op_reqid = m->master_reqid;
+
+    if (op_reqid != moc->master_reqid) {
+      dead_lock_avoidance(op, ctx, moc);
+      return;
+    }
+  }
+
   if (!obc->obs.exists)
     ctx->snapset_obc = get_object_context(obc->obs.oi.soid.get_snapdir(), false);
 
@@ -2297,7 +2360,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   op->mark_started();
   ctx->src_obc.swap(src_obc);
 
-  execute_ctx(ctx);
+  if (ctx->is_multi_object_write_op()) {
+    execute_multi_object_write_op_ctx(ctx);
+  } else {
+    execute_ctx(ctx);
+  }
   utime_t prepare_latency = ceph_clock_now(cct);
   prepare_latency -= op->get_dequeued_time();
   osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
