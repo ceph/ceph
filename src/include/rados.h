@@ -173,6 +173,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
 #define CEPH_OSD_OP_TYPE_PG    0x0500
 #define CEPH_OSD_OP_TYPE_MULTI 0x0600 /* multiobject */
+#define CEPH_OSD_OP_TYPE_MOC   0x0700 /* multi object operation control */
 
 #define __CEPH_OSD_OP1(mode, nr) \
 	(CEPH_OSD_OP_MODE_##mode | (nr))
@@ -260,6 +261,11 @@ extern const char *ceph_osd_state_name(int s);
 	/* ESX/SCSI */							    \
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
 									    \
+	/* multi object slave op*/				            \
+        f(MOC_LOCK,   __CEPH_OSD_OP(WR, MOC, 1),   "moc-lock")              \
+        f(MOC_COMMIT, __CEPH_OSD_OP(WR, MOC, 2),   "moc-commit")            \
+        f(MOC_UNLOCK, __CEPH_OSD_OP(WR, MOC, 3),   "moc-unlock")            \
+                                                                            \
 	/** multi **/							    \
 	f(CLONERANGE,	__CEPH_OSD_OP(WR, MULTI, 1),	"clonerange")	    \
 	f(ASSERT_SRC_VERSION, __CEPH_OSD_OP(RD, MULTI, 2), "assert-src-version") \
@@ -326,6 +332,10 @@ static inline int ceph_osd_op_type_pg(int op)
 static inline int ceph_osd_op_type_multi(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_MULTI;
+}
+static inline int ceph_osd_op_type_moc(int op)
+{
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_MOC;
 }
 
 static inline int ceph_osd_op_mode_subop(int op)
