@@ -10399,6 +10399,7 @@ void ReplicatedPG::on_activate()
 
   hit_set_setup();
   agent_setup();
+  multi_object_write_ops_setup();
 }
 
 void ReplicatedPG::_on_new_interval()
