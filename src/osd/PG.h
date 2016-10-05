@@ -550,6 +550,7 @@ public:
   map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
+  bool pg_trim_to_locker;
 
   set<int> blocked_by; ///< osds we are blocked by (for pg stats)
 

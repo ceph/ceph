@@ -226,6 +226,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   state(0),
   send_notify(false),
   pg_whoami(osd->whoami, p.shard),
+  pg_trim_to_locker(false),
   need_up_thru(false),
   last_peering_reset(0),
   heartbeat_peer_lock("PG::heartbeat_peer_lock"),
@@ -944,6 +945,7 @@ void PG::clear_primary_state()
   peer_activated.clear();
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
+  pg_trim_to_locker = false;
   might_have_unfound.clear();
 
   last_update_ondisk = eversion_t();

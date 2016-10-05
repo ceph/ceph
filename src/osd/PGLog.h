@@ -27,7 +27,8 @@ using namespace std;
 #define PGLOG_INDEXED_OBJECTS          (1 << 0)
 #define PGLOG_INDEXED_CALLER_OPS       (1 << 1)
 #define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
-#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | PGLOG_INDEXED_CALLER_OPS | PGLOG_INDEXED_EXTRA_CALLER_OPS)
+#define PGLOG_INDEXED_LOCKER           (1 << 3)
+#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | PGLOG_INDEXED_CALLER_OPS | PGLOG_INDEXED_EXTRA_CALLER_OPS | PGLOG_INDEXED_LOCKER)
 
 class CephContext;
 
@@ -79,6 +80,7 @@ struct PGLog : DoutPrefixProvider {
     mutable ceph::unordered_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
     mutable ceph::unordered_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
     mutable ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*> extra_caller_ops;
+    mutable ceph::unordered_map<hobject_t,pg_log_entry_t*> locker;
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -233,6 +235,48 @@ struct PGLog : DoutPrefixProvider {
       }
     }
     
+    const pg_log_entry_t *get_locker(const hobject_t &oid) const {
+      if (!(indexed_data & PGLOG_INDEXED_LOCKER)) {
+        index_locker();
+      }
+      auto p = locker.find(oid);
+      if (p == locker.end())
+        return NULL;
+      assert(p->second->is_locker());
+      if (p->second->is_unlock())
+        return NULL;
+      else
+        return p->second;
+    }
+
+    bool is_lock(const hobject_t& oid) const {
+      return get_locker(oid);
+    }
+
+    bool is_lock_by(const pg_log_entry_t &e) const {
+      if (!e.is_locker())
+        return false;
+      const pg_log_entry_t *l = get_locker(e.soid);
+      return l && l->version == e.version;
+    }
+
+    void get_all_locker(list<const pg_log_entry_t *> &ls) const {
+      if (!(indexed_data & PGLOG_INDEXED_LOCKER)) {
+        index_locker();
+      }
+      ls.clear();
+      for (auto &it : locker)
+        if (!it.second->is_unlock())
+          ls.push_back(it.second);
+    }
+
+    void reset_riter() {
+      rollback_info_trimmed_to_riter = log.rbegin();
+      while (rollback_info_trimmed_to_riter != log.rend() &&
+        rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to)
+        ++rollback_info_trimmed_to_riter;
+    }
+
     void reset_rollback_info_trimmed_to_riter() {
       rollback_info_trimmed_to_riter = log.rbegin();
       while (rollback_info_trimmed_to_riter != log.rend() &&
@@ -245,6 +289,7 @@ struct PGLog : DoutPrefixProvider {
       objects.clear();
       caller_ops.clear();
       extra_caller_ops.clear();
+      locker.clear();
       for (list<pg_log_entry_t>::iterator i = log.begin();
              i != log.end();
              ++i) {
@@ -262,6 +307,10 @@ struct PGLog : DoutPrefixProvider {
               j != i->extra_reqids.end();
               ++j) {
             extra_caller_ops.insert(make_pair(j->first, &(*i)));
+        }
+
+        if (i->is_locker()) {
+          locker[i->soid] = &(*i);
         }
       }
         
@@ -314,6 +363,19 @@ struct PGLog : DoutPrefixProvider {
       indexed_data |= PGLOG_INDEXED_EXTRA_CALLER_OPS;        
     }
 
+    void index_locker() const {
+      locker.clear();
+      for (list<pg_log_entry_t>::const_iterator i = log.begin();
+           i != log.end();
+           ++i) {
+        if (i->is_locker()) {
+          locker[i->soid] = const_cast<pg_log_entry_t*>(&(*i));
+        }
+      }
+
+      indexed_data |= PGLOG_INDEXED_LOCKER;
+    }
+
     void index(pg_log_entry_t& e) {
       if ((indexed_data & PGLOG_INDEXED_OBJECTS) && e.object_is_indexed()) {
         if (objects.count(e.soid) == 0 ||
@@ -334,11 +396,19 @@ struct PGLog : DoutPrefixProvider {
     extra_caller_ops.insert(make_pair(j->first, &e));
         }
       }
+      if (indexed_data & PGLOG_INDEXED_LOCKER) {
+        if (e.is_locker()) {
+          if (locker.count(e.soid) == 0 ||
+              locker[e.soid]->version < e.version)
+            locker[e.soid] = &e;
+        }
+      }
     }
     void unindex() {
       objects.clear();
       caller_ops.clear();
       extra_caller_ops.clear();
+      locker.clear();
       indexed_data = 0;
     }
     void unindex(pg_log_entry_t& e) {
@@ -369,6 +439,10 @@ struct PGLog : DoutPrefixProvider {
             }
           }
         }
+      }
+      if (indexed_data & PGLOG_INDEXED_LOCKER) {
+        if (locker.count(e.soid) && locker[e.soid]->version == e.version)
+          locker.erase(e.soid);
       }
     }
 
@@ -408,6 +482,11 @@ struct PGLog : DoutPrefixProvider {
        ++j) {
     extra_caller_ops.insert(make_pair(j->first, &(log.back())));
         }
+      }
+
+      if (indexed_data & PGLOG_INDEXED_LOCKER) {
+        if (e.is_locker())
+          locker[e.soid] = &(log.back());
       }
     }
 
