@@ -671,7 +671,7 @@ stress_write_image()
     local cluster=$1
     local pool=$2
     local image=$3
-    local duration=$(awk 'BEGIN {srand(); print int(35 * rand()) + 15}')
+    local duration=$(awk 'BEGIN {srand(); print int(10 * rand()) + 5}')
 
     timeout ${duration}s ceph_test_rbd_mirror_random_write \
 	--cluster ${cluster} ${pool} ${image} \
