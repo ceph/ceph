@@ -45,7 +45,7 @@ void RGWAsioClientIO::init_env(CephContext *cct)
 
     static const boost::string_ref HTTP_{"HTTP_"};
 
-    char buf[name.size() + HTTP_.size()];
+    char buf[name.size() + HTTP_.size() + 1];
     auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
     for (auto src = name.begin(); src != name.end(); ++src, ++dest) {
       if (*src == '-') {
