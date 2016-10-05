@@ -274,6 +274,7 @@ enum {
   CEPH_OSD_RMW_FLAG_FORCE_PROMOTE   = (1 << 7),
   CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE = (1 << 8),
   CEPH_OSD_RMW_FLAG_SKIP_PROMOTE      = (1 << 9),
+  CEPH_OSD_RMW_FLAG_MULTI_OBJECT_WRITE_OPERATION   = (1 << 10),
 };
 
 
@@ -2735,6 +2736,9 @@ struct pg_log_entry_t {
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
     ERROR = 10,      // write that returned an error
+    LOCK = 11,       // mark an object locked for multi object transaction
+    COMMIT = 12,     // mark an object commited for multi object transaction
+    UNLOCK = 13,     // mark an object unlocked for multi object transaction
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -2758,6 +2762,12 @@ struct pg_log_entry_t {
       return "clean   ";
     case ERROR:
       return "error   ";
+    case LOCK:
+      return "lock    ";
+    case COMMIT:
+      return "commit  ";
+    case UNLOCK:
+      return "unlock  ";
     default:
       return "unknown ";
     }
@@ -2803,6 +2813,9 @@ struct pg_log_entry_t {
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
   bool is_error() const { return op == ERROR; }
+  bool is_lock() const { return op == LOCK; }
+  bool is_commit() const { return op == COMMIT; }
+  bool is_unlock() const { return op == UNLOCK; }
 
   bool is_update() const {
     return
@@ -2819,6 +2832,10 @@ struct pg_log_entry_t {
   // be aware of error entries.
   bool object_is_indexed() const {
     return !is_error();
+  }
+
+  bool is_locker() const {
+    return is_lock() || is_commit() || is_unlock();
   }
 
   bool reqid_is_indexed() const {
