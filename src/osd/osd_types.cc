@@ -5329,6 +5329,13 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 {
   bufferlist::iterator datap = in.begin();
+  split_osd_op_vector_in_data(ops, datap);
+}
+
+void OSDOp::split_osd_op_vector_in_data(
+  vector<OSDOp>& ops,
+  bufferlist::iterator &datap)
+{
   for (unsigned i = 0; i < ops.size(); i++) {
     if (ceph_osd_op_type_multi(ops[i].op.op)) {
       ::decode(ops[i].soid, datap);
@@ -5337,6 +5344,18 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
       datap.copy(ops[i].op.payload_len, ops[i].indata);
     }
   }
+}
+
+void OSDOp::split_osd_op_vector_in_data(
+  vector<OSDOp>& ops,
+  map<object_t, vector<OSDOp> >& sub_ops,
+  bufferlist& in)
+{
+  bufferlist::iterator datap = in.begin();
+  split_osd_op_vector_in_data(ops, datap);
+  for (map<object_t, vector<OSDOp> >::iterator p = sub_ops.begin();
+       p != sub_ops.end(); ++p)
+    split_osd_op_vector_in_data(p->second, datap);
 }
 
 void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
@@ -5350,6 +5369,17 @@ void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
       out.append(ops[i].indata);
     }
   }
+}
+
+void OSDOp::merge_osd_op_vector_in_data(
+  vector<OSDOp>& ops,
+  map<object_t, vector<OSDOp> >& sub_ops,
+  bufferlist& out)
+{
+  merge_osd_op_vector_in_data(ops, out);
+  for (map<object_t, vector<OSDOp> >::iterator p = sub_ops.begin();
+       p != sub_ops.end(); ++p)
+    merge_osd_op_vector_in_data(p->second, out);
 }
 
 void OSDOp::split_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& in)
