@@ -10335,6 +10335,7 @@ void ReplicatedPG::on_shutdown()
   cancel_copy_ops(false);
   cancel_flush_ops(false);
   cancel_proxy_ops(false);
+  cancel_multi_object_write_ops(false);
   apply_and_flush_repops(false);
   cancel_log_updates();
 
@@ -10436,6 +10437,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   cancel_copy_ops(is_primary());
   cancel_flush_ops(is_primary());
   cancel_proxy_ops(is_primary());
+  cancel_multi_object_write_ops(is_primary());
 
   // requeue object waiters
   if (is_primary()) {
