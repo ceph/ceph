@@ -6933,8 +6933,9 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
        get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
     MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
     if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
+        ctx->is_slave_commit() ||
 	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
-      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
+      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS or SLAVE_COMMIT"
 	       << dendl;
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
@@ -9306,6 +9307,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
     // check disk
     bufferlist bv;
+    bufferlist mw_bl;
     if (attrs) {
       assert(attrs->count(OI_ATTR));
       bv = attrs->find(OI_ATTR)->second;
