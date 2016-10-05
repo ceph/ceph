@@ -23,6 +23,10 @@
 namespace ceph {
 template<typename T>
 using remove_extent_t = typename std::remove_extent<T>::type;
+template<typename T>
+using remove_reference_t = typename std::remove_reference<T>::type;
+template<typename T>
+using result_of_t = typename std::result_of<T>::type;
 
 namespace _backport14 {
 template<typename T>
