@@ -12156,6 +12156,11 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
+    if (p->nspace == cct->_conf->osd_multi_object_operation_namespace) {
+      dout(20) << __func__ << " skip (multi operation) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      continue;
+    }
     if (is_degraded_or_backfilling_object(*p)) {
       dout(20) << __func__ << " skip (degraded) " << *p << dendl;
       osd->logger->inc(l_osd_agent_skip);
