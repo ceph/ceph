@@ -201,6 +201,14 @@ void AioCompletion::associate_journal_event(uint64_t tid) {
   journal_tid = tid;
 }
 
+bool AioCompletion::is_last_request() {
+  CephContext *cct = ictx->cct;
+
+  Mutex::Locker locker(lock);
+  ldout(cct, 20) << this << " pending=" << pending_count << dendl;
+  return (pending_count == 1);
+}
+
 bool AioCompletion::is_complete() {
   tracepoint(librbd, aio_is_complete_enter, this);
   bool done;
