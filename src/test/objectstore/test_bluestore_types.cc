@@ -26,6 +26,9 @@ TEST(bluestore, sizeof) {
   P(BlueStore::extent_map_t);
   P(BlueStore::blob_map_t);
   P(BlueStore::BufferSpace);
+  P(BlueStore::Buffer);
+  P(bluestore_onode_t);
+  P(bluestore_blob_t);
   P(bluestore_extent_ref_map_t);
   P(bluestore_extent_ref_map_t::record_t);
   P(std::atomic_int);
