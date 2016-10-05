@@ -1574,11 +1574,9 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
   // un-span all blobs
   auto p = spanning_blob_map.begin();
   while (p != spanning_blob_map.end()) {
-    auto n = spanning_blob_map.erase(p);
-    p->id = -1;
-    dout(30) << __func__ << " un-spanning " << *p << dendl;
-    p->put();
-    p = n;
+    p->second->id = -1;
+    dout(30) << __func__ << " un-spanning " << *p->second << dendl;
+    p = spanning_blob_map.erase(p);
   }
 
   if (extent_map.size() <= 1) {
@@ -1727,8 +1725,7 @@ void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 	}
 	if (must_span) {
 	  b->id = bid++;
-	  spanning_blob_map.insert(*b);
-	  b->get();
+	  spanning_blob_map[b->id] = b;
 	  dout(20) << __func__ << "    adding spanning " << *b << dendl;
 	}
       }
@@ -1886,10 +1883,10 @@ void BlueStore::ExtentMap::encode_spanning_blobs(bufferlist& bl)
 {
   unsigned n = spanning_blob_map.size();
   small_encode_varint(n, bl);
-  for (auto& b : spanning_blob_map) {
-    small_encode_varint(b.id, bl);
-    b.encode(bl);
-    b.ref_map.encode(bl);
+  for (auto& i : spanning_blob_map) {
+    small_encode_varint(i.second->id, bl);
+    i.second->encode(bl);
+    i.second->ref_map.encode(bl);
   }
 }
 
@@ -1902,22 +1899,11 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   while (n--) {
     BlobRef b(new Blob());
     small_decode_varint(b->id, p);
-    spanning_blob_map.insert(*b);
-    b->get();
+    spanning_blob_map[b->id] = b;
     b->decode(p);
     b->ref_map.decode(p);
     c->open_shared_blob(b);
   }
-}
-
-BlueStore::BlobRef BlueStore::ExtentMap::get_spanning_blob(
-  int id)
-{
-  Blob dummy;
-  dummy.id = id;
-  auto p = spanning_blob_map.find(dummy);
-  assert(p != spanning_blob_map.end());
-  return &*p;
 }
 
 void BlueStore::ExtentMap::init_shards(Onode *on, bool loaded, bool dirty)
@@ -7709,7 +7695,7 @@ void BlueStore::_wctx_finish(
     if (b->id >= 0 && b->ref_map.empty()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
-      auto it = o->extent_map.spanning_blob_map.iterator_to(*b);
+      auto it = o->extent_map.spanning_blob_map.find(b->id);
       o->extent_map.spanning_blob_map.erase(it);
     }
   }
@@ -8504,8 +8490,7 @@ int BlueStore::_do_clone_range(
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
       if (cb->id >= 0) {
-	newo->extent_map.spanning_blob_map.insert(*cb);
-	cb->get();
+	newo->extent_map.spanning_blob_map[cb->id] = cb;
       }
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.extents) {
