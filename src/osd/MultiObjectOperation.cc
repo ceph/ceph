@@ -125,3 +125,279 @@ ReplicatedPG::MultiObjectWriteOpContextRef ReplicatedPG::multi_object_write_op_f
     return MultiObjectWriteOpContextRef();
   return it->second;
 }
+
+void ReplicatedPG::multi_object_write_op_load(MultiObjectWriteOpContextRef moc,
+                                 MultiObjectWriteOpContext::State next)
+{
+  if (moc->destroyed)
+    return;
+
+  hobject_t meta_oid = get_multi_object_write_op_meta_object(moc);
+
+  if (is_degraded_or_backfilling_object(meta_oid)) {
+    callbacks_for_degraded_object[meta_oid].push_back(
+      new FunctionContext(boost::bind(
+        &ReplicatedPG::multi_object_write_op_load, this, moc, next
+      ))
+    );
+    maybe_kick_recovery(meta_oid);
+    dout(20) << __func__ << " waiting for temp object" << dendl;
+    return;
+  }
+
+  ObjectContextRef obc = get_object_context(meta_oid, false);
+  if (!obc) {
+    dout(1) << __func__ << " could not load meta " << meta_oid << dendl;
+
+    requeue_ops(moc->waiting);
+    multi_object_write_op_destroy(moc);
+    return;
+  }
+
+  bufferlist bl;
+  {
+    obc->ondisk_read_lock();
+    int r = osd->store->read(ch, ghobject_t(meta_oid), 0, 0, bl);
+    assert(r >= 0);
+    obc->ondisk_read_unlock();
+  }
+
+  bufferlist::iterator pbl = bl.begin();
+  moc->decode(pbl);
+
+  moc->state = next;
+  requeue_ops(moc->waiting);
+
+  if (moc->is_master) {
+    switch (moc->state)
+    {
+      case MultiObjectWriteOpContext::LOCK:
+        multi_object_write_op_master_unlock_slave(moc);
+        break;
+      case MultiObjectWriteOpContext::COMMIT:
+        multi_object_write_op_master_commit_slave(moc);
+        break;
+      default:
+        break;
+    }
+  } else {
+    switch (moc->state)
+    {
+      case MultiObjectWriteOpContext::COMMIT:
+        multi_object_write_op_slave_unlock_self(moc);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+template <typename F>
+void ReplicatedPG::multi_object_write_op_save(MultiObjectWriteOpContextRef moc, F &&f)
+{
+  hobject_t meta_oid = get_multi_object_write_op_meta_object(moc);
+
+  bufferlist bl;
+  moc->encode(bl);
+
+  ObjectContextRef obc = get_object_context(meta_oid, true);
+  OpContextUPtr ctx = simple_opc_create(obc);
+
+  ctx->at_version = get_next_version();
+
+  ctx->log.push_back(
+    pg_log_entry_t(
+      pg_log_entry_t::LOCK,
+      moc->oid,
+      ctx->at_version,
+      eversion_t(),
+      0,
+      moc->reqid,
+      ctx->mtime,
+      0)
+    );
+  ctx->at_version.version++;
+
+  obc->obs.oi.version = ctx->at_version;
+  obc->obs.oi.mtime = ceph_clock_now(cct);;
+  obc->obs.oi.size = bl.length();
+  obc->obs.exists = true;
+  obc->obs.oi.set_data_digest(bl.crc32c(-1));
+
+  ctx->new_obs = obc->obs;
+
+  obc->ssc->snapset.head_exists = true;
+  ctx->new_snapset = obc->ssc->snapset;
+
+  ctx->delta_stats.num_objects++;
+  ctx->delta_stats.num_bytes += bl.length();
+
+  bufferlist bss;
+  ::encode(ctx->new_snapset, bss);
+  bufferlist boi(sizeof(ctx->new_obs.oi));
+  ::encode(ctx->new_obs.oi, boi, get_osdmap()->get_up_osd_features());
+
+  ctx->op_t->append(meta_oid, 0, bl.length(), bl, 0);
+  map <string, bufferlist> attrs;
+  attrs[OI_ATTR].claim(boi);
+  attrs[SS_ATTR].claim(bss);
+  setattrs_maybe_cache(ctx->obc, ctx.get(), ctx->op_t.get(), attrs);
+
+  ctx->log.push_back(
+    pg_log_entry_t(
+      pg_log_entry_t::MODIFY,
+      meta_oid,
+      ctx->at_version,
+      eversion_t(),
+      0,
+      osd_reqid_t(),
+      ctx->mtime,
+      0)
+    );
+
+  if (pool.info.require_rollback()) {
+    ctx->log.back().mod_desc.create();
+  } else {
+    ctx->log.back().mod_desc.mark_unrollbackable();
+  }
+
+  ctx->register_on_commit(std::move(f));
+
+  apply_ctx_stats(ctx.get());
+  simple_opc_submit(std::move(ctx));
+}
+
+void ReplicatedPG::multi_object_write_op_inline_delete(MultiObjectWriteOpContextRef moc, OpContext *ctx)
+{
+  hobject_t meta_oid = get_multi_object_write_op_meta_object(moc);
+  assert(!is_degraded_or_backfilling_object(meta_oid));
+  ObjectContextRef obc = get_object_context(meta_oid, false);
+  assert(obc);
+
+  ctx->log.push_back(
+    pg_log_entry_t(
+      pg_log_entry_t::UNLOCK,
+      moc->oid,
+      ctx->at_version,
+      eversion_t(),
+      0,
+      moc->reqid,
+      ctx->mtime,
+      0)
+    );
+  ctx->at_version.version++;
+
+  ctx->log.push_back(
+    pg_log_entry_t(
+      pg_log_entry_t::DELETE,
+      meta_oid,
+      ctx->at_version,
+      obc->obs.oi.version,
+      0,
+      osd_reqid_t(),
+      ctx->mtime,
+      0)
+    );
+  ctx->at_version.version++;
+
+  if (pool.info.require_rollback()) {
+    if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
+      ctx->op_t->stash(meta_oid, ctx->at_version.version);
+    } else {
+      ctx->op_t->remove(meta_oid);
+    }
+  } else {
+    ctx->op_t->remove(meta_oid);
+    ctx->log.back().mod_desc.mark_unrollbackable();
+  }
+
+  --ctx->delta_stats.num_objects;
+  ctx->delta_stats.num_bytes -= obc->obs.oi.size;
+}
+
+template <typename F>
+void ReplicatedPG::multi_object_write_op_delete(MultiObjectWriteOpContextRef moc, F &&f)
+{
+  hobject_t meta_oid = get_multi_object_write_op_meta_object(moc);
+  assert(!is_degraded_or_backfilling_object(meta_oid));
+  ObjectContextRef obc = get_object_context(meta_oid, false);
+  assert(obc);
+
+  OpContextUPtr ctx = simple_opc_create(obc);
+  ctx->at_version = get_next_version();
+  utime_t now = ceph_clock_now(cct);
+  ctx->mtime = now;
+
+  ctx->log.push_back(
+    pg_log_entry_t(
+      pg_log_entry_t::UNLOCK,
+      moc->oid,
+      ctx->at_version,
+      eversion_t(),
+      0,
+      moc->reqid,
+      ctx->mtime,
+      0)
+    );
+  ctx->at_version.version++;
+
+  ctx->log.push_back(
+    pg_log_entry_t(
+      pg_log_entry_t::DELETE,
+      meta_oid,
+      ctx->at_version,
+      obc->obs.oi.version,
+      0,
+      osd_reqid_t(),
+      ctx->mtime,
+      0)
+    );
+
+  if (pool.info.require_rollback()) {
+    if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
+      ctx->op_t->stash(meta_oid, ctx->at_version.version);
+    } else {
+      ctx->op_t->remove(meta_oid);
+    }
+  } else {
+    ctx->op_t->remove(meta_oid);
+    ctx->log.back().mod_desc.mark_unrollbackable();
+  }
+
+  --ctx->delta_stats.num_objects;
+  ctx->delta_stats.num_bytes -= obc->obs.oi.size;
+
+  ctx->register_on_commit(std::move(f));
+
+  apply_ctx_stats(ctx.get());
+  simple_opc_submit(std::move(ctx));
+}
+
+hobject_t ReplicatedPG::get_multi_object_write_op_meta_object(MultiObjectWriteOpContextRef moc)
+{
+  ostringstream ss;
+  ss << "moc_" << moc->reqid;
+  return hobject_t(ss.str(),
+                   "",
+                   CEPH_NOSNAP,
+		   moc->oid.get_hash(),
+		   moc->oid.pool,
+		   cct->_conf->osd_multi_object_operation_namespace);
+}
+
+void ReplicatedPG::multi_object_write_ops_setup()
+{
+  if (!is_active() || !is_primary())
+    return;
+
+  assert(multi_object_write_ops.empty());
+  list<const pg_log_entry_t *> locker;
+  pg_log.get_log().get_all_locker(locker);
+  for (auto &it : locker) {
+    MultiObjectWriteOpContextRef moc = multi_object_write_op_create(it->soid, it->reqid);
+    moc->state = MultiObjectWriteOpContext::LOADING;
+    MultiObjectWriteOpContext::State next = it->is_commit() ?
+      MultiObjectWriteOpContext::COMMIT : MultiObjectWriteOpContext::LOCK;
+    multi_object_write_op_load(moc, next);
+  }
+}
