@@ -39,6 +39,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
+#include "rgw_role.h"
 
 using namespace std;
 
@@ -174,6 +175,9 @@ void _usage()
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
+  cout << "  role create                create a AWS role for use with STS\n";
+  cout << "  role delete                delete a role\n";
+  cout << "  role get                   get a role\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -276,6 +280,9 @@ void _usage()
   cout << "                             object deletions by not involving GC\n";
   cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
   cout << "                             ignores bucket index consistency\n";
+  cout << "   --role-name               name of the role to create\n";
+  cout << "   --path                    path to the role\n";
+  cout << "   --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -438,6 +445,9 @@ enum {
   OPT_PERIOD_UPDATE,
   OPT_PERIOD_COMMIT,
   OPT_SYNC_STATUS,
+  OPT_ROLE_CREATE,
+  OPT_ROLE_DELETE,
+  OPT_ROLE_GET,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -473,6 +483,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "region-map") == 0 ||
       strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
+      strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "usage") == 0 ||
@@ -831,6 +842,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "sync") == 0) {
     if (strcmp(cmd, "status") == 0)
       return OPT_SYNC_STATUS;
+  } else if (strcmp(prev_cmd, "role") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_ROLE_CREATE;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_ROLE_DELETE;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ROLE_GET;
   }
 
   return -EINVAL;
@@ -895,6 +913,14 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
+}
+
+static void show_role_info(RGWRole& role, Formatter* formatter)
+{
+  formatter->open_object_section("role");
+  role.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
 }
 
 static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
@@ -2271,6 +2297,7 @@ int main(int argc, const char **argv)
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
+  std::string role_name, path, assume_role_doc;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
@@ -2707,6 +2734,12 @@ int main(int argc, const char **argv)
       index_type_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
       compression_type = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
+      role_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
+      path = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*)NULL)) {
+      assume_role_doc = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4491,7 +4524,62 @@ int main(int argc, const char **argv)
       cout << std::endl;
     }
     return 0;
-
+  case OPT_ROLE_CREATE:
+    {
+      if (role_name.empty() || assume_role_doc.empty()) {
+        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+      /* The following two calls will be replaced by read_decode_json or something
+         similar when the code for AWS Policies is in places */
+      bufferlist bl;
+      int ret = read_input(assume_role_doc, bl);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      JSONParser p;
+      if (!p.parse(bl.c_str(), bl.length())) {
+        cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
+        return -EINVAL;
+      }
+      string trust_policy = bl.to_str();
+      RGWRole role(g_ceph_context, store, role_name, path, trust_policy);
+      ret = role.create(true);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_role_info(role, formatter);
+      return 0;
+    }
+  case OPT_ROLE_DELETE:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.delete_obj();
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "role: " << role_name << " successfully deleted" << std::endl;
+      return 0;
+    }
+  case OPT_ROLE_GET:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      show_role_info(role, formatter);
+      return 0;
+    }
   default:
     output_user_info = false;
   }
