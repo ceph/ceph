@@ -33,7 +33,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -56,6 +56,9 @@ private:
   //
 public:
   vector<OSDOp> ops;
+  osd_reqid_t master_reqid;
+  object_t master;
+  map<object_t, vector<OSDOp> > sub_ops;
 private:
 
   snapid_t snapid;
@@ -242,7 +245,7 @@ public:
   // marshalling
   virtual void encode_payload(uint64_t features) {
 
-    OSDOp::merge_osd_op_vector_in_data(ops, data);
+    OSDOp::merge_osd_op_vector_in_data(ops, sub_ops, data);
 
     if ((features & CEPH_FEATURE_OBJECTLOCATOR) == 0) {
       // here is the old structure we are encoding to: //
@@ -349,6 +352,19 @@ struct ceph_osd_request_head {
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
+
+      ::encode(master_reqid, payload);
+      ::encode(master, payload);
+      __u16 num_sub_ops = sub_ops.size();
+      ::encode(num_sub_ops, payload);
+      for (map<object_t, vector<OSDOp> >::iterator p = sub_ops.begin();
+           p != sub_ops.end(); ++p) {
+        ::encode(p->first, payload);
+        num_ops = p->second.size();
+        ::encode(num_ops, payload);
+        for (unsigned i = 0; i < p->second.size(); ++i)
+          ::encode(p->second[i].op, payload);
+      }
     }
   }
 
@@ -357,7 +373,7 @@ struct ceph_osd_request_head {
     p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version >= 7) {
 	  ::decode(pgid, p);
 	  ::decode(osdmap_epoch, p);
 	  ::decode(flags, p);
@@ -404,7 +420,7 @@ struct ceph_osd_request_head {
 
       retry_attempt = -1;
       features = 0;
-      OSDOp::split_osd_op_vector_in_data(ops, data);
+      OSDOp::split_osd_op_vector_in_data(ops, sub_ops, data);
 
       // we did the full decode
       final_decode_needed = false;
@@ -457,7 +473,7 @@ struct ceph_osd_request_head {
       else
 	reqid = osd_reqid_t();
 
-      OSDOp::split_osd_op_vector_in_data(ops, data);
+      OSDOp::split_osd_op_vector_in_data(ops, sub_ops, data);
 
       // we did the full decode
       final_decode_needed = false;
@@ -495,7 +511,23 @@ struct ceph_osd_request_head {
 
     ::decode(features, p);
 
-    OSDOp::split_osd_op_vector_in_data(ops, data);
+    if (header.version >= 8) {
+      ::decode(master_reqid, p);
+      ::decode(master, p);
+      __u16 num_sub_ops;
+      ::decode(num_sub_ops, p);
+      for (unsigned i = 0; i < num_sub_ops; ++i) {
+        object_t sub_oid;
+        ::decode(sub_oid, p);
+        vector<OSDOp> &list = sub_ops[sub_oid];
+        ::decode(num_ops, p);
+        list.resize(num_ops);
+        for (unsigned j = 0; j < num_ops; ++j)
+          ::decode(list[j].op, p);
+      }
+    }
+
+    OSDOp::split_osd_op_vector_in_data(ops, sub_ops, data);
 
     final_decode_needed = false;
   }
