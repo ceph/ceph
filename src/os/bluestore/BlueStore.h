@@ -407,7 +407,7 @@ public:
   };
 
   /// in-memory blob metadata and associated cached buffers (if any)
-  struct Blob : public boost::intrusive::set_base_hook<> {
+  struct Blob : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>> {
     std::atomic_int nref = {0};     ///< reference count
     int id = -1;                    ///< id, for spanning blobs only, >= 0
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
@@ -524,7 +524,7 @@ public:
   typedef boost::intrusive::set<Blob> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
-  struct Extent : public boost::intrusive::set_base_hook<> {
+  struct Extent : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>> {
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
