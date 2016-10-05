@@ -27,6 +27,7 @@ namespace librados
   class IoCtx;
   struct IoCtxImpl;
   class ObjectOperationImpl;
+  class MultiObjectWriteOperation;
   struct ObjListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
@@ -361,6 +362,7 @@ namespace librados
     ObjectOperation& operator=(const ObjectOperation& rhs);
     friend class IoCtx;
     friend class Rados;
+    friend class MultiObjectWriteOperation;
   };
 
   /*
@@ -482,6 +484,18 @@ namespace librados
     void cache_unpin();
 
     friend class IoCtx;
+  };
+
+  class CEPH_RADOS_API MultiObjectWriteOperation
+  {
+  protected:
+    std::map<std::string, ObjectWriteOperation*> slaves;
+    void prepare_operate();
+    friend class IoCtx;
+  public:
+    ObjectWriteOperation master;
+    ObjectWriteOperation& slave(const std::string &oid);
+    virtual ~MultiObjectWriteOperation();
   };
 
   /*
@@ -983,8 +997,10 @@ namespace librados
 	         bufferlist& inbl, bufferlist *outbl);
 
     // compound object operations
+    int operate(const std::string& oid, MultiObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
+    int aio_operate(const std::string& oid, AioCompletion *c, MultiObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**
