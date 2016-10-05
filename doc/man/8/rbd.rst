@@ -475,6 +475,9 @@ Mapping (per block device) options:
 
 * queue_depth=x - queue depth (since 4.2, default is 128 requests).
 
+* lock_on_read - Acquire exclusive lock on reads, in addition to writes and
+  discards (since 4.9).
+
 
 Examples
 ========
