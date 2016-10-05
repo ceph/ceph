@@ -4432,6 +4432,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
+    case CEPH_OSD_OP_MOC_LOCK:
+    case CEPH_OSD_OP_MOC_COMMIT:
+    case CEPH_OSD_OP_MOC_UNLOCK:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -6252,6 +6255,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
       }
       break;
+
+    case CEPH_OSD_OP_MOC_LOCK:
+      {
+        result = multi_object_write_op_slave_lock(ctx);
+      }
+      break;
+    case CEPH_OSD_OP_MOC_COMMIT:
+      {
+        result = multi_object_write_op_slave_commit(ctx);
+      }
+      break;
+    case CEPH_OSD_OP_MOC_UNLOCK:
+      assert(0 == "unexpected case");
 
     default:
       tracepoint(osd, do_osd_op_pre_unknown, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op));
