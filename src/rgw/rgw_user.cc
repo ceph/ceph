@@ -2152,11 +2152,10 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
     user_info.user_email = op_email;
   } else if (op_email.empty() && op_state.user_email_specified) {
 
-    rgw_obj email_obj(store->zone.user_email_pool, user_info.user_email);
     ldout(store->ctx(), 10) << "removing email index: " << user_info.user_email << dendl;
-    ret = store->delete_system_obj(email_obj);
+    ret = rgw_remove_email_index(store, user_info.user_email);
     if (ret < 0 && ret != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: could not remove " << user_info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
+      ldout(store->ctx(), 0) << "ERROR: could not remove " << user_info.user_id << " index (err=" << ret << ")" << dendl;
       return ret;
     }
     user_info.user_email = "";
