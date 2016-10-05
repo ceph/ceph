@@ -10,6 +10,7 @@ set(osd_srcs
   PG.cc
   PGLog.cc
   ReplicatedPG.cc
+  MultiObjectOperation.cc
   ReplicatedBackend.cc
   ECBackend.cc
   ECTransaction.cc
