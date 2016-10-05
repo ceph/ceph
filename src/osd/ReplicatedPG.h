@@ -425,6 +425,9 @@ public:
     ObjectContextRef obc,
     const list<watch_disconnect_t> &to_disconnect);
 
+  struct MultiObjectWriteOpContext;
+  typedef ceph::shared_ptr<MultiObjectWriteOpContext> MultiObjectWriteOpContextRef;
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
@@ -432,6 +435,26 @@ public:
     OpRequestRef op;
     osd_reqid_t reqid;
     vector<OSDOp> &ops;
+
+    enum
+    {
+      NONE,
+      MASTER,
+      SLAVE_LOCK,
+      SLAVE_COMMIT,
+      SLAVE_UNLOCK
+    } multi_object_write_op_type;
+    bool is_master() { return multi_object_write_op_type == MASTER; }
+    bool is_slave_lock() { return multi_object_write_op_type == SLAVE_LOCK; }
+    bool is_slave_commit() { return multi_object_write_op_type == SLAVE_COMMIT; }
+    bool is_slave_unlock() { return multi_object_write_op_type == SLAVE_UNLOCK; }
+    bool is_slave() {
+      return is_slave_lock() ||
+             is_slave_commit() ||
+             is_slave_unlock();
+    }
+    bool is_multi_object_write_op() { return multi_object_write_op_type != NONE; }
+    MultiObjectWriteOpContextRef multi_object_write_op_ctx;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -575,6 +598,7 @@ public:
 	      ObjectContextRef& obc,
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops),
+      multi_object_write_op_type(NONE),
       obs(&obc->obs),
       snapset(0),
       new_obs(obs->oi, obs->exists),
@@ -598,7 +622,7 @@ public:
     }
     OpContext(OpRequestRef _op, osd_reqid_t _reqid,
               vector<OSDOp>& _ops, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
+      op(_op), reqid(_reqid), ops(_ops), multi_object_write_op_type(NONE), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
@@ -1350,6 +1374,89 @@ protected:
   friend struct C_ProxyWrite_Commit;
 
 public:
+
+  struct MultiObjectWriteOpContext
+  {
+    bool destroyed;
+
+    hobject_t oid;
+    osd_reqid_t reqid;
+    bool is_master;
+    OpContext *ctx;
+
+    enum State {
+      NEW,
+      LOADING,
+      LOCKING,
+      LOCK,
+      COMMITTING,
+      COMMIT,
+      UNLOCKING,
+      UNLOCK,
+    };
+    State state;
+
+    hobject_t master;
+    object_locator_t locator;
+    SnapContext snapc;
+    ceph::real_time mtime;
+    osd_reqid_t master_reqid;
+
+    map<object_t, pair<int, ceph_tid_t> > sub_objects;
+
+    bufferlist slave_data_bl;
+
+    list<OpRequestRef> waiting;
+
+    void encode(bufferlist &bl);
+    void decode(bufferlist::iterator &bl);
+
+    MultiObjectWriteOpContext()
+      : destroyed(false)
+      , is_master(false)
+      , ctx(nullptr)
+      , state(NEW)
+    {}
+  };
+
+private:
+  ceph::unordered_map<hobject_t, MultiObjectWriteOpContextRef> multi_object_write_ops;
+
+  MultiObjectWriteOpContextRef multi_object_write_op_create(hobject_t oid, osd_reqid_t reqid);
+  void multi_object_write_op_destroy(MultiObjectWriteOpContextRef moc);
+  MultiObjectWriteOpContextRef multi_object_write_op_find(hobject_t oid);
+
+  void multi_object_write_ops_setup();
+
+  hobject_t get_multi_object_write_op_meta_object(MultiObjectWriteOpContextRef moc);
+  void multi_object_write_op_load(MultiObjectWriteOpContextRef moc, MultiObjectWriteOpContext::State next);
+  template <typename F>
+  void multi_object_write_op_save(MultiObjectWriteOpContextRef moc, F &&f);
+  void multi_object_write_op_inline_delete(MultiObjectWriteOpContextRef moc, OpContext *ctx);
+  template <typename F>
+  void multi_object_write_op_delete(MultiObjectWriteOpContextRef moc, F &&f);
+  template <typename F1, typename F2>
+  void multi_object_write_op_send(
+    MultiObjectWriteOpContextRef moc,
+    F1 &&fill,
+    F2 &&fin);
+
+  void execute_multi_object_write_op_ctx(OpContext *ctx);
+
+  void multi_object_write_op_master_lock_self(MultiObjectWriteOpContextRef moc);
+  void multi_object_write_op_master_lock_slave(MultiObjectWriteOpContextRef moc);
+  void multi_object_write_op_master_commit_self(MultiObjectWriteOpContextRef moc);
+  void multi_object_write_op_master_commit_slave(MultiObjectWriteOpContextRef moc);
+  void multi_object_write_op_master_unlock_self(MultiObjectWriteOpContextRef moc);
+  void multi_object_write_op_master_unlock_slave(MultiObjectWriteOpContextRef moc);
+
+  int multi_object_write_op_slave_lock(OpContext *ctx);
+  int multi_object_write_op_slave_commit(OpContext *ctx);
+  void multi_object_write_op_slave_unlock_self(MultiObjectWriteOpContextRef moc);
+  void dead_lock_avoidance(OpRequestRef op, OpContext* ctx,
+    MultiObjectWriteOpContextRef moc);
+  void cancel_multi_object_write_ops(bool requeue);
+public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool, spg_t p);
   ~ReplicatedPG() {}
@@ -1590,6 +1697,51 @@ inline ostream& operator<<(ostream& out,
       << " pwop_tid=" << pwop->objecter_tid;
   if (pwop->ctx->op)
     out << " op=" << *(pwop->ctx->op->get_req());
+  out << ")";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out, const ReplicatedPG::MultiObjectWriteOpContext& moc)
+{
+  out << " moc(";
+  if (moc.is_master) {
+    out << "MASTER [" << moc.oid << " " << moc.reqid
+        << " -> (";
+    for (auto &it : moc.sub_objects)
+      out << " " << it.first;
+    out << " )]";
+  } else {
+    out << "SLAVE [" << moc.master << " " << moc.master_reqid
+        << " -> " << moc.oid << " " << moc.reqid << "]";
+  }
+  switch (moc.state)
+  {
+    case ReplicatedPG::MultiObjectWriteOpContext::NEW:
+      out << " NEW";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::LOADING:
+      out << " LOADING";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::LOCKING:
+      out << " LOCKING";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::LOCK:
+      out << " LOCK";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::COMMITTING:
+      out << " COMMITTING";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::COMMIT:
+      out << " COMMIT";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::UNLOCKING:
+      out << " UNLOCKING";
+      break;
+    case ReplicatedPG::MultiObjectWriteOpContext::UNLOCK:
+      out << " UNLOCK";
+      break;
+  }
+  out << " loc: " << moc.locator;
   out << ")";
   return out;
 }
