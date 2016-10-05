@@ -886,6 +886,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_bucket user_email_pool;
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
+  rgw_bucket roles_pool;
 
   RGWAccessKey system_key;
 
@@ -915,7 +916,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int fix_pool_names();
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -932,6 +933,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(metadata_heap, bl);
     ::encode(realm_id, bl);
     ::encode(lc_pool, bl);
+    ::encode(roles_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -966,6 +968,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(lc_pool, bl);
     } else {
       lc_pool = name + ".rgw.lc";
+    }
+    if (struct_v >= 8) {
+      ::decode(roles_pool, bl);
     }
     DECODE_FINISH(bl);
   }

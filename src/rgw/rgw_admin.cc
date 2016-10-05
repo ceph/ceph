@@ -36,6 +36,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
+#include "rgw_role.h"
 
 using namespace std;
 
@@ -158,6 +159,9 @@ void _usage()
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
+  cout << "  role create                create a role\n";
+  cout << "  role delete                delete a role\n";
+  cout << "  role list                  list a role\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -391,6 +395,9 @@ enum {
   OPT_PERIOD_UPDATE,
   OPT_PERIOD_COMMIT,
   OPT_SYNC_STATUS,
+  OPT_ROLE_CREATE,
+  OPT_ROLE_DELETE,
+  OPT_ROLE_LIST,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -425,6 +432,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "region-map") == 0 ||
       strcmp(cmd, "regionmap") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
+      strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "sync") == 0 ||
       strcmp(cmd, "usage") == 0 ||
@@ -759,6 +767,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "sync") == 0) {
     if (strcmp(cmd, "status") == 0)
       return OPT_SYNC_STATUS;
+  } else if (strcmp(prev_cmd, "role") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_ROLE_CREATE;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_ROLE_DELETE;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_ROLE_LIST;
   }
 
   return -EINVAL;
@@ -823,6 +838,17 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
+}
+
+static void show_role_info(RGWRole& role, Formatter* formatter)
+{
+  formatter->open_object_section("role");
+  formatter->dump_string("id", role.get_id());
+  formatter->dump_string("name", role.get_name());
+  formatter->dump_string("path", role.get_path());
+  formatter->dump_string("create_date", role.get_create_date());
+  formatter->close_section();
+  formatter->flush(cout);
 }
 
 static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
@@ -1993,6 +2019,7 @@ int main(int argc, char **argv)
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
+  std::string role_name, path;
   list<string> endpoints;
   std::string master_url;
   int is_master_int;
@@ -2356,6 +2383,10 @@ int main(int argc, char **argv)
       get_str_list(val, endpoints);
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
       source_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
+      role_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
+      path = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3955,7 +3986,50 @@ int main(int argc, char **argv)
       cout << std::endl;
     }
     return 0;
-
+  case OPT_ROLE_CREATE:
+    {
+      if (role_name.empty()) {
+        cerr << "Empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name, path);
+      ret = role.create(true);
+      if (ret < 0) {
+        cerr <<"could not create role: " << err_msg << std::endl;
+        return -ret;
+      }
+      show_role_info(role, formatter);
+      return 0;
+    }
+  case OPT_ROLE_DELETE:
+    {
+      if (role_name.empty()) {
+        cerr << "Empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.delete_obj();
+      if (ret < 0) {
+        cerr <<"could not delete role: " << err_msg << std::endl;
+        return -ret;
+      }
+      return 0;
+    }
+  case OPT_ROLE_LIST:
+    {
+      if (role_name.empty()) {
+        cerr << "Empty role name" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.list();
+      if (ret < 0) {
+        cerr <<"could not list role: " << err_msg << std::endl;
+        return -ret;
+      }
+      show_role_info(role, formatter);
+      return 0;
+    }
   default:
     output_user_info = false;
   }
