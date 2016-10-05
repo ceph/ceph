@@ -147,16 +147,16 @@ public:
     uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
     uint32_t flags;             ///< FLAG_*
     uint64_t seq;
-    uint64_t offset, length;
+    uint32_t offset, length;
     bufferlist data;
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
 
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint64_t l,
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, uint32_t l,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o), length(l) {}
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, bufferlist& b,
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, bufferlist& b,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
@@ -171,11 +171,11 @@ public:
       return state == STATE_WRITING;
     }
 
-    uint64_t end() const {
+    uint32_t end() const {
       return offset + length;
     }
 
-    void truncate(uint64_t newlen) {
+    void truncate(uint32_t newlen) {
       assert(newlen < length);
       if (data.length()) {
 	bufferlist t;
