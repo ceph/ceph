@@ -1893,61 +1893,15 @@ void RGWGetBucketOplog::execute()
 {
   RGWAccessHandle h;
   struct rgw_log_entry entry;
-  string st = s->info.args.get("start-time"),
-         et = s->info.args.get("end-time"),
-         marker = s->info.args.get("marker");
-  uint64_t epoch = 0;
-  utime_t  ut_st, ut_et, ut_curr, ut_end, ut_marker;
-  uint32_t skip = 0, count = 0, index;
-  string oid_marker;
+  utime_t  ut_curr, ut_end, ut_marker;
+  uint32_t count = 0, index;
   struct tm bdt;
   time_t tt;
   bool found = false;
 
-  http_ret = 0;
-  if (st.empty() || et.empty()) {
-    ldout(s->cct, 0) << "start-time and end-time must be non-null! " << st << dendl;
-    http_ret = -EINVAL;
+  op_ret = get_params();
+  if (op_ret < 0) {
     return;
-  }
-
-  if (utime_t::parse_date(st, &epoch, NULL) < 0) {
-    ldout(s->cct, 0) << "Error parsing date. st=" << st << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-  ut_st = utime_t(epoch, 0);
-
-  if (utime_t::parse_date(et, &epoch, NULL) < 0) {
-    ldout(s->cct, 0) << "Error parsing date. et=" << et << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-  ut_et = utime_t(epoch, 0);
-
-  if (ut_st >= ut_et || (ut_et - ut_st) > utime_t(24 * 3600, 0)) {
-    ldout(s->cct, 0) << "Invalid argument! st=" << st << " et=" << et << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-
-  if (!marker.empty()) {
-    size_t pos = marker.find('#');
-    if (pos == std::string::npos) {
-      ldout(s->cct, 0) << "marker is wrong! marker:" << marker << dendl;
-      http_ret = -EINVAL;
-      return;
-    }
-    oid_marker = marker.substr(0, pos);
-
-    pos += 1;
-    string skip_str = marker.substr(pos, marker.length() - pos);
-    int ret = stringtoul(skip_str, &skip);
-    if (ret < 0) {
-      ldout(s->cct, 0) << "marker is wrong! marker:" << marker << dendl;
-      http_ret = ret;
-      return;
-    }
   }
 
   ut_curr = ut_st;
@@ -1978,16 +1932,16 @@ void RGWGetBucketOplog::execute()
     index = 0;
     int r = store->log_show_init(oid, &h);
     if (r < 0) {
-        ldout(s->cct, 0) << "Error opening log " << oid << dendl;
-        http_ret = -EINVAL;
+        ldout(s->cct, 0) << "ERROR: store->log_show_init() failed oid=" << oid << " r=" << r << dendl;
+        op_ret = -EINVAL;
         return;
     }
 
     do {
       r = store->log_show_next(h, &entry);
       if (r < 0 && r != -ENOENT) {
-        ldout(s->cct, 0) << "Error opening log " << oid << " r:" << r << dendl;
-        http_ret = -EINVAL;
+        ldout(s->cct, 0) << "ERROR: opening log " << oid << " r=" << r << dendl;
+        op_ret = -EINVAL;
         return;
       } else if (r == 0 || r == -ENOENT) {
         break;

@@ -83,6 +83,7 @@ public:
   RGWGetBucketOplog_ObjStore_S3() {}
   ~RGWGetBucketOplog_ObjStore_S3() {}
 
+  int get_params();
   void send_response();
 };
 

@@ -456,9 +456,12 @@ public:
 
 class RGWGetBucketOplog : public RGWOp {
 protected:
-  int http_ret;
   vector<rgw_log_entry> entries;
 
+  utime_t ut_st;
+  utime_t ut_et;
+  uint32_t skip{0};
+  string oid_marker;
   uint32_t default_max;
   bool is_truncated;
   string last_marker;
@@ -468,6 +471,7 @@ public:
   int verify_permission();
   void execute();
 
+  virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "get_bucket_oplog"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_OPLOG; }

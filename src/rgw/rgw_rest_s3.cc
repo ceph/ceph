@@ -645,14 +645,62 @@ void RGWListBucket_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWGetBucketOplog_ObjStore_S3::get_params()
+{
+  string st = s->info.args.get("start-time"),
+         et = s->info.args.get("end-time"),
+         marker = s->info.args.get("marker");
+  uint64_t epoch = 0;
+
+  if (st.empty() || et.empty()) {
+    ldout(s->cct, 5) << "start-time and end-time must be non-null! " << st << dendl;
+    return -EINVAL;
+  }
+
+  if (utime_t::parse_date(st, &epoch, NULL) < 0) {
+    ldout(s->cct, 5) << "failed parsing date. st=" << st << dendl;
+    return -EINVAL;
+  }
+  ut_st = utime_t(epoch, 0);
+
+  if (utime_t::parse_date(et, &epoch, NULL) < 0) {
+    ldout(s->cct, 5) << "failed parsing date. et=" << et << dendl;
+    return -EINVAL;
+  }
+  ut_et = utime_t(epoch, 0);
+
+  if (ut_st >= ut_et || (ut_et - ut_st) > utime_t(24 * 3600, 0)) {
+    ldout(s->cct, 5) << "invalid argument: st=" << st << " et=" << et << dendl;
+    return -EINVAL;
+  }
+  if (!marker.empty()) {
+    size_t pos = marker.find('#');
+    if (pos == std::string::npos) {
+      ldout(s->cct, 5) << "bad marker, # char is missing, marker:" << marker << dendl;
+      return -EINVAL;
+    }
+    oid_marker = marker.substr(0, pos);
+
+    pos += 1;
+    string skip_str = marker.substr(pos, marker.length() - pos);
+    int ret = stringtoul(skip_str, &skip);
+    if (ret < 0) {
+      ldout(s->cct, 5) << "failed to parse marker, marker=" << marker << dendl;
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
 void RGWGetBucketOplog_ObjStore_S3::send_response()
 {
-  set_req_state_err(s, http_ret);
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
   dump_start(s);
 
-  if (http_ret < 0)
+  if (op_ret < 0)
     return;
 
   s->formatter->open_object_section("log_entries");
