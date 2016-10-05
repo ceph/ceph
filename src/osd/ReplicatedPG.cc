@@ -16,6 +16,7 @@
  */
 
 #include "boost/tuple/tuple.hpp"
+#include "boost/bind.hpp"
 #include "PG.h"
 #include "ReplicatedPG.h"
 #include "OSD.h"
@@ -1188,6 +1189,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
 	  // skip internal namespace
 	  if (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace)
+	    continue;
+
+	  // skip multi operation meta obj
+	  if (candidate.get_namespace() == cct->_conf->osd_multi_object_operation_namespace)
 	    continue;
 
 	  // skip wrong namespace
