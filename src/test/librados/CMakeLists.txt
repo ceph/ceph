@@ -60,6 +60,15 @@ set_target_properties(ceph_test_rados_api_list PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_list
   rados_a global ${UNITTEST_LIBS} radostest)
 
+# ceph_test_rados_api_multiobjectoperation
+add_executable(ceph_test_rados_api_multiobjectoperation
+  multiobjectoperation.cc
+  )
+set_target_properties(ceph_test_rados_api_multiobjectoperation PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rados_api_multiobjectoperation
+  librados ${UNITTEST_LIBS} radostest)
+
 # ceph_test_rados_api_nlist
 add_executable(ceph_test_rados_api_nlist
   nlist.cc
@@ -151,6 +160,7 @@ install(TARGETS
   ceph_test_rados_api_list
   ceph_test_rados_api_lock
   ceph_test_rados_api_misc
+  ceph_test_rados_api_multiobjectoperation
   ceph_test_rados_api_pool
   ceph_test_rados_api_snapshots
   ceph_test_rados_api_stat
