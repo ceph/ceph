@@ -299,6 +299,8 @@ public:
       discard(offset, (uint64_t)-1 - offset);
     }
 
+    void split(size_t pos, BufferSpace &r);
+
     void dump(Formatter *f) const {
       std::lock_guard<std::recursive_mutex> l(cache->lock);
       f->open_array_section("buffers");
@@ -446,6 +448,11 @@ public:
       return id >= 0;
     }
 
+    bool can_split() const {
+      // splitting a BufferSpace writing_map is too hard; don't try.
+      return shared_blob->bc.writing_map.empty() && get_blob().can_split();
+    }
+
     void dup(Blob& o) {
       o.shared_blob = shared_blob;
       o.blob = blob;
@@ -482,6 +489,9 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
 		 vector<bluestore_pextent_t> *r);
+
+    /// split the blob
+    void split(size_t blob_offset, Blob *o);
 
     void get() {
       ++nref;
@@ -559,6 +569,10 @@ public:
 	blob_offset;
     }
 
+    uint32_t end() const {
+      return logical_offset + length;
+    }
+
     bool blob_escapes_range(uint32_t o, uint32_t l) {
       uint32_t bstart = logical_offset - blob_offset;
       return (bstart < o ||
@@ -606,7 +620,7 @@ public:
     BlobRef get_spanning_blob(int id);
 
     bool update(Onode *on, KeyValueDB::Transaction t, bool force);
-    void reshard(Onode *on);
+    void reshard(Onode *on, uint64_t min_alloc_size);
 
     /// initialize Shards from the onode
     void init_shards(Onode *on, bool loaded, bool dirty);
@@ -678,6 +692,8 @@ public:
 			uint64_t offset, uint64_t length, uint8_t blob_depth,
                         BlobRef b, extent_map_t *old_extents);
 
+    /// split a blob (and referring extents)
+    BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
   };
 
   struct OnodeSpace;

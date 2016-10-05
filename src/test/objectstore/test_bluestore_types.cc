@@ -690,6 +690,112 @@ TEST(Blob, put_ref)
   }
 }
 
+TEST(bluestore_blob_t, can_split)
+{
+  bluestore_blob_t a;
+  a.flags = bluestore_blob_t::FLAG_MUTABLE;
+  ASSERT_TRUE(a.can_split());
+  a.flags = bluestore_blob_t::FLAG_SHARED;
+  ASSERT_FALSE(a.can_split());
+  a.flags = bluestore_blob_t::FLAG_COMPRESSED;
+  ASSERT_FALSE(a.can_split());
+  a.flags = bluestore_blob_t::FLAG_HAS_UNUSED;
+  ASSERT_FALSE(a.can_split());
+}
+
+TEST(bluestore_blob_t, can_split_at)
+{
+  bluestore_blob_t a;
+  a.flags = bluestore_blob_t::FLAG_MUTABLE;
+  a.extents.emplace_back(bluestore_pextent_t(0x10000, 0x2000));
+  a.extents.emplace_back(bluestore_pextent_t(0x20000, 0x2000));
+  ASSERT_TRUE(a.can_split_at(0x1000));
+  ASSERT_TRUE(a.can_split_at(0x1800));
+  a.init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x4000);
+  ASSERT_TRUE(a.can_split_at(0x1000));
+  ASSERT_TRUE(a.can_split_at(0x2000));
+  ASSERT_TRUE(a.can_split_at(0x3000));
+  ASSERT_FALSE(a.can_split_at(0x2800));
+}
+
+TEST(bluestore_blob_t, prune_tail)
+{
+  bluestore_blob_t a;
+  a.flags = bluestore_blob_t::FLAG_MUTABLE;
+  a.extents.emplace_back(bluestore_pextent_t(0x10000, 0x2000));
+  a.extents.emplace_back(bluestore_pextent_t(0x20000, 0x2000));
+  ASSERT_FALSE(a.can_prune_tail());
+  a.extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  ASSERT_TRUE(a.can_prune_tail());
+  a.prune_tail();
+  ASSERT_FALSE(a.can_prune_tail());
+  ASSERT_EQ(2u, a.extents.size());
+  ASSERT_EQ(0x4000u, a.get_logical_length());
+
+  a.extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  a.init_csum(bluestore_blob_t::CSUM_CRC32C_8, 12, 0x6000);
+  ASSERT_EQ(6u, a.csum_data.length());
+  ASSERT_TRUE(a.can_prune_tail());
+  a.prune_tail();
+  ASSERT_FALSE(a.can_prune_tail());
+  ASSERT_EQ(2u, a.extents.size());
+  ASSERT_EQ(0x4000u, a.get_logical_length());
+  ASSERT_EQ(4u, a.csum_data.length());
+
+  bluestore_blob_t b;
+  b.extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x2000));
+  ASSERT_FALSE(a.can_prune_tail());
+}
+
+TEST(Blob, split)
+{
+  BlueStore::Cache *cache = BlueStore::Cache::create("lru", NULL);
+  {
+    BlueStore::Blob L, R;
+    L.shared_blob = new BlueStore::SharedBlob(-1, string(), cache);
+    L.shared_blob->get();  // hack to avoid dtor from running
+    R.shared_blob = new BlueStore::SharedBlob(-1, string(), cache);
+    R.shared_blob->get();  // hack to avoid dtor from running
+    L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x2000, 0x2000));
+    L.dirty_blob().init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x2000);
+    L.split(0x1000, &R);
+    ASSERT_EQ(0x1000u, L.get_blob().get_logical_length());
+    ASSERT_EQ(4u, L.get_blob().csum_data.length());
+    ASSERT_EQ(1u, L.get_blob().extents.size());
+    ASSERT_EQ(0x2000u, L.get_blob().extents.front().offset);
+    ASSERT_EQ(0x1000u, L.get_blob().extents.front().length);
+    ASSERT_EQ(0x1000u, R.get_blob().get_logical_length());
+    ASSERT_EQ(4u, R.get_blob().csum_data.length());
+    ASSERT_EQ(1u, R.get_blob().extents.size());
+    ASSERT_EQ(0x3000u, R.get_blob().extents.front().offset);
+    ASSERT_EQ(0x1000u, R.get_blob().extents.front().length);
+  }
+  {
+    BlueStore::Blob L, R;
+    L.shared_blob = new BlueStore::SharedBlob(-1, string(), cache);
+    L.shared_blob->get();  // hack to avoid dtor from running
+    R.shared_blob = new BlueStore::SharedBlob(-1, string(), cache);
+    R.shared_blob->get();  // hack to avoid dtor from running
+    L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x2000, 0x1000));
+    L.dirty_blob().extents.emplace_back(bluestore_pextent_t(0x12000, 0x1000));
+    L.dirty_blob().init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x2000);
+    L.split(0x1000, &R);
+    ASSERT_EQ(0x1000u, L.get_blob().get_logical_length());
+    ASSERT_EQ(4u, L.get_blob().csum_data.length());
+    ASSERT_EQ(1u, L.get_blob().extents.size());
+    ASSERT_EQ(0x2000u, L.get_blob().extents.front().offset);
+    ASSERT_EQ(0x1000u, L.get_blob().extents.front().length);
+    ASSERT_EQ(0x1000u, R.get_blob().get_logical_length());
+    ASSERT_EQ(4u, R.get_blob().csum_data.length());
+    ASSERT_EQ(1u, R.get_blob().extents.size());
+    ASSERT_EQ(0x12000u, R.get_blob().extents.front().offset);
+    ASSERT_EQ(0x1000u, R.get_blob().extents.front().length);
+  }
+}
+
 TEST(ExtentMap, find_lextent)
 {
   BlueStore::LRUCache cache;

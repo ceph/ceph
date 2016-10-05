@@ -299,6 +299,19 @@ struct bluestore_blob_t {
     return csum_data.length() + extents.size() * 16 + 48;
   }
 
+  bool can_split() const {
+    return
+      !has_flag(FLAG_SHARED) &&
+      !has_flag(FLAG_COMPRESSED) &&
+      !has_flag(FLAG_HAS_UNUSED);     // splitting unused set is complex
+  }
+  bool can_split_at(uint32_t blob_offset) const {
+    if (has_csum() &&
+	blob_offset % get_csum_chunk_size() != 0)
+      return false;
+    return true;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
@@ -566,6 +579,22 @@ struct bluestore_blob_t {
   int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off,
 		  uint64_t *bad_csum) const;
 
+  bool can_prune_tail() const {
+    return
+      extents.size() > 1 &&  // if it's all invalid it's not pruning.
+      !extents.back().is_valid() &&
+      !has_unused();
+  }
+  void prune_tail() {
+    extents.pop_back();
+    if (has_csum()) {
+      bufferptr t;
+      t.swap(csum_data);
+      csum_data = bufferptr(t.c_str(),
+			    get_logical_length() / get_csum_chunk_size() *
+			    get_csum_value_size());
+    }
+  }
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)
 
