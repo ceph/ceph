@@ -401,3 +401,221 @@ void ReplicatedPG::multi_object_write_ops_setup()
     multi_object_write_op_load(moc, next);
   }
 }
+
+template <typename F1, typename F2>
+void ReplicatedPG::multi_object_write_op_send(
+  MultiObjectWriteOpContextRef moc,
+  F1 &&fill,
+  F2 &&fin)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->is_master);
+
+  C_GatherBuilder gather(cct);
+
+  for (auto &p : moc->sub_objects) {
+    dout(20) << __func__ << " send " << p.first << dendl;
+
+    ObjectOperation sub_op;
+    sub_op.master_reqid = moc->master_reqid;
+    fill(p.first, sub_op);
+
+    Context *sub_fin = gather.new_sub();
+    int *sub_result = &p.second.first;
+    p.second.second = osd->objecter->mutate(
+      p.first, moc->locator,
+      sub_op,
+      moc->snapc, moc->mtime, 0,
+      NULL,
+      new FunctionContext(
+        [moc, sub_result, sub_fin](int r){
+          // I already hold moc ref
+          *sub_result = r; // I will never use it unless fin have been called.
+          sub_fin->complete(r);
+        }),
+      NULL);
+  }
+
+  Context *internal_fin = new C_OnFinisher(new FunctionContext(
+    [this, moc, fin](int ignore){
+      lock();
+      for (auto &p : moc->sub_objects)
+        p.second.second = 0;
+      fin();
+      unlock();
+    }),
+    &osd->objecter_finisher
+  );
+
+  if (gather.has_subs()) {
+    gather.set_finisher(internal_fin);
+    gather.activate();
+  } else {
+    internal_fin->complete(0);
+  }
+}
+
+void ReplicatedPG::execute_multi_object_write_op_ctx(OpContext *ctx)
+{
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  ObjectContextRef obc = ctx->obc;
+  const hobject_t& soid = obc->obs.oi.soid;
+  MultiObjectWriteOpContextRef moc = multi_object_write_op_find(soid);
+
+  if (!moc) {
+    if (ctx->is_slave_commit() || ctx->is_slave_unlock()) {
+      reply_ctx(ctx, -EPERM);
+      return;
+    }
+
+    ctx->multi_object_write_op_ctx = moc = multi_object_write_op_create(soid, ctx->reqid);
+
+    assert(m->get_snapid() == CEPH_NOSNAP);
+    if (ctx->is_master()) {
+      // client --> master
+      dout(20) << __func__ << " multi op master " << soid << dendl;
+
+      moc->is_master = true;
+      moc->master = soid;
+      moc->master_reqid = m->get_reqid();
+      for (auto &it : m->sub_ops)
+        moc->sub_objects.insert(make_pair(it.first, make_pair(0, 0)));
+      assert(m->sub_ops.size());
+    } else {
+      // master --> slave
+      assert(ctx->is_slave_lock());
+      moc->master = hobject_t(m->master,
+                              m->get_object_locator().key,
+                              m->get_snapid(),
+                              0,
+                              m->get_object_locator().get_pool(),
+                              m->get_object_locator().nspace);
+      moc->master_reqid = m->master_reqid;
+
+      dout(20) << __func__ << " multi op slave lock " << moc->master
+               << " -> " << soid << dendl;
+    }
+    moc->locator = m->get_object_locator();
+    moc->snapc.seq = m->get_snap_seq();
+    moc->snapc.snaps = m->get_snaps();
+    moc->mtime = ceph::real_clock::from_ceph_timespec(m->get_mtime());
+  } else {
+   ctx->multi_object_write_op_ctx = moc;
+  }
+
+  assert(moc->state != MultiObjectWriteOpContext::LOADING);
+  dout(20) << __func__ << *moc << dendl;
+
+  if (ctx->is_master()) {
+    dout(20) << __func__ << " master op" << dendl;
+
+    if (moc->state != MultiObjectWriteOpContext::NEW) {
+      moc->waiting.push_back(ctx->op);
+      ctx->op->mark_delayed("waiting multi op processing");
+      close_op_ctx(ctx);
+      return;
+    }
+    moc->ctx = ctx;
+    multi_object_write_op_master_lock_self(moc);
+  } else if (ctx->is_slave_lock()) {
+    dout(20) << __func__ << " slave lock op" << dendl;
+
+    switch (moc->state)
+    {
+      case MultiObjectWriteOpContext::NEW:
+        moc->state = MultiObjectWriteOpContext::LOCKING;
+        ctx->register_on_finish(
+          [moc, this](){
+            if (moc->destroyed)
+              return;
+
+            if (moc->state == MultiObjectWriteOpContext::LOCKING) {
+              //lock failed
+              requeue_ops(moc->waiting);
+              multi_object_write_op_destroy(moc);
+            }
+          });
+        break;
+      case MultiObjectWriteOpContext::LOCK:
+        reply_ctx(ctx, -EINPROGRESS);
+        return;
+      default:
+        assert(0 == "unexpected case");
+    }
+    execute_ctx(ctx);
+  } else if (ctx->is_slave_commit()) {
+    dout(20) << __func__ << " slave commit op" << dendl;
+
+    switch (moc->state)
+    {
+      case MultiObjectWriteOpContext::LOCK:
+        moc->state = MultiObjectWriteOpContext::COMMITTING;
+        ctx->register_on_finish(
+          [moc, this](){
+            if (moc->destroyed)
+              return;
+
+            if (moc->state == MultiObjectWriteOpContext::COMMITTING) {
+              dout(1) << __func__ << " slave commit failed" << dendl;
+              moc->state = MultiObjectWriteOpContext::LOCK;
+            }
+          });
+        break;
+      case MultiObjectWriteOpContext::COMMIT:
+      case MultiObjectWriteOpContext::UNLOCKING:
+        reply_ctx(ctx, -EPERM);
+        return;
+      default:
+        assert(0 == "unexpected case");
+    }
+    execute_ctx(ctx);
+  } else {
+    assert(ctx->is_slave_unlock());
+    dout(20) << __func__ << " slave unlock op" << dendl;
+
+    switch (moc->state)
+    {
+      case MultiObjectWriteOpContext::LOCK:
+        //pass
+        break;
+      case MultiObjectWriteOpContext::UNLOCKING:
+        reply_ctx(ctx, -EPERM);
+        return;
+      default:
+        assert(0 == "unexpected case");
+    }
+
+    moc->ctx = ctx;
+    multi_object_write_op_slave_unlock_self(moc);
+  }
+}
+
+void ReplicatedPG::cancel_multi_object_write_ops(bool requeue)
+{
+  dout(20) << __func__ << " requeue: " << requeue << dendl;
+  list<OpRequestRef> ls;
+
+  for (auto &it : multi_object_write_ops) {
+    MultiObjectWriteOpContextRef &moc = it.second;
+
+    assert(!moc->destroyed);
+    moc->destroyed = true;
+
+    for (auto &t : moc->sub_objects)
+      if (t.second.second)
+        osd->objecter->op_cancel(t.second.second, -ECANCELED);
+
+    if (moc->ctx) {
+      ls.push_back(moc->ctx->op);
+      close_op_ctx(moc->ctx);
+      moc->ctx = nullptr;
+    }
+
+    ls.splice(ls.end(), moc->waiting);
+  }
+  multi_object_write_ops.clear();
+
+  if (requeue)
+    requeue_ops(ls);
+}
