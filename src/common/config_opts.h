@@ -814,6 +814,16 @@ OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_randomize_hobject_sort_order, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_master_lock_self_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_master_lock_slave_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_master_commit_self_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_master_commit_slave_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_master_unlock_self_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_master_unlock_slave_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_slave_lock_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_slave_commit_crash, OPT_BOOL, false)
+OPTION(osd_debug_multi_object_write_operation_slave_unlock_crash, OPT_BOOL, false)
+OPTION(osd_multi_object_operation_namespace, OPT_STR, ".ceph-mooc") // rados namespace for multi operation
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
