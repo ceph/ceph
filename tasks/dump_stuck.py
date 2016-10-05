@@ -123,7 +123,7 @@ def task(ctx, config):
             check_stuck(
                 manager,
                 num_inactive=0,
-                num_unclean=0,
+                num_unclean=num_pgs,
                 num_stale=num_pgs,
                 )
             done = True
