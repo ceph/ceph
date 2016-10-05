@@ -3054,6 +3054,9 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->set_snaps(op->snapc.snaps);
 
   m->ops = op->ops;
+  m->master_reqid = op->master_reqid;
+  m->master = op->master;
+  m->sub_ops = op->sub_ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
 
@@ -3347,6 +3350,32 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
       (*ph)->complete(ceph_to_host_errno(p->rval));
       *ph = NULL;
+    }
+  }
+
+  map<object_t, vector<OSDOp> > sub_out_ops;
+  m->claim_sub_ops(sub_out_ops);
+
+  if (sub_out_ops.size() != op->sub_ops.size())
+    ldout(cct, 0) << "WARNING: tid " << op->tid << " reply sub_ops " << sub_out_ops
+		  << " != request sub_ops " << op->sub_ops
+		  << " from " << m->get_source_inst() << dendl;
+
+  map<object_t, vector<int*> >::iterator psr = op->sub_out_rval.begin();
+  assert(op->sub_out_rval.size() == sub_out_ops.size());
+  for (map<object_t, vector<OSDOp> >::iterator pso = sub_out_ops.begin();
+       pso != sub_out_ops.end(); ++pso, ++psr) {
+    assert(psr->first == pso->first);
+    assert(psr->second.size() == pso->second.size());
+    vector<int*>::iterator pvr = psr->second.begin();
+    vector<OSDOp>::iterator pvo = pso->second.begin();
+    for (unsigned i = 0;
+         pvr != psr->second.end() && pvo != pso->second.end();
+         ++i, ++pvr, ++pvo) {
+      ldout(cct, 10) << " sub_op " << pso->first.name << " " << i
+                     << " rval " << pvo->rval << dendl;
+      if (*pvr)
+        **pvr = pvo->rval;
     }
   }
 

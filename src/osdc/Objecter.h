@@ -62,12 +62,17 @@ class PerfCounters;
 
 struct ObjectOperation {
   vector<OSDOp> ops;
+  map<object_t, vector<OSDOp> > sub_ops;
   int flags;
   int priority;
 
   vector<bufferlist*> out_bl;
   vector<Context*> out_handler;
   vector<int*> out_rval;
+
+  osd_reqid_t master_reqid;
+  object_t master;
+  map<object_t, vector<int*> > sub_out_rval;
 
   ObjectOperation() : flags(0), priority(0) {}
   ~ObjectOperation() {
@@ -1071,6 +1076,18 @@ struct ObjectOperation {
     set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
   }
 
+  void multi_object_write_operation_lock() {
+    add_op(CEPH_OSD_OP_MOC_LOCK);
+  }
+
+  void multi_object_write_operation_commit() {
+    add_op(CEPH_OSD_OP_MOC_COMMIT);
+  }
+
+  void multi_object_write_operation_unlock() {
+    add_op(CEPH_OSD_OP_MOC_UNLOCK);
+  }
+
   void dup(vector<OSDOp>& sops) {
     ops = sops;
     out_bl.resize(sops.size());
@@ -1221,6 +1238,9 @@ public:
     uint64_t features;  // explicitly specified op features
 
     vector<OSDOp> ops;
+    osd_reqid_t master_reqid;
+    object_t master;
+    map<object_t, vector<OSDOp> > sub_ops;
 
     snapid_t snapid;
     SnapContext snapc;
@@ -1230,6 +1250,7 @@ public:
     vector<bufferlist*> out_bl;
     vector<Context*> out_handler;
     vector<int*> out_rval;
+    map<object_t, vector<int*> > sub_out_rval;
 
     int priority;
     Context *onack, *oncommit;
@@ -2161,8 +2182,12 @@ public:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    o->master_reqid = op.master_reqid;
+    o->master = op.master;
+    o->sub_ops.swap(op.sub_ops);
     o->out_rval.swap(op.out_rval);
     o->reqid = reqid;
+    o->sub_out_rval.swap(op.sub_out_rval);
     return o;
   }
   ceph_tid_t mutate(
