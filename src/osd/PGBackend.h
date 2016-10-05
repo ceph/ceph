@@ -474,6 +474,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool empty() const = 0;
      virtual uint64_t get_bytes_written() const = 0;
      virtual ~PGTransaction() {}
+
+     virtual void encode(bufferlist &bl)
+     { assert(0); }
+     virtual void decode(bufferlist::iterator &bl)
+     { assert(0); }
    };
    using PGTransactionUPtr = std::unique_ptr<PGTransaction>;
 

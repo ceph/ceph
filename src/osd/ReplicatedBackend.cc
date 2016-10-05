@@ -560,6 +560,28 @@ public:
     return written;
   }
   ~RPGTransaction() { }
+
+  void encode(bufferlist &bl)
+  {
+    ENCODE_START(1, 1, bl);
+    ::encode(coll, bl);
+    ::encode(temp_added, bl);
+    ::encode(temp_cleared, bl);
+    ::encode(written, bl);
+    t.encode(bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator &bl)
+  {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+    ::decode(coll, bl);
+    ::decode(temp_added, bl);
+    ::decode(temp_cleared, bl);
+    ::decode(written, bl);
+    t.decode(bl);
+    DECODE_FINISH(bl);
+  }
 };
 
 PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
