@@ -1525,6 +1525,8 @@ void ReplicatedPG::calc_trim_to()
     target = cct->_conf->osd_max_pg_log_entries;
   }
 
+  pg_trim_to_locker = false;
+
   if (min_last_complete_ondisk != eversion_t() &&
       min_last_complete_ondisk != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
@@ -1533,8 +1535,13 @@ void ReplicatedPG::calc_trim_to()
       return;
     }
     list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
-    eversion_t new_trim_to;
+    eversion_t new_trim_to = pg_trim_to;
     for (size_t i = 0; i < num_to_trim; ++i) {
+      if (pg_log.get_log().is_lock_by(*it)) {
+        assert(new_trim_to < it->version);
+        pg_trim_to_locker = true;
+        break;
+      }
       new_trim_to = it->version;
       ++it;
       if (new_trim_to > min_last_complete_ondisk) {
