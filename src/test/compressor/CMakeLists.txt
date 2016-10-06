@@ -16,16 +16,3 @@ add_ceph_unittest(unittest_compression_plugin ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/
 target_link_libraries(unittest_compression_plugin global)
 add_dependencies(unittest_compression_plugin ceph_example)
 
-# unittest_compression_snappy
-add_executable(unittest_compression_snappy
-  test_compression_snappy.cc
-  )
-add_ceph_unittest(unittest_compression_snappy ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_compression_snappy)
-target_link_libraries(unittest_compression_snappy global ceph_snappy)
-
-# unittest_compression_zlib
-add_executable(unittest_compression_zlib
-  test_compression_zlib.cc
-  )
-add_ceph_unittest(unittest_compression_zlib ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_compression_zlib)
-target_link_libraries(unittest_compression_zlib global ceph_zlib)

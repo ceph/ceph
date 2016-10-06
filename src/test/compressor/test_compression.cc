@@ -149,6 +149,168 @@ TEST_P(CompressionTest, big_round_trip_file)
 #endif
 
 
+TEST_P(CompressionTest, compress_decompress)
+{
+  const char* test = "This is test text";
+  int res;
+  int len = strlen(test);
+  bufferlist in, out;
+  bufferlist after;
+  bufferlist exp;
+  in.append(test, len);
+  res = compressor->compress(in, out);
+  EXPECT_EQ(res, 0);
+  res = compressor->decompress(out, after);
+  EXPECT_EQ(res, 0);
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
+  after.clear();
+  size_t compressed_len = out.length();
+  out.append_zero(12);
+  auto it = out.begin();
+  res = compressor->decompress(it, compressed_len, after);
+  EXPECT_EQ(res, 0);
+  EXPECT_TRUE(exp.contents_equal(after));
+
+  //large block and non-begin iterator for continuous block
+  std::string data;
+  data.resize(0x10000 * 1);
+  for(size_t i = 0; i < data.size(); i++)
+    data[i] = i / 256;
+  in.clear();
+  out.clear();
+  in.append(data);
+  exp = in;
+  res = compressor->compress(in, out);
+  EXPECT_EQ(res, 0);
+  compressed_len = out.length();
+  out.append_zero(0x10000 - out.length());
+  after.clear();
+  out.c_str();
+  bufferlist prefix;
+  prefix.append(string("some prefix"));
+  size_t prefix_len = prefix.length();
+  out.claim_prepend(prefix);
+  it = out.begin();
+  it.advance(prefix_len);
+  res = compressor->decompress(it, compressed_len, after);
+  EXPECT_EQ(res, 0);
+  EXPECT_TRUE(exp.contents_equal(after));
+}
+
+TEST_P(CompressionTest, sharded_input_decompress)
+{
+  const size_t small_prefix_size=3;
+
+  string test(128*1024,0);
+  int len = test.size();
+  bufferlist in, out;
+  in.append(test.c_str(), len);
+  int res = compressor->compress(in, out);
+  EXPECT_EQ(res, 0);
+  EXPECT_GT(out.length(), small_prefix_size);
+
+  bufferlist out2, tmp;
+  tmp.substr_of(out, 0, small_prefix_size );
+  out2.append( tmp );
+  size_t left = out.length()-small_prefix_size;
+  size_t offs = small_prefix_size;
+  while( left > 0 ){
+    size_t shard_size = MIN( 2048, left );
+    tmp.substr_of(out, offs, shard_size );
+    out2.append( tmp );
+    left -= shard_size;
+    offs += shard_size;
+  }
+
+  bufferlist after;
+  res = compressor->decompress(out2, after);
+  EXPECT_EQ(res, 0);
+}
+
+void test_compress(CompressorRef compressor, size_t size)
+{
+  char* data = (char*) malloc(size);
+  for (size_t t = 0; t < size; t++) {
+    data[t] = (t & 0xff) | (t >> 8);
+  }
+  bufferlist in;
+  in.append(data, size);
+  for (size_t t = 0; t < 100000; t++) {
+    bufferlist out;
+    int res = compressor->compress(in, out);
+    EXPECT_EQ(res, 0);
+  }
+}
+
+void test_decompress(CompressorRef compressor, size_t size)
+{
+  char* data = (char*) malloc(size);
+  for (size_t t = 0; t < size; t++) {
+    data[t] = (t & 0xff) | (t >> 8);
+  }
+  bufferlist in, out;
+  in.append(data, size);
+  int res = compressor->compress(in, out);
+  EXPECT_EQ(res, 0);
+  for (size_t t = 0; t < 100000; t++) {
+    bufferlist out_dec;
+    int res = compressor->decompress(out, out_dec);
+    EXPECT_EQ(res, 0);
+  }
+}
+
+TEST_P(CompressionTest, compress_1024)
+{
+  test_compress(compressor, 1024);
+}
+
+TEST_P(CompressionTest, compress_2048)
+{
+  test_compress(compressor, 2048);
+}
+
+TEST_P(CompressionTest, compress_4096)
+{
+  test_compress(compressor, 4096);
+}
+
+TEST_P(CompressionTest, compress_8192)
+{
+  test_compress(compressor, 8192);
+}
+
+TEST_P(CompressionTest, compress_16384)
+{
+  test_compress(compressor, 16384);
+}
+
+TEST_P(CompressionTest, decompress_1024)
+{
+  test_decompress(compressor, 1024);
+}
+
+TEST_P(CompressionTest, decompress_2048)
+{
+  test_decompress(compressor, 2048);
+}
+
+TEST_P(CompressionTest, decompress_4096)
+{
+  test_decompress(compressor, 4096);
+}
+
+TEST_P(CompressionTest, decompress_8192)
+{
+  test_decompress(compressor, 8192);
+}
+
+TEST_P(CompressionTest, decompress_16384)
+{
+  test_decompress(compressor, 16384);
+}
+
+
 INSTANTIATE_TEST_CASE_P(
   Compression,
   CompressionTest,
@@ -156,6 +318,43 @@ INSTANTIATE_TEST_CASE_P(
 //    "zlib/isal",
     "zlib/noisal",
     "snappy"));
+
+TEST(ZlibCompressor, zlib_isal_compatibility)
+{
+  g_conf->set_val("compressor_zlib_isal", "true");
+  g_ceph_context->_conf->apply_changes(NULL);
+  CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
+  g_conf->set_val("compressor_zlib_isal", "false");
+  g_ceph_context->_conf->apply_changes(NULL);
+  CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
+  char test[101];
+  srand(time(0));
+  for (int i=0; i<100; ++i)
+    test[i] = 'a' + rand()%26;
+  test[100] = '\0';
+  int len = strlen(test);
+  bufferlist in, out;
+  in.append(test, len);
+  // isal -> zlib
+  int res = isal->compress(in, out);
+  EXPECT_EQ(res, 0);
+  bufferlist after;
+  res = zlib->decompress(out, after);
+  EXPECT_EQ(res, 0);
+  bufferlist exp;
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
+  after.clear();
+  out.clear();
+  exp.clear();
+  // zlib -> isal
+  res = zlib->compress(in, out);
+  EXPECT_EQ(res, 0);
+  res = isal->decompress(out, after);
+  EXPECT_EQ(res, 0);
+  exp.append(test);
+  EXPECT_TRUE(exp.contents_equal(after));
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;
