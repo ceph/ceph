@@ -1435,9 +1435,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005, statfs.stored);
-    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.allocated);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000, statfs.compressed_original);
+    ASSERT_EQ(0x20000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
     //force fsck
     EXPECT_EQ(store->umount(), 0);
@@ -1455,9 +1455,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30005 - 3 - 9, statfs.stored);
-    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.allocated);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000 - 9, statfs.compressed_original);
+    ASSERT_EQ(0x20000 - 9, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
     //force fsck
     EXPECT_EQ(store->umount(), 0);
@@ -1478,9 +1478,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x30001 - 9 + 0x1000, statfs.stored);
-    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_EQ(0x40000, statfs.allocated);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000 - 9 - 0x1000, statfs.compressed_original);
+    ASSERT_EQ(0x20000 - 9 - 0x1000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
     //force fsck
     EXPECT_EQ(store->umount(), 0);
@@ -1544,9 +1544,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(0x40000 - 2, statfs.stored);
-    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_EQ(0x30000, statfs.allocated);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000, statfs.compressed_original);
+    ASSERT_EQ(0x20000, statfs.compressed_original);
     ASSERT_EQ(0x10000, statfs.compressed_allocated);
     //force fsck
     EXPECT_EQ(store->umount(), 0);
