@@ -7900,7 +7900,7 @@ int BlueStore::_do_write(
       size_t read_len = offset - gc_start_offset;
       int r = _do_read(c.get(), o, gc_start_offset, read_len, head_bl, 0);
       assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data == true) {
+      if (g_conf->bluestore_gc_merge_data) {
         head_bl.claim_append(bl);
         bl.swap(head_bl);
         offset = gc_start_offset;
@@ -7917,7 +7917,7 @@ int BlueStore::_do_write(
       size_t read_len = gc_end_offset - end;
       int r = _do_read(c.get(), o, end, read_len, tail_bl, 0);
       assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data == true) {
+      if (g_conf->bluestore_gc_merge_data) {
         bl.claim_append(tail_bl);
         length += read_len;
         end += read_len;
