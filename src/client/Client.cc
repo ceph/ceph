@@ -1941,6 +1941,8 @@ void Client::populate_metadata()
     ldout(cct, 1) << __func__ << " failed to read hostname (" << cpp_strerror(r) << ")" << dendl;
   }
 
+  metadata["pid"] = stringify(getpid());
+
   // Ceph entity id (the '0' in "client.0")
   metadata["entity_id"] = cct->_conf->name.get_id();
 
