@@ -7453,9 +7453,11 @@ void BlueStore::_do_write_big(
     WriteContext *wctx)
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " target_blob_size 0x" << wctx->target_blob_size
+	   << " target_blob_size 0x" << wctx->target_blob_size << std::dec
 	   << " compress " << (int)wctx->compress
-	   << std::dec << dendl;
+	   << dendl;
+  logger->inc(l_bluestore_write_big);
+  logger->inc(l_bluestore_write_big_bytes, length);
   while (length > 0) {
     BlobRef b = c->new_blob();
     auto l = MIN(wctx->target_blob_size, length);
@@ -7471,8 +7473,6 @@ void BlueStore::_do_write_big(
     length -= l;
     logger->inc(l_bluestore_write_big_blobs);
   }
-  logger->inc(l_bluestore_write_big);
-  logger->inc(l_bluestore_write_big_bytes, length);
 }
 
 int BlueStore::_do_alloc_write(
