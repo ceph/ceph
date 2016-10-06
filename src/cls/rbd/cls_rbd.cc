@@ -441,7 +441,7 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   uint64_t enabled_features = features & mask;
   if ((enabled_features & RBD_FEATURES_MUTABLE) != enabled_features) {
     CLS_ERR("Attempting to enable immutable feature: %" PRIu64,
-            enabled_features & ~RBD_FEATURES_MUTABLE);
+            static_cast<uint64_t>(enabled_features & ~RBD_FEATURES_MUTABLE));
     return -EINVAL;
   }
 
