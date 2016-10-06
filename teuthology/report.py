@@ -366,6 +366,21 @@ class ResultsReporter(object):
         response.raise_for_status()
         return response.json()
 
+    def get_run(self, run_name, fields=None):
+        """
+        Query the results server for a run
+
+        :param run_name: The name of the run
+        :param fields:   Optional. A list of fields to include in the result.
+                         Defaults to returning all fields.
+        """
+        uri = "{base}/runs/{name}".format(base=self.base_uri, name=run_name)
+        if fields:
+            uri += "?fields=" + ','.join(fields)
+        response = self.session.get(uri)
+        response.raise_for_status()
+        return response.json()
+
     def delete_job(self, run_name, job_id):
         """
         Delete a job from the results server.

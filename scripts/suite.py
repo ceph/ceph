@@ -7,6 +7,7 @@ from teuthology.config import config
 doc = """
 usage: teuthology-suite --help
        teuthology-suite [-v | -vv ] --suite <suite> [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --rerun <name>  [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
@@ -98,6 +99,24 @@ Scheduler arguments:
                               Useful to avoid bursts that may be too hard on
                               the underlying infrastructure or exceed OpenStack API
                               limits (server creation per minute for instance).
+  -r, --rerun <name>          Attempt to reschedule a run, selecting only those
+                              jobs whose status are mentioned by
+                              --rerun-status.
+                              Note that this is implemented by scheduling an
+                              entirely new suite and including only jobs whose
+                              descriptions match the selected ones. It does so
+                              using the same logic as --filter.
+                              Of all the flags that were passed when scheduling
+                              the original run, the resulting one will only
+                              inherit the suite value. Any others must be
+                              passed as normal while scheduling with this
+                              feature.
+ -R, --rerun-statuses <statuses>
+                              A comma-separated list of statuses to be used
+                              with --rerun. Supported statuses are: 'dead',
+                              'fail', 'pass', 'queued', 'running', 'waiting'
+                              [default: fail,dead]
+
 """.format(default_machine_type=config.default_machine_type,
            default_results_timeout=config.results_timeout)
 
