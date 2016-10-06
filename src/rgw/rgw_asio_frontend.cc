@@ -84,9 +84,9 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
     auto cct = env.store->ctx();
     if (ec) {
       if (ec.category() == beast::http::get_parse_error_category()) {
-        ldout(cct, 1) << "parse failed with " << ec.message() << dendl;
+        ldout(cct, 1) << "parse failed: " << ec.message() << dendl;
       } else {
-        ldout(cct, 1) << "read failed with " << ec.message() << dendl;
+        ldout(cct, 1) << "read failed: " << ec.message() << dendl;
       }
       write_bad_request();
       return;
@@ -114,7 +114,7 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
   void on_write(boost::system::error_code ec) {
     auto cct = env.store->ctx();
     if (ec) {
-      ldout(cct, 1) << "write failed with " << ec.message() << dendl;
+      ldout(cct, 1) << "write failed: " << ec.message() << dendl;
     }
   }
 
