@@ -501,10 +501,21 @@ int MDCache::path_traverse(const MDRequestRef& mdr, const filepath& path,
       }
       err = -ENOENT;
     }
-    cur->mutex_unlock();
 
-    if (depth == path.depth() - 1 && dn)
-      touch_dentry(dn.get());
+    bool drop_lock = true;
+    if (dn) {
+      if (depth == path.depth() - 1) {
+	touch_dentry(dn.get());
+	if (err == -ENOENT) {
+	  mdr->add_locked_object(cur.get());
+	  drop_lock = false;
+	}
+      } else if (err) {
+	dn.reset();
+      }
+    }
+    if (drop_lock)
+      cur->mutex_unlock();
 
     if (pdnvec) {
       if (dn) {

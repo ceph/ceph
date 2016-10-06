@@ -969,13 +969,10 @@ int Server::rdlock_path_pin_ref(const MDRequestRef& mdr, int n,
   if (r > 0)
     return -EAGAIN;
   if (r < 0) {
-    /*
-     * FIXME: 
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
       if (is_lookup)
 	mdr->tracedn = n;
     }
-    */
     respond_to_request(mdr, r);
     return r;
   }
