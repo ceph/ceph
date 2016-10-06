@@ -1257,7 +1257,8 @@ OPTION(rbd_default_features, OPT_INT, 61)   // only applies to format 2 images
 					    // +1 for layering, +2 for stripingv2,
 					    // +4 for exclusive lock, +8 for object map
 					    // +16 for fast-diff, +32 for deep-flatten,
-					    // +64 for journaling
+					    // +64 for journaling, +128 for data pool
+OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing image data blocks
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 
