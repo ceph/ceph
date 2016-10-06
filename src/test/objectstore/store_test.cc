@@ -1363,6 +1363,8 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   ObjectStore::Sequencer osr("test");
   coll_t cid;
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid2 = hoid;
+  hoid2.hobj.snap = 1;
   {
     bufferlist in;
     r = store->read(cid, hoid, 0, 5, in);
@@ -1552,10 +1554,30 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
   }
+  {
+    struct store_statfs_t statfs;
+    r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction t;
+    t.clone(cid, hoid, hoid2);
+    cerr << "Clone compressed objecte" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+    struct store_statfs_t statfs2;
+    r = store->statfs(&statfs2);
+    ASSERT_EQ(r, 0);
+    ASSERT_GT(statfs2.stored, statfs.stored);
+    ASSERT_EQ(statfs2.allocated, statfs.allocated);
+    ASSERT_GT(statfs2.compressed, statfs.compressed);
+    ASSERT_GT(statfs2.compressed_original, statfs.compressed_original);
+    ASSERT_EQ(statfs2.compressed_allocated, statfs.compressed_allocated);
+  }
 
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
+    t.remove(cid, hoid2);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
