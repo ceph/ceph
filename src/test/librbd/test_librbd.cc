@@ -276,6 +276,90 @@ TEST_F(TestLibRBD, CreateAndStatPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, GetId)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  char id[4096];
+  if (!is_feature_enabled(0)) {
+    // V1 image
+    ASSERT_EQ(-EINVAL, rbd_get_id(image, id, sizeof(id)));
+  } else {
+    ASSERT_EQ(-ERANGE, rbd_get_id(image, id, 0));
+    ASSERT_EQ(0, rbd_get_id(image, id, sizeof(id)));
+    ASSERT_LT(0U, strlen(id));
+  }
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, GetIdPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  std::string id;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  if (!is_feature_enabled(0)) {
+    // V1 image
+    ASSERT_EQ(-EINVAL, image.get_id(&id));
+  } else {
+    ASSERT_EQ(0, image.get_id(&id));
+    ASSERT_LT(0U, id.size());
+  }
+}
+
+TEST_F(TestLibRBD, GetBlockNamePrefix)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  char prefix[4096];
+  ASSERT_EQ(-ERANGE, rbd_get_block_name_prefix(image, prefix, 0));
+  ASSERT_EQ(0, rbd_get_block_name_prefix(image, prefix, sizeof(prefix)));
+  ASSERT_LT(0U, strlen(prefix));
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, GetBlockNamePrefixPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  ASSERT_LT(0U, image.get_block_name_prefix().size());
+}
+
 TEST_F(TestLibRBD, OpenAio)
 {
   rados_ioctx_t ioctx;

@@ -32,7 +32,7 @@ extern "C" {
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
-#define LIBRBD_VER_EXTRA 10
+#define LIBRBD_VER_EXTRA 11
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -86,9 +86,9 @@ typedef struct {
   uint64_t obj_size;
   uint64_t num_objs;
   int order;
-  char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
-  int64_t parent_pool;			      /* deprecated */
-  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
+  char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE]; /* deprecated */
+  int64_t parent_pool;			           /* deprecated */
+  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];       /* deprecated */
 } rbd_image_info_t;
 
 typedef enum {
@@ -287,6 +287,10 @@ CEPH_RBD_API int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
 CEPH_RBD_API int rbd_get_stripe_count(rbd_image_t image,
                                       uint64_t *stripe_count);
 CEPH_RBD_API int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
+CEPH_RBD_API int rbd_get_id(rbd_image_t image, char *id, size_t id_len);
+CEPH_RBD_API int rbd_get_block_name_prefix(rbd_image_t image,
+                                           char *prefix, size_t prefix_len);
+CEPH_RBD_API int64_t rbd_get_data_pool_id(rbd_image_t image);
 CEPH_RBD_API int rbd_get_parent_info(rbd_image_t image,
 			             char *parent_poolname, size_t ppoolnamelen,
 			             char *parent_name, size_t pnamelen,
