@@ -40,6 +40,8 @@ def process_args(args):
         elif key == 'subset' and value is not None:
             # take input string '2/3' and turn into (2, 3)
             value = tuple(map(int, value.split('/')))
+        elif key in ('filter_in', 'filter_out'):
+            value = [x.strip() for x in value.split(',')]
         conf[key] = value
     return conf
 

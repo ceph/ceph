@@ -293,10 +293,9 @@ class Run(object):
             # separated components to be used in searches.
             filter_in = self.args.filter_in
             if filter_in:
-                filter_list = [x.strip() for x in filter_in.split(',')]
-                if not any([x in description for x in filter_list]):
+                if not any([x in description for x in filter_in]):
                     all_filt = []
-                    for filt_samp in filter_list:
+                    for filt_samp in filter_in:
                         all_filt.extend(
                             [x.find(filt_samp) < 0 for x in base_frag_paths]
                         )
@@ -304,11 +303,10 @@ class Run(object):
                         continue
             filter_out = self.args.filter_out
             if filter_out:
-                filter_list = [x.strip() for x in filter_out.split(',')]
-                if any([x in description for x in filter_list]):
+                if any([x in description for x in filter_out]):
                     continue
                 all_filt_val = False
-                for filt_samp in filter_list:
+                for filt_samp in filter_out:
                     flist = [filt_samp in x for x in base_frag_paths]
                     if any(flist):
                         all_filt_val = True
