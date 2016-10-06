@@ -6753,13 +6753,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
 
-  dout(30) << __func__ << " transaction dump:\n";
-  JSONFormatter f(true);
-  f.open_object_section("transaction");
-  t->dump(&f);
-  f.close_section();
-  f.flush(*_dout);
-  *_dout << dendl;
+  _dump_transaction(t);
 
   vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
@@ -6852,16 +6846,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
     }
     if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r)
-	      << " not handled on operation " << op->op
-	      << " (op " << pos << ", counting from 0)" << dendl;
-      dout(0) << " transaction dump:\n";
-      JSONFormatter f(true);
-      f.open_object_section("transaction");
-      t->dump(&f);
-      f.close_section();
-      f.flush(*_dout);
-      *_dout << dendl;
+      derr << __func__ << " error " << cpp_strerror(r)
+           << " not handled on operation " << op->op
+           << " (op " << pos << ", counting from 0)" << dendl;
+      _dump_transaction(t, 0);
       assert(0 == "unexpected error");
     }
 
@@ -7060,7 +7048,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     default:
-      derr << "bad op " << op->op << dendl;
+      derr << __func__ << "bad op " << op->op << dendl;
       assert(0);
     }
 
@@ -7094,16 +7082,12 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	}
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op->op
-		<< " (op " << pos << ", counting from 0)" << dendl;
-	dout(0) << msg << dendl;
-	dout(0) << " transaction dump:\n";
-	JSONFormatter f(true);
-	f.open_object_section("transaction");
-	t->dump(&f);
-	f.close_section();
-	f.flush(*_dout);
-	*_dout << dendl;
+        derr << __func__ << " error " << cpp_strerror(r)
+             << " not handled on operation " << op->op
+             << " (op " << pos << ", counting from 0)"
+             << dendl;
+        derr << msg << dendl;
+        _dump_transaction(t, 0);
 	assert(0 == "unexpected error");
       }
     }
@@ -7182,6 +7166,16 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
   }
 }
 
+void BlueStore::_dump_transaction(Transaction *t, int log_level)
+{
+  dout(log_level) << " transaction dump:\n";
+  JSONFormatter f(true);
+  f.open_object_section("transaction");
+  t->dump(&f);
+  f.close_section();
+  f.flush(*_dout);
+  *_dout << dendl;
+}
 
 void BlueStore::_pad_zeros(
   bufferlist *bl, uint64_t *offset,

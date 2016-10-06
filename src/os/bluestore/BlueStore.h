@@ -1506,6 +1506,7 @@ private:
 
   void _dump_onode(OnodeRef o, int log_level=30);
   void _dump_extent_map(ExtentMap& em, int log_level=30);
+  void _dump_transaction(Transaction *t, int log_level = 30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
