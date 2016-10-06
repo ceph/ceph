@@ -1801,7 +1801,7 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
     }
     pos = p->logical_offset + p->length;
     if (blobid & BLOBID_FLAG_DEPTH) {
-      small_encode_varint_lowz(p->blob_depth, bl);
+      ::encode(p->blob_depth, bl);
     }
     if (include_blob) {
       p->blob->encode(bl);
@@ -1849,7 +1849,7 @@ void BlueStore::ExtentMap::decode_some(bufferlist& bl)
     le->length = prev_len;
 
     if (blobid & BLOBID_FLAG_DEPTH) {
-      small_decode_varint_lowz(le->blob_depth, p);
+      ::decode(le->blob_depth, p);
     } else {
       le->blob_depth = 1;
     }
