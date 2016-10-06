@@ -975,3 +975,92 @@ int ReplicatedPG::multi_object_write_op_slave_commit(OpContext *ctx)
 
   return 0;
 }
+
+void ReplicatedPG::multi_object_write_op_master_unlock_self(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->state == MultiObjectWriteOpContext::UNLOCKING || //from unlock_slave
+         moc->state == MultiObjectWriteOpContext::COMMIT); // from commit_slave
+  moc->state = MultiObjectWriteOpContext::UNLOCKING;
+
+  multi_object_write_op_delete(moc,
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_unlock_self_crash) {
+        assert(0 == "inject failure");
+      }
+
+      dout(20) << __func__ << " done" << dendl;
+      assert(!moc->ctx);
+      moc->state = MultiObjectWriteOpContext::UNLOCK;
+      requeue_ops(moc->waiting);
+      multi_object_write_op_destroy(moc);
+    });
+}
+
+void ReplicatedPG::multi_object_write_op_master_unlock_slave(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->state == MultiObjectWriteOpContext::LOCK || // from lock_slave or load
+         moc->state == MultiObjectWriteOpContext::COMMITTING); // from commit_self
+  moc->state = MultiObjectWriteOpContext::UNLOCKING;
+
+  multi_object_write_op_send(moc,
+    [moc, this](const object_t &oid, ObjectOperation &op){
+       op.multi_object_write_operation_unlock();
+    },
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_unlock_slave_crash) {
+        assert(0 == "inject failure");
+      }
+
+      for (auto &p : moc->sub_objects) {
+        switch (p.second.first) {
+          case -EPERM:
+          case -EDEADLK:
+            break;
+          default:
+            dout(1) << __func__ << " Unable to unlock slave object "
+                    << p.first << " r: " << cpp_strerror(p.second.first)
+                    << "(" << p.second.first << ")" << dendl;
+            assert(0 == "unexpected case");
+            break;
+        }
+      }
+
+      multi_object_write_op_master_unlock_self(moc);
+   });
+}
+
+void ReplicatedPG::multi_object_write_op_slave_unlock_self(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->state == MultiObjectWriteOpContext::LOCK ||  //from slave unlock
+         moc->state == MultiObjectWriteOpContext::COMMIT); //from slave commit or load
+  moc->state = MultiObjectWriteOpContext::UNLOCKING;
+
+  multi_object_write_op_delete(moc,
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_slave_unlock_crash) {
+        assert(0 == "inject failure");
+      }
+
+      dout(20) << __func__ << " done" << dendl;
+      if (moc->ctx) {
+        reply_ctx(moc->ctx, -EPERM);
+        moc->ctx = nullptr;
+      }
+
+      moc->state = MultiObjectWriteOpContext::UNLOCK;
+      requeue_ops(moc->waiting);
+      multi_object_write_op_destroy(moc);
+    });
+}
