@@ -64,7 +64,7 @@ void RGWLoadGenIO::flush()
 {
 }
 
-int RGWLoadGenIO::complete_request()
+size_t RGWLoadGenIO::complete_request()
 {
   return 0;
 }

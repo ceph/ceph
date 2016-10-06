@@ -46,7 +46,7 @@ class RGWAsioClientIO : public rgw::io::RestfulClient {
   ~RGWAsioClientIO();
 
   void init_env(CephContext *cct) override;
-  int complete_request() override;
+  size_t complete_request() override;
   void flush() override;
   size_t send_status(int status, const char *status_name) override;
   size_t send_100_continue() override;

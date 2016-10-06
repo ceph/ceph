@@ -85,7 +85,7 @@ size_t RGWAsioClientIO::write_data(const char* const buf,
   auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
   if (ec) {
     derr << "write_data failed: " << ec.message() << dendl;
-    throw rgw::io::RestfulClient::Exception(ec.value(), std::system_category());
+    throw rgw::io::Exception(ec.value(), std::system_category());
   }
   return bytes;
 }
@@ -98,7 +98,7 @@ size_t RGWAsioClientIO::read_data(char* const buf, const size_t max)
   return bytes;
 }
 
-int RGWAsioClientIO::complete_request()
+size_t RGWAsioClientIO::complete_request()
 {
   return 0;
 }

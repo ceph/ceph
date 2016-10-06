@@ -46,7 +46,7 @@ public:
     return env;
   }
 
-  int complete_request() override {
+  size_t complete_request() override {
     return 0;
   }
 };

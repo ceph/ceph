@@ -81,7 +81,7 @@ namespace rgw {
       return env;
     }
 
-    int complete_request() override { /* XXX */
+    size_t complete_request() override { /* XXX */
       return 0;
     };
 

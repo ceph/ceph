@@ -42,7 +42,7 @@ public:
     return write_data(buf, len);
   }
 
-  int complete_request() override;
+  size_t complete_request() override;
 
   void flush() override;
 
