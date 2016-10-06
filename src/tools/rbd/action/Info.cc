@@ -108,9 +108,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     }
   }
 
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+  std::string prefix = image.get_block_name_prefix();
 
   if (f) {
     f->open_object_section("image");
