@@ -200,6 +200,9 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
     int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
     int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
+    int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
+    int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
+                                  size_t prefix_len)
     int rbd_get_parent_info(rbd_image_t image,
                             char *parent_poolname, size_t ppoolnamelen,
                             char *parent_name, size_t pnamelen,
@@ -1312,6 +1315,54 @@ cdef class Image(object):
             'parent_pool'       : info.parent_pool,
             'parent_name'       : info.parent_name
             }
+
+    def id(self):
+        """
+        Get the RBD v2 internal image id
+
+        :returns: str - image id
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *image_id = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                image_id =  <char *>realloc_chk(image_id, size)
+                with nogil:
+                    ret = rbd_get_id(self.image, image_id, size)
+                if ret == -errno.ERANGE:
+                    size *= 2
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting id for image %s' % (self.name,))
+            return decode_cstr(image_id)
+        finally:
+            free(image_id)
+
+    def block_name_prefix(self):
+        """
+        Get the RBD block name prefix
+
+        :returns: str - block name prefix
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *prefix = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                prefix =  <char *>realloc_chk(prefix, size)
+                with nogil:
+                    ret = rbd_get_block_name_prefix(self.image, prefix, size)
+                if ret == -errno.ERANGE:
+                    size *= 2
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting block name prefix for image %s' % (self.name,))
+            return decode_cstr(prefix)
+        finally:
+            free(prefix)
 
     def parent_info(self):
         """
