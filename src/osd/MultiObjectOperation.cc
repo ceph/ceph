@@ -785,3 +785,193 @@ int ReplicatedPG::multi_object_write_op_slave_lock(OpContext *ctx)
     });
   return -EINPROGRESS;
 }
+
+void ReplicatedPG::multi_object_write_op_master_commit_self(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->state == MultiObjectWriteOpContext::LOCK);
+  assert(moc->ctx);
+  moc->state = MultiObjectWriteOpContext::COMMITTING;
+
+  OpContext *ctx = moc->ctx;
+  moc->ctx = nullptr;
+  ctx->register_on_commit(
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_commit_self_crash) {
+        assert(0 == "inject failure");
+      }
+
+      moc->state = MultiObjectWriteOpContext::COMMIT;
+
+      multi_object_write_op_master_commit_slave(moc);
+    });
+  ctx->register_on_finish(
+    [moc, this](){
+      if (moc->destroyed || moc->state != MultiObjectWriteOpContext::COMMITTING)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_commit_self_crash) {
+        assert(0 == "inject failure");
+      }
+
+      multi_object_write_op_master_unlock_slave(moc);
+    });
+  execute_ctx(ctx);
+}
+
+void ReplicatedPG::multi_object_write_op_master_commit_slave(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->state == MultiObjectWriteOpContext::COMMIT);
+
+  multi_object_write_op_send(moc,
+    [moc, this](const object_t &oid, ObjectOperation &op){
+       op.multi_object_write_operation_commit();
+    },
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_commit_slave_crash) {
+        assert(0 == "inject failure");
+      }
+
+      for (auto &p : moc->sub_objects) {
+        switch (p.second.first) {
+          case -EPERM:// already unlock
+          case -EDEADLK: // already unlock and locked by another multi operation
+          case 0:
+            break;
+          default:
+            dout(1) << __func__ << " Unable to commit slave object "
+                    << p.first << " r: " << cpp_strerror(p.second.first)
+                    << "(" << p.second.first << ")" << dendl;
+            assert(0 == "unexpected case");
+            break;
+        }
+      }
+
+      multi_object_write_op_master_unlock_self(moc);
+   });
+}
+
+int ReplicatedPG::multi_object_write_op_slave_commit(OpContext *ctx)
+{
+  MultiObjectWriteOpContextRef moc = ctx->multi_object_write_op_ctx;
+  assert(moc);
+  assert(moc->state == MultiObjectWriteOpContext::COMMITTING);
+
+  if (moc->slave_data_bl.length()) {
+    bufferlist::iterator bl = moc->slave_data_bl.begin();
+    ObjectState &obs = ctx->new_obs;
+    object_info_t &oi = obs.oi;
+
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+
+    ::decode(ctx->user_modify, bl);
+    ::decode(ctx->modify, bl);
+
+    ::decode(ctx->num_read, bl);
+    ::decode(ctx->num_write, bl);
+    ::decode(ctx->delta_stats, bl);
+
+    ::decode(ctx->modified_ranges, bl);
+    ::decode(ctx->mod_desc, bl);
+
+    bool clear_watch;
+    ::decode(clear_watch, bl);
+    if (clear_watch) {
+      for (auto &p : oi.watchers) {
+        ctx->watch_disconnects.push_back(
+          watch_disconnect_t(p.first.first, p.first.second, true));
+      }
+      oi.watchers.clear();
+    }
+
+    assert(ctx->pending_attrs.empty());
+
+    ::decode(oi.truncate_seq, bl);
+    ::decode(oi.truncate_size, bl);
+    ::decode(oi.size, bl);
+
+    ::decode(obs.exists, bl);
+
+    bool is_whiteout;
+    ::decode(is_whiteout, bl);
+    if (is_whiteout)
+      oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    else
+      oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+
+    bool is_data_digest;
+    ::decode(is_data_digest, bl);
+    if (is_data_digest) {
+      __u32 crc32;
+      ::decode(crc32, bl);
+      oi.set_data_digest(crc32);
+    } else {
+      oi.clear_data_digest();
+    }
+
+    bool is_omap;
+    ::decode(is_omap, bl);
+    if (is_omap)
+      oi.set_flag(object_info_t::FLAG_OMAP);
+    else
+      oi.clear_flag(object_info_t::FLAG_OMAP);
+
+    bool is_omap_digest;
+    ::decode(is_omap_digest, bl);
+    if (is_omap_digest) {
+      __u32 crc32;
+      ::decode(crc32, bl);
+      oi.set_omap_digest(crc32);
+    } else {
+      oi.clear_omap_digest();
+    }
+
+    ctx->op_t->decode(bl);
+
+    DECODE_FINISH(bl);
+
+    multi_object_write_op_inline_delete(moc, ctx);
+
+    ctx->register_on_commit(
+      [moc, this](){
+        if (moc->destroyed)
+          return;
+
+        if (g_conf->osd_debug_multi_object_write_operation_slave_commit_crash ||
+            g_conf->osd_debug_multi_object_write_operation_slave_unlock_crash) {
+          assert(0 == "inject failure");
+        }
+
+        dout(20) << __func__ << " done" << dendl;
+        assert(!moc->ctx);
+        assert(moc->state == MultiObjectWriteOpContext::COMMITTING);
+        moc->state = MultiObjectWriteOpContext::UNLOCK;
+        requeue_ops(moc->waiting);
+        multi_object_write_op_destroy(moc);
+      });
+  } else {
+    // readonly op;
+    moc->state = MultiObjectWriteOpContext::COMMIT;
+    ctx->register_on_finish(
+      [moc, this](){
+        if (moc->destroyed)
+          return;
+
+        if (g_conf->osd_debug_multi_object_write_operation_slave_commit_crash) {
+          assert(0 == "inject failure");
+        }
+
+        assert(moc->state == MultiObjectWriteOpContext::COMMIT);
+        multi_object_write_op_slave_unlock_self(moc);
+      });
+  }
+
+  return 0;
+}
