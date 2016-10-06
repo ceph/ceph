@@ -27,10 +27,30 @@
 class CompressionTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
 public:
+  std::string plugin;
   CompressorRef compressor;
 
+  CompressionTest() {
+    plugin = GetParam();
+    size_t pos = plugin.find('/');
+    if (pos != std::string::npos) {
+      string isal = plugin.substr(pos + 1);
+      plugin = plugin.substr(0, pos);
+      if (isal == "isal") {
+	g_conf->set_val("compressor_zlib_isal", "true");
+	g_ceph_context->_conf->apply_changes(NULL);
+      } else if (isal == "noisal") {
+	g_conf->set_val("compressor_zlib_isal", "false");
+	g_ceph_context->_conf->apply_changes(NULL);
+      } else {
+	assert(0 == "bad option");
+      }
+    }
+    cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;
+  }
+
   void SetUp() {
-    compressor = Compressor::create(g_ceph_context, GetParam());
+    compressor = Compressor::create(g_ceph_context, plugin);
     ASSERT_TRUE(compressor);
   }
   void TearDown() {
@@ -133,7 +153,8 @@ INSTANTIATE_TEST_CASE_P(
   Compression,
   CompressionTest,
   ::testing::Values(
-    "zlib",
+    "zlib/isal",
+    "zlib/noisal",
     "snappy"));
 
 int main(int argc, char **argv) {
