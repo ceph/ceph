@@ -1397,7 +1397,7 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
 
   std::mutex wal_lock;
-  atomic64_t wal_seq;
+  std::atomic<uint64_t> wal_seq = {0};
   ThreadPool wal_tp;
   WALWQ wal_wq;
 
