@@ -435,8 +435,8 @@ public:
     }
 
     bool can_split() const {
-      // splitting a BufferSpace writing_map is too hard; don't try.
-      return shared_blob->bc.writing_map.empty() && get_blob().can_split();
+      // splitting a BufferSpace writing list is too hard; don't try.
+      return shared_blob->bc.writing.empty() && get_blob().can_split();
     }
 
     void dup(Blob& o) {

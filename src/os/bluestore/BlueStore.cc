@@ -1111,7 +1111,7 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
       _rm_buffer(p++);
     }
   }
-  assert(writing_map.empty());
+  assert(writing.empty());
 }
 
 // OnodeSpace
