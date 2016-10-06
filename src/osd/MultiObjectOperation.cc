@@ -591,6 +591,21 @@ void ReplicatedPG::execute_multi_object_write_op_ctx(OpContext *ctx)
   }
 }
 
+void ReplicatedPG::dead_lock_avoidance(OpRequestRef op, OpContext* ctx,
+  MultiObjectWriteOpContextRef moc)
+{
+  if (ctx->is_slave() && (moc->state == MultiObjectWriteOpContext::LOCKING ||
+    moc->state == MultiObjectWriteOpContext::LOCK)) {
+    dout(20) << __func__ << " multi op dead lock avoid" << dendl;
+    reply_ctx(ctx, -EDEADLK);
+  } else {
+    dout(20) << __func__ << " waiting for multi op finish" << dendl;
+    op->mark_delayed("waiting for multi op finish");
+    moc->waiting.push_back(op);
+    close_op_ctx(ctx);
+  }
+}
+
 void ReplicatedPG::cancel_multi_object_write_ops(bool requeue)
 {
   dout(20) << __func__ << " requeue: " << requeue << dendl;
