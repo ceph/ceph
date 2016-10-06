@@ -24,10 +24,15 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     :param timeout: timeout value for get_stuck_pgs calls
     """
     inactive = manager.get_stuck_pgs('inactive', timeout)
-    assert len(inactive) == num_inactive
     unclean = manager.get_stuck_pgs('unclean', timeout)
-    assert len(unclean) == num_unclean
     stale = manager.get_stuck_pgs('stale', timeout)
+    log.info('hi mom')
+    log.info('inactive %s / %d,  unclean %s / %d,  stale %s / %d',
+             len(inactive), num_inactive,
+             len(unclean), num_unclean,
+             len(stale), num_stale)
+    assert len(inactive) == num_inactive
+    assert len(unclean) == num_unclean
     assert len(stale) == num_stale
 
     # check health output as well
@@ -105,10 +110,11 @@ def task(ctx, config):
         num_stale=0,
         )
 
-    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'osd'):
-        manager.kill_osd(id_)
-        manager.mark_down_osd(id_)
+    log.info('stopping first osd')
+    manager.kill_osd(0)
+    manager.mark_down_osd(0)
 
+    log.info('waiting for all to be unclean')
     starttime = time.time()
     done = False
     while not done:
@@ -116,7 +122,29 @@ def task(ctx, config):
             check_stuck(
                 manager,
                 num_inactive=0,
-                num_unclean=0,
+                num_unclean=num_pgs,
+                num_stale=0,
+                )
+            done = True
+        except AssertionError:
+            # wait up to 15 minutes to become stale
+            if time.time() - starttime > 900:
+                raise
+
+
+    log.info('stopping second osd')
+    manager.kill_osd(1)
+    manager.mark_down_osd(1)
+
+    log.info('waiting for all to be stale')
+    starttime = time.time()
+    done = False
+    while not done:
+        try:
+            check_stuck(
+                manager,
+                num_inactive=0,
+                num_unclean=num_pgs,
                 num_stale=num_pgs,
                 )
             done = True
@@ -125,6 +153,7 @@ def task(ctx, config):
             if time.time() - starttime > 900:
                 raise
 
+    log.info('reviving')
     for id_ in teuthology.all_roles_of_type(ctx.cluster, 'osd'):
         manager.revive_osd(id_)
         manager.mark_in_osd(id_)
