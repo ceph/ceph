@@ -27,28 +27,66 @@ using util::create_context_callback;
 
 namespace {
 
-bool validate_features(CephContext *cct, uint64_t features, bool force_non_primary) {
+int validate_features(CephContext *cct, uint64_t features,
+                       bool force_non_primary) {
+  if (features & ~RBD_FEATURES_ALL) {
+    lderr(cct) << "librbd does not support requested features." << dendl;
+    return -ENOSYS;
+  }
   if ((features & RBD_FEATURE_FAST_DIFF) != 0 &&
       (features & RBD_FEATURE_OBJECT_MAP) == 0) {
     lderr(cct) << "cannot use fast diff without object map" << dendl;
-    return false;
+    return -EINVAL;
   }
   if ((features & RBD_FEATURE_OBJECT_MAP) != 0 &&
       (features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
     lderr(cct) << "cannot use object map without exclusive lock" << dendl;
-    return false;
+    return -EINVAL;
   }
   if ((features & RBD_FEATURE_JOURNALING) != 0) {
     if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
-      return false;
+      return -EINVAL;
     }
   } else if (force_non_primary) {
     assert(false);
   }
 
-  return true;
+  return 0;
 }
+
+int validate_striping(CephContext *cct, uint8_t order, uint64_t stripe_unit,
+                      uint64_t stripe_count) {
+  if ((stripe_unit && !stripe_count) ||
+      (!stripe_unit && stripe_count)) {
+    lderr(cct) << "must specify both (or neither) of stripe-unit and "
+               << "stripe-count" << dendl;
+    return -EINVAL;
+  } else if (stripe_unit || stripe_count) {
+    if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
+      lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+int validate_data_pool(CephContext *cct, IoCtx &io_ctx, uint64_t features,
+                       const std::string &data_pool) {
+  if ((features & RBD_FEATURE_DATA_POOL) == 0) {
+    return 0;
+  }
+
+  librados::Rados rados(io_ctx);
+  librados::IoCtx data_io_ctx;
+  int r = rados.ioctx_create(data_pool.c_str(), data_io_ctx);
+  if (r < 0) {
+    lderr(cct) << "data pool " << data_pool << " does not exist" << dendl;
+    return -ENOENT;
+  }
+  return 0;
+}
+
 
 bool validate_layout(CephContext *cct, uint64_t size, file_layout_t &layout) {
   if (!librbd::ObjectMap::is_compatible(layout, size)) {
@@ -59,6 +97,17 @@ bool validate_layout(CephContext *cct, uint64_t size, file_layout_t &layout) {
   return true;
 }
 
+int get_image_option(const ImageOptions &image_options, int option,
+                     uint8_t *value) {
+  uint64_t large_value;
+  int r = image_options.get(option, &large_value);
+  if (r < 0) {
+    return r;
+  }
+  *value = static_cast<uint8_t>(large_value);
+  return 0;
+}
+
 } // anonymous namespace
 
 // TODO: do away with @m_op_work_queue
@@ -66,27 +115,64 @@ bool validate_layout(CephContext *cct, uint64_t size, file_layout_t &layout) {
 // worker thread (see callers of ->queue()). Once everything is made
 // fully asynchronous this can be done away with.
 template<typename I>
-CreateRequest<I>::CreateRequest(IoCtx &ioctx, std::string &imgname, std::string &imageid,
-                                uint64_t size, int order, uint64_t features,
-                                uint64_t stripe_unit, uint64_t stripe_count,
-                                uint8_t journal_order, uint8_t journal_splay_width,
-                                const std::string &journal_pool,
+CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
+                                const std::string &image_id, uint64_t size,
+                                const ImageOptions &image_options,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
-                                ContextWQ *op_work_queue, Context *on_finish) :
-  m_image_name(imgname), m_image_id(imageid), m_size(size), m_order(order),
-  m_features(features), m_stripe_unit(stripe_unit), m_stripe_count(stripe_count),
-  m_journal_order(journal_order), m_journal_splay_width(journal_splay_width),
-  m_journal_pool(journal_pool), m_non_primary_global_image_id(non_primary_global_image_id),
-  m_primary_mirror_uuid(primary_mirror_uuid),
-  m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
-
+                                ContextWQ *op_work_queue, Context *on_finish)
+  : m_image_name(image_name), m_image_id(image_id), m_size(size),
+    m_non_primary_global_image_id(non_primary_global_image_id),
+    m_primary_mirror_uuid(primary_mirror_uuid),
+    m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
   m_id_obj = util::id_obj_name(m_image_name);
   m_header_obj = util::header_name(m_image_id);
   m_objmap_name = ObjectMap::object_map_name(m_image_id, CEPH_NOSNAP);
+
+  if (image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
+    m_features = m_cct->_conf->rbd_default_features;
+  }
+
+  uint64_t features_clear = 0;
+  uint64_t features_set = 0;
+  image_options.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
+  image_options.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
+
+  uint64_t features_conflict = features_clear & features_set;
+  features_clear &= ~features_conflict;
+  features_set &= ~features_conflict;
+  m_features |= features_set;
+  m_features &= ~features_clear;
+
+  if (image_options.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &m_stripe_unit) != 0 ||
+      m_stripe_unit == 0) {
+    m_stripe_unit = m_cct->_conf->rbd_default_stripe_unit;
+  }
+  if (image_options.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &m_stripe_count) != 0 ||
+      m_stripe_count == 0) {
+    m_stripe_count = m_cct->_conf->rbd_default_stripe_count;
+  }
+  if (get_image_option(image_options, RBD_IMAGE_OPTION_ORDER, &m_order) != 0 ||
+      m_order == 0) {
+    m_order = m_cct->_conf->rbd_default_order;
+  }
+  if (get_image_option(image_options, RBD_IMAGE_OPTION_JOURNAL_ORDER,
+      &m_journal_order) != 0) {
+    m_journal_order = m_cct->_conf->rbd_journal_order;
+  }
+  if (get_image_option(image_options, RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
+                       &m_journal_splay_width) != 0) {
+    m_journal_splay_width = m_cct->_conf->rbd_journal_splay_width;
+  }
+  if (image_options.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &m_journal_pool) != 0) {
+    m_journal_pool = m_cct->_conf->rbd_journal_pool;
+  }
+  if (image_options.get(RBD_IMAGE_OPTION_DATA_POOL, &m_data_pool) != 0) {
+    m_data_pool = m_cct->_conf->rbd_default_data_pool;
+  }
 
   m_layout.object_size = 1ull << m_order;
   if (m_stripe_unit == 0 || m_stripe_count == 0) {
@@ -99,18 +185,69 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, std::string &imgname, std::string 
 
   m_force_non_primary = !non_primary_global_image_id.empty();
 
-  // TODO
-  m_features &= ~RBD_FEATURE_DATA_POOL;
+  if (/* TODO */ false && !m_data_pool.empty() && m_data_pool != ioctx.get_pool_name()) {
+    m_features |= RBD_FEATURE_DATA_POOL;
+  } else {
+    m_features &= ~RBD_FEATURE_DATA_POOL;
+  }
+
+  if ((m_stripe_unit != 0 && m_stripe_unit != (1ULL << m_order)) ||
+      (m_stripe_count != 0 && m_stripe_count != 1)) {
+    m_features |= RBD_FEATURE_STRIPINGV2;
+  } else {
+    m_features &= ~RBD_FEATURE_STRIPINGV2;
+  }
+
+  ldout(m_cct, 20) << "name=" << m_image_name << ", "
+                   << "id=" << m_image_id << ", "
+                   << "size=" << m_size << ", "
+                   << "features=" << m_features << ", "
+                   << "order=" << m_order << ", "
+                   << "stripe_unit=" << m_stripe_unit << ", "
+                   << "stripe_count=" << m_stripe_count << ", "
+                   << "journal_order=" << m_journal_order << ", "
+                   << "journal_splay_width=" << m_journal_splay_width << ", "
+                   << "journal_pool=" << m_journal_pool << ", "
+                   << "data_pool=" << m_data_pool << dendl;
+}
+
+template<typename I>
+int CreateRequest<I>::validate_order(CephContext *cct, uint8_t order) {
+  if (order > 25 || order < 12) {
+    lderr(cct) << "order must be in the range [12, 25]" << dendl;
+    return -EDOM;
+  }
+  return 0;
 }
 
 template<typename I>
 void CreateRequest<I>::send() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
-  if (!validate_features(m_cct, m_features, m_force_non_primary)) {
-    complete(-EINVAL);
+  int r = validate_features(m_cct, m_features, m_force_non_primary);
+  if (r < 0) {
+    complete(r);
     return;
   }
+
+  r = validate_order(m_cct, m_order);
+  if (r < 0) {
+    complete(r);
+    return;
+  }
+
+  r = validate_striping(m_cct, m_order, m_stripe_unit, m_stripe_count);
+  if (r < 0) {
+    complete(r);
+    return;
+  }
+
+  r = validate_data_pool(m_cct, m_ioctx, m_features, m_data_pool);
+  if (r < 0) {
+    complete(r);
+    return;
+  }
+
   if (!validate_layout(m_cct, m_size, m_layout)) {
     complete(-EINVAL);
     return;

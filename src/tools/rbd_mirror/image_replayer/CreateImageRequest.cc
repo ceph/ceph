@@ -64,19 +64,20 @@ void CreateImageRequest<I>::create_image() {
   Context *ctx = create_context_callback<klass, &klass::handle_create_image>(this);
 
   RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
-  int order = m_remote_image_ctx->order;
 
-  CephContext *cct = reinterpret_cast<CephContext*>(m_local_io_ctx.cct());
-  uint64_t journal_order = cct->_conf->rbd_journal_order;
-  uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
-  std::string journal_pool = cct->_conf->rbd_journal_pool;
+  librbd::ImageOptions image_options;
+  image_options.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
+  image_options.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
+  image_options.set(RBD_IMAGE_OPTION_STRIPE_UNIT,
+                    m_remote_image_ctx->stripe_unit);
+  image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
+                    m_remote_image_ctx->stripe_count);
+
   std::string id = librbd::util::generate_image_id(m_local_io_ctx);
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, id, m_remote_image_ctx->size,
-    order, m_remote_image_ctx->features, m_remote_image_ctx->stripe_unit,
-    m_remote_image_ctx->stripe_count, journal_order, journal_splay_width,
-    journal_pool, m_global_image_id, m_remote_mirror_uuid,
+    image_options, m_global_image_id, m_remote_mirror_uuid,
     m_remote_image_ctx->op_work_queue, ctx);
   req->send();
 }

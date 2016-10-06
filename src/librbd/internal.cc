@@ -836,6 +836,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
 
+    ldout(cct, 20) << __func__ << " "  << &io_ctx << " name = " << imgname
+		   << " size = " << size << " order = " << order << dendl;
     int r = validate_pool(io_ctx, cct);
     if (r < 0) {
       return r;
@@ -875,21 +877,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
-  }
-
-  void create_v2(IoCtx& io_ctx, std::string &imgname, uint64_t size,
-                 int order, uint64_t features, uint64_t stripe_unit,
-                 uint64_t stripe_count, uint8_t journal_order,
-                 uint8_t journal_splay_width, const std::string &journal_pool,
-                 const std::string &non_primary_global_image_id,
-                 const std::string &primary_mirror_uuid,
-                 ContextWQ *op_work_queue, Context *ctx) {
-    std::string id = util::generate_image_id(io_ctx);
-    image::CreateRequest<> *req = image::CreateRequest<>::create(
-      io_ctx, imgname, id, size, order, features, stripe_unit,
-      stripe_count, journal_order, journal_splay_width, journal_pool,
-      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, ctx);
-    req->send();
   }
 
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -947,47 +934,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       format = cct->_conf->rbd_default_format;
     bool old_format = format == 1;
 
-    uint64_t features;
-    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-      features = old_format ? 0 : cct->_conf->rbd_default_features;
-    }
-
-    uint64_t features_clear = 0;
-    uint64_t features_set = 0;
-    opts.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
-    opts.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
-
-    uint64_t conflict = features_clear & features_set;
-    features_clear &= ~conflict;
-    features_set &= ~conflict;
-
-    features |= features_set;
-    features &= ~features_clear;
-
-    uint64_t stripe_unit = 0;
-    uint64_t stripe_count = 0;
-    if (!old_format) {
-      if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0 || stripe_unit == 0)
-	stripe_unit = cct->_conf->rbd_default_stripe_unit;
-      if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0 || stripe_count == 0)
-	stripe_count = cct->_conf->rbd_default_stripe_count;
-    }
-
-    uint64_t order = 0;
-    if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0)
-      order = cct->_conf->rbd_default_order;
-
-    ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
-		   << " size = " << size << " old_format = " << old_format
-		   << " features = " << features << " order = " << order
-		   << " stripe_unit = " << stripe_unit
-		   << " stripe_count = " << stripe_count
-		   << dendl;
-
-    if (features & ~RBD_FEATURES_ALL) {
-      lderr(cct) << "librbd does not support requested features." << dendl;
-      return -ENOSYS;
-    }
 
     // make sure it doesn't already exist, in either format
     int r = detect_format(io_ctx, imgname, NULL, NULL);
@@ -1000,53 +946,29 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EEXIST;
     }
 
-    if (order > 25 || order < 12) {
-      lderr(cct) << "order must be in the range [12, 25]" << dendl;
-      return -EDOM;
+    uint64_t order = 0;
+    if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0) {
+      order = cct->_conf->rbd_default_order;
     }
-
-    if ((features & RBD_FEATURE_STRIPINGV2) == 0 &&
-	((stripe_unit && stripe_unit != (1ull << order)) ||
-	 (stripe_count && stripe_count != 1))) {
-      features |= RBD_FEATURE_STRIPINGV2;
-    }
-
-    if ((stripe_unit && !stripe_count) ||
-	(!stripe_unit && stripe_count)) {
-      lderr(cct) << "must specify both (or neither) of stripe-unit and stripe-count" << dendl;
-      return -EINVAL;
-    } else if (stripe_unit || stripe_count) {
-      if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
-	lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
-	return -EINVAL;
-      }
+    r = image::CreateRequest<>::validate_order(cct, order);
+    if (r < 0) {
+      return r;
     }
 
     if (old_format) {
-      if (stripe_unit && stripe_unit != (1ull << order))
-	return -EINVAL;
-      if (stripe_count && stripe_count != 1)
-	return -EINVAL;
-
       r = create_v1(io_ctx, imgname, size, order);
     } else {
-      uint64_t journal_order = cct->_conf->rbd_journal_order;
-      uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
-      std::string journal_pool = cct->_conf->rbd_journal_pool;
-
-      opts.get(RBD_IMAGE_OPTION_JOURNAL_ORDER, &journal_order);
-      opts.get(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, &journal_splay_width);
-      opts.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &journal_pool);
-
       C_SaferCond cond;
       ContextWQ op_work_queue("librbd::op_work_queue",
                               cct->_conf->rbd_op_thread_timeout,
                               ImageCtx::get_thread_pool_instance(cct));
-      std::string imagename(imgname);
-      create_v2(io_ctx, imagename, size, order, features, stripe_unit,
-                stripe_count, journal_order, journal_splay_width, journal_pool,
-                non_primary_global_image_id, primary_mirror_uuid,
-                &op_work_queue, &cond);
+
+      std::string id = util::generate_image_id(io_ctx);
+      image::CreateRequest<> *req = image::CreateRequest<>::create(
+        io_ctx, imgname, id, size, opts, non_primary_global_image_id,
+        primary_mirror_uuid, &op_work_queue, &cond);
+      req->send();
+
       r = cond.wait();
       op_work_queue.drain();
     }

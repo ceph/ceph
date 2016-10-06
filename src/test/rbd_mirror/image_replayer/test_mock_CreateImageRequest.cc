@@ -35,15 +35,13 @@ struct CreateRequest<librbd::MockTestImageCtx> {
   static CreateRequest *s_instance;
   Context *on_finish = nullptr;
 
-  static CreateRequest *create(IoCtx &ioctx, std::string &imgname,
-                               std::string &imageid, uint64_t size, int order,
-                               uint64_t features, uint64_t stripe_unit,
-                               uint64_t stripe_count, uint8_t journal_order,
-                               uint8_t journal_splay_width,
-                               const std::string &journal_pool,
+  static CreateRequest *create(IoCtx &ioctx, const std::string &imgname,
+                               const std::string &imageid, uint64_t size,
+                               const librbd::ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               MockContextWQ *op_work_queue, Context *on_finish) {
+                               MockContextWQ *op_work_queue,
+                               Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->construct(ioctx);
