@@ -109,6 +109,7 @@ private:
   uint8_t m_journal_splay_width = 0;
   std::string m_journal_pool;
   std::string m_data_pool;
+  int64_t m_data_pool_id = -1;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
 
