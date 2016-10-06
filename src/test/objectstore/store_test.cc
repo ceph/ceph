@@ -3295,7 +3295,8 @@ public:
     }
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
-      bp[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+      // severely limit entropy so we can compress...
+      bp[i] = alphanum[rand() % 10]; //(sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
 
