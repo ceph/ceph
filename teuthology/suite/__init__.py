@@ -33,17 +33,24 @@ def process_args(args):
         key = key.lstrip('--').replace('-', '_')
         # Rename the key if necessary
         key = rename_args.get(key) or key
-        if key == 'suite':
-            value = value.replace('/', ':')
+        if key == 'suite' and value is not None:
+            value = normalize_suite_name(value)
         elif key in ('limit', 'priority', 'num', 'newest'):
             value = int(value)
         elif key == 'subset' and value is not None:
             # take input string '2/3' and turn into (2, 3)
             value = tuple(map(int, value.split('/')))
-        elif key in ('filter_in', 'filter_out'):
-            value = [x.strip() for x in value.split(',')]
+        elif key in ('filter_in', 'filter_out', 'rerun_statuses'):
+            if not value:
+                value = []
+            else:
+                value = [x.strip() for x in value.split(',')]
         conf[key] = value
     return conf
+
+
+def normalize_suite_name(name):
+    return name.replace('/', ':')
 
 
 def main(args):
@@ -63,12 +70,31 @@ def main(args):
         config.archive_upload = conf.archive_upload
         log.info('Will upload archives to ' + conf.archive_upload)
 
+    if conf.rerun:
+        rerun_filters = get_rerun_filters(conf.rerun, conf.rerun_statuses)
+        print rerun_filters
+        conf.filter_in.extend(rerun_filters['descriptions'])
+        conf.suite = normalize_suite_name(rerun_filters['suite'])
+
     run = Run(conf)
     name = run.name
     run.prepare_and_schedule()
     if not conf.dry_run and conf.wait:
         return wait(name, config.max_job_time,
                     conf.archive_upload_url)
+
+
+def get_rerun_filters(name, statuses):
+    reporter = ResultsReporter()
+    run = reporter.get_run(name)
+    filters = dict()
+    filters['suite'] = run['suite']
+    jobs = []
+    for job in run['jobs']:
+        if job['status'] in statuses:
+            jobs.append(job)
+    filters['descriptions'] = [job['description'] for job in jobs]
+    return filters
 
 
 class WaitException(Exception):

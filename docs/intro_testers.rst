@@ -64,3 +64,11 @@ get an email when the test run completes.
 <https://github.com/ceph/pulpito/>`__ that will display the current status of
 each job. The Sepia lab's pulpito instance is `here
 <http://pulpito.ceph.com/>`__.
+
+There may be times when, after scheduling a run containing a large number of
+jobs, that you want to reschedule only those jobs which have failed or died for
+some other reason. For that use-case, `teuthology-suite` has a `--rerun`/`-r`
+flag, and an optional `--rerun-statuses`/`-R` flag. An example of its usage
+is::
+
+    teuthology-suite -v -m vps -r teuthology-2016-10-06_05:00:03-smoke-master-testing-basic-vps -R pass,running,queued
