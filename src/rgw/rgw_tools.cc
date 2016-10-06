@@ -26,6 +26,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
     pattrs = &no_attrs;
 
   rgw_obj obj(bucket, oid);
+  obj.set_ns(bucket.ns);
 
   int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
 
@@ -46,6 +47,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
+  obj.set_ns(bucket.ns);
 
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
@@ -82,6 +84,7 @@ int rgw_delete_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid,
                           RGWObjVersionTracker *objv_tracker)
 {
   rgw_obj obj(bucket, oid);
+  obj.set_ns(bucket.ns);
   int ret = rgwstore->delete_system_obj(obj, objv_tracker);
 
   return ret;

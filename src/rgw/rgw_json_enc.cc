@@ -543,9 +543,24 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
 
+static void parse_pool_name(string& bucket_name, string& name, string& ns)
+{
+  auto pos = bucket_name.find(":");
+  if (pos != string::npos) {
+    name = bucket_name.substr(0, pos);
+    ns = bucket_name.substr(pos + 1);
+  } else {
+    name = std::move(bucket_name);
+  }
+}
+
 void rgw_bucket::dump(Formatter *f) const
 {
-  encode_json("name", name, f);
+  if (! ns.empty()) {
+    encode_json("name", name + ":" + ns, f);
+  } else {
+    encode_json("name", name, f);
+  }
   encode_json("pool", data_pool, f);
   encode_json("data_extra_pool", data_extra_pool, f);
   encode_json("index_pool", index_pool, f);
@@ -555,13 +570,16 @@ void rgw_bucket::dump(Formatter *f) const
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("name", name, obj);
+  string bucket_name;
+  JSONDecoder::decode_json("name", bucket_name, obj);
   JSONDecoder::decode_json("pool", data_pool, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
   JSONDecoder::decode_json("tenant", tenant, obj);
+
+  parse_pool_name(bucket_name, name, ns);
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const
@@ -840,31 +858,49 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
+static void dump(const char* field, const rgw_bucket& bucket, Formatter* f)
+{
+  if (bucket.ns.empty()) {
+    encode_json(field, bucket.data_pool, f);
+  } else {
+    encode_json(field, bucket.data_pool + ":" + bucket.ns, f);
+  }
+}
+
 void RGWZoneParams::dump(Formatter *f) const
 {
   RGWSystemMetaObj::dump(f);
-  encode_json("domain_root", domain_root.data_pool, f);
-  encode_json("control_pool", control_pool.data_pool, f);
-  encode_json("gc_pool", gc_pool.data_pool, f);
-  encode_json("lc_pool", lc_pool.data_pool, f);
-  encode_json("log_pool", log_pool.data_pool, f);
-  encode_json("intent_log_pool", intent_log_pool.data_pool, f);
-  encode_json("usage_log_pool", usage_log_pool.data_pool, f);
-  encode_json("user_keys_pool", user_keys_pool.data_pool, f);
-  encode_json("user_email_pool", user_email_pool.data_pool, f);
-  encode_json("user_swift_pool", user_swift_pool.data_pool, f);
-  encode_json("user_uid_pool", user_uid_pool.data_pool, f);
+
+  ::dump("domain_root", domain_root, f);
+  ::dump("control_pool", control_pool, f);
+  ::dump("gc_pool", gc_pool, f);
+  ::dump("lc_pool", lc_pool, f);
+  ::dump("log_pool", log_pool, f);
+  ::dump("intent_log_pool", intent_log_pool, f);
+  ::dump("usage_log_pool", usage_log_pool, f);
+  ::dump("user_keys_pool", user_keys_pool, f);
+  ::dump("user_email_pool", user_email_pool, f);
+  ::dump("user_swift_pool", user_swift_pool, f);
+  ::dump("user_uid_pool", user_uid_pool, f);
+  ::dump("roles_pool", roles_pool, f);
+
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
-  encode_json("metadata_heap", metadata_heap.data_pool, f);
+  ::dump("metadata_heap", metadata_heap, f);
   encode_json("realm_id", realm_id, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
 {
-  string pool;
+  string pool, name, ns;
   JSONDecoder::decode_json(field, pool, obj);
-  bucket = rgw_bucket(pool.c_str());
+
+  parse_pool_name(pool, name, ns);
+
+  bucket = rgw_bucket(name.c_str());
+  if (! ns.empty()) {
+    bucket.set_ns(ns);
+  }
 }
 
 void RGWZonePlacementInfo::dump(Formatter *f) const

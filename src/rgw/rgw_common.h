@@ -726,6 +726,7 @@ struct rgw_bucket {
   std::string oid; /*
                     * runtime in-memory only info. If not empty, points to the bucket instance object
                     */
+  std::string ns;
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
@@ -754,7 +755,7 @@ struct rgw_bucket {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(9, 3, bl);
+     ENCODE_START(10, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
@@ -762,10 +763,11 @@ struct rgw_bucket {
     ::encode(index_pool, bl);
     ::encode(data_extra_pool, bl);
     ::encode(tenant, bl);
+    ::encode(ns, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {
@@ -791,6 +793,9 @@ struct rgw_bucket {
     if (struct_v >= 8) {
       ::decode(tenant, bl);
     }
+    if (struct_v >= 10) {
+      ::decode(ns, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -803,6 +808,10 @@ struct rgw_bucket {
       return data_pool;
     }
     return data_extra_pool;
+  }
+
+  void set_ns(string& ns) {
+    this->ns = ns;
   }
 
   void dump(Formatter *f) const;

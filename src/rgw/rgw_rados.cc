@@ -1452,33 +1452,48 @@ int get_zones_pool_names_set(CephContext* cct,
 string fix_zone_pool_name(set<string> pool_names,
 			  const string& default_prefix,
 			  const string& default_suffix,
-			  const string& suggested_name)
+			  const string& suggested_name,
+			  string& ns,
+			  string& zone_id)
 {
   string prefix = default_prefix;
-  string suffix = default_suffix;
+  string suffix;
+  ns = "";
+
+  //Parse the poolname:namespace to extract poolname and namespace
+  auto pos = default_suffix.find(":");
+  if (pos != string::npos) {
+    suffix = default_suffix.substr(0, pos);
+    ns = default_suffix.substr(pos + 1);
+  } else {
+    suffix = std::move(default_suffix);
+  }
 
   if (!suggested_name.empty()) {
     prefix = suggested_name.substr(0,suggested_name.find("."));
-    suffix = suggested_name.substr(prefix.length());
+
+    //Parse the poolname:namespace to extract poolname and namespace
+    auto pos = suggested_name.find(":");
+    if (pos != string::npos) {
+      suffix = suggested_name.substr(prefix.length(), pos);
+      ns = suggested_name.substr(pos + 1);
+    } else {
+      suffix = std::move(suggested_name.substr(prefix.length()));
+    }
   }
 
   string name = prefix + suffix;
-  
-  if (pool_names.find(name) == pool_names.end()) {
-    return name;
-  } else {
-    while(true) {
-      name =  prefix + "_" + std::to_string(std::rand()) + suffix;
-      if (pool_names.find(name) == pool_names.end()) {
-	return name;
-      }
+
+  do {
+    if (pool_names.find(name) == pool_names.end()) {
+      return name;
     }
-  }  
+    name =  prefix + "_" + zone_id + suffix;
+  } while (true);
 }
 
 int RGWZoneParams::fix_pool_names()
 {
-
   list<string> zones;
   int r = store->list_zones(zones);
   if (r < 0) {
@@ -1492,29 +1507,56 @@ int RGWZoneParams::fix_pool_names()
     return r;
   }
 
-  domain_root = fix_zone_pool_name(pool_names, name, ".rgw.data.root", domain_root.name);
+  string ns = "";
+
+  domain_root = fix_zone_pool_name(pool_names, name, ".rgw.data.root", domain_root.name, ns, id);
+  domain_root.set_ns(ns);
+
   if (!metadata_heap.name.empty()) {
-    metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+    fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name, ns, id);
+    metadata_heap.set_ns(ns);
   }
-  control_pool = fix_zone_pool_name(pool_names, name, ".rgw.control", control_pool.name);
-  gc_pool = fix_zone_pool_name(pool_names, name ,".rgw.gc", gc_pool.name);
-  lc_pool = fix_zone_pool_name(pool_names, name ,".rgw.lc", lc_pool.name);
-  log_pool = fix_zone_pool_name(pool_names, name, ".rgw.log", log_pool.name);
-  intent_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.intent-log", intent_log_pool.name);
-  usage_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.usage", usage_log_pool.name);
-  user_keys_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.keys", user_keys_pool.name);
-  user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
-  user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
-  user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
-  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.roles", roles_pool.name);
+  control_pool = fix_zone_pool_name(pool_names, name, ".rgw.control", control_pool.name, ns, id);
+  control_pool.set_ns(ns);
+
+  gc_pool = fix_zone_pool_name(pool_names, name ,".rgw.gc", gc_pool.name, ns, id);
+  gc_pool.set_ns(ns);
+
+  lc_pool= fix_zone_pool_name(pool_names, name ,".rgw.lc", lc_pool.name, ns, id);
+  lc_pool.set_ns(ns);
+
+  log_pool = fix_zone_pool_name(pool_names, name, ".rgw.log", log_pool.name, ns, id);
+  log_pool.set_ns(ns);
+
+  intent_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.intent-log", intent_log_pool.name, ns, id);
+  intent_log_pool.set_ns(ns);
+
+  usage_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.usage", usage_log_pool.name, ns, id);
+  usage_log_pool.set_ns(ns);
+
+  user_keys_pool = fix_zone_pool_name(pool_names, name, ".rgw.auth:users.keys", user_keys_pool.name, ns, id);
+  user_keys_pool.set_ns(ns);
+
+  user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.auth:users.email", user_email_pool.name, ns, id);
+  user_email_pool.set_ns(ns);
+
+  user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.auth:users.swift", user_swift_pool.name, ns, id);
+  user_swift_pool.set_ns(ns);
+
+  user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.auth:users.uid", user_uid_pool.name, ns, id);
+  user_uid_pool.set_ns(ns);
+
+  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.auth:role", roles_pool.name, ns, id);
+  roles_pool.set_ns(ns);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
-						iter.second.index_pool);
+						iter.second.index_pool, ns, id);
     iter.second.data_pool = fix_zone_pool_name(pool_names, name, "." + default_storage_pool_suffix,
-					       iter.second.data_pool);
+					       iter.second.data_pool, ns, id);
     iter.second.data_extra_pool= fix_zone_pool_name(pool_names, name, "." + default_storage_extra_pool_suffix,
-						    iter.second.data_extra_pool);
+						    iter.second.data_extra_pool, ns, id);
+
   }
 
   return 0;
@@ -4136,7 +4178,7 @@ void RGWRados::pick_control_oid(const string& key, string& notify_oid)
   notify_oid.append(buf);
 }
 
-int RGWRados::open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx)
+int RGWRados::open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx, const string& ns)
 {
   librados::Rados *rad = get_rados_handle();
   int r = rad->ioctx_create(pool.c_str(), io_ctx);
@@ -4150,12 +4192,17 @@ int RGWRados::open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx)
   if (r < 0 && r != -EEXIST)
     return r;
 
-  return rad->ioctx_create(pool.c_str(), io_ctx);
+  r = rad->ioctx_create(pool.c_str(), io_ctx);
+
+  if (! ns.empty())
+    io_ctx.set_namespace(ns);
+
+  return r;
 }
 
 int RGWRados::open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx)
 {
-  int r = open_pool_ctx(bucket.data_pool, data_ctx);
+  int r = open_pool_ctx(bucket.data_pool, data_ctx, bucket.ns);
   if (r < 0)
     return r;
 
@@ -4165,7 +4212,7 @@ int RGWRados::open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx
 int RGWRados::open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx)
 {
   string& pool = (!bucket.data_extra_pool.empty() ? bucket.data_extra_pool : bucket.data_pool);
-  int r = open_pool_ctx(pool, data_ctx);
+  int r = open_pool_ctx(pool, data_ctx, bucket.ns);
   if (r < 0)
     return r;
 
@@ -4183,7 +4230,7 @@ void RGWRados::build_bucket_index_marker(const string& shard_id_str, const strin
 
 int RGWRados::open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx& index_ctx)
 {
-  int r = open_pool_ctx(bucket.index_pool, index_ctx);
+  int r = open_pool_ctx(bucket.index_pool, index_ctx, bucket.ns);
   if (r < 0)
     return r;
 
@@ -5560,7 +5607,7 @@ int RGWRados::get_system_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_buc
     ref->oid = bucket->name;
     *bucket = get_zone_params().domain_root;
   }
-  r = open_pool_ctx(bucket->name, ref->ioctx);
+  r = open_pool_ctx(bucket->name, ref->ioctx, bucket->ns);
   if (r < 0)
     return r;
 

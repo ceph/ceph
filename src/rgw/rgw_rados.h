@@ -1766,7 +1766,7 @@ class RGWRados
   int open_lc_pool_ctx();
   int open_objexp_pool_ctx();
 
-  int open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx);
+  int open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx, const string& ns="");
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
