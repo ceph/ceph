@@ -6078,7 +6078,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
     switch (txc->state) {
     case TransContext::STATE_PREPARE:
       txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
-      if (txc->ioc.has_aios()) {
+      if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_AIO_WAIT;
 	_txc_aio_submit(txc);
 	return;
@@ -6137,7 +6137,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 
     case TransContext::STATE_WAL_APPLYING:
       txc->log_state_latency(logger, l_bluestore_state_wal_applying_lat);
-      if (txc->ioc.has_aios()) {
+      if (txc->ioc.has_pending_aios()) {
 	txc->state = TransContext::STATE_WAL_AIO_WAIT;
 	_txc_aio_submit(txc);
 	return;
