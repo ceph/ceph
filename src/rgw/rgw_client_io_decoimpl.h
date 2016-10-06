@@ -135,7 +135,7 @@ public:
   size_t send_chunked_transfer_encoding() override;
   size_t complete_header() override;
   size_t send_body(const char* buf, size_t len) override;
-  int complete_request() override;
+  size_t complete_request() override;
 };
 
 template <typename T>
@@ -177,7 +177,7 @@ size_t BufferingFilter<T>::complete_header()
 }
 
 template <typename T>
-int BufferingFilter<T>::complete_request()
+size_t BufferingFilter<T>::complete_request()
 {
   size_t sent = 0;
 
@@ -251,7 +251,7 @@ public:
     }
   }
 
-  int complete_request() override {
+  size_t complete_request() override {
     size_t sent = 0;
 
     if (chunking_enabled) {

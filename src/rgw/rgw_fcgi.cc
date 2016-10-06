@@ -8,7 +8,7 @@ size_t RGWFCGX::write_data(const char* const buf, const size_t len)
 {
   const auto ret = FCGX_PutStr(buf, len, fcgx->out);
   if (ret < 0) {
-    throw rgw::io::RestfulClient::Exception(-ret, std::system_category());
+    throw rgw::io::Exception(-ret, std::system_category());
   }
   return ret;
 }
@@ -17,7 +17,7 @@ size_t RGWFCGX::read_data(char* const buf, const size_t len)
 {
   const auto ret = FCGX_GetStr(buf, len, fcgx->in);
   if (ret < 0) {
-    throw rgw::io::RestfulClient::Exception(-ret, std::system_category());
+    throw rgw::io::Exception(-ret, std::system_category());
   }
   return ret;
 }

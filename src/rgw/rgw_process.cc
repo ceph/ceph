@@ -197,10 +197,13 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
     goto done;
   }
 done:
-  int r = client_io->complete_request();
-  if (r < 0) {
-    dout(0) << "ERROR: client_io->complete_request() returned " << r << dendl;
+  try {
+    client_io->complete_request();
+  } catch (rgw::io::Exception& e) {
+    dout(0) << "ERROR: client_io->complete_request() returned "
+            << e.what() << dendl;
   }
+
   if (should_log) {
     rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
   }

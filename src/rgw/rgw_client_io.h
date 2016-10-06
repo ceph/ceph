@@ -19,6 +19,8 @@
 namespace rgw {
 namespace io {
 
+using Exception = std::system_error;
+
 class BasicClient {
 protected:
   virtual void init_env(CephContext *cct) = 0;
@@ -28,7 +30,7 @@ public:
 
   void init(CephContext *cct);
   virtual RGWEnv& get_env() noexcept = 0;
-  virtual int complete_request() = 0;
+  virtual size_t complete_request() = 0;
 }; /* rgw::io::Client */
 
 
@@ -47,8 +49,6 @@ class RestfulClient : public BasicClient {
   template<typename T> friend class DecoratedRestfulClient;
 
 public:
-  typedef std::system_error Exception;
-
   virtual size_t send_status(int status, const char *status_name) = 0;
   virtual size_t send_100_continue() = 0;
 
@@ -170,7 +170,7 @@ public:
     return get_decoratee().get_env();
   }
 
-  int complete_request() override {
+  size_t complete_request() override {
     return get_decoratee().complete_request();
   }
 };

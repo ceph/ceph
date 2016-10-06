@@ -40,7 +40,7 @@ int RGWRestfulIO::recv_body(char *buf, size_t max, bool calculate_hash)
       calc_hash_sha256_update_stream(sha256_hash, buf, sent);
     }
     return sent;
-  } catch (rgw::io::RestfulClient::Exception& e) {
+  } catch (rgw::io::Exception& e) {
     return -e.code().value();
   }
 }
