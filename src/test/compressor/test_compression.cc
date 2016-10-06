@@ -153,7 +153,7 @@ INSTANTIATE_TEST_CASE_P(
   Compression,
   CompressionTest,
   ::testing::Values(
-    "zlib/isal",
+//    "zlib/isal",
     "zlib/noisal",
     "snappy"));
 
