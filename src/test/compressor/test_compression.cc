@@ -25,14 +25,14 @@
 #include "common/config.h"
 #include "compressor/CompressionPlugin.h"
 
-class CompressionTest : public ::testing::Test,
+class CompressorTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
 public:
   std::string plugin;
   CompressorRef compressor;
   bool old_zlib_isal;
 
-  CompressionTest() {
+  CompressorTest() {
     // note for later
     old_zlib_isal = g_conf->compressor_zlib_isal;
 
@@ -53,7 +53,7 @@ public:
     }
     cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;
   }
-  ~CompressionTest() {
+  ~CompressorTest() {
     g_conf->set_val("compressor_zlib_isal", old_zlib_isal ? "true" : "false");
     g_ceph_context->_conf->apply_changes(NULL);
   }
@@ -67,11 +67,11 @@ public:
   }
 };
 
-TEST_P(CompressionTest, load_plugin)
+TEST_P(CompressorTest, load_plugin)
 {
 }
 
-TEST_P(CompressionTest, small_round_trip)
+TEST_P(CompressorTest, small_round_trip)
 {
   bufferlist orig;
   orig.append("This is a short string.  There are many strings like it but this one is mine.");
@@ -87,7 +87,7 @@ TEST_P(CompressionTest, small_round_trip)
        << " with " << GetParam() << std::endl;
 }
 
-TEST_P(CompressionTest, big_round_trip_repeated)
+TEST_P(CompressorTest, big_round_trip_repeated)
 {
   unsigned len = 1048576 * 4;
   bufferlist orig;
@@ -106,7 +106,7 @@ TEST_P(CompressionTest, big_round_trip_repeated)
        << " with " << GetParam() << std::endl;
 }
 
-TEST_P(CompressionTest, big_round_trip_randomish)
+TEST_P(CompressorTest, big_round_trip_randomish)
 {
   unsigned len = 1048576 * 100;//269;
   bufferlist orig;
@@ -136,7 +136,7 @@ TEST_P(CompressionTest, big_round_trip_randomish)
 }
 
 #if 0
-TEST_P(CompressionTest, big_round_trip_file)
+TEST_P(CompressorTest, big_round_trip_file)
 {
   bufferlist orig;
   int fd = ::open("bin/ceph-osd", O_RDONLY);
@@ -158,7 +158,7 @@ TEST_P(CompressionTest, big_round_trip_file)
 #endif
 
 
-TEST_P(CompressionTest, compress_decompress)
+TEST_P(CompressorTest, compress_decompress)
 {
   const char* test = "This is test text";
   int res;
@@ -207,7 +207,7 @@ TEST_P(CompressionTest, compress_decompress)
   EXPECT_TRUE(exp.contents_equal(after));
 }
 
-TEST_P(CompressionTest, sharded_input_decompress)
+TEST_P(CompressorTest, sharded_input_decompress)
 {
   const size_t small_prefix_size=3;
 
@@ -269,60 +269,60 @@ void test_decompress(CompressorRef compressor, size_t size)
   }
 }
 
-TEST_P(CompressionTest, compress_1024)
+TEST_P(CompressorTest, compress_1024)
 {
   test_compress(compressor, 1024);
 }
 
-TEST_P(CompressionTest, compress_2048)
+TEST_P(CompressorTest, compress_2048)
 {
   test_compress(compressor, 2048);
 }
 
-TEST_P(CompressionTest, compress_4096)
+TEST_P(CompressorTest, compress_4096)
 {
   test_compress(compressor, 4096);
 }
 
-TEST_P(CompressionTest, compress_8192)
+TEST_P(CompressorTest, compress_8192)
 {
   test_compress(compressor, 8192);
 }
 
-TEST_P(CompressionTest, compress_16384)
+TEST_P(CompressorTest, compress_16384)
 {
   test_compress(compressor, 16384);
 }
 
-TEST_P(CompressionTest, decompress_1024)
+TEST_P(CompressorTest, decompress_1024)
 {
   test_decompress(compressor, 1024);
 }
 
-TEST_P(CompressionTest, decompress_2048)
+TEST_P(CompressorTest, decompress_2048)
 {
   test_decompress(compressor, 2048);
 }
 
-TEST_P(CompressionTest, decompress_4096)
+TEST_P(CompressorTest, decompress_4096)
 {
   test_decompress(compressor, 4096);
 }
 
-TEST_P(CompressionTest, decompress_8192)
+TEST_P(CompressorTest, decompress_8192)
 {
   test_decompress(compressor, 8192);
 }
 
-TEST_P(CompressionTest, decompress_16384)
+TEST_P(CompressorTest, decompress_16384)
 {
   test_decompress(compressor, 16384);
 }
 
 
 INSTANTIATE_TEST_CASE_P(
-  Compression,
-  CompressionTest,
+  Compressor,
+  CompressorTest,
   ::testing::Values(
 //    "zlib/isal",
     "zlib/noisal",
