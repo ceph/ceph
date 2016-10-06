@@ -854,7 +854,7 @@ int recv_body(struct req_state* const s,
               const size_t max)
 {
   try {
-    return RESTFUL_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
+    return AWS_AUTHv4_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
   } catch (rgw::io::RestfulClient::Exception& e) {
     return -e.code().value();
   }
