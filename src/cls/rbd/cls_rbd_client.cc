@@ -156,24 +156,26 @@ namespace librbd {
                                          parent, group_ref);
     }
 
-    void create_image(librados::ObjectWriteOperation *op, uint64_t size, uint8_t order,
-                      uint64_t features, const std::string &object_prefix)
+    void create_image(librados::ObjectWriteOperation *op, uint64_t size,
+                      uint8_t order, uint64_t features,
+                      const std::string &object_prefix, int64_t data_pool_id)
     {
       bufferlist bl;
       ::encode(size, bl);
       ::encode(order, bl);
       ::encode(features, bl);
-      ::encode(object_prefix, (bl));
+      ::encode(object_prefix, bl);
+      ::encode(data_pool_id, bl);
 
       op->exec("rbd", "create", bl);
     }
 
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
-		     const std::string &object_prefix)
+		     const std::string &object_prefix, int64_t data_pool_id)
     {
       librados::ObjectWriteOperation op;
-      create_image(&op, size, order, features, object_prefix);
+      create_image(&op, size, order, features, object_prefix, data_pool_id);
 
       return ioctx->operate(oid, &op);
     }
@@ -233,6 +235,35 @@ namespace librbd {
       }
 
       return 0;
+    }
+
+    void get_data_pool_start(librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "get_data_pool", bl);
+    }
+
+    int get_data_pool_finish(bufferlist::iterator *it, int64_t *data_pool_id) {
+      try {
+	::decode(*data_pool_id, *it);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int get_data_pool(librados::IoCtx *ioctx, const std::string &oid,
+                      int64_t *data_pool_id) {
+      librados::ObjectReadOperation op;
+      get_data_pool_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return get_data_pool_finish(&it, data_pool_id);
     }
 
     int get_size(librados::IoCtx *ioctx, const std::string &oid,
