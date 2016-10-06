@@ -7,12 +7,3 @@ add_executable(unittest_compression
 add_ceph_unittest(unittest_compression ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_compression)
 target_link_libraries(unittest_compression global)
 add_dependencies(unittest_compression ceph_example)
-
-# unittest_compression_plugin
-add_executable(unittest_compression_plugin
-  test_compression_plugin.cc
-  )
-add_ceph_unittest(unittest_compression_plugin ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_compression_plugin)
-target_link_libraries(unittest_compression_plugin global)
-add_dependencies(unittest_compression_plugin ceph_example)
-

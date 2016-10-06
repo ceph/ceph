@@ -23,6 +23,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
+#include "compressor/CompressionPlugin.h"
 
 class CompressionTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
@@ -354,6 +355,28 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   EXPECT_EQ(res, 0);
   exp.append(test);
   EXPECT_TRUE(exp.contents_equal(after));
+}
+
+TEST(CompressionPlugin, all)
+{
+  const char* env = getenv("CEPH_LIB");
+  std::string directory(env ? env : ".libs");
+  CompressorRef compressor;
+  PluginRegistry *reg = g_ceph_context->get_plugin_registry();
+  EXPECT_TRUE(reg);
+  CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", "invalid"));
+  EXPECT_FALSE(factory);
+  factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", "example"));
+  EXPECT_TRUE(factory);
+  stringstream ss;
+  EXPECT_EQ(0, factory->factory(&compressor, &ss));
+  EXPECT_TRUE(compressor.get());
+  {
+    Mutex::Locker l(reg->lock);
+    EXPECT_EQ(-ENOENT, reg->remove("compressor", "does not exist"));
+    EXPECT_EQ(0, reg->remove("compressor", "example"));
+    EXPECT_EQ(0, reg->load("compressor", "example"));
+  }
 }
 
 int main(int argc, char **argv) {
