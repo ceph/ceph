@@ -47,7 +47,10 @@ private:
    *                v                               |
    *            V2_GET_STRIPE_UNIT_COUNT            |
    *                |                               |
-   *                v                               v
+   *                v                               |
+   *            V2_GET_DATA_POOL                    |
+   *                |                               |
+   *                v                               |
    *      /---> V2_APPLY_METADATA -------------> REGISTER_WATCH (skip if
    *      |         |                               |            read-only)
    *      \---------/                               v
@@ -93,6 +96,9 @@ private:
 
   void send_v2_get_stripe_unit_count();
   Context *handle_v2_get_stripe_unit_count(int *result);
+
+  void send_v2_get_data_pool();
+  Context *handle_v2_get_data_pool(int *result);
 
   void send_v2_apply_metadata();
   Context *handle_v2_apply_metadata(int *result);
