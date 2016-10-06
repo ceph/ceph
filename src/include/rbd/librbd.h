@@ -177,6 +177,7 @@ enum {
   RBD_IMAGE_OPTION_JOURNAL_POOL = 7,
   RBD_IMAGE_OPTION_FEATURES_SET = 8,
   RBD_IMAGE_OPTION_FEATURES_CLEAR = 9,
+  RBD_IMAGE_OPTION_DATA_POOL = 10
 };
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);

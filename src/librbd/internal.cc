@@ -349,6 +349,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     {RBD_IMAGE_OPTION_JOURNAL_POOL, STR},
     {RBD_IMAGE_OPTION_FEATURES_SET, UINT64},
     {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
+    {RBD_IMAGE_OPTION_DATA_POOL, STR},
   };
 
   std::string image_option_name(int optname) {
@@ -373,6 +374,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return "features_set";
     case RBD_IMAGE_OPTION_FEATURES_CLEAR:
       return "features_clear";
+    case RBD_IMAGE_OPTION_DATA_POOL:
+      return "data_pool";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
