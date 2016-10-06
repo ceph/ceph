@@ -3295,7 +3295,8 @@ public:
     }
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
-      bp[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+      // severely limit entropy so we can compress...
+      bp[i] = alphanum[rand() % 10]; //(sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
 
@@ -4259,11 +4260,12 @@ TEST_P(StoreTest, SyntheticMatrixCsumVsCompression) {
     return;
 
   const char *m[][10] = {
-    { "max_write", "65536", 0 },
+    { "max_write", "131072", 0 },
     { "max_size", "262144", 0 },
     { "alignment", "512", 0 },
-    { "bluestore_min_alloc_size", "32768", "4096", 0 },
-    { "bluestore_compression", "force", "none", 0},
+    { "bluestore_min_alloc_size", "4096", "16384", 0 },
+    { "bluestore_compression", "force", 0},
+    { "bluestore_compression_algorithm", "snappy", "zlib", 0 },
     { "bluestore_csum_type", "crc32c", 0 },
     { "bluestore_default_buffered_read", "true", "false", 0 },
     { 0 },

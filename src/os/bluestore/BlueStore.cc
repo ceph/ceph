@@ -7526,10 +7526,10 @@ int BlueStore::_do_alloc_write(
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
       uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-      uint64_t dstlen = final_length *
+      uint64_t want_len_raw = final_length *
         g_conf->bluestore_compression_required_ratio;
-      dstlen = P2ROUNDUP(dstlen, min_alloc_size);
-      if (newlen <= dstlen && newlen < final_length) {
+      uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
+      if (newlen <= want_len && newlen < final_length) {
         // Cool. We compressed at least as much as we were hoping to.
         // pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
@@ -7549,14 +7549,17 @@ int BlueStore::_do_alloc_write(
 	compressed = true;
         logger->inc(l_bluestore_compress_success_count);
       } else {
-	dout(20) << __func__ << std::hex << "  compressed 0x" << l->length()
-                 << " -> 0x" << rawlen << " with " << (int)chdr.type
-                 << ", which is more than required 0x" << dstlen
+	dout(20) << __func__ << std::hex << "  0x" << l->length()
+		 << " compressed to 0x" << rawlen << " -> 0x" << newlen
+                 << " with " << (int)chdr.type
+                 << ", which is more than required 0x" << want_len_raw
+		 << " -> 0x" << want_len
                  << ", leaving uncompressed"
                  << std::dec << dendl;
         logger->inc(l_bluestore_compress_rejected_count);
       }
-      logger->tinc(l_bluestore_compress_lat, ceph_clock_now(g_ceph_context) - start);
+      logger->tinc(l_bluestore_compress_lat,
+		   ceph_clock_now(g_ceph_context) - start);
     }
     if (!compressed) {
       b->dirty_blob().set_flag(bluestore_blob_t::FLAG_MUTABLE);
