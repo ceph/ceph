@@ -8465,9 +8465,11 @@ int BlueStore::_do_clone_range(
     }
     dout(20) << __func__ << "  src " << e << dendl;
     BlobRef cb;
+    bool blob_duped = true;
     if (e.blob->last_encoded_id >= 0) {
       // blob is already duped
       cb = id_to_blob[e.blob->last_encoded_id];
+      blob_duped = false;
     } else {
       // dup the blob
       const bluestore_blob_t& blob = e.blob->get_blob();
@@ -8516,7 +8518,10 @@ int BlueStore::_do_clone_range(
     // be freed (relative to the shared_blob).
     txc->statfs_delta.stored() += ne->length;
     if (e.blob->get_blob().is_compressed()) {
-      txc->statfs_delta.compressed_original() -= ne->length;
+      txc->statfs_delta.compressed_original() += ne->length;
+      if (blob_duped){
+        txc->statfs_delta.compressed() += cb->get_blob().get_compressed_payload_length();;
+      }
     }
     dout(20) << __func__ << "  dst " << *ne << dendl;
     ++n;
