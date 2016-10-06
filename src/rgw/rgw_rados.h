@@ -914,6 +914,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int create_default(bool old_format = false);
   int create(bool exclusive = true);
   int fix_pool_names();
+  void set_pool_namespaces();
   
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 1, bl);
