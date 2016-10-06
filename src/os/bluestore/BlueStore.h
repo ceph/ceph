@@ -522,7 +522,7 @@ public:
 
     /// ctor for lookup only
     explicit Extent(uint32_t lo) : logical_offset(lo) { }
-    /// ctor for delayed intitialization (see decode_some())
+    /// ctor for delayed initialization (see decode_some())
     explicit Extent() {
     }
     /// ctor for general usage
