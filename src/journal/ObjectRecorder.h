@@ -51,7 +51,7 @@ public:
     return m_oid;
   }
 
-  bool append_unlock(const AppendBuffers &append_buffers);
+  bool append_unlock(AppendBuffers &&append_buffers);
   void flush(Context *on_safe);
   void flush(const FutureImplPtr &future);
 
@@ -160,11 +160,11 @@ private:
   bool append(const AppendBuffer &append_buffer, bool *schedule_append);
   bool flush_appends(bool force);
   void handle_append_flushed(uint64_t tid, int r);
-  void append_overflowed(uint64_t tid);
+  void append_overflowed();
   void send_appends(AppendBuffers *append_buffers);
   void send_appends_aio();
 
-  void notify_handler();
+  void notify_handler_unlock();
 };
 
 } // namespace journal

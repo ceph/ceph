@@ -44,12 +44,12 @@ ObjectRecorder::~ObjectRecorder() {
   assert(!m_aio_scheduled);
 }
 
-bool ObjectRecorder::append_unlock(const AppendBuffers &append_buffers) {
+bool ObjectRecorder::append_unlock(AppendBuffers &&append_buffers) {
   assert(m_lock->is_locked());
 
   FutureImplPtr last_flushed_future;
   bool schedule_append = false;
-    
+
   if (m_overflowed) {
     m_append_buffers.insert(m_append_buffers.end(),
                             append_buffers.begin(), append_buffers.end());
@@ -132,12 +132,16 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
     return;
   }
 
-  AppendBuffers::iterator it;
-  for (it = m_append_buffers.begin(); it != m_append_buffers.end(); ++it) {
-    if (it->first == future) {
+  AppendBuffers::reverse_iterator r_it;
+  for (r_it = m_append_buffers.rbegin(); r_it != m_append_buffers.rend();
+       ++r_it) {
+    if (r_it->first == future) {
       break;
     }
   }
+  assert(r_it != m_append_buffers.rend());
+
+  auto it = (++r_it).base();
   assert(it != m_append_buffers.end());
   ++it;
 
@@ -241,7 +245,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
 
   AppendBuffers append_buffers;
   {
-    Mutex::Locker locker(*m_lock);
+    m_lock->Lock();
     auto tid_iter = m_in_flight_tids.find(tid);
     assert(tid_iter != m_in_flight_tids.end());
     m_in_flight_tids.erase(tid_iter);
@@ -250,7 +254,6 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
     if (r == -EOVERFLOW || m_overflowed) {
       if (iter != m_in_flight_appends.end()) {
         m_overflowed = true;
-        append_overflowed(tid);
       } else {
         // must have seen an overflow on a previous append op
         assert(r == -EOVERFLOW && m_overflowed);
@@ -258,7 +261,10 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
 
       // notify of overflow once all in-flight ops are complete
       if (m_in_flight_tids.empty() && !m_aio_scheduled) {
-        notify_handler();
+        append_overflowed();
+        notify_handler_unlock();
+      } else {
+        m_lock->Unlock();
       }
       return;
     }
@@ -268,11 +274,8 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
     assert(!append_buffers.empty());
 
     m_in_flight_appends.erase(iter);
-    if (m_in_flight_appends.empty() && !m_aio_scheduled && m_object_closed) {
-      // all remaining unsent appends should be redirected to new object
-      notify_handler();
-    }
     m_in_flight_flushes = true;
+    m_lock->Unlock();
   }
 
   // Flag the associated futures as complete.
@@ -284,18 +287,24 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   }
 
   // wake up any flush requests that raced with a RADOS callback
-  Mutex::Locker locker(*m_lock);
+  m_lock->Lock();
   m_in_flight_flushes = false;
   m_in_flight_flushes_cond.Signal();
+
+  if (m_in_flight_appends.empty() && !m_aio_scheduled && m_object_closed) {
+    // all remaining unsent appends should be redirected to new object
+    notify_handler_unlock();
+  } else {
+    m_lock->Unlock();
+  }
 }
 
-void ObjectRecorder::append_overflowed(uint64_t tid) {
+void ObjectRecorder::append_overflowed() {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " append overflowed"
                    << dendl;
 
   assert(m_lock->is_locked());
   assert(!m_in_flight_appends.empty());
-  assert(m_in_flight_appends.begin()->first == tid);
 
   cancel_append_task();
 
@@ -314,6 +323,13 @@ void ObjectRecorder::append_overflowed(uint64_t tid) {
                                 m_append_buffers.begin(),
                                 m_append_buffers.end());
   restart_append_buffers.swap(m_append_buffers);
+
+  for (AppendBuffers::const_iterator it = m_append_buffers.begin();
+       it != m_append_buffers.end(); ++it) {
+    ldout(m_cct, 20) << __func__ << ": overflowed " << *it->first
+                     << dendl;
+    it->first->detach();
+  }
 }
 
 void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
@@ -339,58 +355,72 @@ void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
 }
 
 void ObjectRecorder::send_appends_aio() {
-  Mutex::Locker locker(*m_lock);
+  AppendBuffers *append_buffers;
+  uint64_t append_tid;
+  {
+    Mutex::Locker locker(*m_lock);
+    append_tid = m_append_tid++;
+    m_in_flight_tids.insert(append_tid);
 
-  m_aio_scheduled = false;
+    // safe to hold pointer outside lock until op is submitted
+    append_buffers = &m_in_flight_appends[append_tid];
+    append_buffers->swap(m_pending_buffers);
+  }
 
-  AppendBuffers append_buffers;
-  m_pending_buffers.swap(append_buffers);
-
-  uint64_t append_tid = m_append_tid++;
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " flushing journal tid="
                    << append_tid << dendl;
   C_AppendFlush *append_flush = new C_AppendFlush(this, append_tid);
+  C_Gather *gather_ctx = new C_Gather(m_cct, append_flush);
 
   librados::ObjectWriteOperation op;
   client::guard_append(&op, m_soft_max_size);
-
-  for (AppendBuffers::iterator it = append_buffers.begin();
-       it != append_buffers.end(); ++it) {
+  for (AppendBuffers::iterator it = append_buffers->begin();
+       it != append_buffers->end(); ++it) {
     ldout(m_cct, 20) << __func__ << ": flushing " << *it->first
                      << dendl;
     op.append(it->second);
     op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   }
-  m_in_flight_tids.insert(append_tid);
-  m_in_flight_appends[append_tid].swap(append_buffers);
 
   librados::AioCompletion *rados_completion =
-    librados::Rados::aio_create_completion(append_flush, NULL,
+    librados::Rados::aio_create_completion(gather_ctx->new_sub(), nullptr,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
-}
 
-void ObjectRecorder::notify_handler() {
-  assert(m_lock->is_locked());
-
-  for (AppendBuffers::const_iterator it = m_append_buffers.begin();
-       it != m_append_buffers.end(); ++it) {
-    ldout(m_cct, 20) << __func__ << ": overflowed " << *it->first
-                     << dendl;
-    it->first->detach();
+  {
+    m_lock->Lock();
+    if (m_pending_buffers.empty()) {
+      m_aio_scheduled = false;
+      if (m_in_flight_appends.empty() && m_object_closed) {
+        // all remaining unsent appends should be redirected to new object
+        notify_handler_unlock();
+      } else {
+        m_lock->Unlock();
+      }
+    } else {
+      // additional pending items -- reschedule
+      m_op_work_queue->queue(new FunctionContext([this] (int r) {
+          send_appends_aio();
+        }));
+      m_lock->Unlock();
+    }
   }
 
+  // allow append op to complete
+  gather_ctx->activate();
+}
+
+void ObjectRecorder::notify_handler_unlock() {
+  assert(m_lock->is_locked());
   if (m_object_closed) {
     m_lock->Unlock();
     m_handler->closed(this);
-    m_lock->Lock();
   } else {
     // TODO need to delay completion until after aio_notify completes
     m_lock->Unlock();
     m_handler->overflow(this);
-    m_lock->Lock();
   }
 }
 
