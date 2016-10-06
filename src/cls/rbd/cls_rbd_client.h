@@ -49,11 +49,12 @@ namespace librbd {
 			     cls::rbd::GroupSpec *uplink);
 
     // low-level interface (mainly for testing)
-    void create_image(librados::ObjectWriteOperation *op, uint64_t size, uint8_t order,
-		      uint64_t features, const std::string &object_prefix);
+    void create_image(librados::ObjectWriteOperation *op, uint64_t size,
+                      uint8_t order, uint64_t features,
+                      const std::string &object_prefix, int64_t data_pool_id);
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
-		     const std::string &object_prefix);
+		     const std::string &object_prefix, int64_t data_pool_id);
     int get_features(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, uint64_t *features);
     void set_features(librados::ObjectWriteOperation *op, uint64_t features,
@@ -62,6 +63,10 @@ namespace librbd {
                      uint64_t features, uint64_t mask);
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix);
+    void get_data_pool_start(librados::ObjectReadOperation *op);
+    int get_data_pool_finish(bufferlist::iterator *it, int64_t *data_pool_id);
+    int get_data_pool(librados::IoCtx *ioctx, const std::string &oid,
+                      int64_t *data_pool_id);
     int get_size(librados::IoCtx *ioctx, const std::string &oid,
 		 snapid_t snap_id, uint64_t *size, uint8_t *order);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,

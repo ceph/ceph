@@ -84,6 +84,7 @@ cls_method_handle_t h_remove_child;
 cls_method_handle_t h_get_children;
 cls_method_handle_t h_get_snapcontext;
 cls_method_handle_t h_get_object_prefix;
+cls_method_handle_t h_get_data_pool;
 cls_method_handle_t h_get_snapshot_name;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
@@ -261,6 +262,7 @@ static bool is_valid_id(const string &id) {
  * @param order bits to shift to determine the size of data objects (uint8_t)
  * @param features what optional things this image will use (uint64_t)
  * @param object_prefix a prefix for all the data objects
+ * @param data_pool_id pool id where data objects is stored (int64_t)
  *
  * Output:
  * @return 0 on success, negative error code on failure
@@ -270,6 +272,7 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string object_prefix;
   uint64_t features, size;
   uint8_t order;
+  int64_t data_pool_id = -1;
 
   try {
     bufferlist::iterator iter = in->begin();
@@ -277,6 +280,9 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     ::decode(order, iter);
     ::decode(features, iter);
     ::decode(object_prefix, iter);
+    if (!iter.end()) {
+      ::decode(data_pool_id, iter);
+    }
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -318,6 +324,21 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   omap_vals["features"] = featuresbl;
   omap_vals["object_prefix"] = object_prefixbl;
   omap_vals["snap_seq"] = snap_seqbl;
+
+  if (features & RBD_FEATURE_DATA_POOL) {
+    if (data_pool_id == -1) {
+      CLS_ERR("data pool not provided with feature enabled");
+      return -EINVAL;
+    }
+
+    bufferlist data_pool_id_bl;
+    ::encode(data_pool_id, data_pool_id_bl);
+    omap_vals["data_pool_id"] = data_pool_id_bl;
+  } else if (data_pool_id != -1) {
+    CLS_ERR("data pool provided with feature disabled");
+    return -EINVAL;
+  }
+
   r = cls_cxx_map_set_vals(hctx, &omap_vals);
   if (r < 0)
     return r;
@@ -1460,6 +1481,31 @@ int get_object_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   ::encode(object_prefix, *out);
 
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param pool_id (int64_t) of data pool or -1 if none
+ * @returns 0 on success, negative error code on failure
+ */
+int get_data_pool(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "get_data_pool");
+
+  int64_t data_pool_id;
+  int r = read_key(hctx, "data_pool_id", &data_pool_id);
+  if (r == -ENOENT) {
+    data_pool_id = -1;
+  } else if (r < 0) {
+    CLS_ERR("error reading image data pool id: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  ::encode(data_pool_id, *out);
   return 0;
 }
 
@@ -4730,6 +4776,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_object_prefix",
 			  CLS_METHOD_RD,
 			  get_object_prefix, &h_get_object_prefix);
+  cls_register_cxx_method(h_class, "get_data_pool", CLS_METHOD_RD,
+                          get_data_pool, &h_get_data_pool);
   cls_register_cxx_method(h_class, "get_snapshot_name",
 			  CLS_METHOD_RD,
 			  get_snapshot_name, &h_get_snapshot_name);
