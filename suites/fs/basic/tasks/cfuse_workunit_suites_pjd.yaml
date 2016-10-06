@@ -4,6 +4,8 @@ overrides:
       client:
         debug ms: 1
         debug client: 20
+        fuse set user groups: true
+        fuse default permissions: false
       mds:
         debug ms: 1
         debug mds: 20
