@@ -7271,7 +7271,7 @@ void BlueStore::_do_write_small(
     }
   }
   while (ep != o->extent_map.extent_map.end()) {
-    if (ep->logical_offset >= ep->blob_offset + offset + length) {
+    if (ep->logical_offset >= ep->blob_offset + end) {
       break;
     }
     b = ep->blob;
@@ -7309,15 +7309,14 @@ void BlueStore::_do_write_small(
       z.append_zero(head_pad);
       z.claim_append(padded);
       padded.claim(z);
-      logger->inc(l_bluestore_write_pad_bytes, head_pad);
     }
     if (tail_pad) {
       padded.append_zero(tail_pad);
-      logger->inc(l_bluestore_write_pad_bytes, tail_pad);
     }
     if (head_pad || tail_pad) {
       dout(20) << __func__ << "  can pad head 0x" << std::hex << head_pad
 	       << " tail 0x" << tail_pad << std::dec << dendl;
+      logger->inc(l_bluestore_write_pad_bytes, head_pad + tail_pad);
     }
 
     // direct write into unused blocks of an existing mutable blob?
