@@ -122,6 +122,8 @@ Pool specific commands
   default, and is used as the underlying object name for "read" and
   "write" ops.
   Note: -b *objsize* option is valid only in *write* mode.
+  Note: *write* and *seq* must be run on the same host otherwise the
+  objects created by *write* will have names that will fail *seq*.
 
 :command:`cleanup`
 
