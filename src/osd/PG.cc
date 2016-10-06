@@ -2801,10 +2801,12 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
   }
 
   // try to do info efficiently?
-  if (!dirty_big_info && try_fast_info) {
+  if (!dirty_big_info && try_fast_info &&
+      info.last_update > last_written_info.last_update) {
     pg_fast_info_t fast;
     fast.populate_from(info);
-    fast.apply_to(&last_written_info);
+    bool did = fast.try_apply_to(&last_written_info);
+    assert(did);  // we verified last_update increased above
     if (info == last_written_info) {
       ::encode(fast, (*km)[fastinfo_key]);
       return 0;
@@ -2823,7 +2825,6 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
     }
     *_dout << dendl;
   }
-  (*km)[fastinfo_key];  // erase any previous fastinfo
   last_written_info = info;
 
   // info.  store purged_snaps separately.
@@ -3126,7 +3127,7 @@ int PG::read_info(
     if (!p.end()) {
       pg_fast_info_t fast;
       ::decode(fast, p);
-      fast.apply_to(&info);
+      fast.try_apply_to(&info);
     }
     return 0;
   }
@@ -3163,6 +3164,8 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
 		    info_struct_v);
   assert(r >= 0);
+
+  last_written_info = info;
 
   ostringstream oss;
   pg_log.read_log_and_missing(

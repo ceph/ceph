@@ -2297,7 +2297,9 @@ struct pg_fast_info_t {
     stats.stats.sum.num_objects_dirty = info.stats.stats.sum.num_objects_dirty;
   }
 
-  void apply_to(pg_info_t* info) {
+  bool try_apply_to(pg_info_t* info) {
+    if (last_update <= info->last_update)
+      return false;
     info->last_update = last_update;
     info->last_complete = last_complete;
     info->last_user_version = last_user_version;
@@ -2320,6 +2322,7 @@ struct pg_fast_info_t {
     info->stats.stats.sum.num_wr = stats.stats.sum.num_wr;
     info->stats.stats.sum.num_wr_kb = stats.stats.sum.num_wr_kb;
     info->stats.stats.sum.num_objects_dirty = stats.stats.sum.num_objects_dirty;
+    return true;
   }
 
   void encode(bufferlist& bl) const {
