@@ -116,8 +116,10 @@ void RGWFCGXProcess::handle_request(RGWRequest* r)
 {
   RGWFCGXRequest* req = static_cast<RGWFCGXRequest*>(r);
   FCGX_Request* fcgx = req->fcgx;
-  auto real_client_io = rgw::io::add_conlen_controlling(
-                          RGWFCGX(fcgx));
+  auto real_client_io = rgw::io::add_reordering(
+                          rgw::io::add_buffering(
+                            rgw::io::add_chunking(
+                              RGWFCGX(fcgx))));
   RGWRestfulIO client_io(&real_client_io);
 
  

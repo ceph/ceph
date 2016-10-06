@@ -128,15 +128,20 @@ public:
 }; /* RGWProcess */
 
 class RGWFCGXProcess : public RGWProcess {
-	int max_connections;
+  int max_connections;
+  std::string uri_prefix;
 public:
 
   /* have a bit more connections than threads so that requests are
    * still accepted even if we're still processing older requests */
-  RGWFCGXProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-		 RGWFrontendConfig* _conf)
+  RGWFCGXProcess(CephContext* const cct,
+                 RGWProcessEnv* const pe,
+                 const int num_threads,
+                 RGWFrontendConfig* const _conf)
     : RGWProcess(cct, pe, num_threads, _conf),
-      max_connections(num_threads + (num_threads >> 3))
+      max_connections(num_threads + (num_threads >> 3)),
+      /* We shouldn't mess with our parents by std::moving here. */
+      uri_prefix(pe->uri_prefix)
     {}
 
   void run();
