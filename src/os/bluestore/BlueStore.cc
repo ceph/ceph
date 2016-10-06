@@ -2400,7 +2400,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_wal_bytes(cct, "bluestore_wal_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_wal_max_bytes),
-    wal_seq(0),
     wal_tp(cct,
 	   "BlueStore::wal_tp",
            "tp_wal",
@@ -6718,7 +6717,7 @@ int BlueStore::queue_transactions(
     txc->wal_txn->released.swap(txc->released);
     assert(txc->released.empty());
 
-    txc->wal_txn->seq = wal_seq.inc();
+    txc->wal_txn->seq = ++wal_seq;
     bufferlist bl;
     ::encode(*txc->wal_txn, bl);
     string key;
