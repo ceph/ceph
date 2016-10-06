@@ -113,9 +113,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   if (r < 0)
     return r;
 
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+  std::string prefix = image.get_block_name_prefix();
 
   librbd::group_spec_t group_spec;
   r = image.get_group(&group_spec);
