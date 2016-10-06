@@ -38,7 +38,6 @@ class RGWAsioClientIO : public rgw::io::RestfulClient {
   bool conn_close{false};
   RGWEnv env;
 
-  void init_env(CephContext *cct) override;
   size_t write_data(const char *buf, size_t len);
   size_t read_data(char *buf, size_t max);
 
@@ -46,6 +45,7 @@ class RGWAsioClientIO : public rgw::io::RestfulClient {
   RGWAsioClientIO(tcp::socket&& socket, request_type&& request);
   ~RGWAsioClientIO();
 
+  void init_env(CephContext *cct) override;
   int complete_request() override;
   void flush() override;
   size_t send_status(int status, const char *status_name) override;
