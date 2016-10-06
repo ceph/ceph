@@ -69,6 +69,7 @@ static const std::string IMAGE_SHARED("image-shared");
 static const std::string IMAGE_SIZE("size");
 static const std::string IMAGE_STRIPE_UNIT("stripe-unit");
 static const std::string IMAGE_STRIPE_COUNT("stripe-count");
+static const std::string IMAGE_DATA_POOL("data-pool");
 
 static const std::string JOURNAL_OBJECT_SIZE("journal-object-size");
 static const std::string JOURNAL_SPLAY_WIDTH("journal-splay-width");
