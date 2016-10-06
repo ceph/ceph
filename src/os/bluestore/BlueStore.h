@@ -522,7 +522,7 @@ public:
 
     /// ctor for lookup only
     explicit Extent(uint32_t lo) : logical_offset(lo) { }
-    /// ctor for delayed intitialization (see decode_some())
+    /// ctor for delayed initialization (see decode_some())
     explicit Extent() {
     }
     /// ctor for general usage
@@ -1397,7 +1397,7 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
 
   std::mutex wal_lock;
-  atomic64_t wal_seq;
+  std::atomic<uint64_t> wal_seq = {0};
   ThreadPool wal_tp;
   WALWQ wal_wq;
 
@@ -1506,6 +1506,7 @@ private:
 
   void _dump_onode(OnodeRef o, int log_level=30);
   void _dump_extent_map(ExtentMap& em, int log_level=30);
+  void _dump_transaction(Transaction *t, int log_level = 30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);

@@ -2400,7 +2400,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_wal_bytes(cct, "bluestore_wal_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_wal_max_bytes),
-    wal_seq(0),
     wal_tp(cct,
 	   "BlueStore::wal_tp",
            "tp_wal",
@@ -6718,7 +6717,7 @@ int BlueStore::queue_transactions(
     txc->wal_txn->released.swap(txc->released);
     assert(txc->released.empty());
 
-    txc->wal_txn->seq = wal_seq.inc();
+    txc->wal_txn->seq = ++wal_seq;
     bufferlist bl;
     ::encode(*txc->wal_txn, bl);
     string key;
@@ -6754,13 +6753,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
 
-  dout(30) << __func__ << " transaction dump:\n";
-  JSONFormatter f(true);
-  f.open_object_section("transaction");
-  t->dump(&f);
-  f.close_section();
-  f.flush(*_dout);
-  *_dout << dendl;
+  _dump_transaction(t);
 
   vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
@@ -6853,16 +6846,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
     }
     if (r < 0) {
-      dout(0) << " error " << cpp_strerror(r)
-	      << " not handled on operation " << op->op
-	      << " (op " << pos << ", counting from 0)" << dendl;
-      dout(0) << " transaction dump:\n";
-      JSONFormatter f(true);
-      f.open_object_section("transaction");
-      t->dump(&f);
-      f.close_section();
-      f.flush(*_dout);
-      *_dout << dendl;
+      derr << __func__ << " error " << cpp_strerror(r)
+           << " not handled on operation " << op->op
+           << " (op " << pos << ", counting from 0)" << dendl;
+      _dump_transaction(t, 0);
       assert(0 == "unexpected error");
     }
 
@@ -7061,7 +7048,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     default:
-      derr << "bad op " << op->op << dendl;
+      derr << __func__ << "bad op " << op->op << dendl;
       assert(0);
     }
 
@@ -7095,16 +7082,12 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	}
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op->op
-		<< " (op " << pos << ", counting from 0)" << dendl;
-	dout(0) << msg << dendl;
-	dout(0) << " transaction dump:\n";
-	JSONFormatter f(true);
-	f.open_object_section("transaction");
-	t->dump(&f);
-	f.close_section();
-	f.flush(*_dout);
-	*_dout << dendl;
+        derr << __func__ << " error " << cpp_strerror(r)
+             << " not handled on operation " << op->op
+             << " (op " << pos << ", counting from 0)"
+             << dendl;
+        derr << msg << dendl;
+        _dump_transaction(t, 0);
 	assert(0 == "unexpected error");
       }
     }
@@ -7183,6 +7166,16 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
   }
 }
 
+void BlueStore::_dump_transaction(Transaction *t, int log_level)
+{
+  dout(log_level) << " transaction dump:\n";
+  JSONFormatter f(true);
+  f.open_object_section("transaction");
+  t->dump(&f);
+  f.close_section();
+  f.flush(*_dout);
+  *_dout << dendl;
+}
 
 void BlueStore::_pad_zeros(
   bufferlist *bl, uint64_t *offset,
@@ -7278,7 +7271,7 @@ void BlueStore::_do_write_small(
     }
   }
   while (ep != o->extent_map.extent_map.end()) {
-    if (ep->logical_offset >= ep->blob_offset + offset + length) {
+    if (ep->logical_offset >= ep->blob_offset + end) {
       break;
     }
     b = ep->blob;
@@ -7316,15 +7309,14 @@ void BlueStore::_do_write_small(
       z.append_zero(head_pad);
       z.claim_append(padded);
       padded.claim(z);
-      logger->inc(l_bluestore_write_pad_bytes, head_pad);
     }
     if (tail_pad) {
       padded.append_zero(tail_pad);
-      logger->inc(l_bluestore_write_pad_bytes, tail_pad);
     }
     if (head_pad || tail_pad) {
       dout(20) << __func__ << "  can pad head 0x" << std::hex << head_pad
 	       << " tail 0x" << tail_pad << std::dec << dendl;
+      logger->inc(l_bluestore_write_pad_bytes, head_pad + tail_pad);
     }
 
     // direct write into unused blocks of an existing mutable blob?
@@ -7461,9 +7453,11 @@ void BlueStore::_do_write_big(
     WriteContext *wctx)
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " target_blob_size 0x" << wctx->target_blob_size
+	   << " target_blob_size 0x" << wctx->target_blob_size << std::dec
 	   << " compress " << (int)wctx->compress
-	   << std::dec << dendl;
+	   << dendl;
+  logger->inc(l_bluestore_write_big);
+  logger->inc(l_bluestore_write_big_bytes, length);
   while (length > 0) {
     BlobRef b = c->new_blob();
     auto l = MIN(wctx->target_blob_size, length);
@@ -7479,8 +7473,6 @@ void BlueStore::_do_write_big(
     length -= l;
     logger->inc(l_bluestore_write_big_blobs);
   }
-  logger->inc(l_bluestore_write_big);
-  logger->inc(l_bluestore_write_big_bytes, length);
 }
 
 int BlueStore::_do_alloc_write(
@@ -7908,7 +7900,7 @@ int BlueStore::_do_write(
       size_t read_len = offset - gc_start_offset;
       int r = _do_read(c.get(), o, gc_start_offset, read_len, head_bl, 0);
       assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data == true) {
+      if (g_conf->bluestore_gc_merge_data) {
         head_bl.claim_append(bl);
         bl.swap(head_bl);
         offset = gc_start_offset;
@@ -7925,7 +7917,7 @@ int BlueStore::_do_write(
       size_t read_len = gc_end_offset - end;
       int r = _do_read(c.get(), o, end, read_len, tail_bl, 0);
       assert(r == (int)read_len);
-      if (g_conf->bluestore_gc_merge_data == true) {
+      if (g_conf->bluestore_gc_merge_data) {
         bl.claim_append(tail_bl);
         length += read_len;
         end += read_len;
