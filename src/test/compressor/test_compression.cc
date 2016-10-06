@@ -99,7 +99,7 @@ TEST_P(CompressionTest, big_round_trip_repeated)
 
 TEST_P(CompressionTest, big_round_trip_randomish)
 {
-  unsigned len = 1048576 * 269;
+  unsigned len = 1048576 * 100;//269;
   bufferlist orig;
   const char *alphabet = "abcdefghijklmnopqrstuvwxyz";
   if (false) {
