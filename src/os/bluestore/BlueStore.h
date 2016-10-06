@@ -147,16 +147,16 @@ public:
     uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
     uint32_t flags;             ///< FLAG_*
     uint64_t seq;
-    uint64_t offset, length;
+    uint32_t offset, length;
     bufferlist data;
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
 
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint64_t l,
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, uint32_t l,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o), length(l) {}
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, bufferlist& b,
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, bufferlist& b,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
@@ -171,11 +171,11 @@ public:
       return state == STATE_WRITING;
     }
 
-    uint64_t end() const {
+    uint32_t end() const {
       return offset + length;
     }
 
-    void truncate(uint64_t newlen) {
+    void truncate(uint32_t newlen) {
       assert(newlen < length);
       if (data.length()) {
 	bufferlist t;
@@ -207,7 +207,11 @@ public:
 
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     Cache *cache;
-    map<uint64_t, state_list_t> writing_map;
+
+    // we use a bare intrusive list here instead of std::map because
+    // it uses less memory and we expect this to be very small (very
+    // few IOs in flight to the same Blob at the same time).
+    state_list_t writing;   ///< writing buffers, sorted by seq, ascending
 
     BufferSpace(Cache *c) : cache(c) {
       if (cache) {
@@ -216,7 +220,7 @@ public:
     }
     ~BufferSpace() {
       assert(buffer_map.empty());
-      assert(writing_map.empty());
+      assert(writing.empty());
       if (cache) {
 	cache->rm_blob();
       }
@@ -226,7 +230,7 @@ public:
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-        writing_map[b->seq].push_back(*b);
+        writing.push_back(*b);
       } else {
 	cache->_add_buffer(b, level, near);
       }
@@ -238,12 +242,7 @@ public:
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
-        uint64_t seq = (*p->second.get()).seq;
-        auto it = writing_map.find(seq);
-        assert(it != writing_map.end());
-        it->second.erase(it->second.iterator_to(*p->second));
-        if (it->second.empty())
-          writing_map.erase(it);
+        writing.erase(writing.iterator_to(*p->second));
       } else {
 	cache->_rm_buffer(p->second.get());
       }
@@ -320,14 +319,14 @@ public:
   struct SharedBlob : public boost::intrusive::unordered_set_base_hook<> {
     std::atomic_int nref = {0}; ///< reference count
 
+    // these are defined/set if the shared_blob is 'loaded'
+    bool loaded = false;        ///< whether shared_blob_t is loaded
+    bluestore_shared_blob_t shared_blob; ///< the actual shared state
+
     // these are defined/set if the blob is marked 'shared'
     uint64_t sbid = 0;          ///< shared blob id
     string key;                 ///< key in kv store
     SharedBlobSet *parent_set = 0;  ///< containing SharedBlobSet
-
-    // these are defined/set if the shared_blob is 'loaded'
-    bluestore_shared_blob_t shared_blob; ///< the actual shared state
-    bool loaded = false;        ///< whether shared_blob_t is loaded
 
     BufferSpace bc;             ///< buffer cache
 
@@ -409,14 +408,12 @@ public:
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     std::atomic_int nref = {0};     ///< reference count
-    int id = -1;                    ///< id, for spanning blobs only, >= 0
+    int16_t id = -1;                ///< id, for spanning blobs only, >= 0
+    int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
 
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_extent_ref_map_t ref_map;
-
-
-    int last_encoded_id = -1;       ///< (ephemeral) used during encoding only
 
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
