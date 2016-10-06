@@ -387,11 +387,14 @@ Context *CreateRequest<I>::handle_add_image_to_directory(int *result) {
 template<typename I>
 void CreateRequest<I>::create_image() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
+  assert(m_data_pool.empty() || m_data_pool_id != -1);
 
   ostringstream oss;
-  oss << RBD_DATA_PREFIX << m_image_id;
-
-  assert(m_data_pool.empty() || m_data_pool_id != -1);
+  oss << RBD_DATA_PREFIX;
+  if (m_data_pool_id != -1) {
+    oss << stringify(m_ioctx.get_id()) << ".";
+  }
+  oss << m_image_id;
 
   librados::ObjectWriteOperation op;
   op.create(true);
