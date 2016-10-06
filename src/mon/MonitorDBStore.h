@@ -644,7 +644,8 @@ class MonitorDBStore
     string kv_type;
     int r = read_meta("kv_backend", &kv_type);
     if (r < 0) {
-      kv_type = g_conf->mon_keyvaluedb;
+      // assume old monitors that did not mark the type were leveldb.
+      kv_type = "leveldb";
       r = write_meta("kv_backend", kv_type);
       if (r < 0)
 	return r;

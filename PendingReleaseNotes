@@ -35,6 +35,15 @@
          1
     }.
 
+* If your monitors are configured to use the experimental rocksdb
+  backend, you may need to manually adjust the store before upgraded.
+  Monitors now explicitly record what keyvalue backend type they use.  If
+  the kv_backend file is missing from the mon_data directory (normally
+  /var/lib/ceph/mon/$cluster-$name/kv_backend) it is now assumed to be leveldb.
+  If you had manually configured the mon to use rocksdb, this file should
+  be created and filled with the string "rocksdb" (newline optional).
+
+
 11.0.0
 ------
 
