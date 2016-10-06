@@ -634,3 +634,154 @@ void ReplicatedPG::cancel_multi_object_write_ops(bool requeue)
   if (requeue)
     requeue_ops(ls);
 }
+
+void ReplicatedPG::multi_object_write_op_master_lock_self(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->state == MultiObjectWriteOpContext::NEW);
+  moc->state = MultiObjectWriteOpContext::LOCKING;
+
+  multi_object_write_op_save(moc,
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_lock_self_crash) {
+        assert(0 == "inject failure");
+      }
+
+      dout(20) << __func__ << " master locked" << dendl;
+      moc->state = MultiObjectWriteOpContext::LOCK;
+
+      multi_object_write_op_master_lock_slave(moc);
+    });
+}
+
+void ReplicatedPG::multi_object_write_op_master_lock_slave(MultiObjectWriteOpContextRef moc)
+{
+  dout(20) << __func__ << *moc << dendl;
+  assert(moc->ctx);
+  assert(moc->state == MultiObjectWriteOpContext::LOCK);
+
+  MOSDOp *m = static_cast<MOSDOp*>(moc->ctx->op->get_req());
+  multi_object_write_op_send(moc,
+    [moc, m, this](const object_t &oid, ObjectOperation &op){
+       auto it = m->sub_ops.find(oid);
+       assert(it != m->sub_ops.end());
+       op.dup(it->second);
+       op.master = moc->master.oid;
+       op.multi_object_write_operation_lock();
+    },
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_master_lock_slave_crash) {
+        assert(0 == "inject failure");
+      }
+
+      int r = 0;
+      for (auto &p : moc->sub_objects) {
+        assert(p.second.first < 0);
+        if (p.second.first == -EINPROGRESS)
+          continue;
+        r = p.second.first;
+        break;
+      }
+
+      dout(20) << __func__ << " master send lock result: "
+               << cpp_strerror(r) << "(" << r << ")" << dendl;
+
+      if (r < 0) {
+        reply_ctx(moc->ctx, r);
+        moc->ctx = nullptr;
+
+        multi_object_write_op_master_unlock_slave(moc);
+      } else {
+        multi_object_write_op_master_commit_self(moc);
+      }
+   });
+}
+
+int ReplicatedPG::multi_object_write_op_slave_lock(OpContext *ctx)
+{
+  MultiObjectWriteOpContextRef moc = ctx->multi_object_write_op_ctx;
+  assert(moc);
+  assert(moc->state == MultiObjectWriteOpContext::LOCKING);
+  assert(!moc->ctx);
+
+  if (!ctx->op_t->empty() || ctx->modify) {
+    bufferlist &bl = moc->slave_data_bl;
+    ObjectState &obs = ctx->new_obs;
+    object_info_t &oi = obs.oi;
+
+    ENCODE_START(1, 1, bl);
+
+    ::encode(ctx->user_modify, bl);
+    ::encode(ctx->modify, bl);
+
+    ::encode(ctx->num_read, bl);
+    ::encode(ctx->num_write, bl);
+    ::encode(ctx->delta_stats, bl);
+
+    ::encode(ctx->modified_ranges, bl);
+    ::encode(ctx->mod_desc, bl);
+
+    bool clear_watch = ctx->obs->oi.watchers.size() != oi.watchers.size();
+    assert(!clear_watch || oi.watchers.empty());
+    ::encode(clear_watch, bl);
+
+    assert(ctx->pending_attrs.empty());
+
+    ::encode(oi.truncate_seq, bl);
+    ::encode(oi.truncate_size, bl);
+    ::encode(oi.size, bl);
+
+    ::encode(obs.exists, bl);
+
+    bool is_whiteout = oi.is_whiteout();
+    ::encode(is_whiteout, bl);
+
+    bool is_data_digest =
+      oi.is_data_digest() &&
+      (!ctx->obs->oi.is_data_digest() ||
+       (oi.data_digest != ctx->obs->oi.data_digest));
+    ::encode(is_data_digest, bl);
+    if (is_data_digest)
+      ::encode(oi.data_digest, bl);
+
+    bool is_omap = oi.is_omap();
+    ::encode(is_omap, bl);
+
+    bool is_omap_digest =
+      oi.is_omap_digest() &&
+      (!ctx->obs->oi.is_omap_digest() ||
+       (oi.omap_digest != ctx->obs->oi.omap_digest));
+    ::encode(is_omap_digest, bl);
+    if (is_omap_digest)
+      ::encode(oi.omap_digest, bl);
+
+    ctx->op_t->encode(bl);
+
+    ENCODE_FINISH(bl);
+  }
+
+  moc->ctx = ctx;
+  multi_object_write_op_save(moc,
+    [moc, this](){
+      if (moc->destroyed)
+        return;
+
+      if (g_conf->osd_debug_multi_object_write_operation_slave_lock_crash) {
+        assert(0 == "inject failure");
+      }
+
+      dout(20) << __func__ << " slave locked" << dendl;
+      assert(moc->state == MultiObjectWriteOpContext::LOCKING);
+      moc->state = MultiObjectWriteOpContext::LOCK;
+
+      reply_ctx(moc->ctx, -EINPROGRESS);
+      moc->ctx = nullptr;
+    });
+  return -EINPROGRESS;
+}
