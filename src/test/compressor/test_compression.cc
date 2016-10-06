@@ -30,8 +30,12 @@ class CompressionTest : public ::testing::Test,
 public:
   std::string plugin;
   CompressorRef compressor;
+  bool old_zlib_isal;
 
   CompressionTest() {
+    // note for later
+    old_zlib_isal = g_conf->compressor_zlib_isal;
+
     plugin = GetParam();
     size_t pos = plugin.find('/');
     if (pos != std::string::npos) {
@@ -48,6 +52,10 @@ public:
       }
     }
     cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;
+  }
+  ~CompressionTest() {
+    g_conf->set_val("compressor_zlib_isal", old_zlib_isal ? "true" : "false");
+    g_ceph_context->_conf->apply_changes(NULL);
   }
 
   void SetUp() {
