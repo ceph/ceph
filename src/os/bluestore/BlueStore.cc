@@ -30,6 +30,7 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
+#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -3829,11 +3830,10 @@ int BlueStore::mkfs()
     unsigned n = g_conf->bluestore_precondition_bluefs /
       g_conf->bluestore_precondition_bluefs_block;
     bufferlist bl;
-    bufferptr bp(g_conf->bluestore_precondition_bluefs_block);
-    for (unsigned i=0; i < g_conf->bluestore_precondition_bluefs_block; ++i) {
-      bp[i] = rand();
-    }
-    bl.append(bp);
+    int len = g_conf->bluestore_precondition_bluefs_block;
+    char buf[len];
+    get_random_bytes(buf, len);
+    bl.append(buf, len);
     string key1("a");
     string key2("b");
     for (unsigned i=0; i < n; ++i) {
