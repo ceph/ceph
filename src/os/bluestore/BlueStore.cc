@@ -30,6 +30,7 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
+#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -3698,7 +3699,19 @@ int BlueStore::mkfs()
     r = read_meta("mkfs_done", &done);
     if (r == 0) {
       dout(1) << __func__ << " already created" << dendl;
-      return 0; // idempotent
+      if (g_conf->bluestore_fsck_on_mkfs) {
+        r = fsck();
+        if (r < 0) {
+          derr << __func__ << " fsck found fatal error: " << cpp_strerror(r)
+               << dendl;
+          return r;
+        }
+        if (r > 0) {
+          derr << __func__ << " fsck found " << r << " errors" << dendl;
+          r = -EIO;
+        }
+      }
+      return r; // idempotent
     }
   }
 
@@ -3707,7 +3720,7 @@ int BlueStore::mkfs()
     r = read_meta("type", &type);
     if (r == 0) {
       if (type != "bluestore") {
-	dout(1) << __func__ << " expected bluestore, but type is " << type << dendl;
+	derr << __func__ << " expected bluestore, but type is " << type << dendl;
 	return -EIO;
       }
     } else {
@@ -3817,11 +3830,10 @@ int BlueStore::mkfs()
     unsigned n = g_conf->bluestore_precondition_bluefs /
       g_conf->bluestore_precondition_bluefs_block;
     bufferlist bl;
-    bufferptr bp(g_conf->bluestore_precondition_bluefs_block);
-    for (unsigned i=0; i < g_conf->bluestore_precondition_bluefs_block; ++i) {
-      bp[i] = rand();
-    }
-    bl.append(bp);
+    int len = g_conf->bluestore_precondition_bluefs_block;
+    char buf[len];
+    get_random_bytes(buf, len);
+    bl.append(buf, len);
     string key1("a");
     string key2("b");
     for (unsigned i=0; i < n; ++i) {
@@ -7265,7 +7277,8 @@ void BlueStore::_do_write_small(
   if (ep != o->extent_map.extent_map.begin()) {
     --ep;
     b = ep->blob;
-    if (ep->logical_offset - ep->blob_offset + b->get_blob().get_ondisk_length() <= offset) {
+    if (ep->logical_offset - ep->blob_offset +
+      b->get_blob().get_ondisk_length() <= offset) {
       ++ep;
     }
   }
@@ -7274,7 +7287,7 @@ void BlueStore::_do_write_small(
       break;
     }
     b = ep->blob;
-    if (!b->get_blob().is_mutable() || b->get_blob().is_compressed()) {
+    if (!b->get_blob().is_mutable()) {
       dout(20) << __func__ << " ignoring immutable " << *b << dendl;
       ++ep;
       continue;

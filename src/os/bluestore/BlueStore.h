@@ -240,6 +240,7 @@ public:
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
+      assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
         writing.erase(writing.iterator_to(*p->second));
@@ -320,7 +321,7 @@ public:
     std::atomic_int nref = {0}; ///< reference count
 
     // these are defined/set if the shared_blob is 'loaded'
-    bool loaded = false;        ///< whether shared_blob_t is loaded
+    bool loaded = false;        ///< whether shared_blob is loaded
     bluestore_shared_blob_t shared_blob; ///< the actual shared state
 
     // these are defined/set if the blob is marked 'shared'
@@ -514,7 +515,7 @@ public:
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
-    uint8_t  blob_depth = 0;          /// blob overlapping count
+    uint8_t  blob_depth = 0;          ///< blob overlapping count
     BlobRef blob;                     ///< the blob with our data
 
     /// ctor for lookup only
