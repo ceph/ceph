@@ -971,14 +971,15 @@ public:
 
   const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
-    if (client_caps.count(client))
-      return client_caps[client];
+    auto client_caps_entry = client_caps.find(client);
+    if (client_caps_entry != client_caps.end())
+      return client_caps_entry->second;
     return 0;
   }
   int get_client_cap_pending(client_t client) const {
-    if (client_caps.count(client)) {
-      std::map<client_t, Capability*>::const_iterator found = client_caps.find(client);
-      return found->second->pending();
+    auto client_caps_entry = client_caps.find(client);
+    if (client_caps_entry != client_caps.end()) {
+      return client_caps_entry->second->pending();
     } else {
       return 0;
     }
