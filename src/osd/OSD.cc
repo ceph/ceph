@@ -1253,19 +1253,19 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
   send_map(m, con);
 }
 
-bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
+bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl, bool cache)
 {
   bool found = map_bl_cache.lookup(e, &bl);
   if (found)
     return true;
   found = store->read(coll_t::meta(),
 		      OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
-  if (found)
+  if (found && cache)
     _add_map_bl(e, bl);
   return found;
 }
 
-bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
+bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl, bool cache)
 {
   Mutex::Locker l(map_cache_lock);
   bool found = map_bl_inc_cache.lookup(e, &bl);
@@ -1273,7 +1273,7 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
     return true;
   found = store->read(coll_t::meta(),
 		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
-  if (found)
+  if (found && cache)
     _add_map_inc_bl(e, bl);
   return found;
 }

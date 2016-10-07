@@ -1016,11 +1016,11 @@ public:
   }
   void pin_map_bl(epoch_t e, bufferlist &bl);
   void _add_map_bl(epoch_t e, bufferlist& bl);
-  bool get_map_bl(epoch_t e, bufferlist& bl) {
+  bool get_map_bl(epoch_t e, bufferlist& bl, bool cache = true) {
     Mutex::Locker l(map_cache_lock);
-    return _get_map_bl(e, bl);
+    return _get_map_bl(e, bl, cache);
   }
-  bool _get_map_bl(epoch_t e, bufferlist& bl);
+  bool _get_map_bl(epoch_t e, bufferlist& bl, bool cache = true);
 
   void add_map_inc_bl(epoch_t e, bufferlist& bl) {
     Mutex::Locker l(map_cache_lock);
@@ -1028,7 +1028,7 @@ public:
   }
   void pin_map_inc_bl(epoch_t e, bufferlist &bl);
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
-  bool get_inc_map_bl(epoch_t e, bufferlist& bl);
+  bool get_inc_map_bl(epoch_t e, bufferlist& bl, bool cache = true);
 
   void clear_map_bl_cache_pins(epoch_t e);
 
