@@ -240,6 +240,7 @@ public:
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
+      assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
         writing.erase(writing.iterator_to(*p->second));
