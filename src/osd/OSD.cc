@@ -2157,6 +2157,22 @@ int OSD::init()
       goto out;
   }
 
+  if (g_conf->osd_map_recover_broken) {
+    if (!cct->check_experimental_feature_enabled("osd_map_recover_broken")) {
+      derr << "OSD::init: unable to attempt recovery of broken maps; "
+           << "requires experimental feature 'osd_map_recover_broken' enabled"
+           << dendl;
+      return -EINVAL;
+    }
+    r = _recover_broken_maps();
+    if (r < 0) {
+      derr << "OSD::init: error attempting broken maps recovery -- dying!" << dendl;
+      return r;
+    } else {
+      dout(0) << "OSD::init: recovered broken maps -- continuing!" << dendl;
+    }
+  }
+
   class_handler = new ClassHandler(cct);
   cls_initialize(class_handler);
 
