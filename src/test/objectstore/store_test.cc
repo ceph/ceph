@@ -2516,6 +2516,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
 
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP),
 			     "key", 123, -1, ""));
+  ghobject_t hoid3(hobject_t(sobject_t("Object 3", CEPH_NOSNAP)));
   {
     ObjectStore::Transaction t;
     t.clone(cid, hoid, hoid2);
@@ -2758,9 +2759,40 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ASSERT_TRUE(bl_eq(rl, final));
   }
   {
+    //verify if non-empty collection is properly handled after store reload
+    r = store->umount();
+    ASSERT_EQ(r, 0);
+    r = store->mount();
+    ASSERT_EQ(r, 0);
+
     ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    cerr << "Invalid rm coll" << std::endl;
+    EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
+
+  }
+  {
+    //verify if non-empty collection is properly handled when there are some pending removes and live records in db
+    cerr << "Invalid rm coll again" << std::endl;
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid3); //new record in db
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    r = store->umount();
+    ASSERT_EQ(r, 0);
+    r = store->mount();
+    ASSERT_EQ(r, 0);
+
+    t.remove_collection(cid);
+    EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid3);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));

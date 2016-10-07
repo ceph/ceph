@@ -1572,6 +1572,11 @@ private:
     b->shared_blob->bc.write(txc->seq, offset, bl, flags);
     txc->shared_blobs_written.insert(b->shared_blob);
   }
+
+  int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
+    bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
+
+
 public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
