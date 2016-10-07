@@ -1699,7 +1699,7 @@ int MDSMonitor::management_command(
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
-            "inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
+            " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;
     }
 
