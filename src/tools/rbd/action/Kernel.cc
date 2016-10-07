@@ -281,8 +281,8 @@ void get_map_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
-    ("options,o", po::value<std::string>(), "mapping options")
-    ("read-only", po::bool_switch(), "mount read-only");
+    ("options,o", po::value<std::string>(), "map options")
+    ("read-only", po::bool_switch(), "map read-only");
 }
 
 int execute_map(const po::variables_map &vm) {
