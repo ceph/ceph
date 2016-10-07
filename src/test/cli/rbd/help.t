@@ -738,8 +738,8 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    -o [ --options ] arg  mapping options
-    --read-only           mount read-only
+    -o [ --options ] arg  map options
+    --read-only           map read-only
   
   rbd help merge-diff
   usage: rbd merge-diff [--path <path>] [--no-progress] 
