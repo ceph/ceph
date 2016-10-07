@@ -4833,7 +4833,7 @@ int RGWRados::objexp_hint_list(const string& oid,
 {
   librados::ObjectReadOperation op;
   cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
-	       out_marker, truncated);
+        out_marker, truncated);
 
   bufferlist obl;
   int ret = objexp_pool_ctx.operate(oid, &op, &obl);
@@ -5017,12 +5017,8 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
     buf[r] = '\0';
 
     bigger_than_delim = buf;
-  }
 
-  string skip_after_delim;
-
-  /* if marker points at a common prefix, fast forward it into its upperbound string */
-  if (!params.delim.empty()) {
+    /* if marker points at a common prefix, fast forward it into its upperbound string */
     int delim_pos = cur_marker.name.find(params.delim, params.prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
@@ -5030,7 +5026,8 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       cur_marker.set(s);
     }
   }
-
+  
+  string skip_after_delim;
   while (truncated && count <= max) {
     if (skip_after_delim > cur_marker.name) {
       cur_marker.set(skip_after_delim);
