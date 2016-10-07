@@ -122,11 +122,12 @@ Parameters
 
    Make json or xml formatted output more human-readable.
 
-.. option:: -o map-options, --options map-options
+.. option:: -o krbd-options, --options krbd-options
 
-   Specifies which options to use when mapping an image.  map-options is
-   a comma-separated string of options (similar to mount(8) mount options).
-   See map options section below for more details.
+   Specifies which options to use when mapping or unmapping an image via the
+   rbd kernel driver.  krbd-options is a comma-separated list of options
+   (similar to mount(8) mount options).  See kernel rbd (krbd) options section
+   below for more details.
 
 .. option:: --read-only
 
@@ -326,10 +327,10 @@ Commands
   Remove any previously set limit on the number of snapshots allowed on
   an image.
 
-:command:`map` [-o | --options *map-options* ] [--read-only] *image-spec* | *snap-spec*
+:command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
   Maps the specified image to a block device via the rbd kernel module.
 
-:command:`unmap` *image-spec* | *snap-spec* | *device-path*
+:command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
   Unmaps the block device that was mapped via the rbd kernel module.
 
 :command:`showmapped`
@@ -421,14 +422,14 @@ By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] 
 used.
 
 
-Map options
-===========
+Kernel rbd (krbd) options
+=========================
 
 Most of these options are useful mainly for debugging and benchmarking.  The
 default values are set in the kernel and may therefore depend on the version of
 the running kernel.
 
-libceph (per client instance) options:
+Per client instance `rbd map` options:
 
 * fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
   the client.
@@ -467,7 +468,7 @@ libceph (per client instance) options:
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
 
-Mapping (per block device) options:
+Per mapping (block device) `rbd map` options:
 
 * rw - Map the image read-write (default).
 
@@ -477,6 +478,12 @@ Mapping (per block device) options:
 
 * lock_on_read - Acquire exclusive lock on reads, in addition to writes and
   discards (since 4.9).
+
+`rbd unmap` options:
+
+* force - Force the unmapping of a block device that is open (since 4.9).  The
+  driver will wait for running requests to complete and then unmap; requests
+  sent to the driver after initiating the unmap will be failed.
 
 
 Examples
