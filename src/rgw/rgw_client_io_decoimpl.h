@@ -24,7 +24,7 @@ class AccountingFilter : public DecoratedRestfulClient<T>,
 public:
   template <typename U>
   AccountingFilter(U&& decoratee)
-    : DecoratedRestfulClient<T>(std::move(decoratee)),
+    : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       enabled(false),
       total_sent(0),
       total_received(0) {
@@ -126,7 +126,7 @@ protected:
 public:
   template <typename U>
   BufferingFilter(U&& decoratee)
-    : DecoratedRestfulClient<T>(std::move(decoratee)),
+    : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       has_content_length(false),
       buffer_data(false) {
   }
@@ -202,7 +202,7 @@ size_t BufferingFilter<T>::complete_request()
 
 template <typename T> static inline
 BufferingFilter<T> add_buffering(T&& t) {
-  return BufferingFilter<T>(std::move(t));
+  return BufferingFilter<T>(std::forward<T>(t));
 }
 
 
@@ -216,7 +216,7 @@ protected:
 public:
   template <typename U>
   ChunkingFilter(U&& decoratee)
-    : DecoratedRestfulClient<T>(std::move(decoratee)),
+    : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       has_content_length(false),
       chunking_enabled(false) {
   }
@@ -266,7 +266,7 @@ public:
 
 template <typename T> static inline
 ChunkingFilter<T> add_chunking(T&& t) {
-  return ChunkingFilter<T>(std::move(t));
+  return ChunkingFilter<T>(std::forward<T>(t));
 }
 
 
@@ -285,7 +285,7 @@ protected:
 public:
   template <typename U>
   ConLenControllingFilter(U&& decoratee)
-    : DecoratedRestfulClient<T>(std::move(decoratee)),
+    : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       action(ContentLengthAction::UNKNOWN) {
   }
 
@@ -315,7 +315,7 @@ public:
 
 template <typename T> static inline
 ConLenControllingFilter<T> add_conlen_controlling(T&& t) {
-  return ConLenControllingFilter<T>(std::move(t));
+  return ConLenControllingFilter<T>(std::forward<T>(t));
 }
 
 
@@ -352,7 +352,7 @@ protected:
 public:
   template <typename U>
   ReorderingFilter(U&& decoratee)
-    : DecoratedRestfulClient<T>(std::move(decoratee)),
+    : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       phase(ReorderState::RGW_EARLY_HEADERS) {
   }
 
@@ -396,7 +396,7 @@ public:
 
 template <typename T> static inline
 ReorderingFilter<T> add_reordering(T&& t) {
-  return ReorderingFilter<T>(std::move(t));
+  return ReorderingFilter<T>(std::forward<T>(t));
 }
 
 } /* namespace io */

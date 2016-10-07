@@ -124,7 +124,7 @@ protected:
 
 public:
   DecoratedRestfulClient(DecorateeT&& decoratee)
-    : decoratee(std::move(decoratee)) {
+    : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
   size_t send_status(const int status,
