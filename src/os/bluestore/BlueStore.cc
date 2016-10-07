@@ -7845,6 +7845,11 @@ int BlueStore::_do_write(
   if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
+  } else if (g_conf->bluestore_default_buffered_write &&
+	     (fadvise_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+			       CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
+    dout(20) << __func__ << " defaulting to buffered write" << dendl;
+    wctx.buffered = true;
   }
 
   // FIXME: Using the MAX of the block_size_order and preferred_csum_order
