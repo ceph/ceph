@@ -3698,7 +3698,19 @@ int BlueStore::mkfs()
     r = read_meta("mkfs_done", &done);
     if (r == 0) {
       dout(1) << __func__ << " already created" << dendl;
-      return 0; // idempotent
+      if (g_conf->bluestore_fsck_on_mkfs) {
+        r = fsck();
+        if (r < 0) {
+          derr << __func__ << " fsck found fatal error: " << cpp_strerror(r)
+               << dendl;
+          return r;
+        }
+        if (r > 0) {
+          derr << __func__ << " fsck found " << r << " errors" << dendl;
+          r = -EIO;
+        }
+      }
+      return r; // idempotent
     }
   }
 
@@ -3707,7 +3719,7 @@ int BlueStore::mkfs()
     r = read_meta("type", &type);
     if (r == 0) {
       if (type != "bluestore") {
-	dout(1) << __func__ << " expected bluestore, but type is " << type << dendl;
+	derr << __func__ << " expected bluestore, but type is " << type << dendl;
 	return -EIO;
       }
     } else {
