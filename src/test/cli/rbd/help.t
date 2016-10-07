@@ -1207,6 +1207,7 @@
   
   rbd help unmap
   usage: rbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] 
+                   [--options <options>] 
                    <image-or-snap-or-device-spec> 
   
   Unmap a rbd device that was used by the kernel.
@@ -1220,6 +1221,7 @@
     -p [ --pool ] arg               pool name
     --image arg                     image name
     --snap arg                      snapshot name
+    -o [ --options ] arg            unmap options
   
   rbd help watch
   usage: rbd watch [--pool <pool>] [--image <image>] 

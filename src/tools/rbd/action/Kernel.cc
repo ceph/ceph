@@ -27,7 +27,7 @@ namespace po = boost::program_options;
 
 namespace {
 
-std::map<std::string, std::string> map_options;
+std::map<std::string, std::string> map_options; // used for both map and unmap
 
 } // anonymous namespace
 
@@ -140,6 +140,27 @@ static int parse_map_options(char *options)
   return 0;
 }
 
+static int parse_unmap_options(char *options)
+{
+  for (char *this_char = strtok(options, ", ");
+       this_char != NULL;
+       this_char = strtok(NULL, ",")) {
+    char *value_char;
+
+    if ((value_char = strchr(this_char, '=')) != NULL)
+      *value_char++ = '\0';
+
+    if (!strcmp(this_char, "force")) {
+      put_map_option("force", this_char);
+    } else {
+      std::cerr << "rbd: unknown unmap option '" << this_char << "'" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  return 0;
+}
+
 static int do_kernel_showmapped(Formatter *f)
 {
   struct krbd_ctx *krbd;
@@ -239,16 +260,24 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
                            const char *imgname, const char *snapname)
 {
   struct krbd_ctx *krbd;
+  std::ostringstream oss;
   int r;
 
   r = krbd_create_from_context(g_ceph_context, &krbd);
   if (r < 0)
     return r;
 
+  for (auto it = map_options.cbegin(); it != map_options.cend(); ++it) {
+    if (it != map_options.cbegin())
+      oss << ",";
+    oss << it->second;
+  }
+
   if (dev)
-    r = krbd_unmap(krbd, dev);
+    r = krbd_unmap(krbd, dev, oss.str().c_str());
   else
-    r = krbd_unmap_by_spec(krbd, poolname, imgname, snapname);
+    r = krbd_unmap_by_spec(krbd, poolname, imgname, snapname,
+                           oss.str().c_str());
 
   krbd_destroy(krbd);
   return r;
@@ -345,6 +374,8 @@ void get_unmap_arguments(po::options_description *positional,
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  options->add_options()
+    ("options,o", po::value<std::string>(), "unmap options");
 }
 
 int execute_unmap(const po::variables_map &vm) {
@@ -372,6 +403,18 @@ int execute_unmap(const po::variables_map &vm) {
     std::cerr << "rbd: unmap requires either image name or device path"
               << std::endl;
     return -EINVAL;
+  }
+
+  if (vm.count("options")) {
+    char *cli_unmap_options = strdup(vm["options"].as<std::string>().c_str());
+    BOOST_SCOPE_EXIT( (cli_unmap_options) ) {
+      free(cli_unmap_options);
+    } BOOST_SCOPE_EXIT_END;
+
+    if (parse_unmap_options(cli_unmap_options)) {
+      std::cerr << "rbd: couldn't parse unmap options" << std::endl;
+      return -EINVAL;
+    }
   }
 
   utils::init_context();
