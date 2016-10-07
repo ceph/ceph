@@ -97,6 +97,8 @@ OPTION(xio_max_conns_per_portal, OPT_INT, 32) // max xio_connections per portal/
 OPTION(xio_transport_type, OPT_STR, "rdma") // xio transport type: {rdma or tcp}
 OPTION(xio_max_send_inline, OPT_INT, 512) // xio maximum threshold to send inline
 
+OPTION(compressor_zlib_isal, OPT_BOOL, false)
+
 OPTION(async_compressor_enabled, OPT_BOOL, false)
 OPTION(async_compressor_type, OPT_STR, "snappy")
 OPTION(async_compressor_threads, OPT_INT, 2)

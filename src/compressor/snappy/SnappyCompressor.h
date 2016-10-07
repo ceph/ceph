@@ -77,10 +77,15 @@ class SnappyCompressor : public Compressor {
 		 size_t compressed_len,
 		 bufferlist &dst) override {
     size_t res_len = 0;
-    // Trick, decompress only need first 32bits buffer
+    // Trick, decompress only need first few bytes of buffer.  note
+    // that 4 bytes is *not* enough.. it works for small buffers (a
+    // few MB), but not large ones (~260 MB), because the 32-bit value
+    // is encoded as a varint.  From snappy.cc:
+    //     if (Varint::Parse32WithLimit(start, limit, &v) != NULL) {
+    // 8 bytes is enough.
     bufferlist::const_iterator ptmp = p;
     bufferlist tmp;
-    ptmp.copy(4, tmp);
+    ptmp.copy(std::min(8lu, compressed_len), tmp);
     if (!snappy::GetUncompressedLength(tmp.c_str(), tmp.length(), &res_len)) {
       return -1;
     }
@@ -91,7 +96,7 @@ class SnappyCompressor : public Compressor {
       dst.append(ptr);
       return 0;
     }
-    return -1;
+    return -2;
   }
 };
 
