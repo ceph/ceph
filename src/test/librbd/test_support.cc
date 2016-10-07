@@ -41,17 +41,10 @@ int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
 
 int get_image_id(librbd::Image &image, std::string *image_id)
 {
-  librbd::image_info_t info;
-  int r = image.stat(info, sizeof(info));
+  int r = image.get_id(image_id);
   if (r < 0) {
     return r;
   }
-
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-  *image_id = std::string(prefix + strlen(RBD_DATA_PREFIX));
   return 0;
 }
 
