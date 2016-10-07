@@ -6,7 +6,7 @@ import time
 import sys
 
 from nose import with_setup, SkipTest
-from nose.tools import eq_ as eq, assert_raises
+from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
@@ -191,14 +191,14 @@ def test_create_defaults():
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 1, 1 << 16)
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 20)
     check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 16)
-    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 0, 0)
+    check_default_params(2, 20, 0, 0, 0)
     # make sure invalid combinations of stripe unit and order are still invalid
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 1 << 50, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 100, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 1, exception=InvalidArgument)
     check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 1, 0, exception=InvalidArgument)
     # 0 stripe unit and count are still ignored
-    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 0)
+    check_default_params(2, 22, 0, 0, 0)
 
 def test_context_manager():
     with Rados(conffile='') as cluster:
@@ -316,6 +316,13 @@ class TestImage(object):
         eq(image.stripe_count(), stripe_count)
         image.close()
         RBD().remove(ioctx, image_name)
+
+    @require_new_format()
+    def test_id(self):
+        assert_not_equal(b'', self.image.id())
+
+    def test_block_name_prefix(self):
+        assert_not_equal(b'', self.image.block_name_prefix())
 
     def test_invalidate_cache(self):
         self.image.write(b'abc', 0)

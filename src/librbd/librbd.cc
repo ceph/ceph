@@ -782,6 +782,28 @@ namespace librbd {
     return r;
   }
 
+  int Image::get_id(std::string *id)
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
+    if (ictx->old_format) {
+      return -EINVAL;
+    }
+    *id = ictx->id;
+    return 0;
+  }
+
+  std::string Image::get_block_name_prefix()
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
+    return ictx->object_prefix;
+  }
+
+  int64_t Image::get_data_pool_id()
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
+    return ictx->data_ctx.get_id();
+  }
+
   int Image::parent_info(string *parent_pool_name, string *parent_name,
 			 string *parent_snap_name)
   {
@@ -2194,6 +2216,40 @@ extern "C" int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
   int r = librbd::get_overlap(ictx, overlap);
   tracepoint(librbd, get_overlap_exit, r, *overlap);
   return r;
+}
+
+extern "C" int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
+  if (ictx->old_format) {
+    return -EINVAL;
+  }
+  if (ictx->id.size() >= id_len) {
+    return -ERANGE;
+  }
+
+  strncpy(id, ictx->id.c_str(), id_len - 1);
+  id[id_len - 1] = '\0';
+  return 0;
+}
+
+extern "C" int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
+                                         size_t prefix_len)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
+  if (ictx->object_prefix.size() >= prefix_len) {
+    return -ERANGE;
+  }
+
+  strncpy(prefix, ictx->object_prefix.c_str(), prefix_len - 1);
+  prefix[prefix_len - 1] = '\0';
+  return 0;
+}
+
+extern "C" int64_t rbd_get_data_pool_id(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
+  return ictx->data_ctx.get_id();
 }
 
 extern "C" int rbd_get_parent_info(rbd_image_t image,
