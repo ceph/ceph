@@ -103,6 +103,12 @@ public:
                   const boost::optional<uint8_t> &current_state,
                   Context *on_finish);
 
+  // batch updations
+  bool aio_batch(uint64_t object_no, uint8_t new_state,
+                 const boost::optional<uint8_t> &current_state, uint8_t view_idx);
+  void aio_update_batch(Context *on_finish);
+  uint32_t batch_size();
+
   void rollback(uint64_t snap_id, Context *on_finish);
   void snapshot_add(uint64_t snap_id, Context *on_finish);
   void snapshot_remove(uint64_t snap_id, Context *on_finish);

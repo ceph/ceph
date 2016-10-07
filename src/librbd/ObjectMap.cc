@@ -10,6 +10,7 @@
 #include "librbd/object_map/SnapshotRollbackRequest.h"
 #include "librbd/object_map/UnlockRequest.h"
 #include "librbd/object_map/UpdateRequest.h"
+#include "librbd/object_map/BatchUpdateRequest.h"
 #include "librbd/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -419,6 +420,51 @@ void ObjectMap::aio_update(uint64_t snap_id, uint64_t start_object_no,
     m_image_ctx, object_map, snap_id, start_object_no, end_object_no,
     new_state, current_state, on_finish);
   req->send();
+}
+
+bool ObjectMap::aio_batch(uint64_t object_no, uint8_t new_state,
+                          const boost::optional<uint8_t> &current_state, uint8_t view_idx) {
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
+  assert(m_image_ctx.image_watcher != NULL);
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+  assert(view_idx < OBJECT_MAP_VIEW_LEVELS);
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << &m_image_ctx << " aio_batch: start=" << object_no
+                 << ", " << (current_state ?
+                             stringify(static_cast<uint32_t>(*current_state)) : "")
+                 << "->" << static_cast<uint32_t>(new_state) << ", view idx="
+                 << static_cast<uint32_t>(view_idx) << dendl;
+
+  uint8_t state = m_object_map[object_no];
+  if ((!current_state || state == *current_state ||
+       (*current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) &&
+      state != new_state) {
+    m_object_map.update_view(object_no, current_state, new_state, view_idx);
+    return true;
+  }
+
+  return false;
+}
+
+void ObjectMap::aio_update_batch(Context *on_finish) {
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
+  assert(m_image_ctx.image_watcher != NULL);
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
+
+  object_map::BatchUpdateRequest<> *req = new object_map::BatchUpdateRequest<>(
+    m_image_ctx, &m_object_map, m_snap_id, on_finish);
+  req->send();
+}
+
+uint32_t ObjectMap::batch_size() {
+  return m_object_map.batch_size();
 }
 
 } // namespace librbd
