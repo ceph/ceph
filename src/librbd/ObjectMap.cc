@@ -381,6 +381,8 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
          m_image_ctx.exclusive_lock->is_lock_owner());
   assert(m_image_ctx.object_map_lock.is_wlocked());
   assert(start_object_no < end_object_no);
+  assert(!m_object_map.in_batch_mode(start_object_no));
+  assert(!m_object_map.in_batch_mode(end_object_no));
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << &m_image_ctx << " aio_update: start=" << start_object_no
