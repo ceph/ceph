@@ -224,14 +224,12 @@ bool ObjectMap::is_compatible(const file_layout_t& layout, uint64_t size) {
 ceph::BitVector<2u>::Reference ObjectMap::operator[](uint64_t object_no)
 {
   assert(m_image_ctx.object_map_lock.is_wlocked());
-  assert(object_no < m_object_map.size());
   return m_object_map[object_no];
 }
 
 uint8_t ObjectMap::operator[](uint64_t object_no) const
 {
   assert(m_image_ctx.object_map_lock.is_locked());
-  assert(object_no < m_object_map.size());
   return m_object_map[object_no];
 }
 
@@ -269,8 +267,12 @@ bool ObjectMap::update_required(uint64_t object_no, uint8_t new_state) {
 }
 
 void ObjectMap::open(Context *on_finish) {
+  ceph::BitVector<2> *object_map = level0_map();
+  C_ObjectMapViewSetSize *ctx = new C_ObjectMapViewSetSize(
+    &m_object_map, OBJECT_NONEXISTENT, on_finish);
+
   object_map::RefreshRequest<> *req = new object_map::RefreshRequest<>(
-    m_image_ctx, &m_object_map, m_snap_id, on_finish);
+    m_image_ctx, object_map, m_snap_id, ctx);
   req->send();
 }
 
@@ -299,8 +301,9 @@ void ObjectMap::snapshot_add(uint64_t snap_id, Context *on_finish) {
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(snap_id != CEPH_NOSNAP);
 
+  ceph::BitVector<2> *object_map = level0_map();
   object_map::SnapshotCreateRequest *req =
-    new object_map::SnapshotCreateRequest(m_image_ctx, &m_object_map, snap_id,
+    new object_map::SnapshotCreateRequest(m_image_ctx, object_map, snap_id,
                                           on_finish);
   req->send();
 }
@@ -310,8 +313,9 @@ void ObjectMap::snapshot_remove(uint64_t snap_id, Context *on_finish) {
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(snap_id != CEPH_NOSNAP);
 
+  ceph::BitVector<2> *object_map = level0_map();
   object_map::SnapshotRemoveRequest *req =
-    new object_map::SnapshotRemoveRequest(m_image_ctx, &m_object_map, snap_id,
+    new object_map::SnapshotRemoveRequest(m_image_ctx, object_map, snap_id,
                                           on_finish);
   req->send();
 }
@@ -327,7 +331,9 @@ void ObjectMap::aio_save(Context *on_finish) {
   if (m_snap_id == CEPH_NOSNAP) {
     rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
   }
-  cls_client::object_map_save(&op, m_object_map);
+
+  ceph::BitVector<2> *object_map = level0_map();
+  cls_client::object_map_save(&op, *object_map);
 
   std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
   librados::AioCompletion *comp = util::create_rados_safe_callback(on_finish);
@@ -347,9 +353,11 @@ void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
 
+  ceph::BitVector<2> *object_map = level0_map();
+  C_ObjectMapViewSetSize  *ctx = new C_ObjectMapViewSetSize(
+    &m_object_map, default_object_state, on_finish);
   object_map::ResizeRequest *req = new object_map::ResizeRequest(
-    m_image_ctx, &m_object_map, m_snap_id, new_size, default_object_state,
-    on_finish);
+    m_image_ctx, object_map, m_snap_id, new_size, default_object_state, ctx);
   req->send();
 }
 
@@ -385,9 +393,10 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
     return false;
   }
 
+  ceph::BitVector<2> *object_map = level0_map();
   for (uint64_t object_no = start_object_no; object_no < end_object_no;
        ++object_no) {
-    uint8_t state = m_object_map[object_no];
+    uint8_t state = (*object_map)[object_no];
     if ((!current_state || state == *current_state ||
           (*current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) &&
         state != new_state) {
@@ -403,8 +412,9 @@ void ObjectMap::aio_update(uint64_t snap_id, uint64_t start_object_no,
                            uint64_t end_object_no, uint8_t new_state,
                            const boost::optional<uint8_t> &current_state,
                            Context *on_finish) {
+  ceph::BitVector<2> *object_map = level0_map();
   object_map::UpdateRequest *req = new object_map::UpdateRequest(
-    m_image_ctx, &m_object_map, snap_id, start_object_no, end_object_no,
+    m_image_ctx, object_map, snap_id, start_object_no, end_object_no,
     new_state, current_state, on_finish);
   req->send();
 }

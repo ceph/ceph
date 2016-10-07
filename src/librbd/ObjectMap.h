@@ -109,10 +109,13 @@ public:
 
 private:
   ImageCtx &m_image_ctx;
-  ceph::BitVector<2> m_object_map;
   uint64_t m_snap_id;
 
-  ObjectMapView m_object_map_view;
+  ObjectMapView m_object_map;
+
+  ceph::BitVector<2> *level0_map() {
+    return m_object_map.level0_map();
+  }
 };
 
 } // namespace librbd
