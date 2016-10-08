@@ -18,19 +18,19 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid, const char *data, size_t size, bool exclusive,
+int rgw_put_system_obj(RGWRados *rgwstore, rgw_pool& pool, const string& oid, const char *data, size_t size, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
     pattrs = &no_attrs;
 
-  rgw_obj obj(bucket, oid);
+  rgw_raw_obj obj(pool, oid);
 
   int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
 
   if (ret == -ENOENT) {
-    ret = rgwstore->create_pool(bucket);
+    ret = rgwstore->create_pool(pool);
     if (ret >= 0)
       ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
   }
@@ -38,14 +38,14 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
   struct rgw_err err;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
-  rgw_obj obj(bucket, key);
+  rgw_raw_obj obj(pool, key);
 
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);

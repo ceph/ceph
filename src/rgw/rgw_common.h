@@ -734,14 +734,143 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
+struct rgw_pool {
+  string name;
+
+  rgw_pool() {}
+  rgw_pool(const rgw_pool& _p) : name(_p.name) {}
+  rgw_pool(const string& _name) : name(_name) {}
+
+  const string& to_str() const {
+    return name;
+  }
+
+  void init(const string& _name) {
+    name = _name;
+  }
+
+  bool empty() const {
+    return name.empty();
+  }
+
+  int compare(const rgw_pool& p) const {
+    return name.compare(p.name);
+  }
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(10, 10, bl);
+    ::encode(name, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode_from_bucket(bufferlist::iterator& bl);
+
+  void decode(bufferlist::iterator& bl) {
+    uint64_t start_off = bl.get_off();
+    DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
+    if (struct_v < 10) {
+      bl.seek(start_off);
+      decode_from_bucket(bl);
+      return;
+    }
+
+    ::decode(name, bl);
+    DECODE_FINISH(bl);
+  }
+
+  bool operator==(const rgw_pool& p) const {
+    return (compare(p) == 0);
+  }
+  bool operator!=(const rgw_pool& p) const {
+    return (*this != p);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_pool)
+
+struct rgw_data_placement_target {
+  rgw_pool data_pool;
+  rgw_pool data_extra_pool;
+  rgw_pool index_pool;
+
+  rgw_data_placement_target() {}
+
+  rgw_data_placement_target(const rgw_pool& _data_pool, const rgw_pool& _data_extra_pool, const rgw_pool& _index_pool) 
+         : data_pool(_data_pool), data_extra_pool(_data_extra_pool), index_pool(_index_pool) {}
+
+  const rgw_pool& get_data_extra_pool() const {
+    if (data_extra_pool.empty()) {
+      return data_pool;
+    }
+    return data_extra_pool;
+  }
+
+  int compare(const rgw_data_placement_target& t) {
+    int c = data_pool.compare(t.data_pool);
+    if (c != 0) {
+      return c;
+    }
+    c = data_extra_pool.compare(t.data_extra_pool);
+    if (c != 0) {
+      return c;
+    }
+    return index_pool.compare(t.index_pool);
+  };
+
+  void dump(Formatter *f) const;
+};
+
+inline ostream& operator<<(ostream& out, const rgw_pool& p) {
+  out << p.name;
+  return out;
+}
+
+struct rgw_raw_obj {
+  rgw_pool pool;
+  std::string oid;
+  std::string loc;
+
+  rgw_raw_obj() {}
+  rgw_raw_obj(const rgw_pool& _pool, const std::string& _oid) {
+    init(_pool, _oid);
+  }
+  rgw_raw_obj(const rgw_pool& _pool, const std::string& _oid, const string& _loc) : loc(_loc) {
+    init(_pool, _oid);
+  }
+
+  void init(const rgw_pool& _pool, const std::string& _oid) {
+    pool = _pool;
+    oid = _oid;
+  }
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(6, 6, bl);
+    ::encode(pool, bl);
+    ::encode(oid, bl);
+    ::encode(loc, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(6, bl);
+#warning decode old rgw_obj
+    ::decode(pool, bl);
+    ::decode(oid, bl);
+    ::decode(loc, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_raw_obj)
+
+inline ostream& operator<<(ostream& out, const rgw_raw_obj& o) {
+  out << o.pool << ":" << o.oid;
+  return out;
+}
+
 struct rgw_bucket {
   std::string tenant;
   std::string name;
-  std::string data_pool;
-  std::string data_extra_pool; /* if not set, then we should use data_pool instead */
-  std::string index_pool;
   std::string marker;
   std::string bucket_id;
+  rgw_data_placement_target placement;
 
   std::string oid; /*
                     * runtime in-memory only info. If not empty, points to the bucket instance object
@@ -749,31 +878,18 @@ struct rgw_bucket {
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
-  explicit rgw_bucket(const rgw_user& u, const cls_user_bucket& b)
-    : tenant(u.tenant),
-      name(b.name),
-      data_pool(b.data_pool),
-      data_extra_pool(b.data_extra_pool),
-      index_pool(b.index_pool),
-      marker(b.marker),
-      bucket_id(b.bucket_id) {
-  }
-  rgw_bucket(const string& s) : name(s) {
-    data_pool = index_pool = s;
-    marker = "";
-  }
-  rgw_bucket(const char *n) : name(n) {
-    data_pool = index_pool = n;
-    marker = "";
-  }
-  rgw_bucket(const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
-    tenant(t), name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
+  explicit rgw_bucket(const rgw_user& u, const cls_user_bucket& b) :
+    tenant(u.tenant),
+    name(b.name),
+    marker(b.marker),
+    bucket_id(b.bucket_id),
+    placement(b.data_pool, b.data_extra_pool, b.index_pool) {}
 
   void convert(cls_user_bucket *b) {
     b->name = name;
-    b->data_pool = data_pool;
-    b->data_extra_pool = data_extra_pool;
-    b->index_pool = index_pool;
+    b->data_pool = placement.data_pool.to_str();
+    b->data_extra_pool = placement.data_extra_pool.to_str();
+    b->index_pool = placement.index_pool.to_str();
     b->marker = marker;
     b->bucket_id = bucket_id;
   }
@@ -781,18 +897,18 @@ struct rgw_bucket {
   void encode(bufferlist& bl) const {
      ENCODE_START(9, 3, bl);
     ::encode(name, bl);
-    ::encode(data_pool, bl);
+    ::encode(placement.data_pool.name, bl);
     ::encode(marker, bl);
     ::encode(bucket_id, bl);
-    ::encode(index_pool, bl);
-    ::encode(data_extra_pool, bl);
+    ::encode(placement.index_pool.name, bl);
+    ::encode(placement.data_extra_pool.name, bl);
     ::encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     ::decode(name, bl);
-    ::decode(data_pool, bl);
+    ::decode(placement.data_pool.name, bl);
     if (struct_v >= 2) {
       ::decode(marker, bl);
       if (struct_v <= 3) {
@@ -806,12 +922,12 @@ struct rgw_bucket {
       }
     }
     if (struct_v >= 5) {
-      ::decode(index_pool, bl);
+      ::decode(placement.index_pool.name, bl);
     } else {
-      index_pool = data_pool;
+      placement.index_pool = placement.data_pool;
     }
     if (struct_v >= 7) {
-      ::decode(data_extra_pool, bl);
+      ::decode(placement.data_extra_pool.name, bl);
     }
     if (struct_v >= 8) {
       ::decode(tenant, bl);
@@ -823,11 +939,8 @@ struct rgw_bucket {
   std::string get_key(char tenant_delim = '/',
                       char id_delim = ':') const;
 
-  const string& get_data_extra_pool() {
-    if (data_extra_pool.empty()) {
-      return data_pool;
-    }
-    return data_extra_pool;
+  const rgw_pool& get_data_extra_pool() const {
+    return placement.get_data_extra_pool();
   }
 
   void dump(Formatter *f) const;
@@ -841,24 +954,7 @@ struct rgw_bucket {
 WRITE_CLASS_ENCODER(rgw_bucket)
 
 inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
-  out << b.name;
-  if (b.name.compare(b.data_pool)) {
-    out << "(@";
-    string s;
-    if (!b.index_pool.empty() && b.data_pool.compare(b.index_pool))
-      s = "i=" + b.index_pool;
-    if (!b.data_extra_pool.empty() && b.data_pool.compare(b.data_extra_pool)) {
-      if (!s.empty()) {
-        s += ",";
-      }
-      s += "e=" + b.data_extra_pool;
-    }
-    if (!s.empty()) {
-      out << "{"  << s << "}";
-    }
-
-    out << b.data_pool << "[" << b.marker << "])";
-  }
+  out << b.name << "[" << b.marker << "])";
   return out;
 }
 
@@ -1509,18 +1605,18 @@ public:
   std::string index_hash_source;
 
   rgw_obj() : in_extra_data(false) {}
-  rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
+  rgw_obj(const rgw_bucket& b, const std::string& o) : in_extra_data(false) {
     init(b, o);
   }
-  rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
+  rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
     from_index_key(b, k);
   }
-  void init(rgw_bucket& b, const std::string& o) {
+  void init(const rgw_bucket& b, const std::string& o) {
     bucket = b;
     set_obj(o);
     reset_loc();
   }
-  void init_ns(rgw_bucket& b, const std::string& o, const std::string& n) {
+  void init_ns(const rgw_bucket& b, const std::string& o, const std::string& n) {
     bucket = b;
     set_ns(n);
     set_obj(o);
@@ -1622,7 +1718,7 @@ public:
     return string(buf) + orig_obj;
   };
 
-  void from_index_key(rgw_bucket& b, const rgw_obj_key& key) {
+  void from_index_key(const rgw_bucket& b, const rgw_obj_key& key) {
     if (key.name[0] != '_') {
       init(b, key.name);
       set_instance(key.instance);
