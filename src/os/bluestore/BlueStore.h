@@ -588,7 +588,6 @@ public:
     };
     vector<Shard> shards;    ///< shards
 
-    bool inline_dirty = false;
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
     ExtentMap(Onode *o);
