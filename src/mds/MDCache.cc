@@ -7316,10 +7316,11 @@ void MDCache::check_memory_usage()
 
   if (num_inodes_with_caps > g_conf->mds_cache_size) {
     float ratio = (float)g_conf->mds_cache_size * .9 / (float)num_inodes_with_caps;
-    if (ratio < 1.0)
+    if (ratio < 1.0) {
+      last_recall_state = ceph_clock_now(g_ceph_context);
       mds->server->recall_client_state(ratio);
+    }
   }
-
 }
 
 

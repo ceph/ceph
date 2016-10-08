@@ -384,8 +384,10 @@ void Beacon::notify_health(MDSRank const *mds)
   {
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
+
     utime_t cutoff = ceph_clock_now(g_ceph_context);
     cutoff -= g_conf->mds_recall_state_timeout;
+    utime_t last_recall = mds->mdcache->last_recall_state;
 
     std::list<MDSHealthMetric> late_recall_metrics;
     std::list<MDSHealthMetric> large_completed_requests_metrics;
@@ -395,7 +397,10 @@ void Beacon::notify_health(MDSRank const *mds)
         dout(20) << "Session servicing RECALL " << session->info.inst
           << ": " << session->recalled_at << " " << session->recall_release_count
           << "/" << session->recall_count << dendl;
-        if (session->recalled_at < cutoff) {
+	if (last_recall < cutoff || session->last_recall_sent < last_recall) {
+	  dout(20) << "  no longer recall" << dendl;
+	  session->clear_recalled_at();
+	} else if (session->recalled_at < cutoff) {
           dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
           std::ostringstream oss;
 	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";

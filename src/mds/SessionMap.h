@@ -123,6 +123,7 @@ public:
 
   // Ephemeral state for tracking progress of capability recalls
   utime_t recalled_at;  // When was I asked to SESSION_RECALL?
+  utime_t last_recall_sent;
   uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
   uint32_t recall_release_count;  // How many caps have I actually revoked?
 
@@ -142,6 +143,7 @@ public:
 
   void notify_cap_release(size_t n_caps);
   void notify_recall_sent(int const new_limit);
+  void clear_recalled_at();
 
   inodeno_t next_ino() {
     if (info.prealloc_inos.empty())
@@ -309,7 +311,7 @@ public:
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
-    recalled_at(), recall_count(0), recall_release_count(0),
+    recall_count(0), recall_release_count(0),
     auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
