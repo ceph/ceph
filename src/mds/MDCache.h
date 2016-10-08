@@ -693,6 +693,8 @@ public:
   void trim_client_leases();
   void check_memory_usage();
 
+  utime_t last_recall_state;
+
   // shutdown
   void shutdown_start();
   void shutdown_check();
