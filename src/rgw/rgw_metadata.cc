@@ -280,7 +280,7 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
                   real_time mtime, JSONObj *obj, sync_type_t sync_type) override { return -ENOTSUP; }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {}
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {}
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override { return -ENOTSUP; }
 

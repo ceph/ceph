@@ -113,7 +113,7 @@ int rgw_read_user_buckets(RGWRados * store,
   buckets.clear();
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   list<cls_user_bucket_entry> entries;
 
   bool truncated = false;
@@ -155,7 +155,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_buc
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
 
   return store->cls_user_sync_bucket_stats(obj, bucket);
 }
@@ -211,7 +211,7 @@ int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
-  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
@@ -248,7 +248,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
 
   cls_user_bucket bucket;
   bucket.name = bucket_name;
-  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_remove_bucket(obj, bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
@@ -480,8 +480,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 
       if (actual_bucket.name.compare(bucket.name) != 0 ||
           actual_bucket.tenant.compare(bucket.tenant) != 0 ||
-          actual_bucket.data_pool.compare(bucket.data_pool) != 0 ||
-          actual_bucket.index_pool.compare(bucket.index_pool) != 0 ||
+          actual_bucket.placement.compare(bucket.placement) != 0 ||
           actual_bucket.marker.compare(bucket.marker) != 0 ||
           actual_bucket.bucket_id.compare(bucket.bucket_id) != 0) {
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
@@ -1395,8 +1394,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("pool", bucket.data_pool);
-  formatter->dump_string("index_pool", bucket.index_pool);
+  encode_json("placement", bucket.placement, formatter);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   ::encode_json("owner", bucket_info.owner, formatter);
@@ -2024,9 +2022,9 @@ public:
     return 0;
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    bucket = store->get_zone_params().domain_root;
+    pool = store->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, void **phandle) override
@@ -2137,15 +2135,12 @@ public:
         return ret;
       }
       bci.info.bucket.tenant = bucket.tenant;
-      bci.info.bucket.data_pool = bucket.data_pool;
-      bci.info.bucket.index_pool = bucket.index_pool;
-      bci.info.bucket.data_extra_pool = bucket.data_extra_pool;
+      bci.info.bucket.placement = bucket.placement;
       bci.info.index_type = rule_info.index_type;
     } else {
       /* existing bucket, keep its placement pools */
-      bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
-      bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
-      bci.info.bucket.data_extra_pool = old_bci.info.bucket.data_extra_pool;
+      bci.info.bucket.placement = old_bci.info.bucket.placement;
+      bci.info.index_type = old_bci.info.index_type;
     }
 
     // are we actually going to perform this put, or is it too old?
@@ -2189,10 +2184,10 @@ public:
     return rgw_bucket_instance_remove_entry(store, entry, &info.objv_tracker);
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     rgw_bucket_instance_key_to_oid(oid);
-    bucket = store->get_zone_params().domain_root;
+    pool = store->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, void **phandle) override
