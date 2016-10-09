@@ -421,6 +421,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         for (const auto &i : pending_map.standbys) {
           if (i.second.name == who) {
             gid = i.first;
+            break;
           }
         }
         if (gid != 0) {
