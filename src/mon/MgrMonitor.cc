@@ -271,7 +271,7 @@ void MgrMonitor::send_digests()
   digest_callback = new C_StdFunction([this](){
       send_digests();
   });
-  mon->timer.add_event_after(5, digest_callback);
+  mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_callback);
 }
 
 void MgrMonitor::tick()
