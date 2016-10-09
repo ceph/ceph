@@ -338,6 +338,7 @@ void Mgr::shutdown()
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
+  finisher.wait_for_empty();
   finisher.stop();
 }
 
