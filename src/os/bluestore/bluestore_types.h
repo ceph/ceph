@@ -296,7 +296,7 @@ struct bluestore_blob_t {
 
   int estimate_encoded_size() const {
     // conservative upper bound... fixme
-    return csum_data.length() + extents.size() * 16 + 48;
+    return csum_data.length() + extents.size() * 16 + 24;
   }
 
   bool can_split() const {
