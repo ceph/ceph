@@ -585,21 +585,6 @@ void BlueStore::LRUCache::_audit(const char *when)
     dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
 	     << " ok" << dendl;
   }
-  if (false) {
-    uint64_t lc = 0, oc = 0;
-    set<OnodeSpace*> spaces;
-    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
-      assert(i->space->onode_map.count(i->oid));
-      if (spaces.count(i->space) == 0) {
-	spaces.insert(i->space);
-	oc += i->space->onode_map.size();
-      }
-      ++lc;
-    }
-    if (lc != oc) {
-      derr << " lc " << lc << " oc " << oc << dendl;
-    }
-  }
 }
 #endif
 
@@ -876,24 +861,6 @@ void BlueStore::TwoQCache::_audit(const char *when)
 
     dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
 	     << " ok" << dendl;
-  }
-
-  if (false) {
-    uint64_t lc = 0, oc = 0;
-    set<OnodeSpace*> spaces;
-
-    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
-      assert(i->space->onode_map.count(i->oid));
-      if (spaces.count(i->space) == 0) {
-	spaces.insert(i->space);
-	oc += i->space->onode_map.size();
-      }
-      ++lc;
-    }
-
-    if (lc != oc) {
-      derr << " lc " << lc << " oc " << oc << dendl;
-    }
   }
 }
 #endif
@@ -1808,20 +1775,11 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       p->blob->encode(bl);
     }
   }
-  /*
-  derr << __func__ << ":";
-  bl.hexdump(*_dout);
-  *_dout << dendl;
-  */
   return false;
 }
 
 void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 {
-/*  derr << __func__ << ":";
-  bl.hexdump(*_dout);
-  *_dout << dendl;
-  */
   bufferlist::iterator p = bl.begin();
   uint32_t num;
   small_decode_varint(num, p);
