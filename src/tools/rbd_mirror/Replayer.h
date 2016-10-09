@@ -14,12 +14,18 @@
 #include "common/WorkQueue.h"
 #include "include/atomic.h"
 #include "include/rados/librados.hpp"
+#include "librbd/ManagedLock.h"
 
 #include "ClusterWatcher.h"
 #include "ImageReplayer.h"
+#include "LeaderWatcher.h"
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+
+namespace librbd {
+  class ImageCtx;
+}
 
 namespace rbd {
 namespace mirror {
@@ -55,6 +61,28 @@ public:
 private:
   typedef PoolWatcher::ImageId ImageId;
   typedef PoolWatcher::ImageIds ImageIds;
+  typedef librbd::ManagedLock<librbd::ImageCtx> LeaderLock;
+
+  class LeaderWatcher : public rbd::mirror::LeaderWatcher {
+  public:
+    LeaderWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue,
+                  Replayer *replayer)
+      : rbd::mirror::LeaderWatcher(io_ctx, work_queue), replayer(replayer) {
+    }
+
+    virtual void handle_heartbeat(Context *on_notify_ack) {
+      replayer->handle_leader_watcher_heartbeat(on_notify_ack);
+    }
+    virtual void handle_lock_acquired(Context *on_notify_ack) {
+      replayer->handle_leader_watcher_lock_acquired(on_notify_ack);
+    }
+    virtual void handle_lock_released(Context *on_notify_ack) {
+      replayer->handle_leader_watcher_lock_released(on_notify_ack);
+    }
+
+  private:
+    Replayer *replayer;
+  };
 
   void init_local_mirroring_images();
   void set_sources(const ImageIds &image_ids);
@@ -64,11 +92,24 @@ private:
                             const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
-  int mirror_image_status_init();
-  void mirror_image_status_shut_down();
+  int init_leader_watcher();
+  void shut_down_leader_watcher();
+
+  void acquire_leader_lock(bool blacklist_on_break_lock = false);
+  void handle_acquire_leader_lock(int r);
+
+  void release_leader_lock();
+  void handle_release_leader_lock(int r);
+
+  void mirror_image_status_init(Context *on_finish);
+  void mirror_image_status_shut_down(Context *on_finish);
 
   int init_rados(const std::string &cluser_name, const std::string &client_name,
                  const std::string &description, RadosRef *rados_ref);
+
+  void handle_leader_watcher_heartbeat(Context *on_notify_ack);
+  void handle_leader_watcher_lock_acquired(Context *on_notify_ack);
+  void handle_leader_watcher_lock_released(Context *on_notify_ack);
 
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
@@ -78,6 +119,8 @@ private:
   atomic_t m_stopping;
   bool m_manual_stop = false;
   bool m_blacklisted = false;
+  bool m_leader = false;
+  utime_t m_leader_last_heartbeat;
 
   peer_t m_peer;
   std::vector<const char*> m_args;
@@ -92,7 +135,11 @@ private:
 
   std::unique_ptr<PoolWatcher> m_pool_watcher;
   std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
+  std::unique_ptr<LeaderLock> m_leader_lock;
+  std::unique_ptr<LeaderWatcher> m_leader_watcher;
   std::unique_ptr<MirrorStatusWatchCtx> m_status_watcher;
+  LeaderLock::LockOwner m_leader_lock_owner;
+  LeaderLock::LockOwner m_lock_owner;
 
   std::string m_asok_hook_name;
   ReplayerAdminSocketHook *m_asok_hook;

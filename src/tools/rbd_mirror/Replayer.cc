@@ -13,6 +13,7 @@
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "global/global_context.h"
+#include "librbd/Utils.h"
 #include "librbd/Watcher.h"
 #include "librbd/internal.h"
 #include "Replayer.h"
@@ -33,6 +34,8 @@ using librbd::cls_client::dir_get_name;
 
 namespace rbd {
 namespace mirror {
+
+using librbd::util::create_context_callback;
 
 namespace {
 
@@ -191,16 +194,12 @@ public:
     delete m_watcher;
   }
 
-  int register_watch() {
-    C_SaferCond cond;
-    m_watcher->register_watch(&cond);
-    return cond.wait();
+  void register_watch(Context *on_finish) {
+    m_watcher->register_watch(on_finish);
   }
 
-  int unregister_watch() {
-    C_SaferCond cond;
-    m_watcher->unregister_watch(&cond);
-    return cond.wait();
+  void unregister_watch(Context *on_finish) {
+    m_watcher->unregister_watch(on_finish);
   }
 
   std::string get_oid() const {
@@ -428,12 +427,22 @@ void Replayer::init_local_mirroring_images() {
   } while (r == max_read);
 
   m_init_images = std::move(images);
+
+  Mutex::Locker locker(m_lock);
+  init_leader_watcher();
 }
 
 void Replayer::run()
 {
   dout(20) << "enter" << dendl;
 
+  ImageIds empty_sources;
+  const int heartbeat_interval = 5;
+  const int set_sources_interval =
+    g_ceph_context->_conf->rbd_mirror_image_state_check_interval;
+
+  utime_t last_set_sources;
+  utime_t last_heartbeat;
   while (!m_stopping.read()) {
 
     std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
@@ -446,24 +455,55 @@ void Replayer::run()
                                                 m_asok_hook_name, this);
     }
 
+    utime_t now = ceph_clock_now(nullptr);
     Mutex::Locker locker(m_lock);
     if (m_pool_watcher->is_blacklisted()) {
       m_blacklisted = true;
       m_stopping.set(1);
-    } else if (!m_manual_stop) {
-      set_sources(m_pool_watcher->get_images());
+    } else if (!m_manual_stop && m_leader_watcher) {
+      if (m_leader) {
+        if (now > last_set_sources + set_sources_interval) {
+          set_sources(m_pool_watcher->get_images());
+          last_set_sources = now;
+        }
+      } else if (now > m_leader_last_heartbeat + 2 * heartbeat_interval) {
+        dout(0) << "no hearbeat from the leader for more than "
+                << 2 * heartbeat_interval << " sec"
+                << " -- reacquiring the leader lock" << dendl;
+        acquire_leader_lock(true);
+        m_leader_last_heartbeat = now;
+        m_leader_lock_owner = {};
+      }
     }
 
     if (m_blacklisted) {
       break;
     }
-    m_cond.WaitInterval(g_ceph_context, m_lock,
-	utime_t(g_ceph_context->_conf->rbd_mirror_image_state_check_interval, 0));
+
+    if (m_leader && m_leader_watcher &&
+        now > last_heartbeat + heartbeat_interval) {
+      C_SaferCond cond;
+      m_leader_watcher->notify_heartbeat(&cond);
+      m_lock.Unlock();
+      int r = cond.wait();
+      m_lock.Lock();
+      if (r < 0) {
+        derr << "error sending heartbeat: " << cpp_strerror(r) << dendl;
+      } else {
+        last_heartbeat = now;
+      }
+    }
+
+    m_cond.WaitInterval(g_ceph_context, m_lock, utime_t(1, 0));
   }
 
-  ImageIds empty_sources;
+  C_SaferCond cond;
+  mirror_image_status_shut_down(&cond);
+  cond.wait();
+  Mutex::Locker locker(m_lock);
+  shut_down_leader_watcher();
+
   while (true) {
-    Mutex::Locker l(m_lock);
     set_sources(empty_sources);
     if (m_image_replayers.empty()) {
       break;
@@ -482,6 +522,7 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
     f->open_object_section("replayer_status");
     f->dump_string("pool", m_local_io_ctx.get_pool_name());
     f->dump_stream("peer") << m_peer;
+    f->dump_bool("leader", m_leader);
     f->open_array_section("image_replayers");
   };
 
@@ -614,7 +655,7 @@ void Replayer::set_sources(const ImageIds &image_ids)
 
   if (image_ids.empty()) {
     if (existing_image_replayers && m_image_replayers.empty()) {
-      mirror_image_status_shut_down();
+      shut_down_leader_watcher();
     }
     return;
   }
@@ -639,7 +680,7 @@ void Replayer::set_sources(const ImageIds &image_ids)
 
   if (m_image_replayers.empty() && !existing_image_replayers) {
     // create entry for pool if it doesn't exist
-    r = mirror_image_status_init();
+    r = init_leader_watcher();
     if (r < 0) {
       return;
     }
@@ -663,8 +704,218 @@ void Replayer::set_sources(const ImageIds &image_ids)
   }
 }
 
-int Replayer::mirror_image_status_init() {
-  assert(!m_status_watcher);
+int Replayer::init_leader_watcher() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  if (m_leader_watcher) {
+    dout(20) << "already initialized" << dendl;
+    return 0;
+  }
+
+  unique_ptr<LeaderWatcher> leader_watcher(
+    new LeaderWatcher(m_local_io_ctx, m_threads->work_queue, this));
+
+  int r = leader_watcher->init();
+  if (r < 0) {
+    derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_leader_watcher.reset(leader_watcher.release());
+  m_leader_lock.reset(new LeaderLock(m_local_io_ctx, m_threads->work_queue,
+                                     m_leader_watcher->get_oid(),
+                                     m_leader_watcher.get()));
+  m_leader_last_heartbeat = ceph_clock_now(nullptr);
+  acquire_leader_lock();
+  return 0;
+}
+
+void Replayer::shut_down_leader_watcher() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  if (!m_leader_watcher) {
+    dout(20) << "not initialized" << dendl;
+    return;
+  }
+
+  release_leader_lock();
+
+  while (m_leader) {
+    dout(20) << "waiting for leader lock realeased" << dendl;
+    m_cond.WaitInterval(g_ceph_context, m_lock, utime_t(1, 0));
+  }
+
+  C_SaferCond cond;
+  m_leader_lock->shut_down(&cond);
+  unique_ptr<LeaderWatcher> leader_watcher(m_leader_watcher.release());
+
+  m_lock.Unlock();
+  cond.wait();
+  leader_watcher->shut_down();
+  m_lock.Lock();
+}
+
+void Replayer::acquire_leader_lock(bool blacklist_on_break_lock) {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  assert(m_leader_watcher);
+  assert(m_leader_lock);
+
+  if (blacklist_on_break_lock && !m_leader_lock_owner.cookie.empty()) {
+    FunctionContext *ctx = new FunctionContext(
+      [this](int r) {
+	if (r < 0 && r != -ENOENT) {
+	  derr << "error beaking leader lock: " << cpp_strerror(r)  << dendl;
+	  return;
+	}
+
+	Mutex::Locker locker(m_lock);
+	acquire_leader_lock(false);
+      });
+
+    m_leader_lock->break_lock(m_leader_lock_owner, true, ctx);
+    return;
+  }
+
+  Context *ctx = create_context_callback<
+    Replayer, &Replayer::handle_acquire_leader_lock>(this);
+
+  m_leader_lock->try_acquire_lock(ctx);
+}
+
+void Replayer::handle_acquire_leader_lock(int r) {
+  dout(20) << dendl;
+
+  if (r < 0) {
+    derr << "error acquiring leader lock: " << cpp_strerror(r)
+         << dendl;
+
+    FunctionContext *ctx = new FunctionContext(
+      [this](int r) {
+        Mutex::Locker locker(m_lock);
+
+        if (r < 0) {
+          derr << "error retrieving leader lock owner: " << cpp_strerror(r)
+               << dendl;
+	  m_leader_lock_owner = {};
+        } else {
+	  m_leader_lock_owner = m_lock_owner;
+	  m_leader_last_heartbeat = ceph_clock_now(nullptr);
+        }
+	m_leader = false;
+	m_cond.Signal();
+      });
+
+    m_leader_lock->get_lock_owner(&m_lock_owner, ctx);
+    return;
+  }
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      if (r < 0) {
+	return;
+      }
+
+      Mutex::Locker locker(m_lock);
+      m_leader = true;
+      m_cond.Signal();
+    });
+
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+        derr << "error notifying leader lock acquired: " << cpp_strerror(r)
+             << dendl;
+	ctx->complete(r);
+	return;
+      }
+      mirror_image_status_init(ctx);
+    });
+
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      {
+	Mutex::Locker locker(m_lock);
+	if (m_leader_watcher) {
+	  m_leader_watcher->notify_lock_acquired(ctx);
+	  return;
+	}
+      }
+
+      dout(20) << "leader watcher gone" << dendl;
+      ctx->complete(0);
+    });
+
+  m_threads->work_queue->queue(ctx, 0);
+}
+
+void Replayer::release_leader_lock() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  assert(m_leader_watcher);
+  assert(m_leader_lock);
+
+  Context *ctx = create_context_callback<
+    Replayer, &Replayer::handle_release_leader_lock>(this);
+
+  m_leader_lock->release_lock(ctx);
+}
+
+void Replayer::handle_release_leader_lock(int r) {
+  dout(20) << dendl;
+
+  if (r < 0) {
+    derr << "error releasing leader lock: " << cpp_strerror(r) << dendl;
+  }
+
+  FunctionContext *ctx = new FunctionContext(
+    [this](int r) {
+      Mutex::Locker locker(m_lock);
+      m_leader = false;
+      m_leader_last_heartbeat = ceph_clock_now(nullptr);
+      m_cond.Signal();
+    });
+
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+        derr << "error notifying leader lock released: " << cpp_strerror(r)
+	     << dendl;
+      }
+      mirror_image_status_shut_down(ctx);
+    });
+
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      {
+	Mutex::Locker locker(m_lock);
+	if (m_leader_watcher) {
+	  m_leader_watcher->notify_lock_released(ctx);
+	  return;
+	}
+      }
+
+      dout(20) << "leader watcher gone" << dendl;
+      ctx->complete(0);
+    });
+
+  m_threads->work_queue->queue(ctx, 0);
+}
+
+void Replayer::mirror_image_status_init(Context *on_finish) {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+
+  if (m_status_watcher) {
+    dout(20) << "already initialized" << dendl;
+    m_threads->work_queue->queue(on_finish, 0);
+    return;
+  }
 
   uint64_t instance_id = librados::Rados(m_local_io_ctx).get_instance_id();
   dout(20) << "pool_id=" << m_local_pool_id << ", "
@@ -676,32 +927,54 @@ int Replayer::mirror_image_status_init() {
   if (r < 0) {
     derr << "error initializing " << RBD_MIRRORING << "object: "
 	 << cpp_strerror(r) << dendl;
-    return r;
+    m_threads->work_queue->queue(on_finish, r);
+    return;
   }
 
-  unique_ptr<MirrorStatusWatchCtx> watch_ctx(
+  m_status_watcher.reset(
     new MirrorStatusWatchCtx(m_local_io_ctx, m_threads->work_queue));
 
-  r = watch_ctx->register_watch();
-  if (r < 0) {
-    derr << "error registering watcher for " << watch_ctx->get_oid()
-	 << " object: " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  FunctionContext *ctx = new FunctionContext(
+    [this, on_finish] (int r) {
+      if (r < 0) {
+        derr << "error registering watcher for " << m_status_watcher->get_oid()
+             << " object: " << cpp_strerror(r) << dendl;
+	Mutex::Locker locker(m_lock);
+	m_status_watcher.reset();
+      }
+      on_finish->complete(r);
+    });
 
-  m_status_watcher = std::move(watch_ctx);
-  return 0;
+  m_status_watcher->register_watch(ctx);
 }
 
-void Replayer::mirror_image_status_shut_down() {
-  assert(m_status_watcher);
+void Replayer::mirror_image_status_shut_down(Context *on_finish) {
+  dout(20) << dendl;
 
-  int r = m_status_watcher->unregister_watch();
-  if (r < 0) {
-    derr << "error unregistering watcher for " << m_status_watcher->get_oid()
-	 << " object: " << cpp_strerror(r) << dendl;
+  MirrorStatusWatchCtx *status_watcher;
+  {
+    Mutex::Locker locker(m_lock);
+    status_watcher = m_status_watcher.release();
   }
-  m_status_watcher.reset();
+
+  if (status_watcher == nullptr) {
+    dout(20) << "not initialized" << dendl;
+    on_finish->complete(0);
+    return;
+  }
+
+  FunctionContext *ctx = new FunctionContext(
+    [this, on_finish, status_watcher] (int r) {
+      if (r < 0) {
+	derr << "error unregistering watcher for "
+	     << m_status_watcher->get_oid() << " object: "
+	     << cpp_strerror(r) << dendl;
+      }
+      delete status_watcher;
+      on_finish->complete(r);
+    });
+
+  status_watcher->unregister_watch(ctx);
 }
 
 void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
@@ -789,6 +1062,59 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
   }
 
   return false;
+}
+
+void Replayer::handle_leader_watcher_heartbeat(Context *on_notify_ack) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_leader) {
+      derr << "got another leader heartbeat" << dendl;
+    }
+    m_leader_last_heartbeat = ceph_clock_now(nullptr);
+  }
+
+  on_notify_ack->complete(0);
+}
+
+void Replayer::handle_leader_watcher_lock_acquired(Context *on_notify_ack) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_leader = false;
+    m_cond.Signal();
+
+    FunctionContext *ctx = new FunctionContext(
+      [this](int r) {
+        Mutex::Locker locker(m_lock);
+
+        if (r < 0) {
+          derr << "error retrieving leader lock owner: " << cpp_strerror(r)
+               << dendl;
+          m_leader_lock_owner = {};
+        } else {
+	  m_leader_lock_owner = m_lock_owner;
+	  m_leader_last_heartbeat = ceph_clock_now(nullptr);
+        }
+      });
+
+    m_leader_lock->get_lock_owner(&m_lock_owner, ctx);
+  }
+
+  on_notify_ack->complete(0);
+}
+
+void Replayer::handle_leader_watcher_lock_released(Context *on_notify_ack) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    acquire_leader_lock();
+  }
+
+  on_notify_ack->complete(0);
 }
 
 } // namespace mirror
