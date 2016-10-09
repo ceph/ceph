@@ -24,8 +24,6 @@
 #include "common/Timer.h"
 #include "common/Finisher.h"
 #include "common/config.h"
-#include "auth/AuthClientHandler.h"
-#include "auth/RotatingKeyRing.h"
 
 
 class MMonMap;
@@ -38,8 +36,8 @@ class LogClient;
 struct AuthAuthorizer;
 class AuthMethodList;
 class AuthClientHandler;
-// class RotatingKeyRing;
 class KeyRing;
+class RotatingKeyRing;
 
 struct MonClientPinger : public Dispatcher {
 
