@@ -1584,7 +1584,7 @@ instance for high availability.
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
 .. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure
 .. _Ceph Authentication and Authorization: ../rados/operations/auth-intro/
-.. _Hardware Recommendations: ../install/hardware-recommendations
+.. _Hardware Recommendations: ../start/hardware-recommendations
 .. _Network Config Reference: ../rados/configuration/network-config-ref
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _striping: http://en.wikipedia.org/wiki/Data_striping
