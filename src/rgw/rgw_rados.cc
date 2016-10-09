@@ -2536,7 +2536,7 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
   if (r < 0)
     return r;
 
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.obj.set_atomic(head_obj);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 
@@ -2681,53 +2681,6 @@ public:
     return 0;
   }
 };
-
-RGWObjState *RGWObjectCtx::get_state(rgw_obj& obj) {
-  RGWObjState *result;
-  map<rgw_obj, RGWObjState>::iterator iter;
-  lock.get_read();
-  assert (!obj.get_object().empty());
-  iter = objs_state.find(obj);
-  if (iter != objs_state.end()) {
-    result = &iter->second;
-    lock.unlock();
-  } else {
-    lock.unlock();
-    lock.get_write();
-    result = &objs_state[obj];
-    lock.unlock();
-  }
-  return result;
-}
-
-void RGWObjectCtx::invalidate(rgw_obj& obj)
-{
-  RWLock::WLocker wl(lock);
-  auto iter = objs_state.find(obj);
-  if (iter == objs_state.end()) {
-    return;
-  }
-  bool is_atomic = iter->second.is_atomic;
-  bool prefetch_data = iter->second.prefetch_data;
-  
-  objs_state.erase(iter);
-
-  auto& s = objs_state[obj];
-  s.is_atomic = is_atomic;
-  s.prefetch_data = prefetch_data;
-}
-
-void RGWObjectCtx::set_atomic(rgw_obj& obj) {
-  RWLock::WLocker wl(lock);
-  assert (!obj.get_object().empty());
-  objs_state[obj].is_atomic = true;
-}
-
-void RGWObjectCtx::set_prefetch_data(rgw_obj& obj) {
-  RWLock::WLocker wl(lock);
-  assert (!obj.get_object().empty());
-  objs_state[obj].prefetch_data = true;
-}
 
 class RGWMetaNotifierManager : public RGWCoroutinesManager {
   RGWRados *store;
@@ -5736,6 +5689,16 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_po
   return 0;
 }
 
+void RGWRados::obj_to_raw(const rgw_obj& obj, rgw_raw_obj *raw_obj)
+{
+  get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
+
+  if (!obj.is_in_extra_data()) {
+    raw_obj->pool = obj.bucket.placement.data_pool;
+  } else {
+    raw_obj->pool = obj.bucket.placement.get_data_extra_pool();
+  }
+}
 int RGWRados::get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool)
 {
   return get_raw_obj_ref(obj, ref, pool);
@@ -6054,7 +6017,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
     return 0;
   }
 
-  obj_ctx.set_atomic(obj);
+  obj_ctx.obj.set_atomic(obj);
 
   RGWObjState * state = nullptr;
   int r = get_obj_state(&obj_ctx, obj, &state, false);
@@ -6091,7 +6054,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   }
 
   rgw_obj dest_obj(dest_bucket_info.bucket, buf);
-  obj_ctx.set_atomic(dest_obj);
+  obj_ctx.obj.set_atomic(dest_obj);
 
   string no_zone;
 
@@ -6182,8 +6145,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     std::map<std::string, ceph::bufferlist> no_attrs;
 
     rgw_obj archive_obj(archive_binfo.bucket, entry.key);
-    obj_ctx.set_atomic(archive_obj);
-    obj_ctx.set_atomic(obj);
+    obj_ctx.obj.set_atomic(archive_obj);
+    obj_ctx.obj.set_atomic(obj);
 
     int ret = copy_obj(obj_ctx,
                        user,
@@ -7242,7 +7205,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
     if (copy_if_newer && cb.is_canceled()) {
       ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;
-      obj_ctx.invalidate(dest_obj); /* object was overwritten */
+      obj_ctx.obj.invalidate(dest_obj); /* object was overwritten */
       ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, false);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
@@ -7888,7 +7851,7 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
     string oid, loc;
     get_obj_bucket_and_oid_loc(mobj, oid, loc);
     cls_rgw_obj_key key(oid);
-    chain->push_obj(mobj.bucket.placement.data_pool, key, loc);
+    chain->push_obj(mobj.bucket.placement.data_pool.to_str(), key, loc);
   }
 }
 
@@ -8449,9 +8412,9 @@ int RGWRados::get_olh_target_state(RGWObjectCtx& obj_ctx, rgw_obj& obj, RGWObjSt
   return 0;
 }
 
-int RGWRados::get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker)
+int RGWRados::get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker)
 {
-  RGWObjState *s = rctx->get_state(obj);
+  RGWRawObjState *s = rctx->raw.get_state(obj);
   ldout(cct, 20) << "get_system_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs) {
@@ -8483,7 +8446,7 @@ int RGWRados::get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RG
   return 0;
 }
 
-int RGWRados::get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker)
+int RGWRados::get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker)
 {
   int ret;
 
@@ -8498,7 +8461,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
 {
   bool need_follow_olh = follow_olh && !obj.have_instance();
 
-  RGWObjState *s = rctx->get_state(obj);
+  RGWObjState *s = rctx->obj.get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs) {
@@ -8510,11 +8473,15 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
 
   s->obj = obj;
 
+  rgw_raw_obj raw_obj;
+  obj_to_raw(obj, &raw_obj);
+
   int r = -ENOENT;
 
   if (!assume_noent) {
-    r = RGWRados::raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL);
+    r = RGWRados::raw_obj_stat(raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL);
   }
+
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -8685,7 +8652,7 @@ int RGWRados::Object::Stat::stat_async()
   rgw_obj& obj = source->get_obj();
   RGWRados *store = source->get_store();
 
-  RGWObjState *s = ctx.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
+  RGWObjState *s = ctx.obj.get_state(obj); /* calling this one directly because otherwise a sync request will be sent */
   result.obj = obj;
   if (s->has_attrs) {
     state.ret = 0;
@@ -8820,7 +8787,7 @@ int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh, bool assu
 
 void RGWRados::Object::invalidate_state()
 {
-  ctx.invalidate(obj);
+  ctx.obj.invalidate(obj);
 }
 
 int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag,
@@ -9237,7 +9204,7 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
   return 0;
 }
 
-int RGWRados::SystemObject::get_state(RGWObjState **pstate, RGWObjVersionTracker *objv_tracker)
+int RGWRados::SystemObject::get_state(RGWRawObjState **pstate, RGWObjVersionTracker *objv_tracker)
 {
   return store->get_system_obj_state(&ctx, obj, pstate, objv_tracker);
 }
@@ -9250,7 +9217,7 @@ int RGWRados::stat_system_obj(RGWObjectCtx& obj_ctx,
                               uint64_t *obj_size,
                               RGWObjVersionTracker *objv_tracker)
 {
-  RGWObjState *astate = NULL;
+  RGWRawObjState *astate = NULL;
 
   int r = get_system_obj_state(&obj_ctx, obj, &astate, objv_tracker);
   if (r < 0)
@@ -10520,7 +10487,7 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
 #define MAX_ECANCELED_RETRY 100
   for (i = 0; i < MAX_ECANCELED_RETRY; i++) {
     if (ret == -ECANCELED) {
-      obj_ctx.invalidate(olh_obj);
+      obj_ctx.obj.invalidate(olh_obj);
     }
 
     ret = get_obj_state(&obj_ctx, olh_obj, &state, false); /* don't follow olh */
@@ -10579,7 +10546,7 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
 
   for (i = 0; i < MAX_ECANCELED_RETRY; i++) {
     if (ret == -ECANCELED) {
-      obj_ctx.invalidate(olh_obj);
+      obj_ctx.obj.invalidate(olh_obj);
     }
 
     ret = get_obj_state(&obj_ctx, olh_obj, &state, false); /* don't follow olh */

@@ -842,6 +842,10 @@ struct rgw_raw_obj {
     oid = _oid;
   }
 
+  bool empty() {
+    return oid.empty();
+  }
+
   void encode(bufferlist& bl) const {
      ENCODE_START(6, 6, bl);
     ::encode(pool, bl);
@@ -856,6 +860,17 @@ struct rgw_raw_obj {
     ::decode(oid, bl);
     ::decode(loc, bl);
     DECODE_FINISH(bl);
+  }
+
+  bool operator<(const rgw_raw_obj& o) const {
+    int r = pool.compare(o.pool);
+    if (r == 0) {
+      r = oid.compare(o.oid);
+      if (r == 0) {
+        r = loc.compare(o.loc);
+      }
+    }
+    return (r < 0);
   }
 };
 WRITE_CLASS_ENCODER(rgw_raw_obj)
@@ -1662,6 +1677,10 @@ public:
     if (orig_obj[0] == '_' && ns.empty()) {
       loc = orig_obj;
     }
+  }
+
+  bool empty() {
+    return object.empty();
   }
 
   bool have_null_instance() {
