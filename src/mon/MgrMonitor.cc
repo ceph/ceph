@@ -190,7 +190,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_name = m->get_name();
 
     dout(4) << "selecting new active in epoch " << pending_map.epoch << dendl;
-    wait_for_finished_proposal(op, new C_Updated(this, op));
+    updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
       dout(10) << "from existing standby " << m->get_gid() << dendl;
