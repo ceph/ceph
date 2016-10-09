@@ -2601,6 +2601,7 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
+  b.add_u64(l_bluestore_gc, "bluestore_gc", "Sum for garbage collection reads");
   b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes", "garbage collected bytes");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
@@ -7882,6 +7883,7 @@ int BlueStore::_do_write(
         o->extent_map.fault_range(db, gc_start_offset, read_len);
         _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, &wctx);
       }
+      logger->inc(l_bluestore_gc);
       logger->inc(l_bluestore_gc_bytes, read_len);
     }
 
@@ -7898,6 +7900,7 @@ int BlueStore::_do_write(
         o->extent_map.fault_range(db, end, read_len);
         _do_write_data(txc, c, o, end, read_len, tail_bl, &wctx);
       }
+      logger->inc(l_bluestore_gc);
       logger->inc(l_bluestore_gc_bytes, read_len);
     }
   }
