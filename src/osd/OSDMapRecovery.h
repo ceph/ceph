@@ -31,14 +31,13 @@
 struct OSDMapRecovery : public Dispatcher {
 
   OSD *osd;
-  epoch_t broken_epoch;
-  bool single_epoch;
 
   MonClient monc;
   Messenger *ms;
 
   Mutex lock;
   Cond wanted_cond;
+  bool wants_inc_maps;
   pair<epoch_t, epoch_t> wanted;
   pair<epoch_t, epoch_t> wanted_available;
   pair<epoch_t,epoch_t> remote_available;
@@ -53,7 +52,7 @@ struct OSDMapRecovery : public Dispatcher {
     STATE_WAIT_MON,
     STATE_WORKING,
     STATE_DONE,
-    STATE_NOT_AVAILABLE
+    STATE_ERROR
   } state;
 
   const char *get_state() {
@@ -70,8 +69,8 @@ struct OSDMapRecovery : public Dispatcher {
         return "working";
       case STATE_DONE:
         return "done";
-      case STATE_NOT_AVAILABLE:
-        return "n/a";
+      case STATE_ERROR:
+        return "error";
     }
     return "unknown";
   }
@@ -80,20 +79,10 @@ struct OSDMapRecovery : public Dispatcher {
   explicit OSDMapRecovery(CephContext *_cct, OSD *_osd) :
     Dispatcher(_cct),
     osd(_osd),
-    single_epoch(false),
     monc(_cct),
     ms(nullptr),
     lock("OSDMR::lock"),
-    state(STATE_NONE)
-  { }
-  explicit OSDMapRecovery(CephContext *_cct, OSD *_osd, epoch_t e) :
-    Dispatcher(_cct),
-    osd(_osd),
-    broken_epoch(e),
-    single_epoch(true),
-    monc(_cct),
-    ms(nullptr),
-    lock("OSDMR::lock"),
+    wants_inc_maps(false),
     state(STATE_NONE)
   { }
 
@@ -120,13 +109,19 @@ struct OSDMapRecovery : public Dispatcher {
     return (b.first >= a.first && b.second <= a.second);
   }
 
+  int _recover(list<pair<epoch_t,epoch_t> >& ranges,
+               bool inc);
   int recover_range(const pair<epoch_t,epoch_t> &r,
-                    list<pair<epoch_t,epoch_t> >& missing);
-  int recover_single(epoch_t e);
+                    list<pair<epoch_t,epoch_t> >& missing,
+                    bool inc);
   int recover(const epoch_t first, const epoch_t last);
 
   bool find_broken_ranges(epoch_t first,
                           epoch_t last,
-                          list<pair<epoch_t,epoch_t> >& ranges);
+                          list<pair<epoch_t,epoch_t> >& ranges,
+                          bool inc);
+private:
+  bool _is_broken_map(epoch_t e);
+  bool _is_broken_inc(epoch_t e);
 };
 

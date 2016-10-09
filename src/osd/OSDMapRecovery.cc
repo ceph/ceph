@@ -178,6 +178,14 @@ bool OSDMapRecovery::ms_dispatch(Message *m)
     return true;
   }
 
+  if (wants_inc_maps && mm->incremental_maps.empty() &&
+      !mm->maps.empty()) {
+    dout(0) << __func__ << " wanted incremental maps, got full maps -- drop!"
+            << dendl;
+    m->put();
+    return true;
+  }
+
   for (auto e : mm->maps) {
     if (e.first < war.first || e.first > war.second)
       continue;
@@ -201,9 +209,11 @@ bool OSDMapRecovery::ms_dispatch(Message *m)
 
 int OSDMapRecovery::recover_range(
     const pair<epoch_t,epoch_t> &r,
-    list<pair<epoch_t,epoch_t> >& missing)
+    list<pair<epoch_t,epoch_t> >& missing,
+    bool inc)
 {
-  dout(10) << __func__ << " [" << r.first << " .. "
+  dout(10) << __func__ << " " << (inc ? "inc" : "full")
+           << " [" << r.first << " .. "
            << r.second << "]" << dendl;
 
   clear();
@@ -211,7 +221,12 @@ int OSDMapRecovery::recover_range(
   lock.Lock();
   wanted = r;
   MMonGetOSDMap *req = new MMonGetOSDMap;
-  req->request_full(r.first, r.second);
+  if (inc) {
+    req->request_inc(r.first, r.second);
+    wants_inc_maps = true;
+  } else {
+    req->request_full(r.first, r.second);
+  }
   monc.send_mon_message(req);
 
   state = STATE_WAIT_MON;
@@ -262,26 +277,26 @@ int OSDMapRecovery::recover_range(
        e <= wanted_available.second;
        ++e) {
 
-    auto i = maps.find(e);
-    if (i != maps.end()) {
-      dout(10) << __func__ << " full map epoch " << e << dendl;
-      OSDMap *o = new OSDMap;
-      bufferlist& bl = i->second;
-      o->decode(bl);
-      dout(0) << *o << dendl;
-      assert(bl.length() > 0);
-      ghobject_t fulloid = osd->get_osdmap_pobject_name(e);
-      t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
-      //maps.erase(e);
-    }
-
-    i = incremental_maps.find(e);
-    if (i != incremental_maps.end()) {
-      dout(10) << __func__ << " inc map epoch " << e << dendl;
-      bufferlist& bl = i->second;
-      ghobject_t incoid = osd->get_inc_osdmap_pobject_name(e);
-      t.write(coll_t::meta(), incoid, 0, bl.length(), bl);
-      // incremental_maps.erase(e);
+    if (inc) {
+      auto i = incremental_maps.find(e);
+      if (i != incremental_maps.end()) {
+        dout(10) << __func__ << " inc map epoch " << e << dendl;
+        bufferlist& bl = i->second;
+        ghobject_t incoid = osd->get_inc_osdmap_pobject_name(e);
+        t.write(coll_t::meta(), incoid, 0, bl.length(), bl);
+      }
+    } else {
+      auto i = maps.find(e);
+      if (i != maps.end()) {
+        dout(10) << __func__ << " full map epoch " << e << dendl;
+        OSDMap *o = new OSDMap;
+        bufferlist& bl = i->second;
+        o->decode(bl);
+        dout(0) << *o << dendl;
+        assert(bl.length() > 0);
+        ghobject_t fulloid = osd->get_osdmap_pobject_name(e);
+        t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
+      }
     }
   }
   err = osd->service.store->apply_transaction(
@@ -295,42 +310,17 @@ int OSDMapRecovery::recover_range(
   return err;
 }
 
-int OSDMapRecovery::recover_single(epoch_t e)
+int OSDMapRecovery::_recover(list<pair<epoch_t,epoch_t> >& ranges, bool inc)
 {
-  state = STATE_RECOVERING;
-  dout(0) << __func__ << " epoch " << e << dendl;
-
-  pair<epoch_t,epoch_t> p = make_pair(e, e);
-  list<pair<epoch_t,epoch_t> > missing;
-  int r = recover_range(p, missing);
-  if (r < 0) {
-    derr << __func__ << " unable to recover epoch " << e << dendl;
-    return r;
-  }
-  assert(missing.empty());
-
-  state = STATE_DONE;
-  return 0;
-}
-
-int OSDMapRecovery::recover(const epoch_t first, const epoch_t last)
-{
-  state = STATE_RECOVERING;
-  dout(10) << __func__ << " epochs from " << first
-           << " to " << last << dendl;
-
-  list<pair<epoch_t,epoch_t> > ranges;
-  if (!find_broken_ranges(first, last, ranges)) {
-    dout(0) << __func__ << " no broken ranges found" << dendl;
-    return 0;
-  }
+  dout(10) << __func__ << " " << ranges.size() << " "
+           << (inc ? "broken inc maps" : "broken ranges") << dendl;
 
   while (!ranges.empty()) {
     pair<epoch_t,epoch_t> r = ranges.front();
     ranges.pop_front();
 
     list<pair<epoch_t,epoch_t> > missing;
-    int ret = recover_range(r, missing);
+    int ret = recover_range(r, missing, inc);
     if (ret < 0) {
       derr << __func__ << " error recovering range ["
         << r.first << " .. " << r.second << "]" << dendl;
@@ -340,40 +330,106 @@ int OSDMapRecovery::recover(const epoch_t first, const epoch_t last)
       ranges.splice(ranges.begin(), missing);
     }
   }
-
-  state = STATE_DONE;
   return 0;
 }
 
+int OSDMapRecovery::recover(const epoch_t first, const epoch_t last)
+{
+  assert(state == STATE_INIT);
+
+  state = STATE_RECOVERING;
+  dout(10) << __func__ << " epochs from " << first
+           << " to " << last << dendl;
+
+  list<pair<epoch_t,epoch_t> > broken_maps;
+  if (!find_broken_ranges(first, last, broken_maps, false)) {
+    dout(0) << __func__ << " no broken maps found" << dendl;
+  }
+
+  list<pair<epoch_t,epoch_t> > broken_inc_maps;
+  if (!find_broken_ranges(first, last, broken_inc_maps, true)) {
+    dout(0) << __func__ << " no broken inc maps found" << dendl;
+  }
+
+  int ret = _recover(broken_maps, false);
+  if (ret < 0) {
+    derr << __func__ << " error recovering broken maps" << dendl;
+    state = STATE_ERROR;
+    return ret;
+  }
+
+  ret = _recover(broken_inc_maps, true);
+  if (ret < 0) {
+    derr << __func__ << " error recovering broken inc maps" << dendl;
+    state = STATE_ERROR;
+    return ret;
+  }
+
+  state = STATE_DONE;
+  dout(0) << __func__ << " finished recovery" << dendl;
+  return 0;
+}
+
+bool OSDMapRecovery::_is_broken_map(epoch_t e)
+{
+  try {
+    bufferlist bl;
+
+    if (!osd->service.get_map_bl(e, bl, false) || bl.length() == 0) {
+      throw ceph::buffer::end_of_buffer();
+    }
+
+    OSDMap m;
+    m.decode(bl);
+
+  } catch (ceph::buffer::end_of_buffer e) {
+    return true;
+  } catch (ceph::buffer::malformed_input e) {
+    return true;
+  }
+  return false;
+}
+
+bool OSDMapRecovery::_is_broken_inc(epoch_t e)
+{
+  try {
+    bufferlist bl;
+
+    if (!osd->service.get_inc_map_bl(e, bl, false) || bl.length() == 0) {
+      throw ceph::buffer::end_of_buffer();
+    }
+
+    OSDMap::Incremental inc;
+    auto p = bl.begin();
+    inc.decode(p);
+
+  } catch (ceph::buffer::end_of_buffer e) {
+    return true;
+  } catch (ceph::buffer::malformed_input e) {
+    return true;
+  }
+
+  return false;
+}
 
 bool OSDMapRecovery::find_broken_ranges(
     epoch_t first,
     epoch_t last,
-    list<pair<epoch_t,epoch_t> >& ranges) {
+    list<pair<epoch_t,epoch_t> >& ranges,
+    bool inc)
+{
 
-  dout(10) << __func__ << " [" << first << " .. " << last << "]" << dendl;
+  dout(10) << __func__
+           << " " << (inc ? "inc" : "full" )
+           << " [" << first << " .. " << last << "]" << dendl;
 
   for (auto e = first; e <= last; e ++) {
 
-    bool broken = false;
-    try {
-      bufferlist bl;
-
-      if (!osd->service.get_map_bl(e, bl, false) || bl.length() == 0) {
-        throw ceph::buffer::end_of_buffer();
-      }
-
-      OSDMap m;
-      m.decode(bl);
-
-    } catch (ceph::buffer::end_of_buffer e) {
-      broken = true;
-    } catch (ceph::buffer::malformed_input e) {
-      broken = true;
-    }
+    bool broken = (inc ? _is_broken_inc(e) : _is_broken_map(e));
 
     if (broken) {
-      dout(0) << __func__ << " epoch " << e << " broken" << dendl;
+      dout(0) << __func__ << " " << (inc ? "inc" : "full")
+              << " epoch " << e << " broken" << dendl;
 
       auto &l = ranges.back();
       if (l.second == (e - 1)) {
