@@ -801,6 +801,44 @@ struct RGWObjState {
   }
 };
 
+struct RGWRawObjState {
+  rgw_raw_obj obj;
+  bool has_attrs{false};
+  bool exists{false};
+  uint64_t size{0};
+  ceph::real_time mtime;
+  uint64_t epoch;
+  bufferlist obj_tag;
+  bool has_data{false};
+  bufferlist data;
+  bool prefetch_data{false};
+  uint64_t pg_ver{0};
+
+  /* important! don't forget to update copy constructor */
+
+  RGWObjVersionTracker objv_tracker;
+
+  map<string, bufferlist> attrset;
+  RGWRawObjState() {}
+  RGWRawObjState(const RGWRawObjState& rhs) : obj (rhs.obj) {
+    has_attrs = rhs.has_attrs;
+    exists = rhs.exists;
+    size = rhs.size;
+    mtime = rhs.mtime;
+    epoch = rhs.epoch;
+    if (rhs.obj_tag.length()) {
+      obj_tag = rhs.obj_tag;
+    }
+    has_data = rhs.has_data;
+    if (rhs.data.length()) {
+      data = rhs.data;
+    }
+    prefetch_data = rhs.prefetch_data;
+    pg_ver = rhs.pg_ver;
+    objv_tracker = rhs.objv_tracker;
+  }
+};
+
 struct RGWPoolIterCtx {
   librados::IoCtx io_ctx;
   librados::NObjectIterator iter;
@@ -1847,20 +1885,70 @@ public:
   };
 };
 
+template <class T, class S>
+class RGWObjectCtxImpl {
+  RGWRados *store;
+  std::map<T, S> objs_state;
+  RWLock lock;
+
+public:
+  RGWObjectCtxImpl(RGWRados *_store) : store(_store), lock("RGWObjectCtxImpl") {}
+
+  S *get_state(T& obj) {
+    S *result;
+    typename std::map<T, S>::iterator iter;
+    lock.get_read();
+    assert (!obj.empty());
+    iter = objs_state.find(obj);
+    if (iter != objs_state.end()) {
+      result = &iter->second;
+      lock.unlock();
+    } else {
+      lock.unlock();
+      lock.get_write();
+      result = &objs_state[obj];
+      lock.unlock();
+    }
+    return result;
+  }
+
+  void set_atomic(T& obj) {
+    RWLock::WLocker wl(lock);
+    assert (!obj.get_object().empty());
+    objs_state[obj].is_atomic = true;
+  }
+  void set_prefetch_data(T& obj) {
+    RWLock::WLocker wl(lock);
+    assert (!obj.get_object().empty());
+    objs_state[obj].prefetch_data = true;
+  }
+  void invalidate(T& obj) {
+    RWLock::WLocker wl(lock);
+    auto iter = objs_state.find(obj);
+    if (iter == objs_state.end()) {
+      return;
+    }
+    bool is_atomic = iter->second.is_atomic;
+    bool prefetch_data = iter->second.prefetch_data;
+  
+    objs_state.erase(iter);
+
+    if (is_atomic || prefetch_data) {
+      auto& s = objs_state[obj];
+      s.is_atomic = is_atomic;
+      s.prefetch_data = prefetch_data;
+    }
+  }
+};
 
 struct RGWObjectCtx {
-  RGWRados *store;
-  map<rgw_obj, RGWObjState> objs_state;
-  RWLock lock;
   void *user_ctx;
 
-  explicit RGWObjectCtx(RGWRados *_store) : store(_store), lock("RGWObjectCtx"), user_ctx(NULL) { }
-  RGWObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), lock("RGWObjectCtx"), user_ctx(_user_ctx) { }
+  RGWObjectCtxImpl<rgw_obj, RGWObjState> obj;
+  RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState> raw;
 
-  RGWObjState *get_state(rgw_obj& obj);
-  void set_atomic(rgw_obj& obj);
-  void set_prefetch_data(rgw_obj& obj);
-  void invalidate(rgw_obj& obj);
+  explicit RGWObjectCtx(RGWRados *store) : user_ctx(NULL), obj(store), raw(store) { }
+  RGWObjectCtx(RGWRados *store, void *_user_ctx) : user_ctx(_user_ctx), obj(store), raw(store) { }
 };
 
 class Finisher;
@@ -1966,12 +2054,13 @@ class RGWRados
   int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool);
   int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool);
+  void obj_to_raw(const rgw_obj& obj, rgw_raw_obj *raw_obj);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool);
   uint64_t max_bucket_id;
 
   int get_olh_target_state(RGWObjectCtx& rctx, rgw_obj& obj, RGWObjState *olh_state,
                            RGWObjState **target_state);
-  int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
   int append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
@@ -2287,7 +2376,7 @@ public:
     RGWObjState *state;
 
   protected:
-    int get_state(RGWObjState **pstate, RGWObjVersionTracker *objv_tracker);
+    int get_state(RGWRawObjState **pstate, RGWObjVersionTracker *objv_tracker);
 
   public:
     SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
@@ -2873,7 +2962,7 @@ public:
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs);
 
-  int get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
   int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state) {
     return get_obj_state(rctx, obj, state, true);
@@ -2976,11 +3065,11 @@ public:
 
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->set_atomic(obj);
+    rctx->obj.set_atomic(obj);
   }
   void set_prefetch_data(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->set_prefetch_data(obj);
+    rctx->obj.set_prefetch_data(obj);
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
