@@ -13,6 +13,8 @@
 
 #include "DaemonServer.h"
 
+#include "auth/RotatingKeyRing.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
