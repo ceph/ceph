@@ -433,6 +433,10 @@ void Replayer::run()
 {
   dout(20) << "enter" << dendl;
 
+  const int heartbeat_interval = 5;
+  const int set_sources_interval = 30;
+
+  utime_t last_set_sources;
   while (!m_stopping.read()) {
 
     std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
@@ -450,13 +454,38 @@ void Replayer::run()
       m_blacklisted = true;
       m_stopping.set(1);
     } else if (!m_manual_stop) {
-      set_sources(m_pool_watcher->get_images());
+      utime_t now = ceph_clock_now(g_ceph_context);
+      bool do_set_sources = false;
+      if (m_leader) {
+	if (now > last_set_sources + set_sources_interval) {
+	  do_set_sources = true;
+	}
+      } else if (!m_leader_watcher ||
+		 now > m_leader_last_heartbeat + 2 * heartbeat_interval) {
+	do_set_sources = true;
+      }
+      if (do_set_sources) {
+	set_sources(m_pool_watcher->get_images());
+	last_set_sources = now;
+      }
     }
 
     if (m_blacklisted) {
       break;
     }
-    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
+
+    if (m_leader) {
+      assert(m_leader_watcher);
+
+      C_SaferCond cond;
+      m_leader_watcher->notify_heartbeat(&cond);
+      int r = cond.wait();
+      if (r < 0) {
+	derr << "error sending heartbeat: " << cpp_strerror(r) << dendl;
+	break;
+      }
+    }
+    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(heartbeat_interval));
   }
 
   ImageIds empty_sources;
@@ -613,6 +642,7 @@ void Replayer::set_sources(const ImageIds &image_ids)
   if (image_ids.empty()) {
     if (existing_image_replayers && m_image_replayers.empty()) {
       mirror_image_status_shut_down();
+      shut_down_leader_watcher();
     }
     return;
   }
@@ -637,10 +667,18 @@ void Replayer::set_sources(const ImageIds &image_ids)
 
   if (m_image_replayers.empty() && !existing_image_replayers) {
     // create entry for pool if it doesn't exist
+    r = init_leader_watcher();
+    if (r < 0) {
+      return;
+    }
     r = mirror_image_status_init();
     if (r < 0) {
       return;
     }
+  }
+
+  if (!m_leader) {
+    return;
   }
 
   for (auto &image_id : image_ids) {
@@ -659,6 +697,53 @@ void Replayer::set_sources(const ImageIds &image_ids)
     }
     start_image_replayer(it->second, image_id.id, image_id.name);
   }
+}
+
+int Replayer::init_leader_watcher() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  assert(!m_leader_watcher);
+
+  unique_ptr<LeaderWatcher> leader_watcher(
+    new LeaderWatcher(m_local_io_ctx, m_threads->work_queue, this));
+
+  int r = leader_watcher->init();
+  if (r < 0) {
+    derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // TODO: establish a leader lock on the object properly
+  C_SaferCond notify_ctx;
+  leader_watcher->notify_lock_acquired(&notify_ctx);
+  r = notify_ctx.wait();
+  if (r < 0) {
+    derr << "error notifying lock acquired: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_leader = true;
+  m_leader_watcher = std::move(leader_watcher);
+  return 0;
+}
+
+void Replayer::shut_down_leader_watcher() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  assert(m_leader_watcher);
+
+  C_SaferCond notify_ctx;
+  m_leader_watcher->notify_lock_released(&notify_ctx);
+  int r = notify_ctx.wait();
+  if (r < 0) {
+    derr << "error notifying lock released: " << cpp_strerror(r) << dendl;
+  }
+
+  m_leader_watcher->shut_down();
+  m_leader_watcher.reset();
+  m_leader = false;
 }
 
 int Replayer::mirror_image_status_init() {
@@ -787,6 +872,39 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
   }
 
   return false;
+}
+
+void Replayer::handle_leader_watcher_heartbeat(Context *on_notify_ack) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_leader) {
+      derr << "got another leader heartbeat" << dendl;
+    }
+    m_leader_last_heartbeat = ceph_clock_now(g_ceph_context);
+  }
+
+  on_notify_ack->complete(0);
+}
+
+void Replayer::handle_leader_watcher_lock_acquired(Context *on_notify_ack) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_leader = false;
+    m_leader_last_heartbeat = ceph_clock_now(g_ceph_context);
+  }
+
+  on_notify_ack->complete(0);
+}
+
+void Replayer::handle_leader_watcher_lock_released(Context *on_notify_ack) {
+  dout(20) << dendl;
+
+  // TODO
+  on_notify_ack->complete(0);
 }
 
 } // namespace mirror
