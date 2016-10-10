@@ -473,13 +473,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
     }
 
     if (!force_clear_omap) {
-      if (hardlink == 0) {
-          if (!m_disable_wbthrottle) {
-	    wbthrottle.clear_object(o); // should be only non-cache ref
-          }
-	  fdcache.clear(o);
-	  return 0;
-      } else if (hardlink == 1) {
+      if (hardlink == 0 || hardlink == 1) {
 	  force_clear_omap = true;
       }
     }
@@ -505,6 +499,12 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
        */
       if (!backend->can_checkpoint())
 	object_map->sync(&o, &spos);
+    }
+    if (hardlink == 0) {
+      if (!m_disable_wbthrottle) {
+	wbthrottle.clear_object(o); // should be only non-cache ref
+      }
+      return 0;
     }
   }
   r = index->unlink(o);
