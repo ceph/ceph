@@ -260,6 +260,7 @@ start_mirror()
 stop_mirror()
 {
     local cluster=$1
+    local sig=$2
 
     test -n "${RBD_MIRROR_USE_RBD_MIRROR}" && return
 
@@ -267,7 +268,7 @@ stop_mirror()
     pid=$(cat $(daemon_pid_file "${cluster}") 2>/dev/null) || :
     if [ -n "${pid}" ]
     then
-	kill ${pid}
+	kill ${sig} ${pid}
 	for s in 1 2 4 8 16 32; do
 	    sleep $s
 	    ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}' && break
