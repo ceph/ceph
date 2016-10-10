@@ -95,26 +95,51 @@ fi
 # Functions
 #
 
+# Parse a value in format cluster[:instance] and set cluster and instance vars.
+set_cluster_instance()
+{
+    local val=$1
+    local cluster_var_name=$2
+    local instance_var_name=$3
+
+    cluster=${val%:*}
+    instance=${val##*:}
+
+    if [ "${instance}" =  "${val}" ]; then
+	# instance was not specified, use default
+	instance=0
+    fi
+
+    eval ${cluster_var_name}=${cluster}
+    eval ${instance_var_name}=${instance}
+}
+
 daemon_asok_file()
 {
     local local_cluster=$1
     local cluster=$2
+    local instance
+
+    set_cluster_instance "${local_cluster}" local_cluster instance
 
     if [ -n "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
         echo $(ceph-conf --cluster $local_cluster --name "client.${CEPH_ID}" 'admin socket')
     else
-        echo "${TEMPDIR}/rbd-mirror.${local_cluster}_daemon.${cluster}.asok"
+        echo "${TEMPDIR}/rbd-mirror.${local_cluster}_daemon.${instance}.${cluster}.asok"
     fi
 }
 
 daemon_pid_file()
 {
     local cluster=$1
+    local instance
+
+    set_cluster_instance "${cluster}" cluster instance
 
     if [ -n "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
         echo $(ceph-conf --cluster $cluster --name "client.${CEPH_ID}" 'pid file')
     else
-        echo "${TEMPDIR}/rbd-mirror.${cluster}_daemon.pid"
+        echo "${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.pid"
     fi
 }
 
@@ -189,11 +214,15 @@ setup()
 cleanup()
 {
     test  -n "${RBD_MIRROR_NOCLEANUP}" && return
+    local cluster instance
 
     set +e
 
-    stop_mirror "${CLUSTER1}"
-    stop_mirror "${CLUSTER2}"
+    for cluster in "${CLUSTER1}" "${CLUSTER2}"; do
+	for instance in `seq 0 9`; do
+	    stop_mirror "${cluster}:${instance}"
+	done
+    done
 
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
         cd ${CEPH_ROOT}
@@ -211,14 +240,17 @@ cleanup()
 start_mirror()
 {
     local cluster=$1
+    local instance
+
+    set_cluster_instance "${cluster}" cluster instance
 
     test -n "${RBD_MIRROR_USE_RBD_MIRROR}" && return
 
     rbd-mirror \
 	--cluster ${cluster} \
-	--pid-file=$(daemon_pid_file "${cluster}") \
-	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.\$pid.log \
-	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.asok \
+	--pid-file=$(daemon_pid_file "${cluster}:${instance}") \
+	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log \
+	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.\$cluster.asok \
 	--rbd-mirror-journal-poll-age=1 \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
@@ -250,8 +282,11 @@ stop_mirror()
 admin_daemon()
 {
     local cluster=$1 ; shift
+    local instance
 
-    local asok_file=$(daemon_asok_file "${cluster}" "${cluster}")
+    set_cluster_instance "${cluster}" cluster instance
+
+    local asok_file=$(daemon_asok_file "${cluster}:${instance}" "${cluster}")
     test -S "${asok_file}"
 
     ceph --admin-daemon ${asok_file} $@
