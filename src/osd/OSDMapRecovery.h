@@ -28,6 +28,37 @@
 #include "include/types.h"
 #include "common/config.h"
 
+
+/**
+ * Recover broken osd maps automatically by requesting the broken maps
+ * from the monitors.
+ *
+ * This class will create its own messenger and monclient, keeping itself
+ * separated from the OSD's so as to be as unobtrusive as possible during
+ * the OSD's init process.
+ *
+ * The recover workflow starts with the `recover()` function, which will
+ * first init the class - setup messenger and monclient -, and then proceed
+ * to finding all the broken maps and recover any broken ranges that may be
+ * found.
+ *
+ * Finding broken maps, may they be full or incremental, relies on reading
+ * map epochs from disk and decoding them. Maps with zero length are
+ * considered somehow corrupt, as well as any maps which throw exceptions
+ * during decode.
+ *
+ * Ranges will be asked from the monitors, and replies will be handled by
+ * `ms_dispatch()`. The process is blocking, with the recovery function
+ * `recover_range()` blocking while waiting for an adequate reply to be
+ * handled by `ms_dispatch()`. If `osd_map_recover_broken_timeout` is
+ * greater than zero, a timeout will be triggered if we don't get an
+ * adequate reply in the mean time.
+ *
+ * Given a reply with the wanted range, those maps will then be written
+ * off to disk. Once all the broken maps have been written to disk, the
+ * recovery will finish successfuly.
+ *
+ */
 struct OSDMapRecovery : public Dispatcher {
 
   OSD *osd;
