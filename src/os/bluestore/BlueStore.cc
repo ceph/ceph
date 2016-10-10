@@ -1243,7 +1243,6 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 
 void BlueStore::Blob::discard_unallocated()
 {
-  size_t pos = 0;
   if (blob.is_compressed()) {
     bool discard = false;
     bool all_invalid = true;
@@ -1260,6 +1259,7 @@ void BlueStore::Blob::discard_unallocated()
       shared_blob->bc.discard(0, blob.get_compressed_payload_original_length());
     }
   } else {
+    size_t pos = 0;
     for (auto e : blob.extents) {
       if (!e.is_valid()) {
         shared_blob->bc.discard(pos, e.length);
