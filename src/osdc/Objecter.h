@@ -922,10 +922,11 @@ struct ObjectOperation {
   }
 
   // watch/notify
-  void watch(uint64_t cookie, __u8 op) {
+  void watch(uint64_t cookie, __u8 op, uint32_t timeout = 0) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_WATCH);
     osd_op.op.watch.cookie = cookie;
     osd_op.op.watch.op = op;
+    osd_op.op.watch.timeout = timeout;
   }
 
   void notify(uint64_t cookie, uint32_t prot_ver, uint32_t timeout,
