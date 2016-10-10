@@ -979,9 +979,9 @@ bool SessionFilter::match(
     const Session &session,
     std::function<bool(client_t)> is_reconnecting) const
 {
-  for (auto m : metadata) {
-    auto k = m.first;
-    auto v = m.second;
+  for (const auto &m : metadata) {
+    const auto &k = m.first;
+    const auto &v = m.second;
     if (session.info.client_metadata.count(k) == 0) {
       return false;
     }
