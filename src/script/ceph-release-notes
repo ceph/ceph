@@ -166,7 +166,18 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    desc = '''
+    Make ceph release notes for a given revision. Eg usage:
+
+    $ ceph-release-notes -r tags/v0.87..origin/giant $(git rev-parse --show-toplevel)
+
+    It is recommended to set the github env. token in order to avoid
+    hitting the api rate limits.
+    '''
+
+    parser = argparse.ArgumentParser(description=desc,
+                                     formatter_class=argparse.RawTextHelpFormatter)
+
     parser.add_argument("--rev", "-r",
                         help="git revision range for creating release notes")
     parser.add_argument("--text", "-t",
