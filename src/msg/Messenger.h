@@ -166,8 +166,7 @@ public:
                            entity_name_t name,
 			   string lname,
                            uint64_t nonce,
-			   uint64_t features = 0,
-			   uint64_t cflags = 0);
+			   uint64_t cflags);
 
   /**
    * create a new messenger

@@ -259,7 +259,7 @@ class C_handle_reap : public EventCallback {
  */
 
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
-                               string mname, uint64_t _nonce, uint64_t features)
+                               string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     dispatch_queue(cct, this, mname),
     lock("AsyncMessenger::lock"),
@@ -274,7 +274,6 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   stack->start();
   local_worker = stack->get_worker();
   local_connection = new AsyncConnection(cct, this, &dispatch_queue, local_worker);
-  local_features = features;
   init_local_connection();
   reap_handler = new C_handle_reap(this);
   unsigned processor_num = 1;

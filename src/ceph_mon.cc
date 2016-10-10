@@ -642,7 +642,7 @@ int main(int argc, const char **argv)
   int rank = monmap.get_rank(g_conf->name.get_id());
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MON(rank), "mon",
-				      0, 0, Messenger::HAS_MANY_CONNECTIONS);
+				      0, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);

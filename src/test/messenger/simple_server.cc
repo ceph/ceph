@@ -76,7 +76,8 @@ int main(int argc, const char **argv)
 	messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MON(-1),
 				      "simple_server",
-				      0 /* nonce */);
+				      0 /* nonce */,
+				      0 /* flags */);
 	// enable timing prints
 	messenger->set_magic(MSG_MAGIC_TRACE_CTR);
 	messenger->set_default_policy(

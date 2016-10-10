@@ -82,7 +82,7 @@ public:
    * features The local features bits for the local_connection
    */
   SimpleMessenger(CephContext *cct, entity_name_t name,
-		  string mname, uint64_t _nonce, uint64_t features);
+		  string mname, uint64_t _nonce);
 
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
@@ -332,7 +332,6 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
-  uint64_t local_features;
 
   /**
    * @defgroup SimpleMessenger internals
