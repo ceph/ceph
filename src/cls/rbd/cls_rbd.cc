@@ -1496,7 +1496,7 @@ int get_data_pool(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "get_data_pool");
 
-  int64_t data_pool_id;
+  int64_t data_pool_id = -1;
   int r = read_key(hctx, "data_pool_id", &data_pool_id);
   if (r == -ENOENT) {
     data_pool_id = -1;
