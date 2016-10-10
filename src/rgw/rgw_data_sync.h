@@ -264,7 +264,7 @@ public:
 
 class RGWDataSyncStatusManager {
   RGWRados *store;
-  librados::IoCtx ioctx;
+  rgw_rados_ref ref;
 
   string source_zone;
   RGWRESTConn *conn;
@@ -275,9 +275,8 @@ class RGWDataSyncStatusManager {
 
   string source_status_oid;
   string source_shard_status_oid_prefix;
-  rgw_obj source_status_obj;
 
-  map<int, rgw_obj> shard_objs;
+  map<int, rgw_raw_obj> shard_objs;
 
   int num_shards;
 
@@ -473,7 +472,6 @@ public:
 
 class RGWBucketSyncStatusManager {
   RGWRados *store;
-  librados::IoCtx ioctx;
 
   RGWCoroutinesManager cr_mgr;
 
@@ -490,10 +488,9 @@ class RGWBucketSyncStatusManager {
 
   string source_status_oid;
   string source_shard_status_oid_prefix;
-  rgw_obj source_status_obj;
 
   map<int, rgw_bucket_shard_sync_info> sync_status;
-  rgw_obj status_obj;
+  rgw_raw_obj status_obj;
 
   int num_shards;
 

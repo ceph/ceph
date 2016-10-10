@@ -819,12 +819,11 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  std::string no_oid;
-
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  rgw_obj obj(bucket, no_oid);
+  const rgw_pool& root_pool = store->get_zone_params().domain_root;
+  rgw_raw_obj obj(root_pool, bucket.name);
   RGWObjVersionTracker objv_tracker;
 
   map<string, bufferlist> attrs;
@@ -886,9 +885,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     policy_instance.encode(aclbl);
 
     string oid_bucket_instance = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
-    rgw_bucket bucket_instance;
-    bucket_instance.name = oid_bucket_instance;
-    rgw_obj obj_bucket_instance(bucket_instance, no_oid);
+    rgw_raw_obj obj_bucket_instance(root_pool, oid_bucket_instance);
     r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
 
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket, real_time());
