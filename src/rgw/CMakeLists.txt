@@ -50,6 +50,9 @@ set(rgw_a_srcs
   rgw_multi_del.cc
   rgw_sync.cc
   rgw_data_sync.cc
+  rgw_sync_module.cc
+  rgw_sync_module_es.cc
+  rgw_sync_module_log.cc
   rgw_period_history.cc
   rgw_period_puller.cc
   rgw_period_pusher.cc

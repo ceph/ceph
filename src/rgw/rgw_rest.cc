@@ -527,22 +527,10 @@ void dump_epoch_header(struct req_state *s, const char *name, real_time t)
 
 void dump_time(struct req_state *s, const char *name, real_time *t)
 {
-  utime_t ut(*t);
-
   char buf[TIME_BUF_SIZE];
-  struct tm result;
-  time_t epoch = ut.sec();
-  struct tm *tmp = gmtime_r(&epoch, &result);
-  if (tmp == NULL)
-    return;
+  rgw_to_iso8601(*t, buf, sizeof(buf));
 
-  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T", tmp) == 0)
-    return;
-
-  char buf2[TIME_BUF_SIZE];
-  snprintf(buf2, sizeof(buf2), "%s.%03dZ", buf, (int)(ut.usec() / 1000));
-
-  s->formatter->dump_string(name, buf2);
+  s->formatter->dump_string(name, buf);
 }
 
 void dump_owner(struct req_state *s, rgw_user& id, string& name,
@@ -816,6 +804,8 @@ int RGWGetObj_ObjStore::get_params()
   if (s->system_request) {
     mod_zone_id = s->info.env->get_int("HTTP_DEST_ZONE_SHORT_ID", 0);
     mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
+    rgwx_stat = s->info.args.exists(RGW_SYS_PARAM_PREFIX "stat");
+    get_data &= (!rgwx_stat);
   }
 
   /* start gettorrent */

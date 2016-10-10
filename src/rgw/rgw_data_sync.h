@@ -5,6 +5,8 @@
 #include "rgw_http_client.h"
 #include "rgw_bucket.h"
 
+#include "rgw_sync_module.h"
+
 #include "common/RWLock.h"
 #include "common/ceph_json.h"
 
@@ -185,6 +187,19 @@ struct rgw_datalog_shard_data {
 class RGWAsyncRadosProcessor;
 class RGWDataSyncStatusManager;
 class RGWDataSyncControlCR;
+struct RGWDataSyncEnv;
+
+struct rgw_bucket_entry_owner {
+  string id;
+  string display_name;
+
+  rgw_bucket_entry_owner() {}
+  rgw_bucket_entry_owner(const string& _id, const string& _display_name) : id(_id), display_name(_display_name) {}
+
+  void decode_json(JSONObj *obj);
+};
+
+class RGWSyncErrorLogger;
 
 struct RGWDataSyncEnv {
   CephContext *cct;
@@ -194,12 +209,14 @@ struct RGWDataSyncEnv {
   RGWHTTPManager *http_manager;
   RGWSyncErrorLogger *error_logger;
   string source_zone;
+  RGWSyncModuleInstanceRef sync_module;
 
-  RGWDataSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL) {}
+  RGWDataSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL), sync_module(NULL) {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
-            RGWSyncErrorLogger *_error_logger, const string& _source_zone) {
+            RGWSyncErrorLogger *_error_logger, const string& _source_zone,
+            RGWSyncModuleInstanceRef& _sync_module) {
     cct = _cct;
     store = _store;
     conn = _conn;
@@ -207,6 +224,7 @@ struct RGWDataSyncEnv {
     http_manager = _http_manager;
     error_logger = _error_logger;
     source_zone = _source_zone;
+    sync_module = _sync_module;
   }
 
   string shard_obj_name(int shard_id);
@@ -232,7 +250,7 @@ public:
       http_manager(store->ctx(), completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
-  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger);
+  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger, RGWSyncModuleInstanceRef& module);
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
@@ -253,6 +271,7 @@ class RGWDataSyncStatusManager {
   string source_zone;
   RGWRESTConn *conn;
   RGWSyncErrorLogger *error_logger;
+  RGWSyncModuleInstanceRef sync_module;
 
   RGWRemoteDataLog source_log;
 
@@ -268,6 +287,7 @@ public:
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
                            const string& _source_zone)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
+      sync_module(nullptr),
       source_log(store, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();
@@ -441,7 +461,8 @@ public:
 
   int init(const string& _source_zone, RGWRESTConn *_conn,
            const rgw_bucket& bucket, int shard_id,
-           RGWSyncErrorLogger *_error_logger);
+           RGWSyncErrorLogger *_error_logger,
+           RGWSyncModuleInstanceRef& _sync_module);
   void finish();
 
   RGWCoroutine *read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status);
@@ -463,6 +484,7 @@ class RGWBucketSyncStatusManager {
   string source_zone;
   RGWRESTConn *conn;
   RGWSyncErrorLogger *error_logger;
+  RGWSyncModuleInstanceRef sync_module;
 
   rgw_bucket bucket;
 
@@ -498,6 +520,13 @@ public:
 
   int read_sync_status();
   int run();
+};
+
+class RGWDefaultSyncModule : public RGWSyncModule {
+public:
+  RGWDefaultSyncModule() {}
+  bool supports_data_export() override { return true; }
+  int create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 
