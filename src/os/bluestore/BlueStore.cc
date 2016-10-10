@@ -7466,19 +7466,18 @@ int BlueStore::_do_alloc_write(
   }
 
   uint64_t hint = 0;
+  CompressorRef c = compressor;
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
+    bluestore_blob_t& dblob = b->dirty_blob();
     uint64_t b_off = wi.b_off;
     bufferlist *l = &wi.bl;
     uint64_t final_length = wi.blob_length;
     uint64_t csum_length = wi.blob_length;
     unsigned csum_order = block_size_order;
     bufferlist compressed_bl;
-    CompressorRef c;
     bool compressed = false;
-    if (wctx->compress &&
-	wi.blob_length > min_alloc_size &&
-	(c = compressor) != nullptr) {
+    if (c && wctx->compress && wi.blob_length > min_alloc_size) {
 
       utime_t start = ceph_clock_now(g_ceph_context);
 
@@ -7517,7 +7516,7 @@ int BlueStore::_do_alloc_write(
 	final_length = newlen;
 	csum_length = newlen;
 	csum_order = ctz(newlen);
-	b->dirty_blob().set_compressed(wi.blob_length, rawlen);
+	dblob.set_compressed(wi.blob_length, rawlen);
 	compressed = true;
         logger->inc(l_bluestore_compress_success_count);
       } else {
@@ -7534,7 +7533,7 @@ int BlueStore::_do_alloc_write(
 		   ceph_clock_now(g_ceph_context) - start);
     }
     if (!compressed) {
-      b->dirty_blob().set_flag(bluestore_blob_t::FLAG_MUTABLE);
+      dblob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
       if (l->length() != wi.blob_length) {
 	// hrm, maybe we could do better here, but let's not bother.
 	dout(20) << __func__ << " forcing csum_order to block_size_order "
@@ -7558,7 +7557,6 @@ int BlueStore::_do_alloc_write(
     assert(count > 0);
     hint = extents[count - 1].end();
 
-    bluestore_blob_t& dblob = b->dirty_blob();
     for (int i = 0; i < count; i++) {
       bluestore_pextent_t e = bluestore_pextent_t(extents[i]);
       txc->allocated.insert(e.offset, e.length);
@@ -7573,17 +7571,17 @@ int BlueStore::_do_alloc_write(
     // checksum
     int csum = csum_type.load();
     if (csum) {
-      b->dirty_blob().init_csum(csum, csum_order, csum_length);
-      b->dirty_blob().calc_csum(b_off, *l);
+      dblob.init_csum(csum, csum_order, csum_length);
+      dblob.calc_csum(b_off, *l);
     }
     if (wi.mark_unused) {
       auto b_off = wi.b_off;
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
-        b->dirty_blob().add_unused(0, b_off);
+        dblob.add_unused(0, b_off);
       }
       if (b_end < wi.blob_length) {
-        b->dirty_blob().add_unused(b_end, wi.blob_length - b_end);
+        dblob.add_unused(b_end, wi.blob_length - b_end);
       }
     }
 
