@@ -519,6 +519,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
 		      bool get_format, librbd::ImageOptions *opts) {
   uint64_t order = 0, stripe_unit = 0, stripe_count = 0, object_size = 0;
   uint64_t features = 0, features_clear = 0, features_set = 0;
+  std::string data_pool;
   bool order_specified = true;
   bool features_specified = false;
   bool features_clear_specified = false;
@@ -560,6 +561,10 @@ int get_image_options(const boost::program_options::variables_map &vm,
     }
   }
 
+  if (vm.count(at::IMAGE_DATA_POOL)) {
+    data_pool = vm[at::IMAGE_DATA_POOL].as<std::string>();
+  }
+
   if (get_format) {
     uint64_t format = 0;
     bool format_specified = false;
@@ -597,6 +602,17 @@ int get_image_options(const boost::program_options::variables_map &vm,
       }
     }
 
+    if (!data_pool.empty()) {
+      if (format_specified && format == 1) {
+        std::cerr << "rbd: data pool not allowed with format 1; "
+                  << "use --image-format 2" << std::endl;
+        return -EINVAL;
+      } else {
+        format = 2;
+        format_specified = true;
+      }
+    }
+
     if (format_specified) {
       int r = g_conf->set_val("rbd_default_format", stringify(format));
       assert(r == 0);
@@ -617,7 +633,9 @@ int get_image_options(const boost::program_options::variables_map &vm,
     opts->set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
     opts->set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
   }
-
+  if (!data_pool.empty()) {
+    opts->set(RBD_IMAGE_OPTION_DATA_POOL, data_pool);
+  }
   int r = get_journal_options(vm, opts);
   if (r < 0) {
     return r;
