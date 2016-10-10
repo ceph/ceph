@@ -1022,6 +1022,7 @@ OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
 OPTION(bluestore_default_buffered_read, OPT_BOOL, true)
+OPTION(bluestore_default_buffered_write, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
 OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
