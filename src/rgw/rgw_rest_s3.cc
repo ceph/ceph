@@ -1754,7 +1754,13 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  << store->ctx()->_conf->rgw_ldap_uri
 	  << dendl;
 
-	RGWToken token{from_base64(s3_access_key)};
+	RGWToken token;
+	/* boost filters and/or string_ref may throw on invalid input */
+	try {
+	  token = rgw::from_base64(s3_access_key);
+	} catch(...) {
+	  token = std::string("");
+	}
 	if (! token.valid())
 	  return -EACCES;
 
@@ -3090,12 +3096,13 @@ void RGW_Auth_S3::init_impl(RGWRados* store)
   const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
   const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
   const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
+  const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
   const string& ldap_dnattr =
     store->ctx()->_conf->rgw_ldap_dnattr;
   std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
   ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
-			    ldap_searchdn, ldap_dnattr);
+			    ldap_searchdn, ldap_searchfilter, ldap_dnattr);
 
   ldh->init();
   ldh->bind();
