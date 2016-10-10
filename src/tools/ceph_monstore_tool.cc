@@ -533,6 +533,10 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
     KeyServerData::Incremental auth_inc;
     auth_inc.name = k->first;
     auth_inc.auth = k->second;
+    if (auth_inc.auth.caps.empty()) {
+      cerr << "no caps granted to: " << auth_inc.name << std::endl;
+      return -EINVAL;
+    }
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
 
     AuthMonitor::Incremental inc;
