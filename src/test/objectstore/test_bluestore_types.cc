@@ -235,7 +235,7 @@ TEST(bluestore_blob_t, calc_csum)
   bufferlist n;
   n.append("12345678");
 
-  for (unsigned csum_type = 1;
+  for (unsigned csum_type = Checksummer::CSUM_NONE + 1;
        csum_type < Checksummer::CSUM_MAX;
        ++csum_type) {
     cout << "csum_type " << Checksummer::get_csum_type_string(csum_type)
