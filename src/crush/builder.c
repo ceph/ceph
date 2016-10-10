@@ -1015,7 +1015,8 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 
 		if (bucket->h.items[i] != item)
 			continue;
-		
+
+		bucket->h.items[i] = 0;
 		node = crush_calc_tree_node(i);
 		weight = bucket->node_weights[node];
 		bucket->node_weights[node] = 0;
