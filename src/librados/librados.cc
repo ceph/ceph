@@ -437,6 +437,14 @@ void librados::ObjectWriteOperation::setxattr(const char *name, const bufferlist
   o->setxattr(name, v);
 }
 
+void librados::ObjectWriteOperation::setxattr(const char *name,
+					      const buffer::list&& v)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->setxattr(name, std::move(v));
+}
+
+
 void librados::ObjectWriteOperation::omap_set(
   const map<string, bufferlist> &map)
 {
