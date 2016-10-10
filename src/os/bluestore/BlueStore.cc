@@ -585,21 +585,6 @@ void BlueStore::LRUCache::_audit(const char *when)
     dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
 	     << " ok" << dendl;
   }
-  if (false) {
-    uint64_t lc = 0, oc = 0;
-    set<OnodeSpace*> spaces;
-    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
-      assert(i->space->onode_map.count(i->oid));
-      if (spaces.count(i->space) == 0) {
-	spaces.insert(i->space);
-	oc += i->space->onode_map.size();
-      }
-      ++lc;
-    }
-    if (lc != oc) {
-      derr << " lc " << lc << " oc " << oc << dendl;
-    }
-  }
 }
 #endif
 
@@ -876,24 +861,6 @@ void BlueStore::TwoQCache::_audit(const char *when)
 
     dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
 	     << " ok" << dendl;
-  }
-
-  if (false) {
-    uint64_t lc = 0, oc = 0;
-    set<OnodeSpace*> spaces;
-
-    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
-      assert(i->space->onode_map.count(i->oid));
-      if (spaces.count(i->space) == 0) {
-	spaces.insert(i->space);
-	oc += i->space->onode_map.size();
-      }
-      ++lc;
-    }
-
-    if (lc != oc) {
-      derr << " lc " << lc << " oc " << oc << dendl;
-    }
   }
 }
 #endif
@@ -1276,7 +1243,6 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 
 void BlueStore::Blob::discard_unallocated()
 {
-  size_t pos = 0;
   if (blob.is_compressed()) {
     bool discard = false;
     bool all_invalid = true;
@@ -1293,6 +1259,7 @@ void BlueStore::Blob::discard_unallocated()
       shared_blob->bc.discard(0, blob.get_compressed_payload_original_length());
     }
   } else {
+    size_t pos = 0;
     for (auto e : blob.extents) {
       if (!e.is_valid()) {
         shared_blob->bc.discard(pos, e.length);
@@ -1808,20 +1775,11 @@ bool BlueStore::ExtentMap::encode_some(uint32_t offset, uint32_t length,
       p->blob->encode(bl);
     }
   }
-  /*
-  derr << __func__ << ":";
-  bl.hexdump(*_dout);
-  *_dout << dendl;
-  */
   return false;
 }
 
 void BlueStore::ExtentMap::decode_some(bufferlist& bl)
 {
-/*  derr << __func__ << ":";
-  bl.hexdump(*_dout);
-  *_dout << dendl;
-  */
   bufferlist::iterator p = bl.begin();
   uint32_t num;
   small_decode_varint(num, p);
@@ -2643,6 +2601,7 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
+  b.add_u64(l_bluestore_gc, "bluestore_gc", "Sum for garbage collection reads");
   b.add_u64(l_bluestore_gc_bytes, "bluestore_gc_bytes", "garbage collected bytes");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
@@ -7507,19 +7466,18 @@ int BlueStore::_do_alloc_write(
   }
 
   uint64_t hint = 0;
+  CompressorRef c = compressor;
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
+    bluestore_blob_t& dblob = b->dirty_blob();
     uint64_t b_off = wi.b_off;
     bufferlist *l = &wi.bl;
     uint64_t final_length = wi.blob_length;
     uint64_t csum_length = wi.blob_length;
     unsigned csum_order = block_size_order;
     bufferlist compressed_bl;
-    CompressorRef c;
     bool compressed = false;
-    if (wctx->compress &&
-	wi.blob_length > min_alloc_size &&
-	(c = compressor) != nullptr) {
+    if (c && wctx->compress && wi.blob_length > min_alloc_size) {
 
       utime_t start = ceph_clock_now(g_ceph_context);
 
@@ -7558,7 +7516,7 @@ int BlueStore::_do_alloc_write(
 	final_length = newlen;
 	csum_length = newlen;
 	csum_order = ctz(newlen);
-	b->dirty_blob().set_compressed(wi.blob_length, rawlen);
+	dblob.set_compressed(wi.blob_length, rawlen);
 	compressed = true;
         logger->inc(l_bluestore_compress_success_count);
       } else {
@@ -7575,7 +7533,7 @@ int BlueStore::_do_alloc_write(
 		   ceph_clock_now(g_ceph_context) - start);
     }
     if (!compressed) {
-      b->dirty_blob().set_flag(bluestore_blob_t::FLAG_MUTABLE);
+      dblob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
       if (l->length() != wi.blob_length) {
 	// hrm, maybe we could do better here, but let's not bother.
 	dout(20) << __func__ << " forcing csum_order to block_size_order "
@@ -7599,7 +7557,6 @@ int BlueStore::_do_alloc_write(
     assert(count > 0);
     hint = extents[count - 1].end();
 
-    bluestore_blob_t& dblob = b->dirty_blob();
     for (int i = 0; i < count; i++) {
       bluestore_pextent_t e = bluestore_pextent_t(extents[i]);
       txc->allocated.insert(e.offset, e.length);
@@ -7614,17 +7571,17 @@ int BlueStore::_do_alloc_write(
     // checksum
     int csum = csum_type.load();
     if (csum) {
-      b->dirty_blob().init_csum(csum, csum_order, csum_length);
-      b->dirty_blob().calc_csum(b_off, *l);
+      dblob.init_csum(csum, csum_order, csum_length);
+      dblob.calc_csum(b_off, *l);
     }
     if (wi.mark_unused) {
       auto b_off = wi.b_off;
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
-        b->dirty_blob().add_unused(0, b_off);
+        dblob.add_unused(0, b_off);
       }
       if (b_end < wi.blob_length) {
-        b->dirty_blob().add_unused(b_end, wi.blob_length - b_end);
+        dblob.add_unused(b_end, wi.blob_length - b_end);
       }
     }
 
@@ -7924,6 +7881,7 @@ int BlueStore::_do_write(
         o->extent_map.fault_range(db, gc_start_offset, read_len);
         _do_write_data(txc, c, o, gc_start_offset, read_len, head_bl, &wctx);
       }
+      logger->inc(l_bluestore_gc);
       logger->inc(l_bluestore_gc_bytes, read_len);
     }
 
@@ -7940,6 +7898,7 @@ int BlueStore::_do_write(
         o->extent_map.fault_range(db, end, read_len);
         _do_write_data(txc, c, o, end, read_len, tail_bl, &wctx);
       }
+      logger->inc(l_bluestore_gc);
       logger->inc(l_bluestore_gc_bytes, read_len);
     }
   }
