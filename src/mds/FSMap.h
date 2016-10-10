@@ -375,21 +375,15 @@ public:
     });
   }
 
-  const std::map<fs_cluster_id_t, std::shared_ptr<Filesystem> > &get_filesystems() const
-  {
-    return filesystems;
-  }
-  bool any_filesystems() const {return !filesystems.empty(); }
+  size_t filesystem_count() const {return filesystems.size();}
   bool filesystem_exists(fs_cluster_id_t fscid) const
     {return filesystems.count(fscid) > 0;}
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
-  std::shared_ptr<const Filesystem> get_filesystem(fs_cluster_id_t fscid) const
-  {
-    return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));
-  }
+  std::shared_ptr<const Filesystem> get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
+  std::shared_ptr<const Filesystem> get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
 
   int parse_filesystem(
       std::string const &ns_str,

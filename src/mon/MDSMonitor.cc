@@ -1555,7 +1555,7 @@ int MDSMonitor::management_command(
       }
     }
 
-    if (pending_fsmap.any_filesystems()
+    if (pending_fsmap.filesystem_count() > 0
         && !pending_fsmap.get_enable_multiple()) {
       ss << "Creation of multiple filesystems is disabled.  To enable "
             "this experimental feature, use 'ceph fs flag set enable_multiple "
@@ -2819,8 +2819,7 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
         // that doesn't correspond to an existing filesystem, especially
         // if we loaded from a version with a bug (#17466)
         if (info.standby_for_fscid != FS_CLUSTER_ID_NONE
-            && pending_fsmap.get_filesystems().count(
-              info.standby_for_fscid) == 0) {
+            && !pending_fsmap.filesystem_exists(info.standby_for_fscid)) {
           derr << "gid " << gid << " has invalid standby_for_fscid "
                << info.standby_for_fscid << dendl;
           continue;
