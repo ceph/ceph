@@ -92,6 +92,7 @@ enum {
   l_bluestore_write_small_new,
   l_bluestore_txc,
   l_bluestore_onode_reshard,
+  l_bluestore_gc,
   l_bluestore_gc_bytes,
   l_bluestore_last
 };
@@ -588,7 +589,6 @@ public:
     };
     vector<Shard> shards;    ///< shards
 
-    bool inline_dirty = false;
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
     ExtentMap(Onode *o);
