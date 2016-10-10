@@ -133,6 +133,7 @@ protected:
   utime_t gc_invalidate_time;
   bool is_slo;
   string lo_etag;
+  bool rgwx_stat; /* extended rgw stat operation */
 
   int init_common();
 public:
@@ -155,6 +156,7 @@ public:
     range_parsed = false;
     skip_manifest = false;
     is_slo = false;
+    rgwx_stat = false;
  }
 
   bool prefetch_data();

@@ -209,6 +209,17 @@ void _usage()
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
+  cout << "   --tier-type=<type>        zone tier type\n";
+  cout << "   --tier-config=<k>=<v>[,...]\n";
+  cout << "                             set zone tier config keys, values\n";
+  cout << "   --tier-config-rm=<k>[,...]\n";
+  cout << "                             unset zone tier config keys\n";
+  cout << "   --tier_type=<type>        zone tier type\n";
+  cout << "   --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers\n";
+  cout << "   --sync-from=[zone-name][,...]\n";
+  cout << "                             set list of zones to sync from\n";
+  cout << "   --sync-from-rm=[zone-name][,...]\n";
+  cout << "                             remove zones from list of zones to sync from\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
   cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
   cout << "                             actual objects state\n";
@@ -1784,9 +1795,22 @@ static void get_md_sync_status(list<string>& status)
 
 static void get_data_sync_status(const string& source_zone, list<string>& status, int tab)
 {
-  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
-
   stringstream ss;
+
+  auto ziter = store->zone_by_id.find(source_zone);
+  if (ziter == store->zone_by_id.end()) {
+    push_ss(ss, status, tab) << string("zone not found");
+    flush_ss(ss, status);
+    return;
+  }
+  RGWZone& sz = ziter->second;
+
+  if (!store->zone_syncs_from(store->get_zone(), sz)) {
+    push_ss(ss, status, tab) << string("not syncing from zone");
+    flush_ss(ss, status);
+    return;
+  }
+  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
 
   int ret = sync.init();
   if (ret < 0) {
@@ -1955,9 +1979,9 @@ static void sync_status(Formatter *formatter)
     string zone_name;
     string source_str = "source: ";
     string s = source_str + source_id;
-    auto siter = store->zone_name_by_id.find(source_id);
-    if (siter != store->zone_name_by_id.end()) {
-      s += string(" (") + siter->second + ")";
+    auto siter = store->zone_by_id.find(source_id);
+    if (siter != store->zone_by_id.end()) {
+      s += string(" (") + siter->second.name + ")";
     }
     data_status.push_back(s);
     get_data_sync_status(source_id, data_status, source_str.size());
@@ -1966,7 +1990,21 @@ static void sync_status(Formatter *formatter)
   tab_dump("data sync", width, data_status);
 }
 
-int main(int argc, char **argv)
+static void parse_tier_config_param(const string& s, map<string, string>& out)
+{
+  list<string> confs;
+  get_str_list(s, ",", confs);
+  for (auto c : confs) {
+    ssize_t pos = c.find("=");
+    if (pos < 0) {
+      out[c] = "";
+    } else {
+      out[c.substr(0, pos)] = c.substr(pos + 1);
+    }
+  }
+}
+
+int main(int argc, char **argv) 
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -1989,6 +2027,11 @@ int main(int argc, char **argv)
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
   list<string> endpoints;
+  int tmp_int;
+  int sync_from_all_specified = false;
+  bool sync_from_all = false;
+  list<string> sync_from;
+  list<string> sync_from_rm;
   std::string master_url;
   int is_master_int;
   int set_default = 0;
@@ -2086,6 +2129,13 @@ int main(int argc, char **argv)
 
   string source_zone_name;
   string source_zone; /* zone id */
+
+  string tier_type;
+  bool tier_type_specified = false;
+
+  map<string, string> tier_config_add;
+  map<string, string> tier_config_rm;
+
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -2350,8 +2400,22 @@ int main(int argc, char **argv)
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
       get_str_list(val, endpoints);
+    } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
+      get_str_list(val, sync_from);
+    } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
+      get_str_list(val, sync_from_rm);
+    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--sync-from-all", (char*)NULL)) {
+      sync_from_all = (bool)tmp_int;
+      sync_from_all_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
       source_zone_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--tier-type", (char*)NULL)) {
+      tier_type = val;
+      tier_type_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--tier-config", (char*)NULL)) {
+      parse_tier_config_param(val, tier_config_add);
+    } else if (ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*)NULL)) {
+      parse_tier_config_param(val, tier_config_rm);
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -2885,10 +2949,16 @@ int main(int argc, char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
+        zone.tier_config = tier_config_add;
+
+        bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
-                                 endpoints);
+                                 endpoints, ptier_type,
+                                 psync_from_all, sync_from, sync_from_rm);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -3303,10 +3373,15 @@ int main(int argc, char **argv)
 	}
 
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+          string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
+          bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
 	  ret = zonegroup.add_zone(zone,
                                    (is_master_set ? &is_master : NULL),
                                    (is_read_only_set ? &read_only : NULL),
-                                   endpoints);
+                                   endpoints,
+                                   ptier_type,
+                                   psync_from_all,
+                                   sync_from, sync_from_rm);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
@@ -3548,6 +3623,16 @@ int main(int argc, char **argv)
           need_zone_update = true;
         }
 
+        for (auto add : tier_config_add) {
+          zone.tier_config[add.first] = add.second;
+          need_zone_update = true;
+        }
+
+        for (auto rm : tier_config_rm) {
+          zone.tier_config.erase(rm.first);
+          need_zone_update = true;
+        }
+
         if (need_zone_update) {
           ret = zone.update();
           if (ret < 0) {
@@ -3562,11 +3647,15 @@ int main(int argc, char **argv)
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
+
+        bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
-                                 endpoints);
+                                 endpoints, ptier_type,
+                                 psync_from_all, sync_from, sync_from_rm);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;

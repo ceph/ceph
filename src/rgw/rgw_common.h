@@ -1914,6 +1914,8 @@ extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, boo
 extern string rgw_trim_whitespace(const string& src);
 extern string rgw_trim_quotes(const string& val);
 
+extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
+extern void rgw_to_iso8601(const real_time& t, string *dest);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */

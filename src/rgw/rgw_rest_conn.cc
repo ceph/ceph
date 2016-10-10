@@ -13,8 +13,10 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
     remote_id(_remote_id)
 {
-  key = store->get_zone_params().system_key;
-  self_zone_group = store->get_zonegroup().get_id();
+  if (store) {
+    key = store->get_zone_params().system_key;
+    self_zone_group = store->get_zonegroup().get_id();
+  }
 }
 
 int RGWRESTConn::get_url(string& endpoint)
@@ -44,17 +46,27 @@ string RGWRESTConn::get_url()
   return endpoint;
 }
 
+static void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup)
+{
+  if (uid) {
+    string uid_str = uid->to_str();
+    if (!uid->empty()) {
+      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
+    }
+  }
+  if (!zonegroup.empty()) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zonegroup));
+  }
+}
+
 int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
   int ret = get_url(url);
   if (ret < 0)
     return ret;
-  string uid_str = uid.to_str();
   param_vec_t params;
-  if (!uid.empty())
-    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
+  populate_params(params, &uid, self_zone_group);
   if (objv) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
     char buf[16];
@@ -79,10 +91,8 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
   if (ret < 0)
     return ret;
 
-  string uid_str = uid.to_str();
   param_vec_t params;
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
+  populate_params(params, &uid, self_zone_group);
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
@@ -118,7 +128,8 @@ static void set_header(T val, map<string, string>& headers, const string& header
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
-                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+                         bool prepend_metadata, bool get_op, bool rgwx_stat,
+                         RGWGetDataCB *cb, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -126,18 +137,22 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     return ret;
 
   param_vec_t params;
-  if (!uid.empty()) {
-    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid.to_str()));
-  }
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
+  populate_params(params, &uid, self_zone_group);
   if (prepend_metadata) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", self_zone_group));
+  }
+  if (rgwx_stat) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "stat", "true"));
   }
   if (!obj.get_instance().empty()) {
     const string& instance = obj.get_instance();
     params.push_back(param_pair_t("versionId", instance));
   }
-  *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
+  if (get_op) {
+    *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
+  } else {
+    *req = new RGWRESTStreamHeadRequest(cct, url, cb, NULL, &params);
+  }
   map<string, string> extra_headers;
   if (info) {
     map<string, string, ltstr_nocase>& orig_map = info->env->get_map();
@@ -166,9 +181,10 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)
+int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime,
+                                  uint64_t *psize, map<string, string>& attrs)
 {
-  int ret = req->complete(etag, mtime, attrs);
+  int ret = req->complete(etag, mtime, psize, attrs);
   delete req;
 
   return ret;
@@ -191,7 +207,7 @@ int RGWRESTConn::get_resource(const string& resource,
     params.insert(params.end(), extra_params->begin(), extra_params->end());
   }
 
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
+  populate_params(params, nullptr, self_zone_group);
 
   RGWStreamIntoBufferlist cb(bl);
 
@@ -210,7 +226,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   string etag;
   map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
+  return req.complete(etag, NULL, NULL, attrs);
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
@@ -238,7 +254,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
 
 void RGWRESTReadResource::init_common(param_vec_t *extra_headers)
 {
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
+  populate_params(params, nullptr, conn->get_self_zonegroup());
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
@@ -257,7 +273,7 @@ int RGWRESTReadResource::read()
 
   string etag;
   map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
+  return req.complete(etag, NULL, NULL, attrs);
 }
 
 int RGWRESTReadResource::aio_read()
@@ -271,32 +287,34 @@ int RGWRESTReadResource::aio_read()
   return 0;
 }
 
-RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
+                                         const string& _method,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
 					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
-  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+  : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource),
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
-    req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+    req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL)
 {
   init_common(extra_headers);
 }
 
-RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
+                                         const string& _method,
                                          const string& _resource,
 					 param_vec_t& params,
 					 param_vec_t *extra_headers,
                                          RGWHTTPManager *_mgr)
-  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(params),
-    cb(bl), mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+  : cct(_conn->get_ctx()), conn(_conn), method(_method), resource(_resource), params(params),
+    cb(bl), mgr(_mgr), req(cct, method.c_str(), conn->get_url(), &cb, NULL, NULL)
 {
   init_common(extra_headers);
 }
 
-void RGWRESTPostResource::init_common(param_vec_t *extra_headers)
+void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
 {
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
+  populate_params(params, nullptr, conn->get_self_zonegroup());
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
@@ -305,7 +323,7 @@ void RGWRESTPostResource::init_common(param_vec_t *extra_headers)
   req.set_params(&params);
 }
 
-int RGWRESTPostResource::send(bufferlist& outbl)
+int RGWRESTSendResource::send(bufferlist& outbl)
 {
   req.set_outbl(outbl);
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
@@ -316,10 +334,10 @@ int RGWRESTPostResource::send(bufferlist& outbl)
 
   string etag;
   map<string, string> attrs;
-  return req.complete(etag, NULL, attrs);
+  return req.complete(etag, NULL, NULL, attrs);
 }
 
-int RGWRESTPostResource::aio_send(bufferlist& outbl)
+int RGWRESTSendResource::aio_send(bufferlist& outbl)
 {
   req.set_outbl(outbl);
   int ret = req.get_resource(conn->get_key(), headers, resource, mgr);

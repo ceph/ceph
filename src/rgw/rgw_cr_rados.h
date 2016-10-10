@@ -2,6 +2,7 @@
 #define CEPH_RGW_CR_RADOS_H
 
 #include "rgw_coroutine.h"
+#include "rgw_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
@@ -780,6 +781,93 @@ public:
   int send_request() {
     req = new RGWAsyncFetchRemoteObj(this, stack->create_completion_notifier(), store, source_zone, bucket_info,
                                      key, versioned_epoch, copy_if_newer);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
+class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  rgw_obj_key key;
+
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  map<string, bufferlist> *pattrs;
+
+protected:
+  int _send_request();
+public:
+  RGWAsyncStatRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                         const string& _source_zone,
+                         RGWBucketInfo& _bucket_info,
+                         const rgw_obj_key& _key,
+                         ceph::real_time *_pmtime,
+                         uint64_t *_psize,
+                         map<string, bufferlist> *_pattrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                                      source_zone(_source_zone),
+                                                      bucket_info(_bucket_info),
+                                                      key(_key),
+                                                      pmtime(_pmtime),
+                                                      psize(_psize),
+                                                      pattrs(_pattrs) {}
+};
+
+class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  rgw_obj_key key;
+
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  map<string, bufferlist> *pattrs;
+
+  RGWAsyncStatRemoteObj *req;
+
+public:
+  RGWStatRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                      const string& _source_zone,
+                      RGWBucketInfo& _bucket_info,
+                      const rgw_obj_key& _key,
+                      ceph::real_time *_pmtime,
+                      uint64_t *_psize,
+                      map<string, bufferlist> *_pattrs) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                                       async_rados(_async_rados), store(_store),
+                                       source_zone(_source_zone),
+                                       bucket_info(_bucket_info),
+                                       key(_key),
+                                       pmtime(_pmtime),
+                                       psize(_psize),
+                                       pattrs(_pattrs),
+                                       req(NULL) {}
+
+
+  ~RGWStatRemoteObjCR() {
+    request_cleanup();
+  }
+
+  void request_cleanup() {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() {
+    req = new RGWAsyncStatRemoteObj(this, stack->create_completion_notifier(), store, source_zone,
+                                    bucket_info, key, pmtime, psize, pattrs);
     async_rados->queue(req);
     return 0;
   }

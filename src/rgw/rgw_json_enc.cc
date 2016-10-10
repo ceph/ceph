@@ -858,6 +858,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
   encode_json("metadata_heap", metadata_heap.data_pool, f);
+  encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
 }
 
@@ -903,6 +904,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   ::decode_json("metadata_heap", metadata_heap, obj);
+  JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
 
 }
@@ -916,6 +918,9 @@ void RGWZone::dump(Formatter *f) const
   encode_json("log_data", log_data, f);
   encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
   encode_json("read_only", read_only, f);
+  encode_json("tier_type", tier_type, f);
+  encode_json("sync_from_all", sync_from_all, f);
+  encode_json("sync_from", sync_from, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -930,6 +935,9 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("log_data", log_data, obj);
   JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
   JSONDecoder::decode_json("read_only", read_only, obj);
+  JSONDecoder::decode_json("tier_type", tier_type, obj);
+  JSONDecoder::decode_json("sync_from_all", sync_from_all, obj);
+  JSONDecoder::decode_json("sync_from", sync_from, obj);
 }
 
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
