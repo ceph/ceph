@@ -430,8 +430,13 @@ information stored in OSDs.::
     rsync -avz user@host:$ms $ms
   done
   # rebuild the monitor store from the collected map, if the cluster does not
-  # use cephx authentication, there is no need to pass the "--keyring" option.
-  # i.e. use "ceph-monstore-tool /tmp/mon-store rebuild" instead
+  # use cephx authentication, we can skip the following steps to update the
+  # keyring with the caps, and there is no need to pass the "--keyring" option.
+  # i.e. just use "ceph-monstore-tool /tmp/mon-store rebuild" instead
+  ceph-authtool /path/to/admin.keyring -n mon. \
+    --cap mon allow 'allow *'
+  ceph-authtool /path/to/admin.keyring -n client.admin \
+    --cap mon allow 'allow *' --cap osd 'allow *' --cap mds 'allow *'
   ceph-monstore-tool /tmp/mon-store rebuild -- --keyring /path/to/admin.keyring
   # backup corrupted store.db just in case
   mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
