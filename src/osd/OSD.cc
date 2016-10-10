@@ -2163,10 +2163,14 @@ int OSD::init()
       derr << "OSD::init: error attempting broken maps recovery -- dying!" << dendl;
       goto out;
     } else {
-      dout(0) << "OSD::init: recovered broken maps -- shutdown." << dendl;
-      // force the user to restart the osd without '--osd-map-recover-broken'
-      r = -EAGAIN;
-      goto out;
+      if (g_conf->osd_map_recover_broken_shutdown_after) {
+        dout(0) << "OSD::init: recovered broken maps -- shutdown." << dendl;
+        // force the user to restart the osd without '--osd-map-recover-broken'
+        r = -EAGAIN;
+        goto out;
+      } else {
+        dout(0) << "OSD::init: recovered broken maps -- continue." << dendl;
+      }
     }
   }
 
