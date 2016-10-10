@@ -149,6 +149,12 @@ bool OSDMapRecovery::ms_dispatch(Message *m)
     return true;
   }
 
+  if (g_conf->osd_map_recover_broken_debug_at == 1) {
+    dout(0) << __func__ << " [debug] drop message" << dendl;
+    m->put();
+    return true;
+  }
+
   wanted_available.first = wanted_available.second = 0;
   pair<epoch_t,epoch_t> &war = wanted_available; // wanted available range
 
