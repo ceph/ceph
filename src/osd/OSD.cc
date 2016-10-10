@@ -3086,7 +3086,6 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   service.pg_add_epoch(pg->info.pgid, pg->get_osdmap()->get_epoch());
 
   dout(10) << "Adding newly split pg " << *pg << dendl;
-  pg->reg_next_scrub();
   pg->handle_loaded(rctx);
   pg->write_if_dirty(*(rctx->transaction));
   pg->queue_null(e, e);
