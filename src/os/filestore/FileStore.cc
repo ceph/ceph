@@ -2234,10 +2234,12 @@ void FileStore::_set_replay_guard(int fd,
   // first make sure the previous operation commits
   ::fsync(fd);
 
-  // sync object_map too.  even if this object has a header or keys,
-  // it have had them in the past and then removed them, so always
-  // sync.
-  object_map->sync(hoid, &spos);
+  if (!in_progress) {
+    // sync object_map too.  even if this object has a header or keys,
+    // it have had them in the past and then removed them, so always
+    // sync.
+    object_map->sync(hoid, &spos);
+  }
 
   _inject_failure();
 
@@ -2275,7 +2277,8 @@ void FileStore::_close_replay_guard(const coll_t& cid,
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
+void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
+				    const ghobject_t *hoid)
 {
   if (backend->can_checkpoint())
     return;
@@ -2283,6 +2286,11 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   dout(10) << "_close_replay_guard " << spos << dendl;
 
   _inject_failure();
+
+  // sync object_map too.  even if this object has a header or keys,
+  // it have had them in the past and then removed them, so always
+  // sync.
+  object_map->sync(hoid, &spos);
 
   // then record that we are done with this operation
   bufferlist v(40);
@@ -5210,18 +5218,30 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
       } else {
 	assert(0 == "ERROR: source must exist");
       }
-      return 0;
-    }
-    if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
-      _set_replay_guard(**fd, spos, &o, true);
-    }
 
-    r = lfn_link(oldcid, c, oldoid, o);
-    if (replaying && !backend->can_checkpoint() &&
-	r == -EEXIST)    // crashed between link() and set_replay_guard()
-      r = 0;
+      if (!replaying) {
+	return 0;
+      }
+      if (allow_enoent && dstcmp > 0) { // if dstcmp == 0, try_rename was started.
+	return 0;
+      }
 
-    _inject_failure();
+      r = 0; // don't know if object_map was cloned
+    } else {
+      if (dstcmp > 0) { // if dstcmp == 0 the guard already says "in-progress"
+	_set_replay_guard(**fd, spos, &o, true);
+      }
+
+      r = lfn_link(oldcid, c, oldoid, o);
+      if (replaying && !backend->can_checkpoint() &&
+	  r == -EEXIST)    // crashed between link() and set_replay_guard()
+	r = 0;
+
+      lfn_close(fd);
+      fd = FDRef();
+
+      _inject_failure();
+    }
 
     if (r == 0) {
       // the name changed; link the omap content
@@ -5232,9 +5252,6 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
     _inject_failure();
 
-    lfn_close(fd);
-    fd = FDRef();
-
     if (r == 0)
       r = lfn_unlink(oldcid, oldoid, spos, true);
 
@@ -5243,7 +5260,7 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
     // close guard on object so we don't do this again
     if (r == 0) {
-      _close_replay_guard(**fd, spos);
+      _close_replay_guard(**fd, spos, &o);
       lfn_close(fd);
     }
   }
