@@ -2478,7 +2478,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "     monmap " << *monmap << "\n";
     ss << "            election epoch " << get_epoch()
        << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
-    if (mdsmon()->fsmap.any_filesystems()) {
+    if (mdsmon()->fsmap.filesystem_count() > 0) {
       ss << "      fsmap " << mdsmon()->fsmap << "\n";
     }
     if (mgrmon()->in_use()) {
