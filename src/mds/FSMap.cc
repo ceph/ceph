@@ -499,7 +499,7 @@ int FSMap::parse_filesystem(
   std::string ns_err;
   fs_cluster_id_t fscid = strict_strtol(ns_str.c_str(), 10, &ns_err);
   if (!ns_err.empty() || filesystems.count(fscid) == 0) {
-    for (auto fs : filesystems) {
+    for (auto &fs : filesystems) {
       if (fs.second->mds_map.fs_name == ns_str) {
         *result = std::const_pointer_cast<const Filesystem>(fs.second);
         return 0;
@@ -732,7 +732,7 @@ void FSMap::erase(mds_gid_t who, epoch_t blacklist_epoch)
     standby_daemons.erase(who);
     standby_epochs.erase(who);
   } else {
-    auto fs = filesystems.at(mds_roles.at(who));
+    auto &fs = filesystems.at(mds_roles.at(who));
     const auto &info = fs->mds_map.mds_info.at(who);
     if (info.state != MDSMap::STATE_STANDBY_REPLAY) {
       if (info.state == MDSMap::STATE_CREATING) {
