@@ -74,6 +74,6 @@ class TestConsoleLog(TestTask):
     def test_end(self, m_pconsole):
         with self.klass(self.ctx, self.task_config) as task:
             pass
-        for proc in task.processes:
+        for proc in task.processes.values():
             assert proc.terminate.called_once_with()
             assert proc.kill.called_once_with()
