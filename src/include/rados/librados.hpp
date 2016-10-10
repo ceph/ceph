@@ -1019,8 +1019,12 @@ namespace librados
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,
 	       librados::WatchCtx2 *ctx);
+    int watch3(const std::string& o, uint64_t *handle,
+	       librados::WatchCtx2 *ctx, uint32_t timeout);
     int aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
 	       librados::WatchCtx2 *ctx);
+    int aio_watch2(const std::string& o, AioCompletion *c, uint64_t *handle,
+	       librados::WatchCtx2 *ctx, uint32_t timeout);
     int unwatch2(uint64_t handle);
     int aio_unwatch(uint64_t handle, AioCompletion *c);
     /**

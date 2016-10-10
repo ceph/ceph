@@ -1420,6 +1420,15 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
                                librados::WatchCtx2 *ctx2,
                                bool internal)
 {
+  return watch(oid, handle, ctx, ctx2, 0, internal);
+}
+
+int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
+                               librados::WatchCtx *ctx,
+                               librados::WatchCtx2 *ctx2,
+                               uint32_t timeout,
+                               bool internal)
+{
   ::ObjectOperation wr;
   version_t objver;
   C_SaferCond onfinish;
@@ -1430,7 +1439,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t *handle,
 					   oid, ctx, ctx2, internal);
 
   prepare_assert_ops(&wr);
-  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
+  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH, timeout);
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
 			 snapc, ceph::real_clock::now(), bl,
@@ -1454,6 +1463,16 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
                                    uint64_t *handle,
                                    librados::WatchCtx *ctx,
                                    librados::WatchCtx2 *ctx2,
+                                   bool internal) {
+  return aio_watch(oid, c, handle, ctx, ctx2, 0, internal);
+}
+
+int librados::IoCtxImpl::aio_watch(const object_t& oid,
+                                   AioCompletionImpl *c,
+                                   uint64_t *handle,
+                                   librados::WatchCtx *ctx,
+                                   librados::WatchCtx2 *ctx2,
+                                   uint32_t timeout,
                                    bool internal)
 {
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
@@ -1465,7 +1484,7 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
   linger_op->watch_context = new WatchInfo(this, oid, ctx, ctx2, internal);
 
   prepare_assert_ops(&wr);
-  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
+  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH, timeout);
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
                          snapc, ceph::real_clock::now(), bl,
