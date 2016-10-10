@@ -105,7 +105,7 @@ int main(int argc, const char **argv)
 	messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MON(-1),
 				      "client",
-				      getpid());
+				      getpid(), 0);
 
 	// enable timing prints
 	messenger->set_magic(MSG_MAGIC_TRACE_CTR);
