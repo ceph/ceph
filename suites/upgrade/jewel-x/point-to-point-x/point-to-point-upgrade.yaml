@@ -102,6 +102,8 @@ workload_jewel:
          client.1:
          - rados/test.sh
          - cls
+       env:
+         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_image'
    - print: "**** done rados/test.sh &  cls workload_jewel"
    - sequential:
      - rgw: [client.0]
