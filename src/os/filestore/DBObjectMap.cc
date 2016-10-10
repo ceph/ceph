@@ -902,10 +902,10 @@ int DBObjectMap::clone(const ghobject_t &oid,
   {
     Header destination = lookup_map_header(*ltarget, target);
     if (destination) {
-      remove_map_header(*ltarget, target, destination, t);
       if (check_spos(target, destination, spos))
 	return 0;
       destination->num_children--;
+      remove_map_header(*ltarget, target, destination, t);
       _clear(destination, t);
     }
   }
