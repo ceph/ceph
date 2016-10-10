@@ -726,6 +726,7 @@ struct rgw_bucket {
   std::string oid; /*
                     * runtime in-memory only info. If not empty, points to the bucket instance object
                     */
+  std::string name_space;
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
@@ -762,6 +763,7 @@ struct rgw_bucket {
     ::encode(index_pool, bl);
     ::encode(data_extra_pool, bl);
     ::encode(tenant, bl);
+    ::encode(name_space, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -790,6 +792,9 @@ struct rgw_bucket {
     }
     if (struct_v >= 8) {
       ::decode(tenant, bl);
+    }
+    if (struct_v >= 9) {
+      ::decode(name_space, bl);
     }
     DECODE_FINISH(bl);
   }

@@ -1441,6 +1441,7 @@ int get_zones_pool_names_set(CephContext* cct,
       pool_names.insert(zone.user_email_pool.name);
       pool_names.insert(zone.user_swift_pool.name);
       pool_names.insert(zone.user_uid_pool.name);
+      pool_names.insert(zone.roles_pool.name);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
@@ -1508,6 +1509,7 @@ int RGWZoneParams::fix_pool_names()
   user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
   user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
   user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
+  roles_pool = fix_zone_pool_name(pool_names, name, ".rgw.authorizationdata", roles_pool.name);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
@@ -1519,6 +1521,11 @@ int RGWZoneParams::fix_pool_names()
   }
 
   return 0;
+}
+
+void RGWZoneParams::set_pool_namespaces()
+{
+  roles_pool.name_space = "role";
 }
 
 int RGWZoneParams::create(bool exclusive)
@@ -1541,6 +1548,8 @@ int RGWZoneParams::create(bool exclusive)
     ldout(cct, 0) << "ERROR: fix_pool_names returned r=" << r << dendl;
     return r;
   }
+
+  set_pool_namespaces();
 
   r = RGWSystemMetaObj::create(exclusive);
   if (r < 0) {
@@ -5152,12 +5161,30 @@ int RGWRados::create_pool(rgw_bucket& bucket)
   if (ret < 0)
     return ret;
 
+  if (! bucket.name_space.empty()) {
+    librados::IoCtx io_ctx;
+    ret = rad->ioctx_create(pool.c_str(), io_ctx);
+    if (ret) {
+      return ret;
+    }
+    io_ctx.set_namespace(bucket.name_space);
+  }
+
   if (bucket.data_pool != pool) {
     ret = rad->pool_create(bucket.data_pool.c_str(), 0);
     if (ret == -EEXIST)
       ret = 0;
     if (ret < 0)
       return ret;
+
+    if (! bucket.name_space.empty()) {
+      librados::IoCtx io_ctx;
+      ret = rad->ioctx_create(pool.c_str(), io_ctx);
+      if (ret) {
+        return ret;
+      }
+      io_ctx.set_namespace(bucket.name_space);
+    }
   }
 
   return 0;
@@ -12515,4 +12542,3 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
   }
   return ret;
 }
-
