@@ -230,7 +230,18 @@ int OSDMapRecovery::recover_range(
   monc.send_mon_message(req);
 
   state = STATE_WAIT_MON;
-  wanted_cond.Wait(lock);
+  if (cct->_conf->osd_map_recover_broken_timeout > 0.0) {
+    utime_t until = ceph_clock_now(cct);
+    until += cct->_conf->osd_map_recover_broken_timeout;
+    int r = wanted_cond.WaitUntil(lock, until);
+    if (r == ETIMEDOUT) {
+      derr << __func__ << " timeout waiting for reply from monitors" << dendl;
+      lock.Unlock();
+      return -r;
+    }
+  } else {
+    wanted_cond.Wait(lock);
+  }
 
   state = STATE_WORKING;
   dout(0) << __func__ << " got available range ["
@@ -324,6 +335,7 @@ int OSDMapRecovery::_recover(list<pair<epoch_t,epoch_t> >& ranges, bool inc)
     if (ret < 0) {
       derr << __func__ << " error recovering range ["
         << r.first << " .. " << r.second << "]" << dendl;
+      state = STATE_ERROR;
       return ret;
     }
     if (!missing.empty()) {

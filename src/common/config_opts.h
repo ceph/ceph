@@ -687,6 +687,7 @@ OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
 // force recovery of broken osdmaps from the monitors
 OPTION(osd_map_recover_broken, OPT_BOOL, false)
+OPTION(osd_map_recover_broken_timeout, OPT_FLOAT, 30.0)
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 // shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
