@@ -50,6 +50,10 @@ struct C_NotifyUpdate : public Context {
         // don't fail the op if a peer fails to get the update notification
         lderr(cct) << "update notification timed-out" << dendl;
         r = 0;
+      } else if (r == -ENOENT) {
+        // don't fail if header is missing (e.g. v1 image rename)
+        ldout(cct, 5) << "update notification on missing header" << dendl;
+        r = 0;
       } else if (r < 0) {
         lderr(cct) << "update notification failed: " << cpp_strerror(r)
                    << dendl;
