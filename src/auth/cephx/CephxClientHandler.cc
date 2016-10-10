@@ -74,7 +74,11 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     return 0;
   }
 
-  if (need) {
+  // do not bother (re)requesting tickets if we *only* need the MGR
+  // ticket; that can happen during an upgrade and we want to avoid a
+  // loop.  we'll end up re-requesting it later when the secrets
+  // rotating.
+  if (need && need != CEPH_ENTITY_TYPE_MGR) {
     /* get service tickets */
     ldout(cct, 10) << "get service keys: want=" << want << " need=" << need << " have=" << have << dendl;
 
