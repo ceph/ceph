@@ -6,7 +6,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/WatchNotifyTypes.h"
-#include "librbd/image_watcher/Notifier.h"
+#include "librbd/object_watcher/Notifier.h"
 #include <map>
 
 #define dout_subsys ceph_subsys_rbd
@@ -20,7 +20,8 @@ namespace image_watcher {
 using namespace watch_notify;
 using util::create_context_callback;
 
-NotifyLockOwner::NotifyLockOwner(ImageCtx &image_ctx, Notifier &notifier,
+NotifyLockOwner::NotifyLockOwner(ImageCtx &image_ctx,
+                                 object_watcher::Notifier &notifier,
                                  bufferlist &&bl, Context *on_finish)
   : m_image_ctx(image_ctx), m_notifier(notifier), m_bl(std::move(bl)),
     m_on_finish(on_finish) {

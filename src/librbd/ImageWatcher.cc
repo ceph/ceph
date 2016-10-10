@@ -11,7 +11,6 @@
 #include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
-#include "librbd/image_watcher/Notifier.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
 #include "librbd/image_watcher/RewatchRequest.h"
 #include "include/encoding.h"
@@ -85,7 +84,7 @@ ImageWatcher<I>::ImageWatcher(I &image_ctx)
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
     m_async_request_lock(util::unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
     m_owner_client_id_lock(util::unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this)),
-    m_notifier(image_ctx)
+    m_notifier(image_ctx.op_work_queue, image_ctx.md_ctx, image_ctx.header_oid)
 {
 }
 
@@ -377,7 +376,7 @@ void ImageWatcher<I>::notify_header_update(librados::IoCtx &io_ctx,
   // supports legacy (empty buffer) clients
   bufferlist bl;
   ::encode(NotifyMessage(HeaderUpdatePayload()), bl);
-  io_ctx.notify2(oid, bl, image_watcher::Notifier::NOTIFY_TIMEOUT, nullptr);
+  io_ctx.notify2(oid, bl, object_watcher::Notifier::NOTIFY_TIMEOUT, nullptr);
 }
 
 template <typename I>
