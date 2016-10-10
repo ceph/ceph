@@ -141,6 +141,17 @@ def task(ctx, config):
     default_keyring = '/etc/ceph/{cluster}.keyring'.format(
         cluster=cluster_name)
     keyring_path = config.get('keyring_path', default_keyring)
+    # fill up the caps in the keyring file
+    mon.run(args=['sudo',
+                  'ceph-authtool', keyring_path,
+                  '-n', 'mon.',
+                  '--cap', 'mon', 'allow *'])
+    mon.run(args=['sudo',
+                  'ceph-authtool', keyring_path,
+                  '-n', 'client.admin',
+                  '--cap', 'mon', 'allow *',
+                  '--cap', 'osd', 'allow *',
+                  '--cap', 'mds', 'allow *'])
     mon.run(args=['sudo', '-u', 'ceph',
                   'ceph-monstore-tool', mon_store_dir,
                   'rebuild', '--', '--keyring',
