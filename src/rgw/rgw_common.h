@@ -766,15 +766,22 @@ struct rgw_pool {
   void decode_from_bucket(bufferlist::iterator& bl);
 
   void decode(bufferlist::iterator& bl) {
-    uint64_t start_off = bl.get_off();
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
-    if (struct_v < 10) {
-      bl.seek(start_off);
-      decode_from_bucket(bl);
-      return;
-    }
 
     ::decode(name, bl);
+
+    if (struct_v < 10) {
+
+    /*
+     * note that rgw_pool can be used where rgw_bucket was used before
+     * therefore we inherit rgw_bucket's old versions. However, we only
+     * need the first field from rgw_bucket. unless we add more fields
+     * in which case we'll need to look at struct_v, and check the actual
+     * version. Anything older than 10 needs to be treated as old rgw_bucket
+     */
+
+    }
+
     DECODE_FINISH(bl);
   }
 
@@ -817,6 +824,7 @@ struct rgw_data_placement_target {
   };
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 
 inline ostream& operator<<(ostream& out, const rgw_pool& p) {
@@ -872,6 +880,9 @@ struct rgw_raw_obj {
     }
     return (r < 0);
   }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_raw_obj)
 

@@ -39,7 +39,7 @@ int RGWReplicaLogger::open_ioctx(librados::IoCtx& ctx, const string& pool)
 {
   int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
   if (r == -ENOENT) {
-    rgw_bucket p(pool.c_str());
+    rgw_pool p(pool);
     r = store->create_pool(p);
     if (r < 0)
       return r;

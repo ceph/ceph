@@ -210,7 +210,7 @@ static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
 
 int rgw_get_user_info_from_index(RGWRados * const store,
                                  const string& key,
-                                 rgw_bucket& bucket,
+                                 rgw_pool& pool,
                                  RGWUserInfo& info,
                                  RGWObjVersionTracker * const objv_tracker,
                                  real_time * const pmtime)
@@ -229,7 +229,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
   RGWUID uid;
   RGWObjectCtx obj_ctx(store);
 
-  int ret = rgw_get_system_obj(store, obj_ctx, bucket, key, bl, NULL, &e.mtime);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime);
   if (ret < 0)
     return ret;
 
@@ -342,7 +342,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
                               RGWObjVersionTracker *objv_tracker)
 {
   RGWObjectCtx obj_ctx(store);
-  rgw_obj obj(store->get_zone_params().user_uid_pool, user_id.to_str());
+  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, user_id.to_str());
   RGWRados::SystemObject src(store, obj_ctx, obj);
   RGWRados::SystemObject::Read rop(&src);
 
@@ -352,7 +352,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 {
-  rgw_obj obj(store->get_zone_params().user_keys_pool, access_key.id);
+  rgw_raw_obj obj(store->get_zone_params().user_keys_pool, access_key.id);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
@@ -378,13 +378,13 @@ int rgw_remove_email_index(RGWRados *store, string& email)
   if (email.empty()) {
     return 0;
   }
-  rgw_obj obj(store->get_zone_params().user_email_pool, email);
+  rgw_raw_obj obj(store->get_zone_params().user_email_pool, email);
   return store->delete_system_obj(obj);
 }
 
 int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
 {
-  rgw_obj obj(store->get_zone_params().user_swift_pool, swift_name);
+  rgw_raw_obj obj(store->get_zone_params().user_swift_pool, swift_name);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
@@ -457,7 +457,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
 
   string buckets_obj_id;
   rgw_get_buckets_obj(info.user_id, buckets_obj_id);
-  rgw_obj uid_bucks(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj uid_bucks(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
   ret = store->delete_system_obj(uid_bucks);
   if (ret < 0 && ret != -ENOENT) {
@@ -468,7 +468,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   string key;
   info.user_id.to_str(key);
   
-  rgw_obj uid_obj(store->get_zone_params().user_uid_pool, key);
+  rgw_raw_obj uid_obj(store->get_zone_params().user_uid_pool, key);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
   ret = store->meta_mgr->remove_entry(user_meta_handler, key, &objv_tracker);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
@@ -2701,9 +2701,9 @@ public:
     return rgw_delete_user(store, info, objv_tracker);
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    bucket = store->get_zone_params().user_uid_pool;
+    pool = store->get_zone_params().user_uid_pool;
   }
 
   int list_keys_init(RGWRados *store, void **phandle) override

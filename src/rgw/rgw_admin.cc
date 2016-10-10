@@ -1023,8 +1023,7 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
   }
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("pool", bucket.data_pool);
-  formatter->dump_string("index_pool", bucket.index_pool);
+  ::encode_json("placement", bucket.placement, formatter);
 
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
@@ -1362,7 +1361,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   string oid;
   string locator;
 
-  get_obj_bucket_and_oid_loc(obj, obj.bucket, oid, locator);
+  get_obj_bucket_and_oid_loc(obj, oid, locator);
 
   f->dump_string("oid", oid);
   f->dump_string("locator", locator);

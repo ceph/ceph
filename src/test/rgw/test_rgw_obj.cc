@@ -30,9 +30,19 @@
 #endif
 using namespace std;
 
+static void populate_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id)
+{
+  b->tenant = t;
+  b->name = n;
+  b->marker = m;
+  b->bucket_id = id;
+  b->placement.data_pool = rgw_pool(dp);
+  b->placement.index_pool = rgw_pool(ip);
+}
+
 static void init_bucket(rgw_bucket *bucket, const char *name)
 {
-  *bucket = rgw_bucket("", name, ".data-pool", ".index-pool", "marker", "bucket-id", NULL);
+  populate_bucket(bucket, "", name, ".data-pool", ".index-pool", "marker", "bucket-id");
 }
 
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)
