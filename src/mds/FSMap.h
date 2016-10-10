@@ -263,7 +263,7 @@ public:
    */
   void promote(
       mds_gid_t standby_gid,
-      std::shared_ptr<Filesystem> filesystem,
+      const std::shared_ptr<Filesystem> &filesystem,
       mds_rank_t assigned_rank);
 
   /**
