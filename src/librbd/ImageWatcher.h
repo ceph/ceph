@@ -8,7 +8,7 @@
 #include "common/RWLock.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
-#include "librbd/image_watcher/Notifier.h"
+#include "librbd/object_watcher/Notifier.h"
 #include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
@@ -241,7 +241,7 @@ private:
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
 
-  image_watcher::Notifier m_notifier;
+  object_watcher::Notifier m_notifier;
 
   void handle_register_watch(int r);
 
