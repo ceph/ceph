@@ -93,8 +93,8 @@ void mempool::pool_t::get_stats(
     total->bytes += shard[i].bytes;
     if (debug) {
       std::unique_lock<std::mutex> shard_lock(shard[i].lock);
-      for (const list_member_t *p = shard[i].containers.next;
-	   p != &shard[i].containers;
+      for (const list_member_t *p = shard[i].types.next;
+	   p != &shard[i].types;
 	   p = p->next) {
 	const pool_allocator_base_t *c =
 	  reinterpret_cast<const pool_allocator_base_t *>(p);

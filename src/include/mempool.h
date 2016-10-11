@@ -218,8 +218,8 @@ enum { num_shards = 64 };
 struct shard_t {
   std::atomic<size_t> bytes = {0};
   std::atomic<size_t> items = {0};
-  mutable std::mutex lock;  // only used for containers list
-  list_member_t containers; // protected by lock
+  mutable std::mutex lock;  // only used for types list
+  list_member_t types;      // protected by lock
 };
 
 struct stats_t {
@@ -234,7 +234,7 @@ struct stats_t {
 // Root of all allocators, this enables the container information to
 // operation easily. These fields are "always" accurate.
 struct pool_allocator_base_t {
-  list_member_t list_member;
+  list_member_t list_member;   // this must come first; see get_stats() hackery
 
   pool_t *pool = nullptr;
   shard_t *shard = nullptr;
@@ -302,7 +302,7 @@ inline void pool_allocator_base_t::attach_pool(
 
   // unconditionally register type, even if debug is currently off
   std::unique_lock<std::mutex> lock(shard->lock);
-  shard->containers.insert(&list_member);
+  shard->types.insert(&list_member);
 }
 
 inline pool_allocator_base_t::~pool_allocator_base_t()
