@@ -146,7 +146,6 @@ vc.disconnect()
     def test_default_prefix(self):
         group_id = "grpid"
         volume_id = "volid"
-        guest_entity = "guest"
         DEFAULT_VOL_PREFIX = "volumes"
         DEFAULT_NS_PREFIX = "fsvolumens_"
 
@@ -160,7 +159,6 @@ vc.disconnect()
         """.format(
             group_id=group_id,
             volume_id=volume_id,
-            guest_entity=guest_entity
         )))
 
         # The dir should be created
@@ -304,7 +302,6 @@ vc.disconnect()
         """.format(
             group_id=group_id,
             volume_id=volume_id,
-            guest_entity=guest_entity
         )), volume_prefix, namespace_prefix)
 
     def test_idempotency(self):
@@ -384,7 +381,6 @@ vc.disconnect()
 
         pools_a = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
 
-        guest_entity = "guest"
         group_id = "grpid"
         volume_id = "volid"
         self._volume_client_python(self.mount_b, dedent("""
@@ -393,7 +389,6 @@ vc.disconnect()
         """.format(
             group_id=group_id,
             volume_id=volume_id,
-            guest_entity=guest_entity
         )))
 
         pools_b = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
@@ -594,7 +589,6 @@ vc.disconnect()
         """.format(
             group_id=group_id,
             volume_id=volume_id,
-            guest_entity=guest_entity
         )))
 
         # Authorize and configure credentials for the guest to mount the
