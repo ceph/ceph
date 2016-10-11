@@ -1493,6 +1493,7 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
   
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
+  data_sync_cr->get(); // run() will drop a ref, so take another
   lock.unlock();
   r = run(data_sync_cr);
   if (r < 0) {
@@ -1501,6 +1502,7 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
   }
 
   lock.get_write();
+  data_sync_cr->put();
   data_sync_cr = NULL;
   lock.unlock();
 
