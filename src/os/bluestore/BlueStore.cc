@@ -1520,6 +1520,7 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 		 << p->offset << std::dec << " is " << bl.length()
 		 << " bytes (was " << p->shard_info->bytes << ") from " << n
 		 << " extents" << dendl;
+	assert(p->shard_info->offset == p->offset);
 	p->shard_info->bytes = bl.length();
 	p->shard_info->extents = n;
 	if (!force &&
