@@ -195,15 +195,16 @@ vc.disconnect()
         volume_prefix = "/myprefix"
         namespace_prefix = "mynsprefix_"
 
-        # Create
+        # Create a 100MB volume
+        volume_size = 100
         mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
-            create_result = vc.create_volume(vp, 1024*1024*100)
+            create_result = vc.create_volume(vp, 1024*1024*{volume_size})
             print create_result['mount_path']
         """.format(
             group_id=group_id,
             volume_id=volume_id,
-            guest_entity=guest_entity
+            volume_size=volume_size
         )), volume_prefix, namespace_prefix)
 
         # The dir should be created
@@ -214,6 +215,15 @@ vc.disconnect()
         self._configure_guest_auth(self.mount_b, self.mounts[2], guest_entity,
                                    mount_path, namespace_prefix)
         self.mounts[2].mount(mount_path=mount_path)
+
+        # df should see volume size, same as the quota set on volume's dir
+        self.assertEqual(self.mounts[2].df()['total'],
+                         volume_size * 1024 * 1024)
+        self.assertEqual(
+                self.mount_a.getfattr(
+                    os.path.join(volume_prefix.strip("/"), group_id, volume_id),
+                    "ceph.quota.max_bytes"),
+                "%s" % (volume_size * 1024 * 1024))
 
         # df granularity is 4MB block so have to write at least that much
         data_bin_mb = 4
