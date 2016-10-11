@@ -847,6 +847,7 @@ void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
   //force fsck
   EXPECT_EQ(store->umount(), 0);
   EXPECT_EQ(store->mount(), 0);
+  auto orig_min_blob_size = g_conf->bluestore_compression_min_blob_size;
   {
     g_conf->set_val("bluestore_compression_min_blob_size", "262144");
     g_ceph_context->_conf->apply_changes(NULL);
@@ -874,6 +875,8 @@ void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  g_conf->set_val("bluestore_compression_min_blob_size", stringify(orig_min_blob_size));
+  g_ceph_context->_conf->apply_changes(NULL);
 }
 
 TEST_P(StoreTest, CompressionTest) {
@@ -892,6 +895,7 @@ TEST_P(StoreTest, CompressionTest) {
 
   doCompressionTest(store);
 
+  g_conf->set_val("bluestore_compression_algorithm", "snappy");
   g_conf->set_val("bluestore_compression", "none");
   g_ceph_context->_conf->apply_changes(NULL);
 }
