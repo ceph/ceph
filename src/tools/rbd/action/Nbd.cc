@@ -100,6 +100,7 @@ void get_map_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("read-only", po::bool_switch(), "mount read-only")
+    ("exclusive", po::bool_switch(), "forbid other clients write")
     ("device", po::value<std::string>(), "specify nbd device");
 }
 
@@ -132,6 +133,9 @@ int execute_map(const po::variables_map &vm)
 
   if (vm["read-only"].as<bool>())
     args.push_back("--read-only");
+
+  if (vm["exclusive"].as<bool>())
+    args.push_back("--exclusive");
 
   if (vm.count("device")) {
     args.push_back("--device");

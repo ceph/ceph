@@ -1086,7 +1086,7 @@
   
   rbd help nbd map
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
-                     [--read-only] [--device <device>] 
+                     [--read-only] [--exclusive] [--device <device>] 
                      <image-or-snap-spec> 
   
   Map image to a nbd device.
@@ -1100,6 +1100,7 @@
     --image arg           image name
     --snap arg            snapshot name
     --read-only           mount read-only
+    --exclusive           forbid other clients write
     --device arg          specify nbd device
   
   rbd help nbd unmap
