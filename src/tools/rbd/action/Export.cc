@@ -107,24 +107,17 @@ private:
   }
 };
 
-int do_export_diff(librbd::Image& image, const char *fromsnapname,
-                const char *endsnapname, bool whole_object,
-                const char *path, bool no_progress)
+
+int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
+		   const char *endsnapname, bool whole_object,
+		   int fd, bool no_progress)
 {
   int r;
   librbd::image_info_t info;
-  int fd;
 
   r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
-
-  if (strcmp(path, "-") == 0)
-    fd = 1;
-  else
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-  if (fd < 0)
-    return -errno;
 
   {
     // header
@@ -153,10 +146,6 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
 
     r = bl.write_fd(fd);
     if (r < 0) {
-      close(fd);
-      if (fd != 1) {
-	remove(path);
-      }
       return r;
     }
   }
@@ -185,6 +174,25 @@ out:
     edc.pc.fail();
   else
     edc.pc.finish();
+
+  return r;
+}
+
+int do_export_diff(librbd::Image& image, const char *fromsnapname,
+                const char *endsnapname, bool whole_object,
+                const char *path, bool no_progress)
+{
+  int r;
+  int fd;
+
+  if (strcmp(path, "-") == 0)
+    fd = 1;
+  else
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+  if (fd < 0)
+    return -errno;
+
+  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress);
 
   close(fd);
   if (r < 0 && fd != 1) {
