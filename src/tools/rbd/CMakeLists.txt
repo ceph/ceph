@@ -13,7 +13,6 @@ set(rbd_srcs
   action/Diff.cc
   action/DiskUsage.cc
   action/Export.cc
-  action/ExportDiff.cc
   action/Feature.cc
   action/Flatten.cc
   action/Group.cc
