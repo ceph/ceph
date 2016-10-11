@@ -361,7 +361,7 @@ class OSDStub : public TestStub
     stringstream ss;
     ss << "client-osd" << whoami;
     messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::OSD(whoami),
-				      ss.str().c_str(), getpid()));
+				      ss.str().c_str(), getpid(), 0));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
 	g_conf->osd_client_message_size_cap);

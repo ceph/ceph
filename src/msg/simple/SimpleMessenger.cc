@@ -39,7 +39,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  */
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
-				 string mname, uint64_t _nonce, uint64_t features)
+				 string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
     dispatch_queue(cct, this, mname),
@@ -55,7 +55,6 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
   ANNOTATE_BENIGN_RACE_SIZED(&timeout, sizeof(timeout),
                              "SimpleMessenger read timeout");
   ceph_spin_init(&global_seq_lock);
-  local_features = features;
   init_local_connection();
 }
 
@@ -718,6 +717,6 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_inst.name.type();
-  local_connection->set_features(local_features);
+  local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
 }

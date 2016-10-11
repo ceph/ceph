@@ -65,8 +65,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
   MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
   virtual void SetUp() {
     lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
-    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
-    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid());
+    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
+    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }
@@ -952,7 +952,7 @@ class SyntheticWorkload {
     char addr[64];
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
-                               "server", getpid()+i);
+                               "server", getpid()+i, 0);
       snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i);
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
@@ -966,7 +966,7 @@ class SyntheticWorkload {
 
     for (int i = 0; i < clients; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
-                               "client", getpid()+i+servers);
+                               "client", getpid()+i+servers, 0);
       if (cli_policy.standby) {
         snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i+servers);
         bind_addr.parse(addr);
@@ -1431,7 +1431,7 @@ class MarkdownDispatcher : public Dispatcher {
 
 // Markdown with external lock
 TEST_P(MessengerTest, MarkdownTest) {
-  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
+  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1:16800");
