@@ -39,6 +39,37 @@ public:
   }
 
 protected:
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    v
+   * UNREGISTERED
+   *    |
+   *    | (register_watch)
+   *    |
+   *    v      (watch error)
+   * REGISTERED * * * * * * * > ERROR
+   *    |   ^                     |
+   *    |   |                     | (rewatch)
+   *    |   |                     v
+   *    |   |                   REWATCHING
+   *    |   |                     |
+   *    |   |                     |
+   *    |   \---------------------/
+   *    |
+   *    | (unregister_watch)
+   *    |
+   *    v
+   * UNREGISTERED
+   *    |
+   *    v
+   * <finish>
+   *
+   * @endverbatim
+   */
+
   enum WatchState {
     WATCH_STATE_UNREGISTERED,
     WATCH_STATE_REGISTERED,

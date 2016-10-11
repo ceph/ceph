@@ -108,9 +108,11 @@ void Watcher<P>::register_watch(Context *on_finish) {
 
 template <typename P>
 void Watcher<P>::handle_register_watch(int r) {
+  ldout(m_cct, 10) << this << " handle register r=" << r << dendl;
   RWLock::WLocker watch_locker(m_watch_lock);
   assert(m_watch_state == WATCH_STATE_UNREGISTERED);
   if (r < 0) {
+    lderr(m_cct) << ": failed to register watch: " << cpp_strerror(r) << dendl;
     m_watch_handle = 0;
   } else if (r >= 0) {
     m_watch_state = WATCH_STATE_REGISTERED;

@@ -51,7 +51,7 @@ public:
                                uint64_t cookie,
                                uint64_t notifier_id,
                                bufferlist& bl) {
-        
+
       try {
 	int op;
 	bufferlist payload;
@@ -125,11 +125,6 @@ public:
     m_watcher = new LockWatcher(m_lock);
     m_watch_ctx = new WatchCtx(*this);
     return m_watch_ctx->watch(oid);
-  }
-
-  void register_watch2(const string& oid) {
-    m_lock = new librbd::Lock(m_ioctx, oid);
-    m_watcher = new LockWatcher(m_lock);
   }
 
   bool wait_for_notifies() {
@@ -216,29 +211,6 @@ TEST_F(TestLockWatcher, NotifyAcquiredLock) {
   NotifyOps expected_notify_ops;
   expected_notify_ops += NotifyOp::NOTIFY_OP_ACQUIRED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
-}
-
-TEST_F(TestLockWatcher, WatchRequestLock) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  librbd::Lock *l = new librbd::Lock(m_ioctx, ictx->header_oid);
-  LockWatcher *lw = new LockWatcher(l);
-  
-  register_watch2(ictx->header_oid);
-  C_SaferCond ctx;
-  lw->register_watch(&ctx);
-  ASSERT_EQ(0, ctx.wait());
-
-  m_watcher->notify_request_lock();
-
-  C_SaferCond ctx2;
-  lw->unregister_watch(&ctx2);
-  ASSERT_EQ(0, ctx2.wait());
-
-  delete lw;
-  delete l;
-
 }
 
 
