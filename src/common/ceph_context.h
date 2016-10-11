@@ -15,6 +15,11 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
+#if defined(__FreeBSD__)
+// Help Clang decide for the correct reference for log() 
+#include <math.h>
+#endif
+
 #include <iosfwd>
 #include <stdint.h>
 #include <string>
