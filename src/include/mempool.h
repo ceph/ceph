@@ -148,12 +148,16 @@ The simplest way to interrogate the process is with
   Formater *f = ...
   mempool::dump(f);
 
-This will dump information about *all* memory pools.
+This will dump information about *all* memory pools.  When debug mode
+is enabled, the runtime complexity of dump is O(num_shards *
+num_types).  When debug name is disabled it is O(num_shards).
 
 You can also interogate a specific pool programatically with
 
   size_t bytes = unittest_2::allocated_bytes();
   size_t items = unittest_2::allocated_items();
+
+The runtime complexity is O(num_shards).
 
 Note that you cannot easily query per-type, primarily because debug
 mode is optional and you should not rely on that information being
