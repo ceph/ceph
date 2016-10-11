@@ -453,6 +453,16 @@ out_enm:
   return r;
 }
 
+static string build_unmap_buf(const string& id, const char *options)
+{
+  string buf(id);
+  if (strcmp(options, "") != 0) {
+    buf += " ";
+    buf += options;
+  }
+  return buf;
+}
+
 static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
 {
   for (;;) {
@@ -480,7 +490,7 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
   return 0;
 }
 
-static int do_unmap(struct udev *udev, dev_t devno, const string& id)
+static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
 {
   struct udev_monitor *mon;
   int r;
@@ -504,7 +514,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& id)
    * Try to circumvent this with a retry before turning to udev.
    */
   for (int tries = 0; ; tries++) {
-    r = sysfs_write_rbd_remove(id);
+    r = sysfs_write_rbd_remove(buf);
     if (r >= 0) {
       break;
     } else if (r == -EBUSY && tries < 2) {
@@ -536,7 +546,8 @@ out_mon:
   return r;
 }
 
-static int unmap_image(struct krbd_ctx *ctx, const char *devnode)
+static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
+                       const char *options)
 {
   struct stat sb;
   dev_t wholedevno;
@@ -568,12 +579,12 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode)
     return r;
   }
 
-  return do_unmap(ctx->udev, wholedevno, id);
+  return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
 }
 
 static int unmap_image(struct krbd_ctx *ctx, const char *pool,
-                       const char *image, const char *snap)
-
+                       const char *image, const char *snap,
+                       const char *options)
 {
   dev_t devno;
   string id;
@@ -592,7 +603,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
     return r;
   }
 
-  return do_unmap(ctx->udev, devno, id);
+  return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
 }
 
 static bool dump_one_image(Formatter *f, TextTable *tbl,
@@ -730,15 +741,17 @@ extern "C" int krbd_map(struct krbd_ctx *ctx, const char *pool,
   return r;
 }
 
-extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode)
+extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
+                          const char *options)
 {
-  return unmap_image(ctx, devnode);
+  return unmap_image(ctx, devnode, options);
 }
 
 extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
-                                  const char *image, const char *snap)
+                                  const char *image, const char *snap,
+                                  const char *options)
 {
-  return unmap_image(ctx, pool, image, snap);
+  return unmap_image(ctx, pool, image, snap, options);
 }
 
 int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)
