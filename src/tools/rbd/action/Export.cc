@@ -17,10 +17,6 @@
 
 namespace rbd {
 namespace action {
-namespace export_diff {
-
-namespace at = argument_types;
-namespace po = boost::program_options;
 
 struct ExportDiffContext {
   librbd::Image *image;
@@ -111,9 +107,9 @@ private:
   }
 };
 
-static int do_export_diff(librbd::Image& image, const char *fromsnapname,
-                          const char *endsnapname, bool whole_object,
-                          const char *path, bool no_progress)
+int do_export_diff(librbd::Image& image, const char *fromsnapname,
+                const char *endsnapname, bool whole_object,
+                const char *path, bool no_progress)
 {
   int r;
   librbd::image_info_t info;
@@ -129,13 +125,6 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (fd < 0)
     return -errno;
-
-  BOOST_SCOPE_EXIT((&r) (&fd) (&path)) {
-    close(fd);
-    if (r < 0 && fd != 1) {
-      remove(path);
-    }
-  } BOOST_SCOPE_EXIT_END
 
   {
     // header
@@ -164,6 +153,10 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 
     r = bl.write_fd(fd);
     if (r < 0) {
+      close(fd);
+      if (fd != 1) {
+	remove(path);
+      }
       return r;
     }
   }
@@ -187,13 +180,25 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     r = bl.write_fd(fd);
   }
 
- out:
+out:
   if (r < 0)
     edc.pc.fail();
   else
     edc.pc.finish();
+
+  close(fd);
+  if (r < 0 && fd != 1) {
+    remove(path);
+  }
+
   return r;
 }
+
+
+namespace export_diff {
+
+namespace at = argument_types;
+namespace po = boost::program_options;
 
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
