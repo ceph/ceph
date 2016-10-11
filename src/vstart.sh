@@ -71,6 +71,12 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
 [ -z "$CEPH_CONF_PATH" ] && CEPH_CONF_PATH=$CEPH_DIR
 
+if (( $CEPH_NUM_OSD > 3 )); then
+    OSD_POOL_DEFAULT_SIZE=3
+else
+    OSD_POOL_DEFAULT_SIZE=$CEPH_NUM_OSD
+fi
+
 extra_conf=""
 new=0
 standby=0
@@ -492,6 +498,7 @@ if [ "$start_mon" -eq 1 ]; then
         fsid = $(uuidgen)
         osd pg bits = 3
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
+        osd pool default size = $OSD_POOL_DEFAULT_SIZE
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd failsafe full ratio = .99
