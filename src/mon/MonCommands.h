@@ -227,10 +227,10 @@ COMMAND("auth rm " \
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage (DEPRECATED)", \
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
 	     "mon", "rw", "cli,rest", \
              FLAG(NOFORWARD)|FLAG(DEPRECATED))
-COMMAND_WITH_FLAG("scrub", "scrub the monitor stores (DEPRECATED)", \
+COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
              "mon", "rw", "cli,rest", \
              FLAG(DEPRECATED))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
@@ -256,7 +256,7 @@ COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,re
 COMMAND_WITH_FLAG("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
-	"force sync of and clear monitor store (DEPRECATED)", \
+	"force sync of and clear monitor store", \
         "mon", "rw", "cli,rest", \
         FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("heap " \
