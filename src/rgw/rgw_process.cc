@@ -109,8 +109,12 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
-int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
-		    RGWRestfulIO* client_io, OpsLogSocket* olog)
+int process_request(RGWRados* const store,
+                    RGWREST* const rest,
+                    RGWRequest* const req,
+                    const std::string& frontend_prefix,
+                    RGWRestfulIO* const client_io,
+                    OpsLogSocket* const olog)
 {
   int ret = 0;
 
@@ -142,8 +146,8 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler_REST *handler = rest->get_handler(store, s, client_io, &mgr,
-					      &init_error);
+  RGWHandler_REST *handler = rest->get_handler(store, s, frontend_prefix,
+                                               client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error, NULL);
     goto done;

@@ -259,7 +259,8 @@ protected:
     return false;
   }
 
-  static int init_from_header(struct req_state *s);
+  static int init_from_header(struct req_state* s,
+                              const std::string& frontend_prefix);
 public:
   RGWHandler_REST_SWIFT() {}
   virtual ~RGWHandler_REST_SWIFT() {}
@@ -360,17 +361,19 @@ public:
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
-public:
-  RGWRESTMgr_SWIFT() {}
-  virtual ~RGWRESTMgr_SWIFT() {}
-
-  RGWHandler_REST *get_handler(struct req_state *s) override;
-
-  RGWRESTMgr* get_resource_mgr_as_default(struct req_state* s,
+protected:
+  RGWRESTMgr* get_resource_mgr_as_default(struct req_state* const s,
                                           const std::string& uri,
-                                          std::string* out_uri) override {
+                                          std::string* const out_uri) override {
     return this->get_resource_mgr(s, uri, out_uri);
   }
+
+public:
+  RGWRESTMgr_SWIFT() = default;
+  virtual ~RGWRESTMgr_SWIFT() = default;
+
+  RGWHandler_REST *get_handler(struct req_state *s,
+                               const std::string& frontend_prefix) override;
 };
 
 
@@ -428,17 +431,19 @@ public:
 };
 
 class RGWRESTMgr_SWIFT_CrossDomain : public RGWRESTMgr {
-public:
-  RGWRESTMgr_SWIFT_CrossDomain() = default;
-  ~RGWRESTMgr_SWIFT_CrossDomain() = default;
-
+protected:
   RGWRESTMgr *get_resource_mgr(struct req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
   }
 
-  RGWHandler_REST* get_handler(struct req_state* const s) override {
+public:
+  RGWRESTMgr_SWIFT_CrossDomain() = default;
+  ~RGWRESTMgr_SWIFT_CrossDomain() = default;
+
+  RGWHandler_REST* get_handler(struct req_state* const s,
+                               const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_CrossDomain;
   }
@@ -481,17 +486,19 @@ public:
 };
 
 class RGWRESTMgr_SWIFT_HealthCheck : public RGWRESTMgr {
-public:
-  RGWRESTMgr_SWIFT_HealthCheck() = default;
-  ~RGWRESTMgr_SWIFT_HealthCheck() = default;
-
+protected:
   RGWRESTMgr *get_resource_mgr(struct req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {
     return this;
   }
 
-  RGWHandler_REST* get_handler(struct req_state* const s) override {
+public:
+  RGWRESTMgr_SWIFT_HealthCheck() = default;
+  ~RGWRESTMgr_SWIFT_HealthCheck() = default;
+
+  RGWHandler_REST* get_handler(struct req_state* const s,
+                               const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_HealthCheck;
   }
@@ -534,7 +541,9 @@ class RGWRESTMgr_SWIFT_Info : public RGWRESTMgr {
 public:
   RGWRESTMgr_SWIFT_Info() = default;
   virtual ~RGWRESTMgr_SWIFT_Info() = default;
-  virtual RGWHandler_REST *get_handler(struct req_state *s) override;
+
+  RGWHandler_REST *get_handler(struct req_state* s,
+                               const std::string& frontend_prefix) override;
 };
 
 #endif

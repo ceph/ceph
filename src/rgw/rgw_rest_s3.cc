@@ -4145,7 +4145,8 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
   return RGWHandler_REST::init(store, state, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state *s)
+RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
+                                            const std::string& frontend_prefix)
 {
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
   int ret =

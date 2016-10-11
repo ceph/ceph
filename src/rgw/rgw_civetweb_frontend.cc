@@ -30,7 +30,8 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
                                 RGWCivetWeb(conn, env.port)))));
   RGWRestfulIO client_io(&real_client_io);
 
-  int ret = process_request(env.store, env.rest, &req, &client_io, env.olog);
+  int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
+                            &client_io, env.olog);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;

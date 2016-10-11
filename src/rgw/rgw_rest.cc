@@ -1748,7 +1748,9 @@ void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
   default_mgr = mgr;
 }
 
-RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri, string *out_uri)
+RGWRESTMgr* RGWRESTMgr::get_resource_mgr(struct req_state* const s,
+                                         const std::string& uri,
+                                         std::string* const out_uri)
 {
   *out_uri = uri;
 
@@ -1759,7 +1761,7 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri,
     if (uri.compare(0, iter->first, resource) == 0 &&
 	(uri.size() == iter->first ||
 	 uri[iter->first] == '/')) {
-      string suffix = uri.substr(iter->first);
+      std::string suffix = uri.substr(iter->first);
       return resource_mgrs[resource]->get_resource_mgr(s, suffix, out_uri);
     }
   }
@@ -2042,34 +2044,38 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   return 0;
 }
 
-RGWHandler_REST* RGWREST::get_handler(RGWRados *store, struct req_state *s,
-				      RGWRestfulIO *rio, RGWRESTMgr **pmgr,
-				      int *init_error)
+RGWHandler_REST* RGWREST::get_handler(RGWRados * const store,
+                                      struct req_state* const s,
+                                      const std::string& frontend_prefix,
+                                      RGWRestfulIO* const rio,
+                                      RGWRESTMgr** const pmgr,
+                                      int* const init_error)
 {
-  RGWHandler_REST* handler;
-
   *init_error = preprocess(s, rio);
-  if (*init_error < 0)
-    return NULL;
-
-  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->relative_uri);
-  if (!m) {
-    *init_error = -ERR_METHOD_NOT_ALLOWED;
-    return NULL;
+  if (*init_error < 0) {
+    return nullptr;
   }
 
-  if (pmgr)
-    *pmgr = m;
+  RGWRESTMgr *m = mgr.get_manager(s, frontend_prefix, s->decoded_uri,
+                                  &s->relative_uri);
+  if (! m) {
+    *init_error = -ERR_METHOD_NOT_ALLOWED;
+    return nullptr;
+  }
 
-  handler = m->get_handler(s);
-  if (!handler) {
+  if (pmgr) {
+    *pmgr = m;
+  }
+
+  RGWHandler_REST* handler = m->get_handler(s, frontend_prefix);
+  if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
   *init_error = handler->init(store, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);
-    return NULL;
+    return nullptr;
   }
 
   return handler;

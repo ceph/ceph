@@ -113,10 +113,11 @@ public:
 
 class RGWRESTMgr_Metadata : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Metadata() {}
-  virtual ~RGWRESTMgr_Metadata() {}
+  RGWRESTMgr_Metadata() = default;
+  virtual ~RGWRESTMgr_Metadata() = default;
 
-  virtual RGWHandler_REST* get_handler(struct req_state *s){
+  RGWHandler_REST* get_handler(struct req_state* const s,
+                               const std::string& frontend_prefix) override {
     return new RGWHandler_Metadata;
   }
 };
