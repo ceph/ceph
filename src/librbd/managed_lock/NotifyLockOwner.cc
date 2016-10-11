@@ -1,20 +1,24 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/lock/NotifyLockOwner.h"
+#include "librbd/managed_lock/NotifyLockOwner.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/object_watcher/Notifier.h"
-#include "librbd/lock/LockWatcherTypes.h"
+#include "librbd/managed_lock/LockWatcherTypes.h"
+#include "librbd/watcher/WatcherTypes.h"
 #include <map>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::lock::NotifyLockOwner: " \
+#define dout_prefix *_dout << "librbd::managed_lock::NotifyLockOwner: " \
                            << this << " " << __func__
 
 namespace librbd {
-namespace lock {
+
+using watcher::ResponseMessage;
+
+namespace managed_lock {
 
 using util::create_context_callback;
 
@@ -97,5 +101,5 @@ void NotifyLockOwner::finish(int r) {
   delete this;
 }
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd

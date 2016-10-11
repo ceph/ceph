@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_LOCK_POLICY_H
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 struct Policy {
   virtual ~Policy() {
@@ -15,7 +15,7 @@ struct Policy {
   virtual int lock_requested(bool force) = 0;
 };
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_LOCK_POLICY_H

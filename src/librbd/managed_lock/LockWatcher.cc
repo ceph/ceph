@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/lock/LockWatcher.h"
-#include "librbd/lock/Policy.h"
+#include "librbd/managed_lock/LockWatcher.h"
+#include "librbd/managed_lock/Policy.h"
 #include "librbd/Lock.h"
-#include "librbd/lock/NotifyLockOwner.h"
+#include "librbd/managed_lock/NotifyLockOwner.h"
 #include "librbd/TaskFinisher.h"
 #include "common/Mutex.h"
 #include "librbd/Utils.h"
@@ -18,8 +18,9 @@
 namespace librbd {
 
 using util::create_context_callback;
+using watcher::ResponseMessage;
 
-namespace lock {
+namespace managed_lock {
 
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
@@ -90,7 +91,7 @@ void LockWatcher::notify_request_lock() {
   ldout(m_cct, 10) << this << " notify request lock" << dendl;
 
   bufferlist bl;
-  send_notify(RequestLockPayload(get_client_id(), false));
+  encode(NotifyMessage(RequestLockPayload(get_client_id(), false)), bl);
   notify_lock_owner(std::move(bl), create_context_callback<
     LockWatcher, &LockWatcher::handle_request_lock>(this));
 }
@@ -181,10 +182,14 @@ bool LockWatcher::handle_payload(const RequestLockPayload &payload,
       return true;
     }
 
+    Policy *policy = m_managed_lock->policy();
+    if (!policy) {
+      return true;
+    }
+
     ldout(m_cct, 10) << this << " queuing release of exclusive lock" << dendl;
 
     r = m_managed_lock->policy()->lock_requested(payload.force);
-
     ::encode(ResponseMessage(r), ack_ctx->out);
   }
   return true;
@@ -213,5 +218,5 @@ void LockWatcher::handle_error(uint64_t handle, int err) {
   watcher::Watcher<LockPayload>::handle_error(handle, err);
 }
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd

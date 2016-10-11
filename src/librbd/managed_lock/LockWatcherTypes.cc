@@ -1,11 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/lock/LockWatcherTypes.h"
+#include "librbd/managed_lock/LockWatcherTypes.h"
 #include "common/Formatter.h"
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 void ClientId::encode(bufferlist &bl) const {
   ::encode(gid, bl);
@@ -85,34 +85,12 @@ void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
 void UnknownPayload::dump(Formatter *f) const {
 }
 
-void ResponseMessage::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
-  ::encode(result, bl);
-  ENCODE_FINISH(bl);
-}
-
-void ResponseMessage::decode(bufferlist::iterator& iter) {
-  DECODE_START(1, iter);
-  ::decode(result, iter);
-  DECODE_FINISH(iter);
-}
-
-void ResponseMessage::dump(Formatter *f) const {
-  f->dump_int("result", result);
-}
-
-void ResponseMessage::generate_test_instances(std::list<ResponseMessage *> &o) {
-  o.push_back(new ResponseMessage(1));
-}
-
-
-
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::lock::NotifyOp &op) {
-  using namespace librbd::lock;
+                         const librbd::managed_lock::NotifyOp &op) {
+  using namespace librbd::managed_lock;
 
   switch (op) {
   case NOTIFY_OP_ACQUIRED_LOCK:
@@ -132,7 +110,7 @@ std::ostream &operator<<(std::ostream &out,
 }
 
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::lock::ClientId &client_id) {
+                         const librbd::managed_lock::ClientId &client_id) {
   out << "[" << client_id.gid << "," << client_id.handle << "]";
   return out;
 }

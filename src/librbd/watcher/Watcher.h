@@ -13,7 +13,6 @@
 #include <set>
 #include <string>
 #include <utility>
-#include <boost/variant.hpp>
 
 class ContextWQ;
 
@@ -92,7 +91,8 @@ protected:
     {
     }
 
-    inline void operator()(const Payload &payload) const {
+    template <typename P>
+    inline void operator()(const P &payload) const {
       C_NotifyAck *ctx = new C_NotifyAck(watcher, notify_id, handle);
       if (watcher->handle_payload(payload, ctx)) {
         ctx->complete(0);
@@ -104,8 +104,9 @@ protected:
   public:
     explicit EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
 
-    inline void operator()(const Payload &payload) const {
-      ::encode(static_cast<uint32_t>(Payload::NOTIFY_OP), m_bl);
+    template <typename P>
+    inline void operator()(const P &payload) const {
+      ::encode(static_cast<uint32_t>(P::NOTIFY_OP), m_bl);
       payload.encode(m_bl);
     }
 
@@ -118,7 +119,8 @@ protected:
     DecodePayloadVisitor(__u8 version, bufferlist::iterator &iter)
       : m_version(version), m_iter(iter) {}
 
-    inline void operator()(Payload &payload) const {
+    template <typename P>
+    inline void operator()(P &payload) const {
       payload.decode(m_version, m_iter);
     }
 
@@ -155,6 +157,10 @@ protected:
   static const TaskCode TASK_CODE_REREGISTER_WATCH;
 
   virtual Payload decode_payload_type(uint32_t notify_op) = 0;
+  template <typename I>
+  bool handle_payload(const I& payload, C_NotifyAck *ctx) {
+    return true;
+  }
 
   librados::IoCtx& m_ioctx;
   CephContext *m_cct;
@@ -190,5 +196,8 @@ protected:
 
 } // namespace watcher
 } // namespace librbd
+
+#include "librbd/managed_lock/LockWatcherTypes.h"
+extern template class librbd::watcher::Watcher<librbd::managed_lock::LockPayload>;
 
 #endif // CEPH_LIBRBD_WATCHER_H

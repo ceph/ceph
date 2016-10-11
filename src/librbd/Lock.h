@@ -17,24 +17,24 @@ class ContextWQ;
 
 namespace librbd {
 
-namespace lock {
+namespace managed_lock {
   class LockWatcher;
   class Policy;
 }
 
-using lock::Policy;
+using managed_lock::Policy;
 
 class Lock {
 public:
   static const std::string WATCHER_LOCK_TAG;
 
-  static Lock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  static Lock *create(librados::IoCtx& ioctx,
                       const std::string& oid,
                       Policy *policy = nullptr) {
-    return new Lock(ioctx, work_queue, oid, policy);
+    return new Lock(ioctx, oid, policy);
   }
 
-  Lock(librados::IoCtx& ioctx, ContextWQ *work_queue, const std::string& oid,
+  Lock(librados::IoCtx& ioctx, const std::string& oid,
        Policy *policy = nullptr);
   ~Lock();
 
@@ -151,7 +151,7 @@ private:
   CephContext *m_cct;
   ContextWQ *m_work_queue;
   std::string m_oid;
-  lock::LockWatcher *m_watcher;
+  managed_lock::LockWatcher *m_watcher;
   Policy *m_policy;
 
   mutable Mutex m_lock;

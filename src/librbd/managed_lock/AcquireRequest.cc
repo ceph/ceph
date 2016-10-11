@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/lock/AcquireRequest.h"
-#include "librbd/lock/LockWatcher.h"
+#include "librbd/managed_lock/AcquireRequest.h"
+#include "librbd/managed_lock/LockWatcher.h"
 #include "librbd/Lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
@@ -14,7 +14,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::lock::AcquireRequest: "
+#define dout_prefix *_dout << "librbd::managed_lock::AcquireRequest: "
 
 using std::string;
 
@@ -25,7 +25,7 @@ using util::create_context_callback;
 using util::create_rados_safe_callback;
 using util::create_rados_ack_callback;
 
-namespace lock {
+namespace managed_lock {
 
 namespace {
 
@@ -300,6 +300,6 @@ Context *AcquireRequest::handle_break_lock(int *ret_val) {
   return nullptr;
 }
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 

@@ -53,6 +53,7 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRemoveRequest.cc
   operation/test_mock_SnapshotRollbackRequest.cc
   operation/test_mock_SnapshotUnprotectRequest.cc
+  managed_lock/test_LockWatcher.cc
   )
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}

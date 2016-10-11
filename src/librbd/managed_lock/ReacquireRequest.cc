@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/lock/ReacquireRequest.h"
+#include "librbd/managed_lock/ReacquireRequest.h"
 #include "librbd/Lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
@@ -11,13 +11,13 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::lock::ReacquireRequest: " \
+#define dout_prefix *_dout << "librbd::managed_lock::ReacquireRequest: " \
                            << this << ": " << __func__
 
 using std::string;
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 using librbd::util::create_rados_safe_callback;
 
@@ -65,6 +65,6 @@ void ReacquireRequest::handle_set_cookie(int r) {
   delete this;
 }
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 

@@ -11,7 +11,7 @@
 class Context;
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 class ReacquireRequest {
 public:
@@ -55,7 +55,7 @@ private:
 
 };
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_LOCK_REACQUIRE_REQUEST_H

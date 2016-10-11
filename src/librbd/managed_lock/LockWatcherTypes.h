@@ -14,7 +14,7 @@ class Formatter;
 }
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 struct ClientId {
   uint64_t gid;
@@ -107,28 +107,14 @@ typedef boost::variant<AcquiredLockPayload,
                        RequestLockPayload,
                        UnknownPayload> LockPayload;
 
-struct ResponseMessage {
-  ResponseMessage() : result(0) {}
-  ResponseMessage(int result_) : result(result_) {}
-
-  int result;
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
-  void dump(Formatter *f) const;
-
-  static void generate_test_instances(std::list<ResponseMessage *> &o);
-};
-
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::lock::NotifyOp &op);
+                         const librbd::managed_lock::NotifyOp &op);
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::lock::ClientId &client);
+                         const librbd::managed_lock::ClientId &client);
 
-WRITE_CLASS_ENCODER(librbd::lock::ClientId);
-WRITE_CLASS_ENCODER(librbd::lock::ResponseMessage);
+WRITE_CLASS_ENCODER(librbd::managed_lock::ClientId);
 
 #endif // CEPH_LIBRBD_LOCK_WATCHER_TYPES_H

@@ -2,11 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/Lock.h"
-#include "librbd/lock/Policy.h"
-#include "librbd/lock/LockWatcher.h"
-#include "librbd/lock/AcquireRequest.h"
-#include "librbd/lock/ReleaseRequest.h"
-#include "librbd/lock/ReacquireRequest.h"
+#include "librbd/managed_lock/Policy.h"
+#include "librbd/managed_lock/LockWatcher.h"
+#include "librbd/managed_lock/AcquireRequest.h"
+#include "librbd/managed_lock/ReleaseRequest.h"
+#include "librbd/managed_lock/ReacquireRequest.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -20,7 +20,7 @@
 
 namespace librbd {
 
-using namespace lock;
+using namespace managed_lock;
 using std::string;
 
 namespace {
@@ -37,23 +37,41 @@ struct C_SendRequest : public Context {
   }
 };
 
+class ThreadPoolSingleton : public ThreadPool {
+public:
+  explicit ThreadPoolSingleton(CephContext *cct)
+    : ThreadPool(cct, "librbd::lock::thread_pool", "tp_librbd_lock", 1) {
+    start();
+  }
+  virtual ~ThreadPoolSingleton() {
+    stop();
+  }
+};
+
 } // anonymous namespace
 
 const std::string Lock::WATCHER_LOCK_TAG("internal");
 
-Lock::Lock(librados::IoCtx &ioctx, ContextWQ *work_queue, const string& oid,
+Lock::Lock(librados::IoCtx &ioctx, const string& oid,
            Policy *policy)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_work_queue(work_queue), m_oid(oid),
+    m_oid(oid),
     m_watcher(new LockWatcher(this)),
     m_policy(policy),
     m_lock(util::unique_lock_name("librbd::Lock::m_lock", this)),
     m_state(STATE_UNLOCKED) {
+
+  ThreadPoolSingleton *thread_pool_singleton;
+  m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+                        thread_pool_singleton, "librbd::lock::thread_pool");
+
+  m_work_queue = new ContextWQ("librbd::lock::op_work_queue",
+                               m_cct->_conf->rbd_op_thread_timeout,
+                               thread_pool_singleton);
 }
 
 Lock::~Lock() {
-  assert(m_state == STATE_SHUTDOWN);
-  // TODO: check when m_state == UNLOCKED
+  assert(m_state == STATE_SHUTDOWN || m_state == STATE_UNLOCKED);
 
   if (m_policy != nullptr) {
     delete m_policy;

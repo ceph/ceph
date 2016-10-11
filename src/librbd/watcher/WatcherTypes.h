@@ -4,6 +4,13 @@
 #ifndef CEPH_LIBRBD_WATCHER_TYPES_H
 #define CEPH_LIBRBD_WATCHER_TYPES_H
 
+#include "include/buffer_fwd.h"
+#include "include/encoding.h"
+
+namespace ceph {
+class Formatter;
+}
+
 namespace librbd {
 namespace watcher {
 
@@ -29,8 +36,22 @@ private:
   TaskCode m_task_code;
 };
 
+struct ResponseMessage {
+  ResponseMessage() : result(0) {}
+  ResponseMessage(int result_) : result(result_) {}
+
+  int result;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ResponseMessage *> &o);
+};
 
 } // namespace watcher
 } // namespace librbd
+
+WRITE_CLASS_ENCODER(librbd::watcher::ResponseMessage);
 
 #endif // CEPH_LIBRBD_WATCHER_TYPES_H

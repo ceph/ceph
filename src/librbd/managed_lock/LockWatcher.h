@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_LOCK_WATCHER_H
 
 #include "librbd/watcher/Watcher.h"
-#include "librbd/lock/LockWatcherTypes.h"
+#include "librbd/managed_lock/LockWatcherTypes.h"
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
@@ -19,7 +19,7 @@ namespace librbd {
 
 class Lock;
 
-namespace lock {
+namespace managed_lock {
 
 class LockWatcher : public watcher::Watcher<LockPayload> {
 public:
@@ -72,7 +72,7 @@ private:
 
 };
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_LOCK_WATCHER_H

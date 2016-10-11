@@ -14,7 +14,7 @@ class Context;
 class ContextWQ;
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 class LockWatcher;
 
@@ -112,7 +112,7 @@ private:
   Context *handle_break_lock(int *ret_val);
 };
 
-} // namespace exclusive_lock
+} // namespace managed_lock
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_EXCLUSIVE_LOCK_ACQUIRE_REQUEST_H

@@ -1,20 +1,20 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/lock/ReleaseRequest.h"
+#include "librbd/managed_lock/ReleaseRequest.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/lock/LockWatcher.h"
+#include "librbd/managed_lock/LockWatcher.h"
 #include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::lock::ReleaseRequest: "
+#define dout_prefix *_dout << "librbd::managed_lock::ReleaseRequest: "
 
 namespace librbd {
-namespace lock {
+namespace managed_lock {
 
 using util::detail::C_AsyncCallback;
 using util::create_context_callback;
@@ -106,6 +106,6 @@ Context *ReleaseRequest::handle_unlock(int *ret_val) {
   return m_on_finish;
 }
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 

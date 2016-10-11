@@ -13,7 +13,7 @@ namespace librbd {
 
 namespace object_watcher { class Notifier; }
 
-namespace lock {
+namespace managed_lock {
 
 class NotifyLockOwner {
 public:
@@ -42,7 +42,7 @@ private:
   void finish(int r);
 };
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_LOCK_NOTIFY_LOCK_OWNER_H

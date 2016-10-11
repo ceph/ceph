@@ -12,7 +12,7 @@ class ContextWQ;
 
 namespace librbd {
 
-namespace lock {
+namespace managed_lock {
 
 class LockWatcher;
 
@@ -69,7 +69,7 @@ private:
 
 };
 
-} // namespace lock
+} // namespace managed_lock
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_LOCK_RELEASE_REQUEST_H
