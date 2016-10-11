@@ -34,6 +34,38 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
+// bluestore_meta_onode
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
+			      bluestore_meta_onode);
+
+// bluestore_meta_other
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_MAP_FACTORY(uint64_t, std::unique_ptr<BlueStore::Buffer>,
+			   bluestore_uint64_Buffer, bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_MAP_FACTORY(int, BlueStore::BlobRef,
+			   bluestore_int_BlobRef, bluestore_meta_other);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
+			      bluestore_meta_other);
+MEMPOOL_DEFINE_FACTORY(BlueStore::ExtentMap::Shard, bluestore_ExtentMap_Shard,
+		       bluestore_meta_other);
+
+MEMPOOL_DEFINE_UNORDERED_MAP_BASE_FACTORY(bluestore_meta_other);
+MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(ghobject_t, BlueStore::OnodeRef, true,
+				     bluestore_ghobject_OnodeRef,
+				     bluestore_meta_other);
+MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(coll_t, BlueStore::CollectionRef, true,
+				     bluestore_coll_CollectionRef,
+				     bluestore_meta_other);
+MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(uint64_t, BlueStore::SharedBlob*, false,
+				     bluestore_u64_sharedblob,
+				     bluestore_meta_other);
+
+// kv store prefixes
 const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_STAT = "T";    // field -> value(int64 array)
 const string PREFIX_COLL = "C";    // collection name -> cnode_t
