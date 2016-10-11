@@ -2272,7 +2272,7 @@ public:
   }
 
   int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool = NULL);
-  void obj_to_raw(const rgw_obj& obj, rgw_raw_obj *raw_obj);
+  static void obj_to_raw(const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
   int list_raw_objects(const rgw_pool& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,

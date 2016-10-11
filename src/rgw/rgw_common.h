@@ -861,9 +861,21 @@ struct rgw_raw_obj {
     ::encode(loc, bl);
     ENCODE_FINISH(bl);
   }
+
+  void decode_from_rgw_obj(bufferlist::iterator& bl);
+
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(6, bl);
-#warning decode old rgw_obj
+    unsigned ofs = bl.get_off();
+    DECODE_START(6, bl);
+    if (struct_v < 6) {
+      /*
+       * this object was encoded as rgw_obj, prior to rgw_raw_obj been split out of it,
+       * let's decode it as rgw_obj and convert it
+       */
+      bl.seek(ofs);
+      decode_from_rgw_obj(bl);
+      return;
+    }
     ::decode(pool, bl);
     ::decode(oid, bl);
     ::decode(loc, bl);
