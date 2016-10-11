@@ -435,24 +435,32 @@ int main(int argc, const char **argv)
 	cct->check_experimental_feature_enabled("rgw-asio-frontend")) {
       int port;
       config->get_val("port", 80, &port);
-      RGWProcessEnv env{ store, &rest, olog, port };
+      std::string uri_prefix;
+      config->get_val("prefix", "", &uri_prefix);
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix };
       fe = new RGWAsioFrontend(env);
     } else if (framework == "fastcgi" || framework == "fcgi") {
-      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0 };
+      std::string uri_prefix;
+      config->get_val("prefix", "", &uri_prefix);
+      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix };
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "civetweb" || framework == "mongoose") {
       int port;
       config->get_val("port", 80, &port);
+      std::string uri_prefix;
+      config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix };
 
       fe = new RGWCivetWebFrontend(env, config);
     } else if (framework == "loadgen") {
       int port;
       config->get_val("port", 80, &port);
+      std::string uri_prefix;
+      config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix };
 
       fe = new RGWLoadGenFrontend(env, config);
     } else {

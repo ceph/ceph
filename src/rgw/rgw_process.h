@@ -29,6 +29,7 @@ struct RGWProcessEnv {
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
+  std::string uri_prefix;
 };
 
 class RGWFrontendConfig;
