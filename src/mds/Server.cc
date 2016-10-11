@@ -2922,11 +2922,6 @@ void Server::handle_client_open(MDRequestRef& mdr)
       return;
   }
 
-  if (mdr->snapid != CEPH_NOSNAP && req->may_write()) {
-    respond_to_request(mdr, -EROFS);
-    return;
-  }
-
   if (!cur->inode.is_file()) {
     // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
     cmode = CEPH_FILE_MODE_PIN;
@@ -2968,9 +2963,9 @@ void Server::handle_client_open(MDRequestRef& mdr)
   
   // snapped data is read only
   if (mdr->snapid != CEPH_NOSNAP &&
-      (cmode & CEPH_FILE_MODE_WR)) {
+      ((cmode & CEPH_FILE_MODE_WR) || req->may_write())) {
     dout(7) << "snap " << mdr->snapid << " is read-only " << *cur << dendl;
-    respond_to_request(mdr, -EPERM);
+    respond_to_request(mdr, -EROFS);
     return;
   }
 
