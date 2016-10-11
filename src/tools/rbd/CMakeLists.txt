@@ -18,7 +18,6 @@ set(rbd_srcs
   action/Group.cc
   action/ImageMeta.cc
   action/Import.cc
-  action/ImportDiff.cc
   action/Info.cc
   action/Journal.cc
   action/Kernel.cc
