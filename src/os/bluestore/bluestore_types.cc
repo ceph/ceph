@@ -661,11 +661,6 @@ void bluestore_shared_blob_t::decode(bufferlist::iterator& p)
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
   f->dump_object("ref_map", ref_map);
-  f->open_array_section("objects");
-  /*for (auto &o : objects) {
-    f->dump_object("object", o);
-    }*/
-  f->close_section();
 }
 
 void bluestore_shared_blob_t::generate_test_instances(
