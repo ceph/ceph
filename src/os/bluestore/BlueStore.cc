@@ -4344,30 +4344,6 @@ int BlueStore::fsck()
 	  break;
 	}
 	used_omap_head.insert(o->onode.omap_head);
-	// hrm, scan actual key/value pairs?
-	KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
-	if (!it)
-	  break;
-	string head, tail;
-	get_omap_header(o->onode.omap_head, &head);
-	get_omap_tail(o->onode.omap_head, &tail);
-	it->lower_bound(head);
-	while (it->valid()) {
-	  if (it->key() == head) {
-	    dout(30) << __func__ << "  got header" << dendl;
-	  } else if (it->key() >= tail) {
-	    dout(30) << __func__ << "  reached tail" << dendl;
-	    break;
-	  } else {
-	    string user_key;
-	    decode_omap_key(it->key(), &user_key);
-	    dout(30) << __func__
-		     << "  got " << pretty_binary_string(it->key())
-		     << " -> " << user_key << dendl;
-	  }
-	  it->next();
-	}
-	break;
       }
     }
   }
