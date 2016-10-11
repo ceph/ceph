@@ -2559,7 +2559,7 @@ void Monitor::format_command_descriptions(const MonCommand *commands,
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
 			 cp->cmdstring, cp->helpstring, cp->module,
-			 cp->req_perms, cp->availability);
+			 cp->req_perms, cp->availability, cp->flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions

@@ -263,7 +263,7 @@ bool DaemonServer::handle_command(MCommand *m)
       dout(20) << "Dumping " << pyc.cmdstring << " (" << pyc.helpstring
                << ")" << dendl;
       dump_cmddesc_to_json(&f, secname.str(), pyc.cmdstring, pyc.helpstring,
-			   "mgr", pyc.perm, "cli");
+			   "mgr", pyc.perm, "cli", 0);
       cmdnum++;
     }
 #if 0
@@ -273,7 +273,7 @@ bool DaemonServer::handle_command(MCommand *m)
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability);
+			   cp->module, cp->perm, cp->availability, 0);
       cmdnum++;
     }
 #endif
