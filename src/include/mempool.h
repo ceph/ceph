@@ -213,7 +213,12 @@ struct list_member_t {
 
 // we shard pool stats across many shard_t's to reduce the amount
 // of cacheline ping pong.
-enum { num_shards = 64 };
+enum {
+  num_shard_bits = 5
+};
+enum {
+  num_shards = 1 << num_shard_bits
+};
 
 struct shard_t {
   std::atomic<size_t> bytes = {0};
@@ -277,7 +282,7 @@ public:
     // Dirt cheap, see:
     //   http://fossies.org/dox/glibc-2.24/pthread__self_8c_source.html
     size_t me = (size_t)pthread_self();
-    size_t i = (me >> 3) % num_shards;
+    size_t i = (me >> 3) & ((1 << num_shard_bits) - 1);
     return &shard[i];
   }
 
