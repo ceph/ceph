@@ -62,6 +62,9 @@ tasks:
 - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
 - sleep:
     duration: 10
+- exec:
+    mon.a:
+      - ceph osd set require_kraken_osds
 - ceph_manager.wait_for_clean: null
 - exec:
     mon.a:
