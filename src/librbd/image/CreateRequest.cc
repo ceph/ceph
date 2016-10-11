@@ -72,7 +72,7 @@ int validate_striping(CephContext *cct, uint8_t order, uint64_t stripe_unit,
 }
 
 int validate_data_pool(CephContext *cct, IoCtx &io_ctx, uint64_t features,
-                       const std::string &data_pool) {
+                       const std::string &data_pool, int64_t *data_pool_id) {
   if ((features & RBD_FEATURE_DATA_POOL) == 0) {
     return 0;
   }
@@ -84,6 +84,8 @@ int validate_data_pool(CephContext *cct, IoCtx &io_ctx, uint64_t features,
     lderr(cct) << "data pool " << data_pool << " does not exist" << dendl;
     return -ENOENT;
   }
+
+  *data_pool_id = data_io_ctx.get_id();
   return 0;
 }
 
@@ -185,7 +187,7 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
 
   m_force_non_primary = !non_primary_global_image_id.empty();
 
-  if (/* TODO */ false && !m_data_pool.empty() && m_data_pool != ioctx.get_pool_name()) {
+  if (!m_data_pool.empty() && m_data_pool != ioctx.get_pool_name()) {
     m_features |= RBD_FEATURE_DATA_POOL;
   } else {
     m_features &= ~RBD_FEATURE_DATA_POOL;
@@ -242,7 +244,8 @@ void CreateRequest<I>::send() {
     return;
   }
 
-  r = validate_data_pool(m_cct, m_ioctx, m_features, m_data_pool);
+  r = validate_data_pool(m_cct, m_ioctx, m_features, m_data_pool,
+                         &m_data_pool_id);
   if (r < 0) {
     complete(r);
     return;
@@ -384,14 +387,19 @@ Context *CreateRequest<I>::handle_add_image_to_directory(int *result) {
 template<typename I>
 void CreateRequest<I>::create_image() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
+  assert(m_data_pool.empty() || m_data_pool_id != -1);
 
   ostringstream oss;
-  oss << RBD_DATA_PREFIX << m_image_id;
+  oss << RBD_DATA_PREFIX;
+  if (m_data_pool_id != -1) {
+    oss << stringify(m_ioctx.get_id()) << ".";
+  }
+  oss << m_image_id;
 
   librados::ObjectWriteOperation op;
   op.create(true);
   cls_client::create_image(&op, m_size, m_order, m_features, oss.str(),
-                           /* TODO */-1);
+                           m_data_pool_id);
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
