@@ -19,13 +19,9 @@
 
 namespace rbd {
 namespace action {
-namespace import_diff {
 
-namespace at = argument_types;
-namespace po = boost::program_options;
-
-static int do_import_diff(librbd::Image &image, const char *path,
-                          bool no_progress)
+int do_import_diff(librbd::Image &image, const char *path,
+                bool no_progress)
 {
   int fd, r;
   struct stat stat_buf;
@@ -176,6 +172,11 @@ static int do_import_diff(librbd::Image &image, const char *path,
     close(fd);
   return r;
 }
+
+namespace import_diff {
+
+namespace at = argument_types;
+namespace po = boost::program_options;
 
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
