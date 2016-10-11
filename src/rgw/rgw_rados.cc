@@ -3312,9 +3312,26 @@ int RGWRados::replace_region_with_zonegroup()
     default_oid = default_region_info_oid;
   }
 
-  string default_region;
+
   RGWZoneGroup default_zonegroup;
-  int ret = default_zonegroup.init(cct, this, false, true);
+  string pool_name = default_zonegroup.get_pool_name(cct);
+  rgw_bucket pool(pool_name.c_str());
+  string oid  = "converted";
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(this);
+
+  int ret = rgw_get_system_obj(this, obj_ctx, pool ,oid, bl, NULL,  NULL);
+  if (ret < 0 && ret !=  -ENOENT) {
+    ldout(cct, 0) << "failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
+  } else if (ret != -ENOENT) {
+    ldout(cct, 0) << "System already converted " << dendl;
+    return 0;
+  }
+
+  string default_region;
+  ret = default_zonegroup.init(cct, this, false, true);
   if (ret < 0) {
     ldout(cct, 0) << "failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -3511,6 +3528,15 @@ int RGWRados::replace_region_with_zonegroup()
         << dendl;
       return ret;
     }
+  }
+
+  /* mark as converted */
+  ret = rgw_put_system_obj(this, pool, oid, bl.c_str(), bl.length(),
+			   true, NULL, real_time(), NULL);
+  if (ret < 0 ) {
+    ldout(cct, 0) << "failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
   }
 
   return 0;
