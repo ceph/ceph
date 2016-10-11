@@ -3434,6 +3434,15 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
+    ldout(cct, 0) << "Converting  " << *iter << dendl;
+    /* check to see if we don't have already a zonegroup with this name */
+    RGWZoneGroup new_zonegroup(*iter);
+    ret = new_zonegroup.init(cct , this);
+    if (ret == 0 && new_zonegroup.get_id() != *iter) {
+      ldout(cct, 0) << "zonegroup  "<< *iter << " already exists id " << new_zonegroup.get_id () <<
+	" skipping conversion " << dendl;
+      continue;
+    }
     RGWZoneGroup zonegroup(*iter);
     zonegroup.set_id(*iter);
     int ret = zonegroup.init(cct, this, true, true);
@@ -3469,6 +3478,7 @@ int RGWRados::replace_region_with_zonegroup()
     }
     for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
          iter ++) {
+      ldout(cct, 0) << "Converting zone" << iter->first << dendl;
       RGWZoneParams zoneparams(iter->first, iter->first);
       zoneparams.set_id(iter->first);
       zoneparams.realm_id = realm.get_id();
