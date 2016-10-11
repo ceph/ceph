@@ -23,10 +23,11 @@ public:
 
 class RGWRESTMgr_Usage : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Usage() {}
-  virtual ~RGWRESTMgr_Usage() {}
+  RGWRESTMgr_Usage() = default;
+  virtual ~RGWRESTMgr_Usage() = default;
 
-  RGWHandler_REST* get_handler(struct req_state *s) {
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_Usage;
   }
 };

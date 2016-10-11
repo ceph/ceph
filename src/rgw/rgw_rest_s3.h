@@ -566,13 +566,14 @@ class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
 public:
-  explicit RGWRESTMgr_S3(bool _enable_s3website = false)
-    : enable_s3website(_enable_s3website)
-    {}
+  explicit RGWRESTMgr_S3(bool enable_s3website = false)
+    : enable_s3website(enable_s3website) {
+  }
 
-  virtual ~RGWRESTMgr_S3() {}
+  virtual ~RGWRESTMgr_S3() = default;
 
-  virtual RGWHandler_REST *get_handler(struct req_state *s);
+  RGWHandler_REST *get_handler(struct req_state* s,
+                               const std::string& frontend_prefix) override;
 };
 
 class RGWHandler_REST_Obj_S3Website;

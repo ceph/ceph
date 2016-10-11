@@ -2224,14 +2224,18 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
-int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
+int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
+                                            const std::string& frontend_prefix)
 {
   string req;
   string first;
 
   s->prot_flags |= RGW_REST_SWIFT;
 
-  const char *req_name = s->decoded_uri.c_str();
+  char reqbuf[frontend_prefix.length() + s->decoded_uri.length() + 1];
+  sprintf(reqbuf, "%s%s", frontend_prefix.c_str(), s->decoded_uri.c_str());
+  const char *req_name = reqbuf;
+
   const char *p;
 
   if (*req_name == '?') {
@@ -2290,8 +2294,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
                    g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
   }
 
-  if (s->decoded_uri[0] != '/' ||
-    s->decoded_uri.compare(0, blen, buf) !=  0) {
+  if (strncmp(reqbuf, buf, blen) != 0) {
     return -ENOENT;
   }
 
@@ -2387,14 +2390,18 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
+RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
+                                               const std::string& frontend_prefix)
 {
-  int ret = RGWHandler_REST_SWIFT::init_from_header(s);
-  if (ret < 0)
-    return NULL;
+  int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
+  if (ret < 0) {
+    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    return nullptr;
+  }
 
-  if (s->init_state.url_bucket.empty())
+  if (s->init_state.url_bucket.empty()) {
     return new RGWHandler_REST_Service_SWIFT;
+  }
 
   if (s->object.empty()) {
     return new RGWHandler_REST_Bucket_SWIFT;
@@ -2403,7 +2410,9 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
   return new RGWHandler_REST_Obj_SWIFT;
 }
 
-RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(struct req_state *s)
+RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
+  struct req_state* const s,
+  const std::string& frontend_prefix)
 {
   s->prot_flags |= RGW_REST_SWIFT;
   return new RGWHandler_REST_SWIFT_Info;

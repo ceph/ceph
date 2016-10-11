@@ -10,7 +10,8 @@ class RGWRESTMgr_Realm : public RGWRESTMgr {
 public:
   RGWRESTMgr_Realm();
 
-  RGWHandler_REST* get_handler(struct req_state*) override;
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override;
 };
 
 #endif

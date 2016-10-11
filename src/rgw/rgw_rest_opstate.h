@@ -98,10 +98,11 @@ public:
 
 class RGWRESTMgr_Opstate : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Opstate() {}
-  virtual ~RGWRESTMgr_Opstate() {}
+  RGWRESTMgr_Opstate() = default;
+  virtual ~RGWRESTMgr_Opstate() = default;
 
-  virtual RGWHandler_REST* get_handler(struct req_state *s){
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_Opstate;
   }
 };

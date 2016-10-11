@@ -444,6 +444,16 @@ protected:
   std::multimap<size_t, std::string> resources_by_size;
   RGWRESTMgr* default_mgr;
 
+  virtual RGWRESTMgr* get_resource_mgr(struct req_state* s,
+                                       const std::string& uri,
+                                       std::string* out_uri);
+
+  virtual RGWRESTMgr* get_resource_mgr_as_default(struct req_state* const s,
+                                                  const std::string& uri,
+                                                  std::string* our_uri) {
+    return this;
+  }
+
 public:
   RGWRESTMgr()
     : should_log(false),
@@ -451,24 +461,34 @@ public:
   }
   virtual ~RGWRESTMgr();
 
-  void register_resource(string resource, RGWRESTMgr *mgr);
-  void register_default_mgr(RGWRESTMgr *mgr);
+  void register_resource(std::string resource, RGWRESTMgr* mgr);
+  void register_default_mgr(RGWRESTMgr* mgr);
 
-  virtual RGWRESTMgr* get_resource_mgr(struct req_state *s,
-                                       const std::string& uri,
-                                       std::string* out_uri);
-
-  virtual RGWRESTMgr* get_resource_mgr_as_default(struct req_state* s,
-                                                  const std::string& uri,
-                                                  std::string* our_uri) {
-    return this;
+  virtual RGWRESTMgr* get_manager(struct req_state* const s,
+                                  /* Prefix to be concatenated with @uri
+                                   * during the lookup. */
+                                  const std::string& frontend_prefix,
+                                  const std::string& uri,
+                                  std::string* out_uri) final {
+    return get_resource_mgr(s, frontend_prefix + uri, out_uri);
   }
 
-  virtual RGWHandler_REST *get_handler(struct req_state *s) { return NULL; }
-  virtual void put_handler(RGWHandler_REST *handler) { delete handler; }
+  virtual RGWHandler_REST* get_handler(struct req_state* const s,
+                                       const std::string& frontend_prefix) {
+    return nullptr;
+  }
 
-  void set_logging(bool _should_log) { should_log = _should_log; }
-  bool get_logging() { return should_log; }
+  virtual void put_handler(RGWHandler_REST* const handler) {
+    delete handler;
+  }
+
+  void set_logging(bool _should_log) {
+    should_log = _should_log;
+  }
+
+  bool get_logging() const {
+    return should_log;
+  }
 };
 
 class RGWLibIO;
@@ -482,6 +502,7 @@ public:
   RGWREST() {}
   RGWHandler_REST *get_handler(RGWRados *store,
                                struct req_state *s,
+                               const std::string& frontend_prefix,
                                RGWRestfulIO *rio,
                                RGWRESTMgr **pmgr,
                                int *init_error);

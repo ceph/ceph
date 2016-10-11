@@ -151,13 +151,17 @@ public:
 
 class RGWRESTMgr_SWIFT_Auth : public RGWRESTMgr {
 public:
-  RGWRESTMgr_SWIFT_Auth() {}
-  virtual ~RGWRESTMgr_SWIFT_Auth() {}
+  RGWRESTMgr_SWIFT_Auth() = default;
+  virtual ~RGWRESTMgr_SWIFT_Auth() = default;
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri) {
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+                                       const std::string& uri,
+                                       std::string* const out_uri) override {
     return this;
   }
-  virtual RGWHandler_REST* get_handler(struct req_state *s) {
+
+  virtual RGWHandler_REST* get_handler(struct req_state*,
+                                       const std::string&) override {
     return new RGWHandler_SWIFT_Auth;
   }
 };

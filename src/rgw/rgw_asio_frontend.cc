@@ -99,7 +99,8 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
                                 rgw::io::add_conlen_controlling(
                                   &real_client))));
     RGWRestfulIO client(&real_client_io);
-    process_request(env.store, env.rest, &req, &client, env.olog);
+    process_request(env.store, env.rest, &req, env.uri_prefix, &client,
+                    env.olog);
   }
 
   void write_bad_request() {

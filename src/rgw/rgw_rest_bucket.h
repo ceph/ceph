@@ -25,10 +25,11 @@ public:
 
 class RGWRESTMgr_Bucket : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Bucket() {}
-  virtual ~RGWRESTMgr_Bucket() {}
+  RGWRESTMgr_Bucket() = default;
+  virtual ~RGWRESTMgr_Bucket() = default;
 
-  RGWHandler_REST* get_handler(struct req_state *s) {
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_Bucket;
   }
 };
