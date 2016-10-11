@@ -245,7 +245,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
-  uint64_t total_time =  entry.total_time.sec() * 1000000LL * entry.total_time.usec();
+  uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
 
   formatter->dump_int("total_time", total_time);
   formatter->dump_string("user_agent",  entry.user_agent);
