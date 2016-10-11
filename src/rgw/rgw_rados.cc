@@ -3556,6 +3556,11 @@ int RGWRados::replace_region_with_zonegroup()
       return ret;
     }
     zonegroup.realm_id = realm.get_id();
+    /* fix default region master zone */
+    if (*iter == default_zonegroup_name && zonegroup.master_zone.empty()) {
+      ldout(cct, 0) << "Setting default zone as master for default region" << dendl;
+      zonegroup.master_zone = default_zone_name;
+    }
     ret = zonegroup.update();
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
