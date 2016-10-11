@@ -430,26 +430,26 @@ int main(int argc, const char **argv)
 
   Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::OSD(whoami), "client",
-					   getpid(), 0,
+					   getpid(),
 					   Messenger::HAS_HEAVY_TRAFFIC |
 					   Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
-					    getpid(), CEPH_FEATURES_ALL,
+					    getpid(),
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
-					     getpid(), 0, Messenger::HEARTBEAT);
+					     getpid(), Messenger::HEARTBEAT);
   Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
-						   getpid(), 0, Messenger::HEARTBEAT);
+						   getpid(), Messenger::HEARTBEAT);
   Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
-						    getpid(), 0, Messenger::HEARTBEAT);
+						    getpid(), Messenger::HEARTBEAT);
   Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
-					     getpid());
+					     getpid(), 0);
   if (!ms_public || !ms_cluster || !ms_hbclient || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
     exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);

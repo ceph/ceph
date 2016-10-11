@@ -130,7 +130,7 @@ class MessengerClient {
     addr.parse(serveraddr.c_str());
     addr.set_nonce(0);
     for (int i = 0; i < jobs; ++i) {
-      Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i);
+      Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i, 0);
       msgr->set_default_policy(Messenger::Policy::lossless_client(0, 0));
       entity_inst_t inst(entity_name_t::OSD(0), addr);
       ConnectionRef conn = msgr->get_connection(inst);
