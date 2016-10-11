@@ -12,7 +12,7 @@
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
-#include "rgw_client_io_decoimpl.h"
+#include "rgw_client_io_filters.h"
 
 #define dout_subsys ceph_subsys_rgw
 

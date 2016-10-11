@@ -7,7 +7,7 @@
 #include <boost/utility/string_ref.hpp>
 
 #include "rgw_frontend.h"
-#include "rgw_client_io_decoimpl.h"
+#include "rgw_client_io_filters.h"
 
 #define dout_subsys ceph_subsys_rgw
 
