@@ -32,6 +32,7 @@
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
+#include "include/mempool.h"
 #include "common/Finisher.h"
 #include "compressor/Compressor.h"
 #include "os/ObjectStore.h"
@@ -120,6 +121,8 @@ public:
 
   /// cached buffer
   struct Buffer {
+    MEMPOOL_CLASS_HELPERS();
+
     enum {
       STATE_EMPTY,     ///< empty buffer -- used for cache history
       STATE_CLEAN,     ///< clean data that is up to date
@@ -207,7 +210,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
+    bluestore_meta_other::map<uint64_t, std::unique_ptr<Buffer>> buffer_map;
     Cache *cache;
 
     // we use a bare intrusive list here instead of std::map because
@@ -320,6 +323,8 @@ public:
 
   /// in-memory shared blob state (incl cached buffers)
   struct SharedBlob {
+    MEMPOOL_CLASS_HELPERS();
+
     std::atomic_int nref = {0}; ///< reference count
 
     // these are defined/set if the shared_blob is 'loaded'
@@ -362,7 +367,7 @@ public:
 
     // we use a bare pointer because we don't want to affect the ref
     // count
-    std::unordered_map<uint64_t,SharedBlob*> sb_map;
+    bluestore_meta_other::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard<std::mutex> l(lock);
@@ -397,6 +402,8 @@ public:
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
+    MEMPOOL_CLASS_HELPERS();
+
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
@@ -516,10 +523,12 @@ public:
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef std::map<int,BlobRef> blob_map_t;
+  typedef bluestore_meta_other::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   struct Extent : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>> {
+    MEMPOOL_CLASS_HELPERS();
+
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
@@ -594,7 +603,7 @@ public:
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
-    vector<Shard> shards;    ///< shards
+    bluestore_meta_other::vector<Shard> shards;    ///< shards
 
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
@@ -732,6 +741,8 @@ public:
 
   /// an in-memory object
   struct Onode {
+    MEMPOOL_CLASS_HELPERS();
+
     std::atomic_int nref;  ///< reference count
     Collection *c;
 
@@ -991,7 +1002,9 @@ public:
 
   struct OnodeSpace {
     Cache *cache;
-    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
+
+    /// forward lookups
+    bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     OnodeSpace(Cache *c) : cache(c) {}
     ~OnodeSpace() {
@@ -1429,7 +1442,7 @@ private:
   bool mounted;
 
   RWLock coll_lock;    ///< rwlock to protect coll_map
-  ceph::unordered_map<coll_t, CollectionRef> coll_map;
+  bluestore_meta_other::unordered_map<coll_t, CollectionRef> coll_map;
 
   vector<Cache*> cache_shards;
 
