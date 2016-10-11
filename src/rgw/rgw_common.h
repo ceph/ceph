@@ -789,7 +789,7 @@ struct rgw_pool {
     return (compare(p) == 0);
   }
   bool operator!=(const rgw_pool& p) const {
-    return (*this != p);
+    return !(*this == p);
   }
 };
 WRITE_CLASS_ENCODER(rgw_pool)
