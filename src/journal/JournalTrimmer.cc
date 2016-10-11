@@ -49,7 +49,9 @@ void JournalTrimmer::shut_down(Context *on_finish) {
 
 int JournalTrimmer::remove_objects(bool force) {
   ldout(m_cct, 20) << __func__ << dendl;
-  m_async_op_tracker.wait_for_ops();
+  C_SaferCond ops_ctx;
+  m_async_op_tracker.wait_for_ops(&ops_ctx);
+  ops_ctx.wait();
 
   C_SaferCond ctx;
   {
