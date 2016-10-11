@@ -223,8 +223,6 @@ enum {
 struct shard_t {
   std::atomic<size_t> bytes = {0};
   std::atomic<size_t> items = {0};
-  mutable std::mutex lock;  // only used for types list
-  list_member_t types;      // protected by lock
 };
 
 struct stats_t {
@@ -242,7 +240,6 @@ struct pool_allocator_base_t {
   list_member_t list_member;   // this must come first; see get_stats() hackery
 
   pool_t *pool = nullptr;
-  shard_t *shard = nullptr;
   const char *type_id = nullptr;
   size_t item_size = 0;
 
@@ -260,6 +257,10 @@ pool_t& get_pool(pool_index_t ix);
 class pool_t {
   std::string name;
   shard_t shard[num_shards];
+
+  mutable std::mutex lock;  // only used for types list
+  list_member_t types;      // protected by lock
+
   friend class pool_allocator_base_t;
 public:
   bool debug;
@@ -302,18 +303,17 @@ inline void pool_allocator_base_t::attach_pool(
 {
   assert(pool == nullptr);
   pool = &get_pool(index);
-  shard = pool->pick_a_shard();
   type_id = _type_id;
 
   // unconditionally register type, even if debug is currently off
-  std::unique_lock<std::mutex> lock(shard->lock);
-  shard->types.insert(&list_member);
+  std::unique_lock<std::mutex> lock(pool->lock);
+  pool->types.insert(&list_member);
 }
 
 inline pool_allocator_base_t::~pool_allocator_base_t()
 {
   if (pool) {
-    std::unique_lock<std::mutex> lock(shard->lock);
+    std::unique_lock<std::mutex> lock(pool->lock);
     list_member.remove();
   }
 }
@@ -357,8 +357,9 @@ public:
 
   pointer allocate(size_t n, void *p = nullptr) {
     size_t total = sizeof(T) * n;
-    base.shard->bytes += total;
-    base.shard->items += n;
+    shard_t *shard = base.pool->pick_a_shard();
+    shard->bytes += total;
+    shard->items += n;
     if (base.pool->debug) {
       base.items += n;
     }
@@ -368,8 +369,9 @@ public:
 
   void deallocate(pointer p, size_type n) {
     size_t total = sizeof(T) * n;
-    base.shard->bytes -= total;
-    base.shard->items -= n;
+    shard_t *shard = base.pool->pick_a_shard();
+    shard->bytes -= total;
+    shard->items -= n;
     if (base.pool->debug) {
       base.items -= n;
     }

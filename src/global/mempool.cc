@@ -91,18 +91,18 @@ void mempool::pool_t::get_stats(
   for (size_t i = 0; i < num_shards; ++i) {
     total->items += shard[i].items;
     total->bytes += shard[i].bytes;
-    if (debug) {
-      std::unique_lock<std::mutex> shard_lock(shard[i].lock);
-      for (const list_member_t *p = shard[i].types.next;
-	   p != &shard[i].types;
-	   p = p->next) {
-	const pool_allocator_base_t *c =
-	  reinterpret_cast<const pool_allocator_base_t *>(p);
-	std::string n = ceph_demangle(c->type_id);
-	stats_t &s = (*by_type)[n];
-	s.bytes = c->items * c->item_size;
-	s.items = c->items;
-      }
+  }
+  if (debug) {
+    std::unique_lock<std::mutex> shard_lock(lock);
+    for (const list_member_t *p = types.next;
+	 p != &types;
+	 p = p->next) {
+      const pool_allocator_base_t *c =
+	reinterpret_cast<const pool_allocator_base_t *>(p);
+      std::string n = ceph_demangle(c->type_id);
+      stats_t &s = (*by_type)[n];
+      s.bytes = c->items * c->item_size;
+      s.items = c->items;
     }
   }
 }
