@@ -437,6 +437,7 @@ public:
     }
 
     bool can_split() const {
+      std::lock_guard<std::recursive_mutex> l(shared_blob->bc.cache->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return shared_blob->bc.writing.empty() && get_blob().can_split();
     }
