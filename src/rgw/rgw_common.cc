@@ -14,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
+#include "rgw_rados.h"
 
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
@@ -1432,6 +1433,14 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
   }
 
   return false;
+}
+
+void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
+{
+  rgw_obj old_obj;
+  ::decode(old_obj, bl);
+
+  RGWRados::obj_to_raw(old_obj, this);
 }
 
 std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
