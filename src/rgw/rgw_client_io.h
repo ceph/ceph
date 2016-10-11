@@ -184,7 +184,7 @@ public:
  * mixing interfaces with implementation. Additionally, those classes derive
  * from RGWRestfulIO defined here. I believe that including in the middle of
  * file is still better than polluting it directly. */
-#include "rgw_client_io_decoimpl.h"
+#include "rgw_client_io_filters.h"
 
 
 /* RGWRestfulIO: high level interface to interact with RESTful clients. What
