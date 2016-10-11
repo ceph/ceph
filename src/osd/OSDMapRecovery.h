@@ -134,6 +134,12 @@ struct OSDMapRecovery : public Dispatcher {
 
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) { }
+  bool ms_handle_refused(Connection *con) {
+    /* if the connection is being refused by the current monitor, we presume
+     * the monclient will figure it out.
+     */
+    return false;
+  }
 
   bool _contained_in(const pair<epoch_t,epoch_t>& a,
                      const pair<epoch_t,epoch_t>& b) const {
