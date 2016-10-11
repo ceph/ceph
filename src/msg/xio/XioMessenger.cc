@@ -740,6 +740,17 @@ int XioMessenger::rebind(const set<int>& avoid_ports)
   return 0;
 } /* rebind */
 
+int XioMessenger::client_bind(const entity_addr_t& bind_addr)
+{
+  if (did_bind) {
+    assert(my_inst.addr == bind_addr);
+    return 0;
+  }
+
+  set_myaddr(bind_addr);
+  return 0;
+}
+
 int XioMessenger::start()
 {
   portals.start();
