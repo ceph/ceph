@@ -318,7 +318,7 @@ public:
   struct SharedBlobSet;
 
   /// in-memory shared blob state (incl cached buffers)
-  struct SharedBlob : public boost::intrusive::unordered_set_base_hook<> {
+  struct SharedBlob {
     std::atomic_int nref = {0}; ///< reference count
 
     // these are defined/set if the shared_blob is 'loaded'
@@ -357,37 +357,24 @@ public:
 
   /// a lookup table of SharedBlobs
   struct SharedBlobSet {
-    typedef boost::intrusive::unordered_set<SharedBlob>::bucket_type bucket_type;
-    typedef boost::intrusive::unordered_set<SharedBlob>::bucket_traits bucket_traits;
-
     std::mutex lock;   ///< protect lookup, insertion, removal
-    int num_buckets;
-    vector<bucket_type> buckets;
-    boost::intrusive::unordered_set<SharedBlob> uset;
 
-    SharedBlob dummy;  ///< for lookups
-
-    explicit SharedBlobSet(unsigned n)
-      : num_buckets(n),
-	buckets(n),
-	uset(bucket_traits(buckets.data(), num_buckets)),
-	dummy(0, string(), nullptr) {
-      assert(n > 0);
-    }
+    // we use a bare pointer because we don't want to affect the ref
+    // count
+    std::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard<std::mutex> l(lock);
-      dummy.sbid = sbid;
-      auto p = uset.find(dummy);
-      if (p == uset.end()) {
+      auto p = sb_map.find(sbid);
+      if (p == sb_map.end()) {
         return nullptr;
       }
-      return &*p;
+      return p->second;
     }
 
     void add(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
-      uset.insert(*sb);
+      sb_map[sb->sbid] = sb;
       sb->parent_set = this;
     }
 
@@ -395,7 +382,7 @@ public:
       std::lock_guard<std::mutex> l(lock);
       if (sb->nref == 0) {
 	assert(sb->parent_set == this);
-	uset.erase(*sb);
+	sb_map.erase(sb->sbid);
 	return true;
       }
       return false;
@@ -403,7 +390,7 @@ public:
 
     bool empty() {
       std::lock_guard<std::mutex> l(lock);
-      return uset.empty();
+      return sb_map.empty();
     }
   };
 

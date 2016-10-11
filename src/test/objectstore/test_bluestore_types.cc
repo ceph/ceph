@@ -34,6 +34,7 @@ TEST(bluestore, sizeof) {
   P(std::atomic_int);
   P(BlueStore::SharedBlobRef);
   P(boost::intrusive::set_base_hook<>);
+  P(boost::intrusive::unordered_set_base_hook<>);
   P(bufferlist);
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t,uint64_t>) << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char,char>) << std::endl;
