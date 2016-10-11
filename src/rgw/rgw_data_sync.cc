@@ -1582,16 +1582,17 @@ int RGWRemoteDataLog::run_sync(int num_shards)
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
   lock.unlock();
+
   int r = run(data_sync_cr);
-  if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
-    return r;
-  }
 
   lock.get_write();
   data_sync_cr = NULL;
   lock.unlock();
 
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
+    return r;
+  }
   return 0;
 }
 
