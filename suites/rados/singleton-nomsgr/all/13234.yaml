@@ -216,6 +216,9 @@ tasks:
     - mon.a
     - mon.b
     - mon.c
+  - exec:
+      mon.a:
+        - ceph osd set require_kraken_osds
   - loop:
       body:
       - ceph_manager.set_pool_property:
