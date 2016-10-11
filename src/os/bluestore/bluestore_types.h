@@ -604,7 +604,6 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 /// shared blob state
 struct bluestore_shared_blob_t {
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
-  //set<ghobject_t> objects;  ///< objects referencing these shared blocks (debug)
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
