@@ -11,7 +11,8 @@ class Context;
 
 namespace librbd {
 
-class ImageCtx;
+struct ImageCtx;
+class Lock;
 template <typename> class Journal;
 
 namespace exclusive_lock {
@@ -19,9 +20,8 @@ namespace exclusive_lock {
 template <typename ImageCtxT = ImageCtx>
 class ReleaseRequest {
 public:
-  static ReleaseRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_releasing, Context *on_finish,
-                                bool shutting_down);
+  static ReleaseRequest* create(ImageCtxT &image_ctx, Lock *managed_lock,
+                                Context *on_finish, bool shutting_down);
 
   ~ReleaseRequest();
   void send();
@@ -59,13 +59,11 @@ private:
    * @endverbatim
    */
 
-  ReleaseRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_releasing, Context *on_finish,
+  ReleaseRequest(ImageCtxT &image_ctx, Lock *managed_lock, Context *on_finish,
                  bool shutting_down);
 
   ImageCtxT &m_image_ctx;
-  std::string m_cookie;
-  Context *m_on_releasing;
+  Lock *m_managed_lock;
   Context *m_on_finish;
   bool m_shutting_down;
 
@@ -81,8 +79,8 @@ private:
   void send_block_writes();
   Context *handle_block_writes(int *ret_val);
 
-  void send_flush_notifies();
-  Context *handle_flush_notifies(int *ret_val);
+  void send_image_flush_notifies();
+  Context *handle_image_flush_notifies(int *ret_val);
 
   void send_close_journal();
   Context *handle_close_journal(int *ret_val);
@@ -91,7 +89,6 @@ private:
   Context *handle_close_object_map(int *ret_val);
 
   void send_unlock();
-  Context *handle_unlock(int *ret_val);
 
 };
 
