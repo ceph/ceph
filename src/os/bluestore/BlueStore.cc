@@ -1495,6 +1495,7 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
       dout(20) << __func__ << " inline shard "
 	       << len << " bytes from " << n << " extents" << dendl;
       if (!force && len > g_conf->bluestore_extent_map_shard_max_size) {
+        inline_bl.clear();
 	return true;
       }
     }
@@ -1516,18 +1517,19 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 	if (encode_some(p->offset, endoff - p->offset, bl, &n)) {
 	  return true;
 	}
+        size_t len = bl.length();
 	dout(20) << __func__ << " shard 0x" << std::hex
-		 << p->offset << std::dec << " is " << bl.length()
+		 << p->offset << std::dec << " is " << len
 		 << " bytes (was " << p->shard_info->bytes << ") from " << n
 		 << " extents" << dendl;
+        if (!force &&
+            (len > g_conf->bluestore_extent_map_shard_max_size ||
+             len < g_conf->bluestore_extent_map_shard_min_size)) {
+          return true;
+        }
 	assert(p->shard_info->offset == p->offset);
-	p->shard_info->bytes = bl.length();
+	p->shard_info->bytes = len;
 	p->shard_info->extents = n;
-	if (!force &&
-	    (bl.length() > g_conf->bluestore_extent_map_shard_max_size ||
-	     bl.length() < g_conf->bluestore_extent_map_shard_min_size)) {
-	  return true;
-	}
 	t->set(PREFIX_OBJ, p->key, bl);
 	p->dirty = false;
       }
