@@ -2484,6 +2484,31 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
+  if (copy_source) {
+
+    RGWAccessControlPolicy cs_policy(s->cct);
+    map<string, bufferlist> cs_attrs;
+    rgw_bucket cs_bucket(copy_source_bucket_info.bucket);
+    rgw_obj_key cs_object(copy_source_object_name, copy_source_version_id);
+
+    rgw_obj obj(cs_bucket, cs_object.name);
+    obj.set_instance(cs_object.instance);
+    store->set_atomic(s->obj_ctx, obj);
+    store->set_prefetch_data(s->obj_ctx, obj);
+
+    /* check source object permissions */
+    if (read_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_policy, cs_bucket, cs_object) < 0) {
+      return -EACCES;
+    }
+
+    /* admin request overrides permission checks */
+    if (!s->auth_identity->is_admin_of(cs_policy.get_owner().get_id()) &&
+        !cs_policy.verify_permission(*s->auth_identity, s->perm_mask, RGW_PERM_READ)) {
+      return -EACCES;
+    }
+
+  }
+
   if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
   }
@@ -2662,6 +2687,59 @@ void RGWPutObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+class RGWPutObj_CB : public RGWGetDataCB
+{
+  RGWPutObj *op;
+public:
+  RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
+  virtual ~RGWPutObj_CB() {}
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+};
+
+int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+{
+  bufferlist bl_tmp;
+  bl.copy(bl_ofs, bl_len, bl_tmp);
+
+  bl_aux.append(bl_tmp);
+
+  return bl_len;
+}
+
+int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
+{
+  RGWPutObj_CB cb(this);
+  int ret = 0;
+
+  int64_t new_ofs, new_end;
+
+  new_ofs = fst;
+  new_end = lst;
+
+  rgw_obj_key obj_key(copy_source_object_name, copy_source_version_id);
+  rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
+  obj.set_instance(obj_key.instance);
+
+  RGWRados::Object op_target(store, copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  ret = read_op.prepare(&new_ofs, &new_end);
+  if (ret < 0)
+    return ret;
+
+  ret = read_op.iterate(new_ofs, new_end, &cb);
+  if (ret < 0) {
+    return ret;
+  }
+
+  bl.claim_append(bl_aux);
+
+  return ret;
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -2675,6 +2753,9 @@ void RGWPutObj::execute()
   map<string, string>::iterator iter;
   bool multipart;
   
+  off_t fst;
+  off_t lst;
+
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
   perfcounter->inc(l_rgw_put);
@@ -2753,9 +2834,24 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  fst = copy_source_range_fst;
+  lst = copy_source_range_lst;
+
   do {
     bufferlist data_in;
-    len = get_data(data_in);
+    if (fst > lst)
+      break;
+    if (!copy_source) {
+      len = get_data(data_in);
+    } else {
+      uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
+      op_ret = get_data(fst, cur_lst, data_in);
+      if (op_ret < 0)
+        goto done;
+      len = data_in.length();
+      s->content_length += len;
+      fst += len;
+    }
     if (len < 0) {
       op_ret = len;
       goto done;
