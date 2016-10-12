@@ -567,19 +567,17 @@ void MonClient::_send_mon_message(Message *m)
   }
 }
 
-void MonClient::_reopen_session(int rank, string name)
+void MonClient::_reopen_session(int rank)
 {
   assert(monc_lock.is_locked());
-  ldout(cct, 10) << __func__ << " rank " << rank << " name " << name << dendl;
+  ldout(cct, 10) << __func__ << " rank " << rank << dendl;
 
   active_con.reset();
   pending_cons.clear();
 
   _start_hunting();
-  
-  if (name.length()) {
-    _add_conn(monmap.get_rank(name));
-  } else if (rank >= 0) {
+
+  if (rank >= 0) {
     _add_conn(rank);
   } else {
     _add_conns();
@@ -931,7 +929,7 @@ void MonClient::_send_command(MonCommand *r)
       _finish_command(r, -ENOENT, "mon rank dne");
       return;
     }
-    _reopen_session(r->target_rank, string());
+    _reopen_session(r->target_rank);
     return;
   }
 
@@ -946,7 +944,7 @@ void MonClient::_send_command(MonCommand *r)
       _finish_command(r, -ENOENT, "mon dne");
       return;
     }
-    _reopen_session(-1, r->target_name);
+    _reopen_session(monmap.get_rank(r->target_name));
     return;
   }
 

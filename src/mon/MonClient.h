@@ -204,10 +204,7 @@ private:
   void _start_hunting();
   void _finish_hunting();
   void _finish_auth(int auth_err);
-  void _reopen_session(int rank, string name);
-  void _reopen_session() {
-    _reopen_session(-1, string());
-  }
+  void _reopen_session(int rank = -1);
   MonConnection& _add_conn(unsigned rank);
   void _add_conns();
   void _send_mon_message(Message *m);
