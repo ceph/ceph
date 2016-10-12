@@ -312,31 +312,31 @@ function TEST_list_missing_erasure_coded() {
     wait_for_clean || return 1
 
     # Put an object and remove the two shards (including primary)
-    add_something $dir $poolname OBJ0 || return 1
-    local -a osds=($(get_osds $poolname OBJ0))
+    add_something $dir $poolname MOBJ0 || return 1
+    local -a osds=($(get_osds $poolname MOBJ0))
 
     pids=""
-    run_in_background pids objectstore_tool $dir ${osds[0]} OBJ0 remove
-    run_in_background pids objectstore_tool $dir ${osds[1]} OBJ0 remove
+    run_in_background pids objectstore_tool $dir ${osds[0]} MOBJ0 remove
+    run_in_background pids objectstore_tool $dir ${osds[1]} MOBJ0 remove
     wait_background pids
     return_code=$?
     if [ $return_code -ne 0 ]; then return $return_code; fi
 
 
     # Put another object and remove two shards (excluding primary)
-    add_something $dir $poolname OBJ1 || return 1
-    local -a osds=($(get_osds $poolname OBJ1))
+    add_something $dir $poolname MOBJ1 || return 1
+    local -a osds=($(get_osds $poolname MOBJ1))
 
     pids=""
-    run_in_background pids objectstore_tool $dir ${osds[1]} OBJ1 remove
-    run_in_background pids objectstore_tool $dir ${osds[2]} OBJ1 remove
+    run_in_background pids objectstore_tool $dir ${osds[1]} MOBJ1 remove
+    run_in_background pids objectstore_tool $dir ${osds[2]} MOBJ1 remove
     wait_background pids
     return_code=$?
     if [ $return_code -ne 0 ]; then return $return_code; fi
 
 
     # Get get - both objects should in the same PG
-    local pg=$(get_pg $poolname OBJ0)
+    local pg=$(get_pg $poolname MOBJ0)
 
     # Repair the PG, which triggers the recovering,
     # and should mark the object as unfound
@@ -344,7 +344,7 @@ function TEST_list_missing_erasure_coded() {
     
     for i in $(seq 0 120) ; do
         [ $i -lt 60 ] || return 1
-        matches=$(ceph pg $pg list_missing | egrep "OBJ0|OBJ1" | wc -l)
+        matches=$(ceph pg $pg list_missing | egrep "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
     done
 
@@ -369,7 +369,7 @@ function TEST_corrupt_scrub_replicated() {
     wait_for_clean || return 1
 
     for i in $(seq 0 $total_objs) ; do
-      objname=OBJ${i}
+      objname=ROBJ${i}
       add_something $dir $poolname $objname
       if [ $i = "0" ];
       then
@@ -381,7 +381,7 @@ function TEST_corrupt_scrub_replicated() {
       fi
     done
 
-    local pg=$(get_pg $poolname OBJ0)
+    local pg=$(get_pg $poolname ROBJ0)
     pg_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
