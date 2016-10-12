@@ -770,8 +770,8 @@ TEST(LibCephFS, FlagO_PATH) {
   // try to sync
   ASSERT_EQ(-EBADF, ceph_fsync(cmount, fd, false));
 
-  struct stat sb;
-  ASSERT_EQ(0, ceph_fstat(cmount, fd, &sb));
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_fstatx(cmount, fd, &stx, 0, 0));
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
   ceph_shutdown(cmount);
@@ -986,8 +986,8 @@ TEST(LibCephFS, BadFileDesc) {
   ASSERT_EQ(ceph_ftruncate(cmount, -1, 0), -EBADF);
   ASSERT_EQ(ceph_fsync(cmount, -1, 0), -EBADF);
 
-  struct stat stat;
-  ASSERT_EQ(ceph_fstat(cmount, -1, &stat), -EBADF);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_fstatx(cmount, -1, &stx, 0, 0), -EBADF);
 
   struct sockaddr_storage addr;
   ASSERT_EQ(ceph_get_file_stripe_address(cmount, -1, 0, &addr, 1), -EBADF);
@@ -1175,7 +1175,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_write(cmount, 0, NULL, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_ftruncate(cmount, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_fsync(cmount, 0, 0));
-  EXPECT_EQ(-ENOTCONN, ceph_fstat(cmount, 0, &st));
+  EXPECT_EQ(-ENOTCONN, ceph_fstatx(cmount, 0, &stx, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_sync_fs(cmount));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_stripe_unit(cmount, 0));
   EXPECT_EQ(-ENOTCONN, ceph_get_file_pool(cmount, 0));
