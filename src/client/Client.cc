@@ -8102,7 +8102,7 @@ int Client::close(int fd)
 // ------------
 // read, write
 
-loff_t Client::lseek(int fd, loff_t offset, int whence, const UserPerm& perms)
+loff_t Client::lseek(int fd, loff_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "lseek" << std::endl;
@@ -8117,17 +8117,13 @@ loff_t Client::lseek(int fd, loff_t offset, int whence, const UserPerm& perms)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
-  return _lseek(f, offset, whence, perms);
+  return _lseek(f, offset, whence);
 }
 
-loff_t Client::_lseek(Fh *f, loff_t offset, int whence, const UserPerm& perms)
+loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 {
   Inode *in = f->inode.get();
   int r;
-
-  if (!may_open(f->inode.get(), f->flags, perms)) {
-    return -EPERM;
-  }
 
   switch (whence) {
   case SEEK_SET:
@@ -8139,7 +8135,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence, const UserPerm& perms)
     break;
 
   case SEEK_END:
-    r = _getattr(in, CEPH_STAT_CAP_SIZE, perms);
+    r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
     if (r < 0)
       return r;
     f->pos = in->size + offset;
@@ -8686,7 +8682,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * change out from under us.
      */
     if (f->flags & O_APPEND) {
-      int r = _lseek(f, 0, SEEK_END, f->actor_perms);
+      int r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
@@ -11706,15 +11702,14 @@ out:
   return r;
 }
 
-loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence,
-			const UserPerm& perms)
+loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "ll_lseek" << std::endl;
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
 
-  return _lseek(fh, offset, whence, perms);
+  return _lseek(fh, offset, whence);
 }
 
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
