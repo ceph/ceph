@@ -310,11 +310,11 @@ void CephBroker::remove(ResponseCallback *cb, const char *fname) {
 
 void CephBroker::length(ResponseCallbackLength *cb, const char *fname, bool) {
   int r;
-  struct stat statbuf;
+  struct ceph_statx stx;
 
   HT_DEBUGF("length file='%s'", fname);
 
-  if ((r = ceph_lstat(cmount, fname, &statbuf)) < 0) {
+  if ((r = ceph_statx(cmount, fname, &stx, CEPH_STATX_SIZE, AT_SYMLINK_NOFOLLOW)) < 0) {
     String abspath;
     make_abs_path(fname, abspath);
     std::string errs(cpp_strerror(r));
@@ -322,7 +322,7 @@ void CephBroker::length(ResponseCallbackLength *cb, const char *fname, bool) {
     report_error(cb,- r);
     return;
   }
-  cb->response(statbuf.st_size);
+  cb->response(stx.stx_size);
 }
 
 void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
@@ -487,11 +487,11 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
 
 void CephBroker::exists(ResponseCallbackExists *cb, const char *fname) {
   String abspath;
-  struct stat statbuf;
+  struct ceph_statx stx;
   
   HT_DEBUGF("exists file='%s'", fname);
   make_abs_path(fname, abspath);
-  cb->response(ceph_lstat(cmount, abspath.c_str(), &statbuf) == 0);
+  cb->response(ceph_statx(cmount, abspath.c_str(), &stx, 0, AT_SYMLINK_NOFOLLOW) == 0);
 }
 
 void CephBroker::rename(ResponseCallback *cb, const char *src, const char *dst) {
