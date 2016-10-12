@@ -1117,7 +1117,7 @@ JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1readlink
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_path;
 	char *linkname;
-	struct stat st;
+	struct ceph_statx stx;
 	jstring j_linkname;
 
 	CHECK_ARG_NULL(j_path, "@path is null", NULL);
@@ -1131,7 +1131,8 @@ JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1readlink
 
 	for (;;) {
 		ldout(cct, 10) << "jni: readlink: lstatx " << c_path << dendl;
-		int ret = ceph_lstat(cmount, c_path, &st);
+		int ret = ceph_statx(cmount, c_path, &stx, CEPH_STATX_SIZE,
+				     AT_SYMLINK_NOFOLLOW);
 		ldout(cct, 10) << "jni: readlink: lstat exit ret " << ret << dendl;
 		if (ret) {
 			env->ReleaseStringUTFChars(j_path, c_path);
@@ -1139,16 +1140,16 @@ JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1readlink
 			return NULL;
 		}
 
-		linkname = new (std::nothrow) char[st.st_size + 1];
+		linkname = new (std::nothrow) char[stx.stx_size + 1];
 		if (!linkname) {
 			env->ReleaseStringUTFChars(j_path, c_path);
 			cephThrowOutOfMemory(env, "head allocation failed");
 			return NULL;
 		}
 
-		ldout(cct, 10) << "jni: readlink: size " << st.st_size << " path " << c_path << dendl;
+		ldout(cct, 10) << "jni: readlink: size " << stx.stx_size << " path " << c_path << dendl;
 
-		ret = ceph_readlink(cmount, c_path, linkname, st.st_size + 1);
+		ret = ceph_readlink(cmount, c_path, linkname, stx.stx_size + 1);
 
 		ldout(cct, 10) << "jni: readlink: exit ret " << ret << dendl;
 
@@ -1160,7 +1161,7 @@ JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1readlink
 		}
 
 		/* re-stat and try again */
-		if (ret > st.st_size) {
+		if (ret > (int)stx.stx_size) {
 			delete [] linkname;
 			continue;
 		}
@@ -1223,33 +1224,35 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1symlink
 	return ret;
 }
 
-static void fill_cephstat(JNIEnv *env, jobject j_cephstat, struct stat *st)
-{
-	env->SetIntField(j_cephstat, cephstat_mode_fid, st->st_mode);
-	env->SetIntField(j_cephstat, cephstat_uid_fid, st->st_uid);
-	env->SetIntField(j_cephstat, cephstat_gid_fid, st->st_gid);
-	env->SetLongField(j_cephstat, cephstat_size_fid, st->st_size);
-	env->SetLongField(j_cephstat, cephstat_blksize_fid, st->st_blksize);
-	env->SetLongField(j_cephstat, cephstat_blocks_fid, st->st_blocks);
+#define CEPH_J_CEPHSTAT_MASK (CEPH_STATX_UID|CEPH_STATX_GID|CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_MTIME|CEPH_STATX_ATIME)
 
-	long long time = st->st_mtim.tv_sec;
+static void fill_cephstat(JNIEnv *env, jobject j_cephstat, struct ceph_statx *stx)
+{
+	env->SetIntField(j_cephstat, cephstat_mode_fid, stx->stx_mode);
+	env->SetIntField(j_cephstat, cephstat_uid_fid, stx->stx_uid);
+	env->SetIntField(j_cephstat, cephstat_gid_fid, stx->stx_gid);
+	env->SetLongField(j_cephstat, cephstat_size_fid, stx->stx_size);
+	env->SetLongField(j_cephstat, cephstat_blksize_fid, stx->stx_blksize);
+	env->SetLongField(j_cephstat, cephstat_blocks_fid, stx->stx_blocks);
+
+	long long time = stx->stx_mtime.tv_sec;
 	time *= 1000;
-	time += st->st_mtim.tv_nsec / 1000000;
+	time += stx->stx_mtime.tv_nsec / 1000000;
 	env->SetLongField(j_cephstat, cephstat_m_time_fid, time);
 
-	time = st->st_atim.tv_sec;
+	time = stx->stx_atime.tv_sec;
 	time *= 1000;
-	time += st->st_atim.tv_nsec / 1000000;
+	time += stx->stx_atime.tv_nsec / 1000000;
 	env->SetLongField(j_cephstat, cephstat_a_time_fid, time);
 
 	env->SetBooleanField(j_cephstat, cephstat_is_file_fid,
-			S_ISREG(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+			S_ISREG(stx->stx_mode) ? JNI_TRUE : JNI_FALSE);
 
 	env->SetBooleanField(j_cephstat, cephstat_is_directory_fid,
-			S_ISDIR(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+			S_ISDIR(stx->stx_mode) ? JNI_TRUE : JNI_FALSE);
 
 	env->SetBooleanField(j_cephstat, cephstat_is_symlink_fid,
-			S_ISLNK(st->st_mode) ? JNI_TRUE : JNI_FALSE);
+			S_ISLNK(stx->stx_mode) ? JNI_TRUE : JNI_FALSE);
 }
 
 /*
@@ -1263,7 +1266,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_path;
-	struct stat st;
+	struct ceph_statx stx;
 	int ret;
 
 	CHECK_ARG_NULL(j_path, "@path is null", -1);
@@ -1278,7 +1281,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
 
 	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
 
-	ret = ceph_lstat(cmount, c_path, &st);
+	ret = ceph_statx(cmount, c_path, &stx, CEPH_J_CEPHSTAT_MASK, AT_SYMLINK_NOFOLLOW);
 
 	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
 
@@ -1289,7 +1292,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1lstat
 	    return ret;
 	}
 
-	fill_cephstat(env, j_cephstat, &st);
+	fill_cephstat(env, j_cephstat, &stx);
 
 	return ret;
 }
@@ -1305,7 +1308,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_path;
-	struct stat st;
+	struct ceph_statx stx;
 	int ret;
 
 	CHECK_ARG_NULL(j_path, "@path is null", -1);
@@ -1320,7 +1323,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 
 	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
 
-	ret = ceph_stat(cmount, c_path, &st);
+	ret = ceph_statx(cmount, c_path, &stx, CEPH_J_CEPHSTAT_MASK, 0);
 
 	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
 
@@ -1331,7 +1334,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 		return ret;
 	}
 
-	fill_cephstat(env, j_cephstat, &st);
+	fill_cephstat(env, j_cephstat, &stx);
 
 	return ret;
 }
@@ -1828,7 +1831,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fstat
 {
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
-	struct stat st;
+	struct ceph_statx stx;
 	int ret;
 
 	CHECK_ARG_NULL(j_cephstat, "@stat is null", -1);
@@ -1836,7 +1839,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fstat
 
 	ldout(cct, 10) << "jni: fstat: fd " << (int)j_fd << dendl;
 
-	ret = ceph_fstat(cmount, (int)j_fd, &st);
+	ret = ceph_fstatx(cmount, (int)j_fd, &stx, CEPH_J_CEPHSTAT_MASK, 0);
 
 	ldout(cct, 10) << "jni: fstat exit ret " << ret << dendl;
 
@@ -1845,7 +1848,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fstat
 		return ret;
 	}
 
-	fill_cephstat(env, j_cephstat, &st);
+	fill_cephstat(env, j_cephstat, &stx);
 
 	return ret;
 }
