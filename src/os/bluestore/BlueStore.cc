@@ -2149,6 +2149,83 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   return rb;
 }
 
+bool BlueStore::ExtentMap::do_write_check_depth(
+  uint64_t onode_size,
+  uint64_t start_offset,
+  uint64_t end_offset,
+  uint8_t  *blob_depth,
+  uint64_t *gc_start_offset,
+  uint64_t *gc_end_offset)
+{
+  uint8_t depth = 0;
+  bool head_overlap = false;
+  bool tail_overlap = false;
+
+  *gc_start_offset = start_offset;
+  *gc_end_offset = end_offset;
+  *blob_depth = 1;
+
+  auto hp = seek_lextent(start_offset);
+  if (hp != extent_map.end() &&
+    hp->logical_offset < start_offset &&
+    start_offset < hp->logical_offset + hp->length) {
+    depth = hp->blob_depth;
+    head_overlap = true;
+  }
+
+  auto tp = seek_lextent(end_offset);
+  if (tp != extent_map.end() &&
+    tp->logical_offset < end_offset &&
+    end_offset < tp->logical_offset + tp->length) {
+    tail_overlap = true;
+    if (depth < tp->blob_depth) {
+      depth = tp->blob_depth;
+    }
+  }
+
+  if (depth >= g_conf->bluestore_gc_max_blob_depth) {
+    if (head_overlap) {
+      auto hp_next = hp;
+      while (hp != extent_map.begin() && hp->blob_depth > 1) {
+	hp_next = hp;
+	--hp;
+	if (hp->logical_offset + hp->length != hp_next->logical_offset) {
+	  hp = hp_next;
+	  break;
+	}
+      }
+      *gc_start_offset = hp->logical_offset;
+    }
+    if (tail_overlap) {
+      auto tp_prev = tp;
+
+      while (tp->blob_depth > 1) {
+	tp_prev = tp;
+	tp++;
+	if (tp == extent_map.end() ||
+	  (tp_prev->logical_offset + tp_prev->length) != tp->logical_offset) {
+	  tp = tp_prev;
+	  break;
+	}
+      }
+      *gc_end_offset = tp->logical_offset + tp_prev->length;
+    }
+  }
+  if (*gc_end_offset > onode_size) {
+    *gc_end_offset = MAX(end_offset, onode_size);
+  }
+
+  bool do_collect = true;
+  if (depth < g_conf->bluestore_gc_max_blob_depth) {
+    *blob_depth = 1 + depth;
+    do_collect = false;;
+  }
+  dout(20) << __func__ << " GC depth " << (int)*blob_depth
+           << ", gc 0x" << std::hex << *gc_start_offset << "~"
+           << (*gc_end_offset - *gc_start_offset)
+           << std::dec << dendl;
+  return do_collect;
+}
 
 // Onode
 
@@ -2163,8 +2240,6 @@ void BlueStore::Onode::flush()
     flush_cond.wait(l);
   dout(20) << __func__ << " done" << dendl;
 }
-
-
 
 // =======================================================
 
@@ -2309,8 +2384,6 @@ void BlueStore::Collection::trim_cache()
     g_conf->bluestore_onode_cache_size / store->cache_shards.size(),
     g_conf->bluestore_buffer_cache_size / store->cache_shards.size());
 }
-
-
 
 // =======================================================
 
@@ -7632,83 +7705,6 @@ void BlueStore::_wctx_finish(
   }
 }
 
-bool BlueStore::_do_write_check_depth(
-  OnodeRef o,
-  uint64_t start_offset,
-  uint64_t end_offset,
-  uint8_t  *blob_depth,
-  uint64_t *gc_start_offset,
-  uint64_t *gc_end_offset)
-{
-  uint8_t depth = 0;
-  bool head_overlap = false;
-  bool tail_overlap = false;
-
-  *gc_start_offset = start_offset;
-  *gc_end_offset   = end_offset;
-  *blob_depth = 1;
-
-  auto hp = o->extent_map.seek_lextent(start_offset);
-  if (hp != o->extent_map.extent_map.end() &&
-      hp->logical_offset < start_offset &&
-      start_offset < hp->logical_offset + hp->length) {
-    depth = hp->blob_depth;
-    head_overlap = true;
-  }
-  
-  auto tp = o->extent_map.seek_lextent(end_offset);
-  if (tp != o->extent_map.extent_map.end() &&
-      tp->logical_offset < end_offset &&
-    end_offset < tp->logical_offset + tp->length) {
-    tail_overlap = true;
-    if (depth < tp->blob_depth) {
-      depth = tp->blob_depth;
-    }
-  }
-
-  if (depth >= g_conf->bluestore_gc_max_blob_depth) {
-    if (head_overlap) {
-      auto hp_next = hp;
-      while (hp != o->extent_map.extent_map.begin() && hp->blob_depth > 1) {
-        hp_next = hp;
-        --hp;
-        if (hp->logical_offset + hp->length != hp_next->logical_offset) {
-          hp = hp_next;
-          break;
-        }
-      }
-      *gc_start_offset = hp->logical_offset;
-    }
-    if (tail_overlap) {
-      auto tp_prev = tp;
-
-      while (tp->blob_depth > 1) {
-        tp_prev = tp;
-        tp++;
-        if (tp == o->extent_map.extent_map.end() ||
-            (tp_prev->logical_offset + tp_prev->length) != tp->logical_offset) {
-          tp = tp_prev;
-          break;
-        }
-      }
-      *gc_end_offset = tp->logical_offset + tp_prev->length;
-    }
-  }
-  if (*gc_end_offset > o->onode.size) {
-    *gc_end_offset = MAX(end_offset, o->onode.size);
-  }
-  dout(20) << __func__ << " depth " << (int)depth
-	   << ", gc 0x" << std::hex << *gc_start_offset << "~"
-	   << (*gc_end_offset - *gc_start_offset)
-	   << std::dec << dendl;
-  if (depth >= g_conf->bluestore_gc_max_blob_depth) {
-    return true;
-  } else {
-    *blob_depth = 1 + depth;
-    return false;
-  }
-}
-
 void BlueStore::_do_write_data(
   TransContext *txc,
   CollectionRef& c,
@@ -7836,8 +7832,12 @@ int BlueStore::_do_write(
 	   << std::dec << dendl;
 
   uint64_t gc_start_offset = offset, gc_end_offset = end;
-  if (_do_write_check_depth(o, offset, end, &wctx.blob_depth,
-                            &gc_start_offset, &gc_end_offset)) {
+  bool do_collect = 
+    o->extent_map.do_write_check_depth(o->extent_map, o->onode.size,
+                                       offset, end, &wctx.blob_depth,
+                                       &gc_start_offset,
+		         	       &gc_end_offset);
+  if (do_collect) {
     // we need garbage collection of blobs.
     if (offset > gc_start_offset) {
       bufferlist head_bl;
