@@ -1148,7 +1148,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_readlink(cmount, "/path", NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_symlink(cmount, "/path", "/path"));
   EXPECT_EQ(-ENOTCONN, ceph_statx(cmount, "/path", &stx, 0, 0));
-  EXPECT_EQ(-ENOTCONN, ceph_setattr(cmount, "/path", &st, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_setattrx(cmount, "/path", &stx, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_getxattr(cmount, "/path", "name", NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_lgetxattr(cmount, "/path", "name", NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_listxattr(cmount, "/path", NULL, 0));
