@@ -84,7 +84,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
-        // put a compressor variation mark in front of compressed stream
+        // put a compressor variation mark in front of compressed stream, not used at the moment
         ptr.c_str()[0] = 0;
         begin = 0;
       }
@@ -140,7 +140,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
-        // put a compressor variation mark in front of compressed stream
+        // put a compressor variation mark in front of compressed stream, not used at the moment
         ptr.c_str()[0] = 1;
         begin = 0;
       }
@@ -191,10 +191,7 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
   strm.next_in = Z_NULL;
 
   // choose the variation of compressor
-  if (*p == 1)
-    ret = inflateInit2(&strm, -HIST_SIZE);
-  else
-    ret = inflateInit2(&strm, ZLIB_DEFAULT_WIN_SIZE);
+  ret = inflateInit2(&strm, ZLIB_DEFAULT_WIN_SIZE);
   if (ret != Z_OK) {
     dout(1) << "Decompression init error: init return "
          << ret << " instead of Z_OK" << dendl;

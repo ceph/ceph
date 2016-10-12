@@ -324,7 +324,7 @@ INSTANTIATE_TEST_CASE_P(
   Compressor,
   CompressorTest,
   ::testing::Values(
-//    "zlib/isal",
+    "zlib/isal",
     "zlib/noisal",
     "snappy"));
 
