@@ -6047,8 +6047,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 }
 
 int Client::path_walk(const filepath& origpath, InodeRef *end,
-		      const UserPerm& perms, bool followsym,
-		      int mask, int uid, int gid)
+		      const UserPerm& perms, bool followsym, int mask)
 {
   filepath path = origpath;
   InodeRef cur;

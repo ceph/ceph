@@ -516,7 +516,7 @@ protected:
   // path traversal for high-level interface
   InodeRef cwd;
   int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
-		bool followsym=true, int mask=0, int uid=-1, int gid=-1);
+		bool followsym=true, int mask=0);
 		
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
