@@ -9905,7 +9905,7 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
   return in;
 }
 
-int Client::_ll_getattr(Inode *in, const UserPerm& perms)
+int Client::_ll_getattr(Inode *in, int caps, const UserPerm& perms)
 {
   vinodeno_t vino = _get_vino(in);
 
@@ -9916,14 +9916,14 @@ int Client::_ll_getattr(Inode *in, const UserPerm& perms)
   if (vino.snapid < CEPH_NOSNAP)
     return 0;
   else
-    return _getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
+    return _getattr(in, caps, perms);
 }
 
 int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
-  int res = _ll_getattr(in, perms);
+  int res = _ll_getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
 
   if (res == 0)
     fill_stat(in, attr);
@@ -9940,7 +9940,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
   unsigned mask = statx_to_mask(flags, want);
 
   if (mask && !in->caps_issued_mask(mask))
-    res = _ll_getattr(in, perms);
+    res = _ll_getattr(in, mask, perms);
 
   if (res == 0)
     fill_statx(in, mask, stx);
