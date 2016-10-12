@@ -809,7 +809,6 @@ private:
 	      const char *data_pool, bool *created, const UserPerm &perms);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
-  loff_t _lseek(Fh *fh, loff_t offset, int whence, const UserPerm& perms);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt);
@@ -1033,7 +1032,7 @@ public:
   int lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int close(int fd);
-  loff_t lseek(int fd, loff_t offset, int whence, const UserPerm& perms);
+  loff_t lseek(int fd, loff_t offset, int whence);
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);
   int preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
   int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
@@ -1168,7 +1167,7 @@ public:
 
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
-  loff_t ll_lseek(Fh *fh, loff_t offset, int whence, const UserPerm& perms);
+  loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
