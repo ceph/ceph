@@ -160,11 +160,11 @@ TEST(ACL, SetACL) {
   ASSERT_GT(tmpfd, 0);
   ceph_close(cmount, tmpfd);
 
-  struct stat stbuf;
-  ASSERT_EQ(ceph_fstat(cmount, fd, &stbuf), 0);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_MODE, 0), 0);
   // mode was modified according to ACL
-  ASSERT_EQ(stbuf.st_mode & 0777, 0770u);
-  ASSERT_EQ(check_acl_and_mode(acl_buf, acl_buf_size, stbuf.st_mode), 0);
+  ASSERT_EQ(stx.stx_mode & 0777u, 0770u);
+  ASSERT_EQ(check_acl_and_mode(acl_buf, acl_buf_size, stx.stx_mode), 0);
 
   acl_buf_size = acl_ea_size(3);
   // setting ACL that is equivalent to file mode
@@ -173,9 +173,9 @@ TEST(ACL, SetACL) {
   // ACL was deleted
   ASSERT_EQ(ceph_fgetxattr(cmount, fd, ACL_EA_ACCESS, NULL, 0), -ENODATA);
 
-  ASSERT_EQ(ceph_fstat(cmount, fd, &stbuf), 0);
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_MODE, 0), 0);
   // mode was modified according to ACL
-  ASSERT_EQ(stbuf.st_mode & 0777, 0600u);
+  ASSERT_EQ(stx.stx_mode & 0777u, 0600u);
 
   free(acl_buf);
   ceph_close(cmount, fd);
@@ -200,20 +200,20 @@ TEST(ACL, Chmod) {
   ASSERT_EQ(generate_test_acl(acl_buf, acl_buf_size, 0775), 0);
   ASSERT_EQ(ceph_fsetxattr(cmount, fd, ACL_EA_ACCESS, acl_buf, acl_buf_size, 0), 0);
 
-  struct stat stbuf;
-  ASSERT_EQ(ceph_fstat(cmount, fd, &stbuf), 0);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_MODE, 0), 0);
   // mode was updated according to ACL
-  ASSERT_EQ(stbuf.st_mode & 0777, 0775u);
+  ASSERT_EQ(stx.stx_mode & 0777u, 0775u);
 
   // change mode
   ASSERT_EQ(ceph_fchmod(cmount, fd, 0640), 0);
 
-  ASSERT_EQ(ceph_fstat(cmount, fd, &stbuf), 0);
-  ASSERT_EQ(stbuf.st_mode & 0777, 0640u);
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_MODE, 0), 0);
+  ASSERT_EQ(stx.stx_mode & 0777u, 0640u);
 
   // ACL was updated according to mode
   ASSERT_EQ(ceph_fgetxattr(cmount, fd, ACL_EA_ACCESS, acl_buf, acl_buf_size), acl_buf_size);
-  ASSERT_EQ(check_acl_and_mode(acl_buf, acl_buf_size, stbuf.st_mode), 0);
+  ASSERT_EQ(check_acl_and_mode(acl_buf, acl_buf_size, stx.stx_mode), 0);
 
   free(acl_buf);
   ceph_close(cmount, fd);
