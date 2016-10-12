@@ -921,7 +921,7 @@ private:
 
   mds_rank_t _get_random_up_mds() const;
 
-  int _ll_getattr(Inode *in, const UserPerm& perms);
+  int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
 
 public:
   int mount(const std::string &mount_root, const UserPerm& perms,
