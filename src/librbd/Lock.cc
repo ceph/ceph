@@ -71,7 +71,11 @@ Lock::Lock(librados::IoCtx &ioctx, const string& oid,
 }
 
 Lock::~Lock() {
-  assert(m_state == STATE_SHUTDOWN || m_state == STATE_UNLOCKED);
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_SHUTDOWN || (
+         m_state == STATE_UNLOCKED && !m_watcher->is_registered()));
+
+  delete m_watcher;
 
   if (m_policy != nullptr) {
     delete m_policy;
@@ -106,7 +110,7 @@ void Lock::shut_down(Context *on_shut_down) {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(!is_shutdown());
+    assert(!is_shutdown_locked());
     execute_action(ACTION_SHUT_DOWN, on_shut_down);
   }
 
@@ -118,7 +122,7 @@ void Lock::try_lock(Context *on_tried_lock) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    if (is_shutdown()) {
+    if (is_shutdown_locked()) {
       r = -ESHUTDOWN;
     } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << this << " " << __func__ << dendl;
@@ -134,7 +138,7 @@ void Lock::request_lock(Context *on_locked) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    if (is_shutdown()) {
+    if (is_shutdown_locked()) {
       r = -ESHUTDOWN;
     } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << this << " " << __func__ << dendl;
@@ -152,7 +156,7 @@ void Lock::release_lock(Context *on_released) {
   int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    if (is_shutdown()) {
+    if (is_shutdown_locked()) {
       r = -ESHUTDOWN;
     } else if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << this << " " << __func__ << dendl;
@@ -168,12 +172,13 @@ void Lock::reacquire_lock(Context *on_reacquired) {
   {
     Mutex::Locker locker(m_lock);
 
-    if (!is_shutdown() &&
+    if (!is_shutdown_locked() &&
                (m_state == STATE_LOCKED ||
                 m_state == STATE_ACQUIRING ||
                 m_state == STATE_POST_ACQUIRING ||
+                m_state == STATE_WAITING_FOR_REGISTER ||
                 m_state == STATE_WAITING_FOR_PEER)) {
-      // interlock the lock operation with other image state ops
+      // interlock the lock operation with other state ops
       ldout(m_cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_REACQUIRE_LOCK, on_reacquired);
       return;
@@ -203,12 +208,13 @@ void Lock::assert_locked(librados::ObjectWriteOperation *op,
   rados::cls::lock::assert_locked(op, m_oid, type, m_cookie, WATCHER_LOCK_TAG);
 }
 
-void Lock::update_cookie(const string& cookie) {
-  Mutex::Locker l(m_lock);
+string Lock::encode_lock_cookie() const {
+  assert(m_lock.is_locked());
 
+  assert(m_watcher->is_registered());
   std::ostringstream ss;
-  ss << WATCHER_LOCK_COOKIE_PREFIX << " " << cookie;
-  m_new_cookie = ss.str();
+  ss << WATCHER_LOCK_COOKIE_PREFIX << " " << m_watcher->get_watch_handle();
+  return ss.str();
 }
 
 bool Lock::decode_lock_cookie(const std::string &tag, uint64_t *handle) {
@@ -224,6 +230,7 @@ bool Lock::is_transition_state() const {
   switch (m_state) {
   case STATE_ACQUIRING:
   case STATE_WAITING_FOR_PEER:
+  case STATE_WAITING_FOR_REGISTER:
   case STATE_POST_ACQUIRING:
   case STATE_REACQUIRING:
   case STATE_PRE_RELEASING:
@@ -315,7 +322,7 @@ void Lock::complete_active_action(State next_state, int r) {
   }
 }
 
-bool Lock::is_shutdown() const {
+bool Lock::is_shutdown_locked() const {
   assert(m_lock.is_locked());
 
   return ((m_state == STATE_SHUTDOWN) ||
@@ -333,7 +340,27 @@ void Lock::send_acquire_lock() {
   ldout(m_cct, 10) << this << " " << __func__ << dendl;
   m_state = STATE_ACQUIRING;
 
-  m_cookie = m_new_cookie;
+  if (!m_watcher->is_registered()) {
+    ldout(m_cct, 10) << this << " watcher not registered - delaying request"
+                     << dendl;
+    m_state = STATE_WAITING_FOR_REGISTER;
+    m_work_queue->queue(new FunctionContext([this](int r) {
+      m_watcher->register_watch(new FunctionContext([this](int r) {
+            if (r < 0) {
+              lderr(m_cct) << "watcher registering error: " << cpp_strerror(r)
+                           << dendl;
+              return;
+            }
+            m_state = STATE_ACQUIRING;
+
+            Mutex::Locker locker(m_lock);
+            send_acquire_lock();
+      }));
+    }), 0);
+    return;
+  }
+
+  m_cookie = encode_lock_cookie();
   AcquireRequest* req = AcquireRequest::create(
     m_ioctx, m_work_queue, m_watcher, m_oid, m_cookie,
     util::create_context_callback<Lock, &Lock::handle_acquiring_lock>(this),
@@ -404,6 +431,15 @@ void Lock::send_reacquire_lock() {
     return;
   }
 
+  if (!m_watcher->is_registered()) {
+     // watch (re)failed while recovering
+     lderr(m_cct) << this << " " << __func__ << ": "
+                  << "aborting reacquire due to invalid watch handle" << dendl;
+     complete_active_action(STATE_LOCKED, 0);
+     return;
+  }
+
+  m_new_cookie = encode_lock_cookie();
   if (m_cookie == m_new_cookie) {
     ldout(m_cct, 10) << this << " " << __func__ << ": "
                    << "skipping reacquire since cookie still valid" << dendl;
@@ -436,7 +472,7 @@ void Lock::handle_reacquire_lock(int r) {
                  << dendl;
     }
 
-    if (!is_shutdown()) {
+    if (!is_shutdown_locked()) {
       // queue a release and re-acquire of the lock since cookie cannot
       // be updated on older OSDs
       execute_action(ACTION_RELEASE_LOCK, nullptr);
@@ -572,8 +608,11 @@ void Lock::handle_shutdown_released(int r) {
 void Lock::handle_shutdown(int r) {
   ldout(m_cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  m_watcher->flush(util::create_context_callback<
-    Lock, &Lock::complete_shutdown>(this));
+  m_watcher->flush(new FunctionContext([this](int r) {
+        m_watcher->unregister_watch(
+            util::create_context_callback<Lock, &Lock::complete_shutdown>(this)
+        );
+  }));
 }
 
 void Lock::complete_shutdown(int r) {

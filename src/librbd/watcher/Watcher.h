@@ -38,6 +38,11 @@ public:
     return m_watch_handle;
   }
 
+  bool is_registered() const {
+    RWLock::RLocker locker(m_watch_lock);
+    return m_watch_state == WATCH_STATE_REGISTERED;
+  }
+
 protected:
   /**
    * @verbatim

@@ -75,7 +75,7 @@ template <typename P>
 Watcher<P>::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
                           const string& oid)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_work_queue(work_queue), m_oid(oid), 
+    m_work_queue(work_queue), m_oid(oid),
     m_watch_lock(util::unique_lock_name("librbd::Watcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
     m_watch_state(WATCH_STATE_UNREGISTERED),

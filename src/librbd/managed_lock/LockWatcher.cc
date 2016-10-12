@@ -127,22 +127,14 @@ bool LockWatcher::handle_payload(const AcquiredLockPayload &payload,
                                  C_NotifyAck *ack_ctx) {
   ldout(m_cct, 10) << this << " locked announcement" << dendl;
 
-  bool cancel_async_requests = true;
   if (payload.client_id.is_valid()) {
     Mutex::Locker owner_client_id_locker(m_owner_client_id_lock);
-    if (payload.client_id == m_owner_client_id) {
-      cancel_async_requests = false;
-    }
     set_owner_client_id(payload.client_id);
   }
 
   // potentially wake up the exclusive lock state machine now that
   // a lock owner has advertised itself
   m_managed_lock->handle_peer_notification();
-
-  if (cancel_async_requests && !m_managed_lock->is_lock_owner()) {
-    schedule_request_lock(true);
-  }
   return true;
 }
 

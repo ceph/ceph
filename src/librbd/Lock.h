@@ -52,22 +52,29 @@ public:
 
   void assert_locked(librados::ObjectWriteOperation *op, ClsLockType type);
 
-  void update_cookie(const std::string& new_cookie);
-
   inline Policy *policy() {
     return m_policy;
   }
 
-  inline librados::IoCtx& io_ctx() {
+  inline librados::IoCtx& io_ctx() const {
     return m_ioctx;
   }
 
-  inline const std::string& oid() {
+  inline const std::string& oid() const {
     return m_oid;
   }
 
-  inline ContextWQ *work_queue() {
+  inline ContextWQ *work_queue() const {
     return m_work_queue;
+  }
+
+  bool is_shutdown() const {
+    Mutex::Locker l(m_lock);
+    return is_shutdown_locked();
+  }
+
+  bool is_locked() const {
+    return m_state == STATE_LOCKED;
   }
 
   static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
@@ -117,6 +124,7 @@ private:
     STATE_ACQUIRING,
     STATE_POST_ACQUIRING,
     STATE_WAITING_FOR_PEER,
+    STATE_WAITING_FOR_REGISTER,
     STATE_REACQUIRING,
     STATE_PRE_RELEASING,
     STATE_RELEASING,
@@ -161,6 +169,8 @@ private:
 
   ActionsContexts m_actions_contexts;
 
+  std::string encode_lock_cookie() const;
+
   bool is_transition_state() const;
 
   void append_context(Action action, Context *ctx);
@@ -170,7 +180,7 @@ private:
   Action get_active_action() const;
   void complete_active_action(State next_state, int r);
 
-  bool is_shutdown() const;
+  bool is_shutdown_locked() const;
 
   void send_acquire_lock();
   void handle_acquiring_lock(int r);
