@@ -26,7 +26,6 @@
 
 int KqueueDriver::test_kqfd() {
   struct kevent ke[1];
-  // EV_SET(&ke[0], fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
   if (kevent(kqfd, ke, 0, NULL, 0, NULL) == -1) {
     ldout(cct,0) << __func__ << " invalid kqfd = " << kqfd 
                  << cpp_strerror(errno) << dendl;
@@ -106,7 +105,8 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
   int oldkqfd = kqfd;
 
   if (!pthread_equal(mythread, pthread_self())) {
-    ldout(cct,10) << __func__ << " We changed thread from " << mythread << " to " << pthread_self() << dendl;
+    ldout(cct,10) << __func__ << " We changed thread from " << mythread 
+		  << " to " << pthread_self() << dendl;
     mythread = pthread_self();
     kqfd = -1;
   } else if ((kqfd != -1) && (test_kqfd() < 0)) {
@@ -130,7 +130,7 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
     }
   }
 
-  ldout(cct,10) << __func__ << " add event kqfd = " << kqfd << " fd = " << fd 
+  ldout(cct,20) << __func__ << " add event kqfd = " << kqfd << " fd = " << fd 
 	<< " cur_mask = " << cur_mask << " add_mask = " << add_mask 
 	<< dendl;
 
@@ -157,12 +157,13 @@ int KqueueDriver::del_event(int fd, int cur_mask, int del_mask)
   int num = 0;
   int mask = cur_mask & del_mask;
 
-  ldout(cct,10) << __func__ << " delete event kqfd = " << kqfd 
+  ldout(cct,20) << __func__ << " delete event kqfd = " << kqfd 
 	<< " fd = " << fd << " cur_mask = " << cur_mask 
 	<< " del_mask = " << del_mask << dendl;
 
   if (!pthread_equal(mythread, pthread_self())) {
-    ldout(cct,10) << __func__ << " We changed thread from " << mythread << " to " << pthread_self() << dendl;
+    ldout(cct,10) << __func__ << " We changed thread from " << mythread 
+		  << " to " << pthread_self() << dendl;
     mythread = pthread_self();
   } else if ((kqfd != -1) && (test_kqfd() < 0)) {
     ldout(cct,10) << __func__ << " Recreating old kqfd."  << dendl;
@@ -213,7 +214,8 @@ int KqueueDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeva
 
   ldout(cct,10) << __func__ << " kqfd = " << kqfd << dendl;
   if (!pthread_equal(mythread, pthread_self())) {
-    ldout(cct,10) << __func__ << " We changed thread from " << mythread << " to " << pthread_self() << dendl;
+    ldout(cct,10) << __func__ << " We changed thread from " << mythread 
+		  << " to " << pthread_self() << dendl;
     mythread = pthread_self();
     kqfd = -1;
   } else if ((kqfd != -1) && (test_kqfd() < 0)) {
@@ -238,19 +240,19 @@ int KqueueDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeva
   if (tvp != NULL) {
       timeout.tv_sec = tvp->tv_sec;
       timeout.tv_nsec = tvp->tv_usec * 1000;
-      ldout(cct,10) << __func__ << " "
+      ldout(cct,20) << __func__ << " "
 		<< timeout.tv_sec << " sec "
 		<< timeout.tv_nsec << " nsec"
 		<< dendl;
       retval = kevent(kqfd, NULL, 0, res_events, size, &timeout);
   } else {
-      ldout(cct,10) << __func__ << " event_wait: "
+      ldout(cct,20) << __func__ << " event_wait: "
 		<< " NULL"
 		<< dendl;
       retval = kevent(kqfd, NULL, 0, res_events, size, NULL);
   }
 
-  ldout(cct,10) << __func__ << " kevent retval: "
+  ldout(cct,25) << __func__ << " kevent retval: "
 		<< retval
 		<< dendl;
   if (retval < 0) {
@@ -270,7 +272,7 @@ int KqueueDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeva
     for (j = 0; j < numevents; j++) {
       int mask = 0;
       struct kevent *e = res_events + j;
-      ldout(cct,10) << __func__ << " j: " << j << dendl;
+      ldout(cct,20) << __func__ << " j: " << j << dendl;
 
       if (e->filter == EVFILT_READ) mask |= EVENT_READABLE;
       if (e->filter == EVFILT_WRITE) mask |= EVENT_WRITABLE;
