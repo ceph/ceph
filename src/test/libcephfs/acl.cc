@@ -251,11 +251,11 @@ TEST(ACL, DefaultACL) {
   // mode and ACL are updated
   ASSERT_EQ(ceph_getxattr(cmount, test_dir2, ACL_EA_ACCESS, acl2_buf, acl_buf_size), acl_buf_size);
   {
-    struct stat stbuf;
-    ASSERT_EQ(ceph_stat(cmount, test_dir2, &stbuf), 0);
+    struct ceph_statx stx;
+    ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_MODE, 0), 0);
     // other bits of mode &= acl other perm
-    ASSERT_EQ(stbuf.st_mode & 0777, 0750u);
-    ASSERT_EQ(check_acl_and_mode(acl2_buf, acl_buf_size, stbuf.st_mode), 0);
+    ASSERT_EQ(stx.stx_mode & 0777u, 0750u);
+    ASSERT_EQ(check_acl_and_mode(acl2_buf, acl_buf_size, stx.stx_mode), 0);
   }
 
   char test_file1[256];
@@ -269,11 +269,11 @@ TEST(ACL, DefaultACL) {
   // mode and ACL are updated
   ASSERT_EQ(ceph_fgetxattr(cmount, fd, ACL_EA_ACCESS, acl2_buf, acl_buf_size), acl_buf_size);
   {
-    struct stat stbuf;
-    ASSERT_EQ(ceph_stat(cmount, test_file1, &stbuf), 0);
+    struct ceph_statx stx;
+    ASSERT_EQ(ceph_statx(cmount, test_file1, &stx, CEPH_STATX_MODE, 0), 0);
     // other bits of mode &= acl other perm
-    ASSERT_EQ(stbuf.st_mode & 0777, 0660u);
-    ASSERT_EQ(check_acl_and_mode(acl2_buf, acl_buf_size, stbuf.st_mode), 0);
+    ASSERT_EQ(stx.stx_mode & 0777u, 0660u);
+    ASSERT_EQ(check_acl_and_mode(acl2_buf, acl_buf_size, stx.stx_mode), 0);
   }
 
   free(acl1_buf);

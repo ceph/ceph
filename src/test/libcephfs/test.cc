@@ -272,13 +272,13 @@ TEST(LibCephFS, DirLs) {
   ASSERT_EQ(ceph_opendir(cmount, foostr, &ls_dir), -ENOENT);
 
   ASSERT_EQ(ceph_mkdir(cmount, foostr, 0777), 0);
-  struct stat stbuf;
-  ASSERT_EQ(ceph_stat(cmount, foostr, &stbuf), 0);
-  ASSERT_NE(S_ISDIR(stbuf.st_mode), 0);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_statx(cmount, foostr, &stx, 0, 0), 0);
+  ASSERT_NE(S_ISDIR(stx.stx_mode), 0);
 
   char barstr[256];
   sprintf(barstr, "dir_ls2%d", mypid);
-  ASSERT_EQ(ceph_lstat(cmount, barstr, &stbuf), -ENOENT);
+  ASSERT_EQ(ceph_statx(cmount, barstr, &stx, 0, AT_SYMLINK_NOFOLLOW), -ENOENT);
 
   // insert files into directory and test open
   char bazstr[256];
@@ -598,9 +598,9 @@ TEST(LibCephFS, LstatSlashdot) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  struct stat stbuf;
-  ASSERT_EQ(ceph_lstat(cmount, "/.", &stbuf), 0);
-  ASSERT_EQ(ceph_lstat(cmount, ".", &stbuf), 0);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_statx(cmount, "/.", &stx, 0, AT_SYMLINK_NOFOLLOW), 0);
+  ASSERT_EQ(ceph_statx(cmount, ".", &stx, 0, AT_SYMLINK_NOFOLLOW), 0);
 
   ceph_shutdown(cmount);
 }
@@ -648,9 +648,9 @@ TEST(LibCephFS, DoubleChmod) {
   ASSERT_EQ(ceph_chmod(cmount, test_file, 0600), 0);
 
   // ensure perms are correct
-  struct stat stbuf;
-  ASSERT_EQ(ceph_lstat(cmount, test_file, &stbuf), 0);
-  ASSERT_EQ(stbuf.st_mode, 0100600U);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW), 0);
+  ASSERT_EQ(stx.stx_mode, 0100600U);
 
   fd = ceph_open(cmount, test_file, O_RDWR, 0);
   ASSERT_GT(fd, 0);
@@ -803,13 +803,13 @@ TEST(LibCephFS, Symlinks) {
   ASSERT_EQ(fd, -ELOOP);
 
   // stat the original file
-  struct stat stbuf_orig;
-  ASSERT_EQ(ceph_stat(cmount, test_file, &stbuf_orig), 0);
+  struct ceph_statx stx_orig;
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx_orig, CEPH_STATX_ALL_STATS, 0), 0);
   // stat the symlink
-  struct stat stbuf_symlink_orig;
-  ASSERT_EQ(ceph_stat(cmount, test_symlink, &stbuf_symlink_orig), 0);
-  // ensure the stat bufs are equal
-  ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
+  struct ceph_statx stx_symlink_orig;
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx_symlink_orig, CEPH_STATX_ALL_STATS, 0), 0);
+  // ensure the statx bufs are equal
+  ASSERT_EQ(memcmp(&stx_orig, &stx_symlink_orig, sizeof(stx_orig)), 0);
 
   sprintf(test_file, "/test_symlinks_abs_%d", getpid());
 
@@ -823,16 +823,15 @@ TEST(LibCephFS, Symlinks) {
   ASSERT_EQ(ceph_symlink(cmount, test_file, test_symlink), 0);
 
   // stat the original file
-  ASSERT_EQ(ceph_stat(cmount, test_file, &stbuf_orig), 0);
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx_orig, CEPH_STATX_ALL_STATS, 0), 0);
   // stat the symlink
-  ASSERT_EQ(ceph_stat(cmount, test_symlink, &stbuf_symlink_orig), 0);
-  // ensure the stat bufs are equal
-  ASSERT_TRUE(!memcmp(&stbuf_orig, &stbuf_symlink_orig, sizeof(stbuf_orig)));
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx_symlink_orig, CEPH_STATX_ALL_STATS, 0), 0);
+  // ensure the statx bufs are equal
+  ASSERT_TRUE(!memcmp(&stx_orig, &stx_symlink_orig, sizeof(stx_orig)));
 
   // test lstat
-  struct stat stbuf_symlink;
-  ASSERT_EQ(ceph_lstat(cmount, test_symlink, &stbuf_symlink), 0);
-  ASSERT_TRUE(S_ISLNK(stbuf_symlink.st_mode));
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx_orig, CEPH_STATX_ALL_STATS, AT_SYMLINK_NOFOLLOW), 0);
+  ASSERT_TRUE(S_ISLNK(stx_orig.stx_mode));
 
   ceph_shutdown(cmount);
 }
@@ -860,11 +859,11 @@ TEST(LibCephFS, DirSyms) {
   ASSERT_GT(fd, 0);
   ceph_close(cmount, fd);
 
-  struct stat stbuf;
-  ASSERT_EQ(ceph_lstat(cmount, test_file, &stbuf), 0);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx, 0, AT_SYMLINK_NOFOLLOW), 0);
 
   // ensure that its a file not a directory we get back
-  ASSERT_TRUE(S_ISREG(stbuf.st_mode));
+  ASSERT_TRUE(S_ISREG(stx.stx_mode));
 
   ceph_shutdown(cmount);
 }
@@ -1099,11 +1098,11 @@ TEST(LibCephFS, Rename) {
   ASSERT_EQ(0, ceph_rename(cmount, path_src, path_dst));
 
   /* test that dest path exists */
-  struct stat st;
-  ASSERT_EQ(0, ceph_lstat(cmount, path_dst, &st));
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_statx(cmount, path_dst, &stx, 0, 0));
 
   /* test that src path doesn't exist */
-  ASSERT_EQ(-ENOENT, ceph_lstat(cmount, path_src, &st));
+  ASSERT_EQ(-ENOENT, ceph_statx(cmount, path_src, &stx, 0, AT_SYMLINK_NOFOLLOW));
 
   /* rename with non-existent source path */
   ASSERT_EQ(-ENOENT, ceph_rename(cmount, path_src, path_dst));
@@ -1134,6 +1133,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));
 
   int stmask;
+  struct ceph_statx stx;
   struct stat st;
   EXPECT_EQ(-ENOTCONN, ceph_readdirplus_r(cmount, dirp, &rdent, &st, &stmask));
   EXPECT_EQ(-ENOTCONN, ceph_getdents(cmount, dirp, NULL, 0));
@@ -1147,8 +1147,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_rmdir(cmount, "/path"));
   EXPECT_EQ(-ENOTCONN, ceph_readlink(cmount, "/path", NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_symlink(cmount, "/path", "/path"));
-  EXPECT_EQ(-ENOTCONN, ceph_stat(cmount, "/path", &st));
-  EXPECT_EQ(-ENOTCONN, ceph_lstat(cmount, "/path", &st));
+  EXPECT_EQ(-ENOTCONN, ceph_statx(cmount, "/path", &stx, 0, 0));
   EXPECT_EQ(-ENOTCONN, ceph_setattr(cmount, "/path", &st, 0));
   EXPECT_EQ(-ENOTCONN, ceph_getxattr(cmount, "/path", "name", NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_lgetxattr(cmount, "/path", "name", NULL, 0));
@@ -1417,14 +1416,14 @@ TEST(LibCephFS, SlashDotDot) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, "/"), 0);
 
-  struct stat	st;
-  ASSERT_EQ(ceph_stat(cmount, "/.", &st), 0);
+  struct ceph_statx	stx;
+  ASSERT_EQ(ceph_statx(cmount, "/.", &stx, CEPH_STATX_INO, 0), 0);
 
-  ino_t ino = st.st_ino;
-  ASSERT_EQ(ceph_stat(cmount, "/..", &st), 0);
+  ino_t ino = stx.stx_ino;
+  ASSERT_EQ(ceph_statx(cmount, "/..", &stx, CEPH_STATX_INO, 0), 0);
 
   /* At root, "." and ".." should be the same inode */
-  ASSERT_EQ(ino, st.st_ino);
+  ASSERT_EQ(ino, stx.stx_ino);
 
   /* Test accessing the parent of an unlinked directory */
   char dir1[32], dir2[32];
@@ -1453,7 +1452,7 @@ TEST(LibCephFS, SlashDotDot) {
   /* Make sure it works same way when mounting subtree */
   ASSERT_EQ(ceph_unmount(cmount), 0);
   ASSERT_EQ(ceph_mount(cmount, dir1), 0);
-  ASSERT_EQ(ceph_stat(cmount, "/..", &st), 0);
+  ASSERT_EQ(ceph_statx(cmount, "/..", &stx, CEPH_STATX_INO, 0), 0);
 
   /* Test readdir behavior */
   ASSERT_EQ(ceph_opendir(cmount, "/", &rdir), 0);
