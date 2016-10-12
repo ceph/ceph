@@ -150,7 +150,7 @@ cluster topology, which is inclusive of 5 maps collectively referred to as the
 #. **The MDS Map:** Contains the current MDS map epoch, when the map was 
    created, and the last time it changed. It also contains the pool for 
    storing metadata, a list of metadata servers, and which metadata servers
-   are ``up`` and ``in``. To view an MDS map, execute ``ceph mds dump``.
+   are ``up`` and ``in``. To view an MDS map, execute ``ceph fs dump``.
 
 Each map maintains an iterative history of its operating state changes. Ceph
 Monitors maintain a master copy of the cluster map including the cluster

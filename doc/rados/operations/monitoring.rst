@@ -246,7 +246,7 @@ metadata servers are ``up`` and ``active``,  execute the following::
 	
 To display details of the metadata cluster, execute the following:: 
 
-	ceph mds dump
+	ceph fs dump
 
 
 Checking Placement Group States
