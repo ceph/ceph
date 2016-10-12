@@ -339,8 +339,8 @@ protected:
     switch (phase) {
     case ReorderState::RGW_EARLY_HEADERS:
     case ReorderState::RGW_STATUS_SEEN:
-      headers.emplace_back(std::make_pair(name.to_string(),
-                                          value.to_string()));
+      headers.emplace_back(std::make_pair(std::string(name.data(), name.size()),
+                                          std::string(value.data(), value.size())));
       return 0;
     case ReorderState::RGW_DATA:
       return DecoratedRestfulClient<T>::send_header(name, value);
