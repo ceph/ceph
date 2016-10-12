@@ -1350,7 +1350,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1setattr
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
 	const char *c_path;
-	struct stat st;
+	struct ceph_statx stx;
 	int ret, mask = fixup_attr_mask(j_mask);
 
 	CHECK_ARG_NULL(j_path, "@path is null", -1);
@@ -1363,17 +1363,17 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1setattr
 		return -1;
 	}
 
-	memset(&st, 0, sizeof(st));
+	memset(&stx, 0, sizeof(stx));
 
-	st.st_mode = env->GetIntField(j_cephstat, cephstat_mode_fid);
-	st.st_uid = env->GetIntField(j_cephstat, cephstat_uid_fid);
-	st.st_gid = env->GetIntField(j_cephstat, cephstat_gid_fid);
-	st.st_mtime = env->GetLongField(j_cephstat, cephstat_m_time_fid);
-	st.st_atime = env->GetLongField(j_cephstat, cephstat_a_time_fid);
+	stx.stx_mode = env->GetIntField(j_cephstat, cephstat_mode_fid);
+	stx.stx_uid = env->GetIntField(j_cephstat, cephstat_uid_fid);
+	stx.stx_gid = env->GetIntField(j_cephstat, cephstat_gid_fid);
+	stx.stx_mtime.tv_sec = env->GetLongField(j_cephstat, cephstat_m_time_fid);
+	stx.stx_atime.tv_sec = env->GetLongField(j_cephstat, cephstat_a_time_fid);
 
 	ldout(cct, 10) << "jni: setattr: path " << c_path << " mask " << mask << dendl;
 
-	ret = ceph_setattr(cmount, c_path, &st, mask);
+	ret = ceph_setattrx(cmount, c_path, &stx, mask, 0);
 
 	ldout(cct, 10) << "jni: setattr: exit ret " << ret << dendl;
 
