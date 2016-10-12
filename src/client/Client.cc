@@ -6864,14 +6864,8 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 
   if (mask & CEPH_CAP_FILE_SHARED) {
 
-    if (in->ctime > in->mtime)
-      in->ctime.to_timespec(&stx->stx_ctime);
-    else
-      in->mtime.to_timespec(&stx->stx_ctime);
-
     in->atime.to_timespec(&stx->stx_atime);
     in->mtime.to_timespec(&stx->stx_mtime);
-    stx->stx_version = in->change_attr;
 
     if (in->is_dir()) {
       if (cct->_conf->client_dirsize_rbytes)
@@ -6883,9 +6877,20 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
       stx->stx_size = in->size;
       stx->stx_blocks = (in->size + 511) >> 9;
     }
-    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|
-		      CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_VERSION);
+    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|
+		      CEPH_STATX_SIZE|CEPH_STATX_BLOCKS);
   }
+
+  /* Change time and change_attr both require all shared caps to view */
+  if ((mask & CEPH_STAT_CAP_INODE_ALL) == CEPH_STAT_CAP_INODE_ALL) {
+    stx->stx_version = in->change_attr;
+    if (in->ctime > in->mtime)
+      in->ctime.to_timespec(&stx->stx_ctime);
+    else
+      in->mtime.to_timespec(&stx->stx_ctime);
+    stx->stx_mask |= (CEPH_STATX_CTIME|CEPH_STATX_VERSION);
+  }
+
 }
 
 void Client::touch_dn(Dentry *dn)
