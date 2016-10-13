@@ -17,7 +17,6 @@
 #include "Infiniband.h"
 #include "common/errno.h"
 #include "common/debug.h"
-#include "RDMAStack.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -61,7 +60,7 @@ Device::Device(CephContext *c, ibv_device* d): cct(c), device(d), device_attr(ne
   }
 }
 
-Infiniband::Infiniband(RDMAStack* s, CephContext *c, const std::string &device_name): cct(c), device_list(c), net(c), stack(s)
+Infiniband::Infiniband(CephContext *c, const std::string &device_name): cct(c), device_list(c), net(c)
 {
   device = device_list.get_device(device_name.c_str());
   assert(device);
@@ -124,7 +123,7 @@ ibv_srq* Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_s
  *      QueuePair on success or NULL if init fails
  * See QueuePair::QueuePair for parameter documentation.
  */
-Infiniband::QueuePair* Infiniband::create_queue_pair(ibv_qp_type type)
+Infiniband::QueuePair* Infiniband::create_queue_pair(CompletionQueue *c, ibv_qp_type type)
 {
   Infiniband::CompletionChannel* cc = create_comp_channel();
   if (!cc)
@@ -137,8 +136,7 @@ Infiniband::QueuePair* Infiniband::create_queue_pair(ibv_qp_type type)
     return NULL;
   }
 
-  RDMAWorker* w = static_cast<RDMAWorker*>(stack->get_worker());
-  Infiniband::QueuePair *qp = new QueuePair(*this, type, ib_physical_port, srq, w->get_tx_cq(), cq, max_send_wr, max_recv_wr);
+  Infiniband::QueuePair *qp = new QueuePair(*this, type, ib_physical_port, srq, c, cq, max_send_wr, max_recv_wr);
   if (qp->init()) {
     delete cc;
     delete cq;
@@ -206,6 +204,39 @@ int Infiniband::QueuePair::init()
   ldout(infiniband.cct, 20) << __func__ << " successfully change queue pair to INIT:"
     << " qp=" << qp << dendl;
   return 0;
+}
+
+/**
+ * Change RC QueuePair into the ERROR state. This is necessary modify
+ * the Queue Pair into the Error state and poll all of the relevant
+ * Work Completions prior to destroying a Queue Pair.
+ * Since destroying a Queue Pair does not guarantee that its Work
+ * Completions are removed from the CQ upon destruction. Even if the
+ * Work Completions are already in the CQ, it might not be possible to
+ * retrieve them. If the Queue Pair is associated with an SRQ, it is
+ * recommended wait for the affiliated event IBV_EVENT_QP_LAST_WQE_REACHED
+ *
+ * \return
+ *      -errno if the QueuePair can't switch to ERROR
+ *      0 for success.
+ */
+int Infiniband::QueuePair::to_dead()
+{
+  if (dead)
+    return 0;
+  ibv_qp_attr qpa;
+  memset(&qpa, 0, sizeof(qpa));
+  qpa.qp_state = IBV_QPS_ERR;
+
+  int mask = IBV_QP_STATE;
+  int ret = ibv_modify_qp(qp, &qpa, mask);
+  if (ret) {
+    lderr(infiniband.cct) << __func__ << " failed to transition to ERROR state: "
+                           << cpp_strerror(errno) << dendl;
+    return -errno;
+  }
+  dead = true;
+  return ret;
 }
 
 int Infiniband::post_chunk(Chunk* chunk)
@@ -284,7 +315,8 @@ Infiniband::QueuePair::QueuePair(
   initial_psn(0),
   max_send_wr(max_send_wr),
   max_recv_wr(max_recv_wr),
-  q_key(q_key)
+  q_key(q_key),
+  dead(false)
 {
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {

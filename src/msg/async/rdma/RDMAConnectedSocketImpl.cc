@@ -101,57 +101,39 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 {
   ldout(cct, 20) << __func__ << " need to read bytes: " << len  << " buffers size: " << buffers.size() << dendl;
 
+  if (error)
+    return -error;
   ssize_t read = 0;
   if (!buffers.empty())
     read = read_buffers(buf,len);
 
-  static const int MAX_COMPLETIONS = 16;
-  ibv_wc wc[MAX_COMPLETIONS];
+  std::vector<ibv_wc> cqe;
+  get_wc(cqe);
+  if (cqe.empty())
+    return read == 0 ? -EAGAIN : read;
 
-  bool rearmed = false;
-  int n;
- again:
-  n = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
-  ldout(cct, 20) << __func__ << " poll completion queue got " << n << " responses."<< dendl;
-  for (int i = 0; i < n; ++i) {
-    ibv_wc* response = &wc[i];
-    ldout(cct, 20) << __func__ << " cqe  " << response->byte_len << " bytes." << dendl;
+  ldout(cct, 20) << __func__ << " poll queue got " << cqe.size() << " responses."<< dendl;
+  for (size_t i = 0; i < cqe.size(); ++i) {
+    ibv_wc* response = &cqe[i];
+    assert(response->status == IBV_WC_SUCCESS);
+    ldout(cct, 20) << __func__ << " cqe " << response->byte_len << " bytes." << dendl;
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
     chunk->prepare_read(response->byte_len);
-    if (!response->byte_len) {
-      wait_close = true;
-      return 0;
-    }
-    if (response->status != IBV_WC_SUCCESS) {
-      lderr(cct) << __func__ << " poll cqe failed! " << " number: " << n << ", status: "<< response->status << cpp_strerror(errno) << dendl;
-      assert(0);
+    assert(!response->byte_len);
+    if (read == (ssize_t)len) {
+      buffers.push_back(chunk);
+      ldout(cct, 20) << __func__ << " buffers add a chunk: " << response->byte_len << dendl;
+    } else if (read + response->byte_len > (ssize_t)len) {
+      read += chunk->read(buf+read, (ssize_t)len-read);
+      buffers.push_back(chunk);
+      ldout(cct, 20) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
     } else {
-      if (read == (ssize_t)len) {
-        buffers.push_back(chunk);
-        ldout(cct, 20) << __func__ << " buffers add a chunk: " << response->byte_len << dendl;
-      } else if (read + response->byte_len > (ssize_t)len) {
-        read += chunk->read(buf+read, (ssize_t)len-read);
-        buffers.push_back(chunk);
-        ldout(cct, 20) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
-      } else {
-        read += chunk->read(buf+read, response->byte_len);
-        assert(infiniband->post_chunk(chunk) == 0);
-      }
+      read += chunk->read(buf+read, response->byte_len);
+      assert(infiniband->post_chunk(chunk) == 0);
     }
   }
 
-  if (n)
-   goto again;
-  if (!rearmed) {
-     rx_cq->rearm_notify();
-     rearmed = true;
-     // Clean up cq events after rearm notify ensure no new incoming event
-     // arrived between polling and rearm
-     goto again;
-  }
-  if (read == 0)
-    return -EAGAIN;
-  return read;
+  return read == 0 ? -EAGAIN : read;
 }
 
 ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
@@ -180,57 +162,44 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
 
 ssize_t RDMAConnectedSocketImpl::zero_copy_read(bufferptr &data)
 {
-  ssize_t size = 0;
+  if (error)
+    return -error;
   static const int MAX_COMPLETIONS = 16;
   ibv_wc wc[MAX_COMPLETIONS];
-
-  bool rearmed = false;
-  int n;
- again:
-  n = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
-  ldout(cct, 20) << __func__ << " pool completion queue got " << n << " responses."<< dendl;
+  ssize_t size;
 
   ibv_wc*  response;
   Chunk* chunk;
   bool loaded = false;
   auto iter = buffers.begin();
-  if(iter != buffers.end()) {
+  if (iter != buffers.end()) {
     chunk = *iter;
-    if (chunk->bound == 0) {
-      wait_close = true;
-      return 0;
-    }
     auto del = std::bind(&Chunk::post_srq, std::move(chunk), infiniband);
     buffers.erase(iter);
     loaded = true;
     size = chunk->bound;
   }
 
-  for (int i = 0; i < n; ++i) {
+  std::vector<ibv_wc> cqe;
+  get_wc(cqe);
+  if (cqe.empty())
+    return size == 0 ? -EAGAIN : size;
+
+  ldout(cct, 20) << __func__ << " pool completion queue got " << cqe.size() << " responses."<< dendl;
+
+  for (size_t i = 0; i < cqe.size(); ++i) {
     response = &wc[i];
     chunk = reinterpret_cast<Chunk*>(response->wr_id);
     chunk->prepare_read(response->byte_len);
     if(!loaded && i == 0) {
-      if (chunk->bound == 0) {
-        wait_close = true;
-        return 0;
-      }
       auto del = std::bind(&Chunk::post_srq, std::move(chunk), infiniband);
       size = chunk->bound;
       continue;
     }
     buffers.push_back(chunk);
+    iter++;
   }
 
-  if (n)
-   goto again;
-  if (!rearmed) {
-     rx_cq->rearm_notify();
-     rearmed = true;
-     // Clean up cq events after rearm notify ensure no new incoming event
-     // arrived between polling and rearm
-     goto again;
-  }
   if (size == 0)
     return -EAGAIN;
   return size;
@@ -238,18 +207,33 @@ ssize_t RDMAConnectedSocketImpl::zero_copy_read(bufferptr &data)
 
 ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
 {
+  if (error)
+    return -error;
   size_t bytes = bl.length();
   if (!bytes)
     return 0;
-  vector<Chunk*> tx_buffers;
-  if (infiniband->get_tx_buffers(tx_buffers, bytes) < 0) {
+  pending_bl.claim_append(bl);
+  ssize_t r = submit(more);
+  if (r < 0 && r != -EAGAIN)
+    return r;
+  return bytes;
+}
+
+ssize_t RDMAConnectedSocketImpl::submit(bool more)
+{
+  if (error)
+    return -error;
+  std::vector<Chunk*> tx_buffers;
+  size_t bytes = pending_bl.length();
+  if (worker->reserve_message_buffer(this, tx_buffers, bytes) < 0) {
     ldout(cct, 10) << __func__ << " no enough buffers" << dendl;
-    return 0;
+    pending_bl.claim_append(pending_bl);
+    return -EAGAIN;
   }
   ldout(cct, 20) << __func__ << " prepare " << bytes << " bytes, tx buffer count: " << tx_buffers.size() << dendl;
   vector<Chunk*>::iterator current_buffer = tx_buffers.begin();
-  list<bufferptr>::const_iterator it = bl.buffers().begin();
-  while (it != bl.buffers().end()) {
+  list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
+  while (it != pending_bl.buffers().end()) {
     const uintptr_t addr = reinterpret_cast<const uintptr_t>(it->c_str());
     uint32_t copied = 0;
     //  ldout(cct, 20) << __func__ << " app_buffer: " << addr << " length:  " << it->length()  << dendl;
@@ -270,7 +254,7 @@ ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
     return r;
 
   ldout(cct, 20) << __func__ << " finished sending " << bytes << " bytes." << dendl;
-  bl.clear();
+  pending_bl.clear();
   return bytes;
 }
 
@@ -317,23 +301,4 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     return -errno;
   }
   return 0;
-}
-
-void RDMAConnectedSocketImpl::fin() {
-  //ibv_sge list;
-  //memset(&list, 0, sizeof(list));
-  ibv_send_wr wr;
-  memset(&wr, 0, sizeof(wr));
-  wr.wr_id = reinterpret_cast<uint64_t>(this);
-  wr.num_sge = 0;
-  //wr.sg_list = &list;
-  wr.opcode = IBV_WR_SEND;
-  wr.send_flags = IBV_SEND_SIGNALED;
-  ibv_send_wr* bad_tx_work_request;
-  if (ibv_post_send(qp->get_qp(), &wr, &bad_tx_work_request)) {
-    lderr(cct) << __func__ << " failed to send FIN"
-               << "(most probably should be peer not ready): "
-               << cpp_strerror(errno) << dendl;
-    return ;
-  }
 }

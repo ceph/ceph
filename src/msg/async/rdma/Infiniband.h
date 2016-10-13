@@ -284,10 +284,9 @@ class Infiniband {
         return 0;
       }
 
-      int take_back(Chunk* ck) {
+      void take_back(Chunk* ck) {
         Mutex::Locker l(lock);
         free_chunks.push_back(ck);
-        return 0;
       }
 
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes) {
@@ -312,7 +311,7 @@ class Infiniband {
       uint32_t chunk_size;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
-      set<Chunk*> all_chunks;
+      std::set<Chunk*> all_chunks;
       char* base;
     };
 
@@ -357,9 +356,11 @@ class Infiniband {
       send = new Cluster(*this, size);
       send->add(tx_num);
     }
-    int return_tx(Chunk* c) {
-      c->clear();
-      return send->take_back(c);
+    void return_tx(std::vector<Chunk*> &chunks) {
+      for (auto c : chunks) {
+        c->clear();
+        send->take_back(c);
+      }
     }
 
     int get_send_buffers(std::vector<Chunk*> &c, size_t bytes) {
@@ -396,8 +397,7 @@ class Infiniband {
 
  public:
   NetHandler net;
-  RDMAStack* stack;
-  explicit Infiniband(RDMAStack* s, CephContext *c, const std::string &device_name);
+  explicit Infiniband(CephContext *c, const std::string &device_name);
 
   /**
    * Destroy an Infiniband object.
@@ -459,11 +459,6 @@ class Infiniband {
   class QueuePair {
    public:
     QueuePair(Infiniband& infiniband, ibv_qp_type type,int ib_physical_port,  ibv_srq *srq, Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq, uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key = 0);
-    // exists solely as superclass constructor for MockQueuePair derivative
-    explicit QueuePair(Infiniband& infiniband):
-      infiniband(infiniband), type(IBV_QPT_RC), ctxt(NULL), ib_physical_port(-1),
-      pd(NULL), srq(NULL), qp(NULL), txcq(NULL), rxcq(NULL),
-      initial_psn(-1) {}
     ~QueuePair();
 
     int init();
@@ -551,9 +546,9 @@ class Infiniband {
     ibv_qp* get_qp() const { return qp; }
     Infiniband::CompletionQueue* get_tx_cq() const { return txcq; }
     Infiniband::CompletionQueue* get_rx_cq() const { return rxcq; }
-    int to_reset();
     int to_dead();
-    int get_fd() { return fd; }
+    bool is_dead() const { return dead; }
+
    private:
     Infiniband&  infiniband;     // Infiniband to which this QP belongs
     ibv_qp_type  type;           // QP type (IBV_QPT_RC, etc.)
@@ -568,13 +563,13 @@ class Infiniband {
     uint32_t     max_send_wr;
     uint32_t     max_recv_wr;
     uint32_t     q_key;
-    int fd;
+    bool dead;
   };
 
  public:
   typedef MemoryManager::Cluster Cluster;
   typedef MemoryManager::Chunk Chunk;
-  QueuePair* create_queue_pair(ibv_qp_type type);
+  QueuePair* create_queue_pair(CompletionQueue *w, ibv_qp_type type);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   int post_chunk(Chunk* chunk);
   int post_channel_cluster();
@@ -592,6 +587,7 @@ class Infiniband {
   ibv_gid get_gid() { return device->get_gid(); }
   MemoryManager* get_memory_manager() { return memory_manager; }
   Device* get_device() { return device; }
+  int get_async_fd() { return device->ctxt->async_fd; }
   static const char* wc_status_to_string(int status);
 };
 
