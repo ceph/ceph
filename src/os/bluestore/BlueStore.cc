@@ -1042,13 +1042,14 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
 {
   std::lock_guard<std::recursive_mutex> lk(cache->lock);
   assert(r.cache == cache);
-  auto p = buffer_map.begin();
-  while (p != buffer_map.end() &&
-	 p->second->end() <= pos) {
-    dout(30) << __func__ << " skip " << *p->second << dendl;
-    ++p;
-  }
-  if (p != buffer_map.end()) {
+  if (buffer_map.empty())
+    return;
+
+  auto p = --buffer_map.end();
+  while (true) {
+    if (p->second->end() <= pos)
+      break;
+
     if (p->second->offset < pos) {
       dout(30) << __func__ << " cut " << *p->second << dendl;
       size_t left = pos - p->second->offset;
@@ -1063,20 +1064,25 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
 		      0, p->second.get());
       }
       p->second->truncate(left);
-      ++p;
+      break;
     }
-    while (p != buffer_map.end()) {
-      dout(30) << __func__ << " move " << *p->second << dendl;
-      if (p->second->data.length()) {
-	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
-				 p->second->offset - pos, p->second->data),
-		      0, p->second.get());
-      } else {
-	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
-				 p->second->offset - pos, p->second->length),
-		      0, p->second.get());
-      }
-      _rm_buffer(p++);
+
+    assert(p->second->end() > pos);
+    dout(30) << __func__ << " move " << *p->second << dendl;
+    if (p->second->data.length()) {
+      r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
+                               p->second->offset - pos, p->second->data),
+                    0, p->second.get());
+    } else {
+      r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
+                               p->second->offset - pos, p->second->length),
+                    0, p->second.get());
+    }
+    if (p == buffer_map.begin()) {
+      _rm_buffer(p);
+      break;
+    } else {
+      _rm_buffer(p--);
     }
   }
   assert(writing.empty());
