@@ -346,6 +346,40 @@ Ceph configuration file, the default value will be set automatically.
 :Type: Boolean
 :Default: ``false``
 
+
+``rgw bucket default quota max objects``
+
+:Description: Default max number of objects per bucket. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw bucket default quota max size``
+
+:Description: Default max capacity per bucket, in kB. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw user default quota max objects``
+
+:Description: Default max number of objects for a user. This includes all
+              objects in all buckets owned by the user. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw user default quota max size``
+
+:Description: The value for user max size quota in kB set on new users,
+              if no other quota is specified.  Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
 Regions
 =======
 
