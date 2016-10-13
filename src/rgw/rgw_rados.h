@@ -346,7 +346,7 @@ protected:
   uint64_t obj_size;
 
   rgw_obj obj;
-  rgw_raw_obj head_obj;
+  rgw_raw_obj head_obj; /* in-memory only, calculated from obj */
   uint64_t head_size;
 
   uint64_t max_head_size;
@@ -421,7 +421,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 3, bl);
+    ENCODE_START(6, 6, bl);
     ::encode(obj_size, bl);
     ::encode(objs, bl);
     ::encode(explicit_objs, bl);
@@ -430,9 +430,16 @@ public:
     ::encode(max_head_size, bl);
     ::encode(prefix, bl);
     ::encode(rules, bl);
-    ::encode(tail_bucket, bl);
-    ::encode(tail_instance, bl);
-    ::encode(head_obj, bl);
+    bool encode_tail_bucket = !(tail_bucket == obj.bucket);
+    ::encode(encode_tail_bucket, bl);
+    if (encode_tail_bucket) {
+      ::encode(tail_bucket, bl);
+    }
+    bool encode_tail_instance = (tail_instance != obj.get_instance());
+    ::encode(encode_tail_instance, bl);
+    if (encode_tail_instance) {
+      ::encode(tail_instance, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
@@ -471,20 +478,36 @@ public:
     }
 
     if (struct_v >= 4) {
-      ::decode(tail_bucket, bl);
+      if (struct_v < 6) {
+        ::decode(tail_bucket, bl);
+      } else {
+        bool need_to_decode;
+        ::decode(need_to_decode, bl);
+        if (need_to_decode) {
+          ::decode(tail_bucket, bl);
+        } else {
+          tail_bucket = obj.bucket;
+        }
+      }
     }
 
     if (struct_v >= 5) {
-      ::decode(tail_instance, bl);
+      if (struct_v < 6) {
+        ::decode(tail_instance, bl);
+      } else {
+        bool need_to_decode;
+        ::decode(need_to_decode, bl);
+        if (need_to_decode) {
+          ::decode(tail_instance, bl);
+        } else {
+          tail_instance = obj.get_instance();
+        }
+      }
     } else { // old object created before 'tail_instance' field added to manifest
       tail_instance = obj.get_instance();
     }
 
-    if (struct_v >= 6) {
-      ::decode(head_obj, bl);
-    } else {
-      rgw_obj_to_raw(obj, &head_obj);
-    }
+    rgw_obj_to_raw(obj, &head_obj);
 
     update_iterators();
     DECODE_FINISH(bl);

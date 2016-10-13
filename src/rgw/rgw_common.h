@@ -992,6 +992,9 @@ struct rgw_bucket {
   bool operator<(const rgw_bucket& b) const {
     return name.compare(b.name) < 0;
   }
+  bool operator==(const rgw_bucket& b) const {
+    return (name == b.name) && (bucket_id == b.bucket_id);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
