@@ -112,11 +112,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 void RGWObjManifest::obj_iterator::update_location()
 {
   if (manifest->explicit_objs) {
-    location = explicit_iter->second.loc;
+    RGWRados::obj_to_raw(explicit_iter->second.loc, &location);
     return;
   }
 
-  const rgw_obj& head = manifest->get_head();
+  const rgw_raw_obj& head = manifest->get_head();
 
   if (ofs < manifest->get_head_size()) {
     location = head;
@@ -159,7 +159,7 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   o.push_back(new RGWObjManifest);
 }
 
-void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj *location)
+void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_raw_obj *location)
 {
   string oid;
   if (!override_prefix || override_prefix->empty()) {
@@ -194,17 +194,21 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
 
   rgw_bucket *bucket;
 
+  rgw_obj loc;
+
   if (!tail_bucket.name.empty()) {
     bucket = &tail_bucket;
   } else {
-    bucket = &head_obj.bucket;
+    bucket = &obj.bucket;
   }
 
-  location->init_ns(*bucket, oid, ns);
+  loc.init_ns(*bucket, oid, ns);
   
   // Always overwrite instance with tail_instance
   // to get the right shadow object location
-  location->set_instance(tail_instance);
+  loc.set_instance(tail_instance);
+
+  RGWRados::obj_to_raw(loc, location);
 }
 
 
