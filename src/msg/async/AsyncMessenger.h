@@ -350,7 +350,10 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  AsyncConnectionRef add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr);
+  void add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr);
+  NetworkStack *get_stack() {
+    return stack;
+  }
 
   /**
    * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.
