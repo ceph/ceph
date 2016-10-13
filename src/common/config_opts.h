@@ -1530,7 +1530,7 @@ OPTION(rgw_torrent_createby, OPT_STR, "")    // torrent field created by
 OPTION(rgw_torrent_comment, OPT_STR, "")    // torrent field comment
 OPTION(rgw_torrent_encoding, OPT_STR, "")    // torrent field encoding
 OPTION(rgw_torrent_origin, OPT_STR, "")    // torrent origin
-OPTION(rgw_torrent_sha_unit, OPT_INT, 512*1024)    //torrent field piece length 521K
+OPTION(rgw_torrent_sha_unit, OPT_INT, 512*1024)    // torrent field piece length 512K
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
