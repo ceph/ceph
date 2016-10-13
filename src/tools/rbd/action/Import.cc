@@ -387,6 +387,38 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if (r < 0) {
       goto done;
     }
+
+    // As V1 format for image is already deprecated, import image in V2 by default.
+    uint64_t image_format = 2;
+    if (opts.get(RBD_IMAGE_OPTION_FORMAT, &image_format) != 0) {
+      opts.set(RBD_IMAGE_OPTION_FORMAT, image_format);
+    }
+
+    while (1) {
+      __u8 tag;
+      r = safe_read_exact(fd, &tag, 1);
+      if (r < 0) {
+	goto done;
+      }
+
+      if (tag == RBD_EXPORT_IMAGE_END) {
+	break;
+      } else if (tag == RBD_EXPORT_IMAGE_ORDER) {
+	uint64_t order = 0;
+	r = safe_read_exact(fd, &order, 8);
+	if (r < 0) {
+	  goto done;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_ORDER, order);
+	}
+      } else {
+	std::cerr << "rbd: invalid tag in image priority zone: " << tag << std::endl;
+	r = -EINVAL;
+	goto done;
+      }
+      //TODO, set the image options according flags and appending data.
+    }
   }
 
   r = rbd.create4(io_ctx, imgname, size, opts);

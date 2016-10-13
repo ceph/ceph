@@ -400,6 +400,19 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     uint64_t size = info.size;
     ::encode(size, bl);
 
+    // TODO add more priorities here, such as image_feature...
+    __u8 tag;
+
+    // encode order
+    tag = RBD_EXPORT_IMAGE_ORDER;
+    ::encode(tag, bl);
+    ::encode(uint64_t(info.order), bl);
+
+    // encode end tag
+    tag = RBD_EXPORT_IMAGE_END;
+    ::encode(tag, bl);
+
+    // write bl to fd.
     r = bl.write_fd(fd);
     if (r < 0) {
       goto out;
