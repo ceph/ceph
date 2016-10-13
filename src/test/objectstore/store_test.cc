@@ -262,6 +262,8 @@ TEST_P(StoreTest, FiemapEmpty) {
 
 TEST_P(StoreTest, FiemapHoles) {
   ObjectStore::Sequencer osr("test");
+  const uint64_t MAX_EXTENTS = 4000;
+  const uint64_t SKIP_STEP = 65536;
   coll_t cid;
   int r = 0;
   ghobject_t oid(hobject_t(sobject_t("fiemap_object", CEPH_NOSNAP)));
@@ -271,27 +273,28 @@ TEST_P(StoreTest, FiemapHoles) {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
     t.touch(cid, oid);
-    t.write(cid, oid, 0, 3, bl);
-    t.write(cid, oid, 1048576, 3, bl);
-    t.write(cid, oid, 4194304, 3, bl);
+    for (uint64_t i = 0; i < MAX_EXTENTS; i++)
+      t.write(cid, oid, SKIP_STEP * i, 3, bl);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
   {
     bufferlist bl;
-    store->fiemap(cid, oid, 0, 4194307, bl);
+    store->fiemap(cid, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
     ::decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
     ASSERT_GE(m[0], 3u);
+    bool extents_exist = true;
+    if (m.size() == MAX_EXTENTS) {
+      for (uint64_t i = 0; i < MAX_EXTENTS; i++)
+        extents_exist = extents_exist && m.count(SKIP_STEP*i);
+    }
     ASSERT_TRUE((m.size() == 1 &&
-		 m[0] > 4194304u) ||
-		(m.size() == 3 &&
-		 m.count(0) &&
-		 m.count(1048576) &&
-		 m.count(4194304)));
+		 m[0] > SKIP_STEP * (MAX_EXTENTS - 1)) ||
+		 (m.size() == MAX_EXTENTS && extents_exist));
   }
   {
     ObjectStore::Transaction t;
