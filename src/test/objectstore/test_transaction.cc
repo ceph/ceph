@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include "common/Clock.h"
 #include "include/utime.h"
+#include <boost/tuple/tuple.hpp>
 
 TEST(Transaction, MoveConstruct)
 {
@@ -110,6 +111,32 @@ ObjectStore::Transaction generate_transaction()
   a.touch(acid, oid);
 
   return a;
+}
+
+TEST(Transaction, MoveRangesDelSrcObj)
+{
+  auto t = ObjectStore::Transaction{};
+  t.set_use_tbl(false);
+  t.nop();
+
+  coll_t c(spg_t(pg_t(1,2), shard_id_t::NO_SHARD));
+
+  ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
+  ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
+  vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info = { boost::make_tuple(1, 1, 5), boost::make_tuple(10, 10, 5) };
+
+  t.touch(c, o1);
+  bufferlist bl;
+  bl.append("some data");
+  t.write(c, o1, 1, bl.length(), bl);
+  t.write(c, o1, 10, bl.length(), bl);
+
+  t.clone(c, o1, o2);
+  bl.append("some other data");
+  t.write(c, o2, 1, bl.length(), bl);
+
+  t.move_ranges_destroy_src(c, o1, o2, move_info);
+
 }
 
 TEST(Transaction, GetNumBytes)
