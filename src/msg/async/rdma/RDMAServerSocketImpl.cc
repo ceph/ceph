@@ -78,8 +78,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
       ldout(cct, 1) << __func__ << " recv msg not whole." << dendl;
       continue;
     } else {
-      //RDMAWorker* w = static_cast<RDMAWorker*>(infiniband->stack->get_worker());
-      server = new RDMAConnectedSocketImpl(cct, infiniband, NULL, msg);
+      server = new RDMAConnectedSocketImpl(cct, infiniband, dispatcher, worker, msg);
       msg = server->get_my_msg();
       r = infiniband->send_udp_msg(server_setup_socket, msg, addr);
       server->activate();
