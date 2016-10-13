@@ -612,7 +612,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
 {
   dout(20) << __func__ << " level " << level << " near " << near
 	   << " on " << *b
-	   << " which has level " << b->cache_private << dendl;
+	   << " which has cache_private " << b->cache_private << dendl;
   if (near) {
     b->cache_private = near->cache_private;
     switch (b->cache_private) {
@@ -650,7 +650,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       b->cache_private = BUFFER_HOT;
       // move to hot.  fall-thru
     case BUFFER_HOT:
-      dout(20) << __func__ << " move to hot " << *b << dendl;
+      dout(20) << __func__ << " move to front of hot " << *b << dendl;
       buffer_hot.push_front(*b);
       break;
     default:
@@ -1050,13 +1050,14 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
 {
   std::lock_guard<std::recursive_mutex> lk(cache->lock);
   assert(r.cache == cache);
-  auto p = buffer_map.begin();
-  while (p != buffer_map.end() &&
-	 p->second->end() <= pos) {
-    dout(30) << __func__ << " skip " << *p->second << dendl;
-    ++p;
-  }
-  if (p != buffer_map.end()) {
+  if (buffer_map.empty())
+    return;
+
+  auto p = --buffer_map.end();
+  while (true) {
+    if (p->second->end() <= pos)
+      break;
+
     if (p->second->offset < pos) {
       dout(30) << __func__ << " cut " << *p->second << dendl;
       size_t left = pos - p->second->offset;
@@ -1071,20 +1072,25 @@ void BlueStore::BufferSpace::split(size_t pos, BlueStore::BufferSpace &r)
 		      0, p->second.get());
       }
       p->second->truncate(left);
-      ++p;
+      break;
     }
-    while (p != buffer_map.end()) {
-      dout(30) << __func__ << " move " << *p->second << dendl;
-      if (p->second->data.length()) {
-	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
-				 p->second->offset - pos, p->second->data),
-		      0, p->second.get());
-      } else {
-	r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
-				 p->second->offset - pos, p->second->length),
-		      0, p->second.get());
-      }
-      _rm_buffer(p++);
+
+    assert(p->second->end() > pos);
+    dout(30) << __func__ << " move " << *p->second << dendl;
+    if (p->second->data.length()) {
+      r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
+                               p->second->offset - pos, p->second->data),
+                    0, p->second.get());
+    } else {
+      r._add_buffer(new Buffer(&r, p->second->state, p->second->seq,
+                               p->second->offset - pos, p->second->length),
+                    0, p->second.get());
+    }
+    if (p == buffer_map.begin()) {
+      _rm_buffer(p);
+      break;
+    } else {
+      _rm_buffer(p--);
     }
   }
   assert(writing.empty());
@@ -2457,6 +2463,11 @@ void BlueStore::_set_compression()
       derr << __func__ << " unrecognized compression algorithm '"
 	   << g_conf->bluestore_compression_algorithm << "'"
            << ", reverting compression mode to 'none'"
+           << dendl;
+      comp_mode = COMP_NONE;
+    } else {
+      derr << __func__ << " compression algorithm not specified, "
+           << "reverting compression mode to 'none'"
            << dendl;
       comp_mode = COMP_NONE;
     }
