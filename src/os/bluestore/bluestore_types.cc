@@ -557,11 +557,13 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   if (o.sbid) {
     out << " sbid 0x" << std::hex << o.sbid << std::dec;
   }
-  out << " clen 0x" << std::hex
-      << o.compressed_length_orig
-      << " -> 0x"
-      << o.compressed_length
-      << std::dec;
+  if (o.is_compressed()) {
+    out << " clen 0x" << std::hex
+	<< o.compressed_length_orig
+	<< " -> 0x"
+	<< o.compressed_length
+	<< std::dec;
+  }
   if (o.flags) {
     out << " " << o.get_flags_string();
   }
