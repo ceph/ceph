@@ -2745,8 +2745,7 @@ void EFragment::replay(MDSRank *mds)
   switch (op) {
   case OP_PREPARE:
     mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags, _segment, &rollback);
-    // fall-thru
-  case OP_ONESHOT:
+
     if (in)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
     break;
@@ -2798,8 +2797,6 @@ void EFragment::decode(bufferlist::iterator &bl) {
     ::decode(stamp, bl);
   if (struct_v >= 3)
     ::decode(op, bl);
-  else
-    op = OP_ONESHOT;
   ::decode(ino, bl);
   ::decode(basefrag, bl);
   ::decode(bits, bl);
