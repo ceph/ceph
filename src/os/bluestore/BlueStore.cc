@@ -83,7 +83,9 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  *
  * encoded u64: snap
  * encoded u64: generation
+ * 'o'
  */
+#define ONODE_KEY_SUFFIX 'o'
 
 /*
  * string encoding in the key
@@ -103,8 +105,7 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
  *
  * object prefix key
  * u32
- * 'x'  (this char can be anything that is not part of a u64 (hex)
- *       encoding so we can distinguish this key from an object key)
+ * 'x'
  */
 #define EXTENT_SHARD_KEY_SUFFIX 'x'
 
@@ -295,6 +296,8 @@ static void get_object_key(const ghobject_t& oid, string *key)
   _key_encode_u64(oid.hobj.snap, key);
   _key_encode_u64(oid.generation, key);
 
+  key->push_back(ONODE_KEY_SUFFIX);
+
   // sanity check
   if (true) {
     ghobject_t t;
@@ -356,10 +359,15 @@ static int get_key_object(const string& key, ghobject_t *oid)
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
   p = _key_decode_u64(p, &oid->generation);
+
+  if (*p != ONODE_KEY_SUFFIX) {
+    return -7;
+  }
+  p++;
   if (*p) {
     // if we get something other than a null terminator here,
     // something goes wrong.
-    return -7;
+    return -8;
   }
 
   return 0;
