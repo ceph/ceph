@@ -21,54 +21,105 @@ namespace io {
 
 using Exception = std::system_error;
 
+/* The minimal and simplest subset of methods that a client of RadosGW can be
+ * interacted with. */
 class BasicClient {
 protected:
   virtual void init_env(CephContext *cct) = 0;
 
 public:
-  virtual ~BasicClient() {}
+  virtual ~BasicClient() = default;
 
+  /* Initialize the BasicClient and inject CephContext. */
   void init(CephContext *cct);
+
+  /* Return the RGWEnv describing the environment that a given request lives in.
+   * The method does not throw exceptions. */
   virtual RGWEnv& get_env() noexcept = 0;
+
+  /* Complete request.
+   * On success returns number of bytes generated for a direct client of RadosGW.
+   * On failure throws rgw::io::Exception containing errno. */
   virtual size_t complete_request() = 0;
 }; /* rgw::io::Client */
 
 
 class Accounter {
 public:
-  virtual ~Accounter() {}
+  virtual ~Accounter() = default;
 
+  /* Enable or disable the accounting of both sent and received data. Changing
+   * the state does not affect the counters. */
   virtual void set_account(bool enabled) = 0;
 
+  /* Return number of bytes sent to a direct client of RadosGW (direct means
+   * eg. a web server instance in the case of using FastCGI front-end) when
+   * the accounting was enabled. */
   virtual uint64_t get_bytes_sent() const = 0;
+
+  /* Return number of bytes received from a direct client of RadosGW (direct
+   * means eg. a web server instance in the case of using FastCGI front-end)
+   * when the accounting was enabled. */
   virtual uint64_t get_bytes_received() const = 0;
 }; /* rgw::io::Accounter */
 
 
+/* Interface abstracting restful interactions with clients, usually through
+ * the HTTP protocol. The methods participating in the response generation
+ * process should be called in the specific order:
+ *   1. send_100_continue() - at most once,
+ *   2. send_status() - exactly once,
+ *   3. Any of:
+ *      a. send_header(),
+ *      b. send_content_length() XOR send_chunked_transfer_encoding()
+ *         Please note that only one of those two methods must be called
+           at most once.
+ *   4. complete_header() - exactly once,
+ *   5. send_body()
+ *   6. complete_request() - exactly once.
+ * There are no restrictions on flush() - it may be called in any moment.
+ *
+ * Receiving data from a client isn't a subject to any further call order
+ * restrictions besides those imposed by BasicClient. That is, get_env()
+ * and recv_body can be mixed. */
 class RestfulClient : public BasicClient {
   template<typename T> friend class DecoratedRestfulClient;
 
 public:
-  virtual size_t send_status(int status, const char *status_name) = 0;
+  /* Generate the 100 Continue message.
+   * On success returns number of bytes generated for a direct client of RadosGW.
+   * On failure throws rgw::io::Exception containing errno. */
   virtual size_t send_100_continue() = 0;
 
-  /* Send header to client. On success returns number of bytes sent to the direct
-   * client of RadosGW. On failure throws int containing errno. boost::string_ref
-   * is being used because of length it internally carries. */
+  /* Generate the response's status part taking the HTTP status code as @status
+   * and its name pointed in @status_name.
+   * On success returns number of bytes generated for a direct client of RadosGW.
+   * On failure throws rgw::io::Exception containing errno. */
+  virtual size_t send_status(int status, const char *status_name) = 0;
+
+  /* Generate header. On success returns number of bytes generated for a direct
+   * client of RadosGW. On failure throws rgw::io::Exception containing errno.
+   *
+   * boost::string_ref is being used because of length it internally carries. */
   virtual size_t send_header(const boost::string_ref& name,
                              const boost::string_ref& value) = 0;
 
-  /* Inform a client about a content length. Takes number of bytes supplied in
-   * @len XOR one of the alternative modes for dealing with it passed as @mode.
-   * On success returns number of bytes sent to the direct client of RadosGW.
-   * On failure throws int containing errno.
+  /* Inform a client about a content length. Takes number of bytes as @len.
+   * On success returns number of bytes generated for a direct client of RadosGW.
+   * On failure throws rgw::io::Exception containing errno.
    *
-   * CALL ORDER:
-   *  - The method must be called EXACTLY ONE time.
-   *  - The method must be preceeded with a call to send_status().
-   *  - The method must not be called after complete_header(). */
+   * CALL LIMITATIONS:
+   *  - The method must be called EXACTLY ONCE.
+   *  - The method is interchangeable with send_chunked_transfer_encoding(). */
   virtual size_t send_content_length(uint64_t len) = 0;
 
+  /* Inform a client that the chunked transfer encoding will be used.
+   * On success returns number of bytes generated for a direct client of RadosGW.
+   * On failure throws rgw::io::Exception containing errno.
+   *
+   * CALL LIMITATIONS:
+   *  - The method must be called EXACTLY ONCE.
+   *  - The method is interchangeable with send_content_length(). */
   virtual size_t send_chunked_transfer_encoding() {
     /* This is a null implementation. We don't send anything here, even the HTTP
      * header. The intended behaviour should be provided through a decorator or
@@ -76,18 +127,31 @@ public:
     return 0;
   }
 
+  /* Generate completion (the CRLF sequence separating headers and body in
+   * the case of HTTP) of headers. On success returns number of generated bytes
+   * for a direct client of RadosGW. On failure throws rgw::io::Exception with
+   * errno. */
   virtual size_t complete_header() = 0;
 
-  /* Receive body. On success Returns number of bytes sent to the direct
-   * client of RadosGW. On failure throws int containing errno. */
+  /* Receive no more than @max bytes from a request's body and store it in
+   * buffer pointed by @buf. On success returns number of bytes received from
+   * a direct client of RadosGW that has been stored in @buf. On failure throws
+   * rgw::io::Exception containing errno. */
   virtual size_t recv_body(char* buf, size_t max) = 0;
+
+  /* Generate a part of response's body by taking exactly @len bytes from
+   * the buffer pointed by @buf. On success returns number of generated bytes
+   * of response's body. On failure throws rgw::io::Exception. */
   virtual size_t send_body(const char* buf, size_t len) = 0;
 
+  /* Flushes all already generated data to a direct client of RadosGW.
+   * On failure throws rgw::io::Exception containing errno. */
   virtual void flush() = 0;
-};
+} /* rgw::io::RestfulClient */;
 
 
-/* Abstract decorator over any implementation of rgw::io::RestfulClient. */
+/* Abstract decorator over any implementation of rgw::io::RestfulClient
+ * which could be provided both as a pointer-to-object or the object itself. */
 template <typename DecorateeT>
 class DecoratedRestfulClient : public RestfulClient {
   template<typename T> friend class DecoratedRestfulClient;
@@ -173,7 +237,7 @@ public:
   size_t complete_request() override {
     return get_decoratee().complete_request();
   }
-};
+} /* rgw::io::DecoratedRestfulClient */;
 
 } /* namespace rgw */
 } /* namespace io */
