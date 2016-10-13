@@ -246,7 +246,7 @@ Client::Client(Messenger *m, MonClient *mc)
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
     tick_event(NULL),
-    monclient(mc), messenger(m), whoami(m->get_myname().num()),
+    monclient(mc), messenger(m), whoami(mc->get_global_id()),
     cap_epoch_barrier(0), fsmap(nullptr), fsmap_user(nullptr),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
