@@ -6418,7 +6418,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     } else if (key == "require_kraken_osds") {
       if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
-	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+	// ensure JEWEL is also set
+	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
+	return r;
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
 	err = -EPERM;
