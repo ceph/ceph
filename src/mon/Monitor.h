@@ -651,9 +651,6 @@ public:
   MonSessionMap session_map;
   AdminSocketHook *admin_hook;
 
-  void check_subs();
-  void check_sub(Subscription *sub);
-
   void send_latest_monmap(Connection *con);
 
   // messages
