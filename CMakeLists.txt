@@ -180,6 +180,12 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
+option(WITH_RDMA "Enable RDMA in async messenger" OFF)
+if(WITH_RDMA)
+  find_package(rdma REQUIRED)
+  set(HAVE_RDMA ${RDMA_FOUND})
+endif(WITH_RDMA)
+
 find_package(Backtrace)
 
 if(LINUX)
