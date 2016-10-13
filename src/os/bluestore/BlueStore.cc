@@ -604,7 +604,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
 {
   dout(20) << __func__ << " level " << level << " near " << near
 	   << " on " << *b
-	   << " which has level " << b->cache_private << dendl;
+	   << " which has cache_private " << b->cache_private << dendl;
   if (near) {
     b->cache_private = near->cache_private;
     switch (b->cache_private) {
@@ -642,7 +642,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       b->cache_private = BUFFER_HOT;
       // move to hot.  fall-thru
     case BUFFER_HOT:
-      dout(20) << __func__ << " move to hot " << *b << dendl;
+      dout(20) << __func__ << " move to front of hot " << *b << dendl;
       buffer_hot.push_front(*b);
       break;
     default:
