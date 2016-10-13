@@ -2471,6 +2471,11 @@ void BlueStore::_set_compression()
            << ", reverting compression mode to 'none'"
            << dendl;
       comp_mode = COMP_NONE;
+    } else {
+      derr << __func__ << " compression algorithm not specified, "
+           << "reverting compression mode to 'none'"
+           << dendl;
+      comp_mode = COMP_NONE;
     }
 
     if (alg) {
