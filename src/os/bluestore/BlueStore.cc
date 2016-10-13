@@ -2204,15 +2204,14 @@ bool BlueStore::ExtentMap::do_write_check_depth(
 	tp++;
 	if (tp == extent_map.end() ||
 	  (tp_prev->logical_offset + tp_prev->length) != tp->logical_offset) {
-	  tp = tp_prev;
 	  break;
 	}
       }
-      *gc_end_offset = tp->logical_offset + tp_prev->length;
+      *gc_end_offset = tp_prev->logical_offset + tp_prev->length;
     }
   }
   if (*gc_end_offset > onode_size) {
-    *gc_end_offset = MAX(end_offset, onode_size);
+    *gc_end_offset = onode_size;
   }
 
   bool do_collect = true;
@@ -2223,6 +2222,7 @@ bool BlueStore::ExtentMap::do_write_check_depth(
   dout(20) << __func__ << " GC depth " << (int)*blob_depth
            << ", gc 0x" << std::hex << *gc_start_offset << "~"
            << (*gc_end_offset - *gc_start_offset)
+           << (do_collect ? " collect" : "")
            << std::dec << dendl;
   return do_collect;
 }
@@ -7833,7 +7833,7 @@ int BlueStore::_do_write(
 
   uint64_t gc_start_offset = offset, gc_end_offset = end;
   bool do_collect = 
-    o->extent_map.do_write_check_depth(o->extent_map, o->onode.size,
+    o->extent_map.do_write_check_depth(o->onode.size,
                                        offset, end, &wctx.blob_depth,
                                        &gc_start_offset,
 		         	       &gc_end_offset);
