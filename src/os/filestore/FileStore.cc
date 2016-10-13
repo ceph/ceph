@@ -3046,11 +3046,13 @@ int FileStore::read(
 int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
                           map<uint64_t, uint64_t> *m)
 {
-  struct fiemap *fiemap = NULL;
   uint64_t i;
   struct fiemap_extent *extent = NULL;
+  struct fiemap_extent *last = NULL;
+  struct fiemap *fiemap = NULL;
   int r = 0;
 
+more:
   r = backend->do_fiemap(fd, offset, len, &fiemap);
   if (r < 0)
     return r;
@@ -3090,9 +3092,15 @@ int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
       extent->fe_length = offset + len - extent->fe_logical;
     (*m)[extent->fe_logical] = extent->fe_length;
     i++;
-    extent++;
+    last = extent++;
   }
   free(fiemap);
+  if (!(last->fe_flags & FIEMAP_EXTENT_LAST)) {
+    uint64_t xoffset = last->fe_logical + last->fe_length - offset;
+    offset = last->fe_logical + last->fe_length;
+    len -= xoffset;
+    goto more;
+  }
 
   return r;
 }
