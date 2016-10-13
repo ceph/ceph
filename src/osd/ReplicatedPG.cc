@@ -5223,6 +5223,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    t->truncate(soid, op.extent.truncate_size);
 	    oi.truncate_seq = op.extent.truncate_seq;
 	    oi.truncate_size = op.extent.truncate_size;
+	    if (oi.size > op.extent.truncate_size)
+	      ctx->clean_regions.mark_data_region_dirty(op.extent.truncate_size, oi.size - op.extent.truncate_size);
 	    if (op.extent.truncate_size != oi.size) {
 	      ctx->delta_stats.num_bytes -= oi.size;
 	      ctx->delta_stats.num_bytes += op.extent.truncate_size;
@@ -5253,7 +5255,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  obs.oi.clear_data_digest();
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
-
+	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
+	dout(10) << "clean_regions modified" << ctx->clean_regions << dendl;
       }
       break;
       
@@ -5311,6 +5314,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true, op.extent.length != oi.size ? true : false);
+	ctx->clean_regions.mark_data_region_dirty(0, op.extent.length);
       }
       break;
 
@@ -5344,6 +5348,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  interval_set<uint64_t> ch;
 	  ch.insert(op.extent.offset, op.extent.length);
 	  ctx->modified_ranges.union_of(ch);
+	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
 	  ctx->delta_stats.num_wr++;
 	  oi.clear_data_digest();
 	} else {
@@ -5428,11 +5433,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  interval_set<uint64_t> trim;
 	  trim.insert(op.extent.offset, oi.size-op.extent.offset);
 	  ctx->modified_ranges.union_of(trim);
+	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, oi.size - op.extent.offset);
 	}
 	if (op.extent.offset != oi.size) {
 	  ctx->delta_stats.num_bytes -= oi.size;
 	  ctx->delta_stats.num_bytes += op.extent.offset;
 	  oi.size = op.extent.offset;
+
 	}
 	ctx->delta_stats.num_wr++;
 	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
@@ -5475,6 +5482,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.clonerange.offset, op.clonerange.length, false);
+	ctx->clean_regions.mark_data_region_dirty(op.clonerange.offset, op.clonerange.length);
       }
       break;
       
@@ -6019,6 +6027,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	t->omap_setkeys(soid, to_set_bl);
+	ctx->clean_regions.mark_omap_dirty();
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
@@ -6059,6 +6068,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (oi.is_omap()) {
 	  t->omap_clear(soid);
+	  ctx->clean_regions.mark_omap_dirty();
 	  ctx->delta_stats.num_wr++;
 	  obs.oi.clear_omap_digest();
 	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
@@ -6091,6 +6101,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val);
 	t->omap_rmkeys(soid, to_rm_bl);
+	ctx->clean_regions.mark_omap_dirty();
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.clear_omap_digest();
@@ -6274,6 +6285,8 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     interval_set<uint64_t> ch;
     ch.insert(0, oi.size);
     ctx->modified_ranges.union_of(ch);
+    ctx->clean_regions.mark_data_region_dirty(0, oi.size);
+    ctx->clean_regions.mark_omap_dirty();
   }
 
   ctx->delta_stats.num_wr++;
@@ -6448,6 +6461,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       maybe_create_new_object(ctx);
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
+      ctx->clean_regions.mark_data_region_dirty(0, MAX(obs.oi.size, rollback_to->obs.oi.size));
+      ctx->clean_regions.mark_omap_dirty();
       obs.oi.size = rollback_to->obs.oi.size;
       if (rollback_to->obs.oi.is_data_digest())
 	obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
@@ -7025,6 +7040,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime, 0));
+  ctx->log.back().clean_regions = ctx->clean_regions;
+  dout(20) << __func__ << " object " << soid <<  " marks clean_regions " << ctx->log.back().clean_regions << dendl;
+
   if (soid.snap < CEPH_NOSNAP) {
     switch (log_op_type) {
     case pg_log_entry_t::MODIFY:
@@ -7790,6 +7808,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   if (obs.oi.size > 0)
     ch.insert(0, obs.oi.size);
   ctx->modified_ranges.union_of(ch);
+  ctx->clean_regions.mark_data_region_dirty(0, MAX(obs.oi.size, cb->get_data_size()));
 
   if (cb->get_data_size() != obs.oi.size) {
     ctx->delta_stats.num_bytes -= obs.oi.size;
@@ -7948,10 +7967,14 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
     tctx->new_obs.oi.size = results->object_size;
     tctx->new_obs.oi.user_version = results->user_version;
     // Don't care src object whether have data or omap digest
-    if (results->object_size)
+    if (results->object_size) {
       tctx->new_obs.oi.set_data_digest(results->data_digest);
-    if (results->has_omap)
+      tctx->clean_regions.mark_data_region_dirty(0, results->object_size);
+    }
+    if (results->has_omap) {
       tctx->new_obs.oi.set_omap_digest(results->omap_digest);
+      tctx->clean_regions.mark_omap_dirty();
+    }
     tctx->new_obs.oi.truncate_seq = results->truncate_seq;
     tctx->new_obs.oi.truncate_size = results->truncate_size;
 

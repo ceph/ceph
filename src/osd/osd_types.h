@@ -75,6 +75,9 @@
 /// base backfill priority for MBackfillReserve
 #define OSD_BACKFILL_PRIORITY_BASE 1u
 
+/// max intervals for clean_offsets in ObjectCleanRegions
+#define OSD_CLEAN_OFFSETS_MAX_INTERVALS 10
+
 typedef hobject_t collection_list_handle_t;
 
 /// convert a single CPEH_OSD_FLAG_* to a string
@@ -2522,6 +2525,52 @@ public:
 WRITE_CLASS_ENCODER(ObjectModDesc)
 
 
+class ObjectCleanRegions {
+private:
+  interval_set<uint64_t> clean_offsets;
+  bool clean_omap;
+  bool new_object;
+  int32_t max_num_intervals;
+
+  /**
+   * trim the number of intervals if clean_offsets.num_intervals()
+   * exceeds the given upbound max_num_intervals
+   * etc. max_num_intervals=2, clean_offsets:{[5~10], [20~5]}
+   * then new interval [30~10] will evict out the shortest one [20~5]
+   * finally, clean_offsets becomes {[5~10], [30~10]}
+   */
+  void trim();
+  friend ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
+public:
+  ObjectCleanRegions(int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) : new_object(false), max_num_intervals(max) {
+    clean_offsets.insert(0, (uint64_t)-1);
+    clean_omap = true;
+  }
+  ObjectCleanRegions(uint64_t offset, uint64_t len, bool co, int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) 
+    : clean_omap(co), new_object(false), max_num_intervals(max) {
+    clean_offsets.insert(offset, len);
+  }
+  bool operator==(const ObjectCleanRegions &orc) const {
+    return clean_offsets == orc.clean_offsets && clean_omap == orc.clean_omap && max_num_intervals == orc.max_num_intervals;
+  }
+
+  void merge(const ObjectCleanRegions &other);
+  void mark_data_region_dirty(uint64_t offset, uint64_t len);
+  void mark_omap_dirty();
+  void mark_object_new();
+  void mark_fully_dirty();
+  interval_set<uint64_t> get_dirty_regions() const;
+  bool omap_is_dirty() const;
+  bool object_is_exist() const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectCleanRegions*>& o);
+};
+WRITE_CLASS_ENCODER(ObjectCleanRegions)
+ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
+
 /**
  * pg_log_entry_t - single entry/event in pg log
  *
@@ -2583,6 +2632,8 @@ struct pg_log_entry_t {
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
+
+  ObjectCleanRegions clean_regions;
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
@@ -2741,11 +2792,11 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
  *  kept in memory, as a supplement to pg_log_t
  *  also used to pass missing info in messages.
  */
-struct pg_missing_item {
+struct pg_missing_item_old {
   eversion_t need, have;
-  pg_missing_item() {}
-  explicit pg_missing_item(eversion_t n) : need(n) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h) : need(n), have(h) {}
+  pg_missing_item_old() {}
+  explicit pg_missing_item_old(eversion_t n) : need(n) {}  // have no old version
+  pg_missing_item_old(eversion_t n, eversion_t h) : need(n), have(h) {}
 
   void encode(bufferlist& bl) const {
     ::encode(need, bl);
@@ -2755,18 +2806,46 @@ struct pg_missing_item {
     ::decode(need, bl);
     ::decode(have, bl);
   }
+};
+WRITE_CLASS_ENCODER(pg_missing_item_old);
+
+struct pg_missing_item {
+  eversion_t need, have;
+  ObjectCleanRegions clean_regions;
+  pg_missing_item() {}
+  explicit pg_missing_item(eversion_t n) : need(n) {}  // have no old version
+  pg_missing_item(eversion_t n, eversion_t h, bool old_style = false, bool new_object = false) : need(n), have(h) {
+    if (old_style)
+      clean_regions.mark_fully_dirty();
+    if (new_object)
+      clean_regions.mark_object_new();
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(need, bl);
+    ::encode(have, bl);
+    ::encode(clean_regions, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(need, bl);
+    ::decode(have, bl);
+    ::decode(clean_regions, bl);
+  }
   void dump(Formatter *f) const {
     f->dump_stream("need") << need;
     f->dump_stream("have") << have;
+    f->dump_stream("clean_regions") << clean_regions;
   }
   static void generate_test_instances(list<pg_missing_item*>& o) {
     o.push_back(new pg_missing_item);
     o.push_back(new pg_missing_item);
     o.back()->need = eversion_t(1, 2);
     o.back()->have = eversion_t(1, 1);
+    o.back()->clean_regions.mark_data_region_dirty(4096, 8192);
+    o.back()->clean_regions.mark_omap_dirty();
   }
   bool operator==(const pg_missing_item &rhs) const {
-    return need == rhs.need && have == rhs.have;
+    return need == rhs.need && have == rhs.have && clean_regions == rhs.clean_regions;
   }
   bool operator!=(const pg_missing_item &rhs) const {
     return !(*this == rhs);
@@ -2824,6 +2903,7 @@ public:
 template <bool TrackChanges>
 class pg_missing_set : public pg_missing_const_i {
   using item = pg_missing_item;
+  using old_item = pg_missing_item_old;
   map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
@@ -2852,6 +2932,13 @@ public:
   }
   bool have_missing() const override {
     return !missing.empty();
+  }
+  void merge(const pg_log_entry_t& e) {
+    auto miter = missing.find(e.soid);
+    if (miter != missing.end()
+      && miter->second.have != eversion_t()
+      && e.version > miter->second.have)
+      miter->second.clean_regions.merge(e.clean_regions);
   }
   bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const override {
     auto iter = missing.find(oid);
@@ -2899,13 +2986,21 @@ public:
 	// new object.
 	if (is_missing_divergent_item) {  // use iterator
 	  rmissing.erase((missing_it->second).need.version);
-	  missing_it->second = item(e.version, eversion_t());  // .have = nil
-	} else  // create new element in missing map
+	  // .have = nil
+	  (missing_it->second).need = e.version;
+	  (missing_it->second).have = eversion_t();
+	  (missing_it->second).clean_regions.merge(e.clean_regions);
+	  (missing_it->second).clean_regions.mark_object_new();
+	} else {  // create new element in missing map
 	  missing[e.soid] = item(e.version, eversion_t());     // .have = nil
+	  missing[e.soid].clean_regions = e.clean_regions;
+	  missing[e.soid].clean_regions.mark_object_new();
+	}
       } else if (is_missing_divergent_item) {
 	// already missing (prior).
 	rmissing.erase((missing_it->second).need.version);
 	(missing_it->second).need = e.version;  // leave .have unchanged.
+	(missing_it->second).clean_regions.merge(e.clean_regions);
       } else if (e.is_backlog()) {
 	// May not have prior version
 	assert(0 == "these don't exist anymore");
@@ -2913,6 +3008,7 @@ public:
 	// not missing, we must have prior_version (if any)
 	assert(!is_missing_divergent_item);
 	missing[e.soid] = item(e.version, e.prior_version);
+	missing[e.soid].clean_regions = e.clean_regions;
       }
       rmissing[e.version.version] = e.soid;
     } else if (e.is_delete()) {
@@ -2923,9 +3019,11 @@ public:
   }
 
   void revise_need(hobject_t oid, eversion_t need) {
-    if (missing.count(oid)) {
-      rmissing.erase(missing[oid].need.version);
-      missing[oid].need = need;            // no not adjust .have
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
+      rmissing.erase(p->second.need.version);
+      p->second.need = need;            // no not adjust .have
+      (p->second).clean_regions.mark_fully_dirty();
     } else {
       missing[oid] = item(need, eversion_t());
     }
@@ -2935,14 +3033,16 @@ public:
   }
 
   void revise_have(hobject_t oid, eversion_t have) {
-    if (missing.count(oid)) {
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
       tracker.changed(oid);
-      missing[oid].have = have;
+      (p->second).have = have;
+      (p->second).clean_regions.mark_fully_dirty();
     }
   }
 
-  void add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing[oid] = item(need, have);
+  void add(const hobject_t& oid, eversion_t need, eversion_t have, bool mark_dirty = true) {
+    missing[oid] = item(need, have, mark_dirty, have == eversion_t());
     rmissing[need.version] = oid;
     tracker.changed(oid);
   }
@@ -3006,16 +3106,37 @@ public:
     }
   }
 
-  void encode(bufferlist &bl) const {
-    ENCODE_START(3, 2, bl);
+  void encode(bufferlist &bl, uint64_t features) const {
+    if ((features & CEPH_OSD_PARTIAL_RECOVERY) == 0) {
+      ENCODE_START(3, 2, bl);
+      map<hobject_t, old_item, hobject_t::ComparatorWithDefault> tmp;
+      for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator i = missing.begin();
+	   i != missing.end(); ++i) {
+	tmp[i->first] = old_item(i->second.need, i->second.have);
+      }
+      ::encode(tmp, bl);
+      ENCODE_FINISH(bl);
+      return;
+    }
+    ENCODE_START(4, 2, bl);
     ::encode(missing, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
-    ::decode(missing, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    if (struct_v <= 3) {
+      map<hobject_t, old_item, hobject_t::ComparatorWithDefault> tmp;
+      ::decode(tmp, bl);
+      // copy old item style to new style
+      for (map<hobject_t, old_item, hobject_t::ComparatorWithDefault>::iterator i = tmp.begin();
+	   i != tmp.end(); ++i) {
+	missing[i->first] = item(i->second.need, i->second.have, true);
+      }
+    } else {
+      ::decode(missing, bl);
+    }
     DECODE_FINISH(bl);
 
     if (struct_v < 3) {
@@ -3130,7 +3251,7 @@ template <bool TrackChanges>
 void encode(
   const pg_missing_set<TrackChanges> &c, bufferlist &bl, uint64_t features=0) {
   ENCODE_DUMP_PRE();
-  c.encode(bl);
+  c.encode(bl, features);
   ENCODE_DUMP_POST(cl);
 }
 template <bool TrackChanges>
@@ -3148,7 +3269,6 @@ ostream& operator<<(ostream& out, const pg_missing_set<TrackChanges> &missing)
 
 using pg_missing_t = pg_missing_set<false>;
 using pg_missing_tracker_t = pg_missing_set<true>;
-
 
 /**
  * pg list objects response format
@@ -4271,8 +4391,9 @@ struct ObjectRecoveryInfo {
   SnapSet ss;
   interval_set<uint64_t> copy_subset;
   map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subset;
+  bool object_exist;
 
-  ObjectRecoveryInfo() : size(0) { }
+  ObjectRecoveryInfo() : size(0), object_exist(true) { }
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
   void encode(bufferlist &bl, uint64_t features) const;
