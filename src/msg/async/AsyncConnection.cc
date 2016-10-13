@@ -885,7 +885,8 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
         } else if (r == 0) {
           ldout(async_msgr->cct, 10) << __func__ << " nonblock connect inprogress" << dendl;
-          center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
+          if (async_msgr->get_stack()->nonblock_connect_need_writable_event())
+            center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
           break;
         }
 

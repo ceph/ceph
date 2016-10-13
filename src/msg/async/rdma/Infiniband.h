@@ -38,6 +38,7 @@ struct IBSYNMsg {
   uint16_t lid;
   uint32_t qpn;
   uint32_t psn;
+  uint32_t peer_qpn;
   union ibv_gid gid;
 } __attribute__((packed));
 
@@ -93,6 +94,7 @@ class Device {
   const char* get_name() { return name;}
   uint16_t get_lid() { return active_port->get_lid(); }
   ibv_gid get_gid() { return active_port->get_gid(); }
+  void binding_port(uint8_t port_num);
   struct ibv_context *ctxt;
   ibv_device_attr *device_attr;
   Port* active_port;
@@ -117,7 +119,7 @@ class DeviceList {
     }
   }
   ~DeviceList() {
-    for (int i=0; devices[i] != NULL; ++i) {
+    for (int i=0; i < num; ++i) {
       delete devices[i];
     }
     delete []devices;
@@ -173,7 +175,7 @@ class Infiniband {
         offset = o;
       }
 
-      size_t get_offset() {
+      uint32_t get_offset() {
         return offset;
       }
 
@@ -190,9 +192,9 @@ class Infiniband {
         return bound;
       }
 
-      size_t read(char* buf, size_t len) {
-        size_t left = bound - offset;
-        if(left >= len) {
+      uint32_t read(char* buf, uint32_t len) {
+        uint32_t left = bound - offset;
+        if (left >= len) {
           memcpy(buf, buffer+offset, len);
           offset += len;
           return len;
@@ -204,8 +206,8 @@ class Infiniband {
         }
       }
 
-      size_t write(char* buf, size_t len) {
-        size_t left = bytes - offset;
+      uint32_t write(char* buf, uint32_t len) {
+        uint32_t left = bytes - offset;
         if (left >= len) {
           memcpy(buffer+offset, buf, len);
           offset += len;
@@ -246,7 +248,7 @@ class Infiniband {
       char* buffer;
       uint32_t bytes;
       uint32_t bound;
-      size_t offset;
+      uint32_t offset;
       ibv_mr* mr;
       uint64_t owner;
     };
@@ -264,6 +266,10 @@ class Infiniband {
           delete *c;
           ++c;
         }
+        if (manager.enabled_huge_page)
+          delete base;
+        else
+          manager.free_huge_pages(base);
       }
       int add(uint32_t num) {
         uint32_t bytes = chunk_size * num;
@@ -290,23 +296,28 @@ class Infiniband {
       }
 
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes) {
-        Mutex::Locker l(lock);
-        if (!bytes) {
-          free_chunks.swap(chunks);
-          return 0;
-        }
         uint32_t num = bytes / chunk_size + 1;
         if (bytes % chunk_size == 0)
           --num;
-        if (free_chunks.size() < num)
-          return -EAGAIN;
+        int r = num;
+        Mutex::Locker l(lock);
+        if (free_chunks.empty())
+          return 0;
+        if (!bytes) {
+          free_chunks.swap(chunks);
+          r = chunks.size();
+          return r;
+        }
+        if (free_chunks.size() < num) {
+          num = free_chunks.size();
+          r = num;
+        }
         for (uint32_t i = 0; i < num; ++i) {
           chunks.push_back(free_chunks.back());
           free_chunks.pop_back();
         }
-        return 0;
+        return r;
       }
-
       MemoryManager& manager;
       uint32_t chunk_size;
       Mutex lock;
@@ -319,9 +330,9 @@ class Infiniband {
       enabled_huge_page = cct->_conf->ms_async_rdma_enable_hugepage;
     }
     ~MemoryManager() {
-      if(channel)
+      if (channel)
         delete channel;
-      if(send)
+      if (send)
         delete send;
     }
     void* malloc_huge_pages(size_t size) {
@@ -372,6 +383,7 @@ class Infiniband {
     }
 
     int is_tx_chunk(Chunk* c) { return send->all_chunks.count(c);}
+    int is_rx_chunk(Chunk* c) { return channel->all_chunks.count(c);}
     bool enabled_huge_page;
    private:
     Cluster* channel;//RECV
@@ -397,7 +409,7 @@ class Infiniband {
 
  public:
   NetHandler net;
-  explicit Infiniband(CephContext *c, const std::string &device_name);
+  explicit Infiniband(CephContext *c, const std::string &device_name, uint8_t p);
 
   /**
    * Destroy an Infiniband object.
@@ -569,7 +581,7 @@ class Infiniband {
  public:
   typedef MemoryManager::Cluster Cluster;
   typedef MemoryManager::Chunk Chunk;
-  QueuePair* create_queue_pair(CompletionQueue *w, ibv_qp_type type);
+  QueuePair* create_queue_pair(CompletionQueue*, CompletionQueue*, ibv_qp_type type);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   int post_chunk(Chunk* chunk);
   int post_channel_cluster();
@@ -581,14 +593,29 @@ class Infiniband {
   uint8_t get_ib_physical_port() {
     return ib_physical_port;
   }
-  int send_udp_msg(int sd, IBSYNMsg& msg, entity_addr_t &peeraddr);
-  int recv_udp_msg(int sd, IBSYNMsg& msg, entity_addr_t *addr);
+  int send_msg(int sd, IBSYNMsg& msg);
+  int recv_msg(int sd, IBSYNMsg& msg);
   uint16_t get_lid() { return device->get_lid(); }
   ibv_gid get_gid() { return device->get_gid(); }
   MemoryManager* get_memory_manager() { return memory_manager; }
   Device* get_device() { return device; }
   int get_async_fd() { return device->ctxt->async_fd; }
+  int recall_chunk(Chunk* c) {
+    if (memory_manager->is_rx_chunk(c)) {
+      post_chunk(c);  
+      return 1;
+    } else if (memory_manager->is_tx_chunk(c)) {
+      vector<Chunk*> v;
+      v.push_back(c);
+      memory_manager->return_tx(v);  
+      return 2;
+    }
+    return -1;
+  }
+  int is_tx_chunk(Chunk* c) { return memory_manager->is_tx_chunk(c); }
+  int is_rx_chunk(Chunk* c) { return memory_manager->is_rx_chunk(c); }
   static const char* wc_status_to_string(int status);
+  static const char* qp_state_string(int status);
 };
 
 #endif
