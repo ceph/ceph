@@ -872,7 +872,7 @@ struct cls_rgw_obj_chain {
 
   cls_rgw_obj_chain() {}
 
-  void push_obj(const string& pool, cls_rgw_obj_key& key, string& loc) {
+  void push_obj(const string& pool, const cls_rgw_obj_key& key, const string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
     obj.key = key;

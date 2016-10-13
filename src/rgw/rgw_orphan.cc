@@ -437,8 +437,8 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_obj& loc = miter.get_location();
-      string s = bucket.bucket_id + "_" + loc.get_object();
+      const rgw_raw_obj& loc = miter.get_location();
+      string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }
   }

@@ -2576,7 +2576,7 @@ int RGWPutObj::verify_permission()
     store->set_prefetch_data(s->obj_ctx, obj);
 
     /* check source object permissions */
-    if (read_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_policy, cs_bucket, cs_object) < 0) {
+    if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_policy, cs_bucket, cs_object) < 0) {
       return -EACCES;
     }
 
@@ -2664,9 +2664,9 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
     return r;
   }
 
-  head_obj = manifest_gen.get_cur_obj();
+  cur_obj = manifest_gen.get_cur_obj();
+  rgw_raw_obj_to_obj(bucket, cur_obj, &head_obj);
   head_obj.index_hash_source = obj_str;
-  cur_obj = head_obj;
 
   return 0;
 }
@@ -5078,9 +5078,12 @@ void RGWAbortMultipart::execute()
         store->update_gc_chain(meta_obj, obj_part.manifest, &chain);
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
-          obj = oiter.get_location();
+          rgw_obj head;
+          rgw_raw_obj raw_head = oiter.get_location();
+          rgw_raw_obj_to_obj(s->bucket, raw_head, &head);
+
           rgw_obj_key key;
-          obj.get_index_key(&key);
+          head.get_index_key(&key);
           remove_objs.push_back(key);
         }
       }

@@ -776,10 +776,10 @@ public:
   RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   virtual ~RGWPutObj_Filter() {}
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override {
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
     return next->handle_data(bl, ofs, phandle, pobj, again);
   }
-  virtual int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait) override {
+  virtual int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
     return next->throttle_data(handle, obj, size, need_to_wait);
   }
 }; /* RGWPutObj_Filter */
@@ -1604,7 +1604,7 @@ static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
   bool again = false;
   do {
     void *handle;
-    rgw_obj obj;
+    rgw_raw_obj obj;
 
     uint64_t size = data.length();
 

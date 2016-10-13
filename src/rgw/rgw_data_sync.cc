@@ -1672,7 +1672,7 @@ int RGWDataSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  int r = source_log.init(source_zone, conn, error_logger);
+  int r = source_log.init(source_zone, conn, error_logger, sync_module);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
     finalize();
@@ -2670,8 +2670,8 @@ int RGWRunBucketSyncCoroutine::operate()
       set_status("acquiring sync lock");
       auto store = sync_env->store;
       lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                          store->get_zone_params().log_pool,
-                                          status_oid, "sync_lock",
+                                          rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
+                                          "sync_lock",
                                           cct->_conf->rgw_sync_lease_period,
                                           this);
       lease_stack = spawn(lease_cr.get(), false);
