@@ -579,6 +579,8 @@ public:
 
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
+    bool needs_reshard = false;   ///< true if we must reshard
+
     ExtentMap(Onode *o);
     ~ExtentMap() {
       extent_map.clear_and_dispose([&](Extent *e) { delete e; });
@@ -625,6 +627,22 @@ public:
       }
 
       return -1; // not found
+    }
+
+    /// check if a range spans a shard
+    bool spans_shard(uint32_t offset, uint32_t length) {
+      if (shards.empty()) {
+	return false;
+      }
+      int s = seek_shard(offset);
+      assert(s >= 0);
+      if (s == shards.size() - 1) {
+	return false; // last shard
+      }
+      if (offset + length <= shards[s+1].offset) {
+	return false;
+      }
+      return true;
     }
 
     /// ensure that a range of the map is loaded

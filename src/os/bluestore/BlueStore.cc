@@ -1485,6 +1485,7 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
 bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 				  bool force)
 {
+  assert(!needs_reshard);
   if (o->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
@@ -1539,6 +1540,8 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
 
 void BlueStore::ExtentMap::reshard(Onode *o, uint64_t min_alloc_size)
 {
+  needs_reshard = false;
+
   // un-span all blobs
   auto p = spanning_blob_map.begin();
   while (p != spanning_blob_map.end()) {
@@ -2088,6 +2091,9 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   b->ref_map.get(offset, length);
   Extent *le = new Extent(logical_offset, offset, length, blob_depth, b);
   extent_map.insert(*le);
+  if (!needs_reshard && spans_shard(offset, length)) {
+    needs_reshard = true;
+  }
   return le;
 }
 
@@ -6128,7 +6134,10 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   // finalize onodes
   for (auto o : txc->onodes) {
     // finalize extent_map shards
-    bool reshard = o->extent_map.update(o.get(), t, false);
+    bool reshard = o->extent_map.needs_reshard;
+    if (!reshard) {
+      reshard = o->extent_map.update(o.get(), t, false);
+    }
     if (reshard) {
       dout(20) << __func__ << "  resharding extents for " << o->oid << dendl;
       for (auto &s : o->extent_map.shards) {
@@ -7261,7 +7270,8 @@ void BlueStore::_do_write_small(
       b->dirty_blob().calc_csum(b_off, padded);
       dout(20) << __func__ << "  lex old " << *ep << dendl;
       Extent *le = o->extent_map.set_lextent(offset, b_off + head_pad, length,
-					     wctx->blob_depth, b, &wctx->old_extents);
+					     wctx->blob_depth, b,
+					     &wctx->old_extents);
       b->dirty_blob().mark_used(le->blob_offset, le->length);
       txc->statfs_delta.stored() += le->length;
       dout(20) << __func__ << "  lex " << *le << dendl;
