@@ -44,13 +44,13 @@ class InoTable : public MDSTable {
   bool repair(inodeno_t id);
   bool is_marked_free(inodeno_t id) const;
 
-  void reset_state();
-  void encode_state(bufferlist& bl) const {
+  void reset_state() override;
+  void encode_state(bufferlist& bl) const override {
     ENCODE_START(2, 2, bl);
     ::encode(free, bl);
     ENCODE_FINISH(bl);
   }
-  void decode_state(bufferlist::iterator& bl) {
+  void decode_state(bufferlist::iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(free, bl);
     projected_free = free;
