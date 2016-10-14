@@ -102,43 +102,10 @@ BlueStore::Onode, we need to do
 (This is just because we need to name some static varables and we
 can't use :: in a variable name.)
 
-In order to use the STL containers, a few additional declarations
-are needed.  For example,
+In order to use the STL containers, simply use the namespaced variant
+of the container type.  For example,
 
   unittest_1::map<int> myvec;
-
-requires
-
-  MEMPOOL_DEFINE_FACTORY(int, int, unittest_1);
-  MEMPOOL_DEFINE_MAP_FACTORY(int, int, unittest_1);
-
-There are similar macros for SET, LIST, and UNORDERED_MAP.  The MAP
-macro serves both std::map and std::multimap, and std::vector doesn't
-need a second container-specific declaration (because it only
-allocates T and T* arrays; there is no internal container-specific
-wrapper type).
-
-unordered_map is trickier.  First, it has to allocate the hash
-buckets, which requires an extra mempool-wide definition that is
-shared by all different types.  Second, sometimes the hash value is
-cached in the hash node and sometimes it is not.  The glibc STL makes
-its own decision if you don't explicitly define traits, so you either
-need to match your definition with its inference, or explicitly define
-traits, or simply define the allocator for with the cached and
-uncached case and leave one of them unused (but polluting your
-debug dumps).  For example,
-
-  unittest_2::unordered_map<int, std::string> one;       // not cached
-  unittest_2::unordered_map<std::string, int> one;       // cached
-
-needs
-
- MEMPOOL_DEFINE_UNORDERED_MAP_BASE_FACTORY(unittest_2);  // used by both
- MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(uint64_t, std::string, false, int_str,
-                                      unittest_2);
- MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(std::string, uint64_t, true, str_int,
-                                      unittest_2);
-
 
 Introspection
 -------------
@@ -190,27 +157,6 @@ extern void set_debug_mode(bool d);
 struct pool_allocator_base_t;
 class pool_t;
 
-// doubly linked list
-struct list_member_t {
-  list_member_t *next;
-  list_member_t *prev;
-  list_member_t() : next(this), prev(this) {}
-  ~list_member_t() {
-    assert(next == this && prev == this);
-  }
-  void insert(list_member_t *i) {
-    i->next = next;
-    i->prev = this;
-    next = i;
-  }
-  void remove() {
-    prev->next = next;
-    next->prev = prev;
-    next = this;
-    prev = this;
-  }
-};
-
 // we shard pool stats across many shard_t's to reduce the amount
 // of cacheline ping pong.
 enum {
@@ -234,34 +180,27 @@ struct stats_t {
   }
 };
 
-// Root of all allocators, this enables the container information to
-// operation easily. These fields are "always" accurate.
-struct pool_allocator_base_t {
-  list_member_t list_member;   // this must come first; see get_stats() hackery
+pool_t& get_pool(pool_index_t ix);
 
-  pool_t *pool = nullptr;
-  const char *type_id = nullptr;
-  size_t item_size = 0;
-
-  // for debug mode
+struct type_t {
+  const char *type_name;
+  size_t item_size;
   std::atomic<ssize_t> items = {0};  // signed
-
-  // effective constructor
-  void attach_pool(pool_index_t index, const char *type_id);
-
-  ~pool_allocator_base_t();
 };
 
-pool_t& get_pool(pool_index_t ix);
+struct type_info_hash {
+  std::size_t operator()(const std::type_info& k) const {
+    return k.hash_code();
+  }
+};
 
 class pool_t {
   std::string name;
   shard_t shard[num_shards];
 
   mutable std::mutex lock;  // only used for types list
-  list_member_t types;      // protected by lock
+  std::unordered_map<const char *, type_t> type_map;
 
-  friend class pool_allocator_base_t;
 public:
   bool debug;
 
@@ -287,6 +226,18 @@ public:
     return &shard[i];
   }
 
+  type_t *get_type(const std::type_info& ti, size_t size) {
+    std::lock_guard<std::mutex> l(lock);
+    auto p = type_map.find(ti.name());
+    if (p != type_map.end()) {
+      return &p->second;
+    }
+    type_t &t = type_map[ti.name()];
+    t.type_name = ti.name();
+    t.item_size = size;
+    return &t;
+  }
+
   // get pool stats.  by_type is not populated if !debug
   void get_stats(stats_t *total,
 		 std::map<std::string, stats_t> *by_type) const;
@@ -297,35 +248,15 @@ public:
 // skip unittest_[12] by default
 void dump(ceph::Formatter *f, size_t skip=2);
 
-inline void pool_allocator_base_t::attach_pool(
-  pool_index_t index,
-  const char *_type_id)
-{
-  assert(pool == nullptr);
-  pool = &get_pool(index);
-  type_id = _type_id;
 
-  // unconditionally register type, even if debug is currently off
-  std::unique_lock<std::mutex> lock(pool->lock);
-  pool->types.insert(&list_member);
-}
-
-inline pool_allocator_base_t::~pool_allocator_base_t()
-{
-  if (pool) {
-    std::unique_lock<std::mutex> lock(pool->lock);
-    list_member.remove();
-  }
-}
-
-
-// Stateless STL allocator for use with containers.  All actual state
+// STL allocator for use with containers.  All actual state
 // is stored in the static pool_allocator_base_t, which saves us from
 // passing the allocator to container constructors.
 
 template<pool_index_t pool_ix, typename T>
 class pool_allocator {
-  static pool_allocator_base_t base;
+  pool_t *pool;
+  type_t *type = nullptr;
 
 public:
   typedef pool_allocator<pool_ix, T> allocator_type;
@@ -341,44 +272,45 @@ public:
     typedef pool_allocator<pool_ix,U> other;
   };
 
+  void init() {
+    pool = &get_pool(pool_ix);
+    if (pool) {
+      type = pool->get_type(typeid(T), sizeof(T));
+    }
+  }
+
   pool_allocator() {
-    // initialize fields in the static member.  this should only happen
-    // once, but it's also harmless if we do it multiple times.
-    base.type_id = typeid(T).name();
-    base.item_size = sizeof(T);
+    init();
   }
   template<typename U>
-  pool_allocator(const pool_allocator<pool_ix,U>&) {}
-  void operator=(const allocator_type&) {}
-
-  void attach_pool(pool_index_t index, const char *type_id) {
-    base.attach_pool(index, type_id);
+  pool_allocator(const pool_allocator<pool_ix,U>&) {
+    init();
   }
 
-  pointer allocate(size_t n, void *p = nullptr) {
+  T* allocate(size_t n, void *p = nullptr) {
     size_t total = sizeof(T) * n;
-    shard_t *shard = base.pool->pick_a_shard();
+    shard_t *shard = pool->pick_a_shard();
     shard->bytes += total;
     shard->items += n;
-    if (base.pool->debug) {
-      base.items += n;
+    if (pool->debug) {
+      type->items += n;
     }
-    pointer r = reinterpret_cast<pointer>(new char[total]);
+    T* r = reinterpret_cast<T*>(new char[total]);
     return r;
   }
 
-  void deallocate(pointer p, size_type n) {
+  void deallocate(T* p, size_t n) {
     size_t total = sizeof(T) * n;
-    shard_t *shard = base.pool->pick_a_shard();
+    shard_t *shard = pool->pick_a_shard();
     shard->bytes -= total;
     shard->items -= n;
-    if (base.pool->debug) {
-      base.items -= n;
+    if (type) {
+      type->items -= n;
     }
     delete[] reinterpret_cast<char*>(p);
   }
 
-  void destroy(pointer p) {
+  void destroy(T* p) {
     p->~T();
   }
 
@@ -387,7 +319,7 @@ public:
     p->~U();
   }
 
-  void construct(pointer p, const_reference val) {
+  void construct(T* p, const T& val) {
     ::new ((void *)p) T(val);
   }
 
@@ -395,8 +327,8 @@ public:
     ::new((void *)p) U(std::forward<Args>(args)...);
   }
 
-  bool operator==(const pool_allocator&) { return true; }
-  bool operator!=(const pool_allocator&) { return false; }
+  bool operator==(const pool_allocator&) const { return true; }
+  bool operator!=(const pool_allocator&) const { return false; }
 };
 
 
@@ -409,9 +341,6 @@ public:
   typedef pool_allocator<pool_ix,o> allocator_type;
   static allocator_type alloc;
 
-  factory() {
-    alloc.attach_pool(pool_ix, typeid(o).name());
-  }
   static void *allocate() {
     return (void *)alloc.allocate(1);
   }
@@ -464,13 +393,7 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
-  template<>								\
-  mempool::pool_allocator_base_t					\
-    mempool::pool_allocator<pool::pool_ix,obj>::base = {};		\
-  template<>								\
-  typename pool::factory<obj>::allocator_type				\
-    pool::factory<obj>::alloc = {};					\
-  static pool::factory<obj> _factory_##factoryname;
+  pool::pool_allocator<obj> _factory_##pool##factoryname##_alloc = {};
 
 // Use this for each class that belongs to a mempool.  For example,
 //
@@ -489,52 +412,11 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 // MEMPOOL_CLASS_HELPERS().
 #define MEMPOOL_DEFINE_OBJECT_FACTORY(obj,factoryname,pool)		\
   MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
-  void * obj::operator new(size_t size) {				\
-    assert(size == sizeof(obj));					\
-    return pool::factory<obj>::allocate();				\
+  void *obj::operator new(size_t size) {				\
+    return _factory_##pool##factoryname##_alloc.allocate(1);		\
   }									\
   void obj::operator delete(void *p)  {					\
-    pool::factory<obj>::free(p);					\
+    return _factory_##pool##factoryname##_alloc.deallocate((obj*)p, 1); \
   }
-
-// for std::set
-#define MEMPOOL_DEFINE_SET_FACTORY(t, factoryname, pool)		\
-  MEMPOOL_DEFINE_FACTORY(std::_Rb_tree_node<t>,			\
-			  factoryname##_rbtree_node, pool);
-
-// for std::list
-#define MEMPOOL_DEFINE_LIST_FACTORY(t, factoryname, pool)		\
-  MEMPOOL_DEFINE_FACTORY(std::_List_node<t>,				\
-			  factoryname##_list_node, pool);
-
-// for std::map
-#define MEMPOOL_DEFINE_MAP_FACTORY(k, v, factoryname, pool)		\
-  typedef std::pair<k const,v> _factory_type_##factoryname##pair_t;	\
-  MEMPOOL_DEFINE_FACTORY(						\
-    _factory_type_##factoryname##pair_t,				\
-    factoryname##_pair, pool);						\
-  typedef std::pair<k const,v> _factory_type_##factoryname##pair_t;	\
-  MEMPOOL_DEFINE_FACTORY(						\
-    std::_Rb_tree_node<_factory_type_##factoryname##pair_t>,		\
-    factoryname##_rbtree_node, pool);
-
-// for std::unordered_map
-#define MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(k, v, cached, factoryname, pool) \
-  typedef std::pair<k,v> _factory_type_##factoryname##pair_t;		\
-  typedef std::pair<k const,v> _factory_type_##factoryname##cpair_t;	\
-  typedef std::__detail::_Hash_node<_factory_type_##factoryname##cpair_t, \
-				    cached>				\
-  _factory_type_##factoryname##type;					\
-  MEMPOOL_DEFINE_FACTORY(						\
-    _factory_type_##factoryname##type,					\
-    factoryname##_unordered_hash_node, pool);				\
-  MEMPOOL_DEFINE_FACTORY(						\
-    _factory_type_##factoryname##pair_t,				\
-    factoryname##_unordered_hash_pair, pool);
-
-#define MEMPOOL_DEFINE_UNORDERED_MAP_BASE_FACTORY(pool)		\
-  MEMPOOL_DEFINE_FACTORY(std::__detail::_Hash_node_base*,	\
-			 pool##_unordered_hash_node_ptr, pool);
-
 
 #endif

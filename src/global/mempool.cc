@@ -72,6 +72,7 @@ size_t mempool::pool_t::allocated_bytes() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].bytes;
   }
+  assert(result >= 0);
   return (size_t) result;
 }
 
@@ -81,6 +82,7 @@ size_t mempool::pool_t::allocated_items() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].items;
   }
+  assert(result >= 0);
   return (size_t) result;
 }
 
@@ -94,15 +96,11 @@ void mempool::pool_t::get_stats(
   }
   if (debug) {
     std::unique_lock<std::mutex> shard_lock(lock);
-    for (const list_member_t *p = types.next;
-	 p != &types;
-	 p = p->next) {
-      const pool_allocator_base_t *c =
-	reinterpret_cast<const pool_allocator_base_t *>(p);
-      std::string n = ceph_demangle(c->type_id);
+    for (auto &p : type_map) {
+      std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];
-      s.bytes = c->items * c->item_size;
-      s.items = c->items;
+      s.bytes = p.second.items * p.second.item_size;
+      s.items = p.second.items;
     }
   }
 }
