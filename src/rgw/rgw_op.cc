@@ -2771,6 +2771,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   RGWPutObj_CB cb(this);
   int ret = 0;
 
+  uint64_t obj_size;
   int64_t new_ofs, new_end;
 
   new_ofs = fst;
@@ -2782,8 +2783,11 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 
   RGWRados::Object op_target(store, copy_source_bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
-
-  ret = read_op.prepare(&new_ofs, &new_end);
+  read_op.params.obj_size = &obj_size;
+  ret = read_op.prepare();
+  if (ret < 0)
+    return ret;
+  ret = read_op.range_to_ofs(obj_size, new_ofs, new_end);
   if (ret < 0)
     return ret;
 
@@ -2813,8 +2817,6 @@ void RGWPutObj::execute()
   
   off_t fst;
   off_t lst;
-  uint64_t bucket_size = 0;
-  RGWBucketCompressionInfo bucket_size;
   int res;
   bool compression_enabled;
   boost::optional<RGWPutObj_Compress> compressor;
@@ -3130,7 +3132,7 @@ int RGWPostObj::verify_permission()
 {
   return 0;
 }
-
+/*
 RGWPutObjProcessor *RGWPostObj::select_processor(RGWObjectCtx& obj_ctx)
 {
   RGWPutObjProcessor *processor;
@@ -3146,7 +3148,7 @@ void RGWPostObj::dispose_processor(RGWPutObjDataProcessor *processor)
 {
   delete processor;
 }
-
+*/
 void RGWPostObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
