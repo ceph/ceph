@@ -74,12 +74,12 @@ cmp ${TMPDIR}/img ${TMPDIR}/img3
 
 rm ${TMPDIR}/img ${TMPDIR}/img2 ${TMPDIR}/img3
 
-# try with --export/import-format for snapshots
+# try with --export-format for snapshots
 dd if=/bin/dd of=${TMPDIR}/img bs=1k count=10 seek=100
 rbd import $RBD_CREATE_ARGS ${TMPDIR}/img testimg
 rbd snap create testimg@snap
 rbd export --export-format 2 testimg ${TMPDIR}/img_v2
-rbd import --import-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
 rbd info testimg_import
 rbd info testimg_import@snap
 
@@ -100,6 +100,44 @@ rbd snap rm testimg_import@snap
 rbd remove testimg_import
 rbd snap rm testimg@snap
 rbd rm testimg
+
+# order
+rbd import --order 20 ${TMPDIR}/img testimg
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd info testimg_import|grep order|awk '{print $2}'|grep 20
+
+rm ${TMPDIR}/img_v2
+
+rbd remove testimg_import
+rbd remove testimg
+
+# features
+rbd import --image-feature layering ${TMPDIR}/img testimg
+FEATURES_BEFORE=`rbd info testimg|grep features`
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+FEATURES_AFTER=`rbd info testimg_import|grep features`
+if [ "$FEATURES_BEFORE" != "$FEATURES_AFTER" ]; then
+  false
+fi
+
+rm ${TMPDIR}/img_v2
+
+rbd remove testimg_import
+rbd remove testimg
+
+# stripe
+rbd import --stripe-count 1000 --stripe-unit 4096 ${TMPDIR}/img testimg
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd info testimg_import|grep "stripe unit"|awk '{print $3}'|grep 4096
+rbd info testimg_import|grep "stripe count"|awk '{print $3}'|grep 1000
+
+rm ${TMPDIR}/img_v2
+
+rbd remove testimg_import
+rbd remove testimg
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
