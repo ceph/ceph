@@ -1513,7 +1513,7 @@ private:
   void _dump_transaction(Transaction *t, int log_level = 30);
 
   TransContext *_txc_create(OpSequencer *osr);
-  void _txc_update_store_statfs(TransContext *txc);
+  void _txc_update_store_statfs(TransContext *txc, TransContext::volatile_statfs *vstatfs);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);

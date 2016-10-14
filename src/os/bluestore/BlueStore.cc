@@ -5997,21 +5997,16 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
   return txc;
 }
 
-void BlueStore::_txc_update_store_statfs(TransContext *txc)
+void BlueStore::_txc_update_store_statfs(TransContext *txc, TransContext::volatile_statfs *vstatfs)
 {
   if (txc->statfs_delta.is_empty())
     return;
+  vstatfs->allocated() += txc->statfs_delta.allocated();
+  vstatfs->stored() += txc->statfs_delta.stored();
+  vstatfs->compressed() += txc->statfs_delta.compressed();
+  vstatfs->compressed_allocated() += txc->statfs_delta.compressed_allocated();
+  vstatfs->compressed_original() += txc->statfs_delta.compressed_original();
 
-  logger->inc(l_bluestore_allocated, txc->statfs_delta.allocated());
-  logger->inc(l_bluestore_stored, txc->statfs_delta.stored());
-  logger->inc(l_bluestore_compressed, txc->statfs_delta.compressed());
-  logger->inc(l_bluestore_compressed_allocated, txc->statfs_delta.compressed_allocated());
-  logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
-
-  bufferlist bl;
-  txc->statfs_delta.encode(bl);
-
-  txc->t->merge(PREFIX_STAT, "bluestore_statfs", bl);
   txc->statfs_delta.reset();
 }
 
@@ -6362,7 +6357,6 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 
   txc->allocated.clear();
   txc->released.clear();
-  _txc_update_store_statfs(txc);
 }
 
 void BlueStore::_kv_sync_thread()
@@ -6396,6 +6390,8 @@ void BlueStore::_kv_sync_thread()
       bdev->flush();
 
       uint64_t high_nid = 0, high_blobid = 0;
+      TransContext::volatile_statfs vstatfs;
+
       if (!g_conf->bluestore_sync_transaction &&
 	  !g_conf->bluestore_sync_submit_transaction) {
 	for (auto txc : kv_committing) {
@@ -6408,6 +6404,7 @@ void BlueStore::_kv_sync_thread()
           txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
 	for (auto txc : kv_committing) {
+	  _txc_update_store_statfs(txc, &vstatfs);
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
@@ -6419,6 +6416,7 @@ void BlueStore::_kv_sync_thread()
 	  if (txc->last_blobid > high_blobid) {
 	    high_blobid = txc->last_blobid;
 	  }
+	  _txc_update_store_statfs(txc, &vstatfs);
 	}
       }
 
@@ -6440,6 +6438,21 @@ void BlueStore::_kv_sync_thread()
 	  ::encode(blobid_max, bl);
 	  t->set(PREFIX_SUPER, "blobid_max", bl);
 	  dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+	}
+      }
+
+      {
+	if (vstatfs.is_empty()) {
+	  logger->inc(l_bluestore_allocated, vstatfs.allocated());
+	  logger->inc(l_bluestore_stored, vstatfs.stored());
+	  logger->inc(l_bluestore_compressed, vstatfs.compressed());
+	  logger->inc(l_bluestore_compressed_allocated, vstatfs.compressed_allocated());
+	  logger->inc(l_bluestore_compressed_original, vstatfs.compressed_original());
+
+	  bufferlist bl;
+	  vstatfs.encode(bl);
+
+	  t->merge(PREFIX_STAT, "bluestore_statfs", bl);
 	}
       }
 
