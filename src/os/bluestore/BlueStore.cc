@@ -5997,21 +5997,16 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
   return txc;
 }
 
-void BlueStore::_txc_update_store_statfs(TransContext *txc)
+void BlueStore::_txc_update_store_statfs(TransContext *txc, TransContext::volatile_statfs *vstatfs)
 {
   if (txc->statfs_delta.is_empty())
     return;
+  vstatfs->allocated() += txc->statfs_delta.allocated();
+  vstatfs->stored() += txc->statfs_delta.stored();
+  vstatfs->compressed() += txc->statfs_delta.compressed();
+  vstatfs->compressed_allocated() += txc->statfs_delta.compressed_allocated();
+  vstatfs->compressed_original() += txc->statfs_delta.compressed_original();
 
-  logger->inc(l_bluestore_allocated, txc->statfs_delta.allocated());
-  logger->inc(l_bluestore_stored, txc->statfs_delta.stored());
-  logger->inc(l_bluestore_compressed, txc->statfs_delta.compressed());
-  logger->inc(l_bluestore_compressed_allocated, txc->statfs_delta.compressed_allocated());
-  logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
-
-  bufferlist bl;
-  txc->statfs_delta.encode(bl);
-
-  txc->t->merge(PREFIX_STAT, "bluestore_statfs", bl);
   txc->statfs_delta.reset();
 }
 
@@ -6043,14 +6038,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
+      _txc_finalize_kv(txc, txc->t);
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
-	  _txc_finalize_kv(txc, txc->t);
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
       } else {
-	_txc_finalize_kv(txc, txc->t);
 	int r = db->submit_transaction_sync(txc->t);
 	assert(r == 0);
       }
@@ -6363,7 +6357,6 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 
   txc->allocated.clear();
   txc->released.clear();
-  _txc_update_store_statfs(txc);
 }
 
 void BlueStore::_kv_sync_thread()
@@ -6397,10 +6390,11 @@ void BlueStore::_kv_sync_thread()
       bdev->flush();
 
       uint64_t high_nid = 0, high_blobid = 0;
+      TransContext::volatile_statfs vstatfs;
+
       if (!g_conf->bluestore_sync_transaction &&
 	  !g_conf->bluestore_sync_submit_transaction) {
 	for (auto txc : kv_committing) {
-	  _txc_finalize_kv(txc, txc->t);
 	  if (txc->last_nid > high_nid) {
 	    high_nid = txc->last_nid;
 	  }
@@ -6409,32 +6403,58 @@ void BlueStore::_kv_sync_thread()
 	  }
           txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
-	if (!kv_committing.empty()) {
-	  TransContext *first_txc = kv_committing.front();
-	  std::lock_guard<std::mutex> l(id_lock);
-	  if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
-	    nid_max = high_nid + g_conf->bluestore_nid_prealloc;
-	    bufferlist bl;
-	    ::encode(nid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "nid_max", bl);
-	    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
-	  }
-	  if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
-	    blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
-	    bufferlist bl;
-	    ::encode(blobid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "blobid_max", bl);
-	    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
-	  }
-	}
 	for (auto txc : kv_committing) {
+	  _txc_update_store_statfs(txc, &vstatfs);
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
+	}
+      } else {
+	for (auto txc : kv_committing) {
+	  if (txc->last_nid > high_nid) {
+	    high_nid = txc->last_nid;
+	  }
+	  if (txc->last_blobid > high_blobid) {
+	    high_blobid = txc->last_blobid;
+	  }
+	  _txc_update_store_statfs(txc, &vstatfs);
 	}
       }
 
       // one final transaction to force a sync
       KeyValueDB::Transaction t = db->get_transaction();
+
+      {
+	std::lock_guard<std::mutex> l(id_lock);
+	if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
+	  nid_max = high_nid + g_conf->bluestore_nid_prealloc;
+	  bufferlist bl;
+	  ::encode(nid_max, bl);
+	  t->set(PREFIX_SUPER, "nid_max", bl);
+	  dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+	}
+	if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
+	  blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
+	  bufferlist bl;
+	  ::encode(blobid_max, bl);
+	  t->set(PREFIX_SUPER, "blobid_max", bl);
+	  dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+	}
+      }
+
+      {
+	if (vstatfs.is_empty()) {
+	  logger->inc(l_bluestore_allocated, vstatfs.allocated());
+	  logger->inc(l_bluestore_stored, vstatfs.stored());
+	  logger->inc(l_bluestore_compressed, vstatfs.compressed());
+	  logger->inc(l_bluestore_compressed_allocated, vstatfs.compressed_allocated());
+	  logger->inc(l_bluestore_compressed_original, vstatfs.compressed_original());
+
+	  bufferlist bl;
+	  vstatfs.encode(bl);
+
+	  t->merge(PREFIX_STAT, "bluestore_statfs", bl);
+	}
+      }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
