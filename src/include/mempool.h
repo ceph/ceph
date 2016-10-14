@@ -520,13 +520,17 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 
 // for std::unordered_map
 #define MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(k, v, cached, factoryname, pool) \
-  typedef std::pair<k const,v> _factory_type_##factoryname##pair_t;	\
-  typedef std::__detail::_Hash_node<_factory_type_##factoryname##pair_t, \
+  typedef std::pair<k,v> _factory_type_##factoryname##pair_t;		\
+  typedef std::pair<k const,v> _factory_type_##factoryname##cpair_t;	\
+  typedef std::__detail::_Hash_node<_factory_type_##factoryname##cpair_t, \
 				    cached>				\
   _factory_type_##factoryname##type;					\
   MEMPOOL_DEFINE_FACTORY(						\
     _factory_type_##factoryname##type,					\
-    factoryname##_unordered_hash_node, pool);
+    factoryname##_unordered_hash_node, pool);				\
+  MEMPOOL_DEFINE_FACTORY(						\
+    _factory_type_##factoryname##pair_t,				\
+    factoryname##_unordered_hash_pair, pool);
 
 #define MEMPOOL_DEFINE_UNORDERED_MAP_BASE_FACTORY(pool)		\
   MEMPOOL_DEFINE_FACTORY(std::__detail::_Hash_node_base*,	\
