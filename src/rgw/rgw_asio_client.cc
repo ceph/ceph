@@ -86,8 +86,12 @@ size_t RGWAsioClientIO::write_data(const char* const buf,
   if (ec) {
     derr << "write_data failed: " << ec.message() << dendl;
     throw rgw::io::Exception(ec.value(), std::system_category());
+  } else {
+    /* According to the documentation of boost::asio::write if there is
+     * no error (signalised by ec), then bytes == len. We don't need to
+     * take care of partial writes in such situation. */
+    return bytes;
   }
-  return bytes;
 }
 
 size_t RGWAsioClientIO::read_data(char* const buf, const size_t max)
