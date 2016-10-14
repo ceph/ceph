@@ -199,6 +199,7 @@ void MDSDaemon::dump_status(Formatter *f)
     f->dump_unsigned("whoami", MDS_RANK_NONE);
   }
 
+  f->dump_int("id", monc->get_global_id());
   f->dump_string("want_state", ceph_mds_state_name(beacon.get_want_state()));
   f->dump_string("state", ceph_mds_state_name(mdsmap->get_state_gid(mds_gid_t(
 	    monc->get_global_id()))));
