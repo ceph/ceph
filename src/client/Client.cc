@@ -6742,12 +6742,10 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
   if (r < 0)
     return r;
 
-  if (mask && !in->caps_issued_mask(mask)) {
-    r = _getattr(in, mask, perms);
-    if (r < 0) {
-      ldout(cct, 3) << "statx exit on error!" << dendl;
-      return r;
-    }
+  r = _getattr(in, mask, perms);
+  if (r < 0) {
+    ldout(cct, 3) << "statx exit on error!" << dendl;
+    return r;
   }
 
   fill_statx(in, mask, stx);
