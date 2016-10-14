@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/managed_lock/AcquireRequest.h"
-#include "librbd/managed_lock/LockWatcher.h"
 #include "librbd/Lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
@@ -51,37 +50,38 @@ struct C_BlacklistClient : public Context {
 
 } // anonymous namespace
 
-AcquireRequest* AcquireRequest::create(librados::IoCtx& ioctx,
-                                       ContextWQ *work_queue,
-                                       LockWatcher *watcher,
-                                       const string& m_oid,
-                                       const string &cookie,
-                                       Context *on_acquire,
-                                       Context *on_finish) {
-    return new AcquireRequest(ioctx, work_queue, watcher, m_oid, cookie,
-                              on_acquire, on_finish);
+template <typename L>
+AcquireRequest<L>* AcquireRequest<L>::create(librados::IoCtx& ioctx,
+                                             L *watcher,
+                                             const string& m_oid,
+                                             const string &cookie,
+                                             Context *on_finish) {
+    return new AcquireRequest(ioctx, watcher, m_oid, cookie, on_finish);
 }
 
-AcquireRequest::AcquireRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
-                               LockWatcher *watcher, const string& oid,
-                               const string &cookie, Context *on_acquire,
-                               Context *on_finish)
-  : m_ioctx(ioctx), m_work_queue(work_queue), m_watcher(watcher),
+template <typename L>
+AcquireRequest<L>::AcquireRequest(librados::IoCtx& ioctx, L *watcher,
+                                  const string& oid, const string &cookie,
+                                  Context *on_finish)
+  : m_ioctx(ioctx), m_watcher(watcher),
     m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
-    m_oid(oid), m_cookie(cookie), m_on_acquire(on_acquire),
-    m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)),
+    m_oid(oid), m_cookie(cookie),
+    m_on_finish(new C_AsyncCallback<ContextWQ>(watcher->work_queue(),
+                                               on_finish)),
     m_error_result(0) {
 }
 
-AcquireRequest::~AcquireRequest() {
-  delete m_on_acquire;
+template <typename L>
+AcquireRequest<L>::~AcquireRequest() {
 }
 
-void AcquireRequest::send() {
+template <typename L>
+void AcquireRequest<L>::send() {
   send_flush_notifies();
 }
 
-void AcquireRequest::send_flush_notifies() {
+template <typename L>
+void AcquireRequest<L>::send_flush_notifies() {
   ldout(m_cct, 10) << __func__ << dendl;
 
   using klass = AcquireRequest;
@@ -90,15 +90,16 @@ void AcquireRequest::send_flush_notifies() {
   m_watcher->flush(ctx);
 }
 
-Context *AcquireRequest::handle_flush_notifies(int *ret_val) {
+template <typename L>
+void AcquireRequest<L>::handle_flush_notifies(int r) {
   ldout(m_cct, 10) << __func__ << dendl;
 
-  assert(*ret_val == 0);
+  assert(r == 0);
   send_lock();
-  return nullptr;
 }
 
-void AcquireRequest::send_lock() {
+template <typename L>
+void AcquireRequest<L>::send_lock() {
   ldout(m_cct, 10) << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
@@ -113,21 +114,25 @@ void AcquireRequest::send_lock() {
   rados_completion->release();
 }
 
-Context *AcquireRequest::handle_lock(int *ret_val) {
-  ldout(m_cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+template <typename L>
+void AcquireRequest<L>::handle_lock(int r) {
+  ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
 
-  if (*ret_val == 0) {
-    return m_on_finish;
-  } else if (*ret_val != -EBUSY) {
-    lderr(m_cct) << "failed to lock: " << cpp_strerror(*ret_val) << dendl;
-    return m_on_finish;
+  if (r == 0) {
+    finish();
+    return;
+  } else if (r != -EBUSY) {
+    save_result(r);
+    lderr(m_cct) << "failed to lock: " << cpp_strerror(r) << dendl;
+    finish();
+    return;
   }
 
   send_get_lockers();
-  return nullptr;
 }
 
-void AcquireRequest::send_get_lockers() {
+template <typename L>
+void AcquireRequest<L>::send_get_lockers() {
   ldout(m_cct, 10) << __func__ << dendl;
 
   librados::ObjectReadOperation op;
@@ -142,41 +147,46 @@ void AcquireRequest::send_get_lockers() {
   rados_completion->release();
 }
 
-Context *AcquireRequest::handle_get_lockers(int *ret_val) {
-  ldout(m_cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+template <typename L>
+void AcquireRequest<L>::handle_get_lockers(int r) {
+  ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
   ClsLockType lock_type;
   std::string lock_tag;
-  if (*ret_val == 0) {
+
+  if (r == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    *ret_val = rados::cls::lock::get_lock_info_finish(&it, &lockers,
-                                                      &lock_type, &lock_tag);
+    r = rados::cls::lock::get_lock_info_finish(&it, &lockers,
+                                               &lock_type, &lock_tag);
   }
 
-  if (*ret_val < 0) {
-    lderr(m_cct) << "failed to retrieve lockers: " << cpp_strerror(*ret_val)
-               << dendl;
-    return m_on_finish;
+  save_result(r);
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve lockers: " << cpp_strerror(r) << dendl;
+    finish();
+    return;
   }
 
   if (lockers.empty()) {
     ldout(m_cct, 20) << "no lockers detected" << dendl;
     send_lock();
-    return nullptr;
+    return;
   }
 
   if (lock_tag != Lock::WATCHER_LOCK_TAG) {
     ldout(m_cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
-    *ret_val = -EBUSY;
-    return m_on_finish;
+    save_result(-EBUSY);
+    finish();
+    return;
   }
 
   if (lock_type == LOCK_SHARED) {
     ldout(m_cct, 5) << "shared lock type detected" << dendl;
-    *ret_val = -EBUSY;
-    return m_on_finish;
+    save_result(-EBUSY);
+    finish();
+    return;
   }
 
   std::map<rados::cls::lock::locker_id_t,
@@ -184,8 +194,9 @@ Context *AcquireRequest::handle_get_lockers(int *ret_val) {
   if (!Lock::decode_lock_cookie(iter->first.cookie, &m_locker_handle)) {
     ldout(m_cct, 5) << "locked by external mechanism: "
                     << "cookie=" << iter->first.cookie << dendl;
-    *ret_val = -EBUSY;
-    return m_on_finish;
+    save_result(-EBUSY);
+    finish();
+    return;
   }
 
   m_locker_entity = iter->first.locker;
@@ -194,16 +205,16 @@ Context *AcquireRequest::handle_get_lockers(int *ret_val) {
   if (m_locker_cookie.empty() || m_locker_address.empty()) {
     ldout(m_cct, 20) << "no valid lockers detected" << dendl;
     send_lock();
-    return nullptr;
+    return;
   }
 
   ldout(m_cct, 10) << "retrieved exclusive locker: "
                  << m_locker_entity << "@" << m_locker_address << dendl;
   send_get_watchers();
-  return nullptr;
 }
 
-void AcquireRequest::send_get_watchers() {
+template <typename L>
+void AcquireRequest<L>::send_get_watchers() {
   ldout(m_cct, 10) << __func__ << dendl;
 
   librados::ObjectReadOperation op;
@@ -218,16 +229,18 @@ void AcquireRequest::send_get_watchers() {
   rados_completion->release();
 }
 
-Context *AcquireRequest::handle_get_watchers(int *ret_val) {
-  ldout(m_cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+template <typename L>
+void AcquireRequest<L>::handle_get_watchers(int r) {
+  ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
 
-  if (*ret_val == 0) {
-    *ret_val = m_watchers_ret_val;
+  if (r == 0) {
+    r = m_watchers_ret_val;
   }
-  if (*ret_val < 0) {
-    lderr(m_cct) << "failed to retrieve watchers: " << cpp_strerror(*ret_val)
-               << dendl;
-    return m_on_finish;
+  save_result(r);
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve watchers: " << cpp_strerror(r) << dendl;
+    finish();
+    return;
   }
 
   for (auto &watcher : m_watchers) {
@@ -236,16 +249,17 @@ Context *AcquireRequest::handle_get_watchers(int *ret_val) {
         (m_locker_handle == watcher.cookie)) {
       ldout(m_cct, 10) << "lock owner is still alive" << dendl;
 
-      *ret_val = -EAGAIN;
-      return m_on_finish;
+      save_result(-EAGAIN);
+      finish();
+      return;
     }
   }
 
   send_blacklist();
-  return nullptr;
 }
 
-void AcquireRequest::send_blacklist() {
+template <typename L>
+void AcquireRequest<L>::send_blacklist() {
   if (!m_cct->_conf->rbd_blacklist_on_break_lock) {
     send_break_lock();
     return;
@@ -256,22 +270,25 @@ void AcquireRequest::send_blacklist() {
   using klass = AcquireRequest;
   Context *ctx = create_context_callback<klass, &klass::handle_blacklist>(
     this);
-  m_work_queue->queue(new C_BlacklistClient(m_ioctx, m_locker_address, ctx), 0);
+  m_watcher->work_queue()->queue(
+      new C_BlacklistClient(m_ioctx, m_locker_address, ctx), 0);
 }
+template <typename L>
+void AcquireRequest<L>::handle_blacklist(int r) {
+  ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
 
-Context *AcquireRequest::handle_blacklist(int *ret_val) {
-  ldout(m_cct, 10) << __func__ << ": r=" << *ret_val << dendl;
-
-  if (*ret_val < 0) {
-    lderr(m_cct) << "failed to blacklist lock owner: " << cpp_strerror(*ret_val)
-               << dendl;
-    return m_on_finish;
+  save_result(r);
+  if (r < 0) {
+    lderr(m_cct) << "failed to blacklist lock owner: " << cpp_strerror(r)
+                 << dendl;
+    finish();
+    return;
   }
   send_break_lock();
-  return nullptr;
 }
 
-void AcquireRequest::send_break_lock() {
+template <typename L>
+void AcquireRequest<L>::send_break_lock() {
   ldout(m_cct, 10) << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
@@ -286,20 +303,31 @@ void AcquireRequest::send_break_lock() {
   rados_completion->release();
 }
 
-Context *AcquireRequest::handle_break_lock(int *ret_val) {
-  ldout(m_cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+template <typename L>
+void AcquireRequest<L>::handle_break_lock(int r) {
+  ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
 
-  if (*ret_val == -ENOENT) {
-    *ret_val = 0;
-  } else if (*ret_val < 0) {
-    lderr(m_cct) << "failed to break lock: " << cpp_strerror(*ret_val) << dendl;
-    return m_on_finish;
+  if (r == -ENOENT) {
+    r = 0;
+  } else if (r < 0) {
+    lderr(m_cct) << "failed to break lock: " << cpp_strerror(r) << dendl;
+    save_result(r);
+    finish();
+    return;
   }
 
   send_lock();
-  return nullptr;
+}
+
+template <typename L>
+void AcquireRequest<L>::finish() {
+  m_on_finish->complete(m_error_result);
+  delete this;
 }
 
 } // namespace managed_lock
 } // namespace librbd
 
+#include "librbd/managed_lock/LockWatcher.h"
+template class librbd::managed_lock::AcquireRequest<
+                                            librbd::managed_lock::LockWatcher>;

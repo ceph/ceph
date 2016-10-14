@@ -30,6 +30,10 @@ public:
   void notify_released_lock();
   void notify_request_lock();
 
+  inline ContextWQ *work_queue() {
+    return m_work_queue;
+  }
+
 private:
   static const watcher::TaskCode TASK_CODE_REQUEST_LOCK;
 

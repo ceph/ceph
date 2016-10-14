@@ -95,8 +95,8 @@ private:
    *          v           (try_lock/request_lock)                  *        |
    *       UNLOCKED -----------------------------------------> ACQUIRING <--/
    *          ^                                                    |
-   *          |                                                    v
-   *      RELEASING                                          POST_ACQUIRING
+   *          |                                                    |
+   *      RELEASING                                                |
    *          |                                                    |
    *          |                                                    |
    *          |                    (release_lock)                  v
@@ -122,7 +122,6 @@ private:
     STATE_UNLOCKED,
     STATE_LOCKED,
     STATE_ACQUIRING,
-    STATE_POST_ACQUIRING,
     STATE_WAITING_FOR_PEER,
     STATE_WAITING_FOR_REGISTER,
     STATE_REACQUIRING,
@@ -183,7 +182,6 @@ private:
   bool is_shutdown_locked() const;
 
   void send_acquire_lock();
-  void handle_acquiring_lock(int r);
   void handle_acquire_lock(int r);
 
   void send_reacquire_lock();

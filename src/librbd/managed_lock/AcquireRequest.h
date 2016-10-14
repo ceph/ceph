@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_ACQUIRE_REQUEST_H
-#define CEPH_LIBRBD_EXCLUSIVE_LOCK_ACQUIRE_REQUEST_H
+#ifndef CEPH_LIBRBD_MANAGED_LOCK_ACQUIRE_REQUEST_H
+#define CEPH_LIBRBD_MANAGED_LOCK_ACQUIRE_REQUEST_H
 
 #include "include/rados/librados.hpp"
 #include "include/int_types.h"
@@ -18,14 +18,14 @@ namespace managed_lock {
 
 class LockWatcher;
 
+template <typename LockWatcherT = LockWatcher>
 class AcquireRequest {
 public:
   static AcquireRequest* create(librados::IoCtx& ioctx,
-                                ContextWQ *work_queue,
-                                LockWatcher *watcher,
+                                LockWatcherT *watcher,
                                 const std::string& m_oid,
                                 const std::string &cookie,
-                                Context *on_acquire, Context *on_finish);
+                                Context *on_finish);
 
   ~AcquireRequest();
   void send();
@@ -64,18 +64,15 @@ private:
    * @endverbatim
    */
 
-  AcquireRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
-                 LockWatcher *watcher, const std::string& m_oid,
-                 const std::string &cookie, Context *on_acquire,
+  AcquireRequest(librados::IoCtx& ioctx, LockWatcherT *watcher,
+                 const std::string& m_oid, const std::string &cookie,
                  Context *on_finish);
 
   librados::IoCtx& m_ioctx;
-  ContextWQ *m_work_queue;
-  LockWatcher *m_watcher;
+  LockWatcherT *m_watcher;
   CephContext *m_cct;
   std::string m_oid;
   std::string m_cookie;
-  Context *m_on_acquire;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
@@ -91,28 +88,39 @@ private:
   int m_error_result;
 
   void send_flush_notifies();
-  Context *handle_flush_notifies(int *ret_val);
+  void handle_flush_notifies(int r);
 
   void send_lock();
-  Context *handle_lock(int *ret_val);
+  void handle_lock(int r);
 
   void send_unlock();
-  Context *handle_unlock(int *ret_val);
+  void handle_unlock(int r);
 
   void send_get_lockers();
-  Context *handle_get_lockers(int *ret_val);
+  void handle_get_lockers(int r);
 
   void send_get_watchers();
-  Context *handle_get_watchers(int *ret_val);
+  void handle_get_watchers(int r);
 
   void send_blacklist();
-  Context *handle_blacklist(int *ret_val);
+  void handle_blacklist(int r);
 
   void send_break_lock();
-  Context *handle_break_lock(int *ret_val);
+  void handle_break_lock(int r);
+
+  void finish();
+
+  void save_result(int r) {
+    if (m_error_result == 0 && r < 0) {
+      m_error_result = r;
+    }
+  }
 };
 
 } // namespace managed_lock
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_EXCLUSIVE_LOCK_ACQUIRE_REQUEST_H
+extern template class librbd::managed_lock::AcquireRequest<
+                                            librbd::managed_lock::LockWatcher>;
+
+#endif // CEPH_LIBRBD_MANAGED_LOCK_ACQUIRE_REQUEST_H

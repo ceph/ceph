@@ -6,7 +6,6 @@
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/managed_lock/LockWatcher.h"
 #include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -20,39 +19,42 @@ using util::detail::C_AsyncCallback;
 using util::create_context_callback;
 using util::create_rados_safe_callback;
 
-
-ReleaseRequest* ReleaseRequest::create(librados::IoCtx& ioctx,
-                                       ContextWQ *work_queue,
-                                       LockWatcher *watcher,
+template <typename L>
+ReleaseRequest<L>* ReleaseRequest<L>::create(librados::IoCtx& ioctx,
+                                       L *watcher,
                                        const string& oid,
                                        const string &cookie,
                                        Context *on_releasing,
                                        Context *on_finish,
                                        bool shutting_down) {
-  return new ReleaseRequest(ioctx, work_queue, watcher, oid, cookie,
+  return new ReleaseRequest(ioctx, watcher, oid, cookie,
                             on_releasing, on_finish, shutting_down);
 }
 
-ReleaseRequest::ReleaseRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
-                               LockWatcher *watcher, const string& oid,
-                               const string &cookie, Context *on_releasing,
-                               Context *on_finish, bool shutting_down)
-  : m_ioctx(ioctx), m_work_queue(work_queue), m_watcher(watcher), m_oid(oid),
-    m_cookie(cookie), m_on_releasing(on_releasing),
-    m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)),
+template <typename L>
+ReleaseRequest<L>::ReleaseRequest(librados::IoCtx& ioctx, L *watcher,
+                                  const string& oid, const string &cookie,
+                                  Context *on_releasing, Context *on_finish,
+                                  bool shutting_down)
+  : m_ioctx(ioctx), m_watcher(watcher), m_oid(oid), m_cookie(cookie),
+    m_on_releasing(on_releasing),
+    m_on_finish(new C_AsyncCallback<ContextWQ>(watcher->work_queue(),
+                                               on_finish)),
     m_shutting_down(shutting_down) {
 }
 
-
-ReleaseRequest::~ReleaseRequest() {
+template <typename L>
+ReleaseRequest<L>::~ReleaseRequest() {
 }
 
 
-void ReleaseRequest::send() {
+template <typename L>
+void ReleaseRequest<L>::send() {
   send_flush_notifies();
 }
 
-void ReleaseRequest::send_flush_notifies() {
+template <typename L>
+void ReleaseRequest<L>::send_flush_notifies() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << __func__ << dendl;
 
@@ -63,16 +65,17 @@ void ReleaseRequest::send_flush_notifies() {
 }
 
 
-Context *ReleaseRequest::handle_flush_notifies(int *ret_val) {
+template <typename L>
+void ReleaseRequest<L>::handle_flush_notifies(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << __func__ << dendl;
 
-  assert(*ret_val == 0);
+  assert(r == 0);
   send_unlock();
-  return nullptr;
 }
 
-void ReleaseRequest::send_unlock() {
+template <typename L>
+void ReleaseRequest<L>::send_unlock() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << __func__ << dendl;
 
@@ -93,19 +96,28 @@ void ReleaseRequest::send_unlock() {
   rados_completion->release();
 }
 
-Context *ReleaseRequest::handle_unlock(int *ret_val) {
+template <typename L>
+void ReleaseRequest<L>::handle_unlock(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
-  if (*ret_val < 0 && *ret_val != -ENOENT) {
-    lderr(cct) << "failed to unlock: " << cpp_strerror(*ret_val) << dendl;
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to unlock: " << cpp_strerror(r) << dendl;
   }
 
-  // treat errors as the image is unlocked
-  *ret_val = 0;
-  return m_on_finish;
+  finish();
+}
+
+template <typename L>
+void ReleaseRequest<L>::finish() {
+  m_on_finish->complete(0);
+  delete this;
 }
 
 } // namespace managed_lock
 } // namespace librbd
+
+#include "librbd/managed_lock/LockWatcher.h"
+template class librbd::managed_lock::ReleaseRequest<
+                                            librbd::managed_lock::LockWatcher>;
 

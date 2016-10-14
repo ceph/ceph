@@ -11,16 +11,15 @@ class Context;
 class ContextWQ;
 
 namespace librbd {
-
 namespace managed_lock {
 
 class LockWatcher;
 
+template <typename LockWatcherT = LockWatcher>
 class ReleaseRequest {
 public:
   static ReleaseRequest* create(librados::IoCtx& ioctx,
-                                ContextWQ *work_queue,
-                                LockWatcher *watcher,
+                                LockWatcherT *watcher,
                                 const std::string& m_oid,
                                 const std::string &cookie,
                                 Context *on_releasing, Context *on_finish,
@@ -47,14 +46,13 @@ private:
    * @endverbatim
    */
 
-  ReleaseRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
-                 LockWatcher *watcher, const std::string& oid,
-                 const std::string &cookie, Context *on_releasing,
-                 Context *on_finish, bool shutting_down);
+  ReleaseRequest(librados::IoCtx& ioctx, LockWatcherT *watcher,
+                 const std::string& oid, const std::string &cookie,
+                 Context *on_releasing, Context *on_finish,
+                 bool shutting_down);
 
   librados::IoCtx& m_ioctx;
-  ContextWQ *m_work_queue;
-  LockWatcher *m_watcher;
+  LockWatcherT *m_watcher;
   std::string m_oid;
   std::string m_cookie;
   Context *m_on_releasing;
@@ -62,14 +60,19 @@ private:
   bool m_shutting_down;
 
   void send_flush_notifies();
-  Context *handle_flush_notifies(int *ret_val);
+  void handle_flush_notifies(int r);
 
   void send_unlock();
-  Context *handle_unlock(int *ret_val);
+  void handle_unlock(int r);
+
+  void finish();
 
 };
 
 } // namespace managed_lock
 } // namespace librbd
+
+extern template class librbd::managed_lock::ReleaseRequest<
+                                            librbd::managed_lock::LockWatcher>;
 
 #endif // CEPH_LIBRBD_LOCK_RELEASE_REQUEST_H

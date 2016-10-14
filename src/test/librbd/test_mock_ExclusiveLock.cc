@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/Lock.h"
 #include "librbd/exclusive_lock/AcquireRequest.h"
 #include "librbd/exclusive_lock/ReacquireRequest.h"
 #include "librbd/exclusive_lock/ReleaseRequest.h"
@@ -28,15 +29,14 @@ namespace exclusive_lock {
 template<typename T>
 struct BaseRequest {
   static std::list<T *> s_requests;
+  Lock *managed_lock;
   Context *on_lock_unlock = nullptr;
   Context *on_finish = nullptr;
 
-  static T* create(MockExclusiveLockImageCtx &image_ctx, const std::string &cookie,
-                   Context *on_lock_unlock, Context *on_finish,
-                   bool shutting_down = false) {
-    assert(!s_requests.empty());
+  static T* create(MockExclusiveLockImageCtx &image_ctx, Lock *managed_lock,
+                   Context *on_finish, bool shutting_down = false) {
+    assert(!s_requests.empty()); 
     T* req = s_requests.front();
-    req->on_lock_unlock = on_lock_unlock;
     req->on_finish = on_finish;
     s_requests.pop_front();
     return req;
@@ -52,6 +52,12 @@ std::list<T *> BaseRequest<T>::s_requests;
 
 template <>
 struct AcquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<AcquireRequest<MockExclusiveLockImageCtx> > {
+  static AcquireRequest* create(MockExclusiveLockImageCtx &image_ctx,
+                                Lock *managed_lock, Context *on_finish,
+                                bool try_lock) {
+    return BaseRequest::create(image_ctx, managed_lock, on_finish);
+  }
+
   MOCK_METHOD0(send, void());
 };
 
@@ -61,7 +67,7 @@ struct ReacquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<Reacquir
                                   const std::string &cookie,
                                   const std::string &new_cookie,
                                   Context *on_finish) {
-    return BaseRequest::create(image_ctx, cookie, nullptr, on_finish);
+    return BaseRequest::create(image_ctx, nullptr, on_finish);
   }
 
   MOCK_METHOD0(send, void());

@@ -67,28 +67,39 @@ private:
   Context *m_on_finish;
   bool m_shutting_down;
 
+  int m_error_result;
+
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
   void send_prepare_lock();
-  Context *handle_prepare_lock(int *ret_val);
+  void handle_prepare_lock(int r);
 
   void send_cancel_op_requests();
-  Context *handle_cancel_op_requests(int *ret_val);
+  void handle_cancel_op_requests(int r);
 
   void send_block_writes();
-  Context *handle_block_writes(int *ret_val);
+  void handle_block_writes(int r);
 
   void send_image_flush_notifies();
-  Context *handle_image_flush_notifies(int *ret_val);
+  void handle_image_flush_notifies(int r);
 
   void send_close_journal();
-  Context *handle_close_journal(int *ret_val);
+  void handle_close_journal(int r);
 
   void send_close_object_map();
-  Context *handle_close_object_map(int *ret_val);
+  void handle_close_object_map(int r);
 
   void send_unlock();
+  void handle_unlock(int r);
+
+  void finish();
+
+  void save_result(int result) {
+    if (m_error_result == 0 && result < 0) {
+      m_error_result = result;
+    }
+  }
 
 };
 

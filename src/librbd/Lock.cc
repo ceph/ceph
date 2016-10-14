@@ -22,6 +22,7 @@ namespace librbd {
 
 using namespace managed_lock;
 using std::string;
+using util::detail::C_AsyncCallback;
 
 namespace {
 
@@ -56,7 +57,6 @@ Lock::Lock(librados::IoCtx &ioctx, const string& oid,
            Policy *policy)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_oid(oid),
-    m_watcher(new LockWatcher(this)),
     m_policy(policy),
     m_lock(util::unique_lock_name("librbd::Lock::m_lock", this)),
     m_state(STATE_UNLOCKED) {
@@ -68,6 +68,8 @@ Lock::Lock(librados::IoCtx &ioctx, const string& oid,
   m_work_queue = new ContextWQ("librbd::lock::op_work_queue",
                                m_cct->_conf->rbd_op_thread_timeout,
                                thread_pool_singleton);
+
+  m_watcher = new LockWatcher(this);
 }
 
 Lock::~Lock() {
@@ -89,7 +91,6 @@ bool Lock::is_lock_owner() const {
 
   switch (m_state) {
   case STATE_LOCKED:
-  case STATE_POST_ACQUIRING:
   case STATE_REACQUIRING:
   case STATE_PRE_RELEASING:
   case STATE_PRE_SHUTTING_DOWN:
@@ -175,7 +176,6 @@ void Lock::reacquire_lock(Context *on_reacquired) {
     if (!is_shutdown_locked() &&
                (m_state == STATE_LOCKED ||
                 m_state == STATE_ACQUIRING ||
-                m_state == STATE_POST_ACQUIRING ||
                 m_state == STATE_WAITING_FOR_REGISTER ||
                 m_state == STATE_WAITING_FOR_PEER)) {
       // interlock the lock operation with other state ops
@@ -231,7 +231,6 @@ bool Lock::is_transition_state() const {
   case STATE_ACQUIRING:
   case STATE_WAITING_FOR_PEER:
   case STATE_WAITING_FOR_REGISTER:
-  case STATE_POST_ACQUIRING:
   case STATE_REACQUIRING:
   case STATE_PRE_RELEASING:
   case STATE_RELEASING:
@@ -344,39 +343,25 @@ void Lock::send_acquire_lock() {
     ldout(m_cct, 10) << this << " watcher not registered - delaying request"
                      << dendl;
     m_state = STATE_WAITING_FOR_REGISTER;
-    m_work_queue->queue(new FunctionContext([this](int r) {
-      m_watcher->register_watch(new FunctionContext([this](int r) {
-            if (r < 0) {
-              lderr(m_cct) << "watcher registering error: " << cpp_strerror(r)
-                           << dendl;
-              return;
-            }
-            m_state = STATE_ACQUIRING;
-
+    m_watcher->register_watch(new FunctionContext([this](int r) {
+          if (r < 0) {
+            lderr(m_cct) << "watcher registering error: " << cpp_strerror(r)
+                         << dendl;
+            return;
+          }
+          m_work_queue->queue(new FunctionContext([this](int r) {
             Mutex::Locker locker(m_lock);
             send_acquire_lock();
-      }));
-    }), 0);
+          }));
+    }));
     return;
   }
 
   m_cookie = encode_lock_cookie();
-  AcquireRequest* req = AcquireRequest::create(
-    m_ioctx, m_work_queue, m_watcher, m_oid, m_cookie,
-    util::create_context_callback<Lock, &Lock::handle_acquiring_lock>(this),
+  AcquireRequest<>* req = AcquireRequest<>::create(
+    m_ioctx, m_watcher, m_oid, m_cookie,
     util::create_context_callback<Lock, &Lock::handle_acquire_lock>(this));
-  m_work_queue->queue(new C_SendRequest<AcquireRequest>(req), 0);
-}
-
-void Lock::handle_acquiring_lock(int r) {
-  Mutex::Locker locker(m_lock);
-  ldout(m_cct, 10) << this << " " << __func__ << dendl;
-
-  assert(r == 0);
-  assert(m_state == STATE_ACQUIRING);
-
-  // lock is owned at this point
-  m_state = STATE_POST_ACQUIRING;
+  m_work_queue->queue(new C_SendRequest<AcquireRequest<>>(req), 0);
 }
 
 void Lock::handle_acquire_lock(int r) {
@@ -393,8 +378,7 @@ void Lock::handle_acquire_lock(int r) {
 
   {
     m_lock.Lock();
-    assert(m_state == STATE_ACQUIRING ||
-           m_state == STATE_POST_ACQUIRING);
+    assert(m_state == STATE_ACQUIRING);
 
     Action action = get_active_action();
     assert(action == ACTION_TRY_LOCK || action == ACTION_REQUEST_LOCK);
@@ -514,12 +498,12 @@ void Lock::send_release_lock() {
   ldout(m_cct, 10) << this << " " << __func__ << dendl;
   m_state = STATE_PRE_RELEASING;
 
-  ReleaseRequest* req = ReleaseRequest::create(
-    m_ioctx, m_work_queue, m_watcher, m_oid, m_cookie,
+  ReleaseRequest<>* req = ReleaseRequest<>::create(
+    m_ioctx, m_watcher, m_oid, m_cookie,
     util::create_context_callback<Lock, &Lock::handle_releasing_lock>(this),
     util::create_context_callback<Lock, &Lock::handle_release_lock>(this),
     false);
-  m_work_queue->queue(new C_SendRequest<ReleaseRequest>(req), 0);
+  m_work_queue->queue(new C_SendRequest<ReleaseRequest<>>(req), 0);
 }
 
 void Lock::handle_releasing_lock(int r) {
@@ -575,8 +559,8 @@ void Lock::send_shutdown_release() {
     cookie = m_cookie;
   }
 
-  ReleaseRequest* req = ReleaseRequest::create(
-    m_ioctx, m_work_queue, m_watcher, m_oid, cookie,
+  ReleaseRequest<>* req = ReleaseRequest<>::create(
+    m_ioctx, m_watcher, m_oid, cookie,
     util::create_context_callback<Lock, &Lock::handle_shutdown_releasing>(this),
     util::create_context_callback<Lock, &Lock::handle_shutdown_released>(this),
     true);

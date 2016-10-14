@@ -108,18 +108,31 @@ template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
-  FunctionContext *ctx = new FunctionContext([this, on_shut_down](int r) {
-     {
-       RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-       m_image_ctx.aio_work_queue->clear_require_lock_on_read();
-       m_image_ctx.exclusive_lock = nullptr;
-     }
+  bool is_locked = m_managed_lock->is_locked();
+  FunctionContext *ctx =
+    new FunctionContext([this, on_shut_down, is_locked](int r) {
+      {
+        RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+        m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+        m_image_ctx.exclusive_lock = nullptr;
+      }
+      if (!is_locked || r == 0) {
+        m_image_ctx.aio_work_queue->unblock_writes();
+      }
+      if (is_locked) {
+        m_image_ctx.image_watcher->flush(on_shut_down);
+      } else {
+        on_shut_down->complete(r);
+      }
+    });
 
-     m_image_ctx.aio_work_queue->unblock_writes();
-     m_image_ctx.image_watcher->flush(on_shut_down);
-  });
-
-  m_managed_lock->shut_down(ctx);
+  if (is_locked) {
+    release_lock(new FunctionContext([this, on_shut_down, ctx](int r) {
+      m_managed_lock->shut_down(ctx);
+    }), true);
+  } else {
+    m_managed_lock->shut_down(ctx);
+  }
 }
 
 template <typename I>
@@ -155,7 +168,8 @@ void ExclusiveLock<I>::request_lock(Context *on_locked) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::release_lock(Context *on_released) {
+void ExclusiveLock<I>::release_lock(Context *on_released,
+                                    bool is_shutting_down) {
   FunctionContext *ctx = new FunctionContext([this, on_released](int r) {
       this->handle_release_lock(r);
       if (on_released != nullptr) {
@@ -164,7 +178,7 @@ void ExclusiveLock<I>::release_lock(Context *on_released) {
   });
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_image_ctx,
                                                      m_managed_lock, ctx,
-                                                     false);
+                                                     is_shutting_down);
 
   m_image_ctx.op_work_queue->queue(
       new C_SendRequest<ReleaseRequest<I>>(req), 0);
