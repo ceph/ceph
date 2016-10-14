@@ -15,7 +15,6 @@ overrides:
     - reached quota
     - scrub
     - osd_map_max_advance
-    - failed to encode
     - wrongly marked
     fs: xfs
     conf:
