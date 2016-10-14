@@ -677,10 +677,9 @@ void FSMap::promote(
   }
   MDSMap::mds_info_t &info = mds_map.mds_info[standby_gid];
 
-  if (mds_map.stopped.count(assigned_rank)) {
+  if (mds_map.stopped.erase(assigned_rank)) {
     // The cluster is being expanded with a stopped rank
     info.state = MDSMap::STATE_STARTING;
-    mds_map.stopped.erase(assigned_rank);
   } else if (!mds_map.is_in(assigned_rank)) {
     // The cluster is being expanded with a new rank
     info.state = MDSMap::STATE_CREATING;
@@ -783,8 +782,7 @@ bool FSMap::undamaged(const fs_cluster_id_t fscid, const mds_rank_t rank)
 {
   auto fs = filesystems.at(fscid);
 
-  if (fs->mds_map.damaged.count(rank)) {
-    fs->mds_map.damaged.erase(rank);
+  if (fs->mds_map.damaged.erase(rank)) {
     fs->mds_map.failed.insert(rank);
     fs->mds_map.epoch = epoch;
     return true;
