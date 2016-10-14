@@ -18,43 +18,44 @@
 #include "MDSTableServer.h"
 #include "snap.h"
 
-class MDS;
+class MDSRank;
+class MonClient;
 
 class SnapServer : public MDSTableServer {
-public:
-  
 protected:
+  MonClient *mon_client;
   snapid_t last_snap;
   map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
   
-  map<version_t, SnapInfo> pending_create;
+  map<version_t, SnapInfo> pending_update;
   map<version_t, pair<snapid_t,snapid_t> > pending_destroy; // (removed_snap, seq)
   set<version_t>           pending_noop;
 
   version_t last_checked_osdmap;
 
 public:
-  SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP),
-		       last_checked_osdmap(0) { }
+  SnapServer(MDSRank *m, MonClient *monc)
+    : MDSTableServer(m, TABLE_SNAP), mon_client(monc), last_checked_osdmap(0)
+  {}
     
-  void reset_state();
-  void encode_server_state(bufferlist& bl) const {
+  void reset_state() override;
+  void encode_server_state(bufferlist& bl) const override {
     ENCODE_START(3, 3, bl);
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
     ::encode(need_to_purge, bl);
-    ::encode(pending_create, bl);
+    ::encode(pending_update, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_noop, bl);
     ENCODE_FINISH(bl);
   }
-  void decode_server_state(bufferlist::iterator& bl) {
+  void decode_server_state(bufferlist::iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(last_snap, bl);
     ::decode(snaps, bl);
     ::decode(need_to_purge, bl);
-    ::decode(pending_create, bl);
+    ::decode(pending_update, bl);
     if (struct_v >= 2)
       ::decode(pending_destroy, bl);
     else {
@@ -79,12 +80,12 @@ public:
   static void generate_test_instances(list<SnapServer*>& ls);
 
   // server bits
-  void _prepare(bufferlist &bl, uint64_t reqid, int bymds);
+  void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) override;
   bool _is_prepared(version_t tid);
-  bool _commit(version_t tid, MMDSTableRequest *req=NULL);
-  void _rollback(version_t tid);
-  void _server_update(bufferlist& bl);
-  void handle_query(MMDSTableRequest *m);
+  bool _commit(version_t tid, MMDSTableRequest *req=NULL) override;
+  void _rollback(version_t tid) override;
+  void _server_update(bufferlist& bl) override;
+  void handle_query(MMDSTableRequest *m) override;
 
   void check_osd_map(bool force);
 };

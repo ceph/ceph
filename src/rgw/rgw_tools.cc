@@ -1,6 +1,10 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <errno.h>
 
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "include/types.h"
 
@@ -14,8 +18,8 @@
 
 static map<string, string> ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, time_t set_mtime, map<string, bufferlist> *pattrs)
+int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid, const char *data, size_t size, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
@@ -34,24 +38,34 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs)
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
+                       rgw_cache_entry_info *cache_info)
 {
   struct rgw_err err;
-  void *handle = NULL;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
 
   do {
-    int ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
-                                        NULL, pmtime, NULL, NULL, NULL, NULL,
-                                        objv_tracker, &handle, &err);
+    RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
+    RGWRados::SystemObject::Read rop(&source);
+
+    rop.stat_params.attrs = pattrs;
+    rop.stat_params.lastmod = pmtime;
+    rop.stat_params.perr = &err;
+
+    int ret = rop.stat(objv_tracker);
     if (ret < 0)
       return ret;
 
-    ret = rgwstore->get_obj(ctx, objv_tracker, &handle, obj, bl, 0, request_len - 1);
-    rgwstore->finish_get_obj(&handle);
+    rop.read_params.cache_info = cache_info;
+
+    ret = rop.read(0, request_len - 1, bl, objv_tracker);
+    if (ret == -ECANCELED) {
+      /* raced, restart */
+      continue;
+    }
     if (ret < 0)
       return ret;
 
@@ -109,7 +123,8 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   int ret;
   if (fd < 0) {
     ret = -errno;
-    ldout(cct, 0) << "ext_mime_map_init(): failed to open file=" << ext_map << " ret=" << ret << dendl;
+    ldout(cct, 0) << __func__ << " failed to open file=" << ext_map
+                  << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -117,21 +132,22 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   ret = fstat(fd, &st);
   if (ret < 0) {
     ret = -errno;
-    ldout(cct, 0) << "ext_mime_map_init(): failed to stat file=" << ext_map << " ret=" << ret << dendl;
+    ldout(cct, 0) << __func__ << " failed to stat file=" << ext_map
+                  << " : " << cpp_strerror(-ret) << dendl;
     goto done;
   }
 
   buf = (char *)malloc(st.st_size + 1);
   if (!buf) {
     ret = -ENOMEM;
-    ldout(cct, 0) << "ext_mime_map_init(): failed to allocate buf" << dendl;
+    ldout(cct, 0) << __func__ << " failed to allocate buf" << dendl;
     goto done;
   }
 
-  ret = read(fd, buf, st.st_size + 1);
+  ret = safe_read(fd, buf, st.st_size + 1);
   if (ret != st.st_size) {
-    // huh? file size has changed, what are the odds?
-    ldout(cct, 0) << "ext_mime_map_init(): raced! will retry.." << dendl;
+    // huh? file size has changed?
+    ldout(cct, 0) << __func__ << " raced! will retry.." << dendl;
     free(buf);
     close(fd);
     return ext_mime_map_init(cct, ext_map);

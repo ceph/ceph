@@ -1,12 +1,17 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_RESOLVE_H
 #define CEPH_RGW_RESOLVE_H
 
 #include "rgw_common.h"
 
-class RGWDNSResolver;
+namespace ceph {
+  class DNSResolver;
+}
 
 class RGWResolver {
-  RGWDNSResolver *resolver;
+  DNSResolver *resolver;
 
 public:
   ~RGWResolver();

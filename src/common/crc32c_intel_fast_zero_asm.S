@@ -644,3 +644,5 @@ global %1_slver
 %endmacro
 ;;;       func            core, ver, snum
 slversion crc32_iscsi_zero_00, 00,   02,  0014
+; inform linker that this doesn't require executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits

@@ -21,6 +21,7 @@
 #include "include/elist.h"
 #include "common/snap_types.h"
 
+
 struct SnapRealm {
   // realm state
 
@@ -33,7 +34,9 @@ struct SnapRealm {
   bool open;                        // set to true once all past_parents are opened
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
-  map<inodeno_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
+  set<SnapRealm*> open_past_children;  // past children who has pinned me
+  map<inodeno_t, pair<SnapRealm*, set<snapid_t> > > open_past_parents;  // these are explicitly pinned.
+  unsigned num_open_past_parents;
 
   // cache
   snapid_t cached_seq;           // max seq over self and all past+present parents.
@@ -51,11 +54,12 @@ struct SnapRealm {
     srnode(),
     mdcache(c), inode(in),
     open(false), parent(0),
+    num_open_past_parents(0),
     inodes_with_caps(0) 
   { }
 
-  bool exists(const string &name) {
-    for (map<snapid_t,SnapInfo>::iterator p = srnode.snaps.begin();
+  bool exists(const string &name) const {
+    for (map<snapid_t,SnapInfo>::const_iterator p = srnode.snaps.begin();
 	 p != srnode.snaps.end();
 	 ++p) {
       if (p->second.name == name)
@@ -64,19 +68,23 @@ struct SnapRealm {
     return false;
   }
 
-  bool _open_parents(Context *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  bool open_parents(Context *retryorfinish) {
+  bool is_open() const { return open; }
+  void _close_parents() { open = false; }
+  bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
+  bool open_parents(MDSInternalContextBase *retryorfinish) {
     if (!_open_parents(retryorfinish))
       return false;
     delete retryorfinish;
     return true;
   }
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  void add_open_past_parent(SnapRealm *parent);
+  void add_open_past_parent(SnapRealm *parent, snapid_t last);
+  void remove_open_past_parent(inodeno_t ino, snapid_t last);
   void close_parents();
 
   void prune_past_parents();
-  bool has_past_parents() { return !srnode.past_parents.empty(); }
+  bool has_past_parents() const { return !srnode.past_parents.empty(); }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
@@ -117,11 +125,18 @@ struct SnapRealm {
 
   snapid_t get_snap_following(snapid_t follows) {
     check_cache();
-    set<snapid_t> s = get_snaps();
-    set<snapid_t>::iterator p = s.upper_bound(follows);
+    const set<snapid_t>& s = get_snaps();
+    set<snapid_t>::const_iterator p = s.upper_bound(follows);
     if (p != s.end())
       return *p;
     return CEPH_NOSNAP;
+  }
+
+  bool has_snaps_in_range(snapid_t first, snapid_t last) {
+    check_cache();
+    const set<snapid_t>& s = get_snaps();
+    set<snapid_t>::const_iterator p = s.lower_bound(first);
+    return (p != s.end() && *p <= last);
   }
 
   void adjust_parent();

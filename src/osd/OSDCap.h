@@ -31,6 +31,7 @@
 using std::ostream;
 
 #include "include/types.h"
+#include "OpRequest.h"
 
 static const __u8 OSD_CAP_R     = (1 << 1);      // read
 static const __u8 OSD_CAP_W     = (1 << 2);      // write
@@ -42,6 +43,7 @@ static const __u8 OSD_CAP_ANY   = 0xff;          // *
 struct osd_rwxa_t {
   __u8 val;
 
+  // cppcheck-suppress noExplicitConstructor
   osd_rwxa_t(__u8 v = 0) : val(v) {}
   osd_rwxa_t& operator=(__u8 v) {
     val = v;
@@ -60,9 +62,10 @@ struct OSDCapSpec {
   std::string class_allow;
 
   OSDCapSpec() : allow(0) {}
-  OSDCapSpec(osd_rwxa_t v) : allow(v) {}
-  OSDCapSpec(std::string n) : allow(0), class_name(n) {}
-  OSDCapSpec(std::string n, std::string a) : allow(0), class_name(n), class_allow(a) {}
+  explicit OSDCapSpec(osd_rwxa_t v) : allow(v) {}
+  explicit OSDCapSpec(std::string n) : allow(0), class_name(std::move(n)) {}
+  OSDCapSpec(std::string n, std::string a) :
+    allow(0), class_name(std::move(n)), class_allow(std::move(a)) {}
 
   bool allow_all() const {
     return allow == OSD_CAP_ANY;
@@ -91,7 +94,6 @@ struct OSDCapMatch {
   /**
    * check if given request parameters match our constraints
    *
-   * @param auid requesting user's auid
    * @param pool_name pool name
    * @param nspace_name namespace name
    * @param pool_auid pool's auid
@@ -120,7 +122,7 @@ struct OSDCap {
   std::vector<OSDCapGrant> grants;
 
   OSDCap() {}
-  OSDCap(std::vector<OSDCapGrant> g) : grants(g) {}
+  explicit OSDCap(std::vector<OSDCapGrant> g) : grants(std::move(g)) {}
 
   bool allow_all() const;
   void set_allow_all();
@@ -139,15 +141,12 @@ struct OSDCap {
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
-   * @param op_may_class_read whether the operation needs to call a
-   *                          read class method
-   * @param op_may_class_write whether the operation needs to call a
-   *                          write class method
+   * @param classes (class-name, rd, wr, whitelisted-flag) tuples
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 		  const string& object, bool op_may_read, bool op_may_write,
-		  bool op_may_class_read, bool op_may_class_write) const;
+		  const std::vector<OpRequest::ClassInfo>& classes) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 

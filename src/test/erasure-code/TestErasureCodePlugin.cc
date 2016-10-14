@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -16,11 +17,13 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdlib.h>
 #include "common/Thread.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
+#include "common/config.h"
 #include "gtest/gtest.h"
 
 class ErasureCodePluginRegistryTest : public ::testing::Test {
@@ -28,13 +31,21 @@ protected:
 
   class Thread_factory : public Thread {
   public:
+    static void cleanup(void *arg) {
+      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+      if (instance.lock.is_locked())
+        instance.lock.Unlock();
+    }
+
     virtual void *entry() {
-      map<std::string,std::string> parameters;
-      parameters["directory"] = ".libs";
+      ErasureCodeProfile profile;
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
-      stringstream ss;
-      instance.factory("hangs", parameters, &erasure_code, ss);
+      pthread_cleanup_push(cleanup, NULL);
+      instance.factory("hangs",
+		       g_conf->erasure_code_dir,
+		       profile, &erasure_code, &cerr);
+      pthread_cleanup_pop(0);
       return NULL;
     }
   };
@@ -53,7 +64,7 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
   useconds_t delay = 0;
   const useconds_t DELAY_MAX = 20 * 1000 * 1000;
   Thread_factory sleep_forever;
-  sleep_forever.create();
+  sleep_forever.create("sleep_forever");
   do {
     cout << "Trying (1) with delay " << delay << "us\n";
     if (delay > 0)
@@ -71,27 +82,48 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
-  map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
+  ErasureCodeProfile profile;
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  stringstream ss;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EIO, instance.factory("invalid", parameters, &erasure_code, ss));
+  EXPECT_EQ(-EIO, instance.factory("invalid",
+				   g_conf->erasure_code_dir,
+				   profile, &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point", parameters,
-				      &erasure_code, ss));
+  EXPECT_EQ(-EXDEV, instance.factory("missing_version",
+				     g_conf->erasure_code_dir,
+				     profile,
+				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize", parameters,
-				     &erasure_code, ss));
+  EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point",
+				      g_conf->erasure_code_dir,
+				      profile,
+				      &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EBADF, instance.factory("fail_to_register", parameters,
-				     &erasure_code, ss));
+  EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize",
+				     g_conf->erasure_code_dir,
+				     profile,
+				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("example", parameters, &erasure_code, ss));
-  EXPECT_TRUE(erasure_code);
+  EXPECT_EQ(-EBADF, instance.factory("fail_to_register",
+				     g_conf->erasure_code_dir,
+				     profile,
+				     &erasure_code, &cerr));
+  EXPECT_FALSE(erasure_code);
+  EXPECT_EQ(0, instance.factory("example",
+				g_conf->erasure_code_dir,
+				profile, &erasure_code, &cerr));
+  EXPECT_TRUE(erasure_code.get());
   ErasureCodePlugin *plugin = 0;
-  EXPECT_EQ(-EEXIST, instance.load("example", parameters, &plugin, ss));
+  {
+    Mutex::Locker l(instance.lock);
+    EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, &cerr));
+    EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
+    EXPECT_EQ(0, instance.remove("example"));
+    EXPECT_EQ(0, instance.load("example", directory, &plugin, &cerr));
+  }
 }
 
 int main(int argc, char **argv) {
@@ -101,10 +133,20 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_plugin && valgrind  --leak-check=full --tool=memcheck ./unittest_erasure_code_plugin --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 && 
+ *   make unittest_erasure_code_plugin && 
+ *   valgrind --tool=memcheck \
+ *      ./unittest_erasure_code_plugin \
+ *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
+ * End:
+ */

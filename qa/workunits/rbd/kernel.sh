@@ -17,27 +17,19 @@ function get_device_dir {
 }
 
 function clean_up {
-	udevadm settle
 	[ -e /dev/rbd/rbd/testimg1@snap1 ] &&
-		rbd unmap /dev/rbd/rbd/testimg1@snap1 || true
+		sudo rbd unmap /dev/rbd/rbd/testimg1@snap1
 	if [ -e /dev/rbd/rbd/testimg1 ]; then
-		rbd unmap /dev/rbd/rbd/testimg1 || true
+		sudo rbd unmap /dev/rbd/rbd/testimg1
 		rbd snap purge testimg1 || true
 	fi
-	udevadm settle
-	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
 	rbd ls | grep testimg1 > /dev/null && rbd rm testimg1 || true
 	sudo rm -f $TMP_FILES
 }
 
-[ -d /sys/bus/rbd ] || sudo modprobe rbd
-
 clean_up
 
 trap clean_up INT TERM EXIT
-
-# allow ubuntu user to map/unmap rbd devices
-sudo chown ubuntu /sys/bus/rbd/add /sys/bus/rbd/remove
 
 # create an image
 dd if=/bin/sh of=/tmp/img1 bs=1k count=1 seek=10
@@ -49,9 +41,7 @@ dd if=/dev/zero of=/tmp/img1 count=0 seek=150000
 
 # import
 rbd import /tmp/img1 testimg1
-rbd map testimg1 --user $CEPH_ID $SECRET_ARGS
-# wait for udev to catch up
-udevadm settle
+sudo rbd map testimg1 --user $CEPH_ID $SECRET_ARGS
 
 DEV_ID1=$(get_device_dir rbd testimg1 -)
 echo "dev_id1 = $DEV_ID1"
@@ -63,9 +53,7 @@ cmp /tmp/img1 /tmp/img1.export
 
 # snapshot
 rbd snap create testimg1 --snap=snap1
-rbd map --snap=snap1 testimg1 --user $CEPH_ID $SECRET_ARGS
-# wait for udev to catch up
-udevadm settle
+sudo rbd map --snap=snap1 testimg1 --user $CEPH_ID $SECRET_ARGS
 
 DEV_ID2=$(get_device_dir rbd testimg1 snap1)
 cat /sys/bus/rbd/devices/$DEV_ID2/size | grep 76800000

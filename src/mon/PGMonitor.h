@@ -30,26 +30,22 @@ using namespace std;
 #include "include/utime.h"
 #include "common/histogram.h"
 #include "msg/Messenger.h"
-#include "common/config.h"
 #include "mon/MonitorDBStore.h"
 
-#include "messages/MPGStats.h"
-#include "messages/MPGStatsAck.h"
 class MStatfs;
 class MMonCommand;
 class MGetPoolStats;
 
 class RatioMonitor;
 class TextTable;
+class MPGStats;
 
 class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
 
   bool need_check_down_pgs;
-
-  epoch_t last_map_pg_create_osd_epoch;
-
+  set<int> need_check_down_pg_osds;
 
 private:
   PGMap::Incremental pending_inc;
@@ -69,72 +65,48 @@ private:
   version_t get_trim_to();
   void update_logger();
 
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   void read_pgmap_meta();
   void read_pgmap_full();
   void apply_pgmap_delta(bufferlist& bl);
 
-  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);  // true if processed.
+  bool prepare_update(MonOpRequestRef op);
 
-  bool preprocess_pg_stats(MPGStats *stats);
+  bool preprocess_pg_stats(MonOpRequestRef op);
   bool pg_stats_have_changed(int from, const MPGStats *stats) const;
-  bool prepare_pg_stats(MPGStats *stats);
-  void _updated_stats(MPGStats *req, MPGStatsAck *ack);
+  bool prepare_pg_stats(MonOpRequestRef op);
+  void _updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op);
 
-  struct C_Stats : public Context {
-    PGMonitor *pgmon;
-    MPGStats *req;
-    MPGStatsAck *ack;
-    entity_inst_t who;
-    C_Stats(PGMonitor *p, MPGStats *r, MPGStatsAck *a) : pgmon(p), req(r), ack(a) {}
-    void finish(int r) {
-      if (r >= 0) {
-	pgmon->_updated_stats(req, ack);
-      } else if (r == -ECANCELED) {
-	req->put();
-	ack->put();
-      } else if (r == -EAGAIN) {
-	pgmon->dispatch(req);
-	ack->put();
-      } else {
-	assert(0 == "bad C_Stats return value");
-      }
-    }    
-  };
+  struct C_Stats;
 
-  void handle_statfs(MStatfs *statfs);
-  bool preprocess_getpoolstats(MGetPoolStats *m);
+  void handle_statfs(MonOpRequestRef op);
+  bool preprocess_getpoolstats(MonOpRequestRef op);
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool);
+  void register_new_pgs();
 
-  /**
-   * check latest osdmap for new pgs to register
-   *
-   * @return true if we updated pending_inc (and should propose)
-   */
-  bool register_new_pgs();
-
-  void map_pg_creates();
   void send_pg_creates();
-  void send_pg_creates(int osd, Connection *con);
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
    * check pgs for down primary osds
    *
    * clears need_check_down_pgs
+   * clears need_check_down_pg_osds
    *
-   * @return true if we updated pending_inc (and should propose)
    */
-  bool check_down_pgs();
+  void check_down_pgs();
+  void _try_mark_pg_stale(const OSDMap *osdmap, pg_t pgid,
+			  const pg_stat_t& cur_stat);
+
 
   /**
    * Dump stats from pgs stuck in specified states.
@@ -145,14 +117,10 @@ private:
 			  int threshold,
 			  vector<string>& args) const;
 
-  void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-                            object_stat_sum_t &sum, bool verbose);
-
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
       need_check_down_pgs(false),
-      last_map_pg_create_osd_epoch(0),
       pgmap_meta_prefix("pgmap_meta"),
       pgmap_pg_prefix("pgmap_pg"),
       pgmap_osd_prefix("pgmap_osd")
@@ -176,7 +144,7 @@ public:
   bool should_stash_full() {
     return false;  // never
   }
-  virtual void encode_full(MonitorDBStore::Transaction *t) {
+  virtual void encode_full(MonitorDBStore::TransactionRef t) {
     assert(0 == "unimplemented encode_full");
   }
 
@@ -185,27 +153,31 @@ public:
 
   void check_osd_map(epoch_t epoch);
 
-  void dump_pool_stats(stringstream &ss, Formatter *f, bool verbose);
-  void dump_fs_stats(stringstream &ss, Formatter *f, bool verbose);
-
-  void dump_info(Formatter *f);
+  void dump_info(Formatter *f) const;
 
   int _warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
 				   list<pair<health_status_t,string> >& summary,
 				   list<pair<health_status_t,string> > *detail) const;
 
   void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
   void check_full_osd_health(list<pair<health_status_t,string> >& summary,
 			     list<pair<health_status_t,string> > *detail,
 			     const set<int>& s, const char *desc, health_status_t sev) const;
 
+  void check_subs();
   void check_sub(Subscription *sub);
 
 private:
   // no copying allowed
   PGMonitor(const PGMonitor &rhs);
   PGMonitor &operator=(const PGMonitor &rhs);
+
+  // we don't want to include gtest.h just for FRIEND_TEST
+  friend class pgmonitor_dump_object_stat_sum_0_Test;
+  friend class pgmonitor_dump_object_stat_sum_1_Test;
+  friend class pgmonitor_dump_object_stat_sum_2_Test;
 };
 
 #endif

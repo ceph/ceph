@@ -18,7 +18,7 @@
 #include "CInode.h"
 #include "CDir.h"
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "Locker.h"
 #include "LogSegment.h"
@@ -43,7 +43,7 @@ LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 
 // CDentry
 
-ostream& operator<<(ostream& out, CDentry& dn)
+ostream& operator<<(ostream& out, const CDentry& dn)
 {
   filepath path;
   dn.make_path(path);
@@ -71,16 +71,7 @@ ostream& operator<<(ostream& out, CDentry& dn)
   if (dn.get_linkage()->is_null()) out << " NULL";
   if (dn.get_linkage()->is_remote()) {
     out << " REMOTE(";
-    switch (DTTOIF(dn.get_linkage()->get_remote_d_type())) {
-    case S_IFSOCK: out << "sock"; break;
-    case S_IFLNK: out << "lnk"; break;
-    case S_IFREG: out << "reg"; break;
-    case S_IFBLK: out << "blk"; break;
-    case S_IFDIR: out << "dir"; break;
-    case S_IFCHR: out << "chr"; break;
-    case S_IFIFO: out << "fifo"; break;
-    default: assert(0);
-    }
+    out << dn.get_linkage()->get_remote_d_type_string();
     out << ")";
   }
 
@@ -137,13 +128,13 @@ inodeno_t CDentry::get_ino()
 }
 */
 
-pair<int,int> CDentry::authority()
+mds_authority_t CDentry::authority() const
 {
   return dir->authority();
 }
 
 
-void CDentry::add_waiter(uint64_t tag, Context *c)
+void CDentry::add_waiter(uint64_t tag, MDSInternalContextBase *c)
 {
   // wait on the directory?
   if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
@@ -213,7 +204,7 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
-void CDentry::make_path_string(string& s)
+void CDentry::make_path_string(string& s) const
 {
   if (dir) {
     dir->inode->make_path_string(s);
@@ -224,7 +215,7 @@ void CDentry::make_path_string(string& s)
   s.append(name.data(), name.length());
 }
 
-void CDentry::make_path(filepath& fp)
+void CDentry::make_path(filepath& fp) const
 {
   assert(dir);
   if (dir->inode->is_base())
@@ -330,7 +321,7 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
 // ----------------------------
 // auth pins
 
-int CDentry::get_num_dir_auth_pins()
+int CDentry::get_num_dir_auth_pins() const
 {
   assert(!is_projected());
   if (get_linkage()->is_primary())
@@ -338,7 +329,7 @@ int CDentry::get_num_dir_auth_pins()
   return auth_pins;
 }
 
-bool CDentry::can_auth_pin()
+bool CDentry::can_auth_pin() const
 {
   assert(dir);
   return dir->can_auth_pin();
@@ -394,12 +385,12 @@ void CDentry::adjust_nested_auth_pins(int adjustment, int diradj, void *by)
   dir->adjust_nested_auth_pins(adjustment, diradj, by);
 }
 
-bool CDentry::is_frozen()
+bool CDentry::is_frozen() const
 {
   return dir->is_frozen();
 }
 
-bool CDentry::is_freezing()
+bool CDentry::is_freezing() const
 {
   return dir->is_freezing();
 }
@@ -542,6 +533,12 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
     locker->eval_gather(&lock);
 }
 
+void CDentry::remove_client_leases(Locker *locker)
+{
+  while (!client_lease_map.empty())
+    remove_client_lease(client_lease_map.begin()->second, locker);
+}
+
 void CDentry::_put()
 {
   if (get_num_ref() <= ((int)is_dirty() + 1)) {
@@ -551,5 +548,78 @@ void CDentry::_put()
       if (get_num_ref() == (int)is_dirty() + !!in->get_num_ref())
 	in->mdcache->maybe_eval_stray(in, true);
     }
+  }
+}
+
+void CDentry::dump(Formatter *f) const
+{
+  assert(f != NULL);
+
+  filepath path;
+  make_path(path);
+
+  f->dump_string("path", path.get_path());
+  f->dump_unsigned("path_ino", path.get_ino().val);
+  f->dump_unsigned("snap_first", first);
+  f->dump_unsigned("snap_last", last);
+  
+  f->dump_bool("is_primary", get_linkage()->is_primary());
+  f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_bool("is_new", is_new());
+  if (get_linkage()->get_inode()) {
+    f->dump_unsigned("inode", get_linkage()->get_inode()->ino());
+  } else {
+    f->dump_unsigned("inode", 0);
+  }
+
+  if (linkage.is_remote()) {
+    f->dump_string("remote_type", linkage.get_remote_d_type_string());
+  } else {
+    f->dump_string("remote_type", "");
+  }
+
+  f->dump_unsigned("version", get_version());
+  f->dump_unsigned("projected_version", get_projected_version());
+
+  f->dump_int("auth_pins", auth_pins);
+  f->dump_int("nested_auth_pins", nested_auth_pins);
+
+  MDSCacheObject::dump(f);
+
+  f->open_object_section("lock");
+  lock.dump(f);
+  f->close_section();
+
+  f->open_object_section("versionlock");
+  versionlock.dump(f);
+  f->close_section();
+
+  f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
+  if (state_test(STATE_NEW))
+    f->dump_string("state", "new");
+  if (state_test(STATE_FRAGMENTING))
+    f->dump_string("state", "fragmenting");
+  if (state_test(STATE_PURGING))
+    f->dump_string("state", "purging");
+  if (state_test(STATE_BADREMOTEINO))
+    f->dump_string("state", "badremoteino");
+  if (state_test(STATE_STRAY))
+    f->dump_string("state", "stray");
+  f->close_section();
+}
+
+std::string CDentry::linkage_t::get_remote_d_type_string() const
+{
+  switch (DTTOIF(remote_d_type)) {
+    case S_IFSOCK: return "sock";
+    case S_IFLNK: return "lnk";
+    case S_IFREG: return "reg";
+    case S_IFBLK: return "blk";
+    case S_IFDIR: return "dir";
+    case S_IFCHR: return "chr";
+    case S_IFIFO: return "fifo";
+    default: assert(0); return "";
   }
 }

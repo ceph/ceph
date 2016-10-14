@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -14,8 +15,6 @@
  * 
  */
 
-#include <errno.h>
-#include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
 #include "crush/CrushWrapper.h"
@@ -28,7 +27,6 @@ extern "C" {
 #include "liberation.h"
 }
 
-// FIXME(loic) this may be too conservative, check back with feedback from Andreas 
 #define LARGEST_VECTOR_WORDSIZE 16
 
 #define dout_subsys ceph_subsys_osd
@@ -44,116 +42,92 @@ int ErasureCodeJerasure::create_ruleset(const string &name,
 					CrushWrapper &crush,
 					ostream *ss) const
 {
-  return crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
-				  "indep", pg_pool_t::TYPE_ERASURE, ss);
+  int ruleid = crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
+					"indep", pg_pool_t::TYPE_ERASURE, ss);
+  if (ruleid < 0)
+    return ruleid;
+  else {
+    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
+    return crush.get_rule_mask_ruleset(ruleid);
+  }
 }
 
-void ErasureCodeJerasure::init(const map<string,string> &parameters)
+int ErasureCodeJerasure::init(ErasureCodeProfile& profile, ostream *ss)
 {
+  int err = 0;
   dout(10) << "technique=" << technique << dendl;
-  map<string,string>::const_iterator parameter;
-  parameter = parameters.find("ruleset-root");
-  if (parameter != parameters.end())
-    ruleset_root = parameter->second;
-  parameter = parameters.find("ruleset-failure-domain");
-  if (parameter != parameters.end())
-    ruleset_failure_domain = parameter->second;
-  parse(parameters);
+  profile["technique"] = technique;
+  err |= to_string("ruleset-root", profile,
+		   &ruleset_root,
+		   DEFAULT_RULESET_ROOT, ss);
+  err |= to_string("ruleset-failure-domain", profile,
+		   &ruleset_failure_domain,
+		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
+  err |= parse(profile, ss);
+  if (err)
+    return err;
   prepare();
+  ErasureCode::init(profile, ss);
+  return err;
+}
+
+int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,
+			       ostream *ss)
+{
+  int err = ErasureCode::parse(profile, ss);
+  err |= to_int("k", profile, &k, DEFAULT_K, ss);
+  err |= to_int("m", profile, &m, DEFAULT_M, ss);
+  err |= to_int("w", profile, &w, DEFAULT_W, ss);
+  if (chunk_mapping.size() > 0 && (int)chunk_mapping.size() != k + m) {
+    *ss << "mapping " << profile.find("mapping")->second
+	<< " maps " << chunk_mapping.size() << " chunks instead of"
+	<< " the expected " << k + m << " and will be ignored" << std::endl;
+    chunk_mapping.clear();
+    err = -EINVAL;
+  }
+  err |= sanity_check_k(k, ss);
+  return err;
 }
 
 unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
 {
   unsigned alignment = get_alignment();
-  unsigned tail = object_size % alignment;
-  unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
-  assert(padded_length % k == 0);
-  return padded_length / k;
-}
-
-int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
-                                           const set<int> &available_chunks,
-                                           set<int> *minimum) 
-{
-  if (includes(available_chunks.begin(), available_chunks.end(),
-	       want_to_read.begin(), want_to_read.end())) {
-    *minimum = want_to_read;
-  } else {
-    if (available_chunks.size() < (unsigned)k)
-      return -EIO;
-    set<int>::iterator i;
-    unsigned j;
-    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; ++i, j++)
-      minimum->insert(*i);
-  }
-  return 0;
-}
-
-int ErasureCodeJerasure::minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                                     const map<int, int> &available,
-                                                     set<int> *minimum)
-{
-  set <int> available_chunks;
-  for (map<int, int>::const_iterator i = available.begin();
-       i != available.end();
-       ++i)
-    available_chunks.insert(i->first);
-  return minimum_to_decode(want_to_read, available_chunks, minimum);
-}
-
-int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
-                                const bufferlist &in,
-                                map<int, bufferlist> *encoded)
-{
-  unsigned blocksize = get_chunk_size(in.length());
-  unsigned padded_length = blocksize * k;
-  dout(10) << "encode adjusted buffer length from " << in.length()
-	   << " to " << padded_length << dendl;
-  assert(padded_length % k == 0);
-  bufferlist out(in);
-  if (padded_length - in.length() > 0) {
-    bufferptr pad(padded_length - in.length());
-    pad.zero();
-    out.push_back(pad);
-  }
-  unsigned coding_length = blocksize * m;
-  bufferptr coding(buffer::create_page_aligned(coding_length));
-  out.push_back(coding);
-  out.rebuild_page_aligned();
-  char *chunks[k + m];
-  for (int i = 0; i < k + m; i++) {
-    bufferlist &chunk = (*encoded)[i];
-    chunk.substr_of(out, i * blocksize, blocksize);
-    chunks[i] = chunk.c_str();
-  }
-  jerasure_encode(&chunks[0], &chunks[k], blocksize);
-  for (int i = 0; i < k + m; i++) {
-    if (want_to_encode.count(i) == 0)
-      encoded->erase(i);
-  }
-  return 0;
-}
-
-int ErasureCodeJerasure::decode(const set<int> &want_to_read,
-                                const map<int, bufferlist> &chunks,
-                                map<int, bufferlist> *decoded)
-{
-  vector<int> have;
-  have.reserve(chunks.size());
-  for (map<int, bufferlist>::const_iterator i = chunks.begin();
-       i != chunks.end();
-       ++i) {
-    have.push_back(i->first);
-  }
-  if (includes(
-	have.begin(), have.end(), want_to_read.begin(), want_to_read.end())) {
-    for (set<int>::iterator i = want_to_read.begin();
-	 i != want_to_read.end();
-	 ++i) {
-      (*decoded)[*i] = chunks.find(*i)->second;
+  if (per_chunk_alignment) {
+    unsigned chunk_size = object_size / k;
+    if (object_size % k)
+      chunk_size++;
+    dout(20) << "get_chunk_size: chunk_size " << chunk_size
+	     << " must be modulo " << alignment << dendl; 
+    assert(alignment <= chunk_size);
+    unsigned modulo = chunk_size % alignment;
+    if (modulo) {
+      dout(10) << "get_chunk_size: " << chunk_size
+	       << " padded to " << chunk_size + alignment - modulo << dendl;
+      chunk_size += alignment - modulo;
     }
-    return 0;
+    return chunk_size;
+  } else {
+    unsigned tail = object_size % alignment;
+    unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
+    assert(padded_length % k == 0);
+    return padded_length / k;
   }
+}
+
+int ErasureCodeJerasure::encode_chunks(const set<int> &want_to_encode,
+				       map<int, bufferlist> *encoded)
+{
+  char *chunks[k + m];
+  for (int i = 0; i < k + m; i++)
+    chunks[i] = (*encoded)[i].c_str();
+  jerasure_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
+  return 0;
+}
+
+int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
+				       const map<int, bufferlist> &chunks,
+				       map<int, bufferlist> *decoded)
+{
   unsigned blocksize = (*chunks.begin()).second.length();
   int erasures[k + m + 1];
   int erasures_count = 0;
@@ -163,11 +137,6 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
       erasures_count++;
-      bufferptr ptr(buffer::create_page_aligned(blocksize));
-      (*decoded)[i].push_front(ptr);
-    } else {
-      (*decoded)[i] = chunks.find(i)->second;
-      (*decoded)[i].rebuild_page_aligned();
     }
     if (i < k)
       data[i] = (*decoded)[i].c_str();
@@ -176,33 +145,8 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
   }
   erasures[erasures_count] = -1;
 
-  if (erasures_count > 0)
-    return jerasure_decode(erasures, data, coding, blocksize);
-  else
-    return 0;
-}
-
-int ErasureCodeJerasure::to_int(const std::string &name,
-                                const map<std::string,std::string> &parameters,
-                                int default_value)
-{
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
-    dout(10) << name << " defaults to " << default_value << dendl;
-    return default_value;
-  }
-  const std::string value = parameters.find(name)->second;
-  std::string p = value;
-  std::string err;
-  int r = strict_strtol(p.c_str(), 10, &err);
-  if (!err.empty()) {
-    derr << "could not convert " << name << "=" << value
-         << " to int because " << err
-         << ", set to default " << default_value << dendl;
-    return default_value;
-  }
-  dout(10) << name << " set to " << r << dendl;
-  return r;
+  assert(erasures_count > 0);
+  return jerasure_decode(erasures, data, coding, blocksize);
 }
 
 bool ErasureCodeJerasure::is_prime(int value)
@@ -241,23 +185,31 @@ int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment() const
 {
-  unsigned alignment = k*w*sizeof(int);
-  if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
-    alignment = k*w*LARGEST_VECTOR_WORDSIZE;
-  return alignment;
-
+  if (per_chunk_alignment) {
+    return w * LARGEST_VECTOR_WORDSIZE;
+  } else {
+    unsigned alignment = k*w*sizeof(int);
+    if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+      alignment = k*w*LARGEST_VECTOR_WORDSIZE;
+    return alignment;
+  }
 }
 
-void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureReedSolomonVandermonde::parse(ErasureCodeProfile &profile,
+						     ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
-  w = to_int("w", parameters, DEFAULT_W);
+  int err = 0;
+  err |= ErasureCodeJerasure::parse(profile, ss);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "ReedSolomonVandermonde: w=" << w
-	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
-    w = 8;
+    *ss << "ReedSolomonVandermonde: w=" << w
+	<< " must be one of {8, 16, 32} : revert to " << DEFAULT_W << std::endl;
+    profile["w"] = "8";
+    err |= to_int("w", profile, &w, DEFAULT_W, ss);
+    err = -EINVAL;
   }
+  err |= to_bool("jerasure-per-chunk-alignment", profile,
+		 &per_chunk_alignment, "false", ss);
+  return err;
 }
 
 void ErasureCodeJerasureReedSolomonVandermonde::prepare()
@@ -285,22 +237,30 @@ int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment() const
 {
-  unsigned alignment = k*w*sizeof(int);
-  if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
-    alignment = k*w*LARGEST_VECTOR_WORDSIZE;
-  return alignment;
+  if (per_chunk_alignment) {
+    return w * LARGEST_VECTOR_WORDSIZE;
+  } else {
+    unsigned alignment = k*w*sizeof(int);
+    if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+      alignment = k*w*LARGEST_VECTOR_WORDSIZE;
+    return alignment;
+  }
 }
 
-void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureReedSolomonRAID6::parse(ErasureCodeProfile &profile,
+					       ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
+  int err = ErasureCodeJerasure::parse(profile, ss);
+  profile.erase("m");
   m = 2;
-  w = to_int("w", parameters, DEFAULT_W);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "ReedSolomonRAID6: w=" << w
-	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
-    w = 8;
+    *ss << "ReedSolomonRAID6: w=" << w
+	<< " must be one of {8, 16, 32} : revert to 8 " << std::endl;
+    profile["w"] = "8";
+    err |= to_int("w", profile, &w, DEFAULT_W, ss);
+    err = -EINVAL;
   }
+  return err;
 }
 
 void ErasureCodeJerasureReedSolomonRAID6::prepare()
@@ -330,18 +290,28 @@ int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureCauchy::get_alignment() const
 {
-  unsigned alignment = k*w*packetsize*sizeof(int);
-  if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
-    alignment = k*w*packetsize*LARGEST_VECTOR_WORDSIZE;
-  return alignment;
+  if (per_chunk_alignment) {
+    unsigned alignment = w * packetsize;
+    unsigned modulo = alignment % LARGEST_VECTOR_WORDSIZE;
+    if (modulo)
+      alignment += LARGEST_VECTOR_WORDSIZE - modulo;
+    return alignment;
+  } else {
+    unsigned alignment = k*w*packetsize*sizeof(int);
+    if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+      alignment = k*w*packetsize*LARGEST_VECTOR_WORDSIZE;
+    return alignment;
+  }  
 }
 
-void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureCauchy::parse(ErasureCodeProfile &profile,
+				     ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
-  w = to_int("w", parameters, DEFAULT_W);
-  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
+  int err = ErasureCodeJerasure::parse(profile, ss);
+  err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
+  err |= to_bool("jerasure-per-chunk-alignment", profile,
+		 &per_chunk_alignment, "false", ss);
+  return err;
 }
 
 void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
@@ -406,38 +376,80 @@ unsigned ErasureCodeJerasureLiberation::get_alignment() const
   return alignment;
 }
 
-void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters)
+bool ErasureCodeJerasureLiberation::check_k(ostream *ss) const
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
-  w = to_int("w", parameters, DEFAULT_W);
-  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
+  if (k > w) {
+    *ss << "k=" << k << " must be less than or equal to w=" << w << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool ErasureCodeJerasureLiberation::check_w(ostream *ss) const
+{
+  if (w <= 2 || !is_prime(w)) {
+    *ss <<  "w=" << w << " must be greater than two and be prime" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool ErasureCodeJerasureLiberation::check_packetsize_set(ostream *ss) const
+{
+  if (packetsize == 0) {
+    *ss << "packetsize=" << packetsize << " must be set" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool ErasureCodeJerasureLiberation::check_packetsize(ostream *ss) const
+{
+  if ((packetsize%(sizeof(int))) != 0) {
+    *ss << "packetsize=" << packetsize
+	<< " must be a multiple of sizeof(int) = " << sizeof(int) << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+int ErasureCodeJerasureLiberation::revert_to_default(ErasureCodeProfile &profile,
+						     ostream *ss)
+{
+  int err = 0;
+  *ss << "reverting to k=" << DEFAULT_K << ", w="
+      << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << std::endl;
+  profile["k"] = DEFAULT_K;
+  err |= to_int("k", profile, &k, DEFAULT_K, ss);
+  profile["w"] = DEFAULT_W;
+  err |= to_int("w", profile, &w, DEFAULT_W, ss);
+  profile["packetsize"] = DEFAULT_PACKETSIZE;
+  err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
+  return err;
+}
+
+int ErasureCodeJerasureLiberation::parse(ErasureCodeProfile &profile,
+					 ostream *ss)
+{
+  int err = ErasureCodeJerasure::parse(profile, ss);
+  err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
-  if (k > w) {
-    derr << "k=" << k << " must be less than or equal to w=" << w << dendl;
+  if (!check_k(ss))
     error = true;
-  }
-  if (w <= 2 || !is_prime(w)) {
-    derr <<  "w=" << w << " must be greater than two and be prime" << dendl;
+  if (!check_w(ss))
     error = true;
-  }
-  if (packetsize == 0) {
-    derr << "packetsize=" << packetsize << " must be set" << dendl;
+  if (!check_packetsize_set(ss) || !check_packetsize(ss))
     error = true;
-  }
-  if ((packetsize%(sizeof(int))) != 0) {
-    derr << "packetsize=" << packetsize
-	 << " must be a multiple of sizeof(int) = " << sizeof(int) << dendl;
-    error = true;
-  }
   if (error) {
-    derr << "reverting to k=" << DEFAULT_K << ", w="
-	 << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
-    k = DEFAULT_K;
-    w = DEFAULT_W;
-    packetsize = DEFAULT_PACKETSIZE;
+    revert_to_default(profile, ss);
+    err = -EINVAL;
   }
+  return err;
 }
 
 void ErasureCodeJerasureLiberation::prepare()
@@ -449,6 +461,21 @@ void ErasureCodeJerasureLiberation::prepare()
 // 
 // ErasureCodeJerasureBlaumRoth
 //
+bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
+{
+  // back in Firefly, w = 7 was the default and produced useable 
+  // chunks. Tolerate this value for backward compatibility.
+  if (w == 7)
+    return true;
+  if (w <= 2 || !is_prime(w+1)) {
+    *ss <<  "w=" << w << " must be greater than two and "
+	<< "w+1 must be prime" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
 void ErasureCodeJerasureBlaumRoth::prepare()
 {
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
@@ -458,28 +485,26 @@ void ErasureCodeJerasureBlaumRoth::prepare()
 // 
 // ErasureCodeJerasureLiber8tion
 //
-void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureLiber8tion::parse(ErasureCodeProfile &profile,
+					 ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = DEFAULT_M;
-  w = DEFAULT_W;
-  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
+  int err = ErasureCodeJerasure::parse(profile, ss);
+  profile.erase("m");
+  err |= to_int("m", profile, &m, DEFAULT_M, ss);
+  profile.erase("w");
+  err |= to_int("w", profile, &w, DEFAULT_W, ss);
+  err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
-  if (k > w) {
-    derr << "k=" << k << " must be less than or equal to w=" << w << dendl;
+  if (!check_k(ss))
     error = true;
-  }
-  if (packetsize == 0) {
-    derr << "packetsize=" << packetsize << " must be set" << dendl;
+  if (!check_packetsize_set(ss))
     error = true;
-  }
   if (error) {
-    derr << "reverting to k=" << DEFAULT_K << ", packetsize="
-	 << DEFAULT_PACKETSIZE << dendl;
-    k = DEFAULT_K;
-    packetsize = DEFAULT_PACKETSIZE;
+    revert_to_default(profile, ss);
+    err = -EINVAL;
   }
+  return err;
 }
 
 void ErasureCodeJerasureLiber8tion::prepare()

@@ -17,12 +17,8 @@
 #include <limits.h>
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/MonitorDBStore.h"
-
-#include "common/config.h"
-#include "common/cmdparse.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -37,34 +33,35 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
 
 const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
 
-int ConfigKeyService::store_get(string key, bufferlist &bl)
+int ConfigKeyService::store_get(const string &key, bufferlist &bl)
 {
-  if (!store_exists(key))
-    return -ENOENT;
-
   return mon->store->get(STORE_PREFIX, key, bl);
 }
 
-void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
+void ConfigKeyService::get_store_prefixes(set<string>& s)
 {
-  bufferlist proposal_bl;
-  MonitorDBStore::Transaction t;
-  t.put(STORE_PREFIX, key, bl);
-  t.encode(proposal_bl);
-
-  paxos->propose_new_value(proposal_bl, cb);
+  s.insert(STORE_PREFIX);
 }
 
-void ConfigKeyService::store_delete(string key, Context *cb)
+void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
 {
-  bufferlist proposal_bl;
-  MonitorDBStore::Transaction t;
-  t.erase(STORE_PREFIX, key);
-  t.encode(proposal_bl);
-  paxos->propose_new_value(proposal_bl, cb);
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  t->put(STORE_PREFIX, key, bl);
+  if (cb)
+    paxos->queue_pending_finisher(cb);
+  paxos->trigger_propose();
 }
 
-bool ConfigKeyService::store_exists(string key)
+void ConfigKeyService::store_delete(const string &key, Context *cb)
+{
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  t->erase(STORE_PREFIX, key);
+  if (cb)
+    paxos->queue_pending_finisher(cb);
+  paxos->trigger_propose();
+}
+
+bool ConfigKeyService::store_exists(const string &key)
 {
   return mon->store->exists(STORE_PREFIX, key);
 }
@@ -87,16 +84,17 @@ void ConfigKeyService::store_list(stringstream &ss)
 }
 
 
-bool ConfigKeyService::service_dispatch(Message *m)
+bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 {
+  Message *m = op->get_req();
+  assert(m != NULL);
   dout(10) << __func__ << " " << *m << dendl;
+
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- ignore message" << dendl;
-    m->put();
     return false;
   }
 
-  assert(m != NULL);
   assert(m->get_type() == MSG_MON_COMMAND);
 
   MMonCommand *cmd = static_cast<MMonCommand*>(m);
@@ -111,7 +109,6 @@ bool ConfigKeyService::service_dispatch(Message *m)
   map<string, cmd_vartype> cmdmap;
 
   if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
-    ret = -EINVAL;
     return false;
   }
 
@@ -130,7 +127,7 @@ bool ConfigKeyService::service_dispatch(Message *m)
 
   } else if (prefix == "config-key put") {
     if (!mon->is_leader()) {
-      mon->forward_request_leader(cmd);
+      mon->forward_request_leader(op);
       // we forward the message; so return now.
       return true;
     }
@@ -153,13 +150,14 @@ bool ConfigKeyService::service_dispatch(Message *m)
     }
     // we'll reply to the message once the proposal has been handled
     store_put(key, data,
-        new Monitor::C_Command(mon, cmd, 0, "value stored", 0));
+        new Monitor::C_Command(mon, op, 0, "value stored", 0));
     // return for now; we'll put the message once it's done.
     return true;
 
-  } else if (prefix == "config-key del") {
+  } else if (prefix == "config-key del" ||
+             prefix == "config-key rm") {
     if (!mon->is_leader()) {
-      mon->forward_request_leader(cmd);
+      mon->forward_request_leader(op);
       return true;
     }
 
@@ -168,7 +166,7 @@ bool ConfigKeyService::service_dispatch(Message *m)
       ss << "no such key '" << key << "'";
       goto out;
     }
-    store_delete(key, new Monitor::C_Command(mon, cmd, 0, "key deleted", 0));
+    store_delete(key, new Monitor::C_Command(mon, op, 0, "key deleted", 0));
     // return for now; we'll put the message once it's done
     return true;
 
@@ -193,9 +191,7 @@ bool ConfigKeyService::service_dispatch(Message *m)
 out:
   if (!cmd->get_source().is_mon()) {
     string rs = ss.str();
-    mon->reply_command(cmd, ret, rs, rdata, 0);
-  } else {
-    cmd->put();
+    mon->reply_command(op, ret, rs, rdata, 0);
   }
 
   return (ret == 0);

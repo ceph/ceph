@@ -1,9 +1,23 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#include "include/stringify.h"
 #include "CrushTester.h"
+#include "CrushTreeDumper.h"
 
 #include <algorithm>
 #include <stdlib.h>
-
+#include <boost/lexical_cast.hpp>
+// to workaround https://svn.boost.org/trac/boost/ticket/9501
+#ifdef _LIBCPP_VERSION
+#include <boost/version.hpp>
+#if BOOST_VERSION < 105600
+#define ICL_USE_BOOST_MOVE_IMPLEMENTATION
+#endif
+#endif
+#include <boost/icl/interval_map.hpp>
+#include <boost/algorithm/string/join.hpp>
+#include <common/SubProcess.h>
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -247,12 +261,6 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
       crush.get_max_devices() == 0)
     return -EINVAL;
 
-  // compute each device's proportional weight
-  vector<float> proportional_weights( weight.size() );
-  for (unsigned i = 0; i < weight.size(); i++) {
-    proportional_weights[i] = (float) weight[i] / (float) total_weight;
-  }
-
   // determine the real maximum number of devices to return
   int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
@@ -350,6 +358,146 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
+int CrushTester::test_with_crushtool(const char *crushtool_cmd,
+				     int max_id, int timeout,
+				     int ruleset)
+{
+  SubProcessTimed crushtool(crushtool_cmd, SubProcess::PIPE, SubProcess::CLOSE, SubProcess::PIPE, timeout);
+  string opt_max_id = boost::lexical_cast<string>(max_id);
+  crushtool.add_cmd_args(
+    "-i", "-",
+    "--test", "--check", opt_max_id.c_str(),
+    "--min-x", "1",
+    "--max-x", "50",
+    NULL);
+  if (ruleset >= 0) {
+    crushtool.add_cmd_args(
+      "--ruleset",
+      stringify(ruleset).c_str(),
+      NULL);
+  }
+  int ret = crushtool.spawn();
+  if (ret != 0) {
+    err << "failed run crushtool: " << crushtool.err();
+    return ret;
+  }
+
+  bufferlist bl;
+  ::encode(crush, bl);
+  bl.write_fd(crushtool.get_stdin());
+  crushtool.close_stdin();
+  bl.clear();
+  ret = bl.read_fd(crushtool.get_stderr(), 100 * 1024);
+  if (ret < 0) {
+    err << "failed read from crushtool: " << cpp_strerror(-ret);
+    return ret;
+  }
+  bl.write_stream(err);
+  if (crushtool.join() != 0) {
+    err << crushtool.err();
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+namespace {
+  class BadCrushMap : public std::runtime_error {
+  public:
+    int item;
+    BadCrushMap(const char* msg, int id)
+      : std::runtime_error(msg), item(id) {}
+  };
+  // throws if any node in the crush fail to print
+  class CrushWalker : public CrushTreeDumper::Dumper<void> {
+    typedef void DumbFormatter;
+    typedef CrushTreeDumper::Dumper<DumbFormatter> Parent;
+    int max_id;
+  public:
+    CrushWalker(const CrushWrapper *crush, unsigned max_id)
+      : Parent(crush), max_id(max_id) {}
+    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) {
+      int type = -1;
+      if (qi.is_bucket()) {
+	if (!crush->get_item_name(qi.id)) {
+	  throw BadCrushMap("unknown item name", qi.id);
+	}
+	type = crush->get_bucket_type(qi.id);
+      } else {
+	if (max_id > 0 && qi.id >= max_id) {
+	  throw BadCrushMap("item id too large", qi.id);
+	}
+	type = 0;
+      }
+      if (!crush->get_type_name(type)) {
+	throw BadCrushMap("unknown type name", qi.id);
+      }
+    }
+  };
+}
+
+bool CrushTester::check_name_maps(unsigned max_id) const
+{
+  CrushWalker crush_walker(&crush, max_id);
+  try {
+    // walk through the crush, to see if its self-contained
+    crush_walker.dump(NULL);
+    // and see if the maps is also able to handle straying OSDs, whose id >= 0.
+    // "ceph osd tree" will try to print them, even they are not listed in the
+    // crush map.
+    crush_walker.dump_item(CrushTreeDumper::Item(0, 0, 0), NULL);
+  } catch (const BadCrushMap& e) {
+    err << e.what() << ": item#" << e.item << std::endl;
+    return false;
+  }
+  return true;
+}
+
+static string get_rule_name(CrushWrapper& crush, int rule)
+{
+  if (crush.get_rule_name(rule))
+    return crush.get_rule_name(rule);
+  else
+    return string("rule") + std::to_string(rule);
+}
+
+void CrushTester::check_overlapped_rules() const
+{
+  namespace icl = boost::icl;
+  typedef std::set<string> RuleNames;
+  typedef icl::interval_map<int, RuleNames> Rules;
+  // <ruleset, type> => interval_map<size, {names}>
+  typedef std::map<std::pair<int, int>, Rules> RuleSets;
+  using interval = icl::interval<int>;
+
+  // mimic the logic of crush_find_rule(), but it only return the first matched
+  // one, but I am collecting all of them by the overlapped sizes.
+  RuleSets rulesets;
+  for (int rule = 0; rule < crush.get_max_rules(); rule++) {
+    if (!crush.rule_exists(rule)) {
+      continue;
+    }
+    Rules& rules = rulesets[{crush.get_rule_mask_ruleset(rule),
+			     crush.get_rule_mask_type(rule)}];
+    rules += make_pair(interval::closed(crush.get_rule_mask_min_size(rule),
+					crush.get_rule_mask_max_size(rule)),
+		       RuleNames{get_rule_name(crush, rule)});
+  }
+  for (auto i : rulesets) {
+    auto ruleset_type = i.first;
+    const Rules& rules = i.second;
+    for (auto r : rules) {
+      const RuleNames& names = r.second;
+      // if there are more than one rules covering the same size range,
+      // print them out.
+      if (names.size() > 1) {
+	err << "overlapped rules in ruleset " << ruleset_type.first << ": "
+	    << boost::join(names, ", ") << "\n";
+      }
+    }
+  }
+}
+
 int CrushTester::test()
 {
   if (min_rule < 0 || max_rule < 0) {
@@ -399,6 +547,10 @@ int CrushTester::test()
         err << "rule " << r << " dne" << std::endl;
       continue;
     }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
+      continue;
+    }
     int minr = min_rep, maxr = max_rep;
     if (min_rep < 0 || max_rep < 0) {
       minr = crush.get_rule_mask_min_size(r);
@@ -420,7 +572,6 @@ int CrushTester::test()
 
       // create a structure to hold data for post-processing
       tester_data_set tester_data;
-      vector<int> vector_data_buffer;
       vector<float> vector_data_buffer_f;
 
       // create a map to hold batch-level placement information
@@ -487,18 +638,22 @@ int CrushTester::test()
           vector<int> out;
 
           if (use_crush) {
-            if (output_statistics)
-              err << "CRUSH"; // prepend CRUSH to placement output
-            crush.do_rule(r, x, out, nr, weight);
+            if (output_mappings)
+	      err << "CRUSH"; // prepend CRUSH to placement output
+            uint32_t real_x = x;
+            if (pool_id != -1) {
+              real_x = crush_hash32_2(CRUSH_HASH_RJENKINS1, x, (uint32_t)pool_id);
+            }
+            crush.do_rule(r, real_x, out, nr, weight);
           } else {
-            if (output_statistics)
-              err << "RNG"; // prepend RNG to placement output to denote simulation
+            if (output_mappings)
+	      err << "RNG"; // prepend RNG to placement output to denote simulation
             // test our new monte carlo placement generator
             random_placement(r, out, nr, weight);
           }
 
-          if (output_statistics)
-            err << " rule " << r << " x " << x << " " << out << std::endl;
+	  if (output_mappings)
+	    err << " rule " << r << " x " << x << " " << out << std::endl;
 
           if (output_data_file)
             write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);
@@ -539,14 +694,14 @@ int CrushTester::test()
 
       if (output_statistics)
         for (unsigned i = 0; i < per.size(); i++) {
-          if (output_utilization && num_batches > 1){
+          if (output_utilization) {
             if (num_objects_expected[i] > 0 && per[i] > 0) {
               err << "  device " << i << ":\t"
                   << "\t" << " stored " << ": " << per[i]
                   << "\t" << " expected " << ": " << num_objects_expected[i]
                   << std::endl;
             }
-          } else if (output_utilization_all && num_batches > 1) {
+          } else if (output_utilization_all) {
             err << "  device " << i << ":\t"
                 << "\t" << " stored " << ": " << per[i]
                 << "\t" << " expected " << ": " << num_objects_expected[i]

@@ -1,8 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef RGW_MULTI_DELETE_H_
 #define RGW_MULTI_DELETE_H_
 
 #include <vector>
 #include "rgw_xml.h"
+#include "rgw_common.h"
 
 class RGWMultiDelDelete : public XMLObj
 {
@@ -11,9 +15,9 @@ public:
   ~RGWMultiDelDelete() {}
   bool xml_end(const char *el);
 
-  std::vector<string> objects;
+  std::vector<rgw_obj_key> objects;
   bool quiet;
-  bool is_quiet() { return quiet; };
+  bool is_quiet() { return quiet; }
 };
 
 class RGWMultiDelQuiet : public XMLObj
@@ -26,13 +30,14 @@ public:
 class RGWMultiDelObject : public XMLObj
 {
   string key;
-  string versionID;
+  string version_id;
 public:
   RGWMultiDelObject() {}
   ~RGWMultiDelObject() {}
   bool xml_end(const char *el);
 
-  string get_key() { return key; }
+  const string& get_key() { return key; }
+  const string& get_version_id() { return version_id; }
 };
 
 class RGWMultiDelKey : public XMLObj
@@ -40,6 +45,13 @@ class RGWMultiDelKey : public XMLObj
 public:
   RGWMultiDelKey() {}
   ~RGWMultiDelKey() {}
+};
+
+class RGWMultiDelVersionId : public XMLObj
+{
+public:
+  RGWMultiDelVersionId() {}
+  ~RGWMultiDelVersionId() {}
 };
 
 class RGWMultiDelXMLParser : public RGWXMLParser

@@ -5,23 +5,20 @@
 
 #include "include/int_types.h"
 
-#include "include/rados/librados.hpp"
-
-#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/parent_types.h"
 
 namespace librbd {
 
   struct SnapInfo {
-    librados::snap_t id;
+    std::string name;
     uint64_t size;
-    uint64_t features;
     parent_info parent;
     uint8_t protection_status;
-    SnapInfo(librados::snap_t _id, uint64_t _size, uint64_t _features,
-	     parent_info _parent, uint8_t _protection_status) :
-      id(_id), size(_size), features(_features), parent(_parent),
-      protection_status(_protection_status) {}
+    uint64_t flags;
+    SnapInfo(std::string _name, uint64_t _size, parent_info _parent,
+             uint8_t _protection_status, uint64_t _flags)
+      : name(_name), size(_size), parent(_parent),
+	protection_status(_protection_status), flags(_flags) {}
   };
 }
 

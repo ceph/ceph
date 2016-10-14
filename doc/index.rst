@@ -36,6 +36,7 @@ system**.
 - KVM/libvirt support
 - Back-end for cloud solutions
 - Incremental backup
+- Disaster recovery
 
 .. raw:: html 
 
@@ -97,8 +98,10 @@ about Ceph, see our `Architecture`_ section.
    cephfs/index
    rbd/rbd
    radosgw/index
+   mgr/index
    api/index
    architecture
    Development <dev/index>
    release-notes
+   releases
    Glossary <glossary>

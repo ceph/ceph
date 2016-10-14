@@ -327,9 +327,7 @@ int run_rgw_admin(string& cmd, string& resp) {
       argv[loop++] = (char *)(*it).c_str();
     }
     argv[loop] = NULL;
-    close(1);
-    stdout = fopen(RGW_ADMIN_RESP_PATH, "w+");
-    if (!stdout) {
+    if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
       cout << "Unable to open stdout file" << std::endl;
     }
     execv((g_test->get_rgw_admin_path()).c_str(), argv); 
@@ -466,7 +464,7 @@ int caps_rm(const char * name, const char *perm) {
 }
 
 static int create_bucket(void){
-  g_test->send_request(string("PUT"), string("/"TEST_BUCKET_NAME));
+  g_test->send_request(string("PUT"), string("/" TEST_BUCKET_NAME));
   if(g_test->get_resp_code() != 200U){
     cout << "Error creating bucket, http code " << g_test->get_resp_code();
     return -1;
@@ -475,7 +473,7 @@ static int create_bucket(void){
 }
 
 static int delete_bucket(void){
-  g_test->send_request(string("DELETE"), string("/"TEST_BUCKET_NAME));
+  g_test->send_request(string("DELETE"), string("/" TEST_BUCKET_NAME));
   if(g_test->get_resp_code() != 204U){
     cout << "Error deleting bucket, http code " << g_test->get_resp_code();
     return -1;
@@ -495,7 +493,7 @@ size_t read_bucket_object(void *ptr, size_t s, size_t n, void *ud) {
 }
 
 static int put_bucket_obj(const char *obj_name, char *data, unsigned len) {
-  string req = "/"TEST_BUCKET_NAME"/";
+  string req = "/" TEST_BUCKET_NAME"/";
   req.append(obj_name);
   g_test->send_request(string("PUT"), req,
                        read_bucket_object, (void *)data, (size_t)len);
@@ -507,7 +505,7 @@ static int put_bucket_obj(const char *obj_name, char *data, unsigned len) {
 }
 
 static int read_bucket_obj(const char *obj_name) {
-  string req = "/"TEST_BUCKET_NAME"/";
+  string req = "/" TEST_BUCKET_NAME"/";
   req.append(obj_name);
   g_test->send_request(string("GET"), req);
   if (g_test->get_resp_code() != 200U) {
@@ -518,7 +516,7 @@ static int read_bucket_obj(const char *obj_name) {
 }
 
 static int delete_obj(const char *obj_name) {
-  string req = "/"TEST_BUCKET_NAME"/";
+  string req = "/" TEST_BUCKET_NAME"/";
   req.append(obj_name);
   g_test->send_request(string("DELETE"), req);
   if (g_test->get_resp_code() != 204U) {
@@ -560,12 +558,6 @@ int parse_json_resp(JSONParser &parser) {
   return 0;
 }
 
-struct RGWMetadataLogData {
-  obj_version read_version;
-  obj_version write_version;
-  string status;
-};
-
 struct cls_log_entry_json {
   string section;
   string name;
@@ -585,7 +577,7 @@ static int decode_json(JSONObj *obj, RGWMetadataLogData &data) {
   jo = obj->find_obj("status");
   if (!jo)
     return -1;
-  JSONDecoder::decode_json("status", data.status, jo);
+  JSONDecoder::decode_json("status", data, jo);
   return 0;
 }
 
@@ -717,8 +709,7 @@ unsigned get_datalog_shard_id(const char *bucket_name, int max_shards) {
 
 TEST(TestRGWAdmin, datalog_list) {
   string start_time, 
-         end_time,
-         start_time_2;
+         end_time;
   const char *cname = "datalog",
              *perm = "*";
   string rest_req;
@@ -742,10 +733,9 @@ TEST(TestRGWAdmin, datalog_list) {
   sleep(1);
   ASSERT_EQ(0, create_bucket());
   
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
-  free(bucket_obj);
   sleep(1); 
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
   rest_req = ss.str();
@@ -778,6 +768,7 @@ TEST(TestRGWAdmin, datalog_list) {
 
   sleep(1);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  free(bucket_obj);
   sleep(20);
   ss.str("");
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
@@ -791,7 +782,7 @@ TEST(TestRGWAdmin, datalog_list) {
     list<rgw_data_change>::iterator it = (entries.begin());
     EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
     EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
-    it++; 
+    ++it; 
     EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
     EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
   }
@@ -981,7 +972,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   
   ASSERT_EQ(0, create_bucket());
 
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
@@ -1000,7 +991,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
   get_datalog_list(entries);
-  EXPECT_TRUE(entries.size() > 0);
+  EXPECT_TRUE(!entries.empty());
 
   ss.str("");
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
@@ -1017,7 +1008,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
   get_datalog_list(entries);
-  EXPECT_TRUE(entries.size() == 0);
+  EXPECT_TRUE(entries.empty());
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
@@ -1081,19 +1072,19 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
   }
 
   sleep(1); /*To get a modified time*/
@@ -1115,19 +1106,19 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
   }
 
   sleep(1);
@@ -1151,18 +1142,18 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("remove") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_REMOVE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    it++;
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
-    it++;
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
+    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
   }
 
   sleep(1);
@@ -1220,8 +1211,7 @@ TEST(TestRGWAdmin, mdlog_list) {
 
 TEST(TestRGWAdmin, mdlog_trim) {
   string start_time, 
-         end_time,
-         start_time_2;
+         end_time;
   const char *cname = "mdlog",
              *perm = "*";
   string rest_req;
@@ -1400,12 +1390,12 @@ TEST(TestRGWAdmin, bilog_list) {
 
   ASSERT_EQ(0, create_bucket());
 
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
   
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   list<cls_bilog_entry> entries;
@@ -1417,7 +1407,7 @@ TEST(TestRGWAdmin, bilog_list) {
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT), 0);
     EXPECT_EQ(it->status.compare("pending"), 0);
     EXPECT_EQ(it->index_ver, 1U);
-    it++;
+    ++it;
     EXPECT_EQ(it->op.compare("write"), 0);
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT), 0);
     EXPECT_EQ(it->status.compare("complete"), 0);
@@ -1430,12 +1420,12 @@ TEST(TestRGWAdmin, bilog_list) {
   get_bilog_list(entries);
   EXPECT_EQ(2U, entries.size());
 
-  bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT_1, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
   
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
@@ -1444,12 +1434,12 @@ TEST(TestRGWAdmin, bilog_list) {
   if (entries.size() == 4) {
     list<cls_bilog_entry>::iterator it = entries.begin();
 
-    it++; it++;
+    ++it; ++it;
     EXPECT_EQ(it->op.compare("write"), 0);
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT_1), 0);
     EXPECT_EQ(it->status.compare("pending"), 0);
     EXPECT_EQ(it->index_ver, 3U);
-    it++;
+    ++it;
     EXPECT_EQ(it->op.compare("write"), 0);
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT_1), 0);
     EXPECT_EQ(it->status.compare("complete"), 0);
@@ -1457,7 +1447,7 @@ TEST(TestRGWAdmin, bilog_list) {
   }
 
   ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
@@ -1468,20 +1458,20 @@ TEST(TestRGWAdmin, bilog_list) {
   if (entries.size() == 6) {
     list<cls_bilog_entry>::iterator it = entries.begin();
     
-    it++; it++; it++; it++;
+    ++it; ++it; ++it; ++it;
     marker = it->op_id;
     EXPECT_EQ(it->op.compare("del"), 0);
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT), 0);
     EXPECT_EQ(it->status.compare("pending"), 0);
     EXPECT_EQ(it->index_ver, 5U);
-    it++;
+    ++it;
     EXPECT_EQ(it->op.compare("del"), 0);
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT), 0);
     EXPECT_EQ(it->status.compare("complete"), 0);
     EXPECT_EQ(it->index_ver, 6U);
   }
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   rest_req.append("&marker=");
   rest_req.append(marker);
   g_test->send_request(string("GET"), rest_req);
@@ -1492,12 +1482,12 @@ TEST(TestRGWAdmin, bilog_list) {
   if (entries.size() == 2U) {
     list<cls_bilog_entry>::iterator it = entries.begin();
     EXPECT_EQ(it->index_ver, 5U);
-    it++;
+    ++it;
     EXPECT_EQ(it->index_ver, 6U);
     EXPECT_EQ(it->op.compare("del"), 0);
   }
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   rest_req.append("&marker=");
   rest_req.append(marker);
   rest_req.append("&max-entries=1");
@@ -1511,14 +1501,14 @@ TEST(TestRGWAdmin, bilog_list) {
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "read";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(403U, g_test->get_resp_code());
 
@@ -1537,16 +1527,16 @@ TEST(TestRGWAdmin, bilog_trim) {
 
   ASSERT_EQ(0, create_bucket());
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
   
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   list<cls_bilog_entry> entries;
@@ -1555,10 +1545,10 @@ TEST(TestRGWAdmin, bilog_trim) {
 
   list<cls_bilog_entry>::iterator it = entries.begin();
   start_marker = it->op_id;
-  it++;
+  ++it;
   end_marker = it->op_id;
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   rest_req.append("&start-marker=");
   rest_req.append(start_marker);
   rest_req.append("&end-marker=");
@@ -1566,7 +1556,7 @@ TEST(TestRGWAdmin, bilog_trim) {
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();

@@ -16,12 +16,12 @@
 #define CEPH_FRAG_H
 
 #include <stdint.h>
-#include <map>
 #include <list>
 #include <iostream>
 #include <stdio.h>
 
 #include "buffer.h"
+#include "compact_map.h"
 
 #include "ceph_frag.h"
 #include "include/assert.h"
@@ -177,7 +177,7 @@ class fragtree_t {
   //  frag_t f is split by b bits.
   //  if child frag_t does not appear, it is not split.
 public:
-  std::map<frag_t,int32_t> _splits;  
+  compact_map<frag_t,int32_t> _splits;
 
 public:
   // -------------
@@ -191,11 +191,11 @@ public:
 
   // -------------
   // accessors
-  bool empty() { 
+  bool empty() const { 
     return _splits.empty();
   }
   int get_split(const frag_t hb) const {
-    std::map<frag_t,int32_t>::const_iterator p = _splits.find(hb);
+    compact_map<frag_t,int32_t>::const_iterator p = _splits.find(hb);
     if (p == _splits.end())
       return 0;
     else
@@ -452,30 +452,28 @@ public:
     return true;
   }
 
-  // verify that we describe a legal partition of the namespace.
-  void verify() const {
-    std::map<frag_t,int32_t> copy;
-    std::list<frag_t> q;
-    q.push_back(frag_t());
-    
-    while (1) {
-      frag_t cur = q.front();
-      q.pop_front();
-      int b = get_split(cur);
-      if (!b) continue;
-      copy[cur] = b;
-      cur.split(b, q);
-    }
-    
-    assert(copy == _splits);	
-  }
-  
   // encoding
   void encode(bufferlist& bl) const {
     ::encode(_splits, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(_splits, p);
+  }
+  void encode_nohead(bufferlist& bl) const {
+    for (compact_map<frag_t,int32_t>::const_iterator p = _splits.begin();
+	 p != _splits.end();
+	 ++p) {
+      ::encode(p->first, bl);
+      ::encode(p->second, bl);
+    }
+  }
+  void decode_nohead(int n, bufferlist::iterator& p) {
+    _splits.clear();
+    while (n-- > 0) {
+      frag_t f;
+      ::decode(f, p);
+      ::decode(_splits[f], p);
+    }
   }
 
   void print(std::ostream& out) {
@@ -500,6 +498,21 @@ public:
     }
     out << ")";
   }
+
+  void dump(Formatter *f) const {
+    f->open_array_section("splits");
+    for (compact_map<frag_t,int32_t>::const_iterator p = _splits.begin();
+         p != _splits.end();
+         ++p) {
+      f->open_object_section("split");
+      std::ostringstream frag_str;
+      frag_str << p->first;
+      f->dump_string("frag", frag_str.str());
+      f->dump_int("children", p->second);
+      f->close_section(); // split
+    }
+    f->close_section(); // splits
+  }
 };
 WRITE_CLASS_ENCODER(fragtree_t)
 
@@ -514,33 +527,12 @@ inline std::ostream& operator<<(std::ostream& out, const fragtree_t& ft)
 {
   out << "fragtree_t(";
   
-  if (0) {
-    std::list<frag_t> q;
-    q.push_back(frag_t());
-    while (!q.empty()) {
-      frag_t t = q.front();
-      q.pop_front();
-      int nb = ft.get_split(t);
-      if (nb) {
-	if (t.bits()) out << ' ';
-	out << t << '%' << nb;
-	t.split(nb, q);   // queue up children
-      }
-    }
-  }
-  if (0) {
-    std::list<frag_t> leaves;
-    ft.get_leaves(leaves);
-    out << leaves;
-  }
-  if (1) {
-    for (std::map<frag_t,int32_t>::const_iterator p = ft._splits.begin();
-	 p != ft._splits.end();
-	 p++) {
-      if (p != ft._splits.begin())
-	out << " ";
-      out << p->first << "^" << p->second;
-    }
+  for (compact_map<frag_t,int32_t>::const_iterator p = ft._splits.begin();
+       p != ft._splits.end();
+       ++p) {
+    if (p != ft._splits.begin())
+      out << " ";
+    out << p->first << "^" << p->second;
   }
   return out << ")";
 }

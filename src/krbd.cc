@@ -28,11 +28,13 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/module.h"
+#include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/secret.h"
 #include "common/TextTable.h"
 #include "include/assert.h"
 #include "include/stringify.h"
+#include "include/krbd.h"
 #include "mon/MonMap.h"
 
 #include <blkid/blkid.h>
@@ -92,19 +94,19 @@ static int sysfs_write_rbd_remove(const string& buf)
   return sysfs_write_rbd("remove", buf);
 }
 
-static int should_match_minor(void)
+static int have_minor_attr(void)
 {
   /*
    * 'minor' attribute was added as part of single_major merge, which
    * exposed the 'single_major' parameter.  'minor' is always present,
    * regardless of whether single-major scheme is turned on or not.
+   *
+   * (Something like ver >= KERNEL_VERSION(3, 14, 0) is a no-go because
+   * this has to work with rbd.ko backported to various kernels.)
    */
   return access("/sys/module/rbd/parameters/single_major", F_OK) == 0;
 }
 
-/*
- * options can be NULL
- */
 static int build_map_buf(CephContext *cct, const char *pool, const char *image,
                          const char *snap, const char *options, string *pbuf)
 {
@@ -121,7 +123,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
        ++it) {
     if (it != monmap.mon_addr.begin())
       oss << ",";
-    oss << it->second.addr;
+    oss << it->second.get_sockaddr();
   }
 
   oss << " name=" << cct->_conf->name.get_id();
@@ -159,7 +161,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
     oss << ",key=" << key_name;
   }
 
-  if (options && strcmp(options, "") != 0)
+  if (strcmp(options, "") != 0)
     oss << "," << options;
 
   oss << " " << pool << " " << image << " " << snap;
@@ -175,7 +177,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
   struct udev_device *bus_dev = NULL;
 
   /*
-   * Catch /sys/bus/rbd/<id>, note it, and wait for the corresponding
+   * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
    * block device to show up.  This is necessary because rbd devices
    * and block devices aren't linked together in our sysfs layout.
    */
@@ -202,9 +204,9 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_snap = udev_device_get_sysattr_value(dev,
                                                               "current_snap");
 
-        if (strcmp(this_pool, pool) == 0 &&
-            strcmp(this_image, image) == 0 &&
-            strcmp(this_snap, snap) == 0) {
+        if (this_pool && strcmp(this_pool, pool) == 0 &&
+            this_image && strcmp(this_image, image) == 0 &&
+            this_snap && strcmp(this_snap, snap) == 0) {
           bus_dev = dev;
           continue;
         }
@@ -216,7 +218,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_major = udev_device_get_property_value(dev, "MAJOR");
         const char *this_minor = udev_device_get_property_value(dev, "MINOR");
 
-        assert(!minor ^ should_match_minor());
+        assert(!minor ^ have_minor_attr());
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
@@ -278,16 +280,13 @@ out_mon:
   return r;
 }
 
-/*
- * snap and options can be NULL
- */
 static int map_image(struct krbd_ctx *ctx, const char *pool, const char *image,
                      const char *snap, const char *options, string *pname)
 {
   string buf;
   int r;
 
-  if (!snap)
+  if (strcmp(snap, "") == 0)
     snap = "-";
 
   r = build_map_buf(ctx->cct, pool, image, snap, options, &buf);
@@ -337,7 +336,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   if (r < 0)
     goto out_enm;
 
-  if (should_match_minor()) {
+  if (have_minor_attr()) {
     r = udev_enumerate_add_match_sysattr(enm, "minor",
                                          stringify(minor(devno)).c_str());
     if (r < 0)
@@ -371,6 +370,99 @@ out_enm:
   return r;
 }
 
+static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
+                                     const char *image, const char *snap,
+                                     dev_t *pdevno, string *pid)
+{
+  struct udev_enumerate *enm;
+  struct udev_list_entry *l;
+  struct udev_device *dev;
+  unsigned int maj, min = 0;
+  string err;
+  int r;
+
+  enm = udev_enumerate_new(udev);
+  if (!enm)
+    return -ENOMEM;
+
+  r = udev_enumerate_add_match_subsystem(enm, "rbd");
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "name", image);
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
+  if (r < 0)
+    goto out_enm;
+
+  r = udev_enumerate_scan_devices(enm);
+  if (r < 0)
+    goto out_enm;
+
+  l = udev_enumerate_get_list_entry(enm);
+  if (!l) {
+    r = -ENOENT;
+    goto out_enm;
+  }
+
+  dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
+  if (!dev) {
+    r = -ENOMEM;
+    goto out_enm;
+  }
+
+  maj = strict_strtoll(udev_device_get_sysattr_value(dev, "major"), 10, &err);
+  if (!err.empty()) {
+    cerr << "rbd: couldn't parse major: " << err << std::endl;
+    r = -EINVAL;
+    goto out_dev;
+  }
+  if (have_minor_attr()) {
+    min = strict_strtoll(udev_device_get_sysattr_value(dev, "minor"), 10, &err);
+    if (!err.empty()) {
+      cerr << "rbd: couldn't parse minor: " << err << std::endl;
+      r = -EINVAL;
+      goto out_dev;
+    }
+  }
+
+  /*
+   * If an image is mapped more than once don't bother trying to unmap
+   * all devices - let users run unmap the same number of times they
+   * ran map.
+   */
+  if (udev_list_entry_get_next(l))
+    cerr << "rbd: " << pool << "/" << image << "@" << snap
+         << ": mapped more than once, unmapping "
+         << get_kernel_rbd_name(udev_device_get_sysname(dev))
+         << " only" << std::endl;
+
+  *pdevno = makedev(maj, min);
+  *pid = udev_device_get_sysname(dev);
+
+out_dev:
+  udev_device_unref(dev);
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
+}
+
+static string build_unmap_buf(const string& id, const char *options)
+{
+  string buf(id);
+  if (strcmp(options, "") != 0) {
+    buf += " ";
+    buf += options;
+  }
+  return buf;
+}
+
 static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
 {
   for (;;) {
@@ -398,7 +490,7 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
   return 0;
 }
 
-static int do_unmap(struct udev *udev, dev_t devno, const string& id)
+static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
 {
   struct udev_monitor *mon;
   int r;
@@ -419,18 +511,25 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& id)
    * On final device close(), kernel sends a block change event, in
    * response to which udev apparently runs blkid on the device.  This
    * makes unmap fail with EBUSY, if issued right after final close().
-   * Circumvent this with a retry loop.
+   * Try to circumvent this with a retry before turning to udev.
    */
-  {
-    int tries = 0;
-
-  again:
-    r = sysfs_write_rbd_remove(id);
-    if (r < 0) {
-      if (r == -EBUSY && tries++ < 5) {
-        usleep(200 * 1000);
-        goto again;
+  for (int tries = 0; ; tries++) {
+    r = sysfs_write_rbd_remove(buf);
+    if (r >= 0) {
+      break;
+    } else if (r == -EBUSY && tries < 2) {
+      if (!tries) {
+        usleep(250 * 1000);
+      } else {
+        /*
+         * libudev does not provide the "wait until the queue is empty"
+         * API or the sufficient amount of primitives to build it from.
+         */
+        string err = run_cmd("udevadm", "settle", "--timeout", "10", NULL);
+        if (!err.empty())
+          cerr << "rbd: " << err << std::endl;
       }
+    } else {
       cerr << "rbd: sysfs write failed" << std::endl;
       goto out_mon;
     }
@@ -447,7 +546,8 @@ out_mon:
   return r;
 }
 
-static int unmap_image(struct krbd_ctx *ctx, const char *devnode)
+static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
+                       const char *options)
 {
   struct stat sb;
   dev_t wholedevno;
@@ -479,16 +579,44 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode)
     return r;
   }
 
-  return do_unmap(ctx->udev, wholedevno, id);
+  return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
 }
 
-static void dump_one_image(Formatter *f, TextTable *tbl,
-                           const char *id, const char *pool,
-                           const char *image, const char *snap)
+static int unmap_image(struct krbd_ctx *ctx, const char *pool,
+                       const char *image, const char *snap,
+                       const char *options)
 {
-  assert(id && pool && image && snap);
+  dev_t devno;
+  string id;
+  int r;
 
+  if (!snap)
+    snap = "-";
+
+  r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
+  if (r < 0) {
+    if (r == -ENOENT) {
+      cerr << "rbd: " << pool << "/" << image << "@" << snap
+           << ": not a mapped image or snapshot" << std::endl;
+      r = -EINVAL;
+    }
+    return r;
+  }
+
+  return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
+}
+
+static bool dump_one_image(Formatter *f, TextTable *tbl,
+                           struct udev_device *dev)
+{
+  const char *id = udev_device_get_sysname(dev);
+  const char *pool = udev_device_get_sysattr_value(dev, "pool");
+  const char *image = udev_device_get_sysattr_value(dev, "name");
+  const char *snap = udev_device_get_sysattr_value(dev, "current_snap");
   string kname = get_kernel_rbd_name(id);
+
+  if (!pool || !image || !snap)
+    return false;
 
   if (f) {
     f->open_object_section(id);
@@ -500,6 +628,8 @@ static void dump_one_image(Formatter *f, TextTable *tbl,
   } else {
     *tbl << id << pool << image << snap << kname << TextTable::endrow;
   }
+
+  return true;
 }
 
 static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
@@ -525,18 +655,10 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
     struct udev_device *dev;
 
     dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
-    if (!dev) {
-      r = -ENOMEM;
-      goto out_enm;
+    if (dev) {
+      have_output |= dump_one_image(f, tbl, dev);
+      udev_device_unref(dev);
     }
-
-    dump_one_image(f, tbl, udev_device_get_sysname(dev),
-                   udev_device_get_sysattr_value(dev, "pool"),
-                   udev_device_get_sysattr_value(dev, "name"),
-                   udev_device_get_sysattr_value(dev, "current_snap"));
-
-    have_output = true;
-    udev_device_unref(dev);
   }
 
   r = have_output;
@@ -573,15 +695,15 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   return r;
 }
 
-extern "C" int krbd_create_from_context(struct CephContext *cct,
+extern "C" int krbd_create_from_context(rados_config_t cct,
                                         struct krbd_ctx **pctx)
 {
   struct krbd_ctx *ctx = new struct krbd_ctx();
 
-  ctx->cct = cct;
+  ctx->cct = reinterpret_cast<CephContext *>(cct);
   ctx->udev = udev_new();
   if (!ctx->udev) {
-    free(ctx);
+    delete ctx;
     return -ENOMEM;
   }
 
@@ -619,9 +741,17 @@ extern "C" int krbd_map(struct krbd_ctx *ctx, const char *pool,
   return r;
 }
 
-extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode)
+extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
+                          const char *options)
 {
-  return unmap_image(ctx, devnode);
+  return unmap_image(ctx, devnode, options);
+}
+
+extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
+                                  const char *image, const char *snap,
+                                  const char *options)
+{
+  return unmap_image(ctx, pool, image, snap, options);
 }
 
 int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)

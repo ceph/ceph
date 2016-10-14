@@ -16,13 +16,11 @@
 #define CEPH_SYNC_FILESYSTEM_H
 
 #include <unistd.h>
-#include <syscall.h>
 
-#ifndef __CYGWIN__
-# ifndef DARWIN
-#  include <sys/ioctl.h>
-#  include "../os/btrfs_ioctl.h"
-# endif
+#if defined(__linux__)
+#include <sys/ioctl.h>
+#include <syscall.h>
+#include "os/fs/btrfs_ioctl.h"
 #endif
 
 inline int sync_filesystem(int fd)
@@ -42,13 +40,17 @@ inline int sync_filesystem(int fd)
     return 0;
 #endif
 
-#ifdef BTRFS_IOC_SYNC
-  if (::ioctl(fd, BTRFS_IOC_SYNC) == 0)
+#if defined(HAVE_SYS_SYNCFS) || defined(SYS_syncfs) || defined(__NR_syncfs)
+  else if (errno == ENOSYS) {
+    sync();
     return 0;
-#endif
-
+  } else {
+    return -errno;
+  }
+#else
   sync();
   return 0;
+#endif
 }
 
 #endif

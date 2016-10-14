@@ -15,25 +15,18 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
-#include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
 
 #include "common/Timer.h"
 #include "common/Finisher.h"
-
+#include "common/config.h"
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
-
-#include "messages/MMonSubscribe.h"
-
 #include "common/SimpleRNG.h"
-#include "osd/osd_types.h"
 
-#include <memory>
 
-class MonMap;
 class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
@@ -45,9 +38,10 @@ class MAuthRotating;
 class MPing;
 class LogClient;
 class AuthSupported;
-class AuthAuthorizeHandlerRegistry;
 class AuthMethodList;
-
+class Messenger;
+// class RotatingKeyRing;
+class KeyRing;
 enum MonClientState {
   MC_STATE_NONE,
   MC_STATE_NEGOTIATING,
@@ -77,7 +71,7 @@ struct MonClientPinger : public Dispatcher {
     int ret = 0;
     while (!done) {
       ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == -ETIMEDOUT)
+      if (ret == ETIMEDOUT)
         break;
     }
     return ret;
@@ -105,6 +99,9 @@ struct MonClientPinger : public Dispatcher {
     return true;
   }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) {
+    return false;
+  }
 };
 
 class MonClient : public Dispatcher {
@@ -128,10 +125,6 @@ private:
   SafeTimer timer;
   Finisher finisher;
 
-  // Added to support session signatures.  PLR
-
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
-
   bool initialized;
   bool no_keyring_disabled_cephx;
 
@@ -145,6 +138,7 @@ private:
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) { return false; }
 
   void handle_monmap(MMonMap *m);
 
@@ -153,13 +147,6 @@ private:
   // monitor session
   bool hunting;
 
-  struct C_Tick : public Context {
-    MonClient *monc;
-    C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) {
-      monc->tick();
-    }
-  };
   void tick();
   void schedule_tick();
 
@@ -179,6 +166,7 @@ private:
   int authenticate_err;
 
   list<Message*> waiting_for_session;
+  utime_t last_rotating_renew_sent;
   Context *session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
@@ -200,33 +188,60 @@ public:
 
   int authenticate(double timeout=0.0);
 
+  /**
+   * Try to flush as many log messages as we can in a single
+   * message.  Use this before shutting down to transmit your
+   * last message.
+   */
+  void flush_log();
+
   // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
   utime_t sub_renew_sent, sub_renew_after;
 
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-  bool _sub_want(string what, version_t start, unsigned flags) {
-    if (sub_have.count(what) &&
-	sub_have[what].start == start &&
-	sub_have[what].flags == flags)
+  bool _sub_want(const string &what, version_t start, unsigned flags) {
+    auto sub = sub_new.find(what);
+    if (sub != sub_new.end() &&
+        sub->second.start == start &&
+        sub->second.flags == flags) {
       return false;
-    sub_have[what].start = start;
-    sub_have[what].flags = flags;
+    } else {
+      sub = sub_sent.find(what);
+      if (sub != sub_sent.end() &&
+	  sub->second.start == start &&
+	  sub->second.flags == flags)
+	return false;
+    }
+
+    sub_new[what].start = start;
+    sub_new[what].flags = flags;
     return true;
   }
-  void _sub_got(string what, version_t got) {
-    if (sub_have.count(what)) {
-      if (sub_have[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	sub_have.erase(what);
-      else
-	sub_have[what].start = got + 1;
+  void _sub_got(const string &what, version_t got) {
+    if (sub_new.count(what)) {
+      if (sub_new[what].start <= got) {
+	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
+	  sub_new.erase(what);
+	else
+	  sub_new[what].start = got + 1;
+      }
+    } else if (sub_sent.count(what)) {
+      if (sub_sent[what].start <= got) {
+	if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
+	  sub_sent.erase(what);
+	else
+	  sub_sent[what].start = got + 1;
+      }
     }
   }
-  void _sub_unwant(string what) {
-    sub_have.erase(what);
+  void _sub_unwant(const string &what) {
+    sub_sent.erase(what);
+    sub_new.erase(what);
   }
 
   // auth tickets
@@ -255,10 +270,18 @@ public:
    */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i =
-            sub_have.find(what);
-    if (i == sub_have.end() || i->second.start < start) {
-      ceph_mon_subscribe_item& item = sub_have[what];
+    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
+    if (i != sub_new.end()) {
+      if (i->second.start >= start)
+	return false;
+      i->second.start = start;
+      i->second.flags = flags;
+      return true;
+    }
+
+    i = sub_sent.find(what);
+    if (i == sub_sent.end() || i->second.start < start) {
+      ceph_mon_subscribe_item& item = sub_new[what];
       item.start = start;
       item.flags = flags;
       return true;
@@ -270,7 +293,9 @@ public:
   RotatingKeyRing *rotating_secrets;
 
  public:
-  MonClient(CephContext *cct_);
+  explicit MonClient(CephContext *cct_);
+  MonClient(const MonClient &) = delete;
+  MonClient& operator=(const MonClient &) = delete;
   ~MonClient();
 
   int init();
@@ -288,7 +313,7 @@ public:
    * reply in @p result_reply.
    *
    * @param[in]  mon_id Target monitor's ID
-   * @param[out] Resulting reply from mon.ID, if param != NULL
+   * @param[out] result_reply reply from mon.ID, if param != NULL
    * @returns    0 in case of success; < 0 in case of error,
    *             -ETIMEDOUT if monitor didn't reply before timeout
    *             expired (default: conf->client_mount_timeout).
@@ -345,6 +370,7 @@ public:
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
+  entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
 
   void send_auth_message(Message *m) {
     _send_mon_message(m, true);
@@ -354,12 +380,6 @@ public:
     want_keys = want;
     if (auth)
       auth->set_want_keys(want | CEPH_ENTITY_TYPE_MON);
-  }
-
-  void add_want_keys(uint32_t want) {
-    want_keys |= want;
-    if (auth)
-      auth->add_want_keys(want);
   }
 
   // admin commands
@@ -376,24 +396,13 @@ private:
     int *prval;
     Context *onfinish, *ontimeout;
 
-    MonCommand(uint64_t t)
+    explicit MonCommand(uint64_t t)
       : target_rank(-1),
 	tid(t),
 	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL), ontimeout(NULL)
     {}
   };
   map<uint64_t,MonCommand*> mon_commands;
-
-  class C_CancelMonCommand : public Context
-  {
-    uint64_t tid;
-    MonClient *monc;
-  public:
-    C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
-    void finish(int r) {
-      monc->_cancel_mon_command(tid, -ETIMEDOUT);
-    }
-  };
 
   void _send_command(MonCommand *r);
   void _resend_mon_commands();
@@ -427,6 +436,22 @@ public:
    */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
 
+  /**
+   * Run a callback within our lock, with a reference
+   * to the MonMap
+   */
+  template<typename Callback, typename...Args>
+  auto with_monmap(Callback&& cb, Args&&...args) ->
+    typename std::enable_if<
+      std::is_void<
+    decltype(cb(const_cast<const MonMap&>(monmap),
+		std::forward<Args>(args)...))>::value,
+      void>::type {
+    Mutex::Locker l(monc_lock);
+    std::forward<Callback>(cb)(const_cast<const MonMap&>(monmap),
+			       std::forward<Args>(args)...);
+  }
+
 private:
   struct version_req_d {
     Context *context;
@@ -439,8 +464,6 @@ private:
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 
-  MonClient(const MonClient &rhs);
-  MonClient& operator=(const MonClient &rhs);
 };
 
 #endif

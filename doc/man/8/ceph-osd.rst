@@ -1,3 +1,5 @@
+:orphan:
+
 ========================================
  ceph-osd -- ceph object storage daemon
 ========================================
@@ -35,6 +37,17 @@ Options
 .. option:: -d
 
    Debug mode: like ``-f``, but also send all log output to stderr.
+
+.. option:: --setuser userorgid
+
+   Set uid after starting.  If a username is specified, the user
+   record is looked up to get a uid and a gid, and the gid is also set
+   as well, unless --setgroup is also specified.
+
+.. option:: --setgroup grouporgid
+
+   Set gid after starting.  If a group name is specified the group
+   record is looked up to get a gid.
 
 .. option:: --osd-data osddata
 
@@ -97,7 +110,7 @@ Options
 Availability
 ============
 
-**ceph-osd** is part of the Ceph distributed storage system. Please refer to
+**ceph-osd** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 See also

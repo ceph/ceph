@@ -11,8 +11,8 @@ configuration using command-line utilities.
 
 When Ceph starts, it activates three daemons:
 
-- ``ceph-osd`` (mandatory)
 - ``ceph-mon`` (mandatory)
+- ``ceph-osd`` (mandatory)
 - ``ceph-mds`` (mandatory for cephfs only)
 
 Each process, daemon or utility loads the host's configuration file. A process
@@ -51,6 +51,7 @@ To optimize the performance of your cluster, refer to the following:
 	Heartbeat Settings <mon-osd-interaction>
 	OSD Settings <osd-config-ref>
 	Filestore Settings <filestore-config-ref>
+	Key/Value Store Settings <keyvaluestore-config-ref>
 	Journal Settings <journal-ref>
 	Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
 	Messaging Settings <ms-ref>	

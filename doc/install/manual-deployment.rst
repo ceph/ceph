@@ -162,7 +162,7 @@ The procedure is as follows:
 #. Generate an administrator keyring, generate a ``client.admin`` user and add
    the user to the keyring. :: 
 
-	ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow'
+	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow'
 
 
 #. Add the ``client.admin`` key to the ``ceph.mon.keyring``. :: 
@@ -192,11 +192,11 @@ The procedure is as follows:
 
 #. Populate the monitor daemon(s) with the monitor map and keyring. ::
 
-	ceph-mon --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+	sudo -u ceph ceph-mon [--cluster {cluster-name}] --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
    For example::
 
-	ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+	sudo -u ceph ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
 
 #. Consider settings for a Ceph configuration file. Common settings include 
@@ -212,7 +212,6 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = {n}
-	filestore xattr use omap = true
 	osd pool default size = {n}  # Write an object n times.
 	osd pool default min size = {n} # Allow writing n copy in a degraded state.
 	osd pool default pg num = {n}
@@ -231,21 +230,34 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = 1024
-	filestore xattr use omap = true
 	osd pool default size = 2
 	osd pool default min size = 1
 	osd pool default pg num = 333
 	osd pool default pgp num = 333	
 	osd crush chooseleaf type = 1
 
+#. Touch the ``done`` file.
+
+   Mark that the monitor is created and ready to be started::
+
+	sudo touch /var/lib/ceph/mon/ceph-node1/done
 
 #. Start the monitor(s).
 
-   For Debian/Ubuntu, use Upstart::
+   For Ubuntu, use Upstart::
 
-	sudo start ceph-mon id=node1
+	sudo start ceph-mon id=node1 [cluster={cluster-name}]
 
-   For CentOS/RHEL, use sysvinit::
+   In this case, to allow the start of the daemon at each reboot you
+   must create two empty files like this::
+
+	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/upstart
+
+   For example::
+
+	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
+
+   For Debian/CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start mon.node1
 
@@ -328,9 +340,9 @@ on  ``node2`` and ``node3``:
 Long Form
 ---------
 
-Without the benefit of any helper utilities, creating an OSD and adding it to
-the cluster and CRUSH map the following procedure. To create the first two 
-OSDs with the long form procedure, execute the following on ``node2`` and 
+Without the benefit of any helper utilities, create an OSD and add it to the
+cluster and CRUSH map with the following procedure. To create the first two
+OSDs with the long form procedure, execute the following on ``node2`` and
 ``node3``:
 
 #. Connect to the OSD host. :: 
@@ -346,13 +358,13 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
-	ceph osd create [{uuid}]
+	ceph osd create [{uuid} [{id}]]
 
 
 #. Create the default directory on your new OSD. :: 
 
 	ssh {new-osd-host}
-	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
+	sudo mkdir /var/lib/ceph/osd/{cluster-name}-{osd-number}
 	
 
 #. If the OSD is for a drive other than the OS drive, prepare it 
@@ -360,13 +372,13 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 
 	ssh {new-osd-host}
 	sudo mkfs -t {fstype} /dev/{hdd}
-	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
+	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/{cluster-name}-{osd-number}
 
 	
 #. Initialize the OSD data directory. :: 
 
 	ssh {new-osd-host}
-	sudo ceph-osd -i {osd-num} --mkfs --mkkey
+	sudo ceph-osd -i {osd-num} --mkfs --mkkey --osd-uuid [{uuid}]
 	
    The directory must be empty before you can run ``ceph-osd`` with the 
    ``--mkkey`` option. In addition, the ceph-osd tool requires specification
@@ -377,12 +389,12 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your 
    cluster name differs from ``ceph``, use your cluster name instead.::
 
-	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
+	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/{cluster-name}-{osd-num}/keyring
 
 
 #. Add your Ceph Node to the CRUSH map. ::
 
-	ceph osd crush add-bucket {hostname} host
+	ceph [--cluster {cluster-name}] osd crush add-bucket {hostname} host
 
    For example::
 
@@ -399,7 +411,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    bucket (if it's not already in the CRUSH map), add the device as an item in the
    host, assign it a weight, recompile it and set it. ::
 
-	ceph osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
+	ceph [--cluster {cluster-name}] osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
 
    For example::
 
@@ -410,27 +422,75 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    it is not yet running. The OSD is ``down`` and ``in``. You must start 
    your new OSD before it can begin receiving data.
 
-   For Debian/Ubuntu, use Upstart::
+   For Ubuntu, use Upstart::
 
-	sudo start ceph-osd id={osd-num}
+	sudo start ceph-osd id={osd-num} [cluster={cluster-name}]
 
    For example::
 
 	sudo start ceph-osd id=0
 	sudo start ceph-osd id=1
 
-   For CentOS/RHEL, use sysvinit::
+   For Debian/CentOS/RHEL, use sysvinit::
 
-	sudo /etc/init.d/ceph start osd.{osd-num}
+	sudo /etc/init.d/ceph start osd.{osd-num} [--cluster {cluster-name}]
 
    For example::
 
 	sudo /etc/init.d/ceph start osd.0
 	sudo /etc/init.d/ceph start osd.1
 
+   In this case, to allow the start of the daemon at each reboot you
+   must create an empty file like this::
+
+	sudo touch /var/lib/ceph/osd/{cluster-name}-{osd-num}/sysvinit
+
+   For example::
+
+	sudo touch /var/lib/ceph/osd/ceph-0/sysvinit
+	sudo touch /var/lib/ceph/osd/ceph-1/sysvinit
+
    Once you start your OSD, it is ``up`` and ``in``.
 
 
+
+Adding MDS
+==========
+
+In the below instructions, ``{id}`` is an arbitrary name, such as the hostname of the machine.
+
+#. Create the mds data directory.::
+
+	mkdir -p /var/lib/ceph/mds/{cluster-name}-{id}
+
+#. Create a keyring.::
+
+	ceph-authtool --create-keyring /var/lib/ceph/mds/{cluster-name}-{id}/keyring --gen-key -n mds.{id}
+    
+#. Import the keyring and set caps.::
+
+	ceph auth add mds.{id} osd "allow rwx" mds "allow" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
+   
+#. Add to ceph.conf.::
+
+	[mds.{id}]
+	host = {id}
+
+#. Start the daemon the manual way.::
+
+	ceph-mds --cluster {cluster-name} -i {id} -m {mon-hostname}:{mon-port} [-f]
+
+#. Start the daemon the right way (using ceph.conf entry).::
+
+	service ceph start
+
+#. If starting the daemon fails with this error::
+
+	mds.-1.0 ERROR: failed to authenticate: (22) Invalid argument
+
+   Then make sure you do not have a keyring set in ceph.conf in the global section; move it to the client section; or add a keyring setting specific to this mds daemon. And verify that you see the same key in the mds data directory and ``ceph auth get mds.{id}`` output.
+
+#. Now you are ready to `create a Ceph filesystem`_.
 
 
 Summary
@@ -464,3 +524,4 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
+.. _create a Ceph filesystem: ../../cephfs/createfs

@@ -66,7 +66,7 @@ MOSDPGOps follow the following process:
   1. OSD::handle_op: validates permissions and crush mapping.
      discard the request if they are not connected and the client cannot get the reply ( See OSD::op_is_discardable )
      See OSDService::handle_misdirected_op
-     See OSD::op_has_sufficient_caps
+     See PG::op_has_sufficient_caps
      See OSD::require_same_or_newer_map
   2. OSD::enqueue_op
 
@@ -118,7 +118,7 @@ Peering messages are tagged with two epochs:
 
 These are the same in cases where there was no triggering message.  We discard
 a peering message if the message's query_epoch if the PG in question has entered
-a new epoch (See PG::old_peering_event, PG::queue_peering_event).  Notifies,
+a new epoch (See PG::old_peering_evt, PG::queue_peering_event).  Notifies,
 infos, notifies, and logs are all handled as PG::RecoveryMachine events and
 are wrapped by PG::queue_* by PG::CephPeeringEvts, which include the created
 state machine event along with epoch_sent and query_epoch in order to

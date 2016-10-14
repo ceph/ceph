@@ -38,7 +38,7 @@ public:
     entity_addr_t sample_addr;
     uuid_d sample_uuid;
     for (int i = 0; i < num_osds; ++i) {
-      sample_uuid.uuid[i] = i;
+      sample_uuid.generate_random();
       sample_addr.nonce = i;
       pending_inc.new_state[i] = CEPH_OSD_EXISTS | CEPH_OSD_NEW;
       pending_inc.new_up_client[i] = sample_addr;
@@ -50,13 +50,24 @@ public:
     }
     osdmap.apply_incremental(pending_inc);
 
-    // kludge to get an erasure coding rule and pool
+    // Create an EC ruleset and a pool using it
     int r = osdmap.crush->add_simple_ruleset("erasure", "default", "osd",
 					     "indep", pg_pool_t::TYPE_ERASURE,
 					     &cerr);
-    pg_pool_t *p = (pg_pool_t *)osdmap.get_pg_pool(2);
+
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.new_pool_max = osdmap.get_pool_max();
+    new_pool_inc.fsid = osdmap.get_fsid();
+    pg_pool_t empty;
+    uint64_t pool_id = ++new_pool_inc.new_pool_max;
+    pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->set_pg_num(64);
+    p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_ERASURE;
     p->crush_ruleset = r;
+    new_pool_inc.new_pool_names[pool_id] = "ec";
+    osdmap.apply_incremental(new_pool_inc);
   }
   unsigned int get_num_osds() { return num_osds; }
 
@@ -84,6 +95,48 @@ TEST_F(OSDMapTest, Create) {
   set_up_map();
   ASSERT_EQ(get_num_osds(), (unsigned)osdmap.get_max_osd());
   ASSERT_EQ(get_num_osds(), osdmap.get_num_in_osds());
+}
+
+TEST_F(OSDMapTest, Features) {
+  // with EC pool
+  set_up_map();
+  uint64_t features = osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_V2);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSD_ERASURE_CODES);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+
+  // clients have a slightly different view
+  features = osdmap.get_features(CEPH_ENTITY_TYPE_CLIENT, NULL);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_V2);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_ERASURE_CODES);  // dont' need this
+  ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+
+  // remove teh EC pool, but leave the rule.  add primary affinity.
+  {
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("ec"));
+    new_pool_inc.new_primary_affinity[0] = 0x8000;
+    osdmap.apply_incremental(new_pool_inc);
+  }
+
+  features = osdmap.get_features(CEPH_ENTITY_TYPE_MON, NULL);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES3); // shared bit with primary affinity
+  ASSERT_FALSE(features & CEPH_FEATURE_CRUSH_V2);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_ERASURE_CODES);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+
+  // FIXME: test tiering feature bits
 }
 
 TEST_F(OSDMapTest, MapPG) {
@@ -180,7 +233,8 @@ TEST_F(OSDMapTest, PrimaryTempRespected) {
 
   pg_t rawpg(0, 0, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
-  vector<int> up_osds, acting_osds;
+  vector<int> up_osds;
+  vector<int> acting_osds;
   int up_primary, acting_primary;
 
   osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
@@ -196,29 +250,40 @@ TEST_F(OSDMapTest, PrimaryTempRespected) {
   EXPECT_EQ(acting_primary, acting_osds[1]);
 }
 
-TEST_F(OSDMapTest, RemovesRedundantTemps) {
+TEST_F(OSDMapTest, CleanTemps) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
-  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
-  vector<int> up_osds, acting_osds;
-  int up_primary, acting_primary;
-
-  osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
-                              &acting_osds, &acting_primary);
-
-  // stick calculated values in to temps
   OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
-  pgtemp_map.new_pg_temp[pgid] = up_osds;
-  pgtemp_map.new_primary_temp[pgid] = up_primary;
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 2);
+  pg_t pga = osdmap.raw_pg_to_pg(pg_t(0, 0));
+  {
+    vector<int> up_osds, acting_osds;
+    int up_primary, acting_primary;
+    osdmap.pg_to_up_acting_osds(pga, &up_osds, &up_primary,
+				&acting_osds, &acting_primary);
+    pgtemp_map.new_pg_temp[pga] = up_osds;
+    pgtemp_map.new_primary_temp[pga] = up_primary;
+  }
+  pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, 0));
+  {
+    vector<int> up_osds, acting_osds;
+    int up_primary, acting_primary;
+    osdmap.pg_to_up_acting_osds(pgb, &up_osds, &up_primary,
+				&acting_osds, &acting_primary);
+    pending_inc.new_pg_temp[pgb] = up_osds;
+    pending_inc.new_primary_temp[pgb] = up_primary;
+  }
+
   osdmap.apply_incremental(pgtemp_map);
 
-  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
+  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
 
-  EXPECT_TRUE(pending_inc.new_pg_temp.count(pgid) &&
-	      pending_inc.new_pg_temp[pgid].size() == 0);
-  EXPECT_EQ(-1, pending_inc.new_primary_temp[pgid]);
+  EXPECT_TRUE(pending_inc.new_pg_temp.count(pga) &&
+	      pending_inc.new_pg_temp[pga].size() == 0);
+  EXPECT_EQ(-1, pending_inc.new_primary_temp[pga]);
+
+  EXPECT_TRUE(!pending_inc.new_pg_temp.count(pgb) &&
+	      !pending_inc.new_primary_temp.count(pgb));
 }
 
 TEST_F(OSDMapTest, KeepsNecessaryTemps) {
@@ -252,7 +317,7 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
     }
   }
   if (i == (int)get_num_osds())
-    ASSERT_EQ(0, "did not find unused OSD for temp mapping");
+    FAIL() << "did not find unused OSD for temp mapping";
 
   pgtemp_map.new_pg_temp[pgid] = up_osds;
   pgtemp_map.new_primary_temp[pgid] = up_osds[1];
@@ -260,7 +325,7 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
 
   OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
 
-  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
+  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
   EXPECT_FALSE(pending_inc.new_pg_temp.count(pgid));
   EXPECT_FALSE(pending_inc.new_primary_temp.count(pgid));
 }
@@ -270,7 +335,7 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 
   /*
   osdmap.print(cout);
-  Formatter *f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create("json-pretty");
   f->open_object_section("CRUSH");
   osdmap.crush->dump(f);
   f->close_section();

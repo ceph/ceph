@@ -1,8 +1,79 @@
+>= 11.0.0
+------
 
-v0.81
------
+* The list of monitor hosts/addresses for building the monmap can now be
+  obtained from DNS SRV records. The service name used in when querying the DNS 
+  is defined in the "mon_dns_srv_name" config option, which defaults to
+  "ceph-mon".
 
-- Disallow nonsensical 'tier cache-mode' transitions.  From this point
-  onward, 'writeback' can only transition to 'forward' and 'forward'
-  can transition to 1) 'writeback' if there are dirty objects, or 2) any if
-  there are no dirty objects.
+* The 'osd class load list' config option is a list of object class names that
+  the OSD is permitted to load (or '*' for all classes). By default it
+  contains all existing in-tree classes for backwards compatibility.
+
+* The 'osd class default list' config option is a list of object class names
+  (or '*' for all classes) that clients may invoke having only the '*', 'x',
+  'class-read', or 'class-write' capabilities. By default it contains all
+  existing in-tree classes for backwards compatibility. Invoking classes not
+  listed in 'osd class default list' requires a capability naming the class
+  (e.g. 'allow class foo').
+
+* The 'rgw rest getusage op compat' config option allows you to dump the description of user stats
+  or not in s3 GetUsage API. This config option is of bool type and defaults to false.
+  If the value is true, the reponse data of s3 GetUsage like below:
+
+    "stats": {
+                "TotalBytes": 516,
+                "TotalBytesRounded": 1024,
+                "TotalEntries": 1
+             }
+
+  Or if the value is false, the  reponse of s3 GetUsage like below and as it does before we add this config option:
+
+    {
+         516,
+         1024,
+         1
+    }.
+
+11.0.0
+------
+
+* If you have manually specified the monitor user rocksdb via the
+  ``mon keyvaluedb = rocksdb`` option, you will need to manually add a file
+  to the mon data directory to preserve this option::
+
+     echo rocksdb > /var/lib/ceph/mon/ceph-`hostname`/kv_backend
+
+  New monitors will now use rocksdb by default, but if that file is
+  not present, existing monitors will use leveldb.  The ``mon keyvaluedb`` option
+  now only affects the backend chosen when a monitor is created.
+
+* The 'osd crush initial weight' option allows you to specify a CRUSH
+  weight for a newly added OSD.  Previously a value of 0 (the default)
+  meant that we should use the size of the OSD's store to weight the
+  new OSD.  Now, a value of 0 means it should have a weight of 0, and
+  a negative value (the new default) means we should automatically
+  weight the OSD based on its size.  If your configuration file
+  explicitly specifies a value of 0 for this option you will need to
+  change it to a negative value (e.g., -1) to preserve the current
+  behavior.
+
+* The `osd crush location` config option is no longer supported.  Please
+  update your ceph.conf to use the `crush location` option instead.
+
+* The static libraries are not included by the debian development packages
+  (lib*-dev) any more. As it is not required per debian packaging policy.
+  And their shared versions are packaged as before.
+
+* The libtool pseudo-libraries (.la files) are not included by the debian
+  development packages (lib*-dev) any more. As it is unneeded, and per
+  https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
+  https://www.debian.org/doc/manuals/maint-guide/advanced.en.html,
+  we should remove them.
+
+* The jerasure and shec plugins can now detect SIMD instruction at runtime
+  and no longer need to be built for different processors. The following 
+  plugins are now deprecated: jerasure_generic, jerasure_sse3, jerasure_sse4, 
+  jerasure_neon, shec_generic, shec_sse3, shec_sse4, and shec_neon. If you use any
+  of these plugins directly you will see a warning in the mon log file.
+  Please switch to using just 'jerasure' or 'shec'.

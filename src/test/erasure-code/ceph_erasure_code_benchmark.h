@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -24,13 +25,27 @@ using namespace std;
 class ErasureCodeBench {
   int in_size;
   int max_iterations;
-  string plugin;
   int erasures;
+  int k;
+  int m;
+
+  string plugin;
+
+  bool exhaustive_erasures;
+  vector<int> erased;
   string workload;
-  map<string,string> parameters;
+
+  ErasureCodeProfile profile;
+
+  bool verbose;
 public:
   int setup(int argc, char** argv);
   int run();
+  int decode_erasures(const map<int,bufferlist> &all_chunks,
+		      const map<int,bufferlist> &chunks,
+		      unsigned i,
+		      unsigned want_erasures,
+		      ErasureCodeInterfaceRef erasure_code);
   int decode();
   int encode();
 };

@@ -1,5 +1,5 @@
 =================================
- Using ``libvirt`` with Ceph RBD
+ Using libvirt with Ceph RBD
 =================================
 
 .. index:: Ceph Block Device; livirt
@@ -67,9 +67,9 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
 	ceph osd lspools
 
-#. `Create a Ceph Name`_ (or use ``client.admin`` for version 0.9.7 and earlier).
-   The following example uses the Ceph name ``client.libvirt`` and references
-   ``libvirt-pool``. ::
+#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and 
+   earlier). The following example uses the Ceph user name ``client.libvirt`` 
+   and references ``libvirt-pool``. ::
 
 	ceph auth get-or-create client.libvirt mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=libvirt-pool'
 	
@@ -78,8 +78,9 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	ceph auth list
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``, 
-   not the Ceph name ``client.libvirt``. See `Cephx Commandline`_ for detailed
-   explanation of the difference between ID and name.	
+   not the Ceph name ``client.libvirt``. See `User Management - User`_ and 
+   `User Management - CLI`_ for a detailed explanation of the difference 
+   between ID and name.	
 
 #. Use QEMU to `create an image`_ in your RBD pool. 
    The following example uses the image name ``new-libvirt-image``
@@ -93,6 +94,18 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
    **NOTE:** You can also use `rbd create`_ to create an image, but we
    recommend ensuring that QEMU is working properly.
+
+.. tip:: Optionally, if you wish to enable debug logs and the admin socket for
+   this client, you can add the following section to ``/etc/ceph/ceph.conf``::
+
+	[client.libvirt]
+	log file = /var/log/ceph/qemu-guest-$pid.log
+	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
+
+   The ``client.libvirt`` section name should match the cephx user you created
+   above. If SELinux or AppArmor is enabled, note that this could prevent the
+   client process (qemu via libvirt) from writing the logs or admin socket to
+   the destination locations (``/var/log/ceph`` or ``/var/run/ceph``).
 
 
 
@@ -190,7 +203,7 @@ commands, refer to `Virsh Command Reference`_.
 		<source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
 			<host name='{monitor-host}' port='6789'/>
 		</source>
-		<target dev='hdb' bus='ide'/>
+		<target dev='vda' bus='virtio'/>
 	</disk>
 
    Replace ``{monitor-host}`` with the name of your host, and replace the 
@@ -206,7 +219,8 @@ commands, refer to `Virsh Command Reference`_.
 	
 #. Save the file.
 
-#. If you are using `Ceph Authentication`_, you must generate a secret. :: 
+#. If your Ceph Storage Cluster has `Ceph Authentication`_ enabled (it does by 
+   default), you must generate a secret. :: 
 
 	cat > secret.xml <<EOF
 	<secret ephemeral='no' private='no'>
@@ -223,8 +237,7 @@ commands, refer to `Virsh Command Reference`_.
 
 #. Get the ``client.libvirt`` key and save the key string to a file. ::
 
-	sudo ceph auth list
-	vim client.libvirt.key
+	ceph auth get-key client.libvirt | sudo tee client.libvirt.key
 
 #. Set the UUID of the secret. :: 
 
@@ -290,12 +303,13 @@ within your VM.
 .. _Block Devices and OpenStack: ../rbd-openstack
 .. _Block Devices and CloudStack: ../rbd-cloudstack
 .. _Create a pool: ../../rados/operations/pools#create-a-pool
-.. _Create a Ceph Name: ../../rados/operations/authentication#add-a-key
+.. _Create a Ceph User: ../../rados/operations/user-management#add-a-user
 .. _create an image: ../qemu-rbd#creating-images-with-qemu
 .. _Virsh Command Reference: http://www.libvirt.org/virshcmdref.html
 .. _KVM/VirtManager: https://help.ubuntu.com/community/KVM/VirtManager
-.. _Ceph Authentication: ../../rados/operations/auth-intro
+.. _Ceph Authentication: ../../rados/configuration/auth-config-ref
 .. _Disks: http://www.libvirt.org/formatdomain.html#elementsDisks
 .. _rbd create: ../rados-rbd-cmds#creating-a-block-device-image
-.. _Cephx Commandline: ../../rados/operations/authentication#cephx-commandline-options
+.. _User Management - User: ../../rados/operations/user-management#user
+.. _User Management - CLI: ../../rados/operations/user-management#command-line-usage
 .. _Virtio: http://www.linux-kvm.org/page/Virtio

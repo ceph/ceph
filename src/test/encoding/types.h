@@ -4,9 +4,18 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "include/util.h"
+TYPE(ceph_data_stats)
+
+#include "common/bit_vector.hpp"
+TYPE(BitVector<2>)
+
 #include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
+
+#include "test_ceph_time.h"
+TYPE(real_time_wrapper)
 
 #include "common/snap_types.h"
 TYPE(SnapContext)
@@ -16,22 +25,23 @@ TYPE(SnapRealmInfo)
 TYPE(DecayCounter)
 
 #include "common/LogEntry.h"
-TYPE(LogEntryKey)
-TYPE(LogEntry)
-TYPE(LogSummary)
+TYPE_FEATUREFUL(LogEntryKey)
+TYPE_FEATUREFUL(LogEntry)
+TYPE_FEATUREFUL(LogSummary)
 
 #include "common/SloppyCRCMap.h"
 TYPE(SloppyCRCMap)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
-TYPE(entity_addr_t)
+TYPE_FEATUREFUL(entity_addr_t)
+TYPE_FEATUREFUL(entity_inst_t)
 
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
 TYPE(osd_xinfo_t)
-TYPEWITHSTRAYDATA(OSDMap)
-TYPEWITHSTRAYDATA(OSDMap::Incremental)
+TYPE_FEATUREFUL_STRAYDATA(OSDMap)
+TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
 TYPE_NOCOPY(CrushWrapper)
@@ -60,16 +70,17 @@ TYPE(pg_interval_t)
 TYPE_FEATUREFUL(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
-TYPE(pg_missing_t::item)
+TYPE(pg_missing_item)
 TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
+TYPE(pg_nls_response_t)
 TYPE(object_copy_cursor_t)
-TYPE(object_copy_data_t)
+TYPE_FEATUREFUL(object_copy_data_t)
 TYPE(pg_create_t)
-TYPE(watch_info_t)
-TYPE(object_info_t)
+TYPE_FEATUREFUL(watch_info_t)
+TYPE_FEATUREFUL(object_info_t)
 TYPE(SnapSet)
-TYPE(ObjectRecoveryInfo)
+TYPE_FEATUREFUL(ObjectRecoveryInfo)
 TYPE(ObjectRecoveryProgress)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
@@ -78,31 +89,44 @@ TYPE(pg_hit_set_history_t)
 TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
-TYPE(PullOp)
-TYPE(PushOp)
+TYPE_FEATUREFUL(PullOp)
+TYPE_FEATUREFUL(PushOp)
 TYPE(PushReplyOp)
 
 #include "osd/ECUtil.h"
 TYPE(ECUtil::HashInfo)
 
 #include "osd/ECMsgTypes.h"
-TYPE(ECSubWrite)
+TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
-TYPE(ECSubRead)
+TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
 #include "osd/HitSet.h"
-TYPE(ExplicitHashHitSet)
-TYPE(ExplicitObjectHitSet)
+TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
+TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
 TYPE(BloomHitSet)
-TYPE(HitSet)
+TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
 TYPE(HitSet::Params)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
-#include "os/SequencerPosition.h"
+#include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
+
+#ifdef WITH_LIBAIO
+#include "os/bluestore/bluestore_types.h"
+TYPE(bluestore_cnode_t)
+TYPE(bluestore_compression_header_t)
+TYPE(bluestore_extent_ref_map_t)
+TYPE(bluestore_pextent_t)
+TYPE(bluestore_blob_t)
+TYPE(bluestore_lextent_t)
+TYPE(bluestore_onode_t)
+TYPE(bluestore_wal_op_t)
+TYPE(bluestore_wal_transaction_t)
+#endif
 
 #include "common/hobject.h"
 TYPE(hobject_t)
@@ -113,7 +137,7 @@ TYPE(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
-TYPE(PGMap)
+TYPE_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
@@ -125,9 +149,15 @@ TYPE_FEATUREFUL(MonMap)
 #include "mon/MonCap.h"
 TYPE(MonCap)
 
-#include "os/DBObjectMap.h"
+#include "mon/mon_types.h"
+TYPE(LevelDBStoreStats)
+
+#include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
+
+#include "mds/JournalPointer.h"
+TYPE(JournalPointer)
 
 #include "osdc/Journaler.h"
 TYPE(Journaler::Header)
@@ -141,11 +171,11 @@ TYPE(sr_t)
 TYPE(frag_info_t)
 TYPE(nest_info_t)
 TYPE(client_writeable_range_t)
-TYPE(inode_t)
-TYPE(old_inode_t)
+TYPE_FEATUREFUL(inode_t)
+TYPE_FEATUREFUL(old_inode_t)
 TYPE(fnode_t)
 TYPE(old_rstat_t)
-TYPE(session_info_t)
+TYPE_FEATUREFUL(session_info_t)
 TYPE(string_snap_t)
 TYPE(MDSCacheObjectInfo)
 TYPE(mds_table_pending_t)
@@ -155,10 +185,21 @@ TYPE(mds_load_t)
 TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
+TYPE(quota_info_t)
+
+#include "include/fs_types.h"
+TYPE_FEATUREFUL(file_layout_t)
+
+#include "mds/CInode.h"
+TYPE_FEATUREFUL(InodeStore)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
 TYPE_FEATUREFUL(MDSMap::mds_info_t)
+
+#include "mds/FSMap.h"
+//TYPE_FEATUREFUL(Filesystem)
+TYPE_FEATUREFUL(FSMap)
 
 #include "mds/Capability.h"
 TYPE_NOCOPY(Capability)
@@ -167,56 +208,73 @@ TYPE_NOCOPY(Capability)
 TYPE(InoTable)
 
 #include "mds/SnapServer.h"
-TYPEWITHSTRAYDATA(SnapServer)
-
-#include "mds/SessionMap.h"
-TYPE(SessionMap)
+TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
-TYPE(ECommitted)
+TYPE_FEATUREFUL(ECommitted)
 #include "mds/events/EExport.h"
-TYPE(EExport)
+TYPE_FEATUREFUL(EExport)
 #include "mds/events/EFragment.h"
-TYPE(EFragment)
+TYPE_FEATUREFUL(EFragment)
 #include "mds/events/EImportFinish.h"
-TYPE(EImportFinish)
+TYPE_FEATUREFUL(EImportFinish)
 #include "mds/events/EImportStart.h"
-TYPE(EImportStart)
+TYPE_FEATUREFUL(EImportStart)
 #include "mds/events/EMetaBlob.h"
-TYPE_NOCOPY(EMetaBlob::fullbit)
+TYPE_FEATUREFUL_NOCOPY(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
-TYPE(EMetaBlob::dirlump)
-TYPE(EMetaBlob)
+TYPE_FEATUREFUL(EMetaBlob::dirlump)
+TYPE_FEATUREFUL(EMetaBlob)
 #include "mds/events/EOpen.h"
-TYPE(EOpen)
+TYPE_FEATUREFUL(EOpen)
 #include "mds/events/EResetJournal.h"
-TYPE(EResetJournal)
+TYPE_FEATUREFUL(EResetJournal)
 #include "mds/events/ESession.h"
-TYPE(ESession)
+TYPE_FEATUREFUL(ESession)
 #include "mds/events/ESessions.h"
-TYPE(ESessions)
+TYPE_FEATUREFUL(ESessions)
 #include "mds/events/ESlaveUpdate.h"
 TYPE(link_rollback)
 TYPE(rmdir_rollback)
 TYPE(rename_rollback::drec)
 TYPE(rename_rollback)
-TYPE(ESlaveUpdate)
+TYPE_FEATUREFUL(ESlaveUpdate)
 #include "mds/events/ESubtreeMap.h"
-TYPE(ESubtreeMap)
+TYPE_FEATUREFUL(ESubtreeMap)
 #include "mds/events/ETableClient.h"
-TYPE(ETableClient)
+TYPE_FEATUREFUL(ETableClient)
 #include "mds/events/ETableServer.h"
-TYPE(ETableServer)
+TYPE_FEATUREFUL(ETableServer)
 #include "mds/events/EUpdate.h"
-TYPE(EUpdate)
+TYPE_FEATUREFUL(EUpdate)
+
+#ifdef WITH_RBD
+#include "librbd/journal/Types.h"
+TYPE(librbd::journal::EventEntry)
+TYPE(librbd::journal::ClientData)
+TYPE(librbd::journal::TagData)
+#include "librbd/mirroring_watcher/Types.h"
+TYPE(librbd::mirroring_watcher::NotifyMessage)
+#include "librbd/WatchNotifyTypes.h"
+TYPE(librbd::watch_notify::NotifyMessage)
+TYPE(librbd::watch_notify::ResponseMessage)
+
+#include "rbd_replay/ActionTypes.h"
+TYPE(rbd_replay::action::Dependency)
+TYPE(rbd_replay::action::ActionEntry);
+#endif
 
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
-TYPE(RGWObjManifestPart);
-TYPE(RGWObjManifest);
-
+TYPE(RGWObjManifestPart)
+TYPE(RGWObjManifest)
+TYPE(RGWOLHInfo)
+TYPE(RGWZoneGroup)
+TYPE(RGWZone)
+TYPE(RGWZoneParams)     
+   
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
 TYPE(ACLGranteeType)
@@ -238,6 +296,8 @@ TYPE(rgw_bucket_category_stats)
 TYPE(rgw_bucket_dir_header)
 TYPE(rgw_bucket_dir)
 TYPE(rgw_bucket_entry_ver)
+TYPE(cls_rgw_obj_key)
+TYPE(rgw_bucket_olh_log_entry)
 
 #include "cls/rgw/cls_rgw_ops.h"
 TYPE(rgw_cls_obj_prepare_op)
@@ -256,6 +316,13 @@ TYPE(rgw_cls_tag_timeout_op)
 TYPE(cls_rgw_bi_log_list_op)
 TYPE(cls_rgw_bi_log_trim_op)
 TYPE(cls_rgw_bi_log_list_ret)
+TYPE(rgw_cls_link_olh_op)
+TYPE(rgw_cls_unlink_instance_op)
+TYPE(rgw_cls_read_olh_log_op)
+TYPE(rgw_cls_read_olh_log_ret)
+TYPE(rgw_cls_trim_olh_log_op)
+TYPE(rgw_cls_bucket_clear_olh_op)
+TYPE(rgw_cls_check_index_ret)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
@@ -275,9 +342,14 @@ TYPE(cls_user_get_header_op)
 TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
+#include "cls/journal/cls_journal_types.h"
+TYPE(cls::journal::ObjectPosition)
+TYPE(cls::journal::ObjectSetPosition)
+TYPE(cls::journal::Client)
+
 #include "rgw/rgw_common.h"
-TYPE(RGWAccessKey);
-TYPE(RGWSubUser);
+TYPE(RGWAccessKey)
+TYPE(RGWSubUser)
 TYPE(RGWUserInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)
@@ -287,25 +359,32 @@ TYPE(rgw_obj)
 
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)
-TYPE(rgw_intent_log_entry)
 
+#ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
+
+#include "cls/rbd/cls_rbd_types.h"
+TYPE(cls::rbd::MirrorPeer)
+TYPE(cls::rbd::MirrorImage)
+#endif
 
 #endif
 
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
-TYPE(rados::cls::lock::locker_info_t)
+TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
 TYPE(cls_lock_unlock_op)
 TYPE(cls_lock_break_op)
 TYPE(cls_lock_get_info_op)
-TYPE(cls_lock_get_info_reply)
+TYPE_FEATUREFUL(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
+TYPE(cls_lock_assert_op)
+TYPE(cls_lock_set_cookie_op)
 
 #include "cls/replica_log/cls_replica_log_types.h"
 TYPE(cls_replica_log_item_marker)
@@ -324,6 +403,8 @@ TYPE(cls_refcount_read_op)
 TYPE(cls_refcount_read_ret)
 TYPE(cls_refcount_set_op)
 
+#include "journal/Entry.h"
+TYPE(journal::Entry)
 
 // --- messages ---
 #include "messages/MAuth.h"

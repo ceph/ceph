@@ -34,13 +34,13 @@ struct Subscription {
   bool incremental_onetime;  // has CEPH_FEATURE_INCSUBOSDMAP
   
   Subscription(MonSession *s, const string& t) : session(s), type(t), type_item(this),
-						 next(0), onetime(false), incremental_onetime(false) {};
+						 next(0), onetime(false), incremental_onetime(false) {}
 };
 
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
   entity_inst_t inst;
-  utime_t until;
+  utime_t session_timeout;
   utime_t time_established;
   bool closed;
   xlist<MonSession*>::item item;
@@ -48,19 +48,23 @@ struct MonSession : public RefCountedObject {
   MonCap caps;
   uint64_t auid;
   uint64_t global_id;
-  uint64_t notified_global_id;
 
   map<string, Subscription*> sub_map;
+  epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
 
   AuthServiceHandler *auth_handler;
+  EntityName entity_name;
 
   ConnectionRef proxy_con;
   uint64_t proxy_tid;
 
   MonSession(const entity_inst_t& i, Connection *c) :
+    RefCountedObject(g_ceph_context),
     con(c), inst(i), closed(false), item(this),
     auid(0),
-    global_id(0), notified_global_id(0), auth_handler(NULL),
+    global_id(0),
+    osd_epoch(0),
+    auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now(g_ceph_context);
   }
@@ -75,7 +79,7 @@ struct MonSession : public RefCountedObject {
   bool is_capable(string service, int mask) {
     map<string,string> args;
     return caps.is_capable(g_ceph_context,
-			   inst.name,
+			   entity_name,
 			   service, "", args,
 			   mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
   }
@@ -94,6 +98,10 @@ struct MonSessionMap {
       delete subs.begin()->second;
       subs.erase(subs.begin());
     }
+  }
+
+  unsigned get_size() const {
+    return sessions.size();
   }
 
   void remove_session(MonSession *s) {
@@ -119,6 +127,7 @@ struct MonSessionMap {
 
   MonSession *new_session(const entity_inst_t& i, Connection *c) {
     MonSession *s = new MonSession(i, c);
+    assert(s);
     sessions.push_back(&s->item);
     if (i.name.is_osd())
       by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
@@ -195,11 +204,11 @@ struct MonSessionMap {
   }
 };
 
-inline ostream& operator<<(ostream& out, const MonSession *s)
+inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession: " << s->inst << " is "
-      << (s->closed ? "closed" : "open");
-  out << s->caps;
+  out << "MonSession(" << s.inst << " is "
+      << (s.closed ? "closed" : "open");
+  out << s.caps << ")";
   return out;
 }
 

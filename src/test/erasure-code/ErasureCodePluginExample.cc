@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -16,20 +17,26 @@
 
 #include <unistd.h>
 
+#include "ceph_ver.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeExample.h"
 
 class ErasureCodePluginExample : public ErasureCodePlugin {
 public:
-  virtual int factory(const map<std::string,std::string> &parameters,
-                      ErasureCodeInterfaceRef *erasure_code)
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
+                      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss)
   {
     *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample());
+    (*erasure_code)->init(profile, ss);
     return 0;
   }
 };
 
-int __erasure_code_init(char *plugin_name)
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   return instance.add(plugin_name, new ErasureCodePluginExample());

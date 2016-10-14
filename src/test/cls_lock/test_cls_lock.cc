@@ -298,3 +298,94 @@ TEST(ClsLock, TestLockDuration) {
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+TEST(ClsLock, TestAssertLocked) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string oid = "foo";
+  Lock l("lock1");
+  ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
+
+  librados::ObjectWriteOperation op1;
+  l.assert_locked_exclusive(&op1);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  librados::ObjectWriteOperation op2;
+  l.assert_locked_shared(&op2);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op2));
+
+  l.set_tag("tag");
+  librados::ObjectWriteOperation op3;
+  l.assert_locked_exclusive(&op3);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op3));
+  l.set_tag("");
+
+  l.set_cookie("cookie");
+  librados::ObjectWriteOperation op4;
+  l.assert_locked_exclusive(&op4);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op4));
+  l.set_cookie("");
+
+  ASSERT_EQ(0, l.unlock(&ioctx, oid));
+
+  librados::ObjectWriteOperation op5;
+  l.assert_locked_exclusive(&op5);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op5));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(ClsLock, TestSetCookie) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string oid = "foo";
+  string name = "name";
+  string tag = "tag";
+  string cookie = "cookie";
+  string new_cookie = "new cookie";
+  librados::ObjectWriteOperation op1;
+  set_cookie(&op1, name, LOCK_SHARED, cookie, tag, new_cookie);
+  ASSERT_EQ(-ENOENT, ioctx.operate(oid, &op1));
+
+  librados::ObjectWriteOperation op2;
+  lock(&op2, name, LOCK_SHARED, cookie, tag, "", utime_t{}, 0);
+  ASSERT_EQ(0, ioctx.operate(oid, &op2));
+
+  librados::ObjectWriteOperation op3;
+  lock(&op3, name, LOCK_SHARED, "cookie 2", tag, "", utime_t{}, 0);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+
+  librados::ObjectWriteOperation op4;
+  set_cookie(&op4, name, LOCK_SHARED, cookie, tag, cookie);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op4));
+
+  librados::ObjectWriteOperation op5;
+  set_cookie(&op5, name, LOCK_SHARED, cookie, "wrong tag", new_cookie);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op5));
+
+  librados::ObjectWriteOperation op6;
+  set_cookie(&op6, name, LOCK_SHARED, "wrong cookie", tag, new_cookie);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op6));
+
+  librados::ObjectWriteOperation op7;
+  set_cookie(&op7, name, LOCK_EXCLUSIVE, cookie, tag, new_cookie);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op7));
+
+  librados::ObjectWriteOperation op8;
+  set_cookie(&op8, name, LOCK_SHARED, cookie, tag, "cookie 2");
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid, &op8));
+
+  librados::ObjectWriteOperation op9;
+  set_cookie(&op9, name, LOCK_SHARED, cookie, tag, new_cookie);
+  ASSERT_EQ(0, ioctx.operate(oid, &op9));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}

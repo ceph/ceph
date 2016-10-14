@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
  *
@@ -24,7 +24,7 @@
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 
 #define FIRST_DATA_CHUNK 0
 #define SECOND_DATA_CHUNK 1
@@ -35,7 +35,7 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
-class ErasureCodeExample : public ErasureCodeInterface {
+class ErasureCodeExample : public ErasureCode {
 public:
   virtual ~ErasureCodeExample() {}
 
@@ -128,13 +128,19 @@ public:
     // populate the bufferlist with bufferptr pointing
     // to chunk boundaries
     //
-    const bufferptr ptr = out.buffers().front();
+    const bufferptr &ptr = out.front();
     for (set<int>::iterator j = want_to_encode.begin();
          j != want_to_encode.end();
          ++j) {
       bufferptr chunk(ptr, (*j) * chunk_length, chunk_length);
       (*encoded)[*j].push_front(chunk);
     }
+    return 0;
+  }
+
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded) {
+    assert(0);
     return 0;
   }
 
@@ -166,9 +172,9 @@ public:
 	// two recovers it.
 	//
         map<int, bufferlist>::const_iterator k = chunks.begin();
-        const char *a = k->second.buffers().front().c_str();
+        const char *a = k->second.front().c_str();
         ++k;
-        const char *b = k->second.buffers().front().c_str();
+        const char *b = k->second.front().c_str();
         bufferptr chunk(chunk_length);
 	char *c = chunk.c_str();
         for (unsigned j = 0; j < chunk_length; j++) {
@@ -179,6 +185,19 @@ public:
     }
     return 0;
   }
+
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded) {
+    assert(0);
+    return 0;
+  }
+
+  virtual const vector<int> &get_chunk_mapping() const {
+    static vector<int> mapping;
+    return mapping;
+  }
+
 };
 
 #endif

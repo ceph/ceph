@@ -20,7 +20,7 @@
 #include <string>
 
 #include "include/encoding.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "msg/msg_types.h"
 
 /* Represents a Ceph entity name.
@@ -58,6 +58,7 @@ struct EntityName
 
   uint32_t get_type() const { return type; }
   bool is_osd() const { return get_type() == CEPH_ENTITY_TYPE_OSD; }
+  bool is_mgr() const { return get_type() == CEPH_ENTITY_TYPE_MGR; }
   bool is_mds() const { return get_type() == CEPH_ENTITY_TYPE_MDS; }
   bool is_client() const { return get_type() == CEPH_ENTITY_TYPE_CLIENT; }
   bool is_mon() const { return get_type() == CEPH_ENTITY_TYPE_MON; }
@@ -81,7 +82,7 @@ private:
 
 uint32_t str_to_ceph_entity_type(const char * str);
 
-WRITE_CLASS_ENCODER(EntityName);
+WRITE_CLASS_ENCODER(EntityName)
 
 WRITE_EQ_OPERATORS_2(EntityName, type, id)
 

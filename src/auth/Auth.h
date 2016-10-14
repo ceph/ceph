@@ -16,9 +16,6 @@
 #define CEPH_AUTHTYPES_H
 
 #include "Crypto.h"
-#include "msg/msg_types.h"
-
-#include "common/config.h"
 #include "common/entity_name.h"
 
 class Cond;
@@ -136,7 +133,7 @@ struct AuthAuthorizer {
   bufferlist bl;
   CryptoKey session_key;
 
-  AuthAuthorizer(__u32 p) : protocol(p) {}
+  explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
   virtual bool verify_reply(bufferlist::iterator& reply) = 0;
 };
@@ -164,7 +161,7 @@ struct ExpiringCryptoKey {
     ::decode(expiration, bl);
   }
 };
-WRITE_CLASS_ENCODER(ExpiringCryptoKey);
+WRITE_CLASS_ENCODER(ExpiringCryptoKey)
 
 static inline ostream& operator<<(ostream& out, const ExpiringCryptoKey& c)
 {
@@ -226,7 +223,7 @@ struct RotatingSecrets {
 
   void dump();
 };
-WRITE_CLASS_ENCODER(RotatingSecrets);
+WRITE_CLASS_ENCODER(RotatingSecrets)
 
 
 
@@ -241,7 +238,9 @@ public:
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)
 {
   uint32_t ty(name.get_type());
-  return ((ty == CEPH_ENTITY_TYPE_OSD) || (ty == CEPH_ENTITY_TYPE_MDS));
+  return ((ty == CEPH_ENTITY_TYPE_OSD)
+      || (ty == CEPH_ENTITY_TYPE_MDS)
+      || (ty == CEPH_ENTITY_TYPE_MGR));
 }
 
 #endif

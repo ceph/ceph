@@ -91,7 +91,7 @@ namespace librados {
     PoolAsyncCompletionImpl *c;
 
   public:
-    C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
+    explicit C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
       c->get();
     }
     ~C_PoolAsync_Safe() {

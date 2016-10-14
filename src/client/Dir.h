@@ -1,17 +1,15 @@
 #ifndef CEPH_CLIENT_DIR_H
 #define CEPH_CLIENT_DIR_H
 
-class Inode;
+struct Inode;
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
   ceph::unordered_map<string, Dentry*> dentries;
-  map<string, Dentry*> dentry_map;
-  uint64_t release_count;
-  uint64_t max_offset;
+  vector<Dentry*> readdir_cache;
 
-  Dir(Inode* in) : release_count(0), max_offset(2) { parent_inode = in; }
+  explicit Dir(Inode* in) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };

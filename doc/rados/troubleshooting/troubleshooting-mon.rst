@@ -31,7 +31,7 @@ Initial Troubleshooting
   the server and, if that succeeds, try connecting to the monitor's port
   using you tool of choice (telnet, nc,...).
 
-**Does ``ceph -s`` run and obtain a reply from the cluster?**
+**Does ceph -s run and obtain a reply from the cluster?**
 
   If the answer is yes then your cluster is up and running.  One thing you
   can take for granted is that the monitors will only answer to a ``status``
@@ -43,7 +43,7 @@ Initial Troubleshooting
   enough to form a quorum (keep in mind that a quorum if formed by a majority
   of monitors).
 
-**What if ``ceph -s`` doesn't finish?**
+**What if ceph -s doesn't finish?**
 
   If you haven't gone through all the steps so far, please go back and do.
 
@@ -82,12 +82,12 @@ admin socket, with ``ceph`` likely returning ``Error 111: Connection Refused``.
 Accessing the admin socket is as simple as telling the ``ceph`` tool to use
 the ``asok`` file.  In pre-Dumpling Ceph, this can be achieved by::
 
-  ceph --admin-daemon /var/run/ceph/ceph-mon.ID.asok <command>
+  ceph --admin-daemon /var/run/ceph/ceph-mon.<id>.asok <command>
 
 while in Dumpling and beyond you can use the alternate (and recommended)
 format::
 
-  ceph daemon mon.ID <command>
+  ceph daemon mon.<id> <command>
 
 Using ``help`` as the command to the ``ceph`` tool will show you the
 supported commands available through the admin socket. Please take a look
@@ -175,7 +175,7 @@ How to troubleshoot this?
   all your monitor nodes and make sure you're not dropping/rejecting
   connections.
 
-  If this intial troubleshooting doesn't solve your problems, then it's
+  If this initial troubleshooting doesn't solve your problems, then it's
   time to go deeper.
 
   First, check the problematic monitor's ``mon_status`` via the admin
@@ -378,9 +378,85 @@ like this appropriately::
 
 You may also need to add rules to IP tables on your Ceph hosts to ensure
 that clients can access the ports associated with your Ceph monitors (i.e., port
-6789 by default) and Ceph OSDs (i.e., 6800 et. seq. by default). For example::
+6789 by default) and Ceph OSDs (i.e., 6800 through 7300 by default). For
+example::
 
-	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:6810 -j ACCEPT
+	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
+
+Monitor Store Failures
+======================
+
+Symptoms of store corruption
+----------------------------
+
+Ceph monitor stores the `cluster map`_ in a key/value store such as LevelDB. If
+a monitor fails due to the key/value store corruption, following error messages
+might be found in the monitor log::
+
+  Corruption: error in middle of record
+
+or::
+
+  Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.0/store.db/1234567.ldb
+
+Recovery using healthy monitor(s)
+---------------------------------
+
+If there is any survivers, we can always `replace`_ the corrupted one with a
+new one. And after booting up, the new joiner will sync up with a healthy
+peer, and once it is fully sync'ed, it will be able to serve the clients.
+
+Recovery using OSDs
+-------------------
+
+But what if all monitors fail at the same time? Since users are encouraged to
+deploy at least three monitors in a Ceph cluster, the chance of simultaneous
+failure is rare. But unplanned power-downs in a data center with improperly
+configured disk/fs settings could fail the underlying filesystem, and hence
+kill all the monitors. In this case, we can recover the monitor store with the
+information stored in OSDs.::
+
+  ms=/tmp/mon-store
+  mkdir $ms
+  # collect the cluster map from OSDs
+  for host in $hosts; do
+    rsync -avz $ms user@host:$ms
+    rm -rf $ms
+    ssh user@host <<EOF
+      for osd in /var/lib/osd/osd-*; do
+        ceph-objectstore-tool --data-path $osd --op update-mon-db --mon-store-path $ms
+      done
+    EOF
+    rsync -avz user@host:$ms $ms
+  done
+  # rebuild the monitor store from the collected map, if the cluster does not
+  # use cephx authentication, there is no need to pass the "--keyring" option.
+  # i.e. use "ceph-monstore-tool /tmp/mon-store rebuild" instead
+  ceph-monstore-tool /tmp/mon-store rebuild -- --keyring /path/to/admin.keyring
+  # backup corrupted store.db just in case
+  mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
+  mv /tmp/mon-store/store.db /var/lib/ceph/mon/mon.0/store.db
+
+The steps above
+
+#. collect the map from all OSD hosts,
+#. then rebuild the store,
+#. replace the corrupted store on ``mon.0`` with the recovered copy.
+
+Known limitations
+~~~~~~~~~~~~~~~~~
+
+Following information are not recoverable using the steps above:
+
+- **some added keyrings**: all the OSD keyrings added using ``ceph auth add`` command
+  are recovered from the OSD's copy. And the ``client.admin`` keyring is imported
+  using ``ceph-monstore-tool``. But the MDS keyrings and other keyrings are missing
+  in the recovered monitor store. You might need to re-add them manually.
+
+- **pg settings**: the ``full ratio`` and ``nearfull ratio`` settings configured using
+  ``ceph pg set_full_ratio`` and ``ceph pg set_nearfull_ratio`` will be lost.
+
+- **MDS Maps**: the MDS maps are lost.
 
 
 Everything Failed! Now What?
@@ -429,8 +505,8 @@ ask you to raise them or even define other debug subsystems to obtain infos
 from -- but at least we started off with some useful information, instead
 of a massively empty log without much to go on with.
 
-Do I need to restart a monitor to adjust deebug levels?
--------------------------------------------------------
+Do I need to restart a monitor to adjust debug levels?
+------------------------------------------------------
 
 No. You may do it in one of two ways:
 
@@ -438,11 +514,11 @@ You have quorum
 
   Either inject the debug option into the monitor you want to debug::
 
-        ceph tell mon.FOO injectargs '--debug_mon 10/10'
+        ceph tell mon.FOO injectargs --debug_mon 10/10
 
   or into all monitors at once::
 
-        ceph tell mon.* injectargs '--debug_mon 10/10'
+        ceph tell mon.* injectargs --debug_mon 10/10
 
 No quourm
 
@@ -479,4 +555,6 @@ based on that.
 Finally, you should reach out to us on the mailing lists, on IRC or file
 a new issue on the `tracker`_.
 
+.. _cluster map: ../../architecture#cluster-map
+.. _replace: ../operation/add-or-rm-mons
 .. _tracker: http://tracker.ceph.com/projects/ceph/issues/new

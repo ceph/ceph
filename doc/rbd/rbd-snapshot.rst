@@ -14,9 +14,14 @@ command and many higher level interfaces, including `QEMU`_, `libvirt`_,
 
 .. important:: To use use RBD snapshots, you must have a running Ceph cluster.
 
-.. note:: **STOP I/O BEFORE** snapshotting an image.
-   If the image contains a filesystem, the filesystem must be in a
-   consistent state **BEFORE** snapshotting.
+.. note:: If a snapshot is taken while `I/O` is still in progress in a image, the
+   snapshot might not get the exact or latest data of the image and the snapshot
+   may have to be cloned to a new image to be mountable. So, we recommend to stop
+   `I/O` before taking a snapshot of an image. If the image contains a filesystem,
+   the filesystem must be in a consistent state before taking a snapshot. To stop
+   `I/O` you can use `fsfreeze` command. See `fsfreeze(8)` man page for more details.
+   For virtual machines, `qemu-guest-agent` can be used to automatically freeze
+   filesystems when creating a snapshot.
    
 .. ditaa:: +------------+         +-------------+
            | {s}        |         | {s} c999    |
@@ -29,15 +34,18 @@ command and many higher level interfaces, including `QEMU`_, `libvirt`_,
 Cephx Notes
 ===========
 
-When `cephx`_ is enabled,  you must specify a user and a secret file
-on the command line, or use the ``CEPH_ARGS`` environment variable
-to avoid re-entry of the following parameters. ::
+When `cephx`_ is enabled (it is by default), you must specify a user name or ID
+and a path to the keyring containing the corresponding key for the user. See
+`User Management`_ for details. You may also add the ``CEPH_ARGS`` environment
+variable to avoid re-entry of the following parameters. ::
 
-	rbd --id {user-name} --keyring=/path/to/secret [commands]
+	rbd --id {user-ID} --keyring=/path/to/secret [commands]
+	rbd --name {username} --keyring=/path/to/secret [commands]
 
 For example:: 
 
-	rbd --id client.admin --keyring=/etc/ceph/ceph.keyring [commands]
+	rbd --id admin --keyring=/etc/ceph/ceph.keyring [commands]
+	rbd --name client.admin --keyring=/etc/ceph/ceph.keyring [commands]
 
 .. tip:: Add the user and secret to the ``CEPH_ARGS`` environment 
    variable so that you don't need to enter them each time.
@@ -55,12 +63,10 @@ Create Snapshot
 To create a snapshot with ``rbd``, specify the ``snap create`` option,  the pool
 name and the image name.  ::
 
-	rbd --pool {pool-name} snap create --snap {snap-name} {image-name}
 	rbd snap create {pool-name}/{image-name}@{snap-name}
 
 For example:: 
 
-	rbd --pool rbd snap create --snap snapname foo
 	rbd snap create rbd/foo@snapname
 	
 
@@ -69,12 +75,10 @@ List Snapshots
 
 To list snapshots of an image, specify the pool name and the image name. ::
 
-	rbd --pool {pool-name} snap ls {image-name} 
 	rbd snap ls {pool-name}/{image-name}
 
 For example::
 
-	rbd --pool rbd snap ls foo 
 	rbd snap ls rbd/foo
 
 
@@ -84,12 +88,10 @@ Rollback Snapshot
 To rollback to a snapshot with ``rbd``, specify the ``snap rollback`` option, the
 pool name, the image name and the snap name. ::
 
-	rbd --pool {pool-name} snap rollback --snap {snap-name} {image-name}
 	rbd snap rollback {pool-name}/{image-name}@{snap-name}
 
 For example::
 
-	rbd --pool rbd snap rollback --snap snapname foo
 	rbd snap rollback rbd/foo@snapname
 
 
@@ -105,14 +107,12 @@ Delete a Snapshot
 -----------------
 
 To delete a snapshot with ``rbd``, specify the ``snap rm`` option, the pool
-name, the image name and the username. ::
+name, the image name and the snap name. ::
 
-	rbd --pool {pool-name} snap rm --snap {snap-name} {image-name}
 	rbd snap rm {pool-name}/{image-name}@{snap-name}
 	
 For example:: 
 
-	rbd --pool rbd snap rm --snap snapname foo
 	rbd snap rm rbd/foo@snapname
 
 
@@ -125,12 +125,10 @@ Purge Snapshots
 To delete all snapshots for an image with ``rbd``, specify the ``snap purge``
 option and the image name. ::
 
-	rbd --pool {pool-name} snap purge {image-name}
 	rbd snap purge {pool-name}/{image-name}
 
 For example:: 
 
-	rbd --pool rbd snap purge foo
 	rbd snap purge rbd/foo
 
 
@@ -171,10 +169,9 @@ no special restrictions with cloned images. However, the copy-on-write clone of
 a snapshot refers to the snapshot, so you **MUST** protect the snapshot before
 you clone it. The following diagram depicts the process.
 
-.. note:: Ceph only supports cloning for ``format 2`` images (i.e., created with 
-  ``rbd create --image-format 2``), and is not yet supported by the kernel ``rbd`` module. 
-  So you MUST use QEMU/KVM or ``librbd`` directly to access clones in the current
-  release.
+.. note:: Ceph only supports cloning for format 2 images (i.e., created with
+   ``rbd create --image-format 2``).  The kernel client supports cloned images
+   since kernel 3.10.
 
 Getting Started with Layering
 -----------------------------
@@ -209,7 +206,7 @@ clone snapshots  from one pool to images in another pool.
    a user may create an image for a Linux distribution (e.g., Ubuntu 12.04), and 
    create a snapshot for it. Periodically, the user may update the image and create
    a new snapshot (e.g., ``sudo apt-get update``, ``sudo apt-get upgrade``,
-   ``sudo apt-get dist-upgrade`` followed by ``	rbd snap create``). As the image
+   ``sudo apt-get dist-upgrade`` followed by ``rbd snap create``). As the image
    matures, the user can clone any one of the snapshots.
 
 #. **Extended Template:** A more advanced use case includes extending a template
@@ -220,7 +217,7 @@ clone snapshots  from one pool to images in another pool.
 
 #. **Template Pool:** One way to use block device layering is to create a 
    pool that contains master images that act as templates, and snapshots of those
-   templates. You may then extend read-only priveleges to users so that they 
+   templates. You may then extend read-only privileges to users so that they 
    may clone the snapshots without the ability to write or execute within the pool.
 
 #. **Image Migration/Recovery:** One way to use block device layering is to migrate
@@ -229,16 +226,14 @@ clone snapshots  from one pool to images in another pool.
 Protecting a Snapshot
 ---------------------
 
-Clones access the parent snapshots. All clones would break if a user inadvertantly 
+Clones access the parent snapshots. All clones would break if a user inadvertently 
 deleted the parent snapshot. To prevent data loss, you **MUST** protect the
 snapshot before you can clone it. ::
 
-	rbd --pool {pool-name} snap protect --image {image-name} --snap {snapshot-name}	
 	rbd snap protect {pool-name}/{image-name}@{snapshot-name}
 
 For example::
 
-	rbd --pool rbd snap protect --image my-image --snap my-snapshot
 	rbd snap protect rbd/my-image@my-snapshot
 
 .. note:: You cannot delete a protected snapshot.
@@ -250,7 +245,6 @@ To clone a snapshot, specify you need to specify the parent pool, image and
 snapshot; and, the child pool and image name. You must protect the snapshot
 before  you can clone it. ::
 
-   rbd --pool {pool-name} --image {parent-image} --snap {snap-name} --dest-pool {pool-name} --dest {child-image}
 	rbd clone {pool-name}/{parent-image}@{snap-name} {pool-name}/{child-image-name}
 	
 For example:: 
@@ -268,12 +262,10 @@ Before you can delete a snapshot, you must unprotect it first. Additionally,
 you may *NOT* delete snapshots that have references from clones. You must
 flatten each clone of a snapshot, before you can delete the snapshot. :: 
 
-	rbd --pool {pool-name} snap unprotect --image {image-name} --snap {snapshot-name}
 	rbd snap unprotect {pool-name}/{image-name}@{snapshot-name}
 
 For example::
 
-	rbd --pool rbd snap unprotect --image my-image --snap my-snapshot
 	rbd snap unprotect rbd/my-image@my-snapshot
 
 
@@ -282,12 +274,10 @@ Listing Children of a Snapshot
 
 To list the children of a snapshot, execute the following::
 
-	rbd --pool {pool-name} children --image {image-name} --snap {snap-name}
 	rbd children {pool-name}/{image-name}@{snapshot-name}
 
 For example::
 
-	rbd --pool rbd children --image my-image --snap my-snapshot
 	rbd children rbd/my-image@my-snapshot
 
 
@@ -300,19 +290,18 @@ the image by copying the information from the snapshot to the clone. The time
 it takes to flatten a clone increases with the size of the snapshot. To delete 
 a snapshot, you must flatten the child images first. ::
 
-	rbd --pool {pool-name} flatten --image {image-name}
 	rbd flatten {pool-name}/{image-name}
 
 For example:: 
 
-	rbd --pool rbd flatten --image my-image 
 	rbd flatten rbd/my-image
 
 .. note:: Since a flattened image contains all the information from the snapshot, 
    a flattened image will take up more storage space than a layered clone.
 
 
-.. _cephx: ../../rados/operations/authentication/
+.. _cephx: ../../rados/configuration/auth-config-ref/
+.. _User Management: ../../operations/user-management
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _CloudStack: ../rbd-cloudstack/

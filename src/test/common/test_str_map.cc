@@ -25,19 +25,18 @@ TEST(str_map, json) {
   map<string,string> str_map;
   stringstream ss;
   // well formatted
-  ASSERT_EQ(0, get_str_map("{\"key\": \"value\"}", ss, &str_map));
+  ASSERT_EQ(0, get_json_str_map("{\"key\": \"value\"}", ss, &str_map));
   ASSERT_EQ("value", str_map["key"]);
   // well formatted but not a JSON object
-  ASSERT_EQ(-EINVAL, get_str_map("\"key\"", ss, &str_map));
+  ASSERT_EQ(-EINVAL, get_json_str_map("\"key\"", ss, &str_map));
   ASSERT_NE(string::npos, ss.str().find("must be a JSON object"));
 }
 
 TEST(str_map, plaintext) {
-  stringstream ss;
   {
     map<string,string> str_map;
     ASSERT_EQ(0, get_str_map(" foo=bar\t\nfrob=nitz   yeah right=   \n\t",
-			     ss, &str_map));
+			     &str_map));
     ASSERT_EQ(4u, str_map.size());
     ASSERT_EQ("bar", str_map["foo"]);
     ASSERT_EQ("nitz", str_map["frob"]);
@@ -46,16 +45,24 @@ TEST(str_map, plaintext) {
   }
   {
     map<string,string> str_map;
-    ASSERT_EQ(0, get_str_map("that", ss, &str_map));
+    ASSERT_EQ(0, get_str_map("that", &str_map));
     ASSERT_EQ(1u, str_map.size());
     ASSERT_EQ("", str_map["that"]);
   }
   {
     map<string,string> str_map;
-    ASSERT_EQ(0, get_str_map(" \t \n ", ss, &str_map));
+    ASSERT_EQ(0, get_str_map(" \t \n ", &str_map));
     ASSERT_EQ(0u, str_map.size());
-    ASSERT_EQ(0, get_str_map("", ss, &str_map));
+    ASSERT_EQ(0, get_str_map("", &str_map));
     ASSERT_EQ(0u, str_map.size());
+  }
+  {
+    map<string,string> str_map;
+    ASSERT_EQ(0, get_str_map(" key1=val1; key2=\tval2; key3\t = \t val3; \n ", &str_map, "\n;"));
+    ASSERT_EQ(4u, str_map.size());
+    ASSERT_EQ("val1", str_map["key1"]);
+    ASSERT_EQ("val2", str_map["key2"]);
+    ASSERT_EQ("val3", str_map["key3"]);
   }
 }
 

@@ -33,7 +33,7 @@ enum {
 
 class Mutex {
 private:
-  const char *name;
+  std::string name;
   int id;
   bool recursive;
   bool lockdep;
@@ -46,24 +46,24 @@ private:
   PerfCounters *logger;
 
   // don't allow copying.
-  void operator=(Mutex &M);
+  void operator=(const Mutex &M);
   Mutex(const Mutex &M);
 
   void _register() {
-    id = lockdep_register(name);
+    id = lockdep_register(name.c_str());
   }
   void _will_lock() { // about to lock
-    id = lockdep_will_lock(name, id);
+    id = lockdep_will_lock(name.c_str(), id, backtrace);
   }
   void _locked() {    // just locked
-    id = lockdep_locked(name, id, backtrace);
+    id = lockdep_locked(name.c_str(), id, backtrace);
   }
   void _will_unlock() {  // about to unlock
-    id = lockdep_will_unlock(name, id);
+    id = lockdep_will_unlock(name.c_str(), id);
   }
 
 public:
-  Mutex(const char *n, bool r = false, bool ld=true, bool bt=false,
+  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false,
 	CephContext *cct = 0);
   ~Mutex();
   bool is_locked() const {
@@ -101,12 +101,7 @@ public:
       assert(nlock == 0);
     }
   }
-  void Unlock() {
-    _pre_unlock();
-    if (lockdep && g_lockdep) _will_unlock();
-    int r = pthread_mutex_unlock(&_m);
-    assert(r == 0);
-  }
+  void Unlock();
 
   friend class Cond;
 
@@ -116,7 +111,7 @@ public:
     Mutex &mutex;
 
   public:
-    Locker(Mutex& m) : mutex(m) {
+    explicit Locker(Mutex& m) : mutex(m) {
       mutex.Lock();
     }
     ~Locker() {

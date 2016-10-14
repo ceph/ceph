@@ -41,6 +41,8 @@ using namespace std;
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 
+#include "perfglue/heap_profiler.h"
+
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -100,24 +102,31 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   return -ENOENT;
 }
 
-int mon_data_exists(bool *r)
+int check_mon_data_exists()
 {
   string mon_data = g_conf->mon_data;
   struct stat buf;
   if (::stat(mon_data.c_str(), &buf)) {
-    if (errno == ENOENT) {
-      *r = false;
-    } else {
+    if (errno != ENOENT) {
       cerr << "stat(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
-      return -errno;
     }
-  } else {
-    *r = true;
+    return -errno;
   }
   return 0;
 }
 
-int mon_data_empty(bool *r)
+/** Check whether **mon data** is empty.
+ *
+ * Being empty means mkfs has not been run and there's no monitor setup
+ * at **g_conf->mon_data**.
+ *
+ * If the directory g_conf->mon_data is not empty we will return -ENOTEMPTY.
+ * Otherwise we will return 0.  Any other negative returns will represent
+ * a failure to be handled by the caller.
+ *
+ * @return **0** on success, -ENOTEMPTY if not empty or **-errno** otherwise.
+ */
+int check_mon_data_empty()
 {
   string mon_data = g_conf->mon_data;
 
@@ -126,38 +135,24 @@ int mon_data_empty(bool *r)
     cerr << "opendir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
     return -errno;
   }
-  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
-
-  *r = false;
   int code = 0;
-  struct dirent *de;
+  struct dirent *de = nullptr;
   errno = 0;
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de) {
-      if (errno) {
-	cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
-	code = -errno;
-      }
-      break;
-    }
+  while ((de = ::readdir(dir))) {
     if (string(".") != de->d_name &&
 	string("..") != de->d_name) {
-      *r = true;
+      code = -ENOTEMPTY;
       break;
     }
+  }
+  if (!de && errno) {
+    cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
+    code = -errno;
   }
 
   ::closedir(dir);
 
   return code;
-}
-
-int mon_exists(bool *r)
-{
-  int code = mon_data_exists(r);
-  if (code || *r == false)
-    return code;
-  return mon_data_empty(r);
 }
 
 void usage()
@@ -198,6 +193,28 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  // We need to specify some default values that may be overridden by the
+  // user, that are specific to the monitor.  The options we are overriding
+  // are also used on the OSD (or in any other component that uses leveldb),
+  // so changing them directly in common/config_opts.h is not an option.
+  // This is not the prettiest way of doing this, especially since it has us
+  // having a different place than common/config_opts.h defining default
+  // values, but it's not horribly wrong enough to prevent us from doing it :)
+  //
+  // NOTE: user-defined options will take precedence over ours.
+  //
+  //  leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+  //  leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
+  //  leveldb_block_size        = 64*1024       = 65536     // 64KB
+  //  leveldb_compression       = false
+  //  leveldb_log               = ""
+  vector<const char*> def_args;
+  def_args.push_back("--leveldb-write-buffer-size=33554432");
+  def_args.push_back("--leveldb-cache-size=536870912");
+  def_args.push_back("--leveldb-block-size=65536");
+  def_args.push_back("--leveldb-compression=false");
+  def_args.push_back("--leveldb-log=");
+
   int flags = 0;
   {
     vector<const char*> args_copy = args;
@@ -218,7 +235,9 @@ int main(int argc, const char **argv)
     }
   }
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
+  global_init(&def_args, args,
+              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags, "mon_data");
+  ceph_heap_profiler_init();
 
   uuid_d fsid;
   std::string val;
@@ -227,7 +246,6 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
-      exit(0);
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
@@ -267,33 +285,38 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  bool exists;
-  if (mon_exists(&exists))
-    exit(1);
-
-  if (mkfs && exists) {
-    cerr << g_conf->mon_data << " already exists" << std::endl;
-    exit(0);
-  }
-
   // -- mkfs --
   if (mkfs) {
 
-    if (mon_data_exists(&exists))
-      exit(1);
-
-    if (!exists) {
+    int err = check_mon_data_exists();
+    if (err == -ENOENT) {
       if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
 	cerr << "mkdir(" << g_conf->mon_data << ") : "
 	     << cpp_strerror(errno) << std::endl;
 	exit(1);
       }
+    } else if (err < 0) {
+      cerr << "error opening '" << g_conf->mon_data << "': "
+           << cpp_strerror(-err) << std::endl;
+      exit(-err);
+    }
+
+    err = check_mon_data_empty();
+    if (err == -ENOTEMPTY) {
+      // Mon may exist.  Let the user know and exit gracefully.
+      cerr << "'" << g_conf->mon_data << "' already exists and is not empty"
+           << ": monitor may already exist" << std::endl;
+      exit(0);
+    } else if (err < 0) {
+      cerr << "error checking if '" << g_conf->mon_data << "' is empty: "
+           << cpp_strerror(-err) << std::endl;
+      exit(-err);
     }
 
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
-    common_init_finish(g_ceph_context, flags);
+    common_init_finish(g_ceph_context);
 
     bufferlist monmapbl, osdmapbl;
     std::string error;
@@ -347,7 +370,7 @@ int main(int argc, const char **argv)
 	  string name;
 	  monmap.get_addr_name(local, name);
 
-	  if (name.find("noname-") == 0) {
+	  if (name.compare(0, 7, "noname-") == 0) {
 	    cout << argv[0] << ": mon." << name << " " << local
 		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
 	    monmap.rename(name, g_conf->name.get_id());
@@ -397,61 +420,91 @@ int main(int argc, const char **argv)
       cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
       exit(1);
     }
+    store.close();
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
     return 0;
+  }
+
+  err = check_mon_data_exists();
+  if (err < 0 && err == -ENOENT) {
+    cerr << "monitor data directory at '" << g_conf->mon_data << "'"
+         << " does not exist: have you run 'mkfs'?" << std::endl;
+    exit(1);
+  } else if (err < 0) {
+    cerr << "error accessing monitor data directory at '"
+         << g_conf->mon_data << "': " << cpp_strerror(-err) << std::endl;
+    exit(1);
+  }
+
+  err = check_mon_data_empty();
+  if (err == 0) {
+    derr << "monitor data directory at '" << g_conf->mon_data
+      << "' is empty: have you run 'mkfs'?" << dendl;
+    exit(1);
+  } else if (err < 0 && err != -ENOTEMPTY) {
+    // we don't want an empty data dir by now
+    cerr << "error accessing '" << g_conf->mon_data << "': "
+         << cpp_strerror(-err) << std::endl;
+    exit(1);
+  }
+
+  {
+    // check fs stats. don't start if it's critically close to full.
+    ceph_data_stats_t stats;
+    int err = get_fs_stats(stats, g_conf->mon_data.c_str());
+    if (err < 0) {
+      cerr << "error checking monitor data's fs stats: " << cpp_strerror(err)
+           << std::endl;
+      exit(-err);
+    }
+    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
+      cerr << "error: monitor data filesystem reached concerning levels of"
+           << " available storage space (available: "
+           << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
+           << ")\nyou may adjust 'mon data avail crit' to a lower value"
+           << " to make this go away (default: " << g_conf->mon_data_avail_crit
+           << "%)\n" << std::endl;
+      exit(ENOSPC);
+    }
   }
 
   // we fork early to prevent leveldb's environment static state from
   // screwing us over
   Preforker prefork;
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
-    if (g_conf->daemonize) {
-      global_init_prefork(g_ceph_context, 0);
-      prefork.prefork();
+    if (global_init_prefork(g_ceph_context) >= 0) {
+      string err_msg;
+      err = prefork.prefork(err_msg);
+      if (err < 0) {
+        cerr << err_msg << std::endl;
+        prefork.exit(err);
+      }
       if (prefork.is_parent()) {
-	return prefork.parent_wait();
+        err = prefork.parent_wait(err_msg);
+        if (err < 0)
+          cerr << err_msg << std::endl;
+        prefork.exit(err);
       }
       global_init_postfork_start(g_ceph_context);
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
+    if (global_init_preload_erasure_code(g_ceph_context) < 0)
+      prefork.exit(1);
   }
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
-
-  Monitor::StoreConverter converter(g_conf->mon_data, store);
-  if (store->open(std::cerr) < 0) {
-    int ret = store->create_and_open(std::cerr);
-    if (ret < 0) {
-      derr << "failed to create new leveldb store" << dendl;
-      prefork.exit(1);
-    }
-
-    ret = converter.needs_conversion();
-    if (ret < 0) {
-      derr << "found errors while validating legacy unconverted monitor store: "
-           << cpp_strerror(ret) << dendl;
-      prefork.exit(1);
-    }
-    if (ret > 0) {
-      dout(0) << "converting monitor store, please do not interrupt..." << dendl;
-      int r = converter.convert();
-      if (r) {
-	derr << "failed to convert monitor store: " << cpp_strerror(r) << dendl;
-	prefork.exit(1);
-      }
-    }
-  } else if (converter.is_converting()) {
-    derr << "there is an on-going (maybe aborted?) conversion." << dendl;
-    derr << "you should check what happened" << dendl;
-    derr << "remove store.db to restart conversion" << dendl;
+  err = store->open(std::cerr);
+  if (err < 0) {
+    derr << "error opening mon data directory at '"
+         << g_conf->mon_data << "': " << cpp_strerror(err) << dendl;
     prefork.exit(1);
   }
 
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
-  if (!magicbl.length()) {
+  if (err || !magicbl.length()) {
     derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
@@ -498,11 +551,11 @@ int main(int argc, const char **argv)
     ::encode(v, final);
     ::encode(mapbl, final);
 
-    MonitorDBStore::Transaction t;
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
     // save it
-    t.put("monmap", v, mapbl);
-    t.put("monmap", "latest", final);
-    t.put("monmap", "last_committed", v);
+    t->put("monmap", v, mapbl);
+    t->put("monmap", "latest", final);
+    t->put("monmap", "last_committed", v);
     store->apply_transaction(t);
 
     dout(0) << "done." << dendl;
@@ -587,47 +640,52 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::MON(rank),
-					   "mon",
-					   0);
-  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
-  messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
+  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
+				      entity_name_t::MON(rank), "mon",
+				      0, Messenger::HAS_MANY_CONNECTIONS);
+  if (!msgr)
+    exit(1);
+  msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
+  msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
   uint64_t supported =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_MONCLOCKCHECK |
+    DEPRECATED_CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH;
-  messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MON,
-                        Messenger::Policy::lossless_peer_reuse(supported,
-							       CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_MON_SINGLE_PAXOS));
-  messenger->set_policy(entity_name_t::TYPE_OSD,
-                        Messenger::Policy::stateless_server(supported,
-                                                            CEPH_FEATURE_PGID64 |
-                                                            CEPH_FEATURE_OSDENC));
-  messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
-			Messenger::Policy::stateless_server(supported, 0));
-
+  msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
+  msgr->set_policy(entity_name_t::TYPE_MON,
+                   Messenger::Policy::lossless_peer_reuse(
+                       supported,
+                       CEPH_FEATURE_UID |
+                       CEPH_FEATURE_PGID64 |
+                       CEPH_FEATURE_MON_SINGLE_PAXOS));
+  msgr->set_policy(entity_name_t::TYPE_OSD,
+                   Messenger::Policy::stateless_server(
+                       supported,
+                       CEPH_FEATURE_PGID64 |
+                       CEPH_FEATURE_OSDENC));
+  msgr->set_policy(entity_name_t::TYPE_CLIENT,
+                   Messenger::Policy::stateless_server(supported, 0));
+  msgr->set_policy(entity_name_t::TYPE_MDS,
+                   Messenger::Policy::stateless_server(supported, 0));
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
 					    g_conf->mon_client_bytes);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT, client_throttler, NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+				     client_throttler, NULL);
 
   // throttle daemon traffic
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
   Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
 					    g_conf->mon_daemon_bytes);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler, NULL);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler, NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
+				     NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
+				     NULL);
 
   dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
@@ -635,15 +693,21 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << dendl;
 
-  err = messenger->bind(ipaddr);
+  err = msgr->bind(ipaddr);
   if (err < 0) {
     derr << "unable to bind monitor to " << ipaddr << dendl;
     prefork.exit(1);
   }
 
+  cout << "starting " << g_conf->name << " rank " << rank
+       << " at " << ipaddr
+       << " mon_data " << g_conf->mon_data
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
+
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
-		    messenger, &monmap);
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
+		    msgr, &monmap);
 
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
@@ -663,11 +727,11 @@ int main(int argc, const char **argv)
   }
 
   if (g_conf->daemonize) {
-    global_init_postfork_finish(g_ceph_context, 0);
+    global_init_postfork_finish(g_ceph_context);
     prefork.daemonize();
   }
 
-  messenger->start();
+  msgr->start();
 
   mon->init();
 
@@ -680,7 +744,9 @@ int main(int argc, const char **argv)
   if (g_conf->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
-  messenger->wait();
+  msgr->wait();
+
+  store->close();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
@@ -689,7 +755,7 @@ int main(int argc, const char **argv)
 
   delete mon;
   delete store;
-  delete messenger;
+  delete msgr;
   delete client_throttler;
   delete daemon_throttler;
   g_ceph_context->put();

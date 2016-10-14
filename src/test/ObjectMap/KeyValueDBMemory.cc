@@ -26,7 +26,7 @@ protected:
   map<pair<string,string>, bufferlist>::iterator it;
 
 public:
-  WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
+  explicit WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
   virtual ~WholeSpaceMemIterator() { }
 
   int seek_to_first() {
@@ -80,7 +80,7 @@ public:
 
   int lower_bound(const string &prefix, const string &to) {
     it = db->db.lower_bound(make_pair(prefix,to));
-    if ((db->db.size() == 0) || (it == db->db.end())) {
+    if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
       ready = false;
       return 0;
@@ -94,7 +94,7 @@ public:
 
   int upper_bound(const string &prefix, const string &after) {
     it = db->db.upper_bound(make_pair(prefix,after));
-    if ((db->db.size() == 0) || (it == db->db.end())) {
+    if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
       ready = false;
       return 0;
@@ -138,6 +138,10 @@ public:
       return (*it).first;
     else
       return make_pair("", "");
+  }
+  
+  bool raw_key_is_prefixed(const string &prefix) {
+    return prefix == (*it).first.first;
   }
 
   bufferlist value() {
@@ -234,7 +238,7 @@ public:
    * keep it in mind.
    */
 
-  WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
+  explicit WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
     WholeSpaceMemIterator(db) { }
   ~WholeSpaceSnapshotMemIterator() {
     delete db;

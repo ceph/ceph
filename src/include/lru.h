@@ -41,7 +41,7 @@ class LRUObject {
   // pin/unpin item in cache
   void lru_pin(); 
   void lru_unpin();
-  bool lru_is_expireable() { return !lru_pinned; }
+  bool lru_is_expireable() const { return !lru_pinned; }
 
   friend class LRU;
   friend class LRUList;
@@ -150,6 +150,7 @@ class LRU {
     lru_top.clear();
     lru_bot.clear();
     lru_pintail.clear();
+    lru_num = 0;
   }
 
   // insert at top of lru
@@ -314,14 +315,16 @@ class LRU {
 };
 
 
-inline void LRUObject::lru_pin() 
-{
+inline void LRUObject::lru_pin() {
+  if (lru && !lru_pinned) {
+    lru->lru_num_pinned++;
+    lru->lru_adjust();
+  }
   lru_pinned = true;
-  if (lru) lru->lru_num_pinned++;
 }
+
 inline void LRUObject::lru_unpin() {
-  lru_pinned = false;
-  if (lru) {
+  if (lru && lru_pinned) {
     lru->lru_num_pinned--;
 
     // move from pintail -> bot
@@ -329,7 +332,9 @@ inline void LRUObject::lru_unpin() {
       lru->lru_pintail.remove(this);
       lru->lru_bot.insert_tail(this);
     }
+    lru->lru_adjust();
   }
+  lru_pinned = false;
 }
 
 #endif

@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -14,9 +15,11 @@
  * 
  */
 
+#include "ceph_ver.h"
 #include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeJerasure.h"
+#include "ErasureCodePluginJerasure.h"
+#include "jerasure_init.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -27,14 +30,14 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodePluginJerasure: ";
 }
 
-class ErasureCodePluginJerasure : public ErasureCodePlugin {
-public:
-  virtual int factory(const map<std::string,std::string> &parameters,
-		      ErasureCodeInterfaceRef *erasure_code) {
+int ErasureCodePluginJerasure::factory(const std::string& directory,
+		      ErasureCodeProfile &profile,
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss) {
     ErasureCodeJerasure *interface;
     std::string t;
-    if (parameters.find("technique") != parameters.end())
-      t = parameters.find("technique")->second;
+    if (profile.find("technique") != profile.end())
+      t = profile.find("technique")->second;
     if (t == "reed_sol_van") {
       interface = new ErasureCodeJerasureReedSolomonVandermonde();
     } else if (t == "reed_sol_r6_op") {
@@ -57,33 +60,25 @@ public:
 	   << dendl;
       return -ENOENT;
     }
-    interface->init(parameters);
+    dout(20) << __func__ << ": " << profile << dendl;
+    int r = interface->init(profile, ss);
+    if (r) {
+      delete interface;
+      return r;
+    }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
-  }
-};
-
-extern "C" {
-#include "galois.h"
-
-extern gf_t *gfp_array[];
-extern int  gfp_is_composite[];
 }
 
-int __erasure_code_init(char *plugin_name)
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 4, 8, 16, 32 };
-  for(int i = 0; i < 4; i++) {
-    if (gfp_array[w[i]] == NULL) {
-      gfp_array[w[i]] = (gf_t*)malloc(sizeof(gf_t));
-      assert(gfp_array[w[i]]);
-      gfp_is_composite[w[i]] = 0;
-      if (!gf_init_easy(gfp_array[w[i]], w[i])) {
-	derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
-	return -EINVAL;
-      }
-    }
+  int r = jerasure_init(4, w);
+  if (r) {
+    return -r;
   }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());
 }

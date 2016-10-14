@@ -7,7 +7,7 @@ two snapshots (or a snapshot and the head) of an RBD image.
 Header
 ~~~~~~
 
-"rbd diff v1\n"
+"rbd diff v1\\n"
 
 Metadata records
 ~~~~~~~~~~~~~~~~
@@ -37,7 +37,7 @@ Size
 ----
 
 - u8: 's'
-- u64: (ending) image size
+- le64: (ending) image size
 
 Data Records
 ~~~~~~~~~~~~

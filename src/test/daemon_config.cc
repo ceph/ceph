@@ -23,6 +23,9 @@
 #include <string>
 #include <string.h>
 
+#include <boost/lexical_cast.hpp>
+
+
 using std::string;
 
 TEST(DaemonConfig, SimpleSet) {
@@ -41,6 +44,7 @@ TEST(DaemonConfig, SimpleSet) {
 TEST(DaemonConfig, Substitution) {
   int ret;
   ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("public_network", "bar$host.baz", false);
@@ -57,6 +61,7 @@ TEST(DaemonConfig, Substitution) {
 TEST(DaemonConfig, SubstitutionTrailing) {
   int ret;
   ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("public_network", "bar$host", false);
@@ -73,6 +78,7 @@ TEST(DaemonConfig, SubstitutionTrailing) {
 TEST(DaemonConfig, SubstitutionBraces) {
   int ret;
   ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("public_network", "bar${host}baz", false);
@@ -88,6 +94,7 @@ TEST(DaemonConfig, SubstitutionBraces) {
 TEST(DaemonConfig, SubstitutionBracesTrailing) {
   int ret;
   ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
+  ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(ret, 0);
   ret = g_ceph_context->_conf->set_val("public_network", "bar${host}", false);
@@ -329,6 +336,41 @@ TEST(DaemonConfig, ThreadSafety1) {
 				       "false"));
   ASSERT_EQ(ret, 0);
 }
+
+TEST(DaemonConfig, InvalidIntegers) {
+  {
+    long long bad_value = (long long)std::numeric_limits<int>::max() + 1;
+    string str = boost::lexical_cast<string>(bad_value);
+    int ret = g_ceph_context->_conf->set_val("num_client", str);
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    // 4G must be greater than INT_MAX
+    ASSERT_GT(4LL * 1024 * 1024 * 1024, (long long)std::numeric_limits<int>::max());
+    int ret = g_ceph_context->_conf->set_val("num_client", "4G");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+}
+
+TEST(DaemonConfig, InvalidFloats) {
+  {
+    double bad_value = 2 * (double)std::numeric_limits<float>::max();
+    string str = boost::lexical_cast<string>(-bad_value);
+    int ret = g_ceph_context->_conf->set_val("log_stop_at_utilization", str);
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    double bad_value = 2 * (double)std::numeric_limits<float>::max();
+    string str = boost::lexical_cast<string>(bad_value);
+    int ret = g_ceph_context->_conf->set_val("log_stop_at_utilization", str);
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    int ret = g_ceph_context->_conf->set_val("log_stop_at_utilization", "not a float");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_daemon_config && ./unittest_daemon_config"

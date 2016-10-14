@@ -29,14 +29,19 @@ class ESession : public LogEvent {
   interval_set<inodeno_t> inos;
   version_t inotablev;
 
+  // Client metadata stored during open
+  std::map<std::string, std::string> client_metadata;
+
  public:
   ESession() : LogEvent(EVENT_SESSION), open(false) { }
-  ESession(const entity_inst_t& inst, bool o, version_t v) :
+  ESession(const entity_inst_t& inst, bool o, version_t v,
+      const std::map<std::string, std::string> &cm) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),
     open(o),
     cmapv(v),
-    inotablev(0) {
+    inotablev(0),
+    client_metadata(cm) {
   }
   ESession(const entity_inst_t& inst, bool o, version_t v,
 	   const interval_set<inodeno_t>& i, version_t iv) :
@@ -46,7 +51,7 @@ class ESession : public LogEvent {
     cmapv(v),
     inos(i), inotablev(iv) { }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ESession*>& ls);
@@ -61,7 +66,9 @@ class ESession : public LogEvent {
   }
   
   void update_segment();
-  void replay(MDS *mds);  
+  void replay(MDSRank *mds);
+  entity_inst_t get_client_inst() const {return client_inst;}
 };
+WRITE_CLASS_ENCODER_FEATURES(ESession)
 
 #endif

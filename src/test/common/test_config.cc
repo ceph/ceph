@@ -112,13 +112,15 @@ public:
 
   void test_expand_all_meta() {
     Mutex::Locker l(lock);
-    int before_count = 0;
+    int before_count = 0, data_dir = 0;
     for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
       config_option *opt = config_optionsp + i;
       if (opt->type == OPT_STR) {
         std::string *str = (std::string *)opt->conf_ptr(this);
         if (str->find("$") != string::npos)
           before_count++;
+        if (str->find("$data_dir") != string::npos)
+          data_dir++;
       }
     }
     // if there are no meta variables in the default configuration,
@@ -131,11 +133,19 @@ public:
       config_option *opt = config_optionsp + i;
       if (opt->type == OPT_STR) {
         std::string *str = (std::string *)opt->conf_ptr(this);
-        if (str->find("$") != string::npos)
-          after_count++;
+
+        size_t pos = 0;
+        while ((pos = str->find("$", pos)) != string::npos) {
+          if (str->substr(pos, 8) != "$channel") {
+            std::cout << "unexpected meta-variable found at pos " << pos
+                      << " of '" << *str << "'" << std::endl;
+            after_count++;
+          }
+          pos++;
+        }
       }
     }
-    ASSERT_EQ(0, after_count);
+    ASSERT_EQ(data_dir, after_count);
   }
 };
 

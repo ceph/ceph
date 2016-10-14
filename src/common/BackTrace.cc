@@ -64,6 +64,6 @@ void BackTrace::print(std::ostream& out)
     }
     free(function);
   }
-};
+}
 
 }

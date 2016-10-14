@@ -58,9 +58,9 @@
 
     "ObjectStore" -> "FileStore"
 
-    "FileStore" -> "ext3"
-    "FileStore" -> "ext4"
+    "FileStore" -> "xfs"
     "FileStore" -> "btrfs"
+    "FileStore" -> "ext4"
   }
 
 

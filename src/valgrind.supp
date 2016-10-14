@@ -186,3 +186,40 @@
    fun:main
 }
 
+# lttng-ust
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:pthread_create@@GLIBC_2.2.5
+   obj:/usr/*lib*/liblttng-ust.*
+   fun:call_init.part.0
+   fun:_dl_init
+   obj:*
+}
+
+# PK11_CreateContextBySymKey
+{
+   <insert_a_suppression_name_here>
+   Helgrind:Race
+   obj:/usr/*lib*/libfreebl*3.so
+   ...
+   obj:/usr/*lib*/libsoftokn3.so
+   ...
+   obj:/usr/*lib*/libnss3.so
+   ...
+   fun:PK11_CreateContextBySymKey
+   ...
+}
+
+# _dl_allocate_tls_init
+{
+   <insert_a_suppression_name_here>
+   Helgrind:Race
+   fun:mempcpy
+   fun:_dl_allocate_tls_init
+   ...
+   fun:pthread_create@*
+   ...
+}

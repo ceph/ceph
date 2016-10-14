@@ -25,15 +25,18 @@
 
 struct MOSDPGCreate : public Message {
 
-  const static int HEAD_VERSION = 2;
+  const static int HEAD_VERSION = 3;
+  // At head_version 2 the unspecified compat_version was set to 2
+  const static int COMPAT_VERSION = 2;
 
   version_t          epoch;
   map<pg_t,pg_create_t> mkpg;
+  map<pg_t,utime_t> ctimes;
 
   MOSDPGCreate()
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION) {}
+    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGCreate(epoch_t e)
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION),
+    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
   ~MOSDPGCreate() {}
@@ -44,6 +47,7 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
+    ::encode(ctimes, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -65,14 +69,23 @@ public:
 	mkpg[pgid] = pg_create_t(created, parent, split_bits);
       }
     }
+    if (header.version >= 3) {
+      ::decode(ctimes, p);
+    } else {
+      // To make other code simpler create map with time of 0,0 for each pg
+      for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
+	   i != mkpg.end(); ++i) {
+	ctimes[i->first] = utime_t();
+      }
+    }
   }
 
   void print(ostream& out) const {
-    out << "osd_pg_create(";
+    out << "osd_pg_create(e" << epoch;
     for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();
          ++i) {
-      out << "pg" << i->first << "," << i->second.created << "; ";
+      out << " " << i->first << ":" << i->second.created;
     }
     out << ")";
   }

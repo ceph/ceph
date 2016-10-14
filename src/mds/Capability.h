@@ -16,7 +16,7 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/xlist.h"
 
 #include "common/config.h"
@@ -115,7 +115,8 @@ private:
   __u32 _wanted;     // what the client wants (ideally)
 
   utime_t last_issue_stamp;
-
+  utime_t last_revoke_stamp;
+  unsigned num_revoke_warnings;
 
   // track in-flight caps --------------
   //  - add new caps to _pending
@@ -193,6 +194,11 @@ public:
 	_issued = caps | _pending;
       }
     }
+
+    if (_issued == _pending) {
+      item_revoking_caps.remove_myself();
+      item_client_revoking_caps.remove_myself();
+    }
     //check_rdcaps_list();
   }
   // we may get a release racing with revocations, which means our revokes will be ignored
@@ -203,8 +209,13 @@ public:
       _revokes.pop_front();
       changed = true;
     }
-    if (changed)
+    if (changed) {
       _calc_issued();
+      if (_issued == _pending) {
+	item_revoking_caps.remove_myself();
+	item_client_revoking_caps.remove_myself();
+      }
+    }
   }
 
 
@@ -223,14 +234,18 @@ public:
   snapid_t client_follows;
   version_t client_xattr_version;
   version_t client_inline_version;
-  
+  int64_t last_rbytes;
+  int64_t last_rsize;
+
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
+  xlist<Capability*>::item item_revoking_caps;
+  xlist<Capability*>::item item_client_revoking_caps;
 
   Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
     inode(i), client(c),
     cap_id(id),
-    _wanted(0),
+    _wanted(0), num_revoke_warnings(0),
     _pending(0), _issued(0),
     last_sent(0),
     last_issue(0),
@@ -238,7 +253,9 @@ public:
     suppress(0), state(0),
     client_follows(0), client_xattr_version(0),
     client_inline_version(0),
-    item_session_caps(this), item_snaprealm_caps(this) {
+    last_rbytes(0), last_rsize(0),
+    item_session_caps(this), item_snaprealm_caps(this),
+    item_revoking_caps(this), item_client_revoking_caps(this) {
     g_num_cap++;
     g_num_capa++;
   }
@@ -255,9 +272,14 @@ public:
 
   ceph_seq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
+  utime_t get_last_revoke_stamp() { return last_revoke_stamp; }
 
   void set_last_issue() { last_issue = last_sent; }
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
+  void set_last_revoke_stamp(utime_t t) { last_revoke_stamp = t; }
+  void reset_num_revoke_warnings() { num_revoke_warnings = 0; }
+  void inc_num_revoke_warnings() { ++num_revoke_warnings; }
+  unsigned get_num_revoke_warnings() { return num_revoke_warnings; }
 
   void set_cap_id(uint64_t i) { cap_id = i; }
   uint64_t get_cap_id() { return cap_id; }
@@ -276,7 +298,7 @@ public:
   void clear_new() { state &= ~STATE_NEW; }
 
   CInode *get_inode() { return inode; }
-  client_t get_client() { return client; }
+  client_t get_client() const { return client; }
 
   // caps this client wants to hold
   int wanted() { return _wanted; }
@@ -285,7 +307,7 @@ public:
     //check_rdcaps_list();
   }
 
-  void inc_last_seq() { last_sent++; };
+  void inc_last_seq() { last_sent++; }
   ceph_seq_t get_last_seq() { return last_sent; }
   ceph_seq_t get_last_issue() { return last_issue; }
 

@@ -24,48 +24,41 @@ using std::map;
 using std::list;
 using std::set;
 
-class MDS;
+class MDSRank;
 class Session;
-class CDir;
 class CInode;
 class CDentry;
-class EMetaBlob;
 struct SnapRealm;
 
 class Message;
 
-class MDiscover;
-class MDiscoverReply;
-class MCacheExpire;
-class MDirUpdate;
-class MDentryUnlink;
 class MLock;
 
-class MClientRequest;
-
 class Capability;
-class LogSegment;
 
 class SimpleLock;
 class ScatterLock;
 class LocalLock;
+
 class MDCache;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 #include "SimpleLock.h"
 
 class Locker {
 private:
-  MDS *mds;
+  MDSRank *mds;
   MDCache *mdcache;
  
  public:
-  Locker(MDS *m, MDCache *c) : mds(m), mdcache(c) {}  
+  Locker(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {}  
 
   SimpleLock *get_lock(int lock_type, MDSCacheObjectInfo &info);
   
   void dispatch(Message *m);
   void handle_lock(MLock *m);
 
+  void tick();
 
   void nudge_log(SimpleLock *lock);
 
@@ -79,13 +72,13 @@ protected:
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
-                                    ceph_file_layout **layout);
+                                    file_layout_t **layout);
 
   bool acquire_locks(MDRequestRef& mdr,
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks,
-		     map<SimpleLock*,int> *remote_wrlocks=NULL,
+		     map<SimpleLock*,mds_rank_t> *remote_wrlocks=NULL,
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
 
@@ -95,27 +88,15 @@ public:
   void drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
   void drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
 
-  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<MDSInternalContextBase*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
-  void eval_any(SimpleLock *lock, bool *need_issue, list<Context*> *pfinishers=0, bool first=false) {
+  void eval_any(SimpleLock *lock, bool *need_issue, list<MDSInternalContextBase*> *pfinishers=0, bool first=false) {
     if (!lock->is_stable())
       eval_gather(lock, first, need_issue, pfinishers);
     else if (lock->get_parent()->is_auth())
       eval(lock, need_issue);
   }
 
-  class C_EvalScatterGathers : public Context {
-    Locker *locker;
-    CInode *in;
-  public:
-    C_EvalScatterGathers(Locker *l, CInode *i) : locker(l), in(i) {
-      in->get(CInode::PIN_PTRWAITER);    
-    }
-    void finish(int r) {
-      in->put(CInode::PIN_PTRWAITER);
-      locker->eval_scatter_gathers(in);
-    }
-  };
   void eval_scatter_gathers(CInode *in);
 
   void eval_cap_gather(CInode *in, set<CInode*> *issue_set=0);
@@ -125,7 +106,7 @@ public:
   void try_eval(SimpleLock *lock, bool *pneed_issue);
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
-  bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
+  bool rdlock_try(SimpleLock *lock, client_t client, MDSInternalContextBase *c);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
   void rdlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
   bool can_rdlock_set(set<SimpleLock*>& locks);
@@ -136,8 +117,8 @@ public:
   bool wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait=false);
   void wrlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
 
-  void remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut);
-  void remote_wrlock_finish(SimpleLock *lock, int target, MutationImpl *mut);
+  void remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestRef& mut);
+  void remote_wrlock_finish(SimpleLock *lock, mds_rank_t target, MutationImpl *mut);
 
   bool xlock_start(SimpleLock *lock, MDRequestRef& mut);
   void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
@@ -150,7 +131,7 @@ public:
   // simple
 public:
   void try_simple_eval(SimpleLock *lock);
-  bool simple_rdlock_try(SimpleLock *lock, Context *con);
+  bool simple_rdlock_try(SimpleLock *lock, MDSInternalContextBase *con);
 protected:
   void simple_eval(SimpleLock *lock, bool *need_issue);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
@@ -168,27 +149,16 @@ public:
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
 
   void scatter_tick();
-  void scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange=false);
+  void scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange=false);
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
-  void _scatter_replica_lock(ScatterLock *lock, int auth);
   bool scatter_scatter_fastpath(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock, bool nowait=false);
   void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);
 
   void scatter_writebehind(ScatterLock *lock);
-  class C_Locker_ScatterWB : public Context {
-    Locker *locker;
-    ScatterLock *lock;
-    MutationRef mut;
-  public:
-    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
-      locker(l), lock(sl), mut(m) {}
-    void finish(int r) { 
-      locker->scatter_writebehind_finish(lock, mut); 
-    }
-  };
+
   void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
   xlist<ScatterLock*> updated_scatterlocks;
@@ -215,17 +185,26 @@ public:
 
   void remove_client_cap(CInode *in, client_t client);
 
+  void get_late_revoking_clients(std::list<client_t> *result) const;
+  bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
+
  protected:
+  bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
-  void _do_null_snapflush(CInode *head_in, client_t client, snapid_t follows);
+  void _do_null_snapflush(CInode *head_in, client_t client);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
-		      MClientCaps *ack=0);
+		      MClientCaps *ack=0, bool *need_flush=NULL);
   void handle_client_cap_release(class MClientCapRelease *m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
+  void caps_tick();
 
+  // Maintain a global list to quickly find if any caps are late revoking
+  xlist<Capability*> revoking_caps;
+  // Maintain a per-client list to find clients responsible for late ones quickly
+  std::map<client_t, xlist<Capability*> > revoking_caps_by_client;
 
   // local
 public:
@@ -273,18 +252,22 @@ protected:
   void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t, client_writeable_range_t>& new_ranges);
+  void calc_new_client_ranges(CInode *in, uint64_t size,
+			      map<client_t, client_writeable_range_t>* new_ranges,
+			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
-                            bool update_size=false, uint64_t newsize=0,
-                            bool update_max=false, uint64_t newmax=0,
+                            uint64_t newmax=0, uint64_t newsize=0,
 			    utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
 private:
   friend class C_MDL_CheckMaxSize;
   friend class C_MDL_RequestInodeFileCaps;
-  friend struct C_Locker_FileUpdate_finish;
+  friend class C_Locker_FileUpdate_finish;
   friend class C_Locker_RetryCapRelease;
+  friend class C_Locker_Eval;
+  friend class LockerContext;
+  friend class C_Locker_ScatterWB;
 
   
   // -- client leases --

@@ -8,14 +8,12 @@
 
 #include "include/stringify.h"
 
-
-
 // ----
 // LogEntryKey
 
-void LogEntryKey::encode(bufferlist& bl) const
+void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
 {
-  ::encode(who, bl);
+  ::encode(who, bl, features);
   ::encode(stamp, bl);
   ::encode(seq, bl);
 }
@@ -59,6 +57,28 @@ int clog_type_to_syslog_level(clog_type t)
       assert(0);
       return 0;
   }
+}
+
+clog_type string_to_clog_type(const string& s)
+{
+  if (boost::iequals(s, "debug") ||
+      boost::iequals(s, "dbg"))
+    return CLOG_DEBUG;
+  if (boost::iequals(s, "info") ||
+      boost::iequals(s, "inf"))
+    return CLOG_INFO;
+  if (boost::iequals(s, "warning") ||
+      boost::iequals(s, "warn") ||
+      boost::iequals(s, "wrn"))
+    return CLOG_WARN;
+  if (boost::iequals(s, "error") ||
+      boost::iequals(s, "err"))
+    return CLOG_ERROR;
+  if (boost::iequals(s, "security") ||
+      boost::iequals(s, "sec"))
+    return CLOG_SEC;
+
+  return CLOG_UNKNOWN;
 }
 
 int string_to_syslog_level(string s)
@@ -130,38 +150,69 @@ int string_to_syslog_facility(string s)
   return LOG_USER;
 }
 
-void LogEntry::log_to_syslog(string level, string facility)
+string clog_type_to_string(clog_type t)
 {
-  int min = string_to_syslog_level(level);
-  int l = clog_type_to_syslog_level(type);
-  if (l <= min) {
-    int f = string_to_syslog_facility(facility);
-    syslog(l | f, "%s", stringify(*this).c_str());
+  switch (t) {
+    case CLOG_DEBUG:
+      return "debug";
+    case CLOG_INFO:
+      return "info";
+    case CLOG_WARN:
+      return "warn";
+    case CLOG_ERROR:
+      return "err";
+    case CLOG_SEC:
+      return "crit";
+    default:
+      assert(0);
+      return 0;
   }
 }
 
-void LogEntry::encode(bufferlist& bl) const
+void LogEntry::log_to_syslog(string level, string facility)
 {
-  ENCODE_START(2, 2, bl);
-  __u16 t = type;
-  ::encode(who, bl);
+  int min = string_to_syslog_level(level);
+  int l = clog_type_to_syslog_level(prio);
+  if (l <= min) {
+    int f = string_to_syslog_facility(facility);
+    syslog(l | f, "%s %llu : %s",
+	   stringify(who).c_str(),
+	   (long long unsigned)seq,
+	   msg.c_str());
+  }
+}
+
+void LogEntry::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(3, 2, bl);
+  __u16 t = prio;
+  ::encode(who, bl, features);
   ::encode(stamp, bl);
   ::encode(seq, bl);
   ::encode(t, bl);
   ::encode(msg, bl);
+  ::encode(channel, bl);
   ENCODE_FINISH(bl);
 }
 
 void LogEntry::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   __u16 t;
   ::decode(who, bl);
   ::decode(stamp, bl);
   ::decode(seq, bl);
   ::decode(t, bl);
-  type = (clog_type)t;
+  prio = (clog_type)t;
   ::decode(msg, bl);
+  if (struct_v >= 3) {
+    ::decode(channel, bl);
+  } else {
+    // prior to having logging channels we only had a cluster log.
+    // Ensure we keep that appearance when the other party has no
+    // clue of what a 'channel' is.
+    channel = CLOG_CHANNEL_CLUSTER;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -170,7 +221,8 @@ void LogEntry::dump(Formatter *f) const
   f->dump_stream("who") << who;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
-  f->dump_stream("type") << type;
+  f->dump_string("channel", channel);
+  f->dump_stream("priority") << prio;
   f->dump_string("message", msg);
 }
 
@@ -182,11 +234,11 @@ void LogEntry::generate_test_instances(list<LogEntry*>& o)
 
 // -----
 
-void LogSummary::encode(bufferlist& bl) const
+void LogSummary::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(version, bl);
-  ::encode(tail, bl);
+  ::encode(tail, bl, features);
   ENCODE_FINISH(bl);
 }
 

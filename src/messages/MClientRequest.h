@@ -36,6 +36,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "include/ceph_features.h"
 
 #include <sys/types.h>
 #include <utime.h>
@@ -46,8 +47,12 @@
 // metadata ops.
 
 class MClientRequest : public Message {
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 1;
+
 public:
   struct ceph_mds_request_head head;
+  utime_t stamp;
 
   struct Release {
     mutable ceph_mds_request_release item;
@@ -71,13 +76,16 @@ public:
 
   // path arguments
   filepath path, path2;
+  vector<uint64_t> gid_list;
 
 
 
  public:
   // cons
-  MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
-  MClientRequest(int op) : Message(CEPH_MSG_CLIENT_REQUEST) {
+  MClientRequest()
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+  MClientRequest(int op)
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
@@ -87,6 +95,17 @@ private:
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
+  epoch_t get_osdmap_epoch() const {
+    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    if (header.version >= 3)
+      return head.args.setxattr.osdmap_epoch;
+    else
+      return 0;
+  }
+  void set_osdmap_epoch(epoch_t e) {
+    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    head.args.setxattr.osdmap_epoch = e;
+  }
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
@@ -110,6 +129,7 @@ public:
   }
 
   // normal fields
+  void set_stamp(utime_t t) { stamp = t; }
   void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
@@ -118,19 +138,27 @@ public:
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
+  void set_gid_list(int count, const gid_t *gids) {
+    gid_list.reserve(count);
+    for (int i = 0; i < count; ++i) {
+      gid_list.push_back(gids[i]);
+    }
+  }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
   void set_replayed_op() {
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
   }
-    
+
+  utime_t get_stamp() const { return stamp; }
   ceph_tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
   int get_num_fwd() const { return head.num_fwd; }
   int get_retry_attempt() const { return head.num_retry; }
   int get_op() const { return head.op; }
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
+  const vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
   const string& get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
@@ -141,18 +169,54 @@ public:
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
+
+    if (header.version >= 4) {
+      ::decode(head, p);
+    } else {
+      struct ceph_mds_request_head_legacy old_mds_head;
+
+      ::decode(old_mds_head, p);
+      copy_from_legacy_head(&head, &old_mds_head);
+      head.version = 0;
+
+      /* Can't set the btime from legacy struct */
+      if (head.op == CEPH_MDS_OP_SETATTR) {
+	int localmask = head.args.setattr.mask;
+
+	localmask &= ~CEPH_SETATTR_BTIME;
+
+	head.args.setattr.btime = { 0 };
+	head.args.setattr.mask = localmask;
+      }
+    }
+
     ::decode(path, p);
     ::decode(path2, p);
     ::decode_nohead(head.num_releases, releases, p);
+    if (header.version >= 2)
+      ::decode(stamp, p);
+    if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
+      ::decode(gid_list, p);
   }
 
   void encode_payload(uint64_t features) {
     head.num_releases = releases.size();
-    ::encode(head, payload);
+    head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
+
+    if (features & CEPH_FEATURE_FS_BTIME) {
+      ::encode(head, payload);
+    } else {
+      struct ceph_mds_request_head_legacy old_mds_head;
+
+      copy_to_legacy_head(&old_mds_head, &head);
+      ::encode(old_mds_head, payload);
+    }
+
     ::encode(path, payload);
     ::encode(path2, payload);
     ::encode_nohead(releases, payload);
+    ::encode(stamp, payload);
+    ::encode(gid_list, payload);
   }
 
   const char *get_type_name() const { return "creq"; }
@@ -190,11 +254,19 @@ public:
     out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
+    if (stamp != utime_t())
+      out << " " << stamp;
     if (head.num_retry)
       out << " RETRY=" << (int)head.num_retry;
     if (get_flags() & CEPH_MDS_FLAG_REPLAY)
       out << " REPLAY";
-    out << ")";
+    out << " caller_uid=" << head.caller_uid
+	<< ", caller_gid=" << head.caller_gid
+	<< '{';
+    for (auto i = gid_list.begin(); i != gid_list.end(); ++i)
+      out << *i << ',';
+    out << '}'
+	<< ")";
   }
 
 };

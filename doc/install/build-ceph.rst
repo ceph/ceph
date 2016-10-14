@@ -14,101 +14,24 @@ Build Prerequisites
    Linux/Unix distribution.
 
 Before you can build Ceph source code, you need to install several libraries
-and tools. Ceph provides ``autoconf`` and ``automake`` scripts to get you
-started quickly. Ceph build scripts depend on the following:
+and tools::
 
-- ``autotools-dev``
-- ``autoconf``
-- ``automake``
-- ``cdbs``
-- ``gcc``
-- ``g++``
-- ``git``
-- ``libboost-dev``
-- ``libedit-dev``
-- ``libssl-dev``
-- ``libtool``
-- ``libfcgi``
-- ``libfcgi-dev``
-- ``libfuse-dev``
-- ``linux-kernel-headers``
-- ``libcrypto++-dev``
-- ``libcrypto++``
-- ``libexpat1-dev``
-- ``pkg-config``
-- ``libcurl4-gnutls-dev``
-
-On Ubuntu, execute ``sudo apt-get install`` for each dependency that isn't 
-installed on your host. ::
-
-	sudo apt-get install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev pkg-config
-
-On Debian/Squeeze, execute ``aptitude install`` for each dependency that isn't 
-installed on your host. ::
-
-	aptitude install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev pkg-config libcurl4-gnutls-dev
-	
-On Debian/Wheezy, you may also need:: 
-
-	libkeyutils-dev libaio-dev libboost-thread-dev
+	./install-deps.sh
 
 .. note:: Some distributions that support Google's memory profiler tool may use
    a different package name (e.g., ``libgoogle-perftools4``).
 
-Ubuntu
-------
-
-- ``uuid-dev``
-- ``libkeyutils-dev``
-- ``libgoogle-perftools-dev``
-- ``libatomic-ops-dev``
-- ``libaio-dev``
-- ``libgdata-common``
-- ``libgdata13``
-- ``libsnappy-dev`` 
-- ``libleveldb-dev``
-
-Execute ``sudo apt-get install`` for each dependency that isn't installed on 
-your host. ::
-
-	sudo apt-get install uuid-dev libkeyutils-dev libgoogle-perftools-dev libatomic-ops-dev libaio-dev libgdata-common libgdata13 libsnappy-dev libleveldb-dev
-
-
-Debian
-------
-
-Alternatively, you may also install::
-
-	aptitude install fakeroot dpkg-dev
-	aptitude install debhelper cdbs libexpat1-dev libatomic-ops-dev
-
-openSUSE 11.2 (and later)
--------------------------
-
-- ``boost-devel``
-- ``gcc-c++``
-- ``libedit-devel``
-- ``libopenssl-devel``
-- ``fuse-devel`` (optional)
-
-Execute ``zypper install`` for each dependency that isn't installed on your 
-host. ::
-
-	zypper install boost-devel gcc-c++ libedit-devel libopenssl-devel fuse-devel
-
-
-
 Build Ceph
 ==========
 
-Ceph provides ``automake`` and ``configure`` scripts to streamline the build 
-process. To build Ceph, navigate to your cloned Ceph repository and execute the 
-following::
+Ceph is built using cmake. To build Ceph, navigate to your cloned Ceph
+repository and execute the following::
 
-	cd ceph
-	./autogen.sh
-	./configure
-	make
+    cd ceph
+    mkdir build
+    cd build
+    cmake ..
+    make
 
 .. topic:: Hyperthreading
 
@@ -160,15 +83,19 @@ Once you have installed the tools, setup an RPM compilation environment::
 
 Fetch the source tarball for the RPM compilation environment::
 
-	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.gz
+	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.bz2
 
 Or from the EU mirror::
 
-	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/download/ceph-<version>.tar.gz
+	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/download/ceph-<version>.tar.bz2
+
+Extract the specfile::
+
+    tar --strip-components=1 -C ~/rpmbuild/SPECS/ --no-anchored -xvjf ~/rpmbuild/SOURCES/ceph-<version>.tar.bz2 "ceph.spec"
 
 Build the RPM packages::
 
-	rpmbuild -tb ~/rpmbuild/SOURCES/ceph-<version>.tar.gz
+	rpmbuild -ba ~/rpmbuild/SPECS/ceph.spec
 
 For multi-processor CPUs use the ``-j`` option to accelerate the build.
 

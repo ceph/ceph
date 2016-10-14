@@ -26,7 +26,7 @@ class ScatterLock : public SimpleLock {
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
 
-    more_bits_t(ScatterLock *lock) :
+    explicit more_bits_t(ScatterLock *lock) :
       state_flags(0),
       item_updated(lock)
     {}
@@ -199,6 +199,14 @@ public:
 	s = LOCK_MIX_LOCK;
     }
     ::encode(s, bl);
+  }
+
+  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters) {
+    SimpleLock::decode_state_rejoin(p, waiters);
+    if (is_flushing()) {
+      set_dirty();
+      clear_flushing();
+    }
   }
 
   bool remove_replica(int from, bool rejoin) {

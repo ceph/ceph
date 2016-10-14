@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/rgw/cls_rgw_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
@@ -10,6 +11,7 @@
 #include <errno.h>
 #include <string>
 #include <vector>
+#include <map>
 
 using namespace librados;
 
@@ -66,28 +68,39 @@ public:
 
 void test_stats(librados::IoCtx& ioctx, string& oid, int category, uint64_t num_entries, uint64_t total_size)
 {
-  rgw_bucket_dir_header header;
-  ASSERT_EQ(0, cls_rgw_get_dir_header(ioctx, oid, &header));
+  map<int, struct rgw_cls_list_ret> results;
+  map<int, string> oids;
+  oids[0] = oid;
+  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
 
-  rgw_bucket_category_stats& stats = header.stats[category];
-  ASSERT_EQ(total_size, stats.total_size);
-  ASSERT_EQ(num_entries, stats.num_entries);
+  uint64_t entries = 0;
+  uint64_t size = 0;
+  map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
+  for (; iter != results.end(); ++iter) {
+    entries += (iter->second).dir.header.stats[category].num_entries;
+    size += (iter->second).dir.header.stats[category].total_size;
+  }
+  ASSERT_EQ(total_size, size);
+  ASSERT_EQ(num_entries, entries);
 }
 
 void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, string& obj, string& loc)
 {
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_prepare_op(*op, index_op, tag, obj, loc, true);
+  cls_rgw_obj_key key(obj, string());
+  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
 void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, int epoch, string& obj, rgw_bucket_dir_entry_meta& meta)
 {
   ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_obj_key key(obj, string());
   rgw_bucket_entry_ver ver;
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, obj, meta, NULL, true);
+  meta.accounted_size = meta.size;
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
@@ -330,18 +343,20 @@ TEST(cls_rgw, index_suggest)
     string loc = str_int("loc", i);
 
     rgw_bucket_dir_entry dirent;
-    dirent.name = obj;
+    dirent.key.name = obj;
     dirent.locator = loc;
     dirent.exists = (i < num_objs / 2); // we removed half the objects
     dirent.meta.size = 1024;
+    dirent.meta.accounted_size = 1024;
 
     char suggest_op = (i < num_objs / 2 ? CEPH_RGW_UPDATE : CEPH_RGW_REMOVE);
     cls_rgw_encode_suggestion(suggest_op, dirent, updates);
   }
 
-  op = mgr.write_op();
-  cls_rgw_bucket_set_tag_timeout(*op, 1); // short tag timeout
-  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+  map<int, string> bucket_objs;
+  bucket_objs[0] = bucket_oid;
+  int r = CLSRGWIssueSetTagTimeout(ioctx, bucket_objs, 8 /* max aio */, 1)();
+  ASSERT_EQ(0, r);
 
   sleep(1);
 
@@ -365,17 +380,17 @@ static void create_obj(cls_rgw_obj& obj, int i, int j)
   snprintf(buf, sizeof(buf), "-%d.%d", i, j);
   obj.pool = "pool";
   obj.pool.append(buf);
-  obj.oid = "oid";
-  obj.oid.append(buf);
-  obj.key = "key";
-  obj.key.append(buf);
+  obj.key.name = "oid";
+  obj.key.name.append(buf);
+  obj.loc = "loc";
+  obj.loc.append(buf);
 }
 
 static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 {
   return (obj1.pool == obj2.pool) &&
-         (obj1.oid == obj2.oid) &&
-         (obj1.key == obj2.key);
+         (obj1.key == obj2.key) &&
+         (obj1.loc == obj2.loc);
 }
 
 

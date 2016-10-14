@@ -1,0 +1,170 @@
+#!/bin/bash
+# file: osd_job
+#
+# Copyright (C) 2015 Ubuntu Kylin
+#
+# Author: Min Chen <minchen@ubuntukylin.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
+
+my_dir=$(dirname "$0")
+
+. $my_dir/common_h
+. $my_dir/metadata_h
+. $my_dir/epoch_h
+
+function check_ceph_osd()
+{
+  local func="check_ceph_osd"
+  local host=`hostname`
+  # if ceph-osd service is still running, except flush-journal
+  if [ "`ps aux|grep ceph-osd|grep -v flush-journal|grep -v grep`"x != ""x ];then
+    echo "[$host]: $func: ceph-osd is running..., stop it"
+    exit 
+  fi
+}
+
+function cat_pg_epoch()
+{
+  local func="cat_pg_epoch" 
+  init_env_osd $1
+  if [ -e $node_pg_epoch ];then
+    cat $node_pg_epoch
+  fi
+} 
+
+function cat_image_v1()
+{
+  local func="cat_image_v1" 
+  init_env_osd $1
+  if [ -e $image_v1 ];then
+    cat $image_v1
+  fi
+} 
+
+function cat_image_v2()
+{
+  local func="cat_image_v2" 
+  init_env_osd $1
+  if [ -e $image_v2 ];then
+    cat $image_v2
+  fi
+} 
+
+function flush_osd_journal()
+{
+  local func="flush_osd_journal"
+  init_env_osd $1
+  local osd_data_path=$osd_data
+  local osd_journal_path=$osd_data/journal 
+  local whoami_path=$osd_data/whoami
+  local host=`hostname`
+  if [ ! -e $whoami_path ];then
+    echo "[$host]: $func: $whoami_path not exists"
+    exit
+  fi
+  local whoami=`cat $whoami_path`
+  echo "[$host]: $func ..."
+  ceph-osd -i $whoami --osd-data $osd_data_path --osd-journal $osd_journal_path --flush-journal >/dev/null
+  if [ $? -ne 0 ];then
+    echo "[$host]: $func: flush osd journal failed"
+    exit
+  fi
+}
+
+function do_omap_list()
+{
+  local func="do_omap_list"
+  init_env_osd $1
+  local host=`hostname`
+  echo "[$host]: $func ..."
+  get_omap_list
+}
+
+# get all pgs epoch 
+function do_pg_epoch()
+{
+  local func="do_pg_epoch"
+  init_env_osd $1
+  local node=`hostname`
+  get_pgid_list
+  >$node_pg_epoch
+  local pgid=
+  local data_path=
+  local host=`hostname`
+  echo "[$host]: $func ..."
+  while read line
+  do
+  {
+    pgid=`echo $line|awk '{print $1}'`
+    data_path=`echo $line|awk '{print $2}'`
+    get_pg_epoch $pgid
+    echo -e "$node $pgid $pg_epoch $data_path" >>$node_pg_epoch
+  } 
+  done < $pgid_list
+}
+
+# get an list of image in this osd node, pg epoch maybe not the latest, the admin node will do distinguish
+function do_image_list()
+{
+  local func="do_image_list"
+  init_env_osd $1
+  get_image_list   
+  local node=`hostname`
+  >$image_v1
+  >$image_v2
+  local host=`hostname`
+  echo "[$host]: $func ..."
+  for line in `cat $image_list_v1`
+  do
+    pgid=`get_pgid $line`
+    get_pg_epoch $pgid
+    echo "$node $line $pg_epoch" >> $image_v1
+  done
+  for line in `cat $image_list_v2`
+  do
+    pgid=`get_pgid $line`
+    get_pg_epoch $pgid
+    echo "$node $line $pg_epoch" >> $image_v2
+  done
+}
+
+function do_image_id()
+{
+  local func="do_image_id"
+  init_env_osd $1
+  get_image_id $2
+}
+
+function do_image_metadata_v1()
+{
+  local func="do_image_metadata_v1"
+  init_env_osd $1
+  local image_header_hobject=$2
+  local snap_name=$3
+  get_image_metadata_v1 $image_header_hobject $snap_name
+}
+
+function do_image_metadata_v2()
+{
+  local func="do_image_metadata_v2"
+  init_env_osd $1
+  local image_id=$2
+  local image_header_hobject=$3
+  local snap_name=$4
+  get_map_header $image_id 
+  get_meta_header_seq $map_header_prefix $map_header_key
+  get_image_metadata_v2 $meta_header_seq $snap_name
+}
+
+check_ceph_osd
+$*

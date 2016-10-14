@@ -13,10 +13,8 @@
  */
 
 #include "common/config.h"
-
 #include "CephxKeyServer.h"
-#include "common/Timer.h"
-
+#include "common/dout.h"
 #include <sstream>
 
 #define dout_subsys ceph_subsys_auth
@@ -158,6 +156,7 @@ bool KeyServer::_check_rotating_secrets()
   added += _rotate_secret(CEPH_ENTITY_TYPE_MON);
   added += _rotate_secret(CEPH_ENTITY_TYPE_OSD);
   added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR);
 
   if (added) {
     ldout(cct, 10) << __func__ << " added " << added << dendl;
@@ -268,7 +267,7 @@ bool KeyServer::generate_secret(CryptoKey& secret)
   if (crypto->create(bp) < 0)
     return false;
 
-  secret.set_secret(cct, CEPH_CRYPTO_AES, bp);
+  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now(NULL));
 
   return true;
 }
@@ -298,25 +297,28 @@ bool KeyServer::contains(const EntityName& name) const
 int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 {
   Mutex::Locker l(lock);
-
-  if (f)
-    f->open_array_section("auth_dump");
-
   map<EntityName, EntityAuth>::const_iterator mapiter = data.secrets_begin();
 
   if (mapiter == data.secrets_end())
     return -ENOENT;
+
+  if (f)
+    f->open_array_section("auth_dump");
 
   while (mapiter != data.secrets_end()) {
     const EntityName& name = mapiter->first;
     if (ds) {
       *ds << name.to_str() << std::endl;
       *ds << "\tkey: " << mapiter->second.key << std::endl;
+      if (mapiter->second.auid != CEPH_AUTH_UID_DEFAULT)
+	*ds << "\tauid: " << mapiter->second.auid << std::endl;
     }
     if (f) {
       f->open_object_section("auth_entities");
       f->dump_string("entity", name.to_str());
       f->dump_stream("key") << mapiter->second.key;
+      if (mapiter->second.auid != CEPH_AUTH_UID_DEFAULT)
+	f->dump_int("auid", mapiter->second.auid);
       f->open_object_section("caps");
     }
 
@@ -456,6 +458,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
+  Mutex::Locker l(lock);
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
 

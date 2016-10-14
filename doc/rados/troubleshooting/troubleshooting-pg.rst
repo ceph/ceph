@@ -2,33 +2,88 @@
  Troubleshooting PGs
 =====================
 
-
 Placement Groups Never Get Clean
 ================================
 
-There are a few cases where Ceph placement groups never get clean: 
+When you create a cluster and your cluster remains in ``active``, 
+``active+remapped`` or ``active+degraded`` status and never achieve an 
+``active+clean`` status, you likely have a problem with your configuration.
 
-#. **One OSD:** If you deviate from the quick start and use only one OSD, you
-   will likely run into problems. OSDs report other OSDs to the monitor, and 
-   also interact with other OSDs when replicating data. If you have only one 
-   OSD, a second OSD cannot check its heartbeat. Also, if you remove an OSD 
-   and have only one OSD remaining, you may encounter problems. An secondary 
-   or tertiary OSD expects another OSD to tell it which placement groups it 
-   should have. The lack of another OSD prevents this from occurring. So a 
-   placement group can remain stuck “stale” forever.
-
-#. **Pool Size = 1**: If you have only one copy of an object, no other OSD will
-   tell the OSD which objects it should have. For each placement group mapped 
-   to the remaining OSD (see ``ceph pg dump``), you can force the OSD to notice 
-   the placement groups it needs by running::
-   
-   	ceph pg force_create_pg <pgid>
-   	
-#. **CRUSH Rules:** Another candidate for placement groups remaining
-   unclean involves errors in your CRUSH map.
+You may need to review settings in the `Pool, PG and CRUSH Config Reference`_
+and make appropriate adjustments.
 
 As a general rule, you should run your cluster with more than one OSD and a
 pool size greater than 1 object replica.
+
+One Node Cluster
+----------------
+
+Ceph no longer provides documentation for operating on a single node, because
+you would never deploy a system designed for distributed computing on a single
+node. Additionally, mounting client kernel modules on a single node containing a
+Ceph  daemon may cause a deadlock due to issues with the Linux kernel itself
+(unless you use VMs for the clients). You can experiment with Ceph in a 1-node
+configuration, in spite of the limitations as described herein.
+
+If you are trying to create a cluster on a single node, you must change the
+default of the ``osd crush chooseleaf type`` setting from ``1`` (meaning 
+``host`` or ``node``) to ``0`` (meaning ``osd``) in your Ceph configuration
+file before you create your monitors and OSDs. This tells Ceph that an OSD
+can peer with another OSD on the same host. If you are trying to set up a
+1-node cluster and ``osd crush chooseleaf type`` is greater than ``0``, 
+Ceph will try to peer the PGs of one OSD with the PGs of another OSD on 
+another node, chassis, rack, row, or even datacenter depending on the setting.
+
+.. tip:: DO NOT mount kernel clients directly on the same node as your 
+   Ceph Storage Cluster, because kernel conflicts can arise. However, you 
+   can mount kernel clients within virtual machines (VMs) on a single node.
+
+If you are creating OSDs using a single disk, you must create directories
+for the data manually first. For example:: 
+
+	mkdir /var/local/osd0 /var/local/osd1
+	ceph-deploy osd prepare {localhost-name}:/var/local/osd0 {localhost-name}:/var/local/osd1
+	ceph-deploy osd activate {localhost-name}:/var/local/osd0 {localhost-name}:/var/local/osd1
+
+
+Fewer OSDs than Replicas
+------------------------
+
+If you've brought up two OSDs to an ``up`` and ``in`` state, but you still 
+don't see ``active + clean`` placement groups, you may have an 
+``osd pool default size`` set to greater than ``2``.
+
+There are a few ways to address this situation. If you want to operate your
+cluster in an ``active + degraded`` state with two replicas, you can set the 
+``osd pool default min size`` to ``2`` so that you can write objects in 
+an ``active + degraded`` state. You may also set the ``osd pool default size``
+setting to ``2`` so that you only have two stored replicas (the original and 
+one replica), in which case the cluster should achieve an ``active + clean`` 
+state.
+
+.. note:: You can make the changes at runtime. If you make the changes in 
+   your Ceph configuration file, you may need to restart your cluster.
+
+
+Pool Size = 1
+-------------
+
+If you have the ``osd pool default size`` set to ``1``, you will only have 
+one copy of the object. OSDs rely on other OSDs to tell them which objects 
+they should have. If a first OSD has a copy of an object and there is no
+second copy, then no second OSD can tell the first OSD that it should have
+that copy. For each placement group mapped to the first OSD (see 
+``ceph pg dump``), you can force the first OSD to notice the placement groups
+it needs by running::
+   
+   	ceph pg force_create_pg <pgid>
+   	
+
+CRUSH Map Errors
+----------------
+
+Another candidate for placement groups remaining unclean involves errors 
+in your CRUSH map.
 
 
 Stuck Placement Groups
@@ -199,12 +254,12 @@ data::
                   "status": "osd is down"}]},
 
 In this case, for example, the cluster knows that ``osd.1`` might have
-data, but it is ``down``.  The full range of possible states include::
+data, but it is ``down``.  The full range of possible states include:
 
- * already probed
- * querying
- * OSD is down
- * not queried (yet)
+* already probed
+* querying
+* OSD is down
+* not queried (yet)
 
 Sometimes it simply takes some time for the cluster to query possible
 locations.  
@@ -222,13 +277,17 @@ possible given unusual combinations of failures that allow the cluster
 to learn about writes that were performed before the writes themselves
 are recovered.  To mark the "unfound" objects as "lost"::
 
-	ceph pg 2.5 mark_unfound_lost revert
+	ceph pg 2.5 mark_unfound_lost revert|delete
 
 This the final argument specifies how the cluster should deal with
-lost objects.  Currently the only supported option is "revert", which
-will either roll back to a previous version of the object or (if it
-was a new object) forget about it entirely.  Use this with caution, as
-it may confuse applications that expected the object to exist.
+lost objects.  
+
+The "delete" option will forget about them entirely.
+
+The "revert" option (not available for erasure coded pools) will
+either roll back to a previous version of the object or (if it was a
+new object) forget about it entirely.  Use this with caution, as it
+may confuse applications that expected the object to exist.
 
 
 Homeless Placement Groups
@@ -283,7 +342,224 @@ that Ceph can replicate your data. See ``osd pool default min size``
 in the `Pool, PG and CRUSH Config Reference`_ for details.
 
 
+PGs Inconsistent
+================
+
+If you receive an ``active + clean + inconsistent`` state, this may happen
+due to an error during scrubbing. If the inconsistency is due to disk errors,
+check your disks.
+
+You can repair the inconsistent placement group by executing:: 
+
+	ceph pg repair {placement-group-ID}
+
+If you receive ``active + clean + inconsistent`` states periodically due to 
+clock skew, you may consider configuring your `NTP`_ daemons on your 
+monitor hosts to act as peers. See `The Network Time Protocol`_ and Ceph 
+`Clock Settings`_ for additional details.
+
+
+Erasure Coded PGs are not active+clean
+======================================
+
+When CRUSH fails to find enough OSDs to map to a PG, it will show as a
+``2147483647`` which is ITEM_NONE or ``no OSD found``. For instance::
+
+     [2,1,6,0,5,8,2147483647,7,4]
+
+Not enough OSDs
+---------------
+
+If the Ceph cluster only has 8 OSDs and the erasure coded pool needs
+9, that is what it will show. You can either create another erasure
+coded pool that requires less OSDs::
+
+     ceph osd erasure-code-profile set myprofile k=5 m=3
+     ceph osd pool create erasurepool 16 16 erasure myprofile
+
+or add a new OSDs and the PG will automatically use them.
+
+CRUSH constraints cannot be satisfied
+-------------------------------------
+
+If the cluster has enough OSDs, it is possible that the CRUSH ruleset
+imposes constraints that cannot be satisfied. If there are 10 OSDs on
+two hosts and the CRUSH rulesets require that no two OSDs from the
+same host are used in the same PG, the mapping may fail because only
+two OSD will be found. You can check the constraint by displaying the
+ruleset::
+
+    $ ceph osd crush rule ls
+    [
+        "replicated_ruleset",
+        "erasurepool"]
+    $ ceph osd crush rule dump erasurepool
+    { "rule_id": 1,
+      "rule_name": "erasurepool",
+      "ruleset": 1,
+      "type": 3,
+      "min_size": 3,
+      "max_size": 20,
+      "steps": [
+            { "op": "take",
+              "item": -1,
+              "item_name": "default"},
+            { "op": "chooseleaf_indep",
+              "num": 0,
+              "type": "host"},
+            { "op": "emit"}]}
+
+
+You can resolve the problem by creating a new pool in which PGs are allowed
+to have OSDs residing on the same host with::
+
+     ceph osd erasure-code-profile set myprofile ruleset-failure-domain=osd
+     ceph osd pool create erasurepool 16 16 erasure myprofile
+
+CRUSH gives up too soon
+-----------------------
+
+If the Ceph cluster has just enough OSDs to map the PG (for instance a
+cluster with a total of 9 OSDs and an erasure coded pool that requires
+9 OSDs per PG), it is possible that CRUSH gives up before finding a
+mapping. It can be resolved by:
+
+* lowering the erasure coded pool requirements to use less OSDs per PG
+  (that requires the creation of another pool as erasure code profiles
+  cannot be dynamically modified).
+
+* adding more OSDs to the cluster (that does not require the erasure
+  coded pool to be modified, it will become clean automatically)
+
+* use a hand made CRUSH ruleset that tries more times to find a good
+  mapping. It can be done by setting ``set_choose_tries`` to a value
+  greater than the default.
+
+You should first verify the problem with ``crushtool`` after
+extracting the crushmap from the cluster so your experiments do not
+modify the Ceph cluster and only work on a local files::
+
+    $ ceph osd crush rule dump erasurepool
+    { "rule_name": "erasurepool",
+      "ruleset": 1,
+      "type": 3,
+      "min_size": 3,
+      "max_size": 20,
+      "steps": [
+            { "op": "take",
+              "item": -1,
+              "item_name": "default"},
+            { "op": "chooseleaf_indep",
+              "num": 0,
+              "type": "host"},
+            { "op": "emit"}]}
+    $ ceph osd getcrushmap > crush.map
+    got crush map from osdmap epoch 13
+    $ crushtool -i crush.map --test --show-bad-mappings \
+       --rule 1 \
+       --num-rep 9 \
+       --min-x 1 --max-x $((1024 * 1024))
+    bad mapping rule 8 x 43 num_rep 9 result [3,2,7,1,2147483647,8,5,6,0]
+    bad mapping rule 8 x 79 num_rep 9 result [6,0,2,1,4,7,2147483647,5,8]
+    bad mapping rule 8 x 173 num_rep 9 result [0,4,6,8,2,1,3,7,2147483647]
+
+Where ``--num-rep`` is the number of OSDs the erasure code crush
+ruleset needs, ``--rule`` is the value of the ``ruleset`` field
+displayed by ``ceph osd crush rule dump``.  The test will try mapping
+one million values (i.e. the range defined by ``[--min-x,--max-x]``)
+and must display at least one bad mapping. If it outputs nothing it
+means all mappings are successfull and you can stop right there: the
+problem is elsewhere.
+
+The crush ruleset can be edited by decompiling the crush map::
+
+    $ crushtool --decompile crush.map > crush.txt
+
+and adding the following line to the ruleset::
+
+    step set_choose_tries 100
+
+The relevant part of of the ``crush.txt`` file should look something
+like::
+
+     rule erasurepool {
+             ruleset 1
+             type erasure
+             min_size 3
+             max_size 20
+             step set_chooseleaf_tries 5
+             step set_choose_tries 100
+             step take default
+             step chooseleaf indep 0 type host
+             step emit
+     }
+
+It can then be compiled and tested again::
+
+    $ crushtool --compile crush.txt -o better-crush.map
+
+When all mappings succeed, an histogram of the number of tries that
+were necessary to find all of them can be displayed with the
+``--show-choose-tries`` option of ``crushtool``::
+
+    $ crushtool -i better-crush.map --test --show-bad-mappings \
+       --show-choose-tries \
+       --rule 1 \
+       --num-rep 9 \
+       --min-x 1 --max-x $((1024 * 1024))
+    ...
+    11:        42
+    12:        44
+    13:        54
+    14:        45
+    15:        35
+    16:        34
+    17:        30
+    18:        25
+    19:        19
+    20:        22
+    21:        20
+    22:        17
+    23:        13
+    24:        16
+    25:        13
+    26:        11
+    27:        11
+    28:        13
+    29:        11
+    30:        10
+    31:         6
+    32:         5
+    33:        10
+    34:         3
+    35:         7
+    36:         5
+    37:         2
+    38:         5
+    39:         5
+    40:         2
+    41:         5
+    42:         4
+    43:         1
+    44:         2
+    45:         2
+    46:         3
+    47:         1
+    48:         0
+    ...
+    102:         0
+    103:         1
+    104:         0
+    ...
+
+It took 11 tries to map 42 PGs, 12 tries to map 44 PGs etc. The highest number of tries is the minimum value of ``set_choose_tries`` that prevents bad mappings (i.e. 103 in the above output because it did not take more than 103 tries for any PG to be mapped).
+
 .. _check: ../../operations/placement-groups#get-the-number-of-placement-groups
 .. _here: ../../configuration/pool-pg-config-ref
 .. _Placement Groups: ../../operations/placement-groups
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
+.. _NTP: http://en.wikipedia.org/wiki/Network_Time_Protocol
+.. _The Network Time Protocol: http://www.ntp.org/
+.. _Clock Settings: ../../configuration/mon-config-ref/#clock
+
+

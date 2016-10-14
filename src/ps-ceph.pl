@@ -18,6 +18,7 @@ sub is_ceph_proc {
 
         return 1 if $cmdline =~ /\bceph\b/;
         return 1 if $cmdline =~ /\bceph-fuse\b/;
+        return 1 if $cmdline =~ /\brbd-nbd\b/;
         return 1 if $cmdline =~ /\brbd-fuse\b/;
         return 1 if $cmdline =~ /\bceph-mds\b/;
         return 1 if $cmdline =~ /\bceph-mon\b/;

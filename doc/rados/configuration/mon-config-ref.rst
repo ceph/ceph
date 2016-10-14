@@ -93,7 +93,7 @@ and `Monitoring OSDs and PGs`_ for additional details.
 Monitor Quorum
 --------------
 
-Our Getting Started section provides a trivial `Ceph configuration file`_ that
+Our Configuring ceph section provides a trivial `Ceph configuration file`_ that
 provides for one monitor in the test cluster. A cluster will run fine with a
 single monitor; however, **a single monitor is a single-point-of-failure**. To
 ensure high availability in a production Ceph Storage Cluster, you should run
@@ -248,6 +248,7 @@ possible to run daemons for multiple clusters on the same hardware.
 .. note:: Do not set this value if you use a deployment tool that does
    it for you.
 
+
 .. index:: Ceph Monitor; initial members
 
 Initial Members
@@ -285,8 +286,10 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. Ceph Monitors do
-lots of ``fsync()``, which can interfere with Ceph OSD Daemon workloads.
+Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb is using
+``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
+very often, which can interfere with Ceph OSD Daemon workloads if the data
+store is co-located with the OSD Daemons.
 
 In Ceph versions 0.58 and earlier, Ceph Monitors store their data in files. This 
 approach allows users to inspect monitor data with common tools like ``ls``
@@ -563,7 +566,9 @@ Trimming requires that the placement groups are ``active + clean``.
 
 ``paxos propose interval``
 
-:Description: Gather updates for this time interval before proposing a map update. 
+:Description: Gather updates for this time interval before proposing 
+              a map update. 
+
 :Type: Double
 :Default: ``1.0``
 
@@ -575,20 +580,6 @@ Trimming requires that the placement groups are ``active + clean``.
 
 :Type: Double
 :Default: ``0.05``
-
-
-``paxos trim tolerance``
-
-:Description: The number of extra proposals tolerated before trimming.
-:Type: Integer
-:Default: ``30``
-
-
-``paxos trim disabled max versions``
-
-:Description: The maximimum number of version allowed to pass without trimming.
-:Type: Integer
-:Default: ``100``
 
 
 ``mon lease`` 
@@ -679,6 +670,30 @@ will not work, because there is a single Paxos instance for all services.
 Clock
 -----
 
+Ceph daemons pass critical messages to each other, which must be processed
+before daemons reach a timeout threshold. If the clocks in Ceph monitors
+are not synchronized, it can lead to a number of anomalies. For example:
+
+- Daemons ignoring received messages (e.g., timestamps outdated)
+- Timeouts triggered too soon/late when a message wasn't received in time.
+
+See `Monitor Store Synchronization`_ and `Slurp`_ for details.
+
+
+.. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
+         ensure that the monitor cluster operates with synchronized clocks.
+
+Clock drift may still be noticeable with NTP even though the discrepancy isn't
+yet harmful. Ceph's clock drift / clock skew warnings may get triggered even 
+though NTP maintains a reasonable level of synchronization. Increasing your 
+clock drift may be tolerable under such circumstances; however, a number of 
+factors such as workload, network latency, configuring overrides to default 
+timeouts and the `Monitor Store Synchronization`_ settings may influence 
+the level of acceptable clock drift without compromising Paxos guarantees.
+
+Ceph provides the following tunable options to allow you to find 
+acceptable values.
+
 
 ``clock offset``
 
@@ -723,7 +738,7 @@ Clock
 Client
 ------
 
-``mon client hung interval``
+``mon client hunt interval``
 
 :Description: The client will try a new monitor every ``N`` seconds until it
               establishes a connection.
@@ -816,10 +831,28 @@ Miscellaneous
 :Default: ``4096``
 
 
+``mon osd prime pg temp``
+
+:Description: Enables or disable priming the PGMap with the previous OSDs when an out
+              OSD comes back into the cluster. With the ``true`` setting the clients
+              will continue to use the previous OSDs until the newly in OSDs as that
+              PG peered.
+:Type: Boolean
+:Default: ``true``
+
+
+``mon osd prime pg temp max time``
+
+:Description: How much time in seconds the monitor should spend trying to prime the
+              PGMap when an out OSD comes back into the cluster.
+:Type: Float
+:Default: ``0.5``
+
+
 
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
-.. _Monitor Keyrings: ../../operations/authentication#monitor-keyrings
-.. _Ceph configuration file: ../../../start/quick-start/#add-a-configuration-file
+.. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
+.. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
 .. _ACID: http://en.wikipedia.org/wiki/ACID
 .. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons

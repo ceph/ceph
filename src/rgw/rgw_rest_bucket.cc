@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_op.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_bucket.h"
@@ -26,13 +29,15 @@ void RGWOp_Bucket_Info::execute()
 
   bool fetch_stats;
 
-  std::string uid;
   std::string bucket;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  string uid_str;
+
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
-
 
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
@@ -121,16 +126,20 @@ public:
 
 void RGWOp_Bucket_Link::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string bucket;
+  std::string bucket_id;
 
   RGWBucketAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
+  RESTArgs::get_string(s, "bucket-id", bucket_id, &bucket_id);
 
+  rgw_user uid(uid_str);
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
+  op_state.set_bucket_id(bucket_id);
 
   http_ret = RGWBucketAdminOp::link(store, op_state);
 }
@@ -151,12 +160,14 @@ public:
 
 void RGWOp_Bucket_Unlink::execute()
 {
-  std::string uid;
+  std::string uid_str;
   std::string bucket;
 
   RGWBucketAdminOpState op_state;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  rgw_user uid(uid_str);
+
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
 
   op_state.set_user_id(uid);
@@ -235,17 +246,17 @@ RGWOp *RGWHandler_Bucket::op_get()
     return new RGWOp_Check_Bucket_Index;
 
   return new RGWOp_Bucket_Info;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_put()
 {
   return new RGWOp_Bucket_Link;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_post()
 {
   return new RGWOp_Bucket_Unlink;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_delete()
 {
@@ -253,5 +264,5 @@ RGWOp *RGWHandler_Bucket::op_delete()
     return new RGWOp_Object_Remove;
 
   return new RGWOp_Bucket_Remove;
-};
+}
 

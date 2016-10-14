@@ -1,0 +1,24 @@
+[Unit]
+Description=Ceph metadata server daemon
+After=network-online.target local-fs.target time-sync.target
+Wants=network-online.target local-fs.target time-sync.target
+PartOf=ceph-mds.target
+
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=1048576
+EnvironmentFile=-/etc/sysconfig/ceph
+Environment=CLUSTER=ceph
+ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecReload=/bin/kill -HUP $MAINPID
+PrivateDevices=yes
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+TasksMax=infinity
+Restart=on-failure
+StartLimitInterval=30min
+StartLimitBurst=3
+
+[Install]
+WantedBy=ceph-mds.target

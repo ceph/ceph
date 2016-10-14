@@ -32,13 +32,15 @@ using namespace std;
 #include <errno.h>
 #include <sstream>
 
-class MDS;
+#define SOCKET_PRIORITY_MIN_DELAY 6
+
 class Timer;
 
 
 class Messenger {
 private:
   list<Dispatcher*> dispatchers;
+  list <Dispatcher*> fast_dispatchers;
 
 protected:
   /// the "name" of the local daemon. eg client.99
@@ -46,13 +48,24 @@ protected:
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
+  uint32_t magic;
+  int socket_priority;
 
 public:
+  /**
+   * Various Messenger conditional config/type flags to allow
+   * different "transport" Messengers to tune themselves
+   */
+  static const int HAS_HEAVY_TRAFFIC    = 0x0001;
+  static const int HAS_MANY_CONNECTIONS = 0x0002;
+  static const int HEARTBEAT            = 0x0004;
+
   /**
    *  The CephContext this Messenger uses. Many other components initialize themselves
    *  from this value.
    */
   CephContext *cct;
+  int crcflags;
 
   /**
    * A Policy describes the rules of a Connection. Is there a limit on how
@@ -125,7 +138,10 @@ public:
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
-      cct(cct_)
+      magic(0),
+      socket_priority(-1),
+      cct(cct_),
+      crcflags(get_default_crc_flags(cct->_conf))
   {
     my_inst.name = w;
   }
@@ -138,14 +154,34 @@ public:
    * available or specified via the configuration in cct.
    *
    * @param cct context
+   * @param type name of messenger type
    * @param name entity name to register
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
+   * @param features bits for the local connection
+   * @param cflags general set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
+                           const string &type,
                            entity_name_t name,
 			   string lname,
-                           uint64_t nonce);
+                           uint64_t nonce,
+			   uint64_t cflags);
+
+  /**
+   * create a new messenger
+   *
+   * Create a new messenger instance.
+   * Same as the above, but a slightly simpler interface for clients:
+   * - Generate a random nonce
+   * - use the default feature bits
+   * - get the messenger type from cct
+   * - use the client entity_type
+   *
+   * @param cct context
+   * @param lname logical name of the messenger in this process (e.g., "client")
+   */
+  static Messenger *create_client_messenger(CephContext *cct, string lname);
 
   /**
    * @defgroup Accessors
@@ -162,6 +198,10 @@ public:
    * set messenger's instance
    */
   void set_myinst(entity_inst_t i) { my_inst = i; }
+
+  uint32_t get_magic() { return magic; }
+  void set_magic(int _magic) { magic = _magic; }
+
   /**
    * Retrieve the Messenger's address.
    *
@@ -173,7 +213,7 @@ protected:
   /**
    * set messenger's address
    */
-  void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
+  virtual void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
 public:
   /**
    * Retrieve the Messenger's name.
@@ -199,7 +239,7 @@ public:
    *
    * @param addr The address to use as a template.
    */
-  virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
+  virtual void set_addr_unknowns(const entity_addr_t &addr) = 0;
   /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   /**
@@ -213,6 +253,11 @@ public:
    * (0 if the queue is empty)
    */
   virtual double get_dispatch_queue_max_age(utime_t now) = 0;
+  /**
+   * Get the default crc flags for this messenger.
+   * but not yet dispatched.
+   */
+  static int get_default_crc_flags(md_config_t *);
 
   /**
    * @} // Accessors
@@ -267,16 +312,16 @@ public:
    */
   virtual Policy get_default_policy() = 0;
   /**
-   * Set a Throttler which is applied to all Messages from the given
-   * type of peer.
+   * Set Throttlers applied to all Messages from the given type of peer
    *
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
-   * @param type The peer type this Throttler will apply to.
-   * @param t The Throttler to apply. The Messenger does not take
-   * ownership of this pointer, but you must not destroy it before
-   * you destroy the Messenger.
+   * @param type The peer type the Throttlers will apply to.
+   * @param bytes The Throttle for the number of bytes carried by the message
+   * @param msgs The Throttle for the number of messages for this @p type
+   * @note The Messenger does not take ownership of the Throttle pointers, but
+   * you must not destroy them before you destroy the Messenger.
    */
   virtual void set_policy_throttlers(int type, Throttle *bytes, Throttle *msgs=NULL) = 0;
   /**
@@ -292,6 +337,27 @@ public:
     default_send_priority = p;
   }
   /**
+   * Set the priority(SO_PRIORITY) for all packets to be sent on this socket.
+   *
+   * Linux uses this value to order the networking queues: packets with a higher
+   * priority may be processed first depending on the selected device queueing
+   * discipline.
+   *
+   * @param prio The priority. Setting a priority outside the range 0 to 6
+   * requires the CAP_NET_ADMIN capability.
+   */
+  void set_socket_priority(int prio) {
+    socket_priority = prio;
+  }
+  /**
+   * Get the socket priority
+   *
+   * @return the socket priority
+   */
+  int get_socket_priority() {
+    return socket_priority;
+  }
+  /**
    * Add a new Dispatcher to the front of the list. If you add
    * a Dispatcher which is already included, it will get a duplicate
    * entry. This will reduce efficiency but not break anything.
@@ -301,6 +367,8 @@ public:
   void add_dispatcher_head(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_front(d);
+    if (d->ms_can_fast_dispatch_any())
+      fast_dispatchers.push_front(d);
     if (first)
       ready();
   }
@@ -314,6 +382,8 @@ public:
   void add_dispatcher_tail(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_back(d);
+    if (d->ms_can_fast_dispatch_any())
+      fast_dispatchers.push_back(d);
     if (first)
       ready();
   }
@@ -394,51 +464,6 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
-  /**
-   * Queue the given Message to send out on the given Connection.
-   * Success in this function does not guarantee Message delivery, only
-   * success in queueing the Message. Other guarantees may be provided based
-   * on the Connection policy.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param con The Connection to send the Message out on.
-   *
-   * @return 0 on success, or -errno on failure.
-   */
-  virtual int send_message(Message *m, Connection *con) = 0;
-  int send_message(Message *m, const ConnectionRef& con) {
-    return send_message(m, con.get());
-  }
-  /**
-   * Lazily queue the given Message for the given entity. Unlike with
-   * send_message(), lazy_send_message() will not establish a
-   * Connection if none exists, re-establish the connection if it
-   * has broken, or queue the Message if the connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * DEPRECATED: please do not use this interface for any new code;
-   * use the Connection* variant.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) = 0;
-  /**
-   * Lazily queue the given Message for the given Connection. Unlike with
-   * send_message(), lazy_send_message() does not necessarily re-establish
-   * the connection if it has broken, or even queue the Message if the
-   * connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, Connection *con) = 0;
 
   /**
    * @} // Messaging
@@ -461,23 +486,6 @@ public:
    */
   virtual ConnectionRef get_loopback_connection() = 0;
   /**
-   * Send a "keepalive" ping to the given dest, if it has a working Connection.
-   * If the Messenger doesn't already have a Connection, or if the underlying
-   * connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0, or implementation-defined error numbers.
-   */
-  virtual int send_keepalive(const entity_inst_t& dest) = 0;
-  /**
-   * Send a "keepalive" ping along the given Connection, if it's working.
-   * If the underlying connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0, or implementation-defined error numbers.
-   */
-  virtual int send_keepalive(Connection *con) = 0;
-  /**
    * Mark down a Connection to a remote.
    *
    * This will cause us to discard our outgoing queue for them, and if
@@ -496,24 +504,6 @@ public:
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
   /**
-   * Mark down the given Connection.
-   *
-   * This will cause us to discard its outgoing queue, and if reset
-   * detection is enabled in the policy and the endpoint tries to
-   * reconnect they will discard their queue when we inform them of
-   * the session reset.
-   *
-   * If the Connection* is NULL, this is a no-op.
-   *
-   * It does not generate any notifications to the Dispatcher.
-   *
-   * @param con The Connection to mark down.
-   */
-  virtual void mark_down(Connection *con) = 0;
-  void mark_down(const ConnectionRef& con) {
-    mark_down(con.get());
-  }
-  /**
    * Mark all the existing Connections down. This is equivalent
    * to iterating over all Connections and calling mark_down()
    * on each.
@@ -521,35 +511,6 @@ public:
    * This will generate a RESET event for each closed connections.
    */
   virtual void mark_down_all() = 0;
-  /**
-   * Unlike mark_down, this function will try and deliver
-   * all messages before ending the connection, and it will use
-   * the Pipe's existing semantics to do so. Once the Messages
-   * all been sent out the Connection will be closed and
-   * generate an ms_handle_reset notification to the
-   * Dispatcher.
-   * This function means that you will get standard delivery to endpoints,
-   * and then the Connection will be cleaned up.
-   *
-   * @param con The Connection to mark down.
-   */
-  virtual void mark_down_on_empty(Connection *con) = 0;
-  /**
-   * Mark a Connection as "disposable", setting it to lossy
-   * (regardless of initial Policy). Unlike mark_down_on_empty()
-   * this does not immediately close the Connection once
-   * Messages have been delivered, so as long as there are no errors you can
-   * continue to receive responses; but it will not attempt
-   * to reconnect for message delivery or preserve your old
-   * delivery semantics, either.
-   *
-   * TODO: There's some odd stuff going on in our SimpleMessenger
-   * implementation during connect that looks unused; is there
-   * more of a contract that that's enforcing?
-   *
-   * @param con The Connection to mark as disposable.
-   */
-  virtual void mark_disposable(Connection *con) = 0;
   /**
    * @} // Connection Management
    */
@@ -571,6 +532,51 @@ protected:
    * @{
    */
 public:
+  /**
+   * Determine whether a message can be fast-dispatched. We will
+   * query each Dispatcher in sequence to determine if they are
+   * capable of handling a particular message via "fast dispatch".
+   *
+   * @param m The Message we are testing.
+   */
+  bool ms_can_fast_dispatch(Message *m) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+	 p != fast_dispatchers.end();
+	 ++p) {
+      if ((*p)->ms_can_fast_dispatch(m))
+	return true;
+    }
+    return false;
+  }
+
+  /**
+   * Deliver a single Message via "fast dispatch".
+   *
+   * @param m The Message we are fast dispatching. We take ownership
+   * of one reference to it.
+   */
+  void ms_fast_dispatch(Message *m) {
+    m->set_dispatch_stamp(ceph_clock_now(cct));
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+	 p != fast_dispatchers.end();
+	 ++p) {
+      if ((*p)->ms_can_fast_dispatch(m)) {
+	(*p)->ms_fast_dispatch(m);
+	return;
+      }
+    }
+    assert(0);
+  }
+  /**
+   *
+   */
+  void ms_fast_preprocess(Message *m) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+	 p != fast_dispatchers.end();
+	 ++p) {
+      (*p)->ms_fast_preprocess(m);
+    }
+  }
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
@@ -594,7 +600,8 @@ public:
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
-   * this function whenever a new Connection is initiated.
+   * this function whenever a new Connection is initiated or
+   * reconnects.
    *
    * @param con Pointer to the new Connection.
    */
@@ -603,6 +610,20 @@ public:
 	 p != dispatchers.end();
 	 ++p)
       (*p)->ms_handle_connect(con);
+  }
+
+  /**
+   * Notify each fast Dispatcher of a new Connection. Call
+   * this function whenever a new Connection is initiated or
+   * reconnects.
+   *
+   * @param con Pointer to the new Connection.
+   */
+  void ms_deliver_handle_fast_connect(Connection *con) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+         p != fast_dispatchers.end();
+         ++p)
+      (*p)->ms_handle_fast_connect(con);
   }
 
   /**
@@ -616,6 +637,19 @@ public:
 	 p != dispatchers.end();
 	 ++p)
       (*p)->ms_handle_accept(con);
+  }
+
+  /**
+   * Notify each fast Dispatcher of a new incoming Connection. Call
+   * this function whenever a new Connection is accepted.
+   *
+   * @param con Pointer to the new Connection.
+   */
+  void ms_deliver_handle_fast_accept(Connection *con) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+         p != fast_dispatchers.end();
+         ++p)
+      (*p)->ms_handle_fast_accept(con);
   }
 
   /**
@@ -646,6 +680,24 @@ public:
 	 ++p)
       (*p)->ms_handle_remote_reset(con);
   }
+
+  /**
+   * Notify each Dispatcher of a Connection for which reconnection
+   * attempts are being refused. Call this function whenever you
+   * detect that a lossy Connection has been disconnected and it's
+   * impossible to reconnect.
+   *
+   * @param con Pointer to the broken Connection.
+   */
+  void ms_deliver_handle_refused(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+         p != dispatchers.end();
+         ++p) {
+      if ((*p)->ms_handle_refused(con))
+        return;
+    }
+  }
+
   /**
    * Get the AuthAuthorizer for a new outgoing Connection.
    *

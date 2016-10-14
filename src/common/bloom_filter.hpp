@@ -356,51 +356,6 @@ public:
     return std::pow(1.0 - std::exp(-1.0 * salt_.size() * insert_count_ / size()), 1.0 * salt_.size());
   }
 
-  inline bloom_filter& operator &= (const bloom_filter& filter)
-  {
-    /* intersection */
-    if (
-	(salt_count_  == filter.salt_count_) &&
-	(table_size_  == filter.table_size_) &&
-	(random_seed_ == filter.random_seed_)
-	) {
-      for (std::size_t i = 0; i < table_size_; ++i) {
-	bit_table_[i] &= filter.bit_table_[i];
-      }
-    }
-    return *this;
-  }
-
-  inline bloom_filter& operator |= (const bloom_filter& filter)
-  {
-    /* union */
-    if (
-	(salt_count_  == filter.salt_count_) &&
-	(table_size_  == filter.table_size_) &&
-	(random_seed_ == filter.random_seed_)
-	) {
-      for (std::size_t i = 0; i < table_size_; ++i) {
-        bit_table_[i] |= filter.bit_table_[i];
-      }
-    }
-    return *this;
-  }
-
-  inline bloom_filter& operator ^= (const bloom_filter& filter)
-  {
-    /* difference */
-    if (
-	(salt_count_  == filter.salt_count_) &&
-	(table_size_  == filter.table_size_) &&
-	(random_seed_ == filter.random_seed_)
-	) {
-      for (std::size_t i = 0; i < table_size_; ++i) {
-	bit_table_[i] ^= filter.bit_table_[i];
-      }
-    }
-    return *this;
-  }
-
   inline const cell_type* table() const
   {
     return bit_table_;
@@ -573,27 +528,6 @@ public:
   static void generate_test_instances(std::list<bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(bloom_filter)
-
-inline bloom_filter operator & (const bloom_filter& a, const bloom_filter& b)
-{
-  bloom_filter result = a;
-  result &= b;
-  return result;
-}
-
-inline bloom_filter operator | (const bloom_filter& a, const bloom_filter& b)
-{
-  bloom_filter result = a;
-  result |= b;
-  return result;
-}
-
-inline bloom_filter operator ^ (const bloom_filter& a, const bloom_filter& b)
-{
-  bloom_filter result = a;
-  result ^= b;
-  return result;
-}
 
 
 class compressible_bloom_filter : public bloom_filter

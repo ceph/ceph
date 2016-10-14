@@ -36,7 +36,7 @@ Step 1: Getting librados
 Your client application must bind with ``librados`` to connect to the Ceph
 Storage Cluster. You must install ``librados`` and any required packages to
 write applications that use ``librados``. The ``librados`` API is written in
-C++, with additional bindings for C, Python and Java. 
+C++, with additional bindings for C, Python, Java and PHP. 
 
 
 Getting librados for C/C++
@@ -50,7 +50,7 @@ distributions, execute the following::
 To install ``librados`` development support files for C/C++ on RHEL/CentOS
 distributions, execute the following::
 
-	sudo yum install ceph-devel
+	sudo yum install librados2-devel
 
 Once you install ``librados`` for developers, you can find the required 
 headers for C/C++ under ``/usr/include/rados``. ::
@@ -61,21 +61,21 @@ headers for C/C++ under ``/usr/include/rados``. ::
 Getting librados for Python
 ---------------------------
 
-The ``rados.py`` modules provides ``librados`` support to Python
+The ``rados`` module provides ``librados`` support to Python
 applications. The ``librados-dev`` package for Debian/Ubuntu
-and the ``ceph-devel`` package for RHEL/CentOS will install the
-``python-ceph`` package for you. You may install ``python-ceph``
+and the ``librados2-devel`` package for RHEL/CentOS will install the
+``python-rados`` package for you. You may install ``python-rados``
 directly too.
 
 To install ``librados`` development support files for Python on Debian/Ubuntu
 distributions, execute the following::
 
-	sudo apt-get install python-ceph
+	sudo apt-get install python-rados
 
-To install ``librados`` development support files for C/C++ on RHEL/CentOS
+To install ``librados`` development support files for Python on RHEL/CentOS
 distributions, execute the following::
 
-	sudo yum install python-ceph
+	sudo yum install python-rados
 
 You can find the module under ``/usr/share/pyshared`` on Debian systems,
 or under ``/usr/lib/python*/site-packages`` on CentOS/RHEL systems.
@@ -117,6 +117,36 @@ To install ``librados`` for Java, you need to execute the following procedure:
 To build the documentation, execute the following::
 
 	ant docs
+
+
+Getting librados for PHP
+-------------------------
+
+To install the ``librados`` extension for PHP, you need to execute the following procedure:
+
+#. Install php-dev. For Debian/Ubuntu, execute::
+
+	sudo apt-get install php5-dev build-essential
+
+   For CentOS/RHEL, execute::
+
+	sudo yum install php-devel
+
+#. Clone the ``phprados`` repository::
+
+	git clone https://github.com/ceph/phprados.git
+
+#. Build ``phprados``::
+
+	cd phprados
+	phpize
+	./configure
+	make
+	sudo make install
+
+#. Enable ``phprados`` in php.ini by adding::
+
+	extension=rados.so
 
 
 Step 2: Configuring a Cluster Handle
@@ -323,8 +353,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.init2(user_name, cluster_name, flags);
 			if (ret < 0) {
 				std::cerr << "Couldn't initialize the cluster handle! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Created a cluster handle." << std::endl;
 			}
@@ -335,8 +364,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.conf_read_file("/etc/ceph/ceph.conf");	
 			if (ret < 0) {
 				std::cerr << "Couldn't read the Ceph configuration file! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Read the Ceph configuration file." << std::endl;
 			}
@@ -347,8 +375,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.conf_parse_argv(argc, argv);
 			if (ret < 0) {
 				std::cerr << "Couldn't parse command line options! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Parsed command line options." << std::endl;
 			}
@@ -359,8 +386,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.connect();
 			if (ret < 0) {
 				std::cerr << "Couldn't connect to cluster! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Connected to the cluster." << std::endl;
 			}
@@ -431,8 +457,8 @@ binding converts C++-based errors into exceptions.
 		public static void main (String args[]){
 	
 			try {
-				cluster = rados.Rados(None, "client.admin", "ceph")
-				print "Created cluster handle."
+				Rados cluster = new Rados("admin");
+				System.out.println("Created cluster handle.");
 	            
 				File f = new File("/etc/ceph/ceph.conf");
 				cluster.confReadFile(f);
@@ -454,6 +480,29 @@ to specify the classpath. For example::
 
 	javac CephClient.java
 	java CephClient
+
+
+PHP Example
+------------
+
+With the RADOS extension enabled in PHP you can start creating a new cluster handle very easily:
+
+.. code-block:: php
+
+	<?php
+
+	$r = rados_create();
+	rados_conf_read_file($r, '/etc/ceph/ceph.conf');
+	if (!rados_connect($r)) {
+		echo "Failed to connect to Ceph cluster";
+	} else {
+		echo "Successfully connected to Ceph cluster";
+	}
+
+
+Save this as rados.php and run the code::
+
+	php rados.php
 
 
 Step 3: Creating an I/O Context
@@ -600,7 +649,7 @@ C Example
 		}
 		
 		/* Wait for the operation to complete */
-		rados_wait_for_complete(comp);
+		rados_aio_wait_for_complete(comp);
 		
 		/* Release the asynchronous I/O complete handle to avoid memory leaks. */
 		rados_aio_release(comp);		
@@ -676,7 +725,7 @@ C++ Example
 		{
 			librados::bufferlist bl;
 			bl.append("Hello World!");
-			ret = io_ctx.write("hw", bl);
+			ret = io_ctx.write_full("hw", bl);
 			if (ret < 0) {
 				std::cerr << "Couldn't write object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
@@ -824,6 +873,69 @@ Python Example
 	ioctx.remove_object("bm")
 
 
+Java-Example
+------------
+
+.. code-block:: java
+
+	import com.ceph.rados.Rados;
+	import com.ceph.rados.RadosException;
+
+	import java.io.File;
+	import com.ceph.rados.IoCTX;
+
+	public class CephClient {
+        	public static void main (String args[]){
+
+                	try {
+				Rados cluster = new Rados("admin");
+				System.out.println("Created cluster handle.");
+
+                        	File f = new File("/etc/ceph/ceph.conf");
+                        	cluster.confReadFile(f);
+                        	System.out.println("Read the configuration file.");
+
+                        	cluster.connect();
+                        	System.out.println("Connected to the cluster.");
+
+				IoCTX io = cluster.ioCtxCreate("data");
+
+				String oidone = "hw";
+				String contentone = "Hello World!";
+				io.write(oidone, contentone); 
+
+				String oidtwo = "bm";
+				String contenttwo = "Bonjour tout le monde!";
+				io.write(oidtwo, contenttwo); 
+
+				String[] objects = io.listObjects();
+                       		for (String object: objects)
+					System.out.println(object);
+
+				io.remove(oidone);
+				io.remove(oidtwo);
+
+				cluster.ioCtxDestroy(io);
+
+                	} catch (RadosException e) {
+                        	System.out.println(e.getMessage() + ": " + e.getReturnValue());
+                	}
+        	}
+	}
+
+
+PHP Example
+-----------
+
+.. code-block:: php
+
+	<?php
+
+	$io = rados_ioctx_create($r, "mypool");
+	rados_write_full($io, "oidOne", "mycontents");
+	rados_remove("oidOne");
+	rados_ioctx_destroy($io);
+
 
 Step 4: Closing Sessions
 ========================
@@ -851,6 +963,15 @@ C++ Example
 	cluster.shutdown();
 
 
+Java Example
+--------------
+
+.. code-block:: java
+
+	cluster.ioCtxDestroy(io);
+	cluster.shutDown();
+	
+	
 Python Example
 --------------
 
@@ -862,7 +983,12 @@ Python Example
 	print "Shutting down the handle."
 	cluster.shutdown()
 
+PHP Example
+-----------
 
+.. code-block:: php
+
+	rados_shutdown($r);
 
 
 

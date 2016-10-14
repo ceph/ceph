@@ -17,6 +17,7 @@ finding the `placement group`_ and the underlying OSDs at root of the problem.
 Ceph is generally self-repairing. However, when problems persist, monitoring
 OSDs and placement groups will help you identify the problem.
 
+
 Monitoring OSDs
 ===============
 
@@ -92,11 +93,10 @@ daemons that aren't running::
 
 If an OSD is ``down``, start it:: 
 
-	sudo /etc/init.d/ceph -a start osd.1
+	sudo systemctl start ceph-osd@1
 
 See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
 restart.
-
 	
 
 PG Sets
@@ -118,7 +118,7 @@ arise, don't panic. Common examples include:
 - You added or removed an OSD. Then, CRUSH reassigned the placement group to 
   other OSDs--thereby changing the composition of the Acting Set and spawning
   the migration of data with a "backfill" process.
-- An OSD was ``down``, was restared, and is now ``recovering``.
+- An OSD was ``down``, was restarted, and is now ``recovering``.
 - An OSD in the Acting Set is ``down`` or unable to service requests, 
   and another OSD has temporarily assumed its duties.
 
@@ -196,6 +196,7 @@ number of placement group peering-related circumstances:
 #. You have just modified your CRUSH map and your placement groups are migrating.
 #. There is inconsistent data in different replicas of a placement group.
 #. Ceph is scrubbing a placement group's replicas.
+#. Ceph doesn't have enough storage capacity to complete backfilling operations.
 
 If one of the foregoing circumstances causes Ceph to echo ``HEALTH WARN``, don't
 panic. In many cases, the cluster will recover on its own. In some cases, you
@@ -229,9 +230,9 @@ few cases:
    Placement group IDs consist of the pool number (not pool name) followed 
    by a period (.) and the placement group ID--a hexadecimal number. You
    can view pool numbers and their names from the output of ``ceph osd 
-   lspools``. The default pool names ``data``, ``metadata`` and ``rbd`` 
-   correspond to pool numbers ``0``, ``1`` and ``2`` respectively. A fully 
-   qualified placement group ID has the following form::
+   lspools``. For example, the default pool ``rbd`` corresponds to
+   pool number ``0``. A fully qualified placement group ID has the
+   following form::
    
    	{pool-num}.{pg-id}
    
@@ -490,13 +491,14 @@ During the backfill operations, you may see one of several states:
 ``backfill_wait`` indicates that a backfill operation is pending, but isn't
 underway yet; ``backfill`` indicates that a backfill operation is underway;
 and, ``backfill_too_full`` indicates that a backfill operation was requested,
-but couldn't be completed due to insufficient storage capacity. 
+but couldn't be completed due to insufficient storage capacity. When a 
+placement group can't be backfilled, it may be considered ``incomplete``.
 
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
 an OSD to 10. The ``osd backfill full ratio`` enables an OSD to refuse a
-backfill request if the OSD is approaching its its full ratio (85%, by default).
+backfill request if the OSD is approaching its full ratio (85%, by default).
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
 enables an OSD to retry the request (after 10 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
@@ -550,7 +552,7 @@ include:
 
 To identify stuck placement groups, execute the following:: 
 
-	ceph pg dump_stuck [unclean|inactive|stale]
+	ceph pg dump_stuck [unclean|inactive|stale|undersized|degraded]
 
 See `Placement Group Subsystem`_ for additional details. To troubleshoot
 stuck placement groups, see `Troubleshooting PG Errors`_.
@@ -571,7 +573,7 @@ location, all you need is the object name and the pool name. For example::
 
 	ceph osd map {poolname} {object-name}
 
-.. topic:: Excercise: Locate an Object
+.. topic:: Exercise: Locate an Object
 
 	As an exercise, lets create an object. Specify an object name, a path to a
 	test file containing some object data and a pool name using the 

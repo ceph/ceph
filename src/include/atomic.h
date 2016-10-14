@@ -21,10 +21,77 @@
 #endif
 
 #include <stdlib.h>
+#include "include/Spinlock.h"
+
+namespace ceph {
+  template <class T>
+  class atomic_spinlock_t {
+    mutable ceph_spinlock_t lock;
+    T val;
+  public:
+    atomic_spinlock_t(T i=0)
+      : val(i) {
+      ceph_spin_init(&lock);
+    }
+    ~atomic_spinlock_t() {
+      ceph_spin_destroy(&lock);
+    }
+    void set(T v) {
+      ceph_spin_lock(&lock);
+      val = v;
+      ceph_spin_unlock(&lock);
+    }
+    T inc() {
+      ceph_spin_lock(&lock);
+      T r = ++val;
+      ceph_spin_unlock(&lock);
+      return r;
+    }
+    T dec() {
+      ceph_spin_lock(&lock);
+      T r = --val;
+      ceph_spin_unlock(&lock);
+      return r;
+    }
+    void add(T d) {
+      ceph_spin_lock(&lock);
+      val += d;
+      ceph_spin_unlock(&lock);
+    }
+    void sub(T d) {
+      ceph_spin_lock(&lock);
+      val -= d;
+      ceph_spin_unlock(&lock);
+    }
+    T read() const {
+      T ret;
+      ceph_spin_lock(&lock);
+      ret = val;
+      ceph_spin_unlock(&lock);
+      return ret;
+    }
+    bool compare_and_swap(T o, T n) {
+      bool success = false;
+      ceph_spin_lock(&lock);
+      if (val == o) {
+        success = true;
+        val = n;
+      }
+      ceph_spin_unlock(&lock);
+      return success;
+    }
+
+  private:
+    // forbid copying
+    atomic_spinlock_t(const atomic_spinlock_t<T> &other);
+    atomic_spinlock_t &operator=(const atomic_spinlock_t<T> &rhs);
+  };
+}
 
 #ifndef NO_ATOMIC_OPS
 
 // libatomic_ops implementation
+#define AO_REQUIRE_CAS
 #include <atomic_ops.h>
 
 // reinclude our assert to clobber the system one
@@ -35,7 +102,7 @@ namespace ceph {
     AO_t val;
   public:
     atomic_t(AO_t i=0) : val(i) {}
-    void set(size_t v) {
+    void set(AO_t v) {
       AO_store(&val, v);
     }
     AO_t inc() {
@@ -44,12 +111,12 @@ namespace ceph {
     AO_t dec() {
       return AO_fetch_and_sub1_write(&val) - 1;
     }
-    void add(AO_t add_me) {
-      AO_fetch_and_add(&val, add_me);
+    AO_t add(AO_t add_me) {
+      return AO_fetch_and_add(&val, add_me) + add_me;
     }
-    void sub(int sub_me) {
-      int negsub = 0 - sub_me;
-      AO_fetch_and_add_write(&val, (AO_t)negsub);
+    AO_t sub(AO_t sub_me) {
+      AO_t negsub = 0 - sub_me;
+      return AO_fetch_and_add_write(&val, negsub) + negsub;
     }
     AO_t read() const {
       // cast away const on the pointer.  this is only needed to build
@@ -57,12 +124,24 @@ namespace ceph {
       // at some point.  this hack can go away someday...
       return AO_load_full((AO_t *)&val);
     }
+    bool compare_and_swap(AO_t o, AO_t n) {
+      return AO_compare_and_swap(&val, o, n);
+    }
+
   private:
     // forbid copying
     atomic_t(const atomic_t &other);
     atomic_t &operator=(const atomic_t &rhs);
   };
+
+#if SIZEOF_AO_T == 8
+  typedef atomic_t atomic64_t;
+#else
+  typedef atomic_spinlock_t<unsigned long long> atomic64_t;
+#endif
+
 }
+
 #else
 /*
  * crappy slow implementation that uses a pthreads spinlock.
@@ -70,56 +149,9 @@ namespace ceph {
 #include "include/Spinlock.h"
 
 namespace ceph {
-  class atomic_t {
-    mutable ceph_spinlock_t lock;
-    signed long val;
-  public:
-    atomic_t(int i=0)
-      : val(i) {
-      ceph_spin_init(&lock);
-    }
-    ~atomic_t() {
-      ceph_spin_destroy(&lock);
-    }
-    void set(size_t v) {
-      ceph_spin_lock(&lock);
-      val = v;
-      ceph_spin_unlock(&lock);
-    }
-    int inc() {
-      ceph_spin_lock(&lock);
-      int r = ++val;
-      ceph_spin_unlock(&lock);
-      return r;
-    }
-    int dec() {
-      ceph_spin_lock(&lock);
-      int r = --val;
-      ceph_spin_unlock(&lock);
-      return r;
-    }
-    void add(int d) {
-      ceph_spin_lock(&lock);
-      val += d;
-      ceph_spin_unlock(&lock);
-    }
-    void sub(int d) {
-      ceph_spin_lock(&lock);
-      val -= d;
-      ceph_spin_unlock(&lock);
-    }
-    int read() const {
-      signed long ret;
-      ceph_spin_lock(&lock);
-      ret = val;
-      ceph_spin_unlock(&lock);
-      return ret;
-    }
-  private:
-    // forbid copying
-    atomic_t(const atomic_t &other);
-    atomic_t &operator=(const atomic_t &rhs);
-  };
+  typedef atomic_spinlock_t<unsigned> atomic_t;
+  typedef atomic_spinlock_t<unsigned long long> atomic64_t;
 }
+
 #endif
 #endif

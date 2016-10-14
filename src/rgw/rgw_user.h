@@ -1,7 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_USER_H
 #define CEPH_RGW_USER_H
 
 #include <string>
+#include <boost/algorithm/string.hpp>
+#include "include/assert.h"
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -22,62 +27,87 @@ using namespace std;
 #define PUBLIC_ID_LEN 20
 #define RAND_SUBUSER_LEN 5
 
+#define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
+
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
  */
 struct RGWUID
 {
-  string user_id;
+  rgw_user user_id;
   void encode(bufferlist& bl) const {
-    ::encode(user_id, bl);
+    string s;
+    user_id.to_str(s);
+    ::encode(s, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(user_id, bl);
+    string s;
+    ::decode(s, bl);
+    user_id.from_str(s);
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-extern int rgw_user_sync_all_stats(RGWRados *store, const string& user_id);
+extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
 extern void rgw_get_anon_user(RGWUserInfo& info);
 
 /**
- * verify that user is an actual user, and not the anonymous user
- */
-extern bool rgw_user_is_authenticated(RGWUserInfo& info);
-/**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info,
-                               RGWObjVersionTracker *objv_tracker, time_t mtime, bool exclusive);
+extern int rgw_store_user_info(RGWRados *store,
+                               RGWUserInfo& info,
+                               RGWUserInfo *old_info,
+                               RGWObjVersionTracker *objv_tracker,
+                               real_time mtime,
+                               bool exclusive,
+                               map<string, bufferlist> *pattrs = NULL);
+
+/**
+ * Given an user_id, finds the user info associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
+extern int rgw_get_user_info_by_uid(RGWRados *store,
+                                    const rgw_user& user_id,
+                                    RGWUserInfo& info,
+                                    RGWObjVersionTracker *objv_tracker = NULL,
+                                    real_time *pmtime                     = NULL,
+                                    rgw_cache_entry_info *cache_info   = NULL,
+                                    map<string, bufferlist> *pattrs    = NULL);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info,
-                                    RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
-/**
- * Given an swift username, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
 extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+extern int rgw_get_user_info_by_swift(RGWRados *store,
+                                      const string& swift_name,
+                                      RGWUserInfo& info,        /* out */
+                                      RGWObjVersionTracker *objv_tracker = nullptr,
+                                      real_time *pmtime = nullptr);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                           RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
+/**
+ * Get all the custom metadata stored for user specified in @user_id
+ * and put it into @attrs.
+ * Returns: 0 on success, -ERR# on failure.
+ */
+extern int rgw_get_user_attrs_by_uid(RGWRados *store,
+                                     const rgw_user& user_id,
+                                     map<string, bufferlist>& attrs,
+                                     RGWObjVersionTracker *objv_tracker = NULL);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
@@ -90,7 +120,7 @@ extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTrac
  * remove the different indexes
  */
 extern int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key);
-extern int rgw_remove_uid_index(RGWRados *store, string& uid);
+extern int rgw_remove_uid_index(RGWRados *store, rgw_user& uid);
 extern int rgw_remove_email_index(RGWRados *store, string& email);
 extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 
@@ -123,12 +153,15 @@ enum RGWUserId {
 struct RGWUserAdminOpState {
   // user attributes
   RGWUserInfo info;
-  std::string user_id;
+  rgw_user user_id;
   std::string user_email;
   std::string display_name;
-  uint32_t max_buckets;
+  int32_t max_buckets;
   __u8 suspended;
+  __u8 admin;
   __u8 system;
+  __u8 exclusive;
+  __u8 fetch_stats;
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
@@ -155,6 +188,7 @@ struct RGWUserAdminOpState {
   bool id_specified;
   bool key_specified;
   bool type_specified;
+  bool key_type_setbycontext;   // key type set by user or subuser context
   bool purge_data;
   bool purge_keys;
   bool display_name_specified;
@@ -164,10 +198,14 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
+  bool admin_specified;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
-
+  bool found_by_uid; 
+  bool found_by_email;  
+  bool found_by_key;
+ 
   // req parameters
   bool populated;
   bool initialized;
@@ -190,6 +228,7 @@ struct RGWUserAdminOpState {
     gen_access = false;
     key_op = true;
   }
+
   void set_secret_key(std::string& secret_key) {
     if (secret_key.empty())
       return;
@@ -199,19 +238,24 @@ struct RGWUserAdminOpState {
     gen_secret = false;
     key_op = true;
   }
-  void set_user_id(std::string& id) {
+
+  void set_user_id(rgw_user& id) {
     if (id.empty())
       return;
 
     user_id = id;
   }
+
   void set_user_email(std::string& email) {
     if (email.empty())
       return;
 
+    /* always lowercase email address */
+    boost::algorithm::to_lower(email);
     user_email = email;
     user_email_specified = true;
   }
+
   void set_display_name(std::string& name) {
     if (name.empty())
       return;
@@ -219,14 +263,20 @@ struct RGWUserAdminOpState {
     display_name = name;
     display_name_specified = true;
   }
+
   void set_subuser(std::string& _subuser) {
     if (_subuser.empty())
       return;
 
     size_t pos = _subuser.find(":");
-
     if (pos != string::npos) {
-      user_id = _subuser.substr(0, pos);
+      rgw_user tmp_id;
+      tmp_id.from_str(_subuser.substr(0, pos));
+      if (tmp_id.tenant.empty()) {
+        user_id.id = tmp_id.id;
+      } else {
+        user_id = tmp_id;
+      }
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
@@ -234,6 +284,7 @@ struct RGWUserAdminOpState {
 
     subuser_specified = true;
   }
+
   void set_caps(std::string& _caps) {
     if (_caps.empty())
       return;
@@ -241,46 +292,70 @@ struct RGWUserAdminOpState {
     caps = _caps;
     caps_specified = true;
   }
+
   void set_perm(uint32_t perm) {
     perm_mask = perm;
     perm_specified = true;
   }
+
   void set_op_mask(uint32_t mask) {
     op_mask = mask;
     op_mask_specified = true;
   }
+
   void set_temp_url_key(const string& key, int index) {
     temp_url_keys[index] = key;
     temp_url_key_specified = true;
   }
+
   void set_key_type(int32_t type) {
     key_type = type;
     type_specified = true;
   }
+
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
   }
+
+  void set_admin(__u8 is_admin) {
+    admin = is_admin;
+    admin_specified = true;
+  }
+
   void set_system(__u8 is_system) {
     system = is_system;
     system_specified = true;
   }
+
+  void set_exclusive(__u8 is_exclusive) {
+    exclusive = is_exclusive;
+  }
+
+  void set_fetch_stats(__u8 is_fetch_stats) {
+    fetch_stats = is_fetch_stats;
+  }
+
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;
     info = user_info;
   }
-  void set_max_buckets(uint32_t mb) {
+
+  void set_max_buckets(int32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;
   }
+
   void set_gen_access() {
     gen_access = true;
     key_op = true;
   }
+
   void set_gen_secret() {
     gen_secret = true;
     key_op = true;
   }
+
   void set_generate_key() {
     if (id.empty())
       gen_access = true;
@@ -288,10 +363,12 @@ struct RGWUserAdminOpState {
       gen_secret = true;
     key_op = true;
   }
+
   void clear_generate_key() {
     gen_access = false;
     gen_secret = false;
   }
+
   void set_purge_keys() {
     purge_keys = true;
     key_op = true;
@@ -307,65 +384,66 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
-  bool is_populated() { return populated; };
-  bool is_initialized() { return initialized; };
-  bool has_existing_user() { return existing_user; };
-  bool has_existing_key() { return existing_key; };
-  bool has_existing_subuser() { return existing_subuser; };
-  bool has_existing_email() { return existing_email; };
-  bool has_subuser() { return subuser_specified; };
-  bool has_key_op() { return key_op; };
-  bool has_caps_op() { return caps_specified; };
-  bool has_suspension_op() { return suspension_op; };
-  bool has_subuser_perm() { return perm_specified; };
-  bool has_op_mask() { return op_mask_specified; };
-  bool will_gen_access() { return gen_access; };
-  bool will_gen_secret() { return gen_secret; };
-  bool will_gen_subuser() { return gen_subuser; };
-  bool will_purge_keys() { return purge_keys; };
-  bool will_purge_data() { return purge_data; };
-  bool will_generate_subuser() { return gen_subuser; };
+  bool is_populated() { return populated; }
+  bool is_initialized() { return initialized; }
+  bool has_existing_user() { return existing_user; }
+  bool has_existing_key() { return existing_key; }
+  bool has_existing_subuser() { return existing_subuser; }
+  bool has_existing_email() { return existing_email; }
+  bool has_subuser() { return subuser_specified; }
+  bool has_key_op() { return key_op; }
+  bool has_caps_op() { return caps_specified; }
+  bool has_suspension_op() { return suspension_op; }
+  bool has_subuser_perm() { return perm_specified; }
+  bool has_op_mask() { return op_mask_specified; }
+  bool will_gen_access() { return gen_access; }
+  bool will_gen_secret() { return gen_secret; }
+  bool will_gen_subuser() { return gen_subuser; }
+  bool will_purge_keys() { return purge_keys; }
+  bool will_purge_data() { return purge_data; }
+  bool will_generate_subuser() { return gen_subuser; }
   bool has_bucket_quota() { return bucket_quota_specified; }
   bool has_user_quota() { return user_quota_specified; }
-  void set_populated() { populated = true; };
-  void clear_populated() { populated = false; };
-  void set_initialized() { initialized = true; };
-  void set_existing_user(bool flag) { existing_user = flag; };
-  void set_existing_key(bool flag) { existing_key = flag; };
-  void set_existing_subuser(bool flag) { existing_subuser = flag; };
-  void set_existing_email(bool flag) { existing_email = flag; };
-  void set_purge_data(bool flag) { purge_data = flag; };
-  void set_generate_subuser(bool flag) { gen_subuser = flag; };
-  __u8 get_suspension_status() { return suspended; };
-  int32_t get_key_type() {return key_type; };
-  uint32_t get_subuser_perm() { return perm_mask; };
-  uint32_t get_max_buckets() { return max_buckets; };
-  uint32_t get_op_mask() { return op_mask; };
+  void set_populated() { populated = true; }
+  void clear_populated() { populated = false; }
+  void set_initialized() { initialized = true; }
+  void set_existing_user(bool flag) { existing_user = flag; }
+  void set_existing_key(bool flag) { existing_key = flag; }
+  void set_existing_subuser(bool flag) { existing_subuser = flag; }
+  void set_existing_email(bool flag) { existing_email = flag; }
+  void set_purge_data(bool flag) { purge_data = flag; }
+  void set_generate_subuser(bool flag) { gen_subuser = flag; }
+  __u8 get_suspension_status() { return suspended; }
+  int32_t get_key_type() {return key_type; }
+  uint32_t get_subuser_perm() { return perm_mask; }
+  int32_t get_max_buckets() { return max_buckets; }
+  uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
 
-  std::string get_user_id() { return user_id; };
-  std::string get_subuser() { return subuser; };
-  std::string get_access_key() { return id; };
-  std::string get_secret_key() { return key; };
-  std::string get_caps() { return caps; };
-  std::string get_user_email() { return user_email; };
-  std::string get_display_name() { return display_name; };
-  map<int, std::string>& get_temp_url_keys() { return temp_url_keys; };
+  rgw_user& get_user_id() { return user_id; }
+  std::string get_subuser() { return subuser; }
+  std::string get_access_key() { return id; }
+  std::string get_secret_key() { return key; }
+  std::string get_caps() { return caps; }
+  std::string get_user_email() { return user_email; }
+  std::string get_display_name() { return display_name; }
+  map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
 
-  RGWUserInfo&  get_user_info() { return info; };
+  RGWUserInfo&  get_user_info() { return info; }
 
-  map<std::string, RGWAccessKey> *get_swift_keys() { return &info.swift_keys; };
-  map<std::string, RGWAccessKey> *get_access_keys() { return &info.access_keys; };
-  map<std::string, RGWSubUser> *get_subusers() { return &info.subusers; };
+  map<std::string, RGWAccessKey> *get_swift_keys() { return &info.swift_keys; }
+  map<std::string, RGWAccessKey> *get_access_keys() { return &info.access_keys; }
+  map<std::string, RGWSubUser> *get_subusers() { return &info.subusers; }
 
-  RGWUserCaps *get_caps_obj() { return &info.caps; };
+  RGWUserCaps *get_caps_obj() { return &info.caps; }
 
   std::string build_default_swift_kid() {
     if (user_id.empty() || subuser.empty())
       return "";
 
-    std::string kid = user_id;
+    std::string kid;
+    user_id.to_str(kid);
     kid.append(":");
     kid.append(subuser);
 
@@ -376,7 +454,8 @@ struct RGWUserAdminOpState {
     if (user_id.empty())
       return "";
 
-    std::string generated_subuser = user_id;
+    std::string generated_subuser;
+    user_id.to_str(generated_subuser);
     std::string rand_suffix;
 
     int sub_buf_size = RAND_SUBUSER_LEN + 1;
@@ -395,13 +474,16 @@ struct RGWUserAdminOpState {
     return generated_subuser;
   }
 
-  RGWUserAdminOpState() : user_id(RGW_USER_ANON_ID), user_email(""), display_name(""), id(""), key ("")
+  RGWUserAdminOpState() : user_id(RGW_USER_ANON_ID)
   {
     max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     key_type = -1;
-    perm_mask = 0;
+    perm_mask = RGW_PERM_NONE;
     suspended = 0;
+    admin = 0;
     system = 0;
+    exclusive = 0;
+    fetch_stats = 0;
     op_mask = 0;
 
     existing_user = false;
@@ -417,6 +499,7 @@ struct RGWUserAdminOpState {
     id_specified = false;
     key_specified = false;
     type_specified = false;
+    key_type_setbycontext = false;
     purge_data = false;
     display_name_specified = false;
     user_email_specified = false;
@@ -434,6 +517,9 @@ struct RGWUserAdminOpState {
     bucket_quota_specified = false;
     temp_url_key_specified = false;
     user_quota_specified = false;
+    found_by_uid = false;
+    found_by_email = false;
+    found_by_key = false;
   }
 };
 
@@ -444,7 +530,7 @@ class RGWAccessKeyPool
   RGWUser *user;
 
   std::map<std::string, int, ltstr_nocase> key_type_map;
-  std::string user_id;
+  rgw_user user_id;
   RGWRados *store;
 
   map<std::string, RGWAccessKey> *swift_keys;
@@ -465,11 +551,12 @@ private:
   /* API Contract Fulfilment */
   int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
+  int remove_subuser_keys(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
-  RGWAccessKeyPool(RGWUser* usr);
+  explicit RGWAccessKeyPool(RGWUser* usr);
   ~RGWAccessKeyPool();
 
   int init(RGWUserAdminOpState& op_state);
@@ -486,7 +573,7 @@ class RGWSubUserPool
 {
   RGWUser *user;
 
-  string user_id;
+  rgw_user user_id;
   RGWRados *store;
   bool subusers_allowed;
 
@@ -504,7 +591,7 @@ private:
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
-  RGWSubUserPool(RGWUser *user);
+  explicit RGWSubUserPool(RGWUser *user);
   ~RGWSubUserPool();
 
   bool exists(std::string subuser);
@@ -529,7 +616,7 @@ private:
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 
 public:
-  RGWUserCapPool(RGWUser *user);
+  explicit RGWUserCapPool(RGWUser *user);
   ~RGWUserCapPool();
 
   int init(RGWUserAdminOpState& op_state);
@@ -548,12 +635,12 @@ private:
   RGWUserInfo old_info;
   RGWRados *store;
 
-  string user_id;
+  rgw_user user_id;
   bool info_stored;
 
-  void set_populated() { info_stored = true; };
-  void clear_populated() { info_stored = false; };
-  bool is_populated() { return info_stored; };
+  void set_populated() { info_stored = true; }
+  void clear_populated() { info_stored = false; }
+  bool is_populated() { return info_stored; }
 
   int check_op(RGWUserAdminOpState&  req, std::string *err_msg);
   int update(RGWUserAdminOpState& op_state, std::string *err_msg);
@@ -576,7 +663,7 @@ public:
   int init(RGWUserAdminOpState& op_state);
   int init_members(RGWUserAdminOpState& op_state);
 
-  RGWRados *get_store() { return store; };
+  RGWRados *get_store() { return store; }
 
   /* API Contracted Members */
   RGWUserCapPool caps;
@@ -656,6 +743,6 @@ public:
 
 class RGWMetadataManager;
 
-extern void rgw_user_init(RGWMetadataManager *mm);
+extern void rgw_user_init(RGWRados *store);
 
 #endif

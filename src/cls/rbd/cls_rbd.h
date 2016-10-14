@@ -4,7 +4,7 @@
 #define __CEPH_CLS_RBD_H
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "common/Formatter.h"
 #include "librbd/parent_types.h"
 
@@ -63,6 +63,7 @@ struct cls_rbd_snap {
   uint64_t features;
   uint8_t protection_status;
   cls_rbd_parent parent;
+  uint64_t flags;
 
   /// true if we have a parent
   bool has_parent() const {
@@ -70,20 +71,22 @@ struct cls_rbd_snap {
   }
 
   cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0),
-		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED)
+		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED),
+                   flags(0)
     {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
     ::encode(features, bl);
     ::encode(parent, bl);
     ::encode(protection_status, bl);
+    ::encode(flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(3, p);
+    DECODE_START(4, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
@@ -93,6 +96,9 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 3) {
       ::decode(protection_status, p);
+    }
+    if (struct_v >= 4) {
+      ::decode(flags, p);
     }
     DECODE_FINISH(p);
   }
@@ -127,6 +133,7 @@ struct cls_rbd_snap {
     t->name = "snap";
     t->image_size = 123456;
     t->features = 123;
+    t->flags = 31;
     o.push_back(t);
     t = new cls_rbd_snap;
     t->id = 2;
@@ -138,6 +145,7 @@ struct cls_rbd_snap {
     t->parent.snapid = 456;
     t->parent.overlap = 12345;
     t->protection_status = RBD_PROTECTION_STATUS_PROTECTED;
+    t->flags = 14;
     o.push_back(t);
   }
 };

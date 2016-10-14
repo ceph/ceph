@@ -6,10 +6,9 @@
 
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
-#include "os/DBObjectMap.h"
-#include "os/HashIndex.h"
-#include "os/LevelDBStore.h"
+#include "kv/KeyValueDB.h"
+#include "os/filestore/DBObjectMap.h"
+#include "os/filestore/HashIndex.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -533,8 +532,8 @@ public:
 
     string strpath(path);
 
-    cerr << "using path " << strpath << std::endl;;
-    LevelDBStore *store = new LevelDBStore(g_ceph_context, strpath);
+    cerr << "using path " << strpath << std::endl;
+    KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
     assert(!store->create_and_open(cerr));
 
     db.reset(new DBObjectMap(store));
@@ -559,7 +558,7 @@ int main(int argc, char **argv) {
 }
 
 TEST_F(ObjectMapTest, CreateOneObject) {
-  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 100, 0);
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 100, shard_id_t(0));
   map<string, bufferlist> to_set;
   string key("test");
   string val("test_val");
@@ -614,8 +613,8 @@ TEST_F(ObjectMapTest, CreateOneObject) {
 }
 
 TEST_F(ObjectMapTest, CloneOneObject) {
-  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 200, 0);
-  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)), 201, 1);
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 200, shard_id_t(0));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)), 201, shard_id_t(1));
 
   tester.set_key(hoid, "foo", "bar");
   tester.set_key(hoid, "foo2", "bar2");

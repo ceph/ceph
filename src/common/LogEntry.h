@@ -30,15 +30,28 @@ typedef enum {
   CLOG_SEC = 2,
   CLOG_WARN = 3,
   CLOG_ERROR = 4,
+  CLOG_UNKNOWN = -1,
 } clog_type;
+
+static const std::string CLOG_CHANNEL_NONE    = "none";
+static const std::string CLOG_CHANNEL_DEFAULT = "cluster";
+static const std::string CLOG_CHANNEL_CLUSTER = "cluster";
+static const std::string CLOG_CHANNEL_AUDIT   = "audit";
+
+// this is the key name used in the config options for the default, e.g.
+//   default=true foo=false bar=false
+static const std::string CLOG_CONFIG_DEFAULT_KEY = "default";
 
 /*
  * Given a clog log_type, return the equivalent syslog priority
  */
 int clog_type_to_syslog_level(clog_type t);
 
+clog_type string_to_clog_type(const string& s);
 int string_to_syslog_level(string s);
 int string_to_syslog_facility(string s);
+
+string clog_type_to_string(clog_type t);
 
 
 struct LogEntryKey {
@@ -49,12 +62,12 @@ struct LogEntryKey {
   LogEntryKey() : seq(0) {}
   LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
 };
-WRITE_CLASS_ENCODER(LogEntryKey)
+WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
 static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
   return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
@@ -64,19 +77,22 @@ struct LogEntry {
   entity_inst_t who;
   utime_t stamp;
   uint64_t seq;
-  clog_type type;
+  clog_type prio;
   string msg;
+  string channel;
+
+  LogEntry() : seq(0), prio(CLOG_DEBUG) {}
 
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
 
   void log_to_syslog(string level, string facility);
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
 };
-WRITE_CLASS_ENCODER(LogEntry)
+WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 
 struct LogSummary {
   version_t version;
@@ -98,12 +114,12 @@ struct LogSummary {
     return false;
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogSummary*>& o);
 };
-WRITE_CLASS_ENCODER(LogSummary)
+WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 
 inline ostream& operator<<(ostream& out, clog_type t)
 {
@@ -112,12 +128,12 @@ inline ostream& operator<<(ostream& out, clog_type t)
     return out << "[DBG]";
   case CLOG_INFO:
     return out << "[INF]";
+  case CLOG_SEC:
+    return out << "[SEC]";
   case CLOG_WARN:
     return out << "[WRN]";
   case CLOG_ERROR:
     return out << "[ERR]";
-  case CLOG_SEC:
-    return out << "[SEC]";
   default:
     return out << "[???]";
   }
@@ -125,7 +141,8 @@ inline ostream& operator<<(ostream& out, clog_type t)
 
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.who << " " << e.seq << " : " << e.type << " " << e.msg;
+  return out << e.stamp << " " << e.who << " " << e.seq << " : "
+             << e.channel << " " << e.prio << " " << e.msg;
 }
 
 #endif

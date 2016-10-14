@@ -43,7 +43,7 @@ In the ceph source directory, checkout next branch (for point releases use the {
 
 Checkout the submodules::
 
-    git submodule update --init
+    git submodule update --force --init --recursive
 
 4.  Update Build version numbers
 ================================
@@ -117,7 +117,7 @@ The key-id used below is the id of the ceph release key from step 2::
 Next add any addition debian packages that are needed such as leveldb and
 ceph-deploy.  See the Debian Backports section below.
 
-Debian packages are signed when added to the repo, so no furthur action is
+Debian packages are signed when added to the repo, so no further action is
 needed.
 
 

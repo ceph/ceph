@@ -22,6 +22,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sstream>
 #include <string>
 
@@ -64,6 +65,7 @@ StRadosCreatePool::
 int StRadosCreatePool::
 run()
 {
+  int ret_val = 0;
   rados_t cl;
   RETURN1_IF_NONZERO(rados_create(&cl, NULL));
   rados_conf_parse_argv(cl, m_argc, m_argv);
@@ -92,13 +94,17 @@ run()
     std::string buf(get_random_buf(256));
     int ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
     if (ret != 0) {
-      printf("%s: rados_write error %d\n", get_id_str(), ret);
-      return ret;
+      printf("%s: rados_write(%s) failed with error: %d\n",
+	     get_id_str(), oid, ret);
+      ret_val = ret;
+      goto out;
     }
     if (((i % 25) == 0) || (i == m_num_objects - 1)) {
       printf("%s: created object %d...\n", get_id_str(), i);
     }
   }
+
+out:
   printf("%s: finishing.\n", get_id_str());
   if (m_pool_setup_sem)
     m_pool_setup_sem->post();
@@ -106,5 +112,20 @@ run()
     m_close_create_pool->wait();
   rados_ioctx_destroy(io_ctx);
   rados_shutdown(cl);
-  return 0;
+  return ret_val;
+}
+
+std::string get_temp_pool_name(const char* prefix)
+{
+  assert(prefix);
+  char hostname[80];
+  int ret = 0;
+  ret = gethostname(hostname, sizeof(hostname));
+  assert(!ret);
+  char poolname[256];
+  ret = snprintf(poolname, sizeof(poolname),
+                 "%s.%s-%d", prefix, hostname, getpid());
+  assert(ret > 0);
+  assert((unsigned int)ret < sizeof(poolname));
+  return poolname;
 }

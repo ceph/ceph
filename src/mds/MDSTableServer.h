@@ -28,37 +28,23 @@ public:
 private:
   void handle_prepare(MMDSTableRequest *m);
   void _prepare_logged(MMDSTableRequest *m, version_t tid);
-  struct C_Prepare : public Context {
-    MDSTableServer *server;
-    MMDSTableRequest *req;
-    version_t tid;
-    C_Prepare(MDSTableServer *s, MMDSTableRequest *r, version_t v) : server(s), req(r), tid(v) {}
-    void finish(int r) {
-      server->_prepare_logged(req, tid);
-    }
-  };
+  friend class C_Prepare;
 
   void handle_commit(MMDSTableRequest *m);
   void _commit_logged(MMDSTableRequest *m);
-  struct C_Commit : public Context {
-    MDSTableServer *server;
-    MMDSTableRequest *req;
-    C_Commit(MDSTableServer *s, MMDSTableRequest *r) : server(s), req(r) {}
-    void finish(int r) {
-      server->_commit_logged(req);
-    }
-  };
+  friend class C_Commit;
+
 
   void handle_rollback(MMDSTableRequest *m);
 
  public:
   virtual void handle_query(MMDSTableRequest *m) = 0;
-  virtual void _prepare(bufferlist &bl, uint64_t reqid, int bymds) = 0;
+  virtual void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) = 0;
   virtual bool _commit(version_t tid, MMDSTableRequest *req=NULL) = 0;
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { assert(0); }
 
-  void _note_prepare(int mds, uint64_t reqid) {
+  void _note_prepare(mds_rank_t mds, uint64_t reqid) {
     pending_for_mds[version].mds = mds;
     pending_for_mds[version].reqid = reqid;
     pending_for_mds[version].tid = version;
@@ -71,7 +57,7 @@ private:
   }
   
 
-  MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
+  MDSTableServer(MDSRank *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
   virtual ~MDSTableServer() {}
 
   void handle_request(MMDSTableRequest *m);
@@ -90,8 +76,8 @@ private:
   }
 
   // recovery
-  void finish_recovery(set<int>& active);
-  void handle_mds_recovery(int who);
+  void finish_recovery(set<mds_rank_t>& active);
+  void handle_mds_recovery(mds_rank_t who);
 };
 
 #endif

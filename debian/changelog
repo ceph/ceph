@@ -1,3 +1,195 @@
+ceph (11.0.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Sage Weil <sage@newdream.net>  Tue, 28 Jun 2016 11:41:16 -0400
+
+ceph (10.2.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Wed, 20 Apr 2016 11:29:47 +0000
+
+ceph (10.1.2-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 12 Apr 2016 17:42:55 +0000
+
+ceph (10.1.1-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Wed, 06 Apr 2016 00:45:18 +0000
+
+ceph (10.1.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Thu, 24 Mar 2016 10:53:47 +0000
+
+ceph (10.0.5) stable; urgency=low
+
+  * New upstream release (just fixing changelog)
+
+ -- Sage Weil <sage@newdream.net>  Fri, 11 Mar 2016 12:04:26 -0500
+
+ceph (10.0.4) stable; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Thu, 03 Mar 2016 13:34:18 -0500
+
+ceph (10.0.3) stable; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Mon, 08 Feb 2016 17:10:25 -0500
+
+ceph (10.0.2-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Wed, 13 Jan 2016 16:22:26 +0000
+
+ceph (10.0.1-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 14 Dec 2015 23:48:54 +0000
+
+ceph (10.0.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 16 Nov 2015 21:41:53 +0000
+
+ceph (9.2.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Jenkins Build Slave User <jenkins-build@jenkins-slave-wheezy.localdomain>  Tue, 03 Nov 2015 16:58:32 +0000
+
+ceph (9.1.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 13 Oct 2015 05:56:36 -0700
+
+ceph (9.0.3-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Fri, 21 Aug 2015 12:46:31 -0700
+
+ceph (9.0.2-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 14 Jul 2015 13:10:31 -0700
+
+ceph (9.0.1-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Fri, 05 Jun 2015 10:59:02 -0700
+
+ceph (9.0.0-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 04 May 2015 12:32:58 -0700
+
+ceph (0.94-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 07 Apr 2015 10:05:40 -0700
+
+ceph (0.93-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Fri, 27 Feb 2015 09:52:53 -0800
+
+ceph (0.92-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Mon, 02 Feb 2015 10:35:27 -0800
+
+ceph (0.91-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 13 Jan 2015 12:10:22 -0800
+
+ceph (0.90-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Fri, 19 Dec 2014 06:56:22 -0800
+
+ceph (0.89-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Wed, 03 Dec 2014 08:18:33 -0800
+
+ceph (0.88-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <adeza@redhat.com>  Tue, 11 Nov 2014 09:33:12 -0800
+
+ceph (0.87-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Wed, 29 Oct 2014 11:03:55 -0700
+
+ceph (0.86-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Tue, 07 Oct 2014 06:20:21 -0700
+
+ceph (0.85-1) stable; urgency=low
+
+  * Development release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Mon, 08 Sep 2014 06:31:31 -0700
+
+ceph (0.84-1) stable; urgency=low
+
+  * Development release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Mon, 18 Aug 2014 09:02:20 -0700
+
+ceph (0.83-1) stable; urgency=low
+
+  * Development release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Tue, 29 Jul 2014 13:42:53 -0700
+
+ceph (0.82-1) stable; urgency=low
+
+  * Development release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Wed, 25 Jun 2014 16:47:51 +0000
+
+ceph (0.81-1) stable; urgency=low
+
+  * Development release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Mon, 02 Jun 2014 18:37:27 +0000
+
+ceph (0.80-1) stable; urgency=low
+
+  * New upsream release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Tue, 06 May 2014 14:03:27 +0000
+
 ceph (0.80-rc1-1) stable; urgency=low
 
   * New upsream release

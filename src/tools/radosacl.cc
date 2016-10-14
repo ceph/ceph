@@ -12,15 +12,14 @@
  * 
  */
 
-#include "include/types.h"
-#include "include/rados/librados.hpp"
-using namespace librados;
-
-#include <iostream>
-
 #include <stdlib.h>
 #include <time.h>
 #include <errno.h>
+
+#include "include/types.h"
+#include "include/rados/librados.hpp"
+
+using namespace librados;
 
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
@@ -53,7 +52,7 @@ typedef __u32 ACLFlags;
 
 inline bool operator<(const ACLID& l, const ACLID& r)
 {
-  return (memcmp(&l, &r, ID_SIZE) > 0);
+  return (memcmp(&l, &r, ID_SIZE) < 0);
 }
 
 struct ACLPair {
@@ -176,26 +175,6 @@ int main(int argc, const char **argv)
   int size = io_ctx.read(oid, bl2, 128, 0);
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
-
-#if 0
-  Rados::ListCtx ctx;
-  int entries;
-  do {
-    list<object_t> vec;
-    r = rados.list(io_ctx, 2, vec, ctx);
-    entries = vec.size();
-    cout << "list result=" << r << " entries=" << entries << std::endl;
-    list<object_t>::iterator iter;
-    for (iter = vec.begin(); iter != vec.end(); ++iter) {
-      cout << *iter << std::endl;
-    }
-  } while (entries);
-#endif
-#if 0
-  r = rados.remove(io_ctx, oid);
-  cout << "remove result=" << r << std::endl;
-  rados.close_io_ctx(io_ctx);
-#endif
 
   return 0;
 }

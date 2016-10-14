@@ -127,9 +127,9 @@ struct cls_lock_get_info_reply
 
   cls_lock_get_info_reply() : lock_type(LOCK_NONE) {}
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(lockers, bl);
+    ::encode(lockers, bl, features);
     uint8_t t = (uint8_t)lock_type;
     ::encode(t, bl);
     ::encode(tag, bl);
@@ -147,7 +147,7 @@ struct cls_lock_get_info_reply
   void dump(Formatter *f) const;
   static void generate_test_instances(list<cls_lock_get_info_reply*>& o);
 };
-WRITE_CLASS_ENCODER(cls_lock_get_info_reply)
+WRITE_CLASS_ENCODER_FEATURES(cls_lock_get_info_reply)
 
 struct cls_lock_list_locks_reply
 {
@@ -169,5 +169,74 @@ struct cls_lock_list_locks_reply
   static void generate_test_instances(list<cls_lock_list_locks_reply*>& o);
 };
 WRITE_CLASS_ENCODER(cls_lock_list_locks_reply)
+
+struct cls_lock_assert_op
+{
+  string name;
+  ClsLockType type;
+  string cookie;
+  string tag;
+
+  cls_lock_assert_op() : type(LOCK_NONE) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    uint8_t t = (uint8_t)type;
+    ::encode(t, bl);
+    ::encode(cookie, bl);
+    ::encode(tag, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+    ::decode(name, bl);
+    uint8_t t;
+    ::decode(t, bl);
+    type = (ClsLockType)t;
+    ::decode(cookie, bl);
+    ::decode(tag, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_lock_assert_op*>& o);
+};
+WRITE_CLASS_ENCODER(cls_lock_assert_op)
+
+struct cls_lock_set_cookie_op
+{
+  string name;
+  ClsLockType type;
+  string cookie;
+  string tag;
+  string new_cookie;
+
+  cls_lock_set_cookie_op() : type(LOCK_NONE) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    uint8_t t = (uint8_t)type;
+    ::encode(t, bl);
+    ::encode(cookie, bl);
+    ::encode(tag, bl);
+    ::encode(new_cookie, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+    ::decode(name, bl);
+    uint8_t t;
+    ::decode(t, bl);
+    type = (ClsLockType)t;
+    ::decode(cookie, bl);
+    ::decode(tag, bl);
+    ::decode(new_cookie, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_lock_set_cookie_op*>& o);
+};
+WRITE_CLASS_ENCODER(cls_lock_set_cookie_op)
 
 #endif

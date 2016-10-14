@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -15,27 +16,25 @@
 # GNU Library Public License for more details.
 #
 
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
-export CEPH_DIR="$PWD/"
-export CEPH_DEV_DIR="$CEPH_DIR/test_dev"
-export CEPH_OUT_DIR="$CEPH_DIR/test_out"
-
-function vstart_teardown()
-{
-    ./stop.sh
-}
+export CEPH_VSTART_WRAPPER=1
+export CEPH_DIR="${TMPDIR:-$PWD}/testdir/test-$CEPH_PORT"
+export CEPH_DEV_DIR="$CEPH_DIR/dev"
+export CEPH_OUT_DIR="$CEPH_DIR/out"
 
 function vstart_setup()
 {
     rm -fr $CEPH_DEV_DIR $CEPH_OUT_DIR
     mkdir -p $CEPH_DEV_DIR
-    trap "vstart_teardown ; rm -f $TMPFILE" EXIT
+    trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
-    MON=1 OSD=3 ./vstart.sh \
+    export PATH="$(pwd):${PATH}"
+    $CEPH_ROOT/src/vstart.sh \
+        --short \
         -o 'paxos propose interval = 0.01' \
-        -n -X -l mon osd || return 1
-    export PATH=.:$PATH
-    export CEPH_CONF=ceph.conf
+        -n -l $CEPH_START || return 1
+    export CEPH_CONF=$CEPH_DIR/ceph.conf
 
     crit=$(expr 100 - $(ceph-conf --show-config-value mon_data_avail_crit))
     if [ $(df . | perl -ne 'print if(s/.*\s(\d+)%.*/\1/)') -ge $crit ] ; then
@@ -54,13 +53,9 @@ EOF
 
 function main()
 {
-    if [[ $(pwd) =~ /src$ ]] && [ -d .libs ] && [ -d pybind ] ; then
-        vstart_setup || return 1
-    else
-        trap "rm -f $TMPFILE" EXIT
-    fi
-    
-    "$@" || return 1
+    teardown $CEPH_DIR
+    vstart_setup || return 1
+    CEPH_CONF=$CEPH_DIR/ceph.conf "$@" || return 1
 }
 
 main "$@"

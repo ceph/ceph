@@ -15,6 +15,9 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
+#if defined(__linux__)
+#include <features.h>
+#endif
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -22,23 +25,26 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <fcntl.h>
 
-// FreeBSD compatibility
-#ifdef __FreeBSD__
-typedef off_t loff_t;
-typedef off_t off64_t;
-#endif
+#include "ceph_statx.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_EXTRA 2
+
+#define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
+#define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
+
 /*
- * On FreeBSD and Apple the offset is 64 bit, but libc doesn't announce it in
- * the way glibc does.
+ * If using glibc check that file offset is 64-bit.
  */
-#if !defined(__FreeBSD__) && !defined(__APPLE__) && !defined(__USE_FILE_OFFSET64)
-# error libceph: must define __USE_FILE_OFFSET64 or readdir results will be corrupted
+#if defined(__GLIBC__) && !defined(__USE_FILE_OFFSET64)
+# error libceph: glibc must define __USE_FILE_OFFSET64 or readdir results will be corrupted
 #endif
 
 /*
@@ -69,7 +75,7 @@ struct ceph_file_layout {
 } __attribute__ ((packed));
 
 
-typedef struct _inodeno_t {
+typedef struct inodeno_t {
   uint64_t val;
 } inodeno_t;
 
@@ -83,29 +89,37 @@ typedef struct vinodeno_t {
 } vinodeno_t;
 
 typedef struct Fh Fh;
+#else /* _cplusplus */
+
+struct inodeno_t;
+struct vinodeno_t;
+typedef struct vinodeno_t vinodeno;
 
 #endif /* ! __cplusplus */
 
-struct inodeno_t;
 struct Inode;
 typedef struct Inode Inode;
 
-struct vinodeno_t;
-typedef struct vinodeno_t vinodeno;
 struct ceph_mount_info;
 struct ceph_dir_result;
 struct CephContext;
 
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
-# define CEPH_SETATTR_MODE   1
-# define CEPH_SETATTR_UID    2
-# define CEPH_SETATTR_GID    4
-# define CEPH_SETATTR_MTIME  8
-# define CEPH_SETATTR_ATIME 16
-# define CEPH_SETATTR_SIZE  32
-# define CEPH_SETATTR_CTIME 64
+# define CEPH_SETATTR_MODE	1
+# define CEPH_SETATTR_UID	2
+# define CEPH_SETATTR_GID	4
+# define CEPH_SETATTR_MTIME	8
+# define CEPH_SETATTR_ATIME	16
+# define CEPH_SETATTR_SIZE	32
+# define CEPH_SETATTR_CTIME	64
+# define CEPH_SETATTR_BTIME	512
 #endif
+
+/* define error codes for the mount function*/
+# define CEPHFS_ERROR_MON_MAP_BUILD 1000
+# define CEPHFS_ERROR_NEW_CLIENT 1002
+# define CEPHFS_ERROR_MESSENGER_START 1003
 
 /**
  * @defgroup libcephfs_h_init Setup and Teardown
@@ -122,7 +136,7 @@ struct CephContext;
  *
  * @param major where to store the major version number
  * @param minor where to store the minor version number
- * @param extra where to store the extra version number
+ * @param patch where to store the extra version number
  */
 const char *ceph_version(int *major, int *minor, int *patch);
 
@@ -150,8 +164,32 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
  */
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
 
+
+typedef void *rados_t;
+
+/**
+ * Create a mount handle from a rados_t, for using libcephfs in the
+ * same process as librados.
+ *
+ * @param cmount the mount info handle to initialize
+ * @param cluster reference to already-initialized librados handle
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_create_from_rados(struct ceph_mount_info **cmount, rados_t cluster);
+
+/**
+ * Initialize the filesystem client (but do not mount the filesystem yet)
+ *
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_init(struct ceph_mount_info *cmount);
+
+
 /**
  * Perform a mount using the path for the root of the mount.
+ *
+ * It is optional to call ceph_init before this.  If ceph_init has
+ * not already been called, it will be called in the course of this operation.
  *
  * @param cmount the mount info handle
  * @param root the path for the root of the mount.  This can be an existing
@@ -160,6 +198,38 @@ int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext
  * @returns 0 on success, negative error code on failure
  */
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
+
+
+/**
+ * Execute a management command remotely on an MDS.
+ *
+ * Must have called ceph_init or ceph_mount before calling this.
+ *
+ * @param mds_spec string representing rank, MDS name, GID or '*'
+ * @param cmd array of null-terminated strings
+ * @param cmdlen length of cmd array
+ * @param inbuf non-null-terminated input data to command
+ * @param inbuflen length in octets of inbuf
+ * @param outbuf populated with pointer to buffer (command output data)
+ * @param outbuflen length of allocated outbuf
+ * @param outs populated with pointer to buffer (command error strings)
+ * @param outslen length of allocated outs
+ *
+ * @return 0 on success, negative error code on failure
+ *
+ */
+int ceph_mds_command(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    char **outbuf, size_t *outbuflen,
+    char **outs, size_t *outslen);
+
+/**
+ * Free a buffer, such as those used for output arrays from ceph_mds_command
+ */
+void ceph_buffer_free(char *buf);
 
 /**
  * Unmount a mount handle.
@@ -315,7 +385,7 @@ const char* ceph_getcwd(struct ceph_mount_info *cmount);
  * @param path the path to the working directory to change into.
  * @returns 0 on success, negative error code otherwise.
  */
-int ceph_chdir(struct ceph_mount_info *cmount, const char *s);
+int ceph_chdir(struct ceph_mount_info *cmount, const char *path);
 
 /** @} fsops */
 
@@ -496,7 +566,7 @@ int ceph_link(struct ceph_mount_info *cmount, const char *existing, const char *
  *
  * @param cmount the ceph mount handle to use for creating the link.
  * @param path the path to the symlink to read
- * @param buf the buffer to hold the the path of the file that the symlink points to.
+ * @param buf the buffer to hold the path of the file that the symlink points to.
  * @param size the length of the buffer
  * @returns number of bytes copied on success or negative error code on failure
  */
@@ -552,6 +622,19 @@ int ceph_rename(struct ceph_mount_info *cmount, const char *from, const char *to
 int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
 
 /**
+ * Get a file's extended statistics and attributes.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param path the file or directory to get the statistics of.
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_statx(struct ceph_mount_info *cmount, const char *path, struct ceph_statx *stx,
+	       unsigned int want, unsigned int flags);
+
+/**
  * Get a file's statistics and attributes, without following symlinks.
  *
  * @param cmount the ceph mount handle to use for performing the stat.
@@ -567,10 +650,22 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
  * @param cmount the ceph mount handle to use for performing the setattr.
  * @param relpath the path to the file/directory to set the attributes of.
  * @param attr the stat struct that must include attribute values to set on the file.
- * @param mask a mask of all the stat values that have been set on the stat struct.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the stat struct.
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
+
+/**
+ * Set a file's attributes (extended version).
+ *
+ * @param cmount the ceph mount handle to use for performing the setattr.
+ * @param relpath the path to the file/directory to set the attributes of.
+ * @param stx the statx struct that must include attribute values to set on the file.
+ * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
+ * @param flags mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath, struct ceph_statx *stx, int mask, int flags);
 
 /**
  * Change the mode bits (permissions) of a file/directory.
@@ -607,7 +702,7 @@ int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gi
  * Change the ownership of a file from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use for performing the chown.
- * @param path the path of the file/directory to change the ownership of.
+ * @param fd the fd of the open file/directory to change the ownership of.
  * @param uid the user id to set on the file/directory.
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
@@ -634,6 +729,21 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_utime(struct ceph_mount_info *cmount, const char *path, struct utimbuf *buf);
+
+/**
+ * Apply or remove an advisory lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to change advisory lock.
+ * @param operation the advisory lock operation to be performed on the file
+ * descriptor among LOCK_SH (shared lock), LOCK_EX (exclusive lock),
+ * or LOCK_UN (remove lock). The LOCK_NB value can be ORed to perform a
+ * non-blocking operation.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
+	       uint64_t owner);
 
 /**
  * Truncate the file to the given size.  If this operation causes the
@@ -709,8 +819,8 @@ int ceph_close(struct ceph_mount_info *cmount, int fd);
  * @param offset the offset to set the stream to
  * @param whence the flag to indicate what type of seeking to perform:
  *	SEEK_SET: the offset is set to the given offset in the file.
- *      SEEK_CUR: the offset is set to the current location plus @ref offset bytes.
- *      SEEK_END: the offset is set to the end of the file plus @ref offset bytes.
+ *      SEEK_CUR: the offset is set to the current location plus @e offset bytes.
+ *      SEEK_END: the offset is set to the end of the file plus @e offset bytes.
  * @returns 0 on success or a negative error code on failure.
  */
 int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd, int64_t offset, int whence);
@@ -720,12 +830,25 @@ int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd, int64_t offset, int w
  * @param cmount the ceph mount handle to use for performing the read.
  * @param fd the file descriptor of the open file to read from.
  * @param buf the buffer to read data into
- * @param the initial size of the buffer
+ * @param size the initial size of the buffer
  * @param offset the offset in the file to read from.  If this value is negative, the
  *        function reads from the current offset of the file descriptor.
  * @returns the number of bytes read into buf, or a negative error code on failure.
  */
 int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset);
+
+/**
+ * Read data from the file.
+ * @param cmount the ceph mount handle to use for performing the read.
+ * @param fd the file descriptor of the open file to read from.
+ * @param iov the iov structure to read data into
+ * @param iovcnt the number of items that iov includes
+ * @param offset the offset in the file to read from.  If this value is negative, the
+ *        function reads from the current offset of the file descriptor.
+ * @returns the number of bytes read into buf, or a negative error code on failure.
+ */
+int ceph_preadv(struct ceph_mount_info *cmount, int fd, const struct iovec *iov, int iovcnt,
+           int64_t offset);
 
 /**
  * Write data to a file.
@@ -740,6 +863,20 @@ int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf, int64_t size, i
  */
 int ceph_write(struct ceph_mount_info *cmount, int fd, const char *buf, int64_t size,
 	       int64_t offset);
+
+/**
+ * Write data to a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the write.
+ * @param fd the file descriptor of the open file to write to
+ * @param iov the iov structure to read data into
+ * @param iovcnt the number of items that iov includes
+ * @param offset the offset of the file write into.  If this value is negative, the
+ *        function writes to the current offset of the file descriptor.
+ * @returns the number of bytes written, or a negative error code
+ */
+int ceph_pwritev(struct ceph_mount_info *cmount, int fd, const struct iovec *iov, int iovcnt,
+           int64_t offset);
 
 /**
  * Truncate a file to the given size.
@@ -791,6 +928,19 @@ int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
  */
 int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
 
+/**
+ * Get an open file's extended statistics and attributes.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param fd the file descriptor of the file to get statistics of.
+ * @param stx the ceph_statx struct that will be filled in with the file's statistics.
+ * @param want bitfield of CEPH_STATX_* flags showing designed attributes
+ * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
+		unsigned int want, unsigned int flags);
+
 /** @} file */
 
 /**
@@ -811,6 +961,19 @@ int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
  * @returns the size of the value or a negative error code on failure.
  */
 int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	void *value, size_t size);
+
+/**
+ * Get an extended attribute.
+ *
+ * @param cmount the ceph mount handle to use for performing the getxattr.
+ * @param fd the open file descriptor referring to the file to get extended attribute from.
+ * @param name the name of the extended attribute to get
+ * @param value a pre-allocated buffer to hold the xattr's value
+ * @param size the size of the pre-allocated buffer
+ * @returns the size of the value or a negative error code on failure.
+ */
+int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name,
 	void *value, size_t size);
 
 /**
@@ -841,6 +1004,17 @@ int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char 
 int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size);
 
 /**
+ * List the extended attribute keys on a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the listxattr.
+ * @param fd the open file descriptor referring to the file to list extended attributes on.
+ * @param list a buffer to be filled in with the list of extended attributes keys.
+ * @param size the size of the list buffer.
+ * @returns the size of the resulting list filled in.
+ */
+int ceph_flistxattr(struct ceph_mount_info *cmount, int fd, char *list, size_t size);
+
+/**
  * Get the list of extended attribute keys on a file, but do not follow symbolic links.
  *
  * @param cmount the ceph mount handle to use for performing the llistxattr.
@@ -860,6 +1034,16 @@ int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name);
+
+/**
+ * Remove an extended attribute from a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the removexattr.
+ * @param fd the open file descriptor referring to the file to remove extended attribute from.
+ * @param name the name of the extended attribute to remove.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_fremovexattr(struct ceph_mount_info *cmount, int fd, const char *name);
 
 /**
  * Remove the extended attribute from a file, do not follow symbolic links.
@@ -885,6 +1069,22 @@ int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const ch
  * @returns 0 on success or a negative error code on failure.
  */
 int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, 
+	const void *value, size_t size, int flags);
+
+/**
+ * Set an extended attribute on a file.
+ *
+ * @param cmount the ceph mount handle to use for performing the setxattr.
+ * @param fd the open file descriptor referring to the file to set extended attribute on.
+ * @param name the name of the extended attribute to set.
+ * @param value the bytes of the extended attribute value
+ * @param size the size of the extended attribute value
+ * @param flags the flags can be:
+ *	CEPH_XATTR_CREATE: create the extended attribute.  Must not exist.
+ *      CEPH_XATTR_REPLACE: replace the extended attribute, Must already exist.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char *name,
 	const void *value, size_t size, int flags);
 
 /**
@@ -1096,7 +1296,7 @@ int ceph_get_pool_replication(struct ceph_mount_info *cmount, int pool_id);
  *	anywhere within the stripe unit.
  * @param addr the address of the OSD holding that stripe
  * @param naddr the capacity of the address passed in.
- * @returns the size of the addressed filled into the @ref addr parameter, or a negative
+ * @returns the size of the addressed filled into the @e addr parameter, or a negative
  *	error code on failure.
  */
 int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, int64_t offset,
@@ -1115,7 +1315,7 @@ int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, int64_t
  * @returns the number of items stored in the output array, or -ERANGE if the
  * array is not large enough.
  */
-int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
+int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fd,
                               int64_t offset, int64_t *length, int *osds, int nosds);
 
 /**
@@ -1200,7 +1400,7 @@ int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd);
  * Get the capabilities currently issued to the client.
  *
  * @param cmount the ceph mount handle to use.
- * @param the path to the file
+ * @param path the path to the file
  * @returns the current capabilities issued to this client
  *       for the file
  */
@@ -1234,12 +1434,17 @@ int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 		 struct stat *attr);
 int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *attr, int uid, int gid);
+int ceph_ll_getattrx(struct ceph_mount_info *cmount, struct Inode *in,
+		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
+		    int uid, int gid);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
+int ceph_ll_setattrx(struct ceph_mount_info *cmount, struct Inode *in,
+		    struct ceph_statx *stx, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
 		 struct Fh **fh, int uid, int gid);
-loff_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
-		     loff_t offset, int whence);
+off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
+		     off_t offset, int whence);
 int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		 int64_t off, uint64_t len, char* buf);
 int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
@@ -1278,6 +1483,10 @@ int ceph_ll_create(struct ceph_mount_info *cmount, struct Inode *parent,
 		   const char *name, mode_t mode, int flags,
 		   struct stat *attr, struct Inode **out, Fh **fhp,
 		   int uid, int gid);
+int ceph_ll_mknod(struct ceph_mount_info *cmount, struct Inode *parent,
+		  const char *name, mode_t mode, dev_t rdev,
+		  struct stat *attr, struct Inode **out,
+		  int uid, int gid);
 int ceph_ll_mkdir(struct ceph_mount_info *cmount, struct Inode *parent,
 		  const char *name, mode_t mode, struct stat *attr,
 		  Inode **out, int uid, int gid);
@@ -1332,6 +1541,11 @@ int ceph_ll_write_block(struct ceph_mount_info *cmount,
 int ceph_ll_commit_blocks(struct ceph_mount_info *cmount,
 			  struct Inode *in, uint64_t offset, uint64_t range);
 
+
+int ceph_ll_getlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner);
+int ceph_ll_setlk(struct ceph_mount_info *cmount,
+		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
 #ifdef __cplusplus
 }

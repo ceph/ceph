@@ -15,13 +15,12 @@
 #ifndef CEPH_MLOGACK_H
 #define CEPH_MLOGACK_H
 
-#include <uuid/uuid.h>
-
 class MLogAck : public Message {
 public:
   uuid_d fsid;
   version_t last;
-  
+  std::string channel;
+
   MLogAck() : Message(MSG_LOGACK) {}
   MLogAck(uuid_d& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
 private:
@@ -36,11 +35,14 @@ public:
   void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(last, payload);
+    ::encode(channel, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(last, p);
+    if (!p.end())
+      ::decode(channel, p);
   }
 };
 

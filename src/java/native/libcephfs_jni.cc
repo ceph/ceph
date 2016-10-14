@@ -54,13 +54,14 @@
  * keeping the values in Java and making a cross-JNI up-call to retrieve them,
  * and makes it easy to keep any platform specific value changes in this file.
  */
-#define JAVA_O_RDONLY 1
-#define JAVA_O_RDWR   2
-#define JAVA_O_APPEND 4
-#define JAVA_O_CREAT  8
-#define JAVA_O_TRUNC  16
-#define JAVA_O_EXCL   32
-#define JAVA_O_WRONLY 64
+#define JAVA_O_RDONLY    1
+#define JAVA_O_RDWR      2
+#define JAVA_O_APPEND    4
+#define JAVA_O_CREAT     8
+#define JAVA_O_TRUNC     16
+#define JAVA_O_EXCL      32
+#define JAVA_O_WRONLY    64
+#define JAVA_O_DIRECTORY 128
 
 /*
  * Whence flags for seek(). sync with CephMount.java if changed.
@@ -87,6 +88,14 @@
 #define JAVA_XATTR_REPLACE  2
 #define JAVA_XATTR_NONE     3
 
+/*
+ * flock flags. sync with CephMount.java if changed.
+ */
+#define JAVA_LOCK_SH 1
+#define JAVA_LOCK_EX 2
+#define JAVA_LOCK_NB 4
+#define JAVA_LOCK_UN 8
+
 /* Map JAVA_O_* open flags to values in libc */
 static inline int fixup_open_flags(jint jflags)
 {
@@ -103,6 +112,7 @@ static inline int fixup_open_flags(jint jflags)
 	FIXUP_OPEN_FLAG(O_TRUNC)
 	FIXUP_OPEN_FLAG(O_EXCL)
 	FIXUP_OPEN_FLAG(O_WRONLY)
+	FIXUP_OPEN_FLAG(O_DIRECTORY)
 
 #undef FIXUP_OPEN_FLAG
 
@@ -1655,10 +1665,10 @@ JNIEXPORT jlong JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1read
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: read: fd " << (int)j_fd << " len " << (int)j_size <<
-		" offset " << (int)j_offset << dendl;
+	ldout(cct, 10) << "jni: read: fd " << (int)j_fd << " len " << (long)j_size <<
+		" offset " << (long)j_offset << dendl;
 
-	ret = ceph_read(cmount, (int)j_fd, (char*)c_buf, (int)j_size, (int)j_offset);
+	ret = ceph_read(cmount, (int)j_fd, (char*)c_buf, (long)j_size, (long)j_offset);
 
 	ldout(cct, 10) << "jni: read: exit ret " << ret << dendl;
 
@@ -1697,10 +1707,10 @@ JNIEXPORT jlong JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1write
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: write: fd " << (int)j_fd << " len " << (int)j_size <<
-		" offset " << (int)j_offset << dendl;
+	ldout(cct, 10) << "jni: write: fd " << (int)j_fd << " len " << (long)j_size <<
+		" offset " << (long)j_offset << dendl;
 
-	ret = ceph_write(cmount, (int)j_fd, (char*)c_buf, (int)j_size, (int)j_offset);
+	ret = ceph_write(cmount, (int)j_fd, (char*)c_buf, (long)j_size, (long)j_offset);
 
 	ldout(cct, 10) << "jni: write: exit ret " << ret << dendl;
 
@@ -1767,6 +1777,49 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fsync
 
 /*
  * Class:     com_ceph_fs_CephMount
+ * Method:    native_ceph_flock
+ * Signature: (JIZ)I
+ */
+JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1flock
+	(JNIEnv *env, jclass clz, jlong j_mntp, jint j_fd, jint j_operation, jlong j_owner)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	int ret;
+
+	ldout(cct, 10) << "jni: flock: fd " << (int)j_fd <<
+		" operation " << j_operation << " owner " << j_owner << dendl;
+
+	int operation = 0;
+
+#define MAP_FLOCK_FLAG(JNI_MASK, NATIVE_MASK) do {	\
+	if ((j_operation & JNI_MASK) != 0) {		\
+		operation |= NATIVE_MASK; 		\
+		j_operation &= ~JNI_MASK;		\
+	} 						\
+	} while(0)
+	MAP_FLOCK_FLAG(JAVA_LOCK_SH, LOCK_SH);
+	MAP_FLOCK_FLAG(JAVA_LOCK_EX, LOCK_EX);
+	MAP_FLOCK_FLAG(JAVA_LOCK_NB, LOCK_NB);
+	MAP_FLOCK_FLAG(JAVA_LOCK_UN, LOCK_UN);
+	if (j_operation != 0) {
+		cephThrowIllegalArg(env, "flock flags");
+		return -EINVAL;
+	}
+#undef MAP_FLOCK_FLAG
+
+	ret = ceph_flock(cmount, (int)j_fd, operation, (uint64_t) j_owner);
+
+	ldout(cct, 10) << "jni: flock: exit ret " << ret << dendl;
+
+	if (ret)
+		handle_error(env, ret);
+
+	return ret;
+}
+
+/*
+ * Class:     com_ceph_fs_CephMount
  * Method:    native_ceph_fstat
  * Signature: (JILcom/ceph/fs/CephStat;)I
  */
@@ -1775,7 +1828,6 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fstat
 {
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
-	long long time;
 	struct stat st;
 	int ret;
 
@@ -1793,22 +1845,7 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1fstat
 		return ret;
 	}
 
-	env->SetIntField(j_cephstat, cephstat_mode_fid, st.st_mode);
-	env->SetIntField(j_cephstat, cephstat_uid_fid, st.st_uid);
-	env->SetIntField(j_cephstat, cephstat_gid_fid, st.st_gid);
-	env->SetLongField(j_cephstat, cephstat_size_fid, st.st_size);
-	env->SetLongField(j_cephstat, cephstat_blksize_fid, st.st_blksize);
-	env->SetLongField(j_cephstat, cephstat_blocks_fid, st.st_blocks);
-
-	time = st.st_mtim.tv_sec;
-	time *= 1000;
-	time += st.st_mtim.tv_nsec / 1000;
-	env->SetLongField(j_cephstat, cephstat_m_time_fid, time);
-
-	time = st.st_atim.tv_sec;
-	time *= 1000;
-	time += st.st_atim.tv_nsec / 1000;
-	env->SetLongField(j_cephstat, cephstat_a_time_fid, time);
+	fill_cephstat(env, j_cephstat, &st);
 
 	return ret;
 }
@@ -2875,7 +2912,7 @@ jobject sockaddrToInetAddress(JNIEnv* env, const sockaddr_storage& ss, jint* por
         return NULL;
     }
     env->SetByteArrayRegion(byteArray.get(), 0, addressLength,
-            reinterpret_cast<const jbyte*>(rawAddress));
+			    reinterpret_cast<jbyte*>(const_cast<void*>(rawAddress)));
 
     if (ss.ss_family == AF_UNIX) {
         // Note that we get here for AF_UNIX sockets on accept(2). The unix(7) man page claims

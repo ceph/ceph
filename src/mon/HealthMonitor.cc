@@ -16,19 +16,18 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include <boost/intrusive_ptr.hpp>
+// #include <boost/intrusive_ptr.hpp>
 // Because intusive_ptr clobbers our assert...
 #include "include/assert.h"
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
 #include "mon/HealthService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/DataHealthService.h"
 
 #include "messages/MMonHealth.h"
-
-#include "common/config.h"
+#include "common/Formatter.h"
+// #include "common/config.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -53,18 +52,33 @@ void HealthMonitor::init()
   }
 }
 
-bool HealthMonitor::service_dispatch(Message *m)
+bool HealthMonitor::service_dispatch(MonOpRequestRef op)
 {
-  assert(m->get_type() == MSG_MON_HEALTH);
-  MMonHealth *hm = (MMonHealth*)m;
+  assert(op->get_req()->get_type() == MSG_MON_HEALTH);
+  MMonHealth *hm = static_cast<MMonHealth*>(op->get_req());
   int service_type = hm->get_service_type();
   if (services.count(service_type) == 0) {
     dout(1) << __func__ << " service type " << service_type
             << " not registered -- drop message!" << dendl;
-    m->put();
     return false;
   }
-  return services[service_type]->service_dispatch(hm);
+  return services[service_type]->service_dispatch(op);
+}
+
+void HealthMonitor::start_epoch() {
+  for (map<int,HealthService*>::iterator it = services.begin();
+       it != services.end(); ++it) {
+    it->second->start(get_epoch());
+  }
+}
+
+void HealthMonitor::finish_epoch() {
+  generic_dout(20) << "HealthMonitor::finish_epoch()" << dendl;
+  for (map<int,HealthService*>::iterator it = services.begin();
+       it != services.end(); ++it) {
+    assert(it->second != NULL);
+    it->second->finish();
+  }
 }
 
 void HealthMonitor::service_shutdown()
@@ -80,10 +94,10 @@ void HealthMonitor::service_shutdown()
   services.clear();
 }
 
-health_status_t HealthMonitor::get_health(Formatter *f,
-					  list<pair<health_status_t,string> > *detail)
+void HealthMonitor::get_health(Formatter *f,
+			       list<pair<health_status_t,string> >& summary,
+			       list<pair<health_status_t,string> > *detail)
 {
-  health_status_t overall = HEALTH_OK;
   if (f) {
     f->open_object_section("health");
     f->open_array_section("health_services");
@@ -92,16 +106,12 @@ health_status_t HealthMonitor::get_health(Formatter *f,
   for (map<int,HealthService*>::iterator it = services.begin();
        it != services.end();
        ++it) {
-    health_status_t h = it->second->get_health(f, detail);
-    if (overall > h)
-      overall = h;
+    it->second->get_health(f, summary, detail);
   }
 
   if (f) {
     f->close_section(); // health_services
     f->close_section(); // health
   }
-
-  return overall;
 }
 

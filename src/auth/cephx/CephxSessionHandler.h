@@ -13,10 +13,11 @@
  */
 
 
-#include "../AuthSessionHandler.h"
-#include "../Auth.h"
+#include "auth/AuthSessionHandler.h"
+#include "auth/Auth.h"
 
 class CephContext;
+class Message;
 
 class CephxSessionHandler  : public AuthSessionHandler {
   uint64_t features;
@@ -31,8 +32,9 @@ public:
     return false;
   }
 
-  int sign_message(Message *m);
+  int _calc_signature(Message *m, uint64_t *psig);
 
+  int sign_message(Message *m);
   int check_message_signature(Message *m) ;
 
   // Cephx does not currently encrypt messages, so just return 0 if called.  PLR

@@ -18,7 +18,7 @@
 #include "common/config.h"
 #include "include/types.h"
 
-#include "../MDS.h"
+#include "../MDSRank.h"
 
 #include "EMetaBlob.h"
 #include "../LogEvent.h"
@@ -42,12 +42,15 @@ public:
     out << "EExport " << base << " " << metablob;
   }
 
-  void encode(bufferlist& bl) const;
+  EMetaBlob *get_metablob() { return &metablob; }
+
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EExport*>& ls);
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 
 };
+WRITE_CLASS_ENCODER_FEATURES(EExport)
 
 #endif

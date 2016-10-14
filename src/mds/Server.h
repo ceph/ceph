@@ -15,14 +15,18 @@
 #ifndef CEPH_MDS_SERVER_H
 #define CEPH_MDS_SERVER_H
 
-#include "MDS.h"
+#include "MDSRank.h"
 
+class OSDMap;
 class PerfCounters;
 class LogEvent;
 class EMetaBlob;
 class EUpdate;
 class MMDSSlaveRequest;
 struct SnapInfo;
+class MClientRequest;
+class MClientReply;
+class MDLog;
 
 struct MutationImpl;
 struct MDRequestImpl;
@@ -31,37 +35,39 @@ typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdss_first = 1000,
-  l_mdss_hcreq,
-  l_mdss_hsreq,
-  l_mdss_hcsess,
-  l_mdss_dcreq,
-  l_mdss_dsreq,
+  l_mdss_handle_client_request,
+  l_mdss_handle_slave_request,
+  l_mdss_handle_client_session,
+  l_mdss_dispatch_client_request,
+  l_mdss_dispatch_slave_request,
   l_mdss_last,
 };
 
 class Server {
-  MDS *mds;
+private:
+  MDSRank *mds;
   MDCache *mdcache;
   MDLog *mdlog;
-  Messenger *messenger;
   PerfCounters *logger;
 
-public:
+  // OSDMap full status, used to generate ENOSPC on some operations
+  bool is_full;
+
+  // State for while in reconnect
+  MDSInternalContext *reconnect_done;
   int failed_reconnects;
 
+  friend class MDSContinuation;
+  friend class ServerContext;
+
+public:
   bool terminating_sessions;
 
-  Server(MDS *m) : 
-    mds(m), 
-    mdcache(mds->mdcache), mdlog(mds->mdlog),
-    messenger(mds->messenger),
-    logger(0),
-    failed_reconnects(0),
-    terminating_sessions(false) {
-  }
+  explicit Server(MDSRank *m);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
+    delete reconnect_done;
   }
 
   void create_logger();
@@ -69,10 +75,13 @@ public:
   // message handler
   void dispatch(Message *m);
 
+  void handle_osd_map();
 
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+  bool waiting_for_reconnect(client_t c) const;
+  void dump_reconnect_status(Formatter *f) const;
 
   Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);
@@ -83,13 +92,13 @@ public:
   void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
 				  map<client_t,uint64_t>& sseqmap,
 				  bool dec_import=true);
-  void flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& gather);
+  void flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather);
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session);
-  void journal_close_session(Session *session, int state);
-  void reconnect_clients();
+  void kill_session(Session *session, Context *on_safe);
+  void journal_close_session(Session *session, int state, Context *on_safe);
+  void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
@@ -97,16 +106,18 @@ public:
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
   void recall_client_state(float ratio);
+  void force_clients_readonly();
 
   // -- requests --
   void handle_client_request(MClientRequest *m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
-			 LogEvent *le, Context *fin);
+			 LogEvent *le, MDSInternalContextBase *fin);
+  void submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin,
+                          MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
-  void reply_request(MDRequestRef& mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
-  void reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
+  void respond_to_request(MDRequestRef& mdr, int r = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
 		      int num_dentries_wanted,
@@ -123,25 +134,28 @@ public:
   void handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
 
   // some helpers
+  bool check_fragment_space(MDRequestRef& mdr, CDir *in);
+  bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
+  bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, const string& dname);
   CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string& dname, bool okexist=false);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-			    ceph_file_layout *layout=NULL);
+			    file_layout_t *layout=NULL);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
 			      bool no_want_auth=false,
-			      ceph_file_layout **layout=NULL,
+			      file_layout_t **layout=NULL,
 			      bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
                                     set<SimpleLock*>& rdlocks,
                                     set<SimpleLock*>& wrlocks,
 				    set<SimpleLock*>& xlocks, bool okexist,
 				    bool mustexist, bool alwaysxlock,
-				    ceph_file_layout **layout=NULL);
+				    file_layout_t **layout=NULL);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -159,9 +173,15 @@ public:
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
-  int parse_layout_vxattr(string name, string value, ceph_file_layout *layout);
+  int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
+			  file_layout_t *layout, bool validate=true);
+  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
+  int check_layout_vxattr(MDRequestRef& mdr,
+                          string name,
+                          string value,
+                          file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 ceph_file_layout *dir_layout,
+			 file_layout_t *dir_layout,
 			 set<SimpleLock*> rdlocks,
 			 set<SimpleLock*> wrlocks,
 			 set<SimpleLock*> xlocks);
@@ -200,7 +220,7 @@ public:
   void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
   void _committed_slave(MDRequestRef& mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
-  void do_link_rollback(bufferlist &rbl, int master, MDRequestRef& mdr);
+  void do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
   void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr);
 
   // unlink
@@ -211,12 +231,12 @@ public:
   void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
-  bool _rmdir_prepare_witness(MDRequestRef& mdr, int who, CDentry *dn, CDentry *straydn);
+  bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequestRef& mdr);
   void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
   void _commit_slave_rmdir(MDRequestRef& mdr, int r);
   void handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
-  void do_rmdir_rollback(bufferlist &rbl, int master, MDRequestRef& mdr);
+  void do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
   void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 
   // rename
@@ -229,9 +249,12 @@ public:
   void _mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info);
   void handle_client_rmsnap(MDRequestRef& mdr);
   void _rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void handle_client_renamesnap(MDRequestRef& mdr);
+  void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+
 
   // helpers
-  bool _rename_prepare_witness(MDRequestRef& mdr, int who, set<int> &witnesse,
+  bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   version_t _rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, bufferlist *client_map_bl);
   bool _need_force_journal(CInode *diri, bool empty);
@@ -250,10 +273,12 @@ public:
   void _slave_rename_sessions_flushed(MDRequestRef& mdr);
   void _logged_slave_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr, bool finish_mdr=false);
+  void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
 
+private:
+  void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
 };
 
 #endif

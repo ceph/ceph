@@ -19,7 +19,8 @@
 #include <ostream>
 
 #include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
+#include <boost/intrusive/list.hpp>
+// Because intrusive_ptr clobbers our assert...
 #include "include/assert.h"
 
 #include "include/types.h"
@@ -28,6 +29,7 @@
 #include "msg_types.h"
 
 #include "common/RefCountedObj.h"
+#include "msg/Connection.h"
 
 #include "common/debug.h"
 #include "common/config.h"
@@ -45,18 +47,11 @@
 #define MSG_MON_COMMAND_ACK        51
 #define MSG_LOG                    52
 #define MSG_LOGACK                 53
-//#define MSG_MON_OBSERVE            54
-//#define MSG_MON_OBSERVE_NOTIFY     55
-#define MSG_CLASS                  56
-#define MSG_CLASS_ACK              57
 
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
 
 #define MSG_MON_GLOBAL_ID          60
-
-// #define MSG_POOLOP                 49
-// #define MSG_POOLOPREPLY            48
 
 #define MSG_ROUTE                  47
 #define MSG_FORWARD                46
@@ -78,7 +73,6 @@
 
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
-#define MSG_OSD_PG_SUMMARY     82
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
@@ -111,6 +105,12 @@
 #define MSG_OSD_EC_WRITE_REPLY 109
 #define MSG_OSD_EC_READ        110
 #define MSG_OSD_EC_READ_REPLY  111
+
+#define MSG_OSD_REPOP         112
+#define MSG_OSD_REPOPREPLY    113
+#define MSG_OSD_PG_UPDATE_LOG_MISSING  114
+#define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
+
 
 // *** MDS ***
 
@@ -155,6 +155,7 @@
 
 #define MSG_MDS_EXPORTCAPS            0x470
 #define MSG_MDS_EXPORTCAPSACK         0x471
+#define MSG_MDS_GATHERCAPS            0x472
 
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
@@ -162,148 +163,50 @@
 #define MSG_TIMECHECK             0x600
 #define MSG_MON_HEALTH            0x601
 
+// *** Message::encode() crcflags bits ***
+#define MSG_CRC_DATA           (1 << 0)
+#define MSG_CRC_HEADER         (1 << 1)
+#define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
+// Xio Testing
+#define MSG_DATA_PING		  0x602
 
+// Xio intends to define messages 0x603..0x606
+
+// Special
+#define MSG_NOP                   0x607
+
+// *** ceph-mgr <-> OSD/MDS daemons ***
+#define MSG_MGR_OPEN              0x700
+#define MSG_MGR_CONFIGURE         0x701
+#define MSG_MGR_REPORT            0x702
+
+// *** ceph-mgr <-> ceph-mon ***
+#define MSG_MGR_BEACON            0x703
+
+// *** ceph-mon(MgrMonitor) -> OSD/MDS daemons ***
+#define MSG_MGR_MAP               0x704
+
+// *** ceph-mon(MgrMonitor) -> ceph-mgr
+#define MSG_MGR_DIGEST               0x705
 
 // ======================================================
 
-// abstract Connection, for keeping per-connection state
-
-class Messenger;
-
-struct Connection : private RefCountedObject {
-  Mutex lock;
-  Messenger *msgr;
-  RefCountedObject *priv;
-  int peer_type;
-  entity_addr_t peer_addr;
-  utime_t last_keepalive_ack;
-private:
-  uint64_t features;
-public:
-  RefCountedObject *pipe;
-  bool failed;              /// true if we are a lossy connection that has failed.
-
-  int rx_buffers_version;
-  map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
-
-  friend class boost::intrusive_ptr<Connection>;
-
-public:
-  Connection(Messenger *m)
-    : lock("Connection::lock"),
-      msgr(m),
-      priv(NULL),
-      peer_type(-1),
-      features(0),
-      pipe(NULL),
-      failed(false),
-      rx_buffers_version(0) {
-    // we are managed exlusively by ConnectionRef; make it so you can
-    //   ConnectionRef foo = new Connection;
-    nref.set(0);
-  }
-  ~Connection() {
-    //generic_dout(0) << "~Connection " << this << dendl;
-    if (priv) {
-      //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;
-      priv->put();
-    }
-    if (pipe)
-      pipe->put();
-  }
-
-  void set_priv(RefCountedObject *o) {
-    Mutex::Locker l(lock);
-    if (priv)
-      priv->put();
-    priv = o;
-  }
-  RefCountedObject *get_priv() {
-    Mutex::Locker l(lock);
-    if (priv)
-      return priv->get();
-    return NULL;
-  }
-
-  RefCountedObject *get_pipe() {
-    Mutex::Locker l(lock);
-    if (pipe)
-      return pipe->get();
-    return NULL;
-  }
-  bool try_get_pipe(RefCountedObject **p) {
-    Mutex::Locker l(lock);
-    if (failed) {
-      *p = NULL;
-    } else {
-      if (pipe)
-	*p = pipe->get();
-      else
-	*p = NULL;
-    }
-    return !failed;
-  }
-  bool clear_pipe(RefCountedObject *old_p) {
-    if (old_p == pipe) {
-      Mutex::Locker l(lock);
-      pipe->put();
-      pipe = NULL;
-      failed = true;
-      return true;
-    }
-    return false;
-  }
-  void reset_pipe(RefCountedObject *p) {
-    Mutex::Locker l(lock);
-    if (pipe)
-      pipe->put();
-    pipe = p->get();
-  }
-  bool is_connected() {
-    Mutex::Locker l(lock);
-    return pipe != NULL;
-  }
-
-  Messenger *get_messenger() {
-    return msgr;
-  }
-
-  int get_peer_type() { return peer_type; }
-  void set_peer_type(int t) { peer_type = t; }
-  
-  bool peer_is_mon() { return peer_type == CEPH_ENTITY_TYPE_MON; }
-  bool peer_is_mds() { return peer_type == CEPH_ENTITY_TYPE_MDS; }
-  bool peer_is_osd() { return peer_type == CEPH_ENTITY_TYPE_OSD; }
-  bool peer_is_client() { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
-
-  const entity_addr_t& get_peer_addr() { return peer_addr; }
-  void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
-
-  uint64_t get_features() const { return features; }
-  bool has_feature(uint64_t f) const { return features & f; }
-  void set_features(uint64_t f) { features = f; }
-  void set_feature(uint64_t f) { features |= f; }
-
-  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
-    Mutex::Locker l(lock);
-    ++rx_buffers_version;
-    rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
-  }
-  void revoke_rx_buffer(ceph_tid_t tid) {
-    Mutex::Locker l(lock);
-    rx_buffers.erase(tid);
-  }
-
-  utime_t get_last_keepalive_ack() const {
-    return last_keepalive_ack;
-  }
-};
-typedef boost::intrusive_ptr<Connection> ConnectionRef;
-
-
-
 // abstract Message class
+
+namespace bi = boost::intrusive;
+
+// XioMessenger conditional trace flags
+#define MSG_MAGIC_XIO          0x0002
+#define MSG_MAGIC_TRACE_XCON   0x0004
+#define MSG_MAGIC_TRACE_DTOR   0x0008
+#define MSG_MAGIC_TRACE_HDR    0x0010
+#define MSG_MAGIC_TRACE_XIO    0x0020
+#define MSG_MAGIC_TRACE_XMSGR  0x0040
+#define MSG_MAGIC_TRACE_CTR    0x0080
+
+// XioMessenger diagnostic "ping pong" flag (resend msg when send completes)
+#define MSG_MAGIC_REDUPE       0x0100
 
 class Message : public RefCountedObject {
 protected:
@@ -312,7 +215,7 @@ protected:
   bufferlist       payload;  // "front" unaligned blob
   bufferlist       middle;   // "middle" unaligned blob
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
-  
+
   /* recv_stamp is set when the Messenger starts reading the
    * Message off the wire */
   utime_t recv_stamp;
@@ -326,36 +229,50 @@ protected:
 
   ConnectionRef connection;
 
+  uint32_t magic = 0;
+
+  bi::list_member_hook<> dispatch_q;
+
+public:
+  class CompletionHook : public Context {
+  protected:
+    Message *m;
+    friend class Message;
+  public:
+    explicit CompletionHook(Message *_m) : m(_m) {}
+    virtual void set_message(Message *_m) { m = _m; }
+  };
+
+  typedef bi::list< Message,
+		    bi::member_hook< Message,
+				     bi::list_member_hook<>,
+				     &Message::dispatch_q > > Queue;
+
+protected:
+  CompletionHook* completion_hook = nullptr; // owned by Messenger
+
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *byte_throttler;
+  Throttle *byte_throttler = nullptr;
 
   // release a count back to this throttler when we are destroyed
-  Throttle *msg_throttler;
+  Throttle *msg_throttler = nullptr;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
   // later.  this is necessary because messages can enter the dispatch
   // queue locally (not via read_message()), and those are not
   // currently throttled.
-  uint64_t dispatch_throttle_size;
+  uint64_t dispatch_throttle_size = 0;
 
   friend class Messenger;
 
 public:
-  Message()
-    : connection(NULL),
-      byte_throttler(NULL),
-      msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+  Message() {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
-  };
-  Message(int t, int version=1, int compat_version=0)
-    : connection(NULL),
-      byte_throttler(NULL),
-      msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+  }
+  Message(int t, int version=1, int compat_version=0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = version;
@@ -370,30 +287,39 @@ public:
   }
 
 protected:
-  virtual ~Message() { 
-    assert(nref.read() == 0);
+  virtual ~Message() {
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
-    if (msg_throttler)
-      msg_throttler->put();
+    release_message_throttle();
+    /* call completion hooks (if any) */
+    if (completion_hook)
+      completion_hook->complete(0);
   }
 public:
-  const ConnectionRef& get_connection() { return connection; }
+  const ConnectionRef& get_connection() const { return connection; }
   void set_connection(const ConnectionRef& c) {
     connection = c;
   }
+  CompletionHook* get_completion_hook() { return completion_hook; }
+  void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
   void set_byte_throttler(Throttle *t) { byte_throttler = t; }
   Throttle *get_byte_throttler() { return byte_throttler; }
   void set_message_throttler(Throttle *t) { msg_throttler = t; }
   Throttle *get_message_throttler() { return msg_throttler; }
- 
-  void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
-  uint64_t get_dispatch_throttle_size() { return dispatch_throttle_size; }
 
+  void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
+  uint64_t get_dispatch_throttle_size() const { return dispatch_throttle_size; }
+
+  const ceph_msg_header &get_header() const { return header; }
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
+  const ceph_msg_footer &get_footer() const { return footer; }
   ceph_msg_footer &get_footer() { return footer; }
+  void set_src(const entity_name_t& src) { header.src = src; }
+
+  uint32_t get_magic() const { return magic; }
+  void set_magic(int _magic) { magic = _magic; }
 
   /*
    * If you use get_[data, middle, payload] you shouldn't
@@ -416,13 +342,18 @@ public:
     data.clear();
     clear_buffers(); // let subclass drop buffers as well
   }
+  void release_message_throttle() {
+    if (msg_throttler)
+      msg_throttler->put();
+    msg_throttler = nullptr;
+  }
 
-  bool empty_payload() { return payload.length() == 0; }
+  bool empty_payload() const { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
   void set_payload(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl);
+    payload.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
@@ -430,27 +361,28 @@ public:
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    middle.claim(bl);
+    middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
   bufferlist& get_middle() { return middle; }
 
-  void set_data(const bufferlist &d) {
+  void set_data(const bufferlist &bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    data = d;
+    data.share(bl);
     if (byte_throttler)
       byte_throttler->take(data.length());
   }
 
   bufferlist& get_data() { return data; }
-  void claim_data(bufferlist& bl) {
+  void claim_data(bufferlist& bl,
+		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    bl.claim(data);
+    bl.claim(data, flags);
   }
-  off_t get_data_len() { return data.length(); }
+  off_t get_data_len() const { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   const utime_t& get_recv_stamp() const { return recv_stamp; }
@@ -484,8 +416,8 @@ public:
   uint64_t get_tid() const { return header.tid; }
   void set_tid(uint64_t t) { header.tid = t; }
 
-  unsigned get_seq() const { return header.seq; }
-  void set_seq(unsigned s) { header.seq = s; }
+  uint64_t get_seq() const { return header.seq; }
+  void set_seq(uint64_t s) { header.seq = s; }
 
   unsigned get_priority() const { return header.priority; }
   void set_priority(__s16 p) { header.priority = p; }
@@ -508,10 +440,10 @@ public:
     return get_source_inst();
   }
   entity_name_t get_orig_source() const {
-    return get_orig_source_inst().name;
+    return get_source();
   }
   entity_addr_t get_orig_source_addr() const {
-    return get_orig_source_inst().addr;
+    return get_source_addr();
   }
 
   // virtual bits
@@ -519,19 +451,20 @@ public:
   virtual void encode_payload(uint64_t features) = 0;
   virtual const char *get_type_name() const = 0;
   virtual void print(ostream& out) const {
-    out << get_type_name();
+    out << get_type_name() << " magic: " << magic;
   }
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, bool datacrc);
+  void encode(uint64_t features, int crcflags);
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 
-extern Message *decode_message(CephContext *cct, ceph_msg_header &header,
+extern Message *decode_message(CephContext *cct, int crcflags,
+			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
 			       bufferlist& middle, bufferlist& data);
-inline ostream& operator<<(ostream& out, Message& m) {
+inline ostream& operator<<(ostream &out, const Message &m) {
   m.print(out);
   if (m.get_header().version)
     out << " v" << m.get_header().version;
@@ -539,6 +472,7 @@ inline ostream& operator<<(ostream& out, Message& m) {
 }
 
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
-extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
+extern Message *decode_message(CephContext *cct, int crcflags,
+                               bufferlist::iterator& bl);
 
 #endif

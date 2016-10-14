@@ -1,0 +1,4 @@
+[Unit]
+Description=ceph target allowing to start/stop all ceph*@.service instances at once
+[Install]
+WantedBy=multi-user.target

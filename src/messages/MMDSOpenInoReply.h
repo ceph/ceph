@@ -20,11 +20,11 @@
 struct MMDSOpenInoReply : public Message {
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
-  int32_t hint;
+  mds_rank_t hint;
   int32_t error;
 
-  MMDSOpenInoReply() : Message(MSG_MDS_OPENINOREPLY) {}
-  MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, int h=-1, int e=0) :
+  MMDSOpenInoReply() : Message(MSG_MDS_OPENINOREPLY), error(0) {}
+  MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
     Message(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
     header.tid = t;
   }

@@ -28,10 +28,6 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
-#ifndef DARWIN
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 
@@ -66,6 +62,7 @@ private:
 
   bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
+  bool ms_handle_refused(Connection *con) { return false; }
 
 } dispatcher;
 
@@ -95,6 +92,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   g_ceph_context->_conf->set_val("public_addr", sss.c_str());
   g_ceph_context->_conf->apply_changes(NULL);
   Messenger *rank = Messenger::create(g_ceph_context,
+				      g_conf->ms_type,
 				      entity_name_t::MON(whoami), "tester",
 				      getpid());
   int err = rank->bind(g_ceph_context->_conf->public_addr);

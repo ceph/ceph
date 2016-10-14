@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_REST_BUCKET_H
 #define CEPH_RGW_REST_BUCKET_H
 
@@ -25,7 +28,7 @@ public:
   RGWRESTMgr_Bucket() {}
   virtual ~RGWRESTMgr_Bucket() {}
 
-  RGWHandler *get_handler(struct req_state *s) {
+  RGWHandler_REST* get_handler(struct req_state *s) {
     return new RGWHandler_Bucket;
   }
 };

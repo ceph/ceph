@@ -31,6 +31,7 @@ rm -rf testdir
 mkdir testdir
 cd testdir
 
+echo "creating folder hierarchy"
 for i in `seq 1 $DEPTH`; do
   mkdir dir$i
   cd dir$i
@@ -38,11 +39,14 @@ for i in `seq 1 $DEPTH`; do
 done
 wait
 
+echo "created hierarchy, now cleaning up"
+
 for i in `seq 1 $DEPTH`; do
   delete_files &
   cd ..
 done
 wait
 
+echo "cleaned up hierarchy"
 cd ..
 rm -rf testdir

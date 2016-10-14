@@ -8,7 +8,7 @@
 using std::ostream;
 
 #include "include/types.h"
-#include "msg/msg_types.h"
+#include "common/entity_name.h"
 
 class CephContext;
 
@@ -21,6 +21,7 @@ static const __u8 MON_CAP_ANY   = 0xff;          // *
 struct mon_rwxa_t {
   __u8 val;
 
+  // cppcheck-suppress noExplicitConstructor
   mon_rwxa_t(__u8 v = 0) : val(v) {}
   mon_rwxa_t& operator=(__u8 v) {
     val = v;
@@ -38,7 +39,8 @@ struct StringConstraint {
   string prefix;
 
   StringConstraint() {}
-  StringConstraint(string a, string b) : value(a), prefix(b) {}
+  StringConstraint(string a, string b)
+    : value(std::move(a)), prefix(std::move(b)) {}
 };
 
 ostream& operator<<(ostream& out, const StringConstraint& c);
@@ -76,13 +78,15 @@ struct MonCapGrant {
   // needed by expand_profile() (via is_match()) and cached here.
   mutable list<MonCapGrant> profile_grants;
 
-  void expand_profile(entity_name_t name) const;
+  void expand_profile(EntityName name) const;
 
   MonCapGrant() : allow(0) {}
+  // cppcheck-suppress noExplicitConstructor
   MonCapGrant(mon_rwxa_t a) : allow(a) {}
-  MonCapGrant(string s, mon_rwxa_t a) : service(s), allow(a) {}
-  MonCapGrant(string c) : command(c) {}
-  MonCapGrant(string c, string a, StringConstraint co) : command(c) {
+  MonCapGrant(string s, mon_rwxa_t a) : service(std::move(s)), allow(a) {}
+  // cppcheck-suppress noExplicitConstructor  
+  MonCapGrant(string c) : command(std::move(c)) {}
+  MonCapGrant(string c, string a, StringConstraint co) : command(std::move(c)) {
     command_args[a] = co;
   }
 
@@ -97,7 +101,7 @@ struct MonCapGrant {
    * @return bits we allow
    */
   mon_rwxa_t get_allowed(CephContext *cct,
-			 entity_name_t name,
+			 EntityName name,
 			 const std::string& service,
 			 const std::string& command,
 			 const map<string,string>& command_args) const;
@@ -118,7 +122,7 @@ struct MonCap {
   std::vector<MonCapGrant> grants;
 
   MonCap() {}
-  MonCap(std::vector<MonCapGrant> g) : grants(g) {}
+  explicit MonCap(std::vector<MonCapGrant> g) : grants(g) {}
 
   string get_str() const {
     return text;
@@ -143,7 +147,7 @@ struct MonCap {
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(CephContext *cct,
-		  entity_name_t name,
+		  EntityName name,
 		  const string& service,
 		  const string& command, const map<string,string>& command_args,
 		  bool op_may_read, bool op_may_write, bool op_may_exec) const;

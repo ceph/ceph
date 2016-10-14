@@ -12,6 +12,8 @@
  * 
  */
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <sstream>
 #include <syslog.h>
 
@@ -22,14 +24,12 @@
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
-
-#include "common/Timer.h"
-
-#include "osd/osd_types.h"
+#include "common/Graylog.h"
 #include "common/errno.h"
-#include "common/config.h"
+#include "common/strtol.h"
 #include "include/assert.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 #include "include/compat.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -41,26 +41,8 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
 		<< ").log v" << v << " ";
 }
 
-ostream& operator<<(ostream& out, LogMonitor& pm)
+ostream& operator<<(ostream &out, const LogMonitor &pm)
 {
-  /*
-  std::stringstream ss;
-  for (ceph::unordered_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
-       p != pm.pg_map.num_pg_by_state.end();
-       ++p) {
-    if (p != pm.pg_map.num_pg_by_state.begin())
-      ss << ", ";
-    ss << p->second << " " << pg_state_string(p->first);
-  }
-  string states = ss.str();
-  return out << "v" << pm.pg_map.version << ": "
-	     << pm.pg_map.pg_stat.size() << " pgs: "
-	     << states << "; "
-	     << kb_t(pm.pg_map.total_pg_kb()) << " data, " 
-	     << kb_t(pm.pg_map.total_used_kb()) << " used, "
-	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
-	     << kb_t(pm.pg_map.total_kb()) << " free";
-  */
   return out << "log";
 }
 
@@ -84,7 +66,7 @@ void LogMonitor::create_initial()
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
   e.stamp = ceph_clock_now(g_ceph_context);
-  e.type = CLOG_INFO;
+  e.prio = CLOG_INFO;
   std::stringstream ss;
   ss << "mkfs " << mon->monmap->get_fsid();
   e.msg = ss.str();
@@ -102,7 +84,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     return;
   assert(version >= summary.version);
 
-  bufferlist blog;
+  map<string,bufferlist> channel_blog;
 
   version_t latest_full = get_version_latest_full();
   dout(10) << __func__ << " latest full " << latest_full << dendl;
@@ -131,17 +113,52 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       le.decode(p);
       dout(7) << "update_from_paxos applying incremental log " << summary.version+1 <<  " " << le << dendl;
 
-      if (g_conf->mon_cluster_log_to_syslog) {
-	le.log_to_syslog(g_conf->mon_cluster_log_to_syslog_level,
-			 g_conf->mon_cluster_log_to_syslog_facility);
+      string channel = le.channel;
+      if (channel.empty()) // keep retrocompatibility
+        channel = CLOG_CHANNEL_CLUSTER;
+
+      if (channels.do_log_to_syslog(channel)) {
+        string level = channels.get_level(channel);
+        string facility = channels.get_facility(channel);
+        if (level.empty() || facility.empty()) {
+          derr << __func__ << " unable to log to syslog -- level or facility"
+               << " not defined (level: " << level << ", facility: "
+               << facility << ")" << dendl;
+          continue;
+        }
+        le.log_to_syslog(channels.get_level(channel),
+                         channels.get_facility(channel));
       }
-      if (g_conf->mon_cluster_log_file.length()) {
-	int min = string_to_syslog_level(g_conf->mon_cluster_log_file_level);
-	int l = clog_type_to_syslog_level(le.type);
+
+      if (channels.do_log_to_graylog(channel)) {
+	ceph::log::Graylog::Ref graylog = channels.get_graylog(channel);
+	if (graylog) {
+	  graylog->log_log_entry(&le);
+	}
+	dout(7) << "graylog: " << channel << " " << graylog
+		<< " host:" << channels.log_to_graylog_host << dendl;
+      }
+
+      string log_file = channels.get_log_file(channel);
+      dout(20) << __func__ << " logging for channel '" << channel
+               << "' to file '" << log_file << "'" << dendl;
+
+      if (!log_file.empty()) {
+        string log_file_level = channels.get_log_file_level(channel);
+        if (log_file_level.empty()) {
+          dout(1) << __func__ << " warning: log file level not defined for"
+                  << " channel '" << channel << "' yet a log file is --"
+                  << " will assume lowest level possible" << dendl;
+        }
+
+	int min = string_to_syslog_level(log_file_level);
+	int l = clog_type_to_syslog_level(le.prio);
 	if (l <= min) {
 	  stringstream ss;
 	  ss << le << "\n";
-	  blog.append(ss.str());
+          // init entry if DNE
+          bufferlist &blog = channel_blog[channel];
+          blog.append(ss.str());
 	}
       }
 
@@ -151,34 +168,36 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     summary.version++;
   }
 
+  dout(15) << __func__ << " logging for "
+           << channel_blog.size() << " channels" << dendl;
+  for(map<string,bufferlist>::iterator p = channel_blog.begin();
+      p != channel_blog.end(); ++p) {
+    if (!p->second.length()) {
+      dout(15) << __func__ << " channel '" << p->first
+               << "': nothing to log" << dendl;
+      continue;
+    }
 
-  if (blog.length()) {
-    int fd = ::open(g_conf->mon_cluster_log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
+    dout(15) << __func__ << " channel '" << p->first
+             << "' logging " << p->second.length() << " bytes" << dendl;
+    string log_file = channels.get_log_file(p->first);
+
+    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
     if (fd < 0) {
       int err = -errno;
-      dout(1) << "unable to write to " << g_conf->mon_cluster_log_file << ": " << cpp_strerror(err) << dendl;
+      dout(1) << "unable to write to '" << log_file << "' for channel '"
+              << p->first << "': " << cpp_strerror(err) << dendl;
     } else {
-      int err = blog.write_fd(fd);
+      int err = p->second.write_fd(fd);
       if (err < 0) {
-	dout(1) << "error writing to " << g_conf->mon_cluster_log_file
-		<< ": " << cpp_strerror(err) << dendl;
+	dout(1) << "error writing to '" << log_file << "' for channel '"
+                << p->first << ": " << cpp_strerror(err) << dendl;
       }
       VOID_TEMP_FAILURE_RETRY(::close(fd));
     }
   }
 
   check_subs();
-}
-
-void LogMonitor::store_do_append(MonitorDBStore::Transaction *t,
-    const string& key, bufferlist& bl)
-{
-  bufferlist existing_bl;
-  int err = get_value(key, existing_bl);
-  assert(err == 0);
-
-  existing_bl.append(bl);
-  put_value(t, key, existing_bl);
 }
 
 void LogMonitor::create_pending()
@@ -188,7 +207,7 @@ void LogMonitor::create_pending()
   dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
 }
 
-void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   version_t version = get_last_committed() + 1;
   bufferlist bl;
@@ -197,19 +216,19 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
   ::encode(v, bl);
   multimap<utime_t,LogEntry>::iterator p;
   for (p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl);
+    p->second.encode(bl, mon->quorum_features);
 
   put_version(t, version, bl);
   put_last_committed(t, version);
 }
 
-void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
+void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
   assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  ::encode(summary, summary_bl);
+  ::encode(summary, summary_bl, mon->quorum_features);
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
@@ -217,47 +236,54 @@ void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
 
 version_t LogMonitor::get_trim_to()
 {
+  if (!mon->is_leader())
+    return 0;
+
   unsigned max = g_conf->mon_max_log_epochs;
   version_t version = get_last_committed();
-  if (mon->is_leader() && version > max)
+  if (version > max)
     return version - max;
   return 0;
 }
 
-bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
+bool LogMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_query");
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return preprocess_command(static_cast<MMonCommand*>(m));
+    return preprocess_command(op);
 
   case MSG_LOG:
-    return preprocess_log((MLog*)m);
+    return preprocess_log(op);
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
 
-bool LogMonitor::prepare_update(PaxosServiceMessage *m)
+bool LogMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_logmon_event("prepare_update");
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(static_cast<MMonCommand*>(m));
+    return prepare_command(op);
   case MSG_LOG:
-    return prepare_log((MLog*)m);
+    return prepare_log(op);
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
 
-bool LogMonitor::preprocess_log(MLog *m)
+bool LogMonitor::preprocess_log(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_log");
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
@@ -284,18 +310,30 @@ bool LogMonitor::preprocess_log(MLog *m)
   return false;
 
  done:
-  m->put();
   return true;
 }
 
-bool LogMonitor::prepare_log(MLog *m) 
+struct LogMonitor::C_Log : public C_MonOp {
+  LogMonitor *logmon;
+  C_Log(LogMonitor *p, MonOpRequestRef o) :
+    C_MonOp(o), logmon(p) {}
+  void _finish(int r) {
+    if (r == -ECANCELED) {
+      return;
+    }
+    logmon->_updated_log(op);
+  }
+};
+
+bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
+  op->mark_logmon_event("prepare_log");
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
   if (m->fsid != mon->monmap->fsid) {
     dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid 
 	    << dendl;
-    m->put();
     return false;
   }
 
@@ -308,16 +346,15 @@ bool LogMonitor::prepare_log(MLog *m)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  wait_for_finished_proposal(new C_Log(this, m));
+  wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
 
-void LogMonitor::_updated_log(MLog *m)
+void LogMonitor::_updated_log(MonOpRequestRef op)
 {
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
-  mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
-
-  m->put();
+  mon->send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 }
 
 bool LogMonitor::should_propose(double& delay)
@@ -332,8 +369,9 @@ bool LogMonitor::should_propose(double& delay)
 }
 
 
-bool LogMonitor::preprocess_command(MMonCommand *m)
+bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_command");
   int r = -1;
   bufferlist rdata;
   stringstream ss;
@@ -341,15 +379,17 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
 }
 
 
-bool LogMonitor::prepare_command(MMonCommand *m)
+bool LogMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_logmon_event("prepare_command");
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -358,7 +398,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -367,7 +407,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -378,17 +418,17 @@ bool LogMonitor::prepare_command(MMonCommand *m)
     le.who = m->get_orig_source_inst();
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
-    le.type = CLOG_INFO;
+    le.prio = CLOG_INFO;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(),
-					      get_last_committed() + 1));
+    wait_for_finished_proposal(op, new Monitor::C_Command(
+          mon, op, 0, string(), get_last_committed() + 1));
     return true;
   }
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_last_committed());
+  mon->reply_command(op, err, rs, get_last_committed());
   return false;
 }
 
@@ -405,7 +445,7 @@ int LogMonitor::sub_name_to_id(const string& n)
     return CLOG_WARN;
   if (n == "log-error")
     return CLOG_ERROR;
-  return -1;
+  return CLOG_UNKNOWN;
 }
 
 void LogMonitor::check_subs()
@@ -456,7 +496,11 @@ void LogMonitor::check_sub(Subscription *s)
 	  << " with " << mlog->entries.size() << " entries"
 	  << " (version " << mlog->version << ")" << dendl;
   
-  mon->messenger->send_message(mlog, s->session->inst);
+  if (!mlog->entries.empty()) {
+    s->session->con->send_message(mlog);
+  } else {
+    mlog->put();
+  }
   if (s->onetime)
     mon->session_map.remove_sub(s);
   else
@@ -483,7 +527,7 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
   list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
   for (; it != summary.tail.rend(); ++it) {
     LogEntry e = *it;
-    if (e.type < level)
+    if (e.prio < level)
       continue;
 
     mlog->entries.push_back(e);
@@ -495,10 +539,10 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
 }
 
 /**
- * Create an incremental log message from version @sv to @summary.version
+ * Create an incremental log message from version \p sv to \p summary.version
  *
  * @param mlog	Log message we'll send to the client with the messages received
- *		since version @sv, inclusive.
+ *		since version \p sv, inclusive.
  * @param level	The max log level of the messages the client is interested in.
  * @param sv	The version the client is looking for.
  */
@@ -512,7 +556,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
 	     << " to first_committed " << get_first_committed() << dendl;
     LogEntry le;
     le.stamp = ceph_clock_now(NULL);
-    le.type = CLOG_WARN;
+    le.prio = CLOG_WARN;
     ostringstream ss;
     ss << "skipped log messages from " << sv << " to " << get_first_committed();
     le.msg = ss.str();
@@ -533,9 +577,9 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
       LogEntry le;
       le.decode(p);
 
-      if (le.type < level) {
+      if (le.prio < level) {
 	dout(20) << __func__ << " requested " << level 
-		 << " entry " << le.type << dendl;
+		 << " entry " << le.prio << dendl;
 	continue;
       }
 
@@ -548,3 +592,176 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
 	   << mlog->entries.size() << " entries)" << dendl;
 }
 
+void LogMonitor::update_log_channels()
+{
+  ostringstream oss;
+
+  channels.clear();
+
+  int r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog,
+                                  oss, &channels.log_to_syslog,
+                                  CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_syslog'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog_level,
+                              oss, &channels.syslog_level,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_level'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog_facility,
+                              oss, &channels.syslog_facility,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_facility'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_file, oss,
+                              &channels.log_file,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_file'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_file_level, oss,
+                              &channels.log_file_level,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_file_level'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog, oss,
+                              &channels.log_to_graylog,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_host, oss,
+                              &channels.log_to_graylog_host,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_host'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_port, oss,
+                              &channels.log_to_graylog_port,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_port'"
+         << dendl;
+    return;
+  }
+
+  channels.expand_channel_meta();
+}
+
+void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
+{
+  generic_dout(20) << __func__ << " expand map: " << m << dendl;
+  for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p) {
+    m[p->first] = expand_channel_meta(p->second, p->first);
+  }
+  generic_dout(20) << __func__ << " expanded map: " << m << dendl;
+}
+
+string LogMonitor::log_channel_info::expand_channel_meta(
+    const string &input,
+    const string &change_to)
+{
+  size_t pos = string::npos;
+  string s(input);
+  while ((pos = s.find(LOG_META_CHANNEL)) != string::npos) {
+    string tmp = s.substr(0, pos) + change_to;
+    if (pos+LOG_META_CHANNEL.length() < s.length())
+      tmp += s.substr(pos+LOG_META_CHANNEL.length());
+    s = tmp;
+  }
+  generic_dout(20) << __func__ << " from '" << input
+                   << "' to '" << s << "'" << dendl;
+
+  return s;
+}
+
+bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
+  string v = get_str_map_key(log_to_syslog, channel,
+                             &CLOG_CONFIG_DEFAULT_KEY);
+  // We expect booleans, but they are in k/v pairs, kept
+  // as strings, in 'log_to_syslog'. We must ensure
+  // compatibility with existing boolean handling, and so
+  // we are here using a modified version of how
+  // md_config_t::set_val_raw() handles booleans. We will
+  // accept both 'true' and 'false', but will also check for
+  // '1' and '0'. The main distiction between this and the
+  // original code is that we will assume everything not '1',
+  // '0', 'true' or 'false' to be 'false'.
+  bool ret = false;
+
+  if (boost::iequals(v, "false")) {
+    ret = false;
+  } else if (boost::iequals(v, "true")) {
+    ret = true;
+  } else {
+    std::string err;
+    int b = strict_strtol(v.c_str(), 10, &err);
+    ret = (err.empty() && b == 1);
+  }
+
+  return ret;
+}
+
+ceph::log::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
+    const string &channel)
+{
+  generic_dout(25) << __func__ << " for channel '"
+		   << channel << "'" << dendl;
+
+  if (graylogs.count(channel) == 0) {
+    ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
+
+    graylog->set_fsid(g_conf->fsid);
+    graylog->set_hostname(g_conf->host);
+    graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
+					     &CLOG_CONFIG_DEFAULT_KEY),
+			     atoi(get_str_map_key(log_to_graylog_port, channel,
+						  &CLOG_CONFIG_DEFAULT_KEY).c_str()));
+
+    graylogs[channel] = graylog;
+    generic_dout(20) << __func__ << " for channel '"
+		     << channel << "' to graylog host '"
+		     << log_to_graylog_host[channel] << ":"
+		     << log_to_graylog_port[channel]
+		     << "'" << dendl;
+  }
+  return graylogs[channel];
+}
+
+void LogMonitor::handle_conf_change(const struct md_config_t *conf,
+                                    const std::set<std::string> &changed)
+{
+  if (changed.count("mon_cluster_log_to_syslog") ||
+      changed.count("mon_cluster_log_to_syslog_level") ||
+      changed.count("mon_cluster_log_to_syslog_facility") ||
+      changed.count("mon_cluster_log_file") ||
+      changed.count("mon_cluster_log_file_level") ||
+      changed.count("mon_cluster_log_to_graylog") ||
+      changed.count("mon_cluster_log_to_graylog_host") ||
+      changed.count("mon_cluster_log_to_graylog_port")) {
+    update_log_channels();
+  }
+}

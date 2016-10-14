@@ -83,10 +83,7 @@
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 #define CEPHX_CRYPT_ERR			1
 
-#include "../Auth.h"
-#include "../RotatingKeyRing.h"
-#include "common/debug.h"
-
+#include "auth/Auth.h"
 #include <errno.h>
 #include <sstream>
 
@@ -111,7 +108,7 @@ struct CephXServerChallenge {
     ::decode(server_challenge, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXServerChallenge);
+WRITE_CLASS_ENCODER(CephXServerChallenge)
 
 
 // request/reply headers, for subsequent exchanges.
@@ -126,7 +123,7 @@ struct CephXRequestHeader {
     ::decode(request_type, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXRequestHeader);
+WRITE_CLASS_ENCODER(CephXRequestHeader)
 
 struct CephXResponseHeader {
   uint16_t request_type;
@@ -141,7 +138,7 @@ struct CephXResponseHeader {
     ::decode(status, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXResponseHeader);
+WRITE_CLASS_ENCODER(CephXResponseHeader)
 
 struct CephXTicketBlob {
   uint64_t secret_id;
@@ -163,7 +160,7 @@ struct CephXTicketBlob {
     ::decode(blob, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXTicketBlob);
+WRITE_CLASS_ENCODER(CephXTicketBlob)
 
 // client -> server response to challenge
 struct CephXAuthenticate {
@@ -248,7 +245,7 @@ struct CephXServiceTicketRequest {
     ::decode(keys, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXServiceTicketRequest);
+WRITE_CLASS_ENCODER(CephXServiceTicketRequest)
 
 
 /*
@@ -268,7 +265,7 @@ struct CephXAuthorizeReply {
     ::decode(nonce_plus_one, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXAuthorizeReply);
+WRITE_CLASS_ENCODER(CephXAuthorizeReply)
 
 
 struct CephXAuthorizer : public AuthAuthorizer {
@@ -277,7 +274,7 @@ private:
 public:
   uint64_t nonce;
 
-  CephXAuthorizer(CephContext *cct_)
+  explicit CephXAuthorizer(CephContext *cct_)
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
@@ -320,7 +317,7 @@ struct CephXTicketManager {
   tickets_map_t tickets_map;
   uint64_t global_id;
 
-  CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
+  explicit CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
 
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
@@ -365,7 +362,7 @@ struct CephXServiceTicket {
     ::decode(validity, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXServiceTicket);
+WRITE_CLASS_ENCODER(CephXServiceTicket)
 
 /* B */
 struct CephXServiceTicketInfo {
@@ -385,7 +382,7 @@ struct CephXServiceTicketInfo {
     ::decode(session_key, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXServiceTicketInfo);
+WRITE_CLASS_ENCODER(CephXServiceTicketInfo)
 
 struct CephXAuthorize {
   uint64_t nonce;
@@ -400,7 +397,7 @@ struct CephXAuthorize {
     ::decode(nonce, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXAuthorize);
+WRITE_CLASS_ENCODER(CephXAuthorize)
 
 /*
  * Decode an extract ticket
@@ -433,8 +430,7 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl
   uint64_t magic;
   bufferlist bl;
 
-  key.decrypt(cct, bl_enc, bl, error);
-  if (!error.empty())
+  if (key.decrypt(cct, bl_enc, bl, &error) < 0)
     return;
 
   bufferlist::iterator iter2 = bl.begin();
@@ -462,7 +458,7 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
   ::encode(magic, bl);
   ::encode(t, bl);
 
-  key.encrypt(cct, bl, out, error);
+  key.encrypt(cct, bl, out, &error);
 }
 
 template <typename T>

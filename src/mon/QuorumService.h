@@ -82,7 +82,7 @@ protected:
     return (mon->is_leader() || mon->is_peon());
   }
 
-  virtual bool service_dispatch(Message *m) = 0;
+  virtual bool service_dispatch(MonOpRequestRef op) = 0;
   virtual void service_tick() = 0;
   virtual void service_shutdown() = 0;
 
@@ -107,8 +107,8 @@ public:
     return epoch;
   }
 
-  bool dispatch(Message *m) {
-    return service_dispatch(m);
+  bool dispatch(MonOpRequestRef op) {
+    return service_dispatch(op);
   }
 
   void tick() {
@@ -124,7 +124,8 @@ public:
 
   virtual void init() { }
 
-  virtual health_status_t get_health(Formatter *f,
+  virtual void get_health(Formatter *f,
+			  list<pair<health_status_t,string> >& summary,
                           list<pair<health_status_t,string> > *detail) = 0;
   virtual int get_type() = 0;
   virtual string get_name() const = 0;

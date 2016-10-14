@@ -56,18 +56,7 @@ using std::pair;
 using std::set;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
-
-// file layouts
-struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_unused: init_le32(-1),
- fl_pg_pool : init_le32(-1),
-};
+const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -98,28 +87,30 @@ struct config_option config_optionsp[] = {
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
 
-bool ceph_resolve_file_search(const std::string& filename_list,
-			      std::string& result)
+int ceph_resolve_file_search(const std::string& filename_list,
+			     std::string& result)
 {
   list<string> ls;
   get_str_list(filename_list, ls);
 
+  int ret = -ENOENT;
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
     int fd = ::open(iter->c_str(), O_RDONLY);
-    if (fd < 0)
+    if (fd < 0) {
+      ret = -errno;
       continue;
-
+    }
     close(fd);
     result = *iter;
-    return true;
+    return 0;
   }
 
-  return false;
+  return ret;
 }
 
 md_config_t::md_config_t()
-  : cluster("ceph"),
+  : cluster(""),
 
 #define OPTION_OPT_INT(name, def_val) name(def_val),
 #define OPTION_OPT_LONGLONG(name, def_val) name((1LL) * def_val),
@@ -148,7 +139,7 @@ md_config_t::md_config_t()
 #undef OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
-  lock("md_config_t", true)
+  lock("md_config_t", true, false)
 {
   init_subsys();
 }
@@ -197,13 +188,22 @@ void md_config_t::remove_observer(md_config_obs_t* observer_)
 }
 
 int md_config_t::parse_config_files(const char *conf_files,
-				    std::deque<std::string> *parse_errors,
 				    std::ostream *warnings,
 				    int flags)
 {
   Mutex::Locker l(lock);
+
   if (internal_safe_to_start_threads)
     return -ENOSYS;
+
+  if (!cluster.size() && !conf_files) {
+    /*
+     * set the cluster name to 'ceph' when neither cluster name nor
+     * configuration file are specified.
+     */
+    cluster = "ceph";
+  }
+
   if (!conf_files) {
     const char *c = getenv("CEPH_CONF");
     if (c) {
@@ -215,13 +215,30 @@ int md_config_t::parse_config_files(const char *conf_files,
       conf_files = CEPH_CONF_FILE_DEFAULT;
     }
   }
+
   std::list<std::string> cfl;
   get_str_list(conf_files, cfl);
-  return parse_config_files_impl(cfl, parse_errors, warnings);
+
+  auto p = cfl.begin();
+  while (p != cfl.end()) {
+    // expand $data_dir?
+    string &s = *p;
+    if (s.find("$data_dir") != string::npos) {
+      if (data_dir_option.length()) {
+	list<config_option*> stack;
+	expand_meta(s, NULL, stack, warnings);
+	p++;
+      } else {
+	cfl.erase(p++);  // ignore this item
+      }
+    } else {
+      ++p;
+    }
+  }
+  return parse_config_files_impl(cfl, warnings);
 }
 
 int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
-					 std::deque<std::string> *parse_errors,
 					 std::ostream *warnings)
 {
   assert(lock.is_locked());
@@ -232,7 +249,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     cf.clear();
     string fn = *c;
     expand_meta(fn, warnings);
-    int ret = cf.parse_file(fn.c_str(), parse_errors, warnings);
+    int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
     if (ret == 0)
       break;
     else if (ret != -ENOENT)
@@ -240,6 +257,25 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   }
   if (c == conf_files.end())
     return -EINVAL;
+
+  if (cluster.size() == 0) {
+    /*
+     * If cluster name is not set yet, use the prefix of the
+     * basename of configuration file as cluster name.
+     */
+    auto start = c->rfind('/') + 1;
+    auto end = c->find(".conf", start);
+    if (end == c->npos) {
+        /*
+         * If the configuration file does not follow $cluster.conf
+         * convention, we do the last try and assign the cluster to
+         * 'ceph'.
+         */
+        cluster = "ceph";
+    } else {
+      cluster = c->substr(start, end - start);
+    }
+  }
 
   std::vector <std::string> my_sections;
   _get_my_sections(my_sections);
@@ -283,15 +319,14 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   }
   if (!old_style_section_names.empty()) {
     ostringstream oss;
-    oss << "ERROR! old-style section name(s) found: ";
+    cerr << "ERROR! old-style section name(s) found: ";
     string sep;
     for (std::deque < std::string >::const_iterator os = old_style_section_names.begin();
 	 os != old_style_section_names.end(); ++os) {
-      oss << sep << *os;
+      cerr << sep << *os;
       sep = ", ";
     }
-    oss << ". Please use the new style section names that include a period.";
-    parse_errors->push_back(oss.str());
+    cerr << ". Please use the new style section names that include a period.";
   }
   return 0;
 }
@@ -389,12 +424,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
-      set_val_or_die("pid_file", "");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
       set_val_or_die("log_file", "");
-      set_val_or_die("pid_file", "");
       set_val_or_die("log_to_stderr", "true");
       set_val_or_die("err_to_stderr", "true");
       set_val_or_die("log_to_syslog", "false");
@@ -486,6 +519,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   }
 
   for (o = 0; o < NUM_CONFIG_OPTIONS; ++o) {
+    ostringstream err;
     const config_option *opt = config_optionsp + o;
     std::string as_option("--");
     as_option += opt->name;
@@ -509,8 +543,13 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	}
       }
     }
-    else if (ceph_argparse_witharg(args, i, &val,
+    else if (ceph_argparse_witharg(args, i, &val, err,
 				   as_option.c_str(), (char*)NULL)) {
+      if (!err.str().empty()) {
+	*oss << err.str();
+	ret = -EINVAL;
+	break;
+      }
       if (oss && (
 		  ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
 		   (opt->type == OPT_UUID)) &&
@@ -557,7 +596,11 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
 void md_config_t::apply_changes(std::ostream *oss)
 {
   Mutex::Locker l(lock);
-  _apply_changes(oss);
+  /*
+   * apply changes until the cluster name is assigned
+   */
+  if (cluster.size())
+    _apply_changes(oss);
 }
 
 bool md_config_t::_internal_field(const string& s)
@@ -584,13 +627,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
+    pair < obs_map_t::iterator, obs_map_t::iterator >
+      range(observers.equal_range(key));
     if ((oss) &&
 	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
 	!_internal_field(key)) {
       (*oss) << key << " = '" << buf << "' ";
+      if (range.first == range.second) {
+	(*oss) << "(unchangeable) ";
+      }
     }
-    pair < obs_map_t::iterator, obs_map_t::iterator >
-      range(observers.equal_range(key));
     for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
       rev_obs_map_t::value_type robs_val(r->second, empty_set);
       pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
@@ -599,28 +645,33 @@ void md_config_t::_apply_changes(std::ostream *oss)
     }
   }
 
+  changed.clear();
+
   // Make any pending observer callbacks
   for (rev_obs_map_t::const_iterator r = robs.begin(); r != robs.end(); ++r) {
     md_config_obs_t *obs = r->first;
     obs->handle_conf_change(this, r->second);
   }
 
-  changed.clear();
 }
 
 void md_config_t::call_all_observers()
 {
-  Mutex::Locker l(lock);
-
-  expand_all_meta();
-
   std::map<md_config_obs_t*,std::set<std::string> > obs;
-  for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r)
-    obs[r->second].insert(r->first);
+  {
+    Mutex::Locker l(lock);
+
+    expand_all_meta();
+
+    for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r) {
+      obs[r->second].insert(r->first);
+    }
+  }
   for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
        p != obs.end();
-       ++p)
+       ++p) {
     p->first->handle_conf_change(this, p->second);
+  }
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
@@ -661,7 +712,7 @@ void md_config_t::set_val_or_die(const char *key, const char *val)
   assert(ret == 0);
 }
 
-int md_config_t::set_val(const char *key, const char *val, bool meta)
+int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
 {
   Mutex::Locker l(lock);
   if (!key)
@@ -698,7 +749,7 @@ int md_config_t::set_val(const char *key, const char *val, bool meta)
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
     if (strcmp(opt->name, k.c_str()) == 0) {
-      if (internal_safe_to_start_threads) {
+      if (safe && internal_safe_to_start_threads) {
 	// If threads have been started...
 	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
 	    (opt->type == OPT_UUID)) {
@@ -805,6 +856,22 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
   return -ENOENT;
 }
 
+void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
+  const std::string negative_flag_prefix("no_");
+
+  keys->clear();
+  keys->reserve(NUM_CONFIG_OPTIONS);
+  for (size_t i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
+    keys->push_back(config_optionsp[i].name);
+    if (config_optionsp[i].type == OPT_BOOL) {
+      keys->push_back(negative_flag_prefix + config_optionsp[i].name);
+    }
+  }
+  for (int i = 0; i < subsys.get_num(); ++i) {
+    keys->push_back("debug_" + subsys.get_name(i));
+  }
+}
+
 /* The order of the sections here is important.  The first section in the
  * vector is the "highest priority" section; if we find it there, we'll stop
  * looking. The lowest priority section is the one we look in only if all
@@ -879,7 +946,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   switch (opt->type) {
     case OPT_INT: {
       std::string err;
-      int f = strict_strtol(val, 10, &err);
+      int f = strict_si_cast<int>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(int*)opt->conf_ptr(this) = f;
@@ -887,7 +954,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     }
     case OPT_LONGLONG: {
       std::string err;
-      long long f = strict_strtoll(val, 10, &err);
+      long long f = strict_si_cast<long long>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(long long*)opt->conf_ptr(this) = f;
@@ -896,12 +963,22 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     case OPT_STR:
       *(std::string*)opt->conf_ptr(this) = val ? val : "";
       return 0;
-    case OPT_FLOAT:
-      *(float*)opt->conf_ptr(this) = atof(val);
+    case OPT_FLOAT: {
+      std::string err;
+      float f = strict_strtof(val, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(float*)opt->conf_ptr(this) = f;
       return 0;
-    case OPT_DOUBLE:
-      *(double*)opt->conf_ptr(this) = atof(val);
+    }
+    case OPT_DOUBLE: {
+      std::string err;
+      double f = strict_strtod(val, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(double*)opt->conf_ptr(this) = f;
       return 0;
+    }
     case OPT_BOOL:
       if (strcasecmp(val, "false") == 0)
 	*(bool*)opt->conf_ptr(this) = false;
@@ -917,7 +994,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       return 0;
     case OPT_U32: {
       std::string err;
-      int f = strict_strtol(val, 10, &err);
+      int f = strict_si_cast<uint32_t>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->conf_ptr(this) = f;
@@ -925,7 +1002,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     }
     case OPT_U64: {
       std::string err;
-      long long f = strict_strtoll(val, 10, &err);
+      uint64_t f = strict_si_cast<uint64_t>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint64_t*)opt->conf_ptr(this) = f;
@@ -948,8 +1025,10 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   return -ENOSYS;
 }
 
-static const char *CONF_METAVARIABLES[] =
-  { "cluster", "type", "name", "host", "num", "id", "pid" };
+static const char *CONF_METAVARIABLES[] = {
+  "data_dir", // put this first: it may contain some of the others
+  "cluster", "type", "name", "host", "num", "id", "pid", "cctid"
+};
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -1061,7 +1140,22 @@ bool md_config_t::expand_meta(std::string &origval,
 	  out += name.get_id().c_str();
 	else if (var == "pid")
 	  out += stringify(getpid());
-	else
+	else if (var == "cctid")
+	  out += stringify((unsigned long long)this);
+	else if (var == "data_dir") {
+	  if (data_dir_option.length()) {
+	    char *vv = NULL;
+	    _get_val(data_dir_option.c_str(), &vv, -1);
+	    string tmp = vv;
+	    free(vv);
+	    expand_meta(tmp, NULL, stack, oss);
+	    out += tmp;
+	  } else {
+	    // this isn't really right, but it'll result in a mangled
+	    // non-existent path that will fail any search list
+	    out += "$data_dir";
+	  }
+	} else
 	  assert(0); // unreachable
 	expanded = true;
       }
@@ -1100,7 +1194,40 @@ bool md_config_t::expand_meta(std::string &origval,
   return found_meta;
 }
 
-md_config_obs_t::
-~md_config_obs_t()
+void md_config_t::diff(
+    const md_config_t *other,
+    map<string,pair<string,string> > *diff,
+    set<string> *unknown)
 {
+  Mutex::Locker l(lock);
+
+  char local_buf[4096];
+  char other_buf[4096];
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = &config_optionsp[i];
+    memset(local_buf, 0, sizeof(local_buf));
+    memset(other_buf, 0, sizeof(other_buf));
+
+    char *other_val = other_buf;
+    int err = other->get_val(opt->name, &other_val, sizeof(other_buf));
+    if (err < 0) {
+      if (err == -ENOENT) {
+        unknown->insert(opt->name);
+      }
+      continue;
+    }
+
+    char *local_val = local_buf;
+    err = _get_val(opt->name, &local_val, sizeof(local_buf));
+    if (err != 0)
+      continue;
+
+    if (strcmp(local_val, other_val))
+      diff->insert(make_pair(opt->name, make_pair(local_val, other_val)));
+  }
+}
+
+void md_config_t::complain_about_parse_errors(CephContext *cct)
+{
+  ::complain_about_parse_errors(cct, &parse_errors);
 }

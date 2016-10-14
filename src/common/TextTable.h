@@ -11,6 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#ifndef TEXT_TABLE_H_
+#define TEXT_TABLE_H_
+
 #include <vector>
 #include <sstream>
 #include <iomanip>
@@ -42,16 +46,18 @@ private:
     Align hd_align;
     Align col_align;
 
-    TextTableColumn() {};
+    TextTableColumn() {}
     TextTableColumn(std::string h, int w, Align ha, Align ca) :
 		    heading(h), width(w), hd_align(ha), col_align(ca) { }
     ~TextTableColumn() {}
   };
 
   std::vector<TextTableColumn> col;	// column definitions
-  std::vector<std::vector<std::string> > row;	// row data array
   unsigned int curcol, currow;		// col, row being inserted into
   unsigned int indent;			// indent width when rendering
+
+protected:
+  std::vector<std::vector<std::string> > row;	// row data array
 
 public:
   TextTable(): curcol(0), currow(0), indent(0) {}
@@ -118,7 +124,6 @@ public:
     }
 
     // now store the rendered item with its proper width
-    oss << std::setw(width) << item;
     row[currow][curcol] = oss.str();
 
     curcol++;
@@ -148,7 +153,7 @@ public:
    * Render table to ostream (i.e. cout << table)
    */
 
-  friend std::ostream &operator<<(std::ostream& out, TextTable &t);
+  friend std::ostream &operator<<(std::ostream &out, const TextTable &t);
 
   /**
    * clear: Reset everything in a TextTable except column defs
@@ -157,3 +162,6 @@ public:
 
   void clear();
 };
+
+#endif
+

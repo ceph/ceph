@@ -6,11 +6,12 @@
 
 #include "include/types.h"
 #include "cls_user_types.h"
+#include "common/ceph_time.h"
 
 struct cls_user_set_buckets_op {
   list<cls_user_bucket_entry> entries;
   bool add;
-  utime_t time; /* op time */
+  real_time time; /* op time */
 
   cls_user_set_buckets_op() : add(false) {}
 
@@ -59,6 +60,7 @@ WRITE_CLASS_ENCODER(cls_user_remove_bucket_op)
 
 struct cls_user_list_buckets_op {
   string marker;
+  string end_marker;
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
@@ -66,16 +68,20 @@ struct cls_user_list_buckets_op {
     : max_entries(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(marker, bl);
     ::encode(max_entries, bl);
+    ::encode(end_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(marker, bl);
     ::decode(max_entries, bl);
+    if (struct_v >= 2) {
+      ::decode(end_marker, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -154,7 +160,7 @@ struct cls_user_get_header_ret {
 WRITE_CLASS_ENCODER(cls_user_get_header_ret)
 
 struct cls_user_complete_stats_sync_op {
-  utime_t time;
+  real_time time;
 
   cls_user_complete_stats_sync_op() {}
 

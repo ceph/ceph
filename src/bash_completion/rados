@@ -31,7 +31,7 @@ _rados()
                 COMPREPLY=( $(compgen -A hostname ${cur}) )
                 return 0
                 ;;
-            *)
+            rados)
                 COMPREPLY=( $(compgen -W "lspools mkpool rmpool df ls chown get put create rm listxattr getxattr setxattr rmxattr stat mapext lssnap mksnap rmsnap rollback bench" -- ${cur}) )
                 return 0
             ;;

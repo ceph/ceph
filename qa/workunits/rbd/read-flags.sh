@@ -42,7 +42,7 @@ clean_up
 
 trap clean_up INT TERM EXIT
 
-rbd create -s 10 test
+rbd create --image-feature layering -s 10 test
 rbd snap create test@snap
 
 # export from non snapshot with or without settings should not have flags

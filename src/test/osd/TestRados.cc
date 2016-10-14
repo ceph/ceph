@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
@@ -27,11 +28,13 @@ public:
 			map<TestOpType, unsigned int> op_weights,
 			TestOpStat *stats,
 			int max_seconds,
-			bool ec_pool) :
+			bool ec_pool,
+			bool balance_reads) :
     m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds),
     m_objects(objects), m_stats(stats),
     m_total_weight(0),
-    m_ec_pool(ec_pool)
+    m_ec_pool(ec_pool),
+    m_balance_reads(balance_reads)
   {
     m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
@@ -51,12 +54,16 @@ public:
     if (m_op <= m_objects) {
       stringstream oid;
       oid << m_op;
+      if (m_op % 2) {
+	// make it a long name
+	oid << " " << string(300, 'o');
+      }
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
-	return new WriteOp(m_op, &context, oid.str(), true);
+	return new WriteOp(m_op, &context, oid.str(), true, true);
       } else {
-	return new WriteOp(m_op, &context, oid.str(), false);
+	return new WriteOp(m_op, &context, oid.str(), false, true);
       }
     } else if (m_op >= m_ops) {
       return NULL;
@@ -98,13 +105,27 @@ private:
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
-      return new ReadOp(m_op, &context, oid, m_stats);
+      return new ReadOp(m_op, &context, oid, m_balance_reads, m_stats);
 
     case TEST_OP_WRITE:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << m_op << ": " << "write oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new WriteOp(m_op, &context, oid, false, m_stats);
+      return new WriteOp(m_op, &context, oid, false, false, m_stats);
+
+    case TEST_OP_WRITE_EXCL:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "write (excl) oid "
+	   << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteOp(m_op, &context, oid, false, true, m_stats);
+
+    case TEST_OP_WRITESAME:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "writesame oid "
+	   << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteSameOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -205,11 +226,18 @@ private:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << "append oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new WriteOp(m_op, &context, oid, true, m_stats);
+      return new WriteOp(m_op, &context, oid, true, false, m_stats);
+
+    case TEST_OP_APPEND_EXCL:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << "append oid (excl) " << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteOp(m_op, &context, oid, true, true, m_stats);
 
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       assert(0);
+      return nullptr;
     }
   }
 
@@ -223,6 +251,7 @@ private:
   map<TestOpType, unsigned int> m_weight_sums;
   unsigned int m_total_weight;
   bool m_ec_pool;
+  bool m_balance_reads;
 };
 
 int main(int argc, char **argv)
@@ -234,6 +263,7 @@ int main(int argc, char **argv)
   int64_t min_stride_size = -1, max_stride_size = -1;
   int max_seconds = 0;
   bool pool_snaps = false;
+  bool write_fadvise_dontneed = false;
 
   struct {
     TestOpType op;
@@ -242,6 +272,8 @@ int main(int argc, char **argv)
   } op_types[] = {
     { TEST_OP_READ, "read", true },
     { TEST_OP_WRITE, "write", false },
+    { TEST_OP_WRITE_EXCL, "write_excl", false },
+    { TEST_OP_WRITESAME, "writesame", false },
     { TEST_OP_DELETE, "delete", true },
     { TEST_OP_SNAP_CREATE, "snap_create", true },
     { TEST_OP_SNAP_REMOVE, "snap_remove", true },
@@ -257,13 +289,15 @@ int main(int argc, char **argv)
     { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush", true },
     { TEST_OP_CACHE_EVICT, "cache_evict", true },
     { TEST_OP_APPEND, "append", true },
+    { TEST_OP_APPEND_EXCL, "append_excl", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
   map<TestOpType, unsigned int> op_weights;
-  string pool_name = "data";
+  string pool_name = "rbd";
   bool ec_pool = false;
   bool no_omap = false;
+  bool balance_reads = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -284,8 +318,12 @@ int main(int argc, char **argv)
       max_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--no-omap") == 0)
       no_omap = true;
+    else if (strcmp(argv[i], "--balance_reads") == 0)
+      balance_reads = true;
     else if (strcmp(argv[i], "--pool-snaps") == 0)
       pool_snaps = true;
+    else if (strcmp(argv[i], "--write-fadvise-dontneed") == 0)
+      write_fadvise_dontneed = true;
     else if (strcmp(argv[i], "--ec-pool") == 0) {
       if (!op_weights.empty()) {
 	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
@@ -381,13 +419,14 @@ int main(int argc, char **argv)
     max_stride_size,
     no_omap,
     pool_snaps,
+    write_fadvise_dontneed,
     id);
 
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(
     ops, objects,
     op_weights, &stats, max_seconds,
-    ec_pool);
+    ec_pool, balance_reads);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "

@@ -1,22 +1,26 @@
 #!/usr/bin/python
 
-import exceptions
+from __future__ import print_function
+
 import json
 import os
 import requests
 import subprocess
 import sys
 import time
+import uuid
 import xml.etree.ElementTree
 
 BASEURL = os.environ.get('BASEURL', 'http://localhost:5000/api/v0.1')
 
+
 def fail(r, msg):
-    print >> sys.stderr, 'FAILURE: url ', r.url
-    print >> sys.stderr, msg
-    print >> sys.stderr, 'Response content: ', r.content
-    print >> sys.stderr, 'Headers: ', r.headers
+    print('FAILURE: url ', r.url, file=sys.stderr)
+    print(msg, file=sys.stderr)
+    print('Response content: ', r.text, file=sys.stderr)
+    print('Headers: ', r.headers, file=sys.stderr)
     sys.exit(1)
+
 
 def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
     failmsg, r = expect_nofail(url, method, respcode, contenttype, extra_hdrs,
@@ -25,6 +29,7 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
         fail(r, failmsg)
     return r
 
+
 def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
                  data=None):
 
@@ -32,7 +37,7 @@ def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
     f = fdict[method.lower()]
     r = f(BASEURL + '/' + url, headers=extra_hdrs, data=data)
 
-    print '{0} {1}: {2} {3}'.format(method, url, contenttype, r.status_code)
+    print('{0} {1}: {2} {3}'.format(method, url, contenttype, r.status_code))
 
     if r.status_code != respcode:
         return 'expected {0}, got {1}'.format(respcode, r.status_code), r
@@ -51,15 +56,15 @@ def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
         if r_contenttype == 'application/json':
             try:
                 # older requests.py doesn't create r.myjson; create it myself
-                r.myjson = json.loads(r.content)
-                assert(r.myjson != None)
+                r.myjson = json.loads(r.text)
+                assert(r.myjson is not None)
             except Exception as e:
                 return 'Invalid JSON returned: "{0}"'.format(str(e)), r
 
         if r_contenttype == 'application/xml':
             try:
                 # if it's there, squirrel it away for use in the caller
-                r.tree = xml.etree.ElementTree.fromstring(r.content)
+                r.tree = xml.etree.ElementTree.fromstring(r.text)
             except Exception as e:
                 return 'Invalid XML returned: "{0}"'.format(str(e)), r
 
@@ -83,10 +88,10 @@ if __name__ == '__main__':
     r = expect('auth/export?entity=client.xx', 'GET', 200, 'plain')
     # must use text/plain; default is application/x-www-form-urlencoded
     expect('auth/add?entity=client.xx', 'PUT', 200, 'plain',
-           {'Content-Type':'text/plain'}, data=r.content)
+           {'Content-Type':'text/plain'}, data=r.text)
 
     r = expect('auth/list', 'GET', 200, 'plain')
-    assert('client.xx' in r.content)
+    assert('client.xx' in r.text)
 
     r = expect('auth/list.json', 'GET', 200, 'json')
     dictlist = r.myjson['output']['auth_dump']
@@ -113,31 +118,31 @@ if __name__ == '__main__':
 
     # export/import/export, compare
     r = expect('auth/export', 'GET', 200, 'plain')
-    exp1 = r.content
+    exp1 = r.text
     assert('client.xx' in exp1)
     r = expect('auth/import', 'PUT', 200, 'plain',
-               {'Content-Type':'text/plain'}, data=r.content)
+               {'Content-Type':'text/plain'}, data=r.text)
     r2 = expect('auth/export', 'GET', 200, 'plain')
-    assert(exp1 == r2.content)
+    assert(exp1 == r2.text)
     expect('auth/del?entity=client.xx', 'PUT', 200, 'json', JSONHDR)
 
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
     assert('epoch' in r.myjson['output'])
 
-    assert('GLOBAL' in expect('df', 'GET', 200, 'plain').content)
-    assert('CATEGORY' in expect('df?detail=detail', 'GET', 200, 'plain').content)
+    assert('GLOBAL' in expect('df', 'GET', 200, 'plain').text)
+    assert('CATEGORY' in expect('df?detail=detail', 'GET', 200, 'plain').text)
     # test param with no value (treated as param=param)
-    assert('CATEGORY' in expect('df?detail', 'GET', 200, 'plain').content)
+    assert('CATEGORY' in expect('df?detail', 'GET', 200, 'plain').text)
 
     r = expect('df', 'GET', 200, 'json', JSONHDR)
-    assert('total_used' in r.myjson['output']['stats'])
+    assert('total_used_bytes' in r.myjson['output']['stats'])
     r = expect('df', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/stats/stats/total_used') is not None)
+    assert(r.tree.find('output/stats/stats/total_used_bytes') is not None)
 
     r = expect('df?detail', 'GET', 200, 'json', JSONHDR)
-    assert('rd_kb' in r.myjson['output']['pools'][0]['stats'])
+    assert('rd_bytes' in r.myjson['output']['pools'][0]['stats'])
     r = expect('df?detail', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/stats/pools/pool/stats/rd_kb') is not None)
+    assert(r.tree.find('output/stats/pools/pool/stats/rd_bytes') is not None)
 
     expect('fsid', 'GET', 200, 'json', JSONHDR)
     expect('health', 'GET', 200, 'json', JSONHDR)
@@ -165,28 +170,10 @@ if __name__ == '__main__':
     r = expect('mds/dump.xml', 'GET', 200, 'xml')
     assert(r.tree.find('output/mdsmap/created') is not None)
 
-    failresps = []
-    while len(failresps) < 10:
-        r = expect('mds/dump.json', 'GET', 200, 'json')
-        assert('created' in r.myjson['output'])
-        current_epoch = r.myjson['output']['epoch']
-
-        map = expect('mds/getmap', 'GET', 200, '')
-        assert(len(map.content) != 0)
-        msg, r = expect_nofail(
-            'mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
-            'plain', {'Content-Type':'text/plain'}, data=map.content
-            )
-        if msg:
-            failresps.append(msg + r.content)
-        else:
-            break
-
-    if len(failresps) == 10:
-        fail(r, 'Could not mds setmap in 10 tries; responses:' +
-             '\n'.join(failresps))
-    expect('mds/newfs?metadata=0&data=1&sure=--yes-i-really-mean-it', 'PUT',
-           200, '')
+    expect('fs/flag/set?flag_name=enable_multiple&val=true', 'PUT', 200, '')
+    expect('osd/pool/create?pg_num=1&pool=cephfs_metadata', 'PUT', 200, '')
+    expect('osd/pool/create?pg_num=1&pool=cephfs_data', 'PUT', 200, '')
+    expect('fs/new?fs_name=cephfs&metadata=cephfs_metadata&data=cephfs_data', 'PUT', 200, '')
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
     pools = r.myjson['output']['pools']
@@ -201,6 +188,7 @@ if __name__ == '__main__':
     expect('mds/remove_data_pool?pool={0}'.format(poolnum), 'PUT', 200, '')
     expect('osd/pool/delete?pool=data2&pool2=data2'
            '&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
+    expect('mds/set?var=allow_multimds&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
     expect('mds/set_max_mds?maxmds=4', 'PUT', 200, '')
     expect('mds/set?var=max_mds&val=4', 'PUT', 200, '')
     expect('mds/set?var=max_file_size&val=1048576', 'PUT', 200, '')
@@ -214,16 +202,16 @@ if __name__ == '__main__':
     r = expect('mds/stat.json', 'GET', 200, 'json')
     expect('mds/set?var=max_mds&val=2', 'PUT', 200, '')
     r = expect('mds/stat.json', 'GET', 200, 'json')
-    assert('info' in r.myjson['output']['mdsmap'])
+    assert('epoch' in r.myjson['output']['fsmap'])
     r = expect('mds/stat.xml', 'GET', 200, 'xml')
-    assert(r.tree.find('output/mds_stat/mdsmap/info') is not None)
+    assert(r.tree.find('output/mds_stat/fsmap/epoch') is not None)
 
     # more content tests below, just check format here
     expect('mon/dump.json', 'GET', 200, 'json')
     expect('mon/dump.xml', 'GET', 200, 'xml')
 
     r = expect('mon/getmap', 'GET', 200, '')
-    assert(len(r.content) != 0)
+    assert(len(r.text) != 0)
     r = expect('mon_status.json', 'GET', 200, 'json')
     assert('name' in r.myjson['output'])
     r = expect('mon_status.xml', 'GET', 200, 'xml')
@@ -259,7 +247,7 @@ if __name__ == '__main__':
         if r.myjson['output']['osds'][0]['up'] == 1:
             break
         else:
-            print >> sys.stderr, "waiting for osd.0 to come back up"
+            print("waiting for osd.0 to come back up", file=sys.stderr)
             time.sleep(10)
 
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
@@ -293,7 +281,8 @@ if __name__ == '__main__':
     r = expect('osd/getmaxosd', 'GET', 200, 'json', JSONHDR)
     assert(r.myjson['output']['max_osd'] == saved_maxosd)
 
-    r = expect('osd/create', 'PUT', 200, 'json', JSONHDR)
+    osd_uuid=uuid.uuid1()
+    r = expect('osd/create?uuid={0}'.format(osd_uuid), 'PUT', 200, 'json', JSONHDR)
     assert('osdid' in r.myjson['output'])
     osdid = r.myjson['output']['osdid']
     expect('osd/lost?id={0}'.format(osdid), 'PUT', 400, '')
@@ -304,7 +293,6 @@ if __name__ == '__main__':
     assert(isinstance(r.myjson['output'], list))
     r = expect('osd/ls', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/osds/osd') is not None)
-
 
     expect('osd/pause', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
@@ -317,10 +305,6 @@ if __name__ == '__main__':
     assert('nodes' in r.myjson['output'])
     r = expect('osd/tree', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/tree/nodes') is not None)
-    expect('osd/pool/mksnap?pool=data&snap=datasnap', 'PUT', 200, '')
-    r = subprocess.call('rados -p data lssnap | grep -q datasnap', shell=True)
-    assert(r == 0)
-    expect('osd/pool/rmsnap?pool=data&snap=datasnap', 'PUT', 200, '')
 
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
     r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
@@ -328,6 +312,10 @@ if __name__ == '__main__':
     expect('osd/pool/rename?srcpool=data2&destpool=data3', 'PUT', 200, '')
     r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
     assert([p for p in r.myjson['output'] if p['poolname'] == 'data3'])
+    expect('osd/pool/mksnap?pool=data3&snap=datasnap', 'PUT', 200, '')
+    r = subprocess.call('rados -p data3 lssnap | grep -q datasnap', shell=True)
+    assert(r == 0)
+    expect('osd/pool/rmsnap?pool=data3&snap=datasnap', 'PUT', 200, '')
     expect('osd/pool/delete?pool=data3', 'PUT', 400, '')
     expect('osd/pool/delete?pool=data3&pool2=data3&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
 
@@ -355,7 +343,7 @@ if __name__ == '__main__':
     expect('pg/dump_stuck?stuckops=stale', 'GET', 200, '')
 
     r = expect('pg/getmap', 'GET', 200, '')
-    assert(len(r.content) != 0)
+    assert(len(r.text) != 0)
 
     r = expect('pg/map?pgid=0.0', 'GET', 200, 'json', JSONHDR)
     assert('acting' in r.myjson['output'])
@@ -367,8 +355,6 @@ if __name__ == '__main__':
     expect('pg/repair?pgid=0.0', 'PUT', 200, '')
     expect('pg/scrub?pgid=0.0', 'PUT', 200, '')
 
-    expect('pg/send_pg_creates', 'PUT', 200, '')
-
     expect('pg/set_full_ratio?ratio=0.90', 'PUT', 200, '')
     r = expect('pg/dump', 'GET', 200, 'json', JSONHDR)
     assert(float(r.myjson['output']['full_ratio']) == 0.90)
@@ -379,9 +365,9 @@ if __name__ == '__main__':
     expect('pg/set_full_ratio?ratio=0.85', 'PUT', 200, '')
 
     r = expect('pg/stat', 'GET', 200, 'json', JSONHDR)
-    assert('pg_stats_sum' in r.myjson['output'])
+    assert('num_pgs' in r.myjson['output'])
     r = expect('pg/stat', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/pg_map/pg_stats_sum') is not None)
+    assert(r.tree.find('output/pg_summary/num_pgs') is not None)
 
     expect('tell/0.0/query', 'GET', 200, 'json', JSONHDR)
     expect('quorum?quorumcmd=enter', 'PUT', 200, 'json', JSONHDR)
@@ -401,12 +387,12 @@ if __name__ == '__main__':
     assert(r.tree.find('output/status/osdmap') is not None)
 
     r = expect('tell/osd.0/version', 'GET', 200, '')
-    assert('ceph version' in r.content)
+    assert('ceph version' in r.text)
     expect('tell/osd.999/version', 'GET', 400, '')
     expect('tell/osd.foo/version', 'GET', 400, '')
 
     r = expect('tell/osd.0/dump_pg_recovery_stats', 'GET', 200, '')
-    assert('Started' in r.content)
+    assert('Started' in r.text)
 
     expect('osd/reweight?id=0&weight=0.9', 'PUT', 200, '')
     expect('osd/reweight?id=0&weight=-1', 'PUT', 400, '')
@@ -414,21 +400,21 @@ if __name__ == '__main__':
 
     for v in ['pg_num', 'pgp_num', 'size', 'min_size', 'crash_replay_interval',
               'crush_ruleset']:
-        r = expect('osd/pool/get.json?pool=data&var=' + v, 'GET', 200, 'json')
+        r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])
 
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
-    assert(r.myjson['output']['size'] == 2)
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
+    assert(r.myjson['output']['size'] >= 2)
 
-    expect('osd/pool/set?pool=data&var=size&val=3', 'PUT', 200, 'plain')
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
+    expect('osd/pool/set?pool=rbd&var=size&val=3', 'PUT', 200, 'plain')
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 3)
 
-    expect('osd/pool/set?pool=data&var=size&val=2', 'PUT', 200, 'plain')
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
+    expect('osd/pool/set?pool=rbd&var=size&val=2', 'PUT', 200, 'plain')
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 2)
 
     r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')
     assert(r.myjson['output']['crush_ruleset'] == 0)
 
-    print 'OK'
+    print('OK')

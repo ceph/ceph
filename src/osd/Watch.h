@@ -14,13 +14,11 @@
 #ifndef CEPH_WATCH_H
 #define CEPH_WATCH_H
 
-#include <boost/intrusive_ptr.hpp>
 #include "include/memory.h"
 #include <set>
 
 #include "msg/Messenger.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
 
 enum WatcherState {
   WATCHER_PENDING,
@@ -49,15 +47,15 @@ struct CancelableContext;
  *
  * References are held by Watch and the timeout callback.
  */
-class NotifyTimeoutCB;
 class Notify {
   friend class NotifyTimeoutCB;
   friend class Watch;
   WNotifyRef self;
   ConnectionRef client;
-  unsigned in_progress_watchers;
+  uint64_t client_gid;
   bool complete;
   bool discarded;
+  bool timed_out;  ///< true if the notify timed out
   set<WatchRef> watchers;
 
   bufferlist payload;
@@ -70,13 +68,15 @@ class Notify {
   CancelableContext *cb;
   Mutex lock;
 
+  /// (gid,cookie) -> reply_bl for everyone who acked the notify
+  multimap<pair<uint64_t,uint64_t>,bufferlist> notify_replies;
 
   /// true if this notify is being discarded
   bool is_discarded() {
     return discarded || complete;
   }
 
-  /// Sends notify completion if in_progress_watchers == 0
+  /// Sends notify completion if watchers.empty() or timeout
   void maybe_complete_notify();
 
   /// Called on Notify timeout
@@ -84,7 +84,7 @@ class Notify {
 
   Notify(
     ConnectionRef client,
-    unsigned num_watchers,
+    uint64_t client_gid,
     bufferlist &payload,
     uint32_t timeout,
     uint64_t cookie,
@@ -98,10 +98,11 @@ class Notify {
   /// removes the timeout callback, called on completion or cancellation
   void unregister_cb();
 public:
+
   string gen_dbg_prefix() {
     stringstream ss;
     ss << "Notify(" << make_pair(cookie, notify_id) << " "
-       << " in_progress_watchers=" << in_progress_watchers
+       << " watchers=" << watchers.size()
        << ") ";
     return ss.str();
   }
@@ -110,7 +111,7 @@ public:
   }
   static NotifyRef makeNotifyRef(
     ConnectionRef client,
-    unsigned num_watchers,
+    uint64_t client_gid,
     bufferlist &payload,
     uint32_t timeout,
     uint64_t cookie,
@@ -128,6 +129,11 @@ public:
 
   /// Called once per NotifyAck
   void complete_watcher(
+    WatchRef watcher, ///< [in] watcher to complete
+    bufferlist& reply_bl ///< [in] reply buffer from the notified watcher
+    );
+  /// Called when a watcher unregisters or times out
+  void complete_watcher_remove(
     WatchRef watcher ///< [in] watcher to complete
     );
 
@@ -156,9 +162,12 @@ class Watch {
   std::map<uint64_t, NotifyRef> in_progress_notifies;
 
   // Could have watch_info_t here, but this file includes osd_types.h
-  uint32_t timeout;
+  uint32_t timeout; ///< timeout in seconds
   uint64_t cookie;
   entity_addr_t addr;
+
+  bool will_ping;    ///< is client new enough to ping the watch
+  utime_t last_ping; ///< last cilent ping
 
   entity_name_t entity;
   bool discarded;
@@ -172,17 +181,34 @@ class Watch {
   /// Registers the timeout callback with watch_timer
   void register_cb();
 
-  /// Unregisters the timeout callback
-  void unregister_cb();
-
   /// send a Notify message when connected for notif
   void send_notify(NotifyRef notif);
 
   /// Cleans up state on discard or remove (including Connection state, obc)
   void discard_state();
 public:
+  /// Unregisters the timeout callback
+  void unregister_cb();
+
+  /// note receipt of a ping
+  void got_ping(utime_t t);
+  utime_t get_last_ping() const {
+    return last_ping;
+  }
+
+  bool is_connected() const {
+    return conn.get() != NULL;
+  }
+  bool is_connected(Connection *con) const {
+    return conn.get() == con;
+  }
+
   /// NOTE: must be called with pg lock held
   ~Watch();
+
+  uint64_t get_watcher_gid() const {
+    return entity.num();
+  }
 
   string gen_dbg_prefix();
   static WatchRef makeWatchRef(
@@ -210,7 +236,8 @@ public:
 
   /// Transitions Watch to connected, unregister_cb, resends pending Notifies
   void connect(
-    ConnectionRef con ///< [in] Reference to new connection
+    ConnectionRef con, ///< [in] Reference to new connection
+    bool will_ping     ///< [in] client is new and will send pings
     );
 
   /// Transitions watch to disconnected, register_cb
@@ -220,10 +247,10 @@ public:
   void discard();
 
   /// True if removed or discarded
-  bool is_discarded();
+  bool is_discarded() const;
 
   /// Called on unwatch
-  void remove();
+  void remove(bool send_disconnect);
 
   /// Adds notif as in-progress notify
   void start_notify(
@@ -237,7 +264,8 @@ public:
 
   /// Call when notify_ack received on notify_id
   void notify_ack(
-    uint64_t notify_id ///< [in] id of acked notify
+    uint64_t notify_id, ///< [in] id of acked notify
+    bufferlist& reply_bl ///< [in] notify reply buffer
     );
 };
 
@@ -262,7 +290,7 @@ public:
     );
 
   /// Called on session reset, disconnects watchers
-  void reset();
+  void reset(Connection *con);
 };
 
 #endif

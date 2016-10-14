@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 
-#include <iostream> //for testing, remove
+#include <iosfwd>
 
 #include "include/types.h"
 
@@ -52,24 +52,23 @@ using namespace std;
 class CrushWrapper {
   mutable Mutex mapper_lock;
 public:
-  struct crush_map *crush;
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
 
-  /* reverse maps */
-  bool have_rmaps;
-  std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
-
 private:
-  void build_rmaps() {
+  struct crush_map *crush;
+  /* reverse maps */
+  mutable bool have_rmaps;
+  mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  void build_rmaps() const {
     if (have_rmaps) return;
     build_rmap(type_map, type_rmap);
     build_rmap(name_map, name_rmap);
     build_rmap(rule_name_map, rule_name_rmap);
     have_rmaps = true;
   }
-  void build_rmap(const map<int, string> &f, std::map<string, int> &r) {
+  void build_rmap(const map<int, string> &f, std::map<string, int> &r) const {
     r.clear();
     for (std::map<int, string>::const_iterator p = f.begin(); p != f.end(); ++p)
       r[p->second] = p->first;
@@ -87,6 +86,8 @@ public:
     if (crush)
       crush_destroy(crush);
   }
+
+  crush_map *get_crush_map() { return crush; }
 
   /* building */
   void create() {
@@ -106,6 +107,8 @@ public:
     crush->choose_total_tries = 19;
     crush->chooseleaf_descend_once = 0;
     crush->chooseleaf_vary_r = 0;
+    crush->chooseleaf_stable = 0;
+    crush->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
@@ -113,6 +116,8 @@ public:
     crush->choose_total_tries = 50;
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 0;
+    crush->chooseleaf_stable = 0;
+    crush->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   void set_tunables_firefly() {
     crush->choose_local_tries = 0;
@@ -120,16 +125,47 @@ public:
     crush->choose_total_tries = 50;
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 1;
+    crush->chooseleaf_stable = 0;
+    crush->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+  }
+  void set_tunables_hammer() {
+    crush->choose_local_tries = 0;
+    crush->choose_local_fallback_tries = 0;
+    crush->choose_total_tries = 50;
+    crush->chooseleaf_descend_once = 1;
+    crush->chooseleaf_vary_r = 1;
+    crush->chooseleaf_stable = 0;
+    crush->allowed_bucket_algs =
+      (1 << CRUSH_BUCKET_UNIFORM) |
+      (1 << CRUSH_BUCKET_LIST) |
+      (1 << CRUSH_BUCKET_STRAW) |
+      (1 << CRUSH_BUCKET_STRAW2);
+  }
+  void set_tunables_jewel() {
+    crush->choose_local_tries = 0;
+    crush->choose_local_fallback_tries = 0;
+    crush->choose_total_tries = 50;
+    crush->chooseleaf_descend_once = 1;
+    crush->chooseleaf_vary_r = 1;
+    crush->chooseleaf_stable = 1;
+    crush->allowed_bucket_algs =
+      (1 << CRUSH_BUCKET_UNIFORM) |
+      (1 << CRUSH_BUCKET_LIST) |
+      (1 << CRUSH_BUCKET_STRAW) |
+      (1 << CRUSH_BUCKET_STRAW2);
   }
 
   void set_tunables_legacy() {
     set_tunables_argonaut();
+    crush->straw_calc_version = 0;
   }
   void set_tunables_optimal() {
-    set_tunables_firefly();
+    set_tunables_jewel();
+    crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
-    set_tunables_bobtail();
+    set_tunables_firefly();
+    crush->straw_calc_version = 1;
   }
 
   int get_choose_local_tries() const {
@@ -167,13 +203,36 @@ public:
     crush->chooseleaf_vary_r = n;
   }
 
+  int get_chooseleaf_stable() const {
+    return crush->chooseleaf_stable;
+  }
+  void set_chooseleaf_stable(int n) {
+    crush->chooseleaf_stable = n;
+  }
+
+  int get_straw_calc_version() const {
+    return crush->straw_calc_version;
+  }
+  void set_straw_calc_version(int n) {
+    crush->straw_calc_version = n;
+  }
+
+  unsigned get_allowed_bucket_algs() const {
+    return crush->allowed_bucket_algs;
+  }
+  void set_allowed_bucket_algs(unsigned n) {
+    crush->allowed_bucket_algs = n;
+  }
+
   bool has_argonaut_tunables() const {
     return
       crush->choose_local_tries == 2 &&
       crush->choose_local_fallback_tries == 5 &&
       crush->choose_total_tries == 19 &&
       crush->chooseleaf_descend_once == 0 &&
-      crush->chooseleaf_vary_r == 0;
+      crush->chooseleaf_vary_r == 0 &&
+      crush->chooseleaf_stable == 0 &&
+      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_bobtail_tunables() const {
     return
@@ -181,7 +240,9 @@ public:
       crush->choose_local_fallback_tries == 0 &&
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
-      crush->chooseleaf_vary_r == 0;
+      crush->chooseleaf_vary_r == 0 &&
+      crush->chooseleaf_stable == 0 &&
+      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
   }
   bool has_firefly_tunables() const {
     return
@@ -189,11 +250,39 @@ public:
       crush->choose_local_fallback_tries == 0 &&
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
-      crush->chooseleaf_vary_r == 1;
+      crush->chooseleaf_vary_r == 1 &&
+      crush->chooseleaf_stable == 0 &&
+      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+  }
+  bool has_hammer_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1 &&
+      crush->chooseleaf_vary_r == 1 &&
+      crush->chooseleaf_stable == 0 &&
+      crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
+				      (1 << CRUSH_BUCKET_LIST) |
+				      (1 << CRUSH_BUCKET_STRAW) |
+				      (1 << CRUSH_BUCKET_STRAW2));
+  }
+  bool has_jewel_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1 &&
+      crush->chooseleaf_vary_r == 1 &&
+      crush->chooseleaf_stable == 1 &&
+      crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
+				      (1 << CRUSH_BUCKET_LIST) |
+				      (1 << CRUSH_BUCKET_STRAW) |
+				      (1 << CRUSH_BUCKET_STRAW2));
   }
 
   bool has_optimal_tunables() const {
-    return has_firefly_tunables();
+    return has_jewel_tunables();
   }
   bool has_legacy_tunables() const {
     return has_argonaut_tunables();
@@ -213,15 +302,54 @@ public:
     return
       crush->chooseleaf_vary_r != 0;
   }
+  bool has_nondefault_tunables5() const {
+    return
+        crush->chooseleaf_stable != 0;
+  }
+
   bool has_v2_rules() const;
   bool has_v3_rules() const;
+  bool has_v4_buckets() const;
+  bool has_v5_rules() const;
 
+  bool is_v2_rule(unsigned ruleid) const;
+  bool is_v3_rule(unsigned ruleid) const;
+  bool is_v5_rule(unsigned ruleid) const;
+
+  string get_min_required_version() const {
+    if (has_v5_rules() || has_nondefault_tunables5())
+      return "jewel";
+    else if (has_v4_buckets())
+      return "hammer";
+    else if (has_nondefault_tunables3())
+      return "firefly";
+    else if (has_nondefault_tunables2() || has_nondefault_tunables())
+      return "bobtail";
+    else
+      return "argonaut";
+  }
+
+  // default bucket types
+  unsigned get_default_bucket_alg() const {
+    // in order of preference
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_STRAW2))
+      return CRUSH_BUCKET_STRAW2;
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_STRAW))
+      return CRUSH_BUCKET_STRAW;
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_TREE))
+      return CRUSH_BUCKET_TREE;
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_LIST))
+      return CRUSH_BUCKET_LIST;
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_UNIFORM))
+      return CRUSH_BUCKET_UNIFORM;
+    return 0;
+  }
 
   // bucket types
   int get_num_type_names() const {
     return type_map.size();
   }
-  int get_type_id(const string& name) {
+  int get_type_id(const string& name) const {
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
@@ -240,14 +368,14 @@ public:
   }
 
   // item/bucket names
-  bool name_exists(const string& name) {
+  bool name_exists(const string& name) const {
     build_rmaps();
     return name_rmap.count(name);
   }
   bool item_exists(int i) {
     return name_map.count(i);
   }
-  int get_item_id(const string& name) {
+  int get_item_id(const string& name) const {
     build_rmaps();
     if (name_rmap.count(name))
       return name_rmap[name];
@@ -268,12 +396,25 @@ public:
     return 0;
   }
 
+  int can_rename_item(const string& srcname,
+		      const string& dstname,
+		      ostream *ss) const;
+  int rename_item(const string& srcname,
+		  const string& dstname,
+		  ostream *ss);
+  int can_rename_bucket(const string& srcname,
+			const string& dstname,
+			ostream *ss) const;
+  int rename_bucket(const string& srcname,
+		    const string& dstname,
+		    ostream *ss);
+
   // rule names
-  bool rule_exists(string name) {
+  bool rule_exists(string name) const {
     build_rmaps();
     return rule_name_rmap.count(name);
   }
-  int get_rule_id(string name) {
+  int get_rule_id(string name) const {
     build_rmaps();
     if (rule_name_rmap.count(name))
       return rule_name_rmap[name];
@@ -502,6 +643,7 @@ public:
 private:
   bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
+  bool _bucket_is_in_use(CephContext *cct, int id);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
@@ -536,23 +678,35 @@ public:
    *
    * Will return the weight for the first instance it finds.
    *
-   * @param cct cct
    * @param id item id to check
    * @return weight of item
    */
-  int get_item_weight(int id);
-  float get_item_weightf(int id) {
+  int get_item_weight(int id) const;
+  float get_item_weightf(int id) const {
     return (float)get_item_weight(id) / (float)0x10000;
+  }
+  int get_item_weight_in_loc(int id, const map<string,string> &loc);
+  float get_item_weightf_in_loc(int id, const map<string,string> &loc) {
+    return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
   }
 
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
+  int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
+  int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
+  }
   void reweight(CephContext *cct);
 
+  int adjust_subtree_weight(CephContext *cct, int id, int weight);
+  int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
+  }
+
   /// check if item id is present in the map hierarchy
-  bool check_item_present(int id);
+  bool check_item_present(int id) const;
 
 
   /*** devices ***/
@@ -572,7 +726,7 @@ private:
   }
   crush_rule_step *get_rule_step(unsigned ruleno, unsigned step) const {
     crush_rule *n = get_rule(ruleno);
-    if (!n) return (crush_rule_step *)(-EINVAL);
+    if (IS_ERR(n)) return (crush_rule_step *)(-EINVAL);
     if (step >= n->len) return (crush_rule_step *)(-EINVAL);
     return &n->steps[step];
   }
@@ -631,6 +785,18 @@ public:
     return s->arg2;
   }
 
+  /**
+   * calculate a map of osds to weights for a given rule
+   *
+   * Generate a map of which OSDs get how much relative weight for a
+   * given rule.
+   *
+   * @param ruleno [in] rule id
+   * @param pmap [out] map of osd to weight
+   * @return 0 for success, or negative error code
+   */
+  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
+
   /* modifiers */
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
@@ -638,6 +804,11 @@ public:
     assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
+  }
+  int set_rule_mask_max_size(unsigned ruleno, int max_size) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.max_size = max_size;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
     if (!crush) return -ENOENT;
@@ -664,6 +835,9 @@ public:
   int set_rule_step_set_chooseleaf_vary_r(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_VARY_R, val, 0);
   }
+  int set_rule_step_set_chooseleaf_stable(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_STABLE, val, 0);
+  }
   int set_rule_step_choose_firstn(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_FIRSTN, val, type);
   }
@@ -682,6 +856,12 @@ public:
 
   int add_simple_ruleset(string name, string root_name, string failure_domain_type,
 			 string mode, int rule_type, ostream *err = 0);
+  /**
+   * @param rno ruleset id to use, -1 to pick the lowest available
+   */
+  int add_simple_ruleset_at(string name, string root_name,
+                            string failure_domain_type, string mode,
+                            int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -725,14 +905,11 @@ private:
       return (-EINVAL);
 
     // check that the bucket that we want to detach exists
-    assert( get_bucket(item) );
+    assert(bucket_exists(item));
 
     // get the bucket's weight
     crush_bucket *b = get_bucket(item);
     unsigned bucket_weight = b->weight;
-
-    // zero out the bucket weight
-    adjust_item_weight(cct, item, 0);
 
     // get where the bucket is located
     pair<string, string> bucket_location = get_immediate_parent(item);
@@ -744,8 +921,12 @@ private:
     crush_bucket *parent_bucket = get_bucket(parent_id);
 
     if (!IS_ERR(parent_bucket)) {
+      // zero out the bucket weight
+      crush_bucket_adjust_item_weight(crush, parent_bucket, item, 0);
+      adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
+
       // remove the bucket from the parent
-      crush_bucket_remove_item(parent_bucket, item);
+      crush_bucket_remove_item(crush, parent_bucket, item);
     } else if (PTR_ERR(parent_bucket) != -ENOENT) {
       return PTR_ERR(parent_bucket);
     }
@@ -819,13 +1000,21 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return crush_get_bucket_item_weight(b, pos);
   }
+  float get_bucket_item_weightf(int id, int pos) const {
+    const crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return 0;
+    return (float)crush_get_bucket_item_weight(b, pos) / (float)0x10000;
+  }
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
 		 int *items, int *weights, int *idout) {
-    if (type == 0)
-      return -EINVAL;
-    crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
+    if (alg == 0) {
+      alg = get_default_bucket_alg();
+      if (alg == 0)
+	return -EINVAL;
+    }
+    crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items, weights);
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
   }
@@ -863,6 +1052,36 @@ public:
     if (!crush) return -1;
     return crush_find_rule(crush, ruleset, type, size);
   }
+
+  bool ruleset_exists(int const ruleset) const {
+    for (size_t i = 0; i < crush->max_rules; ++i) {
+      if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
+	return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Return the lowest numbered ruleset of type `type`
+   *
+   * @returns a ruleset ID, or -1 if no matching rulesets found.
+   */
+  int find_first_ruleset(int type) const {
+    int result = -1;
+
+    for (size_t i = 0; i < crush->max_rules; ++i) {
+      if (crush->rules[i]
+          && crush->rules[i]->mask.type == type
+          && (crush->rules[i]->mask.ruleset < result || result == -1)) {
+        result = crush->rules[i]->mask.ruleset;
+      }
+    }
+
+    return result;
+  }
+
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
@@ -875,20 +1094,31 @@ public:
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
+  
+  bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
+   
+    assert(crush);    
 
-  int read_from_file(const char *fn) {
-    bufferlist bl;
-    std::string error;
-    int r = bl.read_file(fn, &error);
-    if (r < 0) return r;
-    bufferlist::iterator blp = bl.begin();
-    decode(blp);
-    return 0;
-  }
-  int write_to_file(const char *fn) {
-    bufferlist bl;
-    encode(bl);
-    return bl.write_file(fn);
+    __u32 i;
+    for (i = 0; i < crush->max_rules; i++) {
+      if (crush->rules[i] &&
+          crush->rules[i]->mask.ruleset == ruleset &&
+          crush->rules[i]->mask.type == type) {
+
+        if (crush->rules[i]->mask.min_size <= size &&
+            crush->rules[i]->mask.max_size >= size) {
+          return true;
+        } else if (size < crush->rules[i]->mask.min_size) {
+          ss << "pool size is smaller than the crush rule min size";
+          return false;
+        } else {
+          ss << "pool size is bigger than the crush rule max size";
+          return false;
+        }
+      }
+    }
+
+    return false;
   }
 
   void encode(bufferlist &bl, bool lean=false) const;
@@ -899,10 +1129,13 @@ public:
   void dump_rule(int ruleset, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
-  void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
+  void dump_tree(ostream *out, Formatter *f) const;
+  void dump_tree(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
-  static int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
+  int _get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
+                                                     bool quiet);
+  int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,

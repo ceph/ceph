@@ -2,19 +2,23 @@
 #define CEPH_CLIENT_DENTRY_H
 
 #include "include/lru.h"
+#include "include/xlist.h"
+
+#include "mds/mdstypes.h"
+#include "InodeRef.h"
 
 class Dir;
-class Inode;
+struct Inode;
 
 class Dentry : public LRUObject {
  public:
-  string  name;                      // sort of lame
+  string   name;                      // sort of lame
   //const char *name;
-  Dir     *dir;
-  Inode   *inode;
-  int     ref;                       // 1 if there's a dir beneath me.
-  uint64_t offset;
-  int lease_mds;
+  Dir	   *dir;
+  InodeRef inode;
+  int	   ref;                       // 1 if there's a dir beneath me.
+  int64_t offset;
+  mds_rank_t lease_mds;
   utime_t lease_ttl;
   uint64_t lease_gen;
   ceph_seq_t lease_seq;
@@ -41,7 +45,10 @@ class Dentry : public LRUObject {
 
   void dump(Formatter *f) const;
 
-  Dentry() : dir(0), inode(0), ref(1), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
+  Dentry() :
+    dir(0), ref(1), offset(0),
+    lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0)
+  { }
 private:
   ~Dentry() {
     assert(ref == 0);

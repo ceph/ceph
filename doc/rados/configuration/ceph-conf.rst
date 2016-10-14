@@ -129,14 +129,14 @@ A typical global setting involves activating authentication. For example:
 .. code-block:: ini
 
 	[global]
-		#Enable authentication between hosts within the cluster.
-		#v 0.54 and earlier
-		auth supported = cephx
+	#Enable authentication between hosts within the cluster.
+	#v 0.54 and earlier
+	auth supported = cephx
 		
-		#v 0.55 and after
-		auth cluster required = cephx
-		auth service required = cephx
-		auth client required = cephx
+	#v 0.55 and after
+	auth cluster required = cephx
+	auth service required = cephx
+	auth client required = cephx
 
 
 You can specify settings that apply to a particular type of daemon. When you
@@ -150,8 +150,7 @@ settings, etc. For example:
 .. code-block:: ini
 
 	[osd]
-		osd journal size = 1000
-		filestore xattr use omap = true
+	osd journal size = 1000
 
 
 You may specify settings for particular instances of a daemon. You may specify
@@ -162,13 +161,21 @@ alphanumeric for Ceph Monitors and Ceph Metadata Servers.
 .. code-block:: ini
 
 	[osd.1]
-		# settings affect osd.1 only.
+	# settings affect osd.1 only.
 		
 	[mon.a]	
-		# settings affect mon.a only.
+	# settings affect mon.a only.
 		
 	[mds.b]
-		# settings affect mds.b only.
+	# settings affect mds.b only.
+
+
+If the daemon you specify is a Ceph Gateway client, specify the daemon and the 
+instance, delimited by a period (.). For example:: 
+
+	[client.radosgw.instance-name]
+	# settings affect client.radosgw.instance-name only.
+
 
 
 .. _ceph-metavariables:
@@ -179,8 +186,8 @@ Metavariables
 Metavariables simplify Ceph Storage Cluster configuration dramatically. When a
 metavariable is set in a configuration value, Ceph expands the metavariable into
 a concrete value. Metavariables are very powerful when used within the
-``[global]``, ``[osd]``, ``[mon]`` or ``[mds]`` sections of your configuration
-file. Ceph metavariables are similar to Bash shell expansion.
+``[global]``, ``[osd]``, ``[mon]``, ``[mds]`` or ``[client]`` sections of your 
+configuration file. Ceph metavariables are similar to Bash shell expansion.
 
 Ceph supports the following metavariables: 
 
@@ -220,6 +227,11 @@ Ceph supports the following metavariables:
 :Description: Expands to ``$type.$id``.
 :Example: ``/var/run/ceph/$cluster-$name.asok``
 
+``$pid``
+
+:Description: Expands to daemon pid.
+:Example: ``/var/run/ceph/$cluster-$name-$pid.asok``
+
 
 .. _ceph-conf-common-settings:
 
@@ -229,31 +241,30 @@ Common Settings
 The `Hardware Recommendations`_ section provides some hardware guidelines for
 configuring a Ceph Storage Cluster. It is possible for a single :term:`Ceph
 Node` to run multiple daemons. For example, a single node with multiple drives
-or RAIDs may run one ``ceph-osd`` for each drive or RAID. Ideally, you will 
-have a node for a particular type of process. For example, some nodes may run
-``ceph-osd`` daemons, other nodes may run ``ceph-mds`` daemons, and still 
-other nodes may run ``ceph-mon`` daemons.
+may run one ``ceph-osd`` for each drive. Ideally, you will  have a node for a
+particular type of process. For example, some nodes may run ``ceph-osd``
+daemons, other nodes may run ``ceph-mds`` daemons, and still  other nodes may
+run ``ceph-mon`` daemons.
 
 Each node has a name identified by the ``host`` setting. Monitors also specify
 a network address and port (i.e., domain name or IP address) identified by the
 ``addr`` setting.  A basic configuration file will typically specify only
-minimal settings for each instance of a daemon. For example:
+minimal settings for each instance of monitor daemons. For example:
 
 .. code-block:: ini
 
-	[mon.a]
-		host = hostName
-		mon addr = 150.140.130.120:6789
-		
-	[osd.0]
-		host = hostName
+	[global]
+	mon_initial_members = ceph1
+	mon_host = 10.0.0.1
+
 
 .. important:: The ``host`` setting is the short name of the node (i.e., not 
    an fqdn). It is **NOT** an IP address either.  Enter ``hostname -s`` on 
-   the command line to retrieve the name of the node. Also, this setting is 
-   **ONLY** for ``mkcephfs`` and manual deployment. It **MUST NOT**
-   be used with ``chef`` or ``ceph-deploy``, as those tools will enter the
-   appropriate values for you.
+   the command line to retrieve the name of the node. Do not use ``host`` 
+   settings for anything other than initial monitors unless you are deploying
+   Ceph manually. You **MUST NOT** specify ``host`` under individual daemons 
+   when using deployment tools like ``chef`` or ``ceph-deploy``, as those tools 
+   will enter the appropriate values for you in the cluster map.
 
 
 .. _ceph-network-config:
@@ -282,8 +293,8 @@ Ceph Monitors typically listen on port ``6789``. For example:
 .. code-block:: ini 
 
 	[mon.a]
-		host = hostName
-		mon addr = 150.140.130.120:6789
+	host = hostName
+	mon addr = 150.140.130.120:6789
 
 By default, Ceph expects that you will store a monitor's data under the
 following path::
@@ -312,9 +323,9 @@ Authentication
 For Bobtail (v 0.56) and beyond, you should expressly enable or disable
 authentication in the ``[global]`` section of your Ceph configuration file. ::
 
-		auth cluster required = cephx
-		auth service required = cephx
-		auth client required = cephx
+	auth cluster required = cephx
+	auth service required = cephx
+	auth client required = cephx
 
 Additionally, you should enable message signing. See `Cephx Config Reference`_
 and  `Cephx Authentication`_ for details. 
@@ -333,20 +344,17 @@ and  `Cephx Authentication`_ for details.
 OSDs
 ====
 
-Ceph production clusters typically deploy :term:Ceph OSD Daemons` where one node
+Ceph production clusters typically deploy :term:`Ceph OSD Daemons` where one node
 has one OSD daemon running a filestore on one storage drive. A typical
-deployment specifies a journal  size and whether the file store's extended
-attributes (XATTRs) use an  object map (i.e., when running on the ``ext4``
-filesystem). For example:
+deployment specifies a journal size. For example:
 
 .. code-block:: ini
 
 	[osd]
-		osd journal size = 10000
-		filestore xattr use omap = true #enables the object map. Only if running ext4.
+	osd journal size = 10000
 		
 	[osd.0]
-		host = {hostname}
+	host = {hostname} #manual deployments only.
 
 
 By default, Ceph expects that you will store a Ceph OSD Daemon's data with the 
@@ -377,8 +385,8 @@ use with Ceph, and mount it to the directory you just created::
 	sudo mkfs -t {fstype} /dev/{disk}
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
-We recommend using the ``xfs`` file system or the ``btrfs`` file system when 
-running :command:mkfs. 
+We recommend using the ``xfs`` file system or the ``btrfs`` file system when
+running :command:`mkfs`.
 
 See the `OSD Config Reference`_ for additional configuration details.
 
@@ -399,7 +407,7 @@ See `Configuring Monitor/OSD Interaction`_ for additional details.
 Logs / Debugging
 ================
 
-Ceph is still on the leading edge, so you may encounter situations that require
+Sometimes you may encounter issues with Ceph that require
 modifying logging output and using Ceph's debugging. See `Debugging and
 Logging`_ for details on log rotation.
 
@@ -423,19 +431,19 @@ useful for increasing/decreasing logging output, enabling/disabling debug
 settings, and even for runtime optimization. The following reflects runtime
 configuration usage::
 
-	ceph {daemon-type} tell {id or *} injectargs '--{name} {value} [--{name} {value}]'
+	ceph tell {daemon-type}.{id or *} injectargs --{name} {value} [--{name} {value}]
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the  runtime setting to all daemons of a particular type with ``*``, or specify
 a specific  daemon's ID (i.e., its number or letter). For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following::
 
-	ceph osd tell 0 injectargs '--debug-osd 20 --debug-ms 1'
+	ceph tell osd.0 injectargs --debug-osd 20 --debug-ms 1
 
 In your ``ceph.conf`` file, you may use spaces when specifying a
 setting name.  When specifying a setting name on the command line,
 ensure that you use an underscore or hyphen (``_`` or ``-``) between
-terms (e.g., ``debug osd`` becomes ``debug-osd``).
+terms (e.g., ``debug osd`` becomes ``--debug-osd``).
 
 
 Viewing a Configuration at Runtime
@@ -444,17 +452,11 @@ Viewing a Configuration at Runtime
 If your Ceph Storage Cluster is running, and you would like to see the
 configuration settings from a running daemon, execute the following:: 
 
-	ceph --admin-daemon {/path/to/admin/socket} config show | less
-	
-The default path for the admin socket for each daemon is:: 
+	ceph daemon {daemon-type}.{id} config show | less
 
-	/var/run/ceph/$cluster-$name.asok
-	
-At real time, the metavariables will evaluate to the actual cluster name and
-daemon name. For example, if the cluster name is ``ceph`` (it is by default) 
-and you want to retrieve the configuration for ``osd.0``, use the following::
+If you are on a machine where osd.0 is running, the command would be::
 
-	ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config show | less
+    ceph daemon osd.0 config show | less
 
 
 Running Multiple Clusters
@@ -468,7 +470,8 @@ When running Ceph with  default settings, the default cluster name is ``ceph``,
 which means you would  save your Ceph configuration file with the file name
 ``ceph.conf`` in the  ``/etc/ceph`` default directory.
 
-See `ceph-deploy new` for details.
+See `ceph-deploy new`_ for details.
+.. _ceph-deploy new:../ceph-deploy-new
 
 When you run multiple clusters, you must name your cluster and save the Ceph
 configuration file with the name of the cluster. For example, a cluster named
@@ -522,8 +525,8 @@ To invoke a cluster other than the default ``ceph`` cluster, use the
 	ceph -c openstack.conf health
 
 
-.. _Hardware Recommendations: ../../../install/hardware-recommendations
-.. _hardware recommendations: ../../../install/hardware-recommendations
+.. _Hardware Recommendations: ../../../start/hardware-recommendations
+.. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction

@@ -12,25 +12,24 @@
  *
  */
 
-#include "common/Thread.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
-#include "common/common_init.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 #include "include/compat.h"
-#include "include/color.h"
+#include "include/str_list.h"
 
+#include <pwd.h>
+#include <grp.h>
 #include <errno.h>
-#include <deque>
 
 #define dout_subsys ceph_subsys_
 
@@ -56,18 +55,37 @@ static const char* c_str_or_null(const std::string &str)
   return str.c_str();
 }
 
+static int chown_path(const std::string &pathname, const uid_t owner, const gid_t group,
+		      const std::string &uid_str, const std::string &gid_str)
+{
+  const char *pathname_cstr = c_str_or_null(pathname);
+
+  if (!pathname_cstr) {
+    return 0;
+  }
+
+  int r = ::chown(pathname_cstr, owner, group);
+
+  if (r < 0) {
+    r = -errno;
+    cerr << "warning: unable to chown() " << pathname << " as "
+	 << uid_str << ":" << gid_str << ": " << cpp_strerror(r) << std::endl;
+  }
+
+  return r;
+}
+
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags)
+		     int flags,
+		     const char *data_dir_option)
 {
-  // You can only call global_init once.
-  assert(!g_ceph_context);
   std::string conf_file_list;
-  std::string cluster = "ceph";
+  std::string cluster = "";
   CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
 							&cluster, &conf_file_list);
-  CephContext *cct = common_preinit(iparams, code_env, flags);
+  CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
@@ -75,8 +93,8 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   if (alt_def_args)
     conf->parse_argv(*alt_def_args);  // alternative default args
 
-  std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(c_str_or_null(conf_file_list), &parse_errors, &cerr, flags);
+  int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
+				     &cerr, flags);
   if (ret == -EDOM) {
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);
@@ -103,20 +121,33 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
   conf->parse_argv(args); // argv override
 
-  // Expand metavariables. Invoke configuration observers.
-  conf->apply_changes(NULL);
-
   // Now we're ready to complain about config file parse errors
-  complain_about_parse_errors(cct, &parse_errors);
+  g_conf->complain_about_parse_errors(g_ceph_context);
 }
 
 void global_init(std::vector < const char * > *alt_def_args,
 		 std::vector < const char* >& args,
-		 uint32_t module_type, code_environment_t code_env, int flags)
+		 uint32_t module_type, code_environment_t code_env,
+		 int flags,
+		 const char *data_dir_option, bool run_pre_init)
 {
-  global_pre_init(alt_def_args, args, module_type, code_env, flags);
+  // Ensure we're not calling the global init functions multiple times.
+  static bool first_run = true;
+  if (run_pre_init) {
+    // We will run pre_init from here (default).
+    assert(!g_ceph_context && first_run);
+    global_pre_init(alt_def_args, args, module_type, code_env, flags);
+  } else {
+    // Caller should have invoked pre_init manually.
+    assert(g_ceph_context && first_run);
+  }
+  first_run = false;
 
-  g_lockdep = g_ceph_context->_conf->lockdep;
+  // Verify flags have not changed if global_pre_init() has been called
+  // manually. If they have, update them.
+  if (g_ceph_context->get_init_flags() != flags) {
+    g_ceph_context->set_init_flags(flags);
+  }
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
@@ -128,27 +159,161 @@ void global_init(std::vector < const char * > *alt_def_args,
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
 
+  // consider --setuser root a no-op, even if we're not root
+  if (getuid() != 0) {
+    if (g_conf->setuser.length()) {
+      cerr << "ignoring --setuser " << g_conf->setuser << " since I am not root"
+	   << std::endl;
+      g_conf->set_val("setuser", "", false, false);
+    }
+    if (g_conf->setgroup.length()) {
+      cerr << "ignoring --setgroup " << g_conf->setgroup
+	   << " since I am not root" << std::endl;
+      g_conf->set_val("setgroup", "", false, false);
+    }
+  }
+
+  // drop privileges?
+  ostringstream priv_ss;
+  if (g_conf->setgroup.length() ||
+      g_conf->setuser.length()) {
+    uid_t uid = 0;  // zero means no change; we can only drop privs here.
+    gid_t gid = 0;
+    std::string uid_string;
+    std::string gid_string;
+    if (g_conf->setuser.length()) {
+      uid = atoi(g_conf->setuser.c_str());
+      if (!uid) {
+	char buf[4096];
+	struct passwd pa;
+	struct passwd *p = 0;
+	getpwnam_r(g_conf->setuser.c_str(), &pa, buf, sizeof(buf), &p);
+	if (!p) {
+	  cerr << "unable to look up user '" << g_conf->setuser << "'"
+	       << std::endl;
+	  exit(1);
+	}
+	uid = p->pw_uid;
+	gid = p->pw_gid;
+	uid_string = g_conf->setuser;
+      }
+    }
+    if (g_conf->setgroup.length() > 0) {
+      gid = atoi(g_conf->setgroup.c_str());
+      if (!gid) {
+	char buf[4096];
+	struct group gr;
+	struct group *g = 0;
+	getgrnam_r(g_conf->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
+	if (!g) {
+	  cerr << "unable to look up group '" << g_conf->setgroup << "'"
+	       << ": " << cpp_strerror(errno) << std::endl;
+	  exit(1);
+	}
+	gid = g->gr_gid;
+	gid_string = g_conf->setgroup;
+      }
+    }
+    if ((uid || gid) &&
+	g_conf->setuser_match_path.length()) {
+      // induce early expansion of setuser_match_path config option
+      string match_path = g_conf->setuser_match_path;
+      g_conf->early_expand_meta(match_path, &cerr);
+      struct stat st;
+      int r = ::stat(match_path.c_str(), &st);
+      if (r < 0) {
+	cerr << "unable to stat setuser_match_path "
+	     << g_conf->setuser_match_path
+	     << ": " << cpp_strerror(errno) << std::endl;
+	exit(1);
+      }
+      if ((uid && uid != st.st_uid) ||
+	  (gid && gid != st.st_gid)) {
+	cerr << "WARNING: will not setuid/gid: " << match_path
+	     << " owned by " << st.st_uid << ":" << st.st_gid
+	     << " and not requested " << uid << ":" << gid
+	     << std::endl;
+	uid = 0;
+	gid = 0;
+	uid_string.erase();
+	gid_string.erase();
+      } else {
+	priv_ss << "setuser_match_path "
+		<< match_path << " owned by "
+		<< st.st_uid << ":" << st.st_gid << ". ";
+      }
+    }
+    g_ceph_context->set_uid_gid(uid, gid);
+    g_ceph_context->set_uid_gid_strings(uid_string, gid_string);
+    if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) == 0) {
+      if (setgid(gid) != 0) {
+	cerr << "unable to setgid " << gid << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(1);
+      }
+      if (setuid(uid) != 0) {
+	cerr << "unable to setuid " << uid << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(1);
+      }
+      priv_ss << "set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
+    } else {
+      priv_ss << "deferred set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
+    }
+  }
+
+  // Expand metavariables. Invoke configuration observers. Open log file.
+  g_conf->apply_changes(NULL);
+
   if (g_conf->run_dir.length() &&
       code_env == CODE_ENVIRONMENT_DAEMON &&
       !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
     if (r < 0 && errno != EEXIST) {
-      r = -errno;
-      derr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << dendl;
+      cerr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(errno) << std::endl;
     }
   }
 
-  if (g_lockdep) {
-    lockdep_register_ceph_context(g_ceph_context);
-  }
   register_assert_context(g_ceph_context);
 
   // call all observers now.  this has the side-effect of configuring
   // and opening the log file immediately.
   g_conf->call_all_observers();
 
+  if (priv_ss.str().length()) {
+    dout(0) << priv_ss.str() << dendl;
+  }
+
+  if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+      (g_ceph_context->get_set_uid() || g_ceph_context->get_set_gid())) {
+    // Fix ownership on log files and run directories if needed.
+    // Admin socket files are chown()'d during the common init path _after_
+    // the service thread has been started. This is sadly a bit of a hack :(
+    chown_path(g_conf->run_dir,
+	       g_ceph_context->get_set_uid(),
+	       g_ceph_context->get_set_gid(),
+	       g_ceph_context->get_set_uid_string(),
+	       g_ceph_context->get_set_gid_string());
+    g_ceph_context->_log->chown_log_file(
+      g_ceph_context->get_set_uid(),
+      g_ceph_context->get_set_gid());
+  }
+
+  // Now we're ready to complain about config file parse errors
+  g_conf->complain_about_parse_errors(g_ceph_context);
+
+  // test leak checking
+  if (g_conf->debug_deliberately_leak_memory) {
+    derr << "deliberately leaking some memory" << dendl;
+    char *s = new char[1234567];
+    (void)s;
+    // cppcheck-suppress memleak
+  }
+
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
+
+  g_ceph_context->crush_location.init_on_startup();
 }
 
 void global_print_banner(void)
@@ -156,30 +321,39 @@ void global_print_banner(void)
   output_ceph_version();
 }
 
-static void pidfile_remove_void(void)
-{
-  pidfile_remove();
-}
-
-int global_init_prefork(CephContext *cct, int flags)
+int global_init_prefork(CephContext *cct)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return -1;
-  const md_config_t *conf = cct->_conf;
-  if (!conf->daemonize)
-    return -1;
 
+  const md_config_t *conf = cct->_conf;
+  if (!conf->daemonize) {
+
+    if (pidfile_write(conf) < 0)
+      exit(1);
+
+    if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+	(cct->get_set_uid() || cct->get_set_gid())) {
+      chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
+		 cct->get_set_uid_string(), cct->get_set_gid_string());
+    }
+
+    return -1;
+  }
+
+  cct->notify_pre_fork();
   // stop log thread
-  g_ceph_context->_log->flush();
-  g_ceph_context->_log->stop();
+  cct->_log->flush();
+  cct->_log->stop();
   return 0;
 }
 
-void global_init_daemonize(CephContext *cct, int flags)
+void global_init_daemonize(CephContext *cct)
 {
-  if (global_init_prefork(cct, flags) < 0)
+  if (global_init_prefork(cct) < 0)
     return;
 
+#if !defined(_AIX)
   int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
@@ -187,20 +361,19 @@ void global_init_daemonize(CephContext *cct, int flags)
 	 << cpp_strerror(ret) << dendl;
     exit(1);
   }
-
+ 
   global_init_postfork_start(cct);
-  global_init_postfork_finish(cct, flags);
+  global_init_postfork_finish(cct);
+#else
+# warning daemon not supported on aix
+#endif
 }
 
 void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
-  g_ceph_context->_log->start();
-
-  if (atexit(pidfile_remove_void)) {
-    derr << "global_init_daemonize: failed to set pidfile_remove function "
-	 << "to run at exit." << dendl;
-  }
+  cct->_log->start();
+  cct->notify_post_fork();
 
   /* This is the old trick where we make file descriptors 0, 1, and possibly 2
    * point to /dev/null.
@@ -225,16 +398,24 @@ void global_init_postfork_start(CephContext *cct)
     exit(1);
   }
 
-  pidfile_write(g_conf);
+  const md_config_t *conf = cct->_conf;
+  if (pidfile_write(conf) < 0)
+    exit(1);
+
+  if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+      (cct->get_set_uid() || cct->get_set_gid())) {
+    chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
+	       cct->get_set_uid_string(), cct->get_set_gid_string());
+  }
 }
 
-void global_init_postfork_finish(CephContext *cct, int flags)
+void global_init_postfork_finish(CephContext *cct)
 {
   /* We only close stderr once the caller decides the daemonization
    * process is finished.  This way we can allow error messages to be
    * propagated in a manner that the user is able to see.
    */
-  if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
+  if (!(cct->get_init_flags() & CINIT_FLAG_NO_CLOSE_STDERR)) {
     int ret = global_init_shutdown_stderr(cct);
     if (ret) {
       derr << "global_init_daemonize: global_init_shutdown_stderr failed with "
@@ -275,3 +456,48 @@ int global_init_shutdown_stderr(CephContext *cct)
   return 0;
 }
 
+int global_init_preload_erasure_code(const CephContext *cct)
+{
+  const md_config_t *conf = cct->_conf;
+  string plugins = conf->osd_erasure_code_plugins;
+
+  // validate that this is a not a legacy plugin
+  list<string> plugins_list;
+  get_str_list(plugins, plugins_list);
+  for (list<string>::iterator i = plugins_list.begin();
+       i != plugins_list.end();
+       ++i) {
+	string plugin_name = *i;
+	string replacement = "";
+
+	if (plugin_name == "jerasure_generic" || 
+	    plugin_name == "jerasure_sse3" ||
+	    plugin_name == "jerasure_sse4" ||
+	    plugin_name == "jerasure_neon") {
+	  replacement = "jerasure";
+	}
+	else if (plugin_name == "shec_generic" ||
+		 plugin_name == "shec_sse3" ||
+		 plugin_name == "shec_sse4" ||
+		 plugin_name == "shec_neon") {
+	  replacement = "shec";
+	}
+
+	if (replacement != "") {
+	  dout(0) << "WARNING: osd_erasure_code_plugins contains plugin "
+		  << plugin_name << " that is now deprecated. Please modify the value "
+		  << "for osd_erasure_code_plugins to use "  << replacement << " instead." << dendl;
+	}
+  }
+
+  stringstream ss;
+  int r = ErasureCodePluginRegistry::instance().preload(
+    plugins,
+    conf->erasure_code_dir,
+    &ss);
+  if (r)
+    derr << ss.str() << dendl;
+  else
+    dout(10) << ss.str() << dendl;
+  return r;
+}

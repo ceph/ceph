@@ -169,4 +169,43 @@ void cls_lock_list_locks_reply::generate_test_instances(list<cls_lock_list_locks
   o.push_back(new cls_lock_list_locks_reply);
 }
 
+void cls_lock_assert_op::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_string("type", cls_lock_type_str(type));
+  f->dump_string("cookie", cookie);
+  f->dump_string("tag", tag);
+}
+
+void cls_lock_assert_op::generate_test_instances(list<cls_lock_assert_op*>& o)
+{
+  cls_lock_assert_op *i = new cls_lock_assert_op;
+  i->name = "name";
+  i->type = LOCK_SHARED;
+  i->cookie = "cookie";
+  i->tag = "tag";
+  o.push_back(i);
+  o.push_back(new cls_lock_assert_op);
+}
+
+void cls_lock_set_cookie_op::dump(Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_string("type", cls_lock_type_str(type));
+  f->dump_string("cookie", cookie);
+  f->dump_string("tag", tag);
+  f->dump_string("new_cookie", new_cookie);
+}
+
+void cls_lock_set_cookie_op::generate_test_instances(list<cls_lock_set_cookie_op*>& o)
+{
+  cls_lock_set_cookie_op *i = new cls_lock_set_cookie_op;
+  i->name = "name";
+  i->type = LOCK_SHARED;
+  i->cookie = "cookie";
+  i->tag = "tag";
+  i->new_cookie = "new cookie";
+  o.push_back(i);
+  o.push_back(new cls_lock_set_cookie_op);
+}
 

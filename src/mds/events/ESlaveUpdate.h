@@ -113,7 +113,7 @@ public:
   bufferlist rollback;
   string type;
   metareqid_t reqid;
-  __s32 master;
+  mds_rank_t master;
   __u8 op;  // prepare, commit, abort
   __u8 origop; // link | rename
 
@@ -136,12 +136,15 @@ public:
     out << commit;
   }
 
-  void encode(bufferlist& bl) const;
+  EMetaBlob *get_metablob() { return &commit; }
+
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ESlaveUpdate*>& ls);
 
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 };
+WRITE_CLASS_ENCODER_FEATURES(ESlaveUpdate)
 
 #endif

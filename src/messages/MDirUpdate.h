@@ -19,18 +19,18 @@
 #include "msg/Message.h"
 
 class MDirUpdate : public Message {
-  int32_t from_mds;
+  mds_rank_t from_mds;
   dirfrag_t dirfrag;
   int32_t dir_rep;
   int32_t discover;
-  set<int32_t> dir_rep_by;
+  compact_set<int32_t> dir_rep_by;
   filepath path;
 
  public:
-  int get_source_mds() const { return from_mds; }
+  mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   int get_dir_rep() const { return dir_rep; }
-  const set<int>& get_dir_rep_by() const { return dir_rep_by; } 
+  const compact_set<int>& get_dir_rep_by() const { return dir_rep_by; }
   bool should_discover() const { return discover > 0; }
   const filepath& get_path() const { return path; }
 
@@ -39,10 +39,10 @@ class MDirUpdate : public Message {
   }
 
   MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
-  MDirUpdate(int f, 
+  MDirUpdate(mds_rank_t f, 
 	     dirfrag_t dirfrag,
              int dir_rep,
-             set<int>& dir_rep_by,
+             compact_set<int>& dir_rep_by,
              filepath& path,
              bool discover = false) :
     Message(MSG_MDS_DIRUPDATE) {
@@ -51,6 +51,7 @@ class MDirUpdate : public Message {
     this->dir_rep = dir_rep;
     this->dir_rep_by = dir_rep_by;
     if (discover) this->discover = 5;
+    else this->discover = 0;
     this->path = path;
   }
 private:

@@ -17,15 +17,14 @@
 #include <errno.h>
 
 #include "include/types.h"
-#include "include/Context.h"
 #include "mon/mon_types.h"
-#include "mon/QuorumService.h"
 #include "mon/HealthService.h"
-#include "common/Formatter.h"
 #include "common/config.h"
 #include "global/signal_handler.h"
 
 struct MMonHealth;
+namespace ceph { class Formatter; }
+
 
 class DataHealthService :
   public HealthService
@@ -33,7 +32,7 @@ class DataHealthService :
   map<entity_inst_t,DataStats> stats;
   int last_warned_percent;
 
-  void handle_tell(MMonHealth *m);
+  void handle_tell(MonOpRequestRef op);
   int update_store_stats(DataStats &ours);
   int update_stats();
   void share_stats();
@@ -45,11 +44,7 @@ class DataHealthService :
 
 protected:
   virtual void service_tick();
-  virtual bool service_dispatch(Message *m) {
-    assert(0 == "We should never reach this; only the function below");
-    return false;
-  }
-  virtual bool service_dispatch(MMonHealth *m);
+  virtual bool service_dispatch_op(MonOpRequestRef op);
   virtual void service_shutdown() { }
 
   virtual void start_epoch();
@@ -70,7 +65,8 @@ public:
     start_tick();
   }
 
-  virtual health_status_t get_health(Formatter *f,
+  virtual void get_health(Formatter *f,
+                          list<pair<health_status_t,string> >& summary,
                           list<pair<health_status_t,string> > *detail);
 
   virtual int get_type() {

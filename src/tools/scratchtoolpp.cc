@@ -23,6 +23,10 @@ using namespace librados;
 #include <stdlib.h>
 #include <time.h>
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   str[0] = '\0';
@@ -101,8 +105,11 @@ int main(int argc, const char **argv)
 
   const char *oid = "bar";
 
+  int r = rados.pool_create("foo");
+  cout << "pool_create result = " << r << std::endl;
+
   IoCtx io_ctx;
-  int r = rados.ioctx_create("data", io_ctx);
+  r = rados.ioctx_create("foo", io_ctx);
   cout << "ioctx_create result = " << r << std::endl;
 
   r = io_ctx.write(oid, bl, bl.length(), 0);
@@ -285,8 +292,8 @@ int main(int argc, const char **argv)
 
   cout << "iterating over objects..." << std::endl;
   int num_objs = 0;
-  for (ObjectIterator iter = io_ctx.objects_begin();
-       iter != io_ctx.objects_end(); ++iter) {
+  for (NObjectIterator iter = io_ctx.nobjects_begin();
+       iter != io_ctx.nobjects_end(); ++iter) {
     num_objs++;
     cout << "'" << *iter << "'" << std::endl;
   }
@@ -301,8 +308,14 @@ int main(int argc, const char **argv)
 
   r = io_ctx.remove(oid);
   cout << "remove result=" << r << std::endl;
+
+  r = rados.pool_delete("foo");
+  cout << "pool_delete result=" << r << std::endl;
+
   rados.shutdown();
 
   return 0;
 }
 
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"

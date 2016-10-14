@@ -24,17 +24,10 @@ by using a method of storing XATTRs that is extrinsic to the underlying filesyst
 
 Ceph XATTRs are stored as ``inline xattr``, using the XATTRs provided
 by the underlying file system, if it does not impose a size limit. If
-there is a size limit ( 4KB total on ext4, for instance ), some Ceph
-XATTRs will be stored in an key/value database ( aka ``omap`` ) when
-the ``filestore max inline xattr size`` or ``filestore max inline
-xattrs`` threshold are reached.
-
-``filestore xattr use omap``
-
-:Description: Use object map for XATTRS. Set to ``true`` for ``ext4`` file systems. 
-:Type: Boolean
-:Required: No
-:Default: ``false``
+there is a size limit (4KB total on ext4, for instance), some Ceph
+XATTRs will be stored in an key/value database when either the
+``filestore max inline xattr size`` or ``filestore max inline
+xattrs`` threshold is reached.
 
 
 ``filestore max inline xattr size``
@@ -256,6 +249,7 @@ Misc
 ``filestore merge threshold``
 
 :Description: Min number of files in a subdir before merging into parent
+              NOTE: A negative value means to disable subdir merging
 :Type: Integer
 :Required: No
 :Default: ``10``
@@ -263,7 +257,7 @@ Misc
 
 ``filestore split multiple``
 
-:Description:  ``filestore_split_multiple * filestore_merge_threshold * 16`` 
+:Description:  ``filestore_split_multiple * abs(filestore_merge_threshold) * 16`` 
                is the maximum number of files in a subdirectory before 
                splitting into child directories.
 

@@ -35,7 +35,7 @@ public:
   {}
 
 private:
-  ~MPGStats() {};
+  ~MPGStats() {}
 
 public:
   const char *get_type_name() const { return "pg_stats"; }

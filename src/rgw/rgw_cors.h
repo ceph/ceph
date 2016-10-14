@@ -17,7 +17,6 @@
 
 #include <map>
 #include <string>
-#include <iostream>
 #include <include/types.h>
 
 #define RGW_CORS_GET    0x1
@@ -81,6 +80,7 @@ public:
     ::decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
+  bool has_wildcard_origin();
   bool is_origin_present(const char *o);
   void format_exp_headers(std::string& s);
   void erase_origin_if_present(std::string& origin, bool *rule_empty);

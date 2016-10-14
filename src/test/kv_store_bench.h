@@ -125,6 +125,7 @@ protected:
   librados::Rados rados;
   string rados_id;
   string pool_name;
+  bool io_ctx_ready;
   librados::IoCtx io_ctx;
 
   /**

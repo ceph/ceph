@@ -15,9 +15,7 @@
 #ifndef CEPH_COMMON_GLOBAL_INIT_H
 #define CEPH_COMMON_GLOBAL_INIT_H
 
-#include <deque>
 #include <stdint.h>
-#include <string>
 #include <vector>
 
 #include "common/code_environment.h"
@@ -32,21 +30,26 @@ class CephContext;
  */
 void global_init(std::vector < const char * > *alt_def_args,
 		 std::vector < const char* >& args,
-		 uint32_t module_type, code_environment_t code_env, int flags);
+		 uint32_t module_type,
+		 code_environment_t code_env,
+		 int flags,
+		 const char *data_dir_option = 0,
+		 bool run_pre_init = true);
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags);
+		     int flags,
+		     const char *data_dir_option = 0);
 
 /*
  * perform all of the steps that global_init_daemonize performs just prior
  * to actually forking (via daemon(3)).  return 0 if we are going to proceed
  * with the fork, or -1 otherwise.
  */
-int global_init_prefork(CephContext *cct, int flags);
+int global_init_prefork(CephContext *cct);
 
 /*
  * perform all the steps that global_init_daemonize performs just after
@@ -57,7 +60,7 @@ void global_init_postfork_start(CephContext *cct);
 /*
  * close stderr, thus completing the postfork.
  */
-void global_init_postfork_finish(CephContext *cct, int flags);
+void global_init_postfork_finish(CephContext *cct);
 
 
 /*
@@ -67,7 +70,7 @@ void global_init_postfork_finish(CephContext *cct, int flags);
  * Note that this is equivalent to calling _prefork(), daemon(), and
  * _postfork.
  */
-void global_init_daemonize(CephContext *cct, int flags);
+void global_init_daemonize(CephContext *cct);
 
 /*
  * global_init_chdir changes the process directory.
@@ -84,6 +87,12 @@ void global_init_chdir(const CephContext *cct);
  * If this is called, it *must* be called before common_init_finish
  */
 int global_init_shutdown_stderr(CephContext *cct);
+
+/*
+ * Preload the erasure coding libraries to detect early issues with
+ * configuration.
+ */
+int global_init_preload_erasure_code(const CephContext *cct);
 
 /**
  * print daemon startup banner/warning

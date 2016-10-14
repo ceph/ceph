@@ -68,7 +68,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw dns name``
 
-:Description: The DNS name of the served domain.
+:Description: The DNS name of the served domain. See also the ``hostnames`` setting within regions.
 :Type: String 
 :Default: None
 	
@@ -129,6 +129,18 @@ Ceph configuration file, the default value will be set automatically.
 :Description: The size of the thread pool.
 :Type: Integer 
 :Default: 100 threads.
+
+
+``rgw num rados handles``
+
+:Description: The numer of the `RADOS cluster handles`_ for Ceph Object Gateway.
+              Having a configurable number of RADOS handles is resulting in
+              significant performance boost for all types of workloads. Each RGW
+              worker thread would now get to pick a RADOS handle for its lifetime,
+              from the available bunch.
+
+:Type: Integer
+:Default: ``1``
 
 
 ``rgw num control oids``
@@ -208,7 +220,7 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``false``
 
 
-``rgw object stripe size``
+``rgw obj stripe size``
 
 :Description: The size of an object stripe for Ceph Object Gateway objects.
               See `Architecture`_ for details on striping.
@@ -219,14 +231,15 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw extended http attrs``
 
-:Description: Add new set of attributes that could be set on an object. These 
-              extra attributes can be set through HTTP header fields when 
-              putting the objects. If set, these attributes will return as HTTP 
-              fields when doing GET/HEAD on the object.
+:Description: Add new set of attributes that could be set on an entity
+              (user, bucket or object). These extra attributes can be set
+              through HTTP header fields when putting the entity or modifying
+              it using POST method. If set, these attributes will return as
+              HTTP  fields when doing GET/HEAD on the entity.
 
 :Type: String
 :Default: None
-:Example: "content_foo, content_bar"
+:Example: "content_foo, content_bar, x-foo-bar"
 
 
 ``rgw exit timeout secs``
@@ -268,6 +281,17 @@ Ceph configuration file, the default value will be set automatically.
 
 :Type: Integer
 :Default: ``1000``
+
+
+``rgw override bucket index max shards``
+
+:Description: Represents the number of shards for the bucket index object,
+              a value of zero indicates there is no sharding. It is not
+              recommended to set a value too large (e.g. thousand) as it
+              increases the cost for bucket listing.
+
+:Type: Integer
+:Default: ``0``
 
 
 ``rgw num zone opstate shards``
@@ -316,6 +340,46 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``admin``
 
 
+``rgw content length compat``
+
+:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Type: Boolean
+:Default: ``false``
+
+
+``rgw bucket default quota max objects``
+
+:Description: Default max number of objects per bucket. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw bucket default quota max size``
+
+:Description: Default max capacity per bucket, in bytes. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw user default quota max objects``
+
+:Description: Default max number of objects for a user. This includes all
+              objects in all buckets owned by the user. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw user default quota max size``
+
+:Description: The value for user max size quota in bytes set on new users,
+              if no other quota is specified.  Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
 Regions
 =======
 
@@ -335,7 +399,7 @@ List Regions
 
 A Ceph cluster contains a list of regions. To list the regions, execute:: 
 
-	sudo radosgw-admin regions list
+	sudo radosgw-admin region list
 
 The ``radosgw-admin`` returns a JSON formatted list of regions. 
 
@@ -373,6 +437,7 @@ The ``default`` region looks like this:
     "api_name": "",
     "is_master": "true",
     "endpoints": [],
+    "hostnames": [],
     "master_zone": "",
     "zones": [
       {"name": "default",
@@ -401,7 +466,12 @@ required settings:
 #. ``endpoints``: A list of all the endpoints in the region. For example, 
    you may use multiple domain names to refer to the same region. Remember to 
    escape the forward slashes (``\/``). You may also specify a 
-   port (``fgdn:port``) for each endpoint. Optional.
+   port (``fqdn:port``) for each endpoint. Optional.
+
+#. ``hostnames``: A list of all the hostnames in the region. For example, 
+   you may use multiple domain names to refer to the same region. Optional.
+   The ``rgw dns name`` setting will automatically be included in this list.
+   You should restart the ``radosgw`` daemon(s) after changing this setting.
 
 #. ``master_zone``: The master zone for the region. Optional. Uses the default
    zone if not specified. **note:** You can only have one master zone per 
@@ -464,6 +534,7 @@ JSON object is an example of a default region map.
             "api_name": "",
             "is_master": "true",
             "endpoints": [],
+            "hostnames": [],
             "master_zone": "",
             "zones": [
               { "name": "default",
@@ -647,7 +718,7 @@ the default pool names. For example:
 
 Ceph Object Gateways store data for the bucket index (``index_pool``) and bucket
 data (``data_pool``) in placement pools. These may overlap--i.e., you may use
-the same pool for the the index and the data. The index pool for default
+the same pool for the index and the data. The index pool for default
 placement is ``.rgw.buckets.index`` and for the data pool for default placement
 is ``.rgw.buckets``. See `Zones`_ for details on specifying pools in a zone
 configuration.
@@ -672,9 +743,17 @@ configuration.
 ``rgw region root pool``
 
 :Description: The pool for storing all region-specific information.
+              Not used in Ceph version ``Jewel``.
 :Type: String
 :Default: ``.rgw.root``
 
+.. versionadded:: Jewel
+
+``rgw zonegroup root pool``
+
+:Description: The pool for storing all zonegroup-specific information.
+:Type: String
+:Default: ``.rgw.root``
 
 
 .. versionadded:: v.67
@@ -712,10 +791,17 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift API. 
+:Description: The URL prefix for the Swift StorageURL that goes in front of
+              the "/v1" part. This allows to run several Gateway instances
+              on the same host. For compatibility, setting this configuration
+              variable to empty causes the default "/swift" to be used.
+              Use explicit prefix "/" to start StorageURL at the root.
+              WARNING: setting this option to "/" will NOT work if S3 API is
+              enabled. From the other side disabling S3 will make impossible
+              to deploy RadosGW in the multi-site configuration!
 :Default: ``swift``
-:Example: http://fqdn.com/swift
-	
+:Example: "/swift-testing"
+
 
 ``rgw swift auth url``
 
@@ -731,6 +817,20 @@ Swift Settings
 :Description: The entry point for a Swift auth URL.
 :Type: String
 :Default: ``auth``
+
+
+``rgw swift versioning enabled``
+
+:Description: Enables the Object Versioning of OpenStack Object Storage API.
+              This allows clients to put the ``X-Versions-Location`` attribute
+              on containers that should be versioned. The attribute specifies
+              the name of container storing archived versions. It must be owned
+              by the same user that the versioned container due to access
+              control verification - ACLs are NOT taken into consideration.
+              Those containers cannot be versioned by the S3 object versioning
+              mechanism.
+:Type: Boolean
+:Default: ``false``
 
 
 
@@ -910,9 +1010,64 @@ Keystone Settings
 :Default: None
 
 
+``rgw keystone api version``
+
+:Description: The version (2 or 3) of OpenStack Identity API that should be
+              used for communication with the Keystone server.
+:Type: Integer
+:Default: ``2``
+
+
+``rgw keystone admin domain``
+
+:Description: The name of OpenStack domain with admin privilege when using
+              OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+
+``rgw keystone admin project``
+
+:Description: The name of OpenStack project with admin privilege when using
+              OpenStack Identity API v3. If left unspecified, value of
+              ``rgw keystone admin tenant`` will be used instead.
+:Type: String
+:Default: None
+
+
 ``rgw keystone admin token``
 
-:Description: The Keystone admin token (shared secret).
+:Description: The Keystone admin token (shared secret). In Ceph RadosGW
+              authentication with the admin token has priority over
+              authentication with the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``). Admin token feature is considered
+              as deprecated.
+:Type: String
+:Default: None
+
+
+``rgw keystone admin tenant``
+
+:Description: The name of OpenStack tenant with admin privilege (Service Tenant) when
+              using OpenStack Identity API v2
+:Type: String
+:Default: None
+
+
+``rgw keystone admin user``
+
+:Description: The name of OpenStack user with admin privilege for Keystone
+              authentication (Service User) when OpenStack Identity API v2
+:Type: String
+:Default: None
+
+
+``rgw keystone admin password``
+
+:Description: The password for OpenStack admin user when using OpenStack
+              Identity API v2
 :Type: String
 :Default: None
 
@@ -938,7 +1093,13 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
+``rgw keystone verify ssl``
+
+:Description: Verify SSL certificates while making token requests to keystone.
+:Type: Boolean
+:Default: ``true``
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
+.. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle

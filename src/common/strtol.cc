@@ -12,37 +12,44 @@
  *
  */
 
-#include <errno.h>
-#include <limits.h>
+#include "strtol.h"
+
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <sstream>
-#include <stdlib.h>
-#include <string>
 
 using std::ostringstream;
 
 long long strict_strtoll(const char *str, int base, std::string *err)
 {
   char *endptr;
+  std::string errStr;
   errno = 0; /* To distinguish success/failure after call (see man page) */
   long long ret = strtoll(str, &endptr, base);
 
   if ((errno == ERANGE && (ret == LLONG_MAX || ret == LLONG_MIN))
       || (errno != 0 && ret == 0)) {
-    ostringstream oss;
-    oss << "strict_strtoll: integer underflow or overflow parsing '" << str << "'";
-    *err = oss.str();
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err = errStr;
     return 0;
   }
   if (endptr == str) {
-    ostringstream oss;
-    oss << "strict_strtoll: expected integer, got: '" << str << "'";
-    *err = oss.str();
+    errStr = "Expected option value to be integer, got '";
+    errStr.append(str);
+    errStr.append("'");
+    *err =  errStr;
     return 0;
   }
   if (*endptr != '\0') {
-    ostringstream oss;
-    oss << "strict_strtoll: garbage at end of string. got: '" << str << "'";
-    *err = oss.str();
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err =  errStr;
     return 0;
   }
   *err = "";
@@ -51,19 +58,16 @@ long long strict_strtoll(const char *str, int base, std::string *err)
 
 int strict_strtol(const char *str, int base, std::string *err)
 {
+  std::string errStr;
   long long ret = strict_strtoll(str, base, err);
   if (!err->empty())
     return 0;
-  if (ret <= INT_MIN) {
-    ostringstream oss;
-    oss << "strict_strtol: integer underflow parsing '" << str << "'";
-    *err = oss.str();
-    return 0;
-  }
-  if (ret >= INT_MAX) {
-    ostringstream oss;
-    oss << "strict_strtol: integer overflow parsing '" << str << "'";
-    *err = oss.str();
+  if ((ret <= INT_MIN) || (ret >= INT_MAX)) {
+    errStr = "The option value '";
+    errStr.append(str);
+    errStr.append("'");
+    errStr.append(" seems to be invalid");
+    *err = errStr;
     return 0;
   }
   return static_cast<int>(ret);
@@ -123,4 +127,71 @@ float strict_strtof(const char *str, std::string *err)
   }
   *err = "";
   return ret;
+}
+
+template<typename T>
+T strict_si_cast(const char *str, std::string *err)
+{
+  std::string s(str);
+  if (s.empty()) {
+    *err = "strict_sistrtoll: value not specified";
+    return 0;
+  }
+  const char &u = s.back();
+  int m = 0;
+  if (u == 'B')
+    m = 0;
+  else if (u == 'K')
+    m = 10;
+  else if (u == 'M')
+    m = 20;
+  else if (u == 'G')
+    m = 30;
+  else if (u == 'T')
+    m = 40;
+  else if (u == 'P')
+    m = 50;
+  else if (u == 'E')
+    m = 60;
+  else
+    m = -1;
+
+  if (m >= 0)
+    s.pop_back();
+  else
+    m = 0;
+
+  long long ll = strict_strtoll(s.c_str(), 10, err);
+  if (ll < 0 && !std::numeric_limits<T>::is_signed) {
+    *err = "strict_sistrtoll: value should not be negative";
+    return 0;
+  }
+  if (static_cast<unsigned>(m) >= sizeof(T) * CHAR_BIT) {
+    *err = ("strict_sistrtoll: the SI prefix is too large for the designated "
+	    "type");
+    return 0;
+  }
+  using promoted_t = typename std::common_type<decltype(ll), T>::type;
+  if (static_cast<promoted_t>(ll) <
+      static_cast<promoted_t>(std::numeric_limits<T>::min()) >> m) {
+    *err = "strict_sistrtoll: value seems to be too small";
+    return 0;
+  }
+  if (static_cast<promoted_t>(ll) >
+      static_cast<promoted_t>(std::numeric_limits<T>::max()) >> m) {
+    *err = "strict_sistrtoll: value seems to be too large";
+    return 0;
+  }
+  return (ll << m);
+}
+
+template int strict_si_cast<int>(const char *str, std::string *err);
+template long strict_si_cast<long>(const char *str, std::string *err);
+template long long strict_si_cast<long long>(const char *str, std::string *err);
+template uint64_t strict_si_cast<uint64_t>(const char *str, std::string *err);
+template uint32_t strict_si_cast<uint32_t>(const char *str, std::string *err);
+
+uint64_t strict_sistrtoll(const char *str, std::string *err)
+{
+  return strict_si_cast<uint64_t>(str, err);
 }

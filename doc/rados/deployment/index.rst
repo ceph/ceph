@@ -55,4 +55,4 @@ metadata servers, configure admin hosts, and tear down the clusters.
 	</td></tr></tbody></table>
 
 
-.. _Chef: http://wiki.ceph.com/02Guides/Deploying_Ceph_with_Chef
+.. _Chef: http://tracker.ceph.com/projects/ceph/wiki/Deploying_Ceph_with_Chef

@@ -20,7 +20,7 @@ Ceph configuration file.
 
 ``mon max pool pg num``
 
-:Description: The maximium number of placement groups per pool.
+:Description: The maximum number of placement groups per pool.
 :Type: Integer
 :Default: ``65536``
 
@@ -66,11 +66,23 @@ Ceph configuration file.
 :Default: ``1``. Typically a host containing one or more Ceph OSD Daemons.
 
 
+``osd crush initial weight``
+
+:Description: The initial crush weight for newly added osds into crushmap.
+
+:Type: Double
+:Default: ``the size of newly added osd in TB``. By default, the initial crush
+          weight for the newly added osd is set to its volume size in TB.
+          See `Weighting Bucket Items`_ for details.
+
+
 ``osd pool default crush replicated ruleset`` 
 
 :Description: The default CRUSH ruleset to use when creating a replicated pool.
 :Type: 8-bit Integer
-:Default: ``0``
+:Default: ``CEPH_DEFAULT_CRUSH_REPLICATED_RULESET``, which means "pick
+          a ruleset with the lowest numerical ID and use that".  This is to
+          make pool creation work in the absence of ruleset 0.
 
 
 ``osd pool erasure code stripe width`` 
@@ -83,19 +95,19 @@ Ceph configuration file.
 :Default: ``4096`` 
 
 
-``osd pool default size`` 
+``osd pool default size``
 
-:Description: Sets the number of replicas for objects in the pool. The default 
-              value is the same as 
+:Description: Sets the number of replicas for objects in the pool. The default
+              value is the same as
               ``ceph osd pool set {pool-name} size {size}``.
 
 :Type: 32-bit Integer
-:Default: ``2`` 
+:Default: ``3``
 
 
 ``osd pool default min size``
 
-:Descrption: Sets the minimum number of written replicas for objects in the 
+:Description: Sets the minimum number of written replicas for objects in the 
              pool in order to acknowledge a write operation to the client. 
              If minimum is not met, Ceph will not acknowledge the write to the 
              client. This setting ensures a minimum number of replicas when 
@@ -162,3 +174,4 @@ Ceph configuration file.
 
 .. _pool: ../../operations/pools
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
+.. _Weighting Bucket Items: ../../operations/crush-map#weightingbucketitems

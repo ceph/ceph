@@ -57,13 +57,10 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION) { }
-  MOSDMap(const uuid_d &f, OSDMap *oc=0)
+  MOSDMap(const uuid_d &f)
     : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION),
       fsid(f),
-      oldest_map(0), newest_map(0) {
-    if (oc)
-      oc->encode(maps[oc->get_epoch()]);
-  }
+      oldest_map(0), newest_map(0) { }
 private:
   ~MOSDMap() {}
 
@@ -83,6 +80,7 @@ public:
     }
   }
   void encode_payload(uint64_t features) {
+    header.version = HEAD_VERSION;
     ::encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
@@ -111,9 +109,9 @@ public:
 	  OSDMap m;
 	  m.decode(inc.fullmap);
 	  inc.fullmap.clear();
-	  m.encode(inc.fullmap, features);
+	  m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
 	}
-	inc.encode(p->second, features);
+	inc.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
@@ -121,7 +119,7 @@ public:
 	OSDMap m;
 	m.decode(p->second);
 	p->second.clear();
-	m.encode(p->second, features);
+	m.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
     }
     ::encode(incremental_maps, payload);

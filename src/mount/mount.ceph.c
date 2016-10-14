@@ -65,8 +65,10 @@ static char *mount_resolve_src(const char *orig_str)
 	}
 
 	src = resolve_addrs(buf);
-	if (!src)
+	if (!src) {
+		free(buf);
 		return NULL;
+	}
 
 	len = strlen(src);
 	pos = safe_cat(&src, &len, len, ":");
@@ -154,6 +156,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "secretfile", 10) == 0) {
 			if (!value || !*value) {
 				printf("keyword secretfile found, but no secret file specified\n");
+				free(saw_name);
 				return NULL;
 			}
 
@@ -172,11 +175,13 @@ static char *parse_options(const char *data, int *filesys_flags)
 			}
 
 			/* secret is only added to kernel options as
-			   backwards compatilbity, if add_key doesn't
+			   backwards compatibility, if add_key doesn't
 			   recognize our keytype; hence, it is skipped
 			   here and appended to options on add_key
 			   failure */
-			strncpy(secret, value, sizeof(secret));
+			size_t len = sizeof(secret);
+			strncpy(secret, value, len-1);
+			secret[len-1] = '\0';
 			saw_secret = secret;
 			skip = 1;
 		} else if (strncmp(data, "name", 4) == 0) {
@@ -186,9 +191,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 			}
 
 			/* take a copy of the name, to be used for
-			   naming the keys that we add to kernel;
-			   ignore memleak as mount.ceph is
-			   short-lived */
+			   naming the keys that we add to kernel; */
+			free(saw_name);
 			saw_name = strdup(value);
 			if (!saw_name) {
 				printf("out of memory.\n");
@@ -229,6 +233,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		char secret_option[MAX_SECRET_OPTION_LEN];
 		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
 		if (ret < 0) {
+			free(saw_name);
 			return NULL;
 		} else {
 			if (pos) {
@@ -238,6 +243,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		}
 	}
 
+	free(saw_name);
 	if (!out)
 		return strdup(EMPTY_STRING);
 	return out;

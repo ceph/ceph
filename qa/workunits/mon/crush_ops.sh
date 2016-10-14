@@ -63,6 +63,12 @@ ceph osd tree | grep -c host1 | grep -q 0
 
 expect_false ceph osd crush rm bar   # not empty
 ceph osd crush unlink host2
+
+# reference foo and bar with a rule
+ceph osd crush rule create-simple foo-rule foo host firstn
+expect_false ceph osd crush rm foo
+ceph osd crush rule rm foo-rule
+
 ceph osd crush rm bar
 ceph osd crush rm foo
 ceph osd crush rm osd.$o2 host2
@@ -83,5 +89,20 @@ ceph osd crush reweight osd.$o3 113
 ceph osd tree | grep osd.$o3 | grep 113
 ceph osd crush rm osd.$o3
 ceph osd rm osd.$o3
+
+# test reweight-subtree
+o4=`ceph osd create`
+o5=`ceph osd create`
+ceph osd crush add $o4 123 root=default host=foobaz
+ceph osd crush add $o5 123 root=default host=foobaz
+ceph osd tree | grep osd.$o4 | grep 123
+ceph osd tree | grep osd.$o5 | grep 123
+ceph osd crush reweight-subtree foobaz 155
+ceph osd tree | grep osd.$o4 | grep 155
+ceph osd tree | grep osd.$o5 | grep 155
+ceph osd crush rm osd.$o4
+ceph osd crush rm osd.$o5
+ceph osd rm osd.$o4
+ceph osd rm osd.$o5
 
 echo OK

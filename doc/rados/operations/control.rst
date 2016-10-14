@@ -65,7 +65,7 @@ The valid formats are ``plain`` (default) and ``json``.
 To display the statistics for all placement groups stuck in a specified state, 
 execute the following:: 
 
-	ceph pg dump_stuck inactive|unclean|stale [--format {format}] [-t|--threshold {seconds}]
+	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
 ``--format`` may be ``plain`` (default) or ``json``
@@ -82,10 +82,10 @@ of times. They should be recovering.
 reported to the monitor cluster in a while (configured by
 ``mon_osd_report_timeout``).
 
-Revert "lost" objects to their prior state, either a previous version
+Delete "lost" objects or revert them to their prior state, either a previous version
 or delete them if they were just created. ::
 
-	ceph pg {pgid} mark_unfound_lost revert
+	ceph pg {pgid} mark_unfound_lost revert|delete
 
 
 OSD Subsystem
@@ -131,9 +131,13 @@ location. ::
 
 	ceph osd crush set {id} {weight} [{loc1} [{loc2} ...]]
 
-Remove an existing item from the CRUSH map. ::
+Remove an existing item (OSD) from the CRUSH map. ::
 
-	ceph osd crush remove {id}
+	ceph osd crush remove {name}
+
+Remove an existing bucket from the CRUSH map. ::
+
+	ceph osd crush remove {bucket-name}
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
@@ -163,13 +167,6 @@ Remove the given OSD(s). ::
 Query the current max_osd parameter in the OSD map. ::
 
 	ceph osd getmaxosd
-
-Import the given OSD map. Note that this can be a bit dangerous,
-since the OSD map includes dynamic state about which OSDs are current
-on or offline; only do this if you've just modified a (very) recent
-copy of the map. ::
-
-	ceph osd setmap -i file
 
 Import the given crush map. ::
 
@@ -203,9 +200,16 @@ resending pending requests. ::
 	ceph osd pause
 	ceph osd unpause
 
-Set the weight of ``{osd-num}`` to ``{weight}``. Two OSDs with the same weight will receive
-roughly the same number of I/O requests and store approximately the
-same amount of data. ::
+Set the weight of ``{osd-num}`` to ``{weight}``. Two OSDs with the
+same weight will receive roughly the same number of I/O requests and
+store approximately the same amount of data. ``ceph osd reweight``
+sets an override weight on the OSD. This value is in the range 0 to 1,
+and forces CRUSH to re-place (1-weight) of the data that would
+otherwise live on this drive. It does not change the weights assigned
+to the buckets above the OSD in the crush map, and is a corrective
+measure in case the normal CRUSH distribution isn't working out quite
+right. For instance, if one of your OSDs is at 90% and the others are
+at 50%, you could reduce this weight to try and compensate for it. ::
 
 	ceph osd reweight {osd-num} {weight}
 
@@ -215,6 +219,10 @@ OSDs which have 120% of the average utilization, but if you include
 threshold it will use that percentage instead. ::
 
 	ceph osd reweight-by-utilization [threshold]
+
+Describes what reweight-by-utilization would do. ::
+
+    ceph osd test-reweight-by-utilization
 
 Adds/removes the address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
@@ -273,11 +281,14 @@ Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 	ceph osd repair N
 
-Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_BYTES``
+Runs a simple throughput benchmark against OSD.N, writing ``NUMBER_OF_OBJECTS``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
-writes 1 GB in total in 4-MB increments. ::
+writes 1 GB in total in 4-MB increments.
+The benchmark is non-destructive and will not overwrite existing live
+OSD data, but might temporarily affect the performance of clients
+concurrently accessing the OSD. ::
 
-	ceph osd tell N bench [BYTES_PER_WRITE] [TOTAL_BYTES]
+	ceph tell osd.N bench [NUMER_OF_OBJECTS] [BYTES_PER_WRITE]
 
 
 MDS Subsystem
@@ -285,17 +296,17 @@ MDS Subsystem
 
 Change configuration parameters on a running mds. ::
 
-	ceph mds tell {mds-id} injectargs '--{switch} {value} [--{switch} {value}]'
+	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
 
 Example::
 
-	ceph mds tell 0 injectargs '--debug_ms 1 --debug_mds 10'
+	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
 
 Enables debug messages. ::
 
 	ceph mds stat
 
-Displays the status of all metadata servers.
+Displays the status of all metadata servers. ::
 
 	ceph mds fail 0
 
@@ -318,7 +329,7 @@ The ``quorum`` list at the end lists monitor nodes that are part of the current 
 
 This is also available more directly::
 
-	$ ./ceph quorum_status
+	ceph quorum_status
 	
 	2011-12-14 10:44:20.417705 mon {- [quorum_status]
 	2011-12-14 10:44:20.431890 mon.0 -} 

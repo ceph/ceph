@@ -22,7 +22,7 @@ modified after being written. On average there is one write for 10,000
 reads.
 
 A replicated pool is created and set as a cache tier for the
-replicated pool. An agent demotes objects (i.e. moves them from the
+erasure coded pool. An agent demotes objects (i.e. moves them from the
 replicated pool to the erasure-coded pool) if they have not been
 accessed in a week.
 
@@ -90,7 +90,7 @@ Choose an alternate erasure code plugin::
  m=1
  plugin=example
  technique=xor
- $ ceph osd create ecpool 12 12 erasure \
+ $ ceph osd pool create ecpool 12 12 erasure \
      myprofile
 
 Display the default erasure code profile::
@@ -103,7 +103,7 @@ Display the default erasure code profile::
   plugin=jerasure
   technique=reed_sol_van
 
-Create a profile to set the data to be distributed on six OSDs (k+m=6) and sustain the loss of three OSDs (m=3) without loosing data::
+Create a profile to set the data to be distributed on six OSDs (k+m=6) and sustain the loss of three OSDs (m=3) without losing data::
 
   $ ceph osd erasure-code-profile set myprofile k=3 m=3
   $ ceph osd erasure-code-profile get myprofile

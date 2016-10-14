@@ -41,21 +41,22 @@ namespace ceph {
  */
 
 struct heartbeat_handle_d {
-  std::string name;
+  const std::string name;
+  pthread_t thread_id;
   atomic_t timeout, suicide_timeout;
   time_t grace, suicide_grace;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
-  heartbeat_handle_d(const std::string& n)
-    : name(n), grace(0), suicide_grace(0)
+  explicit heartbeat_handle_d(const std::string& n)
+    : name(n), thread_id(0), grace(0), suicide_grace(0)
   { }
 };
 
 class HeartbeatMap {
  public:
   // register/unregister
-  heartbeat_handle_d *add_worker(std::string name);
-  void remove_worker(heartbeat_handle_d *h);
+  heartbeat_handle_d *add_worker(const std::string& name, pthread_t thread_id);
+  void remove_worker(const heartbeat_handle_d *h);
 
   // reset the timeout so that it expects another touch within grace amount of time
   void reset_timeout(heartbeat_handle_d *h, time_t grace, time_t suicide_grace);
@@ -68,7 +69,13 @@ class HeartbeatMap {
   // touch cct->_conf->heartbeat_file if is_healthy()
   void check_touch_file();
 
-  HeartbeatMap(CephContext *cct);
+  // get the number of unhealthy workers
+  int get_unhealthy_workers() const;
+
+  // get the number of total workers
+  int get_total_workers() const;
+
+  explicit HeartbeatMap(CephContext *cct);
   ~HeartbeatMap();
 
  private:
@@ -76,8 +83,10 @@ class HeartbeatMap {
   RWLock m_rwlock;
   time_t m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
+  atomic_t m_unhealthy_workers;
+  atomic_t m_total_workers;
 
-  bool _check(heartbeat_handle_d *h, const char *who, time_t now);
+  bool _check(const heartbeat_handle_d *h, const char *who, time_t now);
 };
 
 }

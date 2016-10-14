@@ -1,21 +1,12 @@
 Installation Instructions
 *************************
 
-If pulling from git, you first need to build the configure script with
+To use Ceph
 
-$ ./autogen.sh
+  Read online        http://docs.ceph.com/docs/master/start/
+  Read from sources  doc/start
 
-Then,
+To build from sources
 
-$ ./configure
-$ make
-
-Note that if the FUSE library is not found, the user-space fuse client
-will not be built.  
-
-If you are doing development, you may want to do
-
-$ CXXFLAGS="-g -pg" ./configure
-
-or similar to avoid the default (-g -O2), which includes optimizations
-(-O2).
+  Read online        http://docs.ceph.com/docs/master/install/build-ceph/
+  Read from sources  doc/install/build-ceph.rst

@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -35,10 +36,12 @@ namespace po = boost::program_options;
 
 class ErasureCodeCommand {
   po::variables_map vm;
-  map<string,string> parameters;
+  ErasureCodeProfile profile;
 public:
   int setup(int argc, char** argv);
   int run();
+  int plugin_exists();
+  int display_information();
 };
 
 int ErasureCodeCommand::setup(int argc, char** argv) {
@@ -49,13 +52,17 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     ("all", "implies "
      "--get_chunk_size 1024 "
      "--get_data_chunk_count "
+     "--get_coding_chunk_count "
      "--get_chunk_count ")
     ("get_chunk_size", po::value<unsigned int>(),
      "display get_chunk_size(<object size>)")
     ("get_data_chunk_count", "display get_data_chunk_count()")
+    ("get_coding_chunk_count", "display get_coding_chunk_count()")
     ("get_chunk_count", "display get_chunk_count()")
     ("parameter,P", po::value<vector<string> >(),
      "parameters")
+    ("plugin_exists", po::value<string>(),
+     "succeeds if the plugin given in argument exists and can be loaded")
     ;
 
   po::parsed_options parsed =
@@ -81,6 +88,9 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+  g_conf->set_val("erasure_code_dir", directory, false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -98,28 +108,46 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
 	cerr << "--parameter " << *i
 	     << " ignored because it does not contain exactly one =" << endl;
       } else {
-	parameters[strs[0]] = strs[1];
+	profile[strs[0]] = strs[1];
       }
     }
-  }
-
-  if (parameters.count("directory") == 0)
-    parameters["directory"] = ".libs";
-  if (parameters.count("plugin") == 0) {
-    cerr << "--parameter plugin=<plugin> is mandatory" << endl;
-    return 1;
   }
 
   return 0;
 }
 
 int ErasureCodeCommand::run() {
+  if (vm.count("plugin_exists"))
+    return plugin_exists();
+  else
+    return display_information();
+}
+
+int ErasureCodeCommand::plugin_exists() {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  instance.disable_dlclose = true;
+  ErasureCodePlugin *plugin = 0;
+  Mutex::Locker l(instance.lock);
+  stringstream ss;
+  int code = instance.load(vm["plugin_exists"].as<string>(),
+			   g_conf->erasure_code_dir, &plugin, &ss);
+  if (code)
+    cerr << ss.str() << endl;
+  return code;
+}
+
+int ErasureCodeCommand::display_information() {
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
-  int code = instance.factory(parameters["plugin"],
-			      parameters,
-			      &erasure_code, cerr);
+
+  if (profile.count("plugin") == 0) {
+    cerr << "--parameter plugin=<plugin> is mandatory" << endl;
+    return 1;
+  }
+
+  int code = instance.factory(profile["plugin"],
+			      g_conf->erasure_code_dir,
+			      profile,
+			      &erasure_code, &cerr);
   if (code)
     return code;
 
@@ -133,6 +161,9 @@ int ErasureCodeCommand::run() {
   if (vm.count("all") || vm.count("get_data_chunk_count"))
     cout << "get_data_chunk_count\t"
       	 << erasure_code->get_data_chunk_count() << endl;
+  if (vm.count("all") || vm.count("get_coding_chunk_count"))
+    cout << "get_coding_chunk_count\t"
+      	 << erasure_code->get_coding_chunk_count() << endl;
   if (vm.count("all") || vm.count("get_chunk_count"))
     cout << "get_chunk_count\t"
       	 << erasure_code->get_chunk_count() << endl;
@@ -141,25 +172,30 @@ int ErasureCodeCommand::run() {
 
 int main(int argc, char** argv) {
   ErasureCodeCommand eccommand;
-  int err = eccommand.setup(argc, argv);
-  if (err)
-    return err;
-  return eccommand.run();
+  try {
+    int err = eccommand.setup(argc, argv);
+    if (err)
+      return err;
+    return eccommand.run();
+  } catch(po::error &e) {
+    cerr << e.what() << endl; 
+    return 1;
+  }
 }
 
 /*
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 &&
  *   make -j4 ceph_erasure_code &&
- *   valgrind --tool=memcheck --leak-check=full \
+ *   libtool --mode=execute valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code \
  *      --parameter plugin=jerasure \
- *      --parameter directory=.libs \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \
  *      --parameter m=2 \
  *      --get_chunk_size 1024 \
  *      --get_data_chunk_count \
+ *      --get_coding_chunk_count \
  *      --get_chunk_count \
  * "
  * End:

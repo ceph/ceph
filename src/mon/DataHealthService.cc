@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-#include <memory>
 #include "include/memory.h"
 #include <errno.h>
 #include <map>
@@ -34,14 +33,11 @@
 #endif
 
 #include "messages/MMonHealth.h"
-#include "include/types.h"
-#include "include/Context.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
 #include "mon/DataHealthService.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -68,8 +64,9 @@ void DataHealthService::start_epoch()
   last_warned_percent = 0;
 }
 
-health_status_t DataHealthService::get_health(
+void DataHealthService::get_health(
     Formatter *f,
+    list<pair<health_status_t,string> >& summary,
     list<pair<health_status_t,string> > *detail)
 {
   dout(10) << __func__ << dendl;
@@ -78,8 +75,6 @@ health_status_t DataHealthService::get_health(
     f->open_array_section("mons");
   }
 
-  health_status_t overall_status = HEALTH_OK;
-
   for (map<entity_inst_t,DataStats>::iterator it = stats.begin();
        it != stats.end(); ++it) {
     string mon_name = mon->monmap->get_name(it->first.addr);
@@ -87,15 +82,15 @@ health_status_t DataHealthService::get_health(
 
     health_status_t health_status = HEALTH_OK;
     string health_detail;
-    if (stats.latest_avail_percent <= g_conf->mon_data_avail_crit) {
+    if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
       health_status = HEALTH_ERR;
-      health_detail = "shutdown iminent!";
-    } else if (stats.latest_avail_percent <= g_conf->mon_data_avail_warn) {
+      health_detail = "low disk space, shutdown imminent";
+    } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
       health_status = HEALTH_WARN;
-      health_detail = "low disk space!";
+      health_detail = "low disk space";
     }
 
-    if (stats.store_stats.bytes_total >= g_conf->mon_leveldb_size_warn) {
+    if (stats.store_stats.bytes_total >= g_conf->mon_data_size_warn) {
       if (health_status > HEALTH_WARN)
         health_status = HEALTH_WARN;
       if (!health_detail.empty())
@@ -103,19 +98,17 @@ health_status_t DataHealthService::get_health(
       stringstream ss;
       ss << "store is getting too big! "
          << prettybyte_t(stats.store_stats.bytes_total)
-         << " >= " << prettybyte_t(g_conf->mon_leveldb_size_warn);
+         << " >= " << prettybyte_t(g_conf->mon_data_size_warn);
       health_detail.append(ss.str());
     }
 
-    if (overall_status > health_status)
-      overall_status = health_status;
-
-    if (detail && health_status != HEALTH_OK) {
+    if (health_status != HEALTH_OK) {
       stringstream ss;
-      ss << "mon." << mon_name << " addr " << it->first.addr
-          << " has " << stats.latest_avail_percent
-          << "\% avail disk space -- " << health_detail;
-      detail->push_back(make_pair(health_status, ss.str()));
+      ss << "mon." << mon_name << " " << health_detail;
+      summary.push_back(make_pair(health_status, ss.str()));
+      ss << " -- " <<  stats.fs_stats.avail_percent << "% avail";
+      if (detail)
+	detail->push_back(make_pair(health_status, ss.str()));
     }
 
     if (f) {
@@ -134,8 +127,6 @@ health_status_t DataHealthService::get_health(
     f->close_section(); // mons
     f->close_section(); // data_health
   }
-
-  return overall_status;
 }
 
 int DataHealthService::update_store_stats(DataStats &ours)
@@ -156,23 +147,18 @@ int DataHealthService::update_store_stats(DataStats &ours)
 
 int DataHealthService::update_stats()
 {
-  struct statfs stbuf;
-  int err = ::statfs(g_conf->mon_data.c_str(), &stbuf);
-  if (err < 0) {
-    derr << __func__ << " statfs error: " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-
   entity_inst_t our_inst = mon->messenger->get_myinst();
   DataStats& ours = stats[our_inst];
 
-  ours.kb_total = stbuf.f_blocks * stbuf.f_bsize / 1024;
-  ours.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
-  ours.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
-  ours.latest_avail_percent = (((float)ours.kb_avail/ours.kb_total)*100);
-  dout(0) << __func__ << " avail " << ours.latest_avail_percent << "%"
-          << " total " << ours.kb_total << " used " << ours.kb_used << " avail " << ours.kb_avail
-          << dendl;
+  int err = get_fs_stats(ours.fs_stats, g_conf->mon_data.c_str());
+  if (err < 0) {
+    derr << __func__ << " get_fs_stats error: " << cpp_strerror(err) << dendl;
+    return err;
+  }
+  dout(0) << __func__ << " avail " << ours.fs_stats.avail_percent << "%"
+          << " total " << prettybyte_t(ours.fs_stats.byte_total)
+          << ", used " << prettybyte_t(ours.fs_stats.byte_used)
+          << ", avail " << prettybyte_t(ours.fs_stats.byte_avail) << dendl;
   ours.last_update = ceph_clock_now(g_ceph_context);
 
   return update_store_stats(ours);
@@ -218,7 +204,7 @@ void DataHealthService::service_tick()
 
   DataStats &ours = stats[mon->messenger->get_myinst()];
 
-  if (ours.latest_avail_percent <= g_conf->mon_data_avail_crit) {
+  if (ours.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
     derr << "reached critical levels of available space on local monitor storage"
          << " -- shutdown!" << dendl;
     force_shutdown();
@@ -229,45 +215,47 @@ void DataHealthService::service_tick()
   // consumed in-between reports to assess if it's worth to log this info,
   // otherwise we may very well contribute to the consumption of the
   // already low available disk space.
-  if (ours.latest_avail_percent <= g_conf->mon_data_avail_warn) {
-    if (ours.latest_avail_percent != last_warned_percent)
-      mon->clog.warn()
+  if (ours.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
+    if (ours.fs_stats.avail_percent != last_warned_percent)
+      mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
-	<< " (" << ours.latest_avail_percent << "\% free)\n";
-    last_warned_percent = ours.latest_avail_percent;
+	<< " (" << ours.fs_stats.avail_percent << "% free)\n";
+    last_warned_percent = ours.fs_stats.avail_percent;
   } else {
     last_warned_percent = 0;
   }
 }
 
-void DataHealthService::handle_tell(MMonHealth *m)
+void DataHealthService::handle_tell(MonOpRequestRef op)
 {
+  op->mark_event("datahealth:handle_tell");
+  MMonHealth *m = static_cast<MMonHealth*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   assert(m->get_service_op() == MMonHealth::OP_TELL);
 
   stats[m->get_source_inst()] = m->data_stats;
 }
 
-bool DataHealthService::service_dispatch(MMonHealth *m)
+bool DataHealthService::service_dispatch_op(MonOpRequestRef op)
 {
+  op->mark_event("datahealth:service_dispatch_op");
+  MMonHealth *m = static_cast<MMonHealth*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   assert(m->get_service_type() == get_type());
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- drop message" << dendl;
-    m->put();
     return false;
   }
 
   switch (m->service_op) {
     case MMonHealth::OP_TELL:
       // someone is telling us their stats
-      handle_tell(m);
+      handle_tell(op);
       break;
     default:
       dout(0) << __func__ << " unknown op " << m->service_op << dendl;
       assert(0 == "Unknown service op");
       break;
   }
-  m->put();
   return true;
 }

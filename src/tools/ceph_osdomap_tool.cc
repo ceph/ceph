@@ -10,29 +10,17 @@
 * License kkjversion 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <boost/scoped_ptr.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/program_options/option.hpp>
-#include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <iostream>
-#include <set>
-#include <sstream>
-#include <stdlib.h>
-#include <fstream>
-#include <string>
-#include <sstream>
-#include <map>
-#include <set>
-#include <boost/scoped_ptr.hpp>
 
-#include "global/global_init.h"
-#include "os/LevelDBStore.h"
-#include "mon/MonitorDBStore.h"
-#include "os/DBObjectMap.h"
+#include <stdlib.h>
+#include <string>
+
 #include "common/errno.h"
+#include "global/global_init.h"
+
+#include "os/filestore/DBObjectMap.h"
+#include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -40,35 +28,35 @@ using namespace std;
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
   string store_path, cmd, out_path;
-  bool paranoid = false;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
      "path to mon directory, mandatory (current/omap usually)")
-    ("paranoid", po::value<bool>(&paranoid),
-     "use paranoid checking")
+    ("paranoid", "use paranoid checking")
     ("command", po::value<string>(&cmd),
-     "command")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check], mandatory")
     ;
   po::positional_options_description p;
   p.add("command", 1);
 
+  vector<string> ceph_option_strings;
   po::variables_map vm;
-  po::parsed_options parsed =
-    po::command_line_parser(argc, argv).options(desc).positional(p).run();
-  po::store(
-    parsed,
-    vm);
   try {
+    po::parsed_options parsed =
+      po::command_line_parser(argc, argv).options(desc).positional(p).allow_unregistered().run();
+    po::store(
+	      parsed,
+	      vm);
     po::notify(vm);
-  } catch (...) {
-    cout << desc << std::endl;
+
+    ceph_option_strings = po::collect_unrecognized(parsed.options,
+						   po::include_positional);
+  } catch(po::error &e) {
+    std::cerr << e.what() << std::endl;
     return 1;
   }
 
   vector<const char *> ceph_options, def_args;
-  vector<string> ceph_option_strings = po::collect_unrecognized(
-    parsed.options, po::include_positional);
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -88,11 +76,21 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  LevelDBStore* store(new LevelDBStore(g_ceph_context, store_path));
-  if (paranoid) {
-    std::cerr << "Enabling paranoid checks" << std::endl;
-    store->options.paranoid_checks = paranoid;
+  if (vm.count("omap-path") == 0) {
+    std::cerr << "Required argument --omap-path" << std::endl;
+    return 1;
   }
+
+  if (vm.count("command") == 0) {
+    std::cerr << "Required argument --command" << std::endl;
+    return 1;
+  }
+
+  KeyValueDB* store(KeyValueDB::create(g_ceph_context, "leveldb", store_path));
+  /*if (vm.count("paranoid")) {
+    std::cerr << "Enabling paranoid checks" << std::endl;
+    store->options.paranoid_checks = true;
+    }*/
   DBObjectMap omap(store);
   stringstream out;
   int r = store->open(out);
@@ -139,7 +137,7 @@ int main(int argc, char **argv) {
 	 i != objects.end();
 	 ++i) {
       std::cout << "Object: " << *i << std::endl;
-      ObjectMap::ObjectMapIterator j = omap.get_iterator(i->hobj);
+      ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj));
       for (j->seek_to_first(); j->valid(); j->next()) {
 	std::cout << j->key() << std::endl;
 	j->value().hexdump(std::cout);

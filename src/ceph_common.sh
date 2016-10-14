@@ -50,12 +50,13 @@ check_host() {
 
     #echo host for $name is $host, i am $hostname
 
-    if [ -e "/var/lib/ceph/$type/ceph-$id/upstart" ]; then
+    cluster=$1
+    if [ -e "/var/lib/ceph/$type/$cluster-$id/upstart" ]; then
 	return 1
     fi
 
     # sysvinit managed instance in standard location?
-    if [ -e "/var/lib/ceph/$type/ceph-$id/sysvinit" ]; then
+    if [ -e "/var/lib/ceph/$type/$cluster-$id/sysvinit" ]; then
 	host="$hostname"
 	echo "=== $type.$id === "
 	return 0
@@ -137,6 +138,24 @@ do_root_cmd() {
     fi
 }
 
+do_root_cmd_okfail() {
+    ERR=0
+    if [ -z "$ssh" ]; then
+	[ $verbose -eq 1 ] && echo "--- $host# $1"
+	ulimit -c unlimited
+	whoami=`whoami`
+	if [ "$whoami" = "root" ]; then
+	    bash -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && ERR=1 && return 1; }
+	else
+	    sudo bash -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && ERR=1 && return 1; }
+	fi
+    else
+	[ $verbose -eq 1 ] && echo "--- $rootssh $2 \"if [ ! -d $sshdir ]; then mkdir -p $sshdir; fi; cd $sshdir ; ulimit -c unlimited ; $1\""
+	$rootssh $2 "if [ ! -d $sshdir ]; then mkdir -p $sshdir; fi; cd $sshdir ; ulimit -c unlimited ; $1" || { [ -z "$3" ] && echo "failed: '$rootssh $1'" && ERR=1 && return 1; }
+    fi
+    return 0
+}
+
 get_local_daemon_list() {
     type=$1
     if [ -d "/var/lib/ceph/$type" ]; then
@@ -201,10 +220,10 @@ get_conf() {
 
 	if [ -z "$1" ]; then
 	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -n $type.$id \"$key\""
-	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || eval echo -n \"$def\"`\""
+	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || printf \"$def\"`\""
 	else
 	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -s $1 \"$key\""
-	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval echo -n \"$def\"`\""
+	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval printf \"$def\"`\""
 	fi
 }
 

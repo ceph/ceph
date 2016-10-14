@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_cache.h"
 
 #include <errno.h>
@@ -6,9 +9,13 @@
 
 using namespace std;
 
-int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
+int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
   RWLock::RLocker l(lock);
+
+  if (!enabled) {
+    return -ENOENT;
+  }
 
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
@@ -17,38 +24,108 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
     return -ENOENT;
   }
 
-  ObjectCacheEntry& entry = iter->second;
+  ObjectCacheEntry *entry = &iter->second;
 
-  if (lru_counter - entry.lru_promotion_ts > lru_window) {
-    ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter << " promotion_ts=" << entry.lru_promotion_ts << dendl;
+  if (lru_counter - entry->lru_promotion_ts > lru_window) {
+    ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter
+                   << " promotion_ts=" << entry->lru_promotion_ts << dendl;
     lock.unlock();
     lock.get_write(); /* promote lock to writer */
 
+    /* need to redo this because entry might have dropped off the cache */
+    iter = cache_map.find(name);
+    if (iter == cache_map.end()) {
+      ldout(cct, 10) << "lost race! cache get: name=" << name << " : miss" << dendl;
+      if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
+      return -ENOENT;
+    }
+
+    entry = &iter->second;
     /* check again, we might have lost a race here */
-    if (lru_counter - entry.lru_promotion_ts > lru_window) {
-      touch_lru(name, entry, iter->second.lru_iter);
+    if (lru_counter - entry->lru_promotion_ts > lru_window) {
+      touch_lru(name, *entry, iter->second.lru_iter);
     }
   }
 
   ObjectCacheInfo& src = iter->second.info;
   if ((src.flags & mask) != mask) {
-    ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << ")" << dendl;
+    ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=0x"
+                   << std::hex << mask << ", cached=0x" << src.flags
+                   << std::dec << ")" << dendl;
     if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
-  ldout(cct, 10) << "cache get: name=" << name << " : hit" << dendl;
+  ldout(cct, 10) << "cache get: name=" << name << " : hit (requested=0x"
+                 << std::hex << mask << ", cached=0x" << src.flags
+                 << std::dec << ")" << dendl;
 
   info = src;
+  if (cache_info) {
+    cache_info->cache_locator = name;
+    cache_info->gen = entry->gen;
+  }
   if(perfcounter) perfcounter->inc(l_rgw_cache_hit);
 
   return 0;
 }
 
-void ObjectCache::put(string& name, ObjectCacheInfo& info)
+bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry)
 {
   RWLock::WLocker l(lock);
 
-  ldout(cct, 10) << "cache put: name=" << name << dendl;
+  if (!enabled) {
+    return false;
+  }
+
+  list<rgw_cache_entry_info *>::iterator citer;
+
+  list<ObjectCacheEntry *> cache_entry_list;
+
+  /* first verify that all entries are still valid */
+  for (citer = cache_info_entries.begin(); citer != cache_info_entries.end(); ++citer) {
+    rgw_cache_entry_info *cache_info = *citer;
+
+    ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info->cache_locator << dendl;
+    map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info->cache_locator);
+    if (iter == cache_map.end()) {
+      ldout(cct, 20) << "chain_cache_entry: couldn't find cachce locator" << dendl;
+      return false;
+    }
+
+    ObjectCacheEntry *entry = &iter->second;
+
+    if (entry->gen != cache_info->gen) {
+      ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry->gen << ") != cache_info.gen (" << cache_info->gen << ")" << dendl;
+      return false;
+    }
+
+    cache_entry_list.push_back(entry);
+  }
+
+
+  chained_entry->cache->chain_cb(chained_entry->key, chained_entry->data);
+
+  list<ObjectCacheEntry *>::iterator liter;
+
+  for (liter = cache_entry_list.begin(); liter != cache_entry_list.end(); ++liter) {
+    ObjectCacheEntry *entry = *liter;
+
+    entry->chained_entries.push_back(make_pair(chained_entry->cache, chained_entry->key));
+  }
+
+  return true;
+}
+
+void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
+{
+  RWLock::WLocker l(lock);
+
+  if (!enabled) {
+    return;
+  }
+
+  ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
+                 << std::hex << info.flags << std::dec << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ObjectCacheEntry entry;
@@ -59,6 +136,15 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
   ObjectCacheEntry& entry = iter->second;
   ObjectCacheInfo& target = entry.info;
 
+  for (list<pair<RGWChainedCache *, string> >::iterator iiter = entry.chained_entries.begin();
+       iiter != entry.chained_entries.end(); ++iiter) {
+    RGWChainedCache *chained_cache = iiter->first;
+    chained_cache->invalidate(iiter->second);
+  }
+
+  entry.chained_entries.clear();
+  entry.gen++;
+
   touch_lru(name, entry, entry.lru_iter);
 
   target.status = info.status;
@@ -68,6 +154,11 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
     target.xattrs.clear();
     target.data.clear();
     return;
+  }
+
+  if (cache_info) {
+    cache_info->cache_locator = name;
+    cache_info->gen = entry.gen;
   }
 
   target.flags |= info.flags;
@@ -106,11 +197,22 @@ void ObjectCache::remove(string& name)
 {
   RWLock::WLocker l(lock);
 
+  if (!enabled) {
+    return;
+  }
+
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end())
     return;
 
   ldout(cct, 10) << "removing " << name << " from cache" << dendl;
+  ObjectCacheEntry& entry = iter->second;
+
+  for (list<pair<RGWChainedCache *, string> >::iterator iiter = entry.chained_entries.begin();
+       iiter != entry.chained_entries.end(); ++iiter) {
+    RGWChainedCache *chained_cache = iiter->first;
+    chained_cache->invalidate(iiter->second);
+  }
 
   remove_lru(name, iter->second.lru_iter);
   cache_map.erase(iter);
@@ -162,4 +264,40 @@ void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter
   lru_iter = lru.end();
 }
 
+void ObjectCache::set_enabled(bool status)
+{
+  RWLock::WLocker l(lock);
+
+  enabled = status;
+
+  if (!enabled) {
+    do_invalidate_all();
+  }
+}
+
+void ObjectCache::invalidate_all()
+{
+  RWLock::WLocker l(lock);
+
+  do_invalidate_all();
+}
+
+void ObjectCache::do_invalidate_all()
+{
+  cache_map.clear();
+  lru.clear();
+
+  lru_size = 0;
+  lru_counter = 0;
+  lru_window = 0;
+
+  for (list<RGWChainedCache *>::iterator iter = chained_cache.begin(); iter != chained_cache.end(); ++iter) {
+    (*iter)->invalidate_all();
+  }
+}
+
+void ObjectCache::chain_cache(RGWChainedCache *cache) {
+  RWLock::WLocker l(lock);
+  chained_cache.push_back(cache);
+}
 

@@ -113,8 +113,8 @@ be in memory or on disk on all replicas::
 		rados_shutdown(cluster);
 		exit(1);
 	}
-	rados_wait_for_complete(comp); // in memory
-	rados_wait_for_safe(comp); // on disk
+	rados_aio_wait_for_complete(comp); // in memory
+	rados_aio_wait_for_safe(comp); // on disk
 
 Finally, we need to free the memory used by the completion with :c:func:`rados_aio_release`::
 
@@ -183,4 +183,5 @@ Note that all the :c:type:`rados_completion_t` must be freed with :c:func:`rados
 API calls
 =========
 
- .. doxygenfile:: librados.h
+ .. autodoxygenfile:: rados_types.h
+ .. autodoxygenfile:: librados.h

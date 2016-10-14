@@ -28,8 +28,11 @@ public:
   spg_t pgid;
   epoch_t map_epoch;
   vector<PushOp> pushes;
+
+private:
   uint64_t cost;
 
+public:
   void compute_cost(CephContext *cct) {
     cost = 0;
     for (vector<PushOp>::iterator i = pushes.begin();
@@ -41,6 +44,10 @@ public:
 
   int get_cost() const {
     return cost;
+  }
+
+  void set_cost(uint64_t c) {
+    cost = c;
   }
 
   MOSDPGPush() :
@@ -58,15 +65,15 @@ public:
       ::decode(pgid.shard, p);
       ::decode(from, p);
     } else {
-      pgid.shard = ghobject_t::NO_SHARD;
-      from = pg_shard_t(get_source().num(), ghobject_t::NO_SHARD);
+      pgid.shard = shard_id_t::NO_SHARD;
+      from = pg_shard_t(get_source().num(), shard_id_t::NO_SHARD);
     }
   }
 
   virtual void encode_payload(uint64_t features) {
     ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(pushes, payload);
+    ::encode(pushes, payload, features);
     ::encode(cost, payload);
     ::encode(pgid.shard, payload);
     ::encode(from, payload);

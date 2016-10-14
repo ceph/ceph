@@ -16,8 +16,6 @@
 #ifndef CEPH_MGETPOOLSTATS_H
 #define CEPH_MGETPOOLSTATS_H
 
-#include <uuid/uuid.h>
-
 #include "messages/PaxosServiceMessage.h"
 
 class MGetPoolStats : public PaxosServiceMessage {

@@ -14,10 +14,10 @@
 #include "include/int_types.h"
 
 #include "gtest/gtest.h"
-#include "include/cephfs/libcephfs.h"
 #include "include/ceph_fs.h"
+#include "include/cephfs/libcephfs.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>

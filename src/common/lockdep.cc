@@ -15,14 +15,14 @@
 #include "Clock.h"
 #include "common/dout.h"
 #include "common/environment.h"
+#include "common/valgrind.h"
 #include "include/types.h"
 #include "lockdep.h"
 
 #include "include/unordered_map.h"
-#include "include/hash_namespace.h"
 
 #if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<>
     struct hash<pthread_t>
     {
@@ -30,18 +30,16 @@ CEPH_HASH_NAMESPACE_START
       operator()(pthread_t __x) const
       { return (uintptr_t)__x; }
     };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 #endif
 
 /******* Constants **********/
-#undef DOUT_COND
-#define DOUT_COND(cct, l) cct && l <= XDOUT_CONDVAR(cct, dout_subsys)
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  1000   // increase me as needed
+#define MAX_LOCKS  4096   // increase me as needed
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
-int g_lockdep = get_env_int("CEPH_LOCKDEP");
+int g_lockdep = 0;
 struct lockdep_stopper_t {
   // disable lockdep when this module destructs.
   ~lockdep_stopper_t() {
@@ -51,19 +49,40 @@ struct lockdep_stopper_t {
 static pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
 static CephContext *g_lockdep_ceph_ctx = NULL;
 static lockdep_stopper_t lockdep_stopper;
-static ceph::unordered_map<const char *, int> lock_ids;
-static map<int, const char *> lock_names;
-static int last_id = 0;
+static ceph::unordered_map<std::string, int> lock_ids;
+static map<int, std::string> lock_names;
+static map<int, int> lock_refs;
+static char free_ids[MAX_LOCKS/8]; // bit set = free
 static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
-static BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b taken after a
+static char follows[MAX_LOCKS][MAX_LOCKS/8]; // follows[a][b] means b taken after a
+static BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
+unsigned current_maxid;
+int last_freed_id;
+
+static bool lockdep_force_backtrace()
+{
+  return (g_lockdep_ceph_ctx != NULL &&
+          g_lockdep_ceph_ctx->_conf->lockdep_force_backtrace);
+}
 
 /******* Functions **********/
 void lockdep_register_ceph_context(CephContext *cct)
 {
+  static_assert((MAX_LOCKS > 0) && (MAX_LOCKS % 8 == 0),                   
+    "lockdep's MAX_LOCKS needs to be divisible by 8 to operate correctly.");
   pthread_mutex_lock(&lockdep_mutex);
   if (g_lockdep_ceph_ctx == NULL) {
+    ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep_ceph_ctx, sizeof(g_lockdep_ceph_ctx),
+                               "lockdep cct");
+    ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep, sizeof(g_lockdep),
+                               "lockdep enabled");
+    g_lockdep = true;
     g_lockdep_ceph_ctx = cct;
-    lockdep_dout(0) << "lockdep start" << dendl;
+    lockdep_dout(1) << "lockdep start" << dendl;
+    current_maxid = 0;
+	last_freed_id = -1;
+
+    memset((void*) &free_ids[0], 255, sizeof(free_ids));
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -72,19 +91,27 @@ void lockdep_unregister_ceph_context(CephContext *cct)
 {
   pthread_mutex_lock(&lockdep_mutex);
   if (cct == g_lockdep_ceph_ctx) {
-    lockdep_dout(0) << "lockdep stop" << dendl;
+    lockdep_dout(1) << "lockdep stop" << dendl;
     // this cct is going away; shut it down!
     g_lockdep = false;
     g_lockdep_ceph_ctx = NULL;
 
     // blow away all of our state, too, in case it starts up again.
+    for (unsigned i = 0; i < current_maxid; ++i) {
+      for (unsigned j = 0; j < current_maxid; ++j) {
+        delete follows_bt[i][j];
+      }
+    }
+
     held.clear();
-    for (unsigned i = 0; i < MAX_LOCKS; ++i)
-      for (unsigned j = 0; j < MAX_LOCKS; ++j)
-	follows[i][j] = NULL;
     lock_names.clear();
     lock_ids.clear();
-    last_id = 0;
+    lock_refs.clear();
+    memset((void*)&free_ids[0], 0, sizeof(free_ids));
+    memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
+    memset((void*)&follows_bt[0][0], 0, sizeof(BackTrace*) * current_maxid * MAX_LOCKS);
+    current_maxid = 0;
+    last_freed_id = -1;
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -111,21 +138,56 @@ int lockdep_dump_locks()
   return 0;
 }
 
+int lockdep_get_free_id(void)
+{
+  // if there's id known to be freed lately, reuse it
+  if ((last_freed_id >= 0) && 
+     (free_ids[last_freed_id/8] & (1 << (last_freed_id % 8)))) {
+    int tmp = last_freed_id;
+    last_freed_id = -1;
+    free_ids[tmp/8] &= 255 - (1 << (tmp % 8));
+    lockdep_dout(1) << "reusing last freed id " << tmp << dendl;
+    return tmp;
+  }
+  
+  // walk through entire array and locate nonzero char, then find
+  // actual bit.
+  for (int i = 0; i < MAX_LOCKS / 8; ++i) {
+    if (free_ids[i] != 0) {
+      for (int j = 0; j < 8; ++j) {
+        if (free_ids[i] & (1 << j)) {
+          free_ids[i] &= 255 - (1 << j);
+          lockdep_dout(1) << "using id " << i * 8 + j << dendl;
+          return i * 8 + j;
+        }
+      }
+    }
+  }
+  
+  // not found
+  lockdep_dout(0) << "failing miserably..." << dendl;
+  return -1;
+}
 
 int lockdep_register(const char *name)
 {
   int id;
 
   pthread_mutex_lock(&lockdep_mutex);
-  if (last_id == 0)
-    for (int i=0; i<MAX_LOCKS; i++)
-      for (int j=0; j<MAX_LOCKS; j++)
-	follows[i][j] = NULL;
-
-  ceph::unordered_map<const char *, int>::iterator p = lock_ids.find(name);
+  ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
-    assert(last_id < MAX_LOCKS);
-    id = last_id++;
+    id = lockdep_get_free_id();
+    if (id < 0) {
+      lockdep_dout(0) << "ERROR OUT OF IDS .. have 0"
+		      << " max " << MAX_LOCKS << dendl;
+      for (auto& p : lock_names) {
+	lockdep_dout(0) << "  lock " << p.first << " " << p.second << dendl;
+      }
+      assert(false);
+    }
+    if (current_maxid <= (unsigned)id) {
+        current_maxid = (unsigned)id + 1;
+    }
     lock_ids[name] = id;
     lock_names[id] = name;
     lockdep_dout(10) << "registered '" << name << "' as " << id << dendl;
@@ -134,31 +196,74 @@ int lockdep_register(const char *name)
     lockdep_dout(20) << "had '" << name << "' as " << id << dendl;
   }
 
+  ++lock_refs[id];
   pthread_mutex_unlock(&lockdep_mutex);
 
   return id;
 }
 
+void lockdep_unregister(int id)
+{
+  if (id < 0) {
+    return;
+  }
 
-// does a follow b?
+  pthread_mutex_lock(&lockdep_mutex);
+
+  map<int, std::string>::iterator p = lock_names.find(id);
+  assert(p != lock_names.end());
+
+  int &refs = lock_refs[id];
+  if (--refs == 0) {
+    // reset dependency ordering
+    memset((void*)&follows[id][0], 0, MAX_LOCKS/8);
+    for (unsigned i=0; i<current_maxid; ++i) {
+      delete follows_bt[id][i];
+      follows_bt[id][i] = NULL;
+
+      delete follows_bt[i][id];
+      follows_bt[i][id] = NULL;
+      follows[i][id / 8] &= 255 - (1 << (id % 8));
+    }
+
+    lockdep_dout(10) << "unregistered '" << p->second << "' from " << id
+                     << dendl;
+    lock_ids.erase(p->second);
+    lock_names.erase(id);
+    lock_refs.erase(id);
+    free_ids[id/8] |= (1 << (id % 8));
+	last_freed_id = id;
+  } else {
+    lockdep_dout(20) << "have " << refs << " of '" << p->second << "' "
+                     << "from " << id << dendl;
+  }
+  pthread_mutex_unlock(&lockdep_mutex);
+}
+
+
+// does b follow a?
 static bool does_follow(int a, int b)
 {
-  if (follows[a][b]) {
+  if (follows[a][b/8] & (1 << (b % 8))) {
     lockdep_dout(0) << "\n";
     *_dout << "------------------------------------" << "\n";
     *_dout << "existing dependency " << lock_names[a] << " (" << a << ") -> "
            << lock_names[b] << " (" << b << ") at:\n";
-    follows[a][b]->print(*_dout);
+    if (follows_bt[a][b]) {
+      follows_bt[a][b]->print(*_dout);
+    }
     *_dout << dendl;
     return true;
   }
 
-  for (int i=0; i<MAX_LOCKS; i++) {
-    if (follows[a][i] &&
+  for (unsigned i=0; i<current_maxid; i++) {
+    if ((follows[a][i/8] & (1 << (i % 8))) &&
 	does_follow(i, b)) {
       lockdep_dout(0) << "existing intermediate dependency " << lock_names[a]
           << " (" << a << ") -> " << lock_names[i] << " (" << i << ") at:\n";
-      follows[a][i]->print(*_dout);
+      if (follows_bt[a][i]) {
+        follows_bt[a][i]->print(*_dout);
+      }
       *_dout << dendl;
       return true;
     }
@@ -167,7 +272,7 @@ static bool does_follow(int a, int b)
   return false;
 }
 
-int lockdep_will_lock(const char *name, int id)
+int lockdep_will_lock(const char *name, int id, bool force_backtrace)
 {
   pthread_t p = pthread_self();
   if (id < 0) id = lockdep_register(name);
@@ -193,12 +298,12 @@ int lockdep_will_lock(const char *name, int id)
       *_dout << dendl;
       assert(0);
     }
-    else if (!follows[p->first][id]) {
+    else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
       // new dependency
 
       // did we just create a cycle?
-      BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
       if (does_follow(id, p->first)) {
+        BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
 	lockdep_dout(0) << "new dependency " << lock_names[p->first]
 		<< " (" << p->first << ") -> " << name << " (" << id << ")"
 		<< " creates a cycle at\n";
@@ -224,7 +329,12 @@ int lockdep_will_lock(const char *name, int id)
 
 	assert(0);  // actually, we should just die here.
       } else {
-	follows[p->first][id] = bt;
+        BackTrace *bt = NULL;
+        if (force_backtrace || lockdep_force_backtrace()) {
+          bt = new BackTrace(BACKTRACE_SKIP);
+        }
+        follows[p->first][id/8] |= 1 << (id % 8);
+        follows_bt[p->first][id] = bt;
 	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
 	//bt->print(*_dout);
       }
@@ -243,7 +353,7 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
 
   pthread_mutex_lock(&lockdep_mutex);
   lockdep_dout(20) << "_locked " << name << dendl;
-  if (g_lockdep >= 2 || force_backtrace)
+  if (force_backtrace || lockdep_force_backtrace())
     held[p][id] = new BackTrace(BACKTRACE_SKIP);
   else
     held[p][id] = 0;

@@ -2,34 +2,70 @@
  Upgrading Ceph
 ================
 
-You can upgrade daemons in your Ceph cluster while the cluster is
-online and in service! The upgrade process is relatively simple: 
+Each release of Ceph may have additional steps. Refer to the release-specific
+sections in this document and the `release notes`_ document to identify
+release-specific procedures for your cluster before using the upgrade
+procedures.
 
-#. Use ``ceph-deploy`` to upgrade the packages for multiple hosts, 
-   or login to each host and upgrade the Ceph package manually.
-#. Restart each daemon.
-#. Ensure your cluster is healthy.
 
-.. important:: Once you upgrade a daemon, you cannot downgrade it.
+Summary
+=======
 
-Certain types of daemons depend upon others. For example, Ceph Metadata Servers
-and Ceph Object Gateways depend upon Ceph Monitors and Ceph OSD Daemons. We
-recommend upgrading daemons in this order:
+You can upgrade daemons in your Ceph cluster while the cluster is online and in
+service! Certain types of daemons depend upon others. For example, Ceph Metadata
+Servers and Ceph Object Gateways depend upon Ceph Monitors and Ceph OSD Daemons.
+We recommend upgrading in this order:
 
-#. Ceph Monitors (or Ceph OSD Daemons)
-#. Ceph OSD Daemons (or Ceph Monitors)
+#. `Ceph Deploy`_
+#. Ceph Monitors
+#. Ceph OSD Daemons
 #. Ceph Metadata Servers
 #. Ceph Object Gateways
 
 As a general rule, we recommend upgrading all the daemons of a specific type
-(e.g., all ``ceph-osd`` daemons, all ``ceph-mon`` daemons, etc.) to ensure that
+(e.g., all ``ceph-mon`` daemons, all ``ceph-osd`` daemons, etc.) to ensure that
 they are all on the same release. We also recommend that you upgrade all the
 daemons in your cluster before you try to exercise new functionality in a
 release.
 
-Each release of Ceph may have some additional steps. Refer to the following
-sections to identify release-specific procedures for your cluster before 
-using the upgrade procedures.
+The `Upgrade Procedures`_ are relatively simple, but please look at 
+distribution-specific sections before upgrading. The basic process involves 
+three steps: 
+
+#. Use ``ceph-deploy`` on your admin node to upgrade the packages for 
+   multiple hosts (using the ``ceph-deploy install`` command), or login to each 
+   host and upgrade the Ceph package `manually`_. For example, when 
+   `Upgrading Monitors`_, the ``ceph-deploy`` syntax might look like this::
+   
+	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
+	ceph-deploy install --release firefly mon1 mon2 mon3
+
+   **Note:** The ``ceph-deploy install`` command will upgrade the packages 
+   in the specified node(s) from the old release to the release you specify. 
+   There is no ``ceph-deploy upgrade`` command.
+
+#. Login in to each Ceph node and restart each Ceph daemon.
+   See `Operating a Cluster`_ for details.
+
+#. Ensure your cluster is healthy. See `Monitoring a Cluster`_ for details.
+
+.. important:: Once you upgrade a daemon, you cannot downgrade it.
+
+
+Ceph Deploy
+===========
+
+Before upgrading Ceph daemons, upgrade the ``ceph-deploy`` tool. ::
+
+	sudo pip install -U ceph-deploy
+
+Or::
+
+	sudo apt-get install ceph-deploy
+	
+Or::
+
+	sudo yum install ceph-deploy python-pushy
 
 
 Argonaut to Bobtail
@@ -44,7 +80,7 @@ When upgrading from Argonaut to Bobtail, you need to be aware of several things:
 Ensure that you update package repository paths. For example:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See the following sections for additional details.
 
@@ -126,7 +162,7 @@ Argonaut to Cuttlefish without the intermediate upgrade to Bobtail.
 For example:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 We recommend upgrading all monitors to Bobtail before proceeding with the
 upgrade of the monitors to Cuttlefish. A mixture of Bobtail and Argonaut
@@ -150,7 +186,7 @@ replace the reference to the Bobtail repository with a reference to
 the Cuttlefish repository. For example::
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See `Upgrading Monitors`_ for details.
 
@@ -174,7 +210,7 @@ Replace any ``apt`` reference to older repositories with a reference to the
 Cuttlefish repository. For example:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 
 Monitor
@@ -196,7 +232,7 @@ MDS Unique Names
 ----------------
 
 The monitor now enforces that MDS names be unique. If you have multiple metadata
-server daemons that start with with the same ID (e.g., mds.a) the second
+server daemons that start with the same ID (e.g., mds.a) the second
 metadata server will implicitly mark the first metadata server as ``failed``.
 Multi-MDS configurations with identical names must be adjusted accordingly to
 give daemons unique names. If you run your cluster with one  metadata server,
@@ -223,7 +259,7 @@ Replace any reference to older repositories with a reference to the
 Dumpling repository. For example, with ``apt`` perform the following:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 With CentOS/Red Hat distributions, remove the old repository. :: 
 
@@ -235,15 +271,15 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 
 	[ceph]
 	name=Ceph Packages and Backports $basearch
-	baseurl=http://ceph.com/rpm/el6/$basearch
+	baseurl=http://download.ceph.com/rpm/el6/$basearch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
-   http://ceph.com/rpm directory for your distribution. 
+   http://download.ceph.com/rpm directory for your distribution. 
 
 .. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
    the repository on Ceph Client nodes where you use the ``ceph`` command line 
@@ -260,7 +296,7 @@ Replace any reference to older repositories with a reference to the
 Emperor repository. For example, with ``apt`` perform the following:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-emperor/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-emperor/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 With CentOS/Red Hat distributions, remove the old repository. :: 
 
@@ -273,15 +309,15 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 
 	[ceph]
 	name=Ceph Packages and Backports $basearch
-	baseurl=http://ceph.com/rpm-emperor/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-emperor/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
-   http://ceph.com/rpm directory for your distribution. 
+   http://download.ceph.com/rpm directory for your distribution. 
 
 .. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
    the repository on Ceph Client nodes where you use the ``ceph`` command line 
@@ -306,20 +342,25 @@ See `v0.65`_ for details on the new command line interface.
 .. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
 
 
-Ceph Deploy
------------
+Monitor
+-------
 
-Before upgrading Ceph daemons, upgrade the ``ceph-deploy`` tool. ::
+Dumpling (v0.67) ``ceph-mon`` daemons have an internal protocol change. This
+means that v0.67 daemons cannot talk to v0.66 or older daemons.  Once you
+upgrade a majority of monitors,  the monitors form a quorum using the new
+protocol and the old monitors will be blocked until they get upgraded. For this
+reason, we recommend upgrading all monitors at once (or in relatively quick
+succession) to minimize the possibility of downtime.
 
-	sudo pip install -U ceph-deploy
+.. important:: Do not run a mixed-version cluster for an extended period.
 
-Or::
 
-	sudo apt-get install ceph-deploy
-	
-Or::
 
-	sudo yum install ceph-deploy python-pushy
+Dumpling to Firefly
+===================
+
+If your existing cluster is running a version older than v0.67 Dumpling, please
+first upgrade to the latest Dumpling release before upgrading to v0.80 Firefly.
 
 
 Monitor
@@ -329,10 +370,175 @@ Dumpling (v0.67) ``ceph-mon`` daemons have an internal protocol change. This
 means that v0.67 daemons cannot talk to v0.66 or older daemons.  Once you
 upgrade a majority of monitors,  the monitors form a quorum using the new
 protocol and the old monitors will be blocked until they get upgraded. For this
-reason, We recommend upgrading all monitors at once (or in relatively quick
+reason, we recommend upgrading all monitors at once (or in relatively quick
 succession) to minimize the possibility of downtime.
 
 .. important:: Do not run a mixed-version cluster for an extended period.
+
+
+Ceph Config File Changes
+------------------------
+
+We recommand adding the following to the ``[mon]`` section of your 
+``ceph.conf`` prior to upgrade::
+
+    mon warn on legacy crush tunables = false
+
+This will prevent health warnings due to the use of legacy CRUSH placement.
+Although it is possible to rebalance existing data across your cluster, we do
+not normally recommend it for production environments as a large amount of data
+will move and there is a significant performance impact from the rebalancing.
+
+
+Command Line Utility
+--------------------
+
+In V0.65, the ``ceph`` commandline interface (CLI) utility changed
+significantly. You will not be able to use the old CLI with Firefly. This means
+that you must upgrade the  ``ceph-common`` library on all nodes that access the
+Ceph Storage Cluster with the ``ceph`` CLI before upgrading Ceph daemons. 
+
+For Debian/Ubuntu, execute::
+
+	sudo apt-get update && sudo apt-get install ceph-common
+
+For CentOS/RHEL, execute:: 
+	
+	sudo yum install ceph-common	
+	
+Ensure that you have the latest version. If you do not, 
+you may need to uninstall, auto remove dependencies and reinstall.
+
+See `v0.65`_ for details on the new command line interface.
+
+.. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
+
+
+Upgrade Sequence
+----------------
+
+Replace any reference to older repositories with a reference to the
+Firely repository. For example, with ``apt`` perform the following:: 
+
+	sudo rm /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+With CentOS/Red Hat distributions, remove the old repository. :: 
+
+	sudo rm /etc/yum.repos.d/ceph.repo
+
+Then add a new ``ceph.repo`` repository entry with the following contents and
+replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, 
+``rhel7``, etc.). 
+
+.. code-block:: ini
+
+	[ceph]
+	name=Ceph Packages and Backports $basearch
+	baseurl=http://download.ceph.com/rpm-firefly/{distro}/$basearch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://download.ceph.com/keys/release.asc
+
+
+Upgrade daemons in the following order:
+
+#. **Monitors:** If the ``ceph-mon`` daemons are not restarted prior to the 
+   ``ceph-osd`` daemons, the monitors will not correctly register their new 
+   capabilities with the cluster and new features may not be usable until 
+   the monitors are restarted a second time.
+
+#. **OSDs**
+
+#. **MDSs:** If the ``ceph-mds`` daemon is restarted first, it will wait until 
+   all OSDs have been upgraded before finishing its startup sequence.  
+
+#. **Gateways:** Upgrade ``radosgw`` daemons together. There is a subtle change 
+   in behavior for multipart uploads that prevents a multipart request that 
+   was initiated with a new ``radosgw`` from being completed by an old 
+   ``radosgw``.
+   
+.. note:: Make sure you upgrade your **ALL** of your Ceph monitors **AND** 
+   restart them **BEFORE** upgrading and restarting OSDs, MDSs, and gateways!
+   
+
+Emperor to Firefly
+==================
+
+If your existing cluster is running a version older than v0.67 Dumpling, please
+first upgrade to the latest Dumpling release before upgrading to v0.80 Firefly.
+Please refer to `Cuttlefish to Dumpling`_ and the `Firefly release notes`_ for
+details. To upgrade from a post-Emperor point release, see the `Firefly release 
+notes`_ for details.
+
+
+Ceph Config File Changes
+------------------------
+
+We recommand adding the following to the ``[mon]`` section of your 
+``ceph.conf`` prior to upgrade::
+
+    mon warn on legacy crush tunables = false
+
+This will prevent health warnings due to the use of legacy CRUSH placement.
+Although it is possible to rebalance existing data across your cluster, we do
+not normally recommend it for production environments as a large amount of data
+will move and there is a significant performance impact from the rebalancing.
+
+
+Upgrade Sequence
+----------------
+
+Replace any reference to older repositories with a reference to the
+Firefly repository. For example, with ``apt`` perform the following:: 
+
+	sudo rm /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+With CentOS/Red Hat distributions, remove the old repository. :: 
+
+	sudo rm /etc/yum.repos.d/ceph.repo
+
+Then add a new ``ceph.repo`` repository entry with the following contents, but
+replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
+``rhel7``, etc.). 
+
+.. code-block:: ini
+
+	[ceph]
+	name=Ceph Packages and Backports $basearch
+	baseurl=http://download.ceph.com/rpm/{distro}/$basearch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://download.ceph.com/keys/release.asc
+
+
+.. note:: Ensure you use the correct URL for your distribution. Check the
+   http://download.ceph.com/rpm directory for your distribution. 
+
+.. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
+   the repository on Ceph Client nodes where you use the ``ceph`` command line 
+   interface or the ``ceph-deploy`` tool.
+
+
+Upgrade daemons in the following order:
+
+#. **Monitors:** If the ``ceph-mon`` daemons are not restarted prior to the 
+   ``ceph-osd`` daemons, the monitors will not correctly register their new 
+   capabilities with the cluster and new features may not be usable until 
+   the monitors are restarted a second time.
+
+#. **OSDs**
+
+#. **MDSs:** If the ``ceph-mds`` daemon is restarted first, it will wait until 
+   all OSDs have been upgraded before finishing its startup sequence.  
+
+#. **Gateways:** Upgrade ``radosgw`` daemons together. There is a subtle change 
+   in behavior for multipart uploads that prevents a multipart request that 
+   was initiated with a new ``radosgw`` from being completed by an old 
+   ``radosgw``.
 
 
 Upgrade Procedures
@@ -354,8 +560,8 @@ To upgrade monitors, perform the following steps:
    You may use ``ceph-deploy`` to address all monitor nodes at once. 
    For example::
 
-	ceph-deploy install --stable {stable release} ceph-node1[ ceph-node2]
-	ceph-deploy install --stable dumpling mon1 mon2 mon3
+	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
+	ceph-deploy install --release hammer mon1 mon2 mon3
 
    You may also use the package manager for your Linux distribution on 
    each individual node. To upgrade packages manually on each Debian/Ubuntu 
@@ -370,11 +576,11 @@ To upgrade monitors, perform the following steps:
 	sudo yum update && sudo yum install ceph
 	
  
-#. Restart each monitor. For Debian/Ubuntu distributions, use:: 
+#. Restart each monitor. For Ubuntu distributions, use:: 
 
 	sudo restart ceph-mon id={hostname}
 
-   For CentOS/Red Hat distributions, use::
+   For CentOS/Red Hat/Debian distributions, use::
 
 	sudo /etc/init.d/ceph restart {mon-id}
 
@@ -398,8 +604,8 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
    You may use ``ceph-deploy`` to address all Ceph OSD Daemon nodes at 
    once. For example::
 
-	ceph-deploy install --stable {stable release} ceph-node1[ ceph-node2]
-	ceph-deploy install --stable dumpling mon1 mon2 mon3
+	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
+	ceph-deploy install --release hammer osd1 osd2 osd3
 
    You may also use the package manager on each node to upgrade packages 
    manually. For Debian/Ubuntu hosts, perform the following steps on each
@@ -414,7 +620,7 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
 	sudo yum update && sudo yum install ceph
 
 
-#. Restart the OSD, where ``N`` is the OSD number. For Debian/Ubuntu, use:: 
+#. Restart the OSD, where ``N`` is the OSD number. For Ubuntu, use:: 
 
 	sudo restart ceph-osd id=N
 
@@ -422,7 +628,7 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
 
 	sudo restart ceph-osd-all
 	
-   For CentOS/Red Hat distributions, use::
+   For CentOS/Red Hat/Debian distributions, use::
 
 	sudo /etc/init.d/ceph restart N	
 
@@ -444,8 +650,8 @@ To upgrade a Ceph Metadata Server, perform the following steps:
    address all Ceph Metadata Server nodes at once, or use the package manager 
    on each node. For example::
 
-	ceph-deploy install --stable {stable release} ceph-node1[ ceph-node2]
-	ceph-deploy install --stable dumpling mon1 mon2 mon3
+	ceph-deploy install --release {release-name} ceph-node1
+	ceph-deploy install --release hammer mds1
 
    To upgrade packages manually, perform the following steps on each
    Debian/Ubuntu host. :: 
@@ -459,11 +665,11 @@ To upgrade a Ceph Metadata Server, perform the following steps:
 	sudo yum update && sudo yum install ceph-mds
 
  
-#. Restart the metadata server. For Debian/Ubuntu, use:: 
+#. Restart the metadata server. For Ubuntu, use:: 
 
 	sudo restart ceph-mds id={hostname}
 	
-   For CentOS/Red Hat distributions, use::
+   For CentOS/Red Hat/Debian distributions, use::
 
 	sudo /etc/init.d/ceph restart mds.{hostname}
 
@@ -485,7 +691,7 @@ cluster, we recommend upgrading ``ceph-common`` and client libraries
 #. Upgrade the package:: 
 
 	ssh {client-host}
-	apt-get update && sudo apt-get install ceph-common librados2 librbd1 python-ceph
+	apt-get update && sudo apt-get install ceph-common librados2 librbd1 python-rados python-rbd
 
 #. Ensure that you have the latest version::
 
@@ -531,7 +737,15 @@ to use the default paths.
 
 Under those directories, the keyring should be in a file named ``keyring``.
 
+
+
+
 .. _Monitor Config Reference: ../../rados/configuration/mon-config-ref
 .. _Joao's blog post: http://ceph.com/dev-notes/cephs-new-monitor-changes 
 .. _Ceph Authentication: ../../rados/operations/authentication/
 .. _Ceph Authentication - Backward Compatibility: ../../rados/operations/authentication/#backward-compatibility
+.. _manually: ../install-storage-cluster/
+.. _Operating a Cluster: ../../rados/operations/operating
+.. _Monitoring a Cluster: ../../rados/operations/monitoring
+.. _Firefly release notes: ../../release-notes/#v0-80-firefly
+.. _release notes: ../../release-notes

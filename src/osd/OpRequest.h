@@ -63,18 +63,45 @@ struct OpRequest : public TrackedOp {
   bool includes_pg_op();
   bool need_read_cap();
   bool need_write_cap();
-  bool need_class_read_cap();
-  bool need_class_write_cap();
+  bool need_promote();
+  bool need_skip_handle_cache();
+  bool need_skip_promote();
   void set_read();
   void set_write();
   void set_cache();
   void set_class_read();
   void set_class_write();
   void set_pg_op();
+  void set_promote();
+  void set_skip_handle_cache();
+  void set_skip_promote();
+
+  struct ClassInfo {
+    ClassInfo(const std::string& name, bool read, bool write,
+        bool whitelisted) :
+      name(name), read(read), write(write), whitelisted(whitelisted)
+    {}
+    const std::string name;
+    const bool read, write, whitelisted;
+  };
+
+  void add_class(const std::string& name, bool read, bool write,
+      bool whitelisted) {
+    classes_.emplace_back(name, read, write, whitelisted);
+  }
+
+  std::vector<ClassInfo> classes() const {
+    return classes_;
+  }
 
   void _dump(utime_t now, Formatter *f) const;
 
+  bool has_feature(uint64_t f) const {
+    return request->get_connection()->has_feature(f);
+  }
+
 private:
+  Message *request; /// the logical request we are tracking
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
@@ -86,9 +113,22 @@ private:
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
 
+  std::vector<ClassInfo> classes_;
+
   OpRequest(Message *req, OpTracker *tracker);
 
+protected:
+  void _dump_op_descriptor_unlocked(ostream& stream) const;
+  void _unregistered();
+
 public:
+  ~OpRequest() {
+    request->put();
+  }
+  bool send_map_update;
+  epoch_t sent_epoch;
+  bool hitset_inserted;
+  Message *get_req() const { return request; }
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
   bool been_delayed() { return hit_flag_points & flag_delayed; }
@@ -116,40 +156,22 @@ public:
   }
 
   void mark_queued_for_pg() {
-    mark_event("queued_for_pg");
-    current = "queued for pg";
-    hit_flag_points |= flag_queued_for_pg;
-    latest_flag_point = flag_queued_for_pg;
+    mark_flag_point(flag_queued_for_pg, "queued_for_pg");
   }
   void mark_reached_pg() {
-    mark_event("reached_pg");
-    current = "reached pg";
-    hit_flag_points |= flag_reached_pg;
-    latest_flag_point = flag_reached_pg;
+    mark_flag_point(flag_reached_pg, "reached_pg");
   }
-  void mark_delayed(string s) {
-    mark_event(s);
-    current = s;
-    hit_flag_points |= flag_delayed;
-    latest_flag_point = flag_delayed;
+  void mark_delayed(const string& s) {
+    mark_flag_point(flag_delayed, s);
   }
   void mark_started() {
-    mark_event("started");
-    current = "started";
-    hit_flag_points |= flag_started;
-    latest_flag_point = flag_started;
+    mark_flag_point(flag_started, "started");
   }
-  void mark_sub_op_sent(string s) {
-    mark_event(s);
-    current = s;
-    hit_flag_points |= flag_sub_op_sent;
-    latest_flag_point = flag_sub_op_sent;
+  void mark_sub_op_sent(const string& s) {
+    mark_flag_point(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
-    mark_event("commit_sent");
-    current = "commit sent";
-    hit_flag_points |= flag_commit_sent;
-    latest_flag_point = flag_commit_sent;
+    mark_flag_point(flag_commit_sent, "commit_sent");
   }
 
   utime_t get_dequeued_time() const {
@@ -163,11 +185,15 @@ public:
     return reqid;
   }
 
-  void init_from_message();
-
   typedef ceph::shared_ptr<OpRequest> Ref;
+
+private:
+  void set_rmw_flags(int flags);
+  void mark_flag_point(uint8_t flag, const string& s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
+
+ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i);
 
 #endif /* OPREQUEST_H_ */

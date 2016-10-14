@@ -15,8 +15,6 @@
 #ifndef CEPH_COMPATSET_H
 #define CEPH_COMPATSET_H
 #include "include/buffer.h"
-#include <vector>
-
 #include "common/Formatter.h"
 
 struct CompatSet {
@@ -25,35 +23,50 @@ struct CompatSet {
     uint64_t id;
     string name;
 
-    Feature(uint64_t _id, const char *_name) : id(_id), name(_name) {}
-    Feature(uint64_t _id, string& _name) : id(_id), name(_name) {}
+    Feature(uint64_t _id, const string& _name) : id(_id), name(_name) {}
   };
 
-  struct FeatureSet {
+  class FeatureSet {
     uint64_t mask;
     map <uint64_t,string> names;
 
+  public:
+    friend struct CompatSet;
+    friend class CephCompatSet_AllSet_Test;
+    friend class CephCompatSet_other_Test;
+    friend class CephCompatSet_merge_Test;
+    friend ostream& operator<<(ostream& out, const CompatSet::FeatureSet& fs);
+    friend ostream& operator<<(ostream& out, const CompatSet& compat);
     FeatureSet() : mask(1), names() {}
-    void insert(Feature f) {
+    void insert(const Feature& f) {
       assert(f.id > 0);
       assert(f.id < 64);
       mask |= ((uint64_t)1<<f.id);
       names[f.id] = f.name;
     }
 
-    bool contains(Feature f) const {
+    bool contains(const Feature& f) const {
       return names.count(f.id);
     }
     bool contains(uint64_t f) const {
       return names.count(f);
     }
+    /**
+     * Getter instead of using name[] to be const safe
+     */
+    std::string get_name(uint64_t const f) const {
+      std::map<uint64_t, std::string>::const_iterator i = names.find(f);
+      assert(i != names.end());
+      return i->second;
+    }
+
     void remove(uint64_t f) {
       if (names.count(f)) {
 	names.erase(f);
 	mask &= ~((uint64_t)1<<f);
       }
     }
-    void remove(Feature f) {
+    void remove(const Feature& f) {
       remove(f.id);
     }
 
@@ -95,14 +108,20 @@ struct CompatSet {
       for (map<uint64_t,string>::const_iterator p = names.begin();
 	   p != names.end();
 	   ++p) {
-	char s[10];
+	char s[18];
 	snprintf(s, sizeof(s), "feature_%lld", (unsigned long long)p->first);
 	f->dump_string(s, p->second);
       }
     }
   };
 
-  FeatureSet compat, ro_compat, incompat;
+  // These features have no impact on the read / write status
+  FeatureSet compat;
+  // If any of these features are missing, read is possible ( as long
+  // as no incompat feature is missing ) but it is not possible to write
+  FeatureSet ro_compat;
+  // If any of these features are missing, read or write is not possible
+  FeatureSet incompat;
 
   CompatSet(FeatureSet& _compat, FeatureSet& _ro_compat, FeatureSet& _incompat) :
     compat(_compat), ro_compat(_ro_compat), incompat(_incompat) {}
@@ -112,13 +131,13 @@ struct CompatSet {
 
   /* does this filesystem implementation have the
      features required to read the other? */
-  bool readable(CompatSet& other) {
+  bool readable(CompatSet const& other) const {
     return !((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
   }
 
   /* does this filesystem implementation have the
      features required to write the other? */
-  bool writeable(CompatSet& other) {
+  bool writeable(CompatSet const& other) const {
     return readable(other) &&
       !((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
   }
@@ -132,7 +151,7 @@ struct CompatSet {
    * -1: This CompatSet is missing at least one feature
    *     described in the other. It may still have more features, though.
    */
-  int compare(CompatSet& other) {
+  int compare(const CompatSet& other) {
     if ((other.compat.mask == compat.mask) &&
 	(other.ro_compat.mask == ro_compat.mask) &&
 	(other.incompat.mask == incompat.mask)) return 0;
@@ -174,7 +193,7 @@ struct CompatSet {
   /* Merge features supported by other CompatSet into this one.
    * Return: true if some features were merged
    */
-  bool merge(CompatSet& other) {
+  bool merge(CompatSet const & other) {
     uint64_t other_compat =
       ((other.compat.mask ^ compat.mask) & other.compat.mask);
     uint64_t other_ro_compat =
@@ -186,13 +205,13 @@ struct CompatSet {
     for (int id = 1; id < 64; ++id) {
       uint64_t mask = (uint64_t)1 << id;
       if (mask & other_compat) {
-	compat.insert( Feature(id, other.compat.names[id]));
+	compat.insert( Feature(id, other.compat.get_name(id)));
       }
       if (mask & other_ro_compat) {
-	ro_compat.insert(Feature(id, other.ro_compat.names[id]));
+	ro_compat.insert(Feature(id, other.ro_compat.get_name(id)));
       }
       if (mask & other_incompat) {
-	incompat.insert( Feature(id, other.incompat.names[id]));
+	incompat.insert( Feature(id, other.incompat.get_name(id)));
       }
     }
     return true;

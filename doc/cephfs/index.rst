@@ -7,20 +7,21 @@ a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
 
-.. important:: Ceph FS is currently not recommended for production data.
+.. note:: If you are evaluating CephFS for the first time, please review
+          the best practices for deployment: :doc:`/cephfs/best-practices`
 
 .. ditaa::
             +-----------------------+  +------------------------+
-            | CephFS Kernel Object  |  |      CephFS FUSE       |
-            +-----------------------+  +------------------------+            
-
-            +---------------------------------------------------+
-            |            Ceph FS Library (libcephfs)            |
-            +---------------------------------------------------+
-
-            +---------------------------------------------------+
-            |      Ceph Storage Cluster Protocol (librados)     |
-            +---------------------------------------------------+
+            |                       |  |      CephFS FUSE       |
+            |                       |  +------------------------+
+            |                       |
+            |                       |  +------------------------+
+            |  CephFS Kernel Object |  |     CephFS Library     |
+            |                       |  +------------------------+
+            |                       |
+            |                       |  +------------------------+
+            |                       |  |        librados        |
+            +-----------------------+  +------------------------+
 
             +---------------+ +---------------+ +---------------+
             |      OSDs     | |      MDSs     | |    Monitors   |
@@ -44,26 +45,29 @@ least one :term:`Ceph Metadata Server` running.
 .. toctree:: 
 	:maxdepth: 1
 
-	Add/Remove MDS <../../rados/deployment/ceph-deploy-mds>
-	MDS Configuration <mds-config-ref>
+	Add/Remove MDS(s) <../../rados/deployment/ceph-deploy-mds>
+	MDS failover and standby configuration <standby>
+	MDS Configuration Settings <mds-config-ref>
+	Client Configuration Settings <client-config-ref>
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
 .. raw:: html 
 
-	</td><td><h3>Step 2: Mount Ceph FS</h3>
+	</td><td><h3>Step 2: Mount CephFS</h3>
 
 Once you have a healthy Ceph Storage Cluster with at least
-one Ceph Metadata Server, you may mount your Ceph Filesystem.
+one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
 Ensure that you client has network connectivity and the proper
 authentication keyring.
 
 .. toctree:: 
 	:maxdepth: 1
 
-	Mount Ceph FS <kernel>
-	Mount Ceph FS as FUSE <fuse>
-	Mount Ceph FS in fstab <fstab>
+	Create CephFS <createfs>
+	Mount CephFS <kernel>
+	Mount CephFS as FUSE <fuse>
+	Mount CephFS in fstab <fstab>
 	Manpage cephfs <../../man/8/cephfs>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
@@ -76,9 +80,22 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+    Deployment best practices <best-practices>
+    Administrative commands <administration>
+	POSIX compatibility <posix>
+	Experimental Features <experimental-features>
+        CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>
+	cephfs-journal-tool <cephfs-journal-tool>
+	File layouts <file-layouts>
+	Client eviction <eviction>
+	Handling full filesystems <full>
+    Health messages <health-messages>
 	Troubleshooting <troubleshooting>
+	Disaster recovery <disaster-recovery>
+	Client authentication <client-auth>
+	Upgrading old filesystems <upgrading>
 
 .. raw:: html
 

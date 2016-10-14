@@ -50,28 +50,28 @@ class MonmapMonitor : public PaxosService {
 
   void create_pending();
 
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   // we always encode the full map; we have no use for full versions
-  virtual void encode_full(MonitorDBStore::Transaction *t) { }
+  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
 
   void on_active();
 
   void dump_info(Formatter *f);
 
-  bool preprocess_query(PaxosServiceMessage *m);
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);
+  bool prepare_update(MonOpRequestRef op);
 
-  bool preprocess_join(MMonJoin *m);
-  bool prepare_join(MMonJoin *m);
+  bool preprocess_join(MonOpRequestRef op);
+  bool prepare_join(MonOpRequestRef op);
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
 
   int get_monmap(bufferlist &bl);
-  int get_monmap(MonMap &m);
 
   /*
    * Since monitors are pretty

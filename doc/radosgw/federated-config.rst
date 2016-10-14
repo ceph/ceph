@@ -103,14 +103,12 @@ format prepended to the pool name, but you can use any naming convention you
 prefer. For example:
 
 
-- ``.us.rgw.root``
-
-- ``.us-east.domain.rgw``
 - ``.us-east.rgw.root``
 - ``.us-east.rgw.control``
 - ``.us-east.rgw.gc``
-- ``.us-east.rgw.buckets.index``
 - ``.us-east.rgw.buckets``
+- ``.us-east.rgw.buckets.index``
+- ``.us-east.rgw.buckets.extra``
 - ``.us-east.log``
 - ``.us-east.intent-log``
 - ``.us-east.usage``
@@ -119,12 +117,14 @@ prefer. For example:
 - ``.us-east.users.swift``
 - ``.us-east.users.uid``
 
-- ``.us-west.domain.rgw``
+| 
+
 - ``.us-west.rgw.root``
 - ``.us-west.rgw.control``
 - ``.us-west.rgw.gc``
-- ``.us-west.rgw.buckets.index``
 - ``.us-west.rgw.buckets``
+- ``.us-west.rgw.buckets.index``
+- ``.us-west.rgw.buckets.extra``
 - ``.us-west.log``
 - ``.us-west.intent-log``
 - ``.us-west.usage``
@@ -137,7 +137,7 @@ See `Configuration Reference - Pools`_ for details on the default pools for
 gateways. See `Pools`_ for details on creating pools. Execute the following 
 to create a pool:: 
 
-	ceph osd pool create {poolname} {pg-num} {pgp-num}
+	ceph osd pool create {poolname} {pg-num} {pgp-num} {replicated | erasure} [{erasure-code-profile}]  {ruleset-name} {ruleset-number}
 
 
 .. tip:: When adding a large number of pools, it may take some time for your 
@@ -146,8 +146,14 @@ to create a pool::
 .. topic:: CRUSH Maps
 
 	When deploying a Ceph Storage Cluster for the entire region, consider 
-	using a CRUSH rule for the the zone such that you do NOT	have overlapping 
+	using a CRUSH rule for the zone such that you do NOT have overlapping
 	failure domains. See `CRUSH Map`_ for details.
+	
+	Ceph supports multiple CRUSH hierarchies and CRUSH rulesets, enabling 
+	great flexibility in the way you configure your gateway. Pools such 
+	as ``rgw.buckets.index`` may benefit from a modestly sized pool of SSDs 
+	for fast performance. Backing storage may benefit from the increased economy
+	of erasure-coded storage, and/or the improved performance from cache tiering.
 
 When you have completed this step, execute the following to ensure that
 you have created all of the foregoing pools::
@@ -179,8 +185,8 @@ each node containing an instance.
 #. Add capabilities to each key. See `Configuration Reference - Pools`_ for details
    on the effect of write permissions for the monitor and creating pools. ::
 
-	sudo ceph-authtool -n client.radosgw.us-east-1 --cap osd 'allow rwx' --cap mon 'allow rw' /etc/ceph/ceph.client.radosgw.keyring
-	sudo ceph-authtool -n client.radosgw.us-west-1 --cap osd 'allow rwx' --cap mon 'allow rw' /etc/ceph/ceph.client.radosgw.keyring
+	sudo ceph-authtool -n client.radosgw.us-east-1 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
+	sudo ceph-authtool -n client.radosgw.us-west-1 --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
 
 
 #. Once you have created a keyring and key to enable the Ceph Object Gateway 
@@ -335,11 +341,12 @@ Add Instances to Ceph Config File
 On an admin node, add an entry for each instance in the Ceph configuration file
 for your Ceph Storage Cluster(s). For example:: 
 
-	...
+	[global]
+	rgw region root pool = .us.rgw.root     # Deprecated in Jewel
+	rgw zonegroup root pool = .us.rgw.root  # From Jewel
 	
 	[client.radosgw.us-east-1]
 	rgw region = us
-	rgw region root pool = .us.rgw.root
 	rgw zone = us-east
 	rgw zone root pool = .us-east.rgw.root
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
@@ -349,7 +356,6 @@ for your Ceph Storage Cluster(s). For example::
 	
 	[client.radosgw.us-west-1]
 	rgw region = us
-	rgw region root pool = .us.rgw.root
 	rgw zone = us-west
 	rgw zone root pool = .us-west.rgw.root
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
@@ -361,7 +367,7 @@ for your Ceph Storage Cluster(s). For example::
 Then, update each :term:`Ceph Node` with the updated Ceph configuration
 file. For example:: 
 
-	ceph-deploy --overwrite-conf config {node1} {node2} {nodex}	
+	ceph-deploy --overwrite-conf config push {node1} {node2} {nodex}	
 
 
 .. note:: When you use this procedure to configure the secondary region, 
@@ -488,7 +494,8 @@ Create Zones
 
 #. Delete the default zone (if it exists). :: 
 
-	rados -p .rgw.root rm zone_info.default
+	rados -p .us-east.rgw.root rm zone_info.default
+	rados -p .us-west.rgw.root rm zone_info.default
 
 
 #. Update the region map. :: 

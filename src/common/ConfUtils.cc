@@ -24,6 +24,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <iostream>
 
 #include "include/buffer.h"
 #include "common/errno.h"

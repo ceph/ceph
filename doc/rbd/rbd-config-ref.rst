@@ -1,8 +1,11 @@
 =======================
- librbd Cache Settings
+ librbd Settings
 =======================
 
 See `Block Device`_ for additional details.
+
+Cache Settings
+=======================
 
 .. sidebar:: Kernel Caching
 
@@ -38,7 +41,7 @@ mode, set ``rbd cache max dirty`` to 0. This means writes return only
 when the data is on disk on all replicas, but reads may come from the
 cache. The cache is in memory on the client, and each RBD image has
 its own.  Since the cache is local to the client, there's no coherency
-if there are others accesing the image. Running GFS or OCFS on top of
+if there are others accessing the image. Running GFS or OCFS on top of
 RBD will not work with caching enabled.
 
 The ``ceph.conf`` file settings for RBD should be set in the ``[client]``
@@ -50,7 +53,7 @@ section of your configuration file. The settings include:
 :Description: Enable caching for RADOS Block Device (RBD).
 :Type: Boolean
 :Required: No
-:Default: ``false``
+:Default: ``true``
 
 
 ``rbd cache size``
@@ -93,6 +96,41 @@ section of your configuration file. The settings include:
 :Description: Start out in write-through mode, and switch to write-back after the first flush request is received. Enabling this is a conservative but safe setting in case VMs running on rbd are too old to send flushes, like the virtio driver in Linux before 2.6.32.
 :Type: Boolean
 :Required: No
-:Default: ``false``
+:Default: ``true``
 
 .. _Block Device: ../../rbd/rbd/
+
+
+Read-ahead Settings
+=======================
+
+.. versionadded:: 0.86
+
+RBD supports read-ahead/prefetching to optimize small, sequential reads.
+This should normally be handled by the guest OS in the case of a VM,
+but boot loaders may not issue efficient reads.
+Read-ahead is automatically disabled if caching is disabled.
+
+
+``rbd readahead trigger requests``
+
+:Description: Number of sequential read requests necessary to trigger read-ahead.
+:Type: Integer
+:Required: No
+:Default: ``10``
+
+
+``rbd readahead max bytes``
+
+:Description: Maximum size of a read-ahead request.  If zero, read-ahead is disabled.
+:Type: 64-bit Integer
+:Required: No
+:Default: ``512 KiB``
+
+
+``rbd readahead disable after bytes``
+
+:Description: After this many bytes have been read from an RBD image, read-ahead is disabled for that image until it is closed.  This allows the guest OS to take over read-ahead once it is booted.  If zero, read-ahead stays enabled.
+:Type: 64-bit Integer
+:Required: No
+:Default: ``50 MiB``

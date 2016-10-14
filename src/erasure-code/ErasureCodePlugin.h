@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -21,7 +22,8 @@
 #include "ErasureCodeInterface.h"
 
 extern "C" {
-  int __erasure_code_init(char *plugin_name);
+  const char *__erasure_code_version();
+  int __erasure_code_init(char *plugin_name, char *directory);
 }
 
 namespace ceph {
@@ -34,8 +36,10 @@ namespace ceph {
       library(0) {}
     virtual ~ErasureCodePlugin() {}
 
-    virtual int factory(const map<std::string,std::string> &parameters,
-                        ErasureCodeInterfaceRef *erasure_code) = 0;
+    virtual int factory(const std::string &directory,
+			ErasureCodeProfile &profile,
+                        ErasureCodeInterfaceRef *erasure_code,
+			ostream *ss) = 0;
   };
 
   class ErasureCodePluginRegistry {
@@ -55,18 +59,23 @@ namespace ceph {
     }
 
     int factory(const std::string &plugin,
-		const map<std::string,std::string> &parameters,
+		const std::string &directory,
+		ErasureCodeProfile &profile,
 		ErasureCodeInterfaceRef *erasure_code,
-		ostream &ss);
+		ostream *ss);
 
     int add(const std::string &name, ErasureCodePlugin *plugin);
+    int remove(const std::string &name);
     ErasureCodePlugin *get(const std::string &name);
 
     int load(const std::string &plugin_name,
-	     const map<std::string,std::string> &parameters,
+	     const std::string &directory,
 	     ErasureCodePlugin **plugin,
-	     ostream &ss);
+	     ostream *ss);
 
+    int preload(const std::string &plugins,
+		const std::string &directory,
+		ostream *ss);
   };
 }
 

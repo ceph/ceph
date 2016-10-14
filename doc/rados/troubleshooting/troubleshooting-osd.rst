@@ -4,9 +4,10 @@
 
 Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
-a health status, the return of a status means that the monitors have a quorum.
+a health status, it means that the monitors have a quorum.
 If you don't have a monitor quorum or if there are errors with the monitor
-status, address the monitor issues first. Check your networks to ensure they
+status, `address the monitor issues first <../troubleshooting-mon>`_.
+Check your networks to ensure they
 are running properly, because networks may have a significant impact on OSD
 operation and performance.
 
@@ -41,10 +42,15 @@ the sockets for your Ceph processes::
 
 	ls /var/run/ceph
 
-Then, execute the following, replacing ``{socket-name}`` with an actual
-socket name to show the list of available options::
+Then, execute the following, replacing ``{daemon-name}`` with an actual
+daemon (e.g., ``osd.0``)::
 
-	ceph --admin-daemon /var/run/ceph/{socket-name} help
+  ceph daemon osd.0 help
+
+Alternatively, you can specify a ``{socket-file}`` (e.g., something in ``/var/run/ceph``)::
+
+  ceph daemon {socket-file} help
+
 
 The admin socket, among other things, allows you to:
 
@@ -96,14 +102,14 @@ maintenance, set the cluster to ``noout`` first::
 Once the cluster is set to ``noout``, you can begin stopping the OSDs within the
 failure domain that requires maintenance work. ::
 
-	ceph osd stop osd.{num}
+	stop ceph-osd id={num}
 
 .. note:: Placement groups within the OSDs you stop will become ``degraded``
    while you are addressing issues with within the failure domain.
 
 Once you have completed your maintenance, restart the OSDs. ::
 
-	ceph osd start osd.{num}
+	start ceph-osd id={num}
 
 Finally, you must unset the cluster from ``noout``. ::
 
@@ -135,6 +141,20 @@ If you start your cluster and an OSD won't start, check the following:
   journal on a block device, you should partition your journal disk and assign
   one partition per OSD.
 
+- **Check Max Threadcount:** If you have a node with a lot of OSDs, you may be
+  hitting the default maximum number of threads (e.g., usually 32k), especially
+  during recovery. You can increase the number of threads using ``sysctl`` to
+  see if increasing the maximum number of threads to the maximum possible
+  number of threads allowed (i.e.,  4194303) will help. For example::
+
+	sysctl -w kernel.pid_max=4194303
+
+  If increasing the maximum thread count resolves the issue, you can make it
+  permanent by including a ``kernel.pid_max`` setting in the
+  ``/etc/sysctl.conf`` file. For example::
+
+	kernel.pid_max = 4194303
+
 - **Kernel Version:** Identify the kernel version and distribution you
   are using. Ceph uses some third party tools by default, which may be
   buggy or may conflict with certain distributions and/or kernel
@@ -146,8 +166,6 @@ If you start your cluster and an OSD won't start, check the following:
   contact the ceph-devel email list and provide your Ceph configuration
   file, your monitor output and the contents of your log file(s).
 
-If you cannot resolve the issue and the email list isn't helpful, you may
-contact `Inktank`_ for support.
 
 
 An OSD Failed
@@ -266,8 +284,8 @@ write throughput can bottleneck if other processes share the drive, including
 journals, operating systems, monitors, other OSDs and non-Ceph processes.
 
 Ceph acknowledges writes *after* journaling, so fast SSDs are an attractive
-option to accelerate the response time--particularly when using the ``ext4`` or
-XFS filesystems. By contrast, the ``btrfs`` filesystem can write and journal
+option to accelerate the response time--particularly when using the ``XFS`` or
+``ext4`` filesystems. By contrast, the ``btrfs`` filesystem can write and journal
 simultaneously.
 
 .. note:: Partitioning a drive does not change its total throughput or
@@ -343,9 +361,14 @@ might not have a recent enough version of ``glibc`` to support ``syncfs(2)``.
 Filesystem Issues
 -----------------
 
-Currently, we recommend deploying clusters with XFS or ext4. The btrfs
+Currently, we recommend deploying clusters with XFS. The btrfs
 filesystem has many attractive features, but bugs in the filesystem may
-lead to performance issues.
+lead to performance issues.  We do not recommend ext4 because xattr size
+limitations break our support for long object names (needed for RGW).
+
+For more information, see `Filesystem Recommendations`_.
+
+.. _Filesystem Recommendations: ../configuration/filesystem-recommendations
 
 
 Insufficient RAM
@@ -427,7 +450,7 @@ You can clear the flags with::
 
 Two other flags are supported, ``noin`` and ``noout``, which prevent
 booting OSDs from being marked ``in`` (allocated data) or protect OSDs
-from eventually being marked ``out`` (regardless of what the current value for 
+from eventually being marked ``out`` (regardless of what the current value for
 ``mon osd down out interval`` is).
 
 .. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the
@@ -452,6 +475,5 @@ from eventually being marked ``out`` (regardless of what the current value for
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
 .. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
-.. _Inktank: http://inktank.com
-.. _OS recommendations: ../../../install/os-recommendations
+.. _OS recommendations: ../../../start/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org

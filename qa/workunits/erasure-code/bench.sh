@@ -1,6 +1,7 @@
 #!/bin/bash 
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -14,6 +15,33 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+# Test that it works from sources with:
+#
+#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  PLUGIN_DIRECTORY=src/.libs \
+#      qa/workunits/erasure-code/bench.sh fplot jerasure |
+#      tee qa/workunits/erasure-code/bench.js
+#
+# This should start immediately and display:
+#
+# ...
+# [ '2/1',  .48035538612887358583  ],
+# [ '3/2',  .21648470405675016626  ],
+# etc.
+#
+# and complete within a few seconds. The result can then be displayed with:
+#
+#  firefox qa/workunits/erasure-code/bench.html
+#
+# Once it is confirmed to work, it can be run with a more significant
+# volume of data so that the measures are more reliable:
+#
+#  TOTAL_SIZE=$((4 * 1024 * 1024 * 1024)) \
+#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  PLUGIN_DIRECTORY=src/.libs \
+#      qa/workunits/erasure-code/bench.sh fplot jerasure |
+#      tee qa/workunits/erasure-code/bench.js
+#
 set -e
 
 export PATH=/sbin:$PATH
@@ -21,9 +49,11 @@ export PATH=/sbin:$PATH
 : ${VERBOSE:=false}
 : ${CEPH_ERASURE_CODE_BENCHMARK:=ceph_erasure_code_benchmark}
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
-: ${PLUGINS:=example jerasure}
-: ${ITERATIONS:=1024}
-: ${SIZE:=1048576}
+: ${PLUGINS:=isa jerasure}
+: ${TECHNIQUES:=vandermonde cauchy}
+: ${TOTAL_SIZE:=$((1024 * 1024))}
+: ${SIZE:=4096}
+: ${PARAMETERS:=--parameter jerasure-per-chunk-alignment=true}
 
 function bench_header() {
     echo -e "seconds\tKB\tplugin\tk\tm\twork.\titer.\tsize\teras.\tcommand."
@@ -50,53 +80,64 @@ function bench() {
         --iterations $iterations \
         --size $size \
         --erasures $erasures \
-        --parameter erasure-code-k=$k \
-        --parameter erasure-code-m=$m \
-        --parameter erasure-code-directory=$PLUGIN_DIRECTORY)
+        --parameter k=$k \
+        --parameter m=$m \
+        --erasure-code-dir $PLUGIN_DIRECTORY)
     result=$($command "$@")
     echo -e "$result\t$plugin\t$k\t$m\t$workload\t$iterations\t$size\t$erasures\t$command ""$@"
 }
 
-function example_test() {
-    local plugin=example
+function packetsize() {
+    local k=$1
+    local w=$2
+    local vector_wordsize=$3
+    local size=$4
 
-    bench $plugin 2 1 encode $ITERATIONS $SIZE 0
-    bench $plugin 2 1 decode $ITERATIONS $SIZE 1
+    local p=$(( ($size / $k / $w / $vector_wordsize ) * $vector_wordsize))
+    if [ $p -gt 3100 ] ; then
+        p=3100
+    fi
+    echo $p
 }
 
-#
-# The results are expected to be consistent with 
-# https://www.usenix.org/legacy/events/fast09/tech/full_papers/plank/plank_html/
-# 
-function jerasure_test() {
+function bench_run() {
     local plugin=jerasure
+    local w=8
+    local VECTOR_WORDSIZE=16
+    local ks="2 3 4 6 10"
+    declare -A k2ms
+    k2ms[2]="1"
+    k2ms[3]="2"
+    k2ms[4]="2 3"
+    k2ms[6]="2 3 4"
+    k2ms[10]="3 4"
+    for technique in ${TECHNIQUES} ; do
+        for plugin in ${PLUGINS} ; do
+            eval technique_parameter=\$${plugin}2technique_${technique}
+            echo "serie encode_${technique}_${plugin}"
+            for k in $ks ; do
+                for m in ${k2ms[$k]} ; do
+                    bench $plugin $k $m encode $(($TOTAL_SIZE / $SIZE)) $SIZE 0 \
+                        --parameter packetsize=$(packetsize $k $w $VECTOR_WORDSIZE $SIZE) \
+                        ${PARAMETERS} \
+                        --parameter technique=$technique_parameter
 
-    for technique in reed_sol_van ; do
-        for k in 4 6 10 ; do
-            for m in $(seq 1 4) ; do
-                bench $plugin $k $m encode $ITERATIONS $SIZE 0 \
-                    --parameter erasure-code-technique=$technique
-
-                for erasures in $(seq 1 $m) ; do
-                    bench $plugin $k $m decode $ITERATIONS $SIZE $erasures \
-                        --parameter erasure-code-technique=$technique
                 done
             done
         done
     done
-
-    for technique in cauchy_orig cauchy_good ; do
-        for packetsize in $(seq 512 512 4096) ; do
-            for k in 4 6 10 ; do
-                for m in $(seq 1 4) ; do
-                    bench $plugin $k $m encode $ITERATIONS $SIZE 0 \
-                        --parameter erasure-code-packetsize=$packetsize \
-                        --parameter erasure-code-technique=$technique
-
+    for technique in ${TECHNIQUES} ; do
+        for plugin in ${PLUGINS} ; do
+            eval technique_parameter=\$${plugin}2technique_${technique}
+            echo "serie decode_${technique}_${plugin}"
+            for k in $ks ; do
+                for m in ${k2ms[$k]} ; do
+                    echo
                     for erasures in $(seq 1 $m) ; do
-                        bench $plugin $k $m decode $ITERATIONS $SIZE $erasures \
-                            --parameter erasure-code-packetsize=$packetsize \
-                            --parameter erasure-code-technique=$technique
+                        bench $plugin $k $m decode $(($TOTAL_SIZE / $SIZE)) $SIZE $erasures \
+                            --parameter packetsize=$(packetsize $k $w $VECTOR_WORDSIZE  $SIZE) \
+                            ${PARAMETERS} \
+                            --parameter technique=$technique_parameter
                     done
                 done
             done
@@ -104,125 +145,37 @@ function jerasure_test() {
     done
 }
 
-function main() {
-    bench_header
-    for plugin in ${PLUGINS} ; do
-        ${plugin}_test || return 1
+function fplot() {
+    local serie
+    bench_run | while read seconds total plugin k m workload iteration size erasures rest ; do 
+        if [ -z $seconds ] ; then
+            echo null,
+        elif [ $seconds = serie ] ; then
+            if [ "$serie" ] ; then
+                echo '];'
+            fi
+            local serie=`echo $total | sed 's/cauchy_\([0-9]\)/cauchy_good_\1/g'`
+            echo "var $serie = ["
+        else
+            local x
+            if [ $workload = encode ] ; then
+                x=$k/$m
+            else
+                x=$k/$m/$erasures
+            fi
+            echo "[ '$x', " $(echo "( $total / 1024 / 1024 ) / $seconds" | bc -ql) " ], "
+        fi
     done
+    echo '];'
 }
 
-if [ "$1" = TEST ]
-then
-    set -x
-    set -o functrace
-    PS4=' ${FUNCNAME[0]}: $LINENO: '
+function main() {
+    bench_header
+    bench_run
+}
 
-    ITERATIONS=1
-    SIZE=1024
-
-    function run_test() {
-        dir=/tmp/erasure-code
-        rm -fr $dir
-        mkdir $dir
-        expected=$(cat <<EOF
-plugin	k	m	work.	iter.	size	eras.
-example	2	1	encode	1	1024	0
-example	2	1	decode	1	1024	1
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	6	3	encode	1	1024	0
-jerasure	6	3	decode	1	1024	1
-jerasure	6	3	decode	1	1024	2
-jerasure	6	3	decode	1	1024	3
-jerasure	6	4	encode	1	1024	0
-jerasure	6	4	decode	1	1024	1
-jerasure	6	4	decode	1	1024	2
-jerasure	6	4	decode	1	1024	3
-jerasure	6	4	decode	1	1024	4
-jerasure	10	3	encode	1	1024	0
-jerasure	10	3	decode	1	1024	1
-jerasure	10	3	decode	1	1024	2
-jerasure	10	3	decode	1	1024	3
-jerasure	10	4	encode	1	1024	0
-jerasure	10	4	decode	1	1024	1
-jerasure	10	4	decode	1	1024	2
-jerasure	10	4	decode	1	1024	3
-jerasure	10	4	decode	1	1024	4
-jerasure	6	3	encode	1	1024	0
-jerasure	6	3	decode	1	1024	1
-jerasure	6	3	decode	1	1024	2
-jerasure	6	3	decode	1	1024	3
-jerasure	6	4	encode	1	1024	0
-jerasure	6	4	decode	1	1024	1
-jerasure	6	4	decode	1	1024	2
-jerasure	6	4	decode	1	1024	3
-jerasure	6	4	decode	1	1024	4
-jerasure	10	3	encode	1	1024	0
-jerasure	10	3	decode	1	1024	1
-jerasure	10	3	decode	1	1024	2
-jerasure	10	3	decode	1	1024	3
-jerasure	10	4	encode	1	1024	0
-jerasure	10	4	decode	1	1024	1
-jerasure	10	4	decode	1	1024	2
-jerasure	10	4	decode	1	1024	3
-jerasure	10	4	decode	1	1024	4
-jerasure	6	3	encode	1	1024	0
-jerasure	6	3	decode	1	1024	1
-jerasure	6	3	decode	1	1024	2
-jerasure	6	3	decode	1	1024	3
-jerasure	6	4	encode	1	1024	0
-jerasure	6	4	decode	1	1024	1
-jerasure	6	4	decode	1	1024	2
-jerasure	6	4	decode	1	1024	3
-jerasure	6	4	decode	1	1024	4
-jerasure	10	3	encode	1	1024	0
-jerasure	10	3	decode	1	1024	1
-jerasure	10	3	decode	1	1024	2
-jerasure	10	3	decode	1	1024	3
-jerasure	10	4	encode	1	1024	0
-jerasure	10	4	decode	1	1024	1
-jerasure	10	4	decode	1	1024	2
-jerasure	10	4	decode	1	1024	3
-jerasure	10	4	decode	1	1024	4
-EOF
-)
-        test "$(main | cut --fields=3-9 )" = "$expected" || return 1
-    }
-
-    run_test
+if [ "$1" = fplot ] ; then
+    "$@"
 else
     main
 fi
@@ -230,6 +183,6 @@ fi
 # compile-command: "\
 #   CEPH_ERASURE_CODE_BENCHMARK=../../../src/ceph_erasure_code_benchmark \
 #   PLUGIN_DIRECTORY=../../../src/.libs \
-#   ./bench.sh TEST
+#   ./bench.sh
 # "
 # End:

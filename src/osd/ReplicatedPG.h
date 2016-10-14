@@ -17,28 +17,14 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
-#include <boost/optional.hpp>
 #include <boost/tuple/tuple.hpp>
-
 #include "include/assert.h" 
-#include "common/cmdparse.h"
-
-#include "HitSet.h"
-#include "OSD.h"
 #include "PG.h"
 #include "Watch.h"
-#include "OpRequest.h"
 #include "TierAgentState.h"
-
-#include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDSubOp.h"
-
 #include "common/sharedptr_registry.hpp"
-
-#include "PGBackend.h"
 #include "ReplicatedBackend.h"
-#include "ECBackend.h"
 
 class MOSDSubOpReply;
 
@@ -46,6 +32,14 @@ class CopyFromCallback;
 class PromoteCallback;
 
 class ReplicatedPG;
+class PGLSFilter;
+class HitSet;
+struct TierAgentState;
+class MOSDOp;
+class MOSDOpReply;
+class MOSDSubOp;
+class OSDService;
+
 void intrusive_ptr_add_ref(ReplicatedPG *pg);
 void intrusive_ptr_release(ReplicatedPG *pg);
 uint64_t get_with_id(ReplicatedPG *pg);
@@ -57,38 +51,7 @@ void put_with_id(ReplicatedPG *pg, uint64_t id);
   typedef boost::intrusive_ptr<ReplicatedPG> ReplicatedPGRef;
 #endif
 
-class PGLSFilter {
-protected:
-  string xattr;
-public:
-  PGLSFilter();
-  virtual ~PGLSFilter();
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
-  virtual string& get_xattr() { return xattr; }
-};
-
-class PGLSPlainFilter : public PGLSFilter {
-  string val;
-public:
-  PGLSPlainFilter(bufferlist::iterator& params) {
-    ::decode(xattr, params);
-    ::decode(val, params);
-  }
-  virtual ~PGLSPlainFilter() {}
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
-};
-
-class PGLSParentFilter : public PGLSFilter {
-  inodeno_t parent_ino;
-public:
-  PGLSParentFilter(bufferlist::iterator& params) {
-    xattr = "_parent";
-    ::decode(parent_ino, params);
-    generic_dout(0) << "parent_ino=" << parent_ino << dendl;
-  }
-  virtual ~PGLSParentFilter() {}
-  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
-};
+struct inconsistent_snapset_wrapper;
 
 class ReplicatedPG : public PG, public PGBackend::Listener {
   friend class OSD;
@@ -106,7 +69,7 @@ public:
    * CopyResults stores the object metadata of interest to a copy initiator.
    */
   struct CopyResults {
-    utime_t mtime; ///< the copy source's mtime
+    ceph::real_time mtime; ///< the copy source's mtime
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
     hobject_t temp_oid;    ///< temp object (if any)
@@ -115,7 +78,6 @@ public:
      * other accesses to the object (in order to complete the copy).
      */
     PGBackend::PGTransaction *final_tx;
-    string category; ///< The copy source's category
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
@@ -124,10 +86,28 @@ public:
     bool mirror_snapset;
     map<string, bufferlist> attrs; ///< src user attrs
     bool has_omap;
-    CopyResults() : object_size(0), started_temp_obj(false),
-		    final_tx(NULL), user_version(0), 
-		    should_requeue(false), mirror_snapset(false),
-		    has_omap(false) {}
+    uint32_t flags;    // object_copy_data_t::FLAG_*
+    uint32_t source_data_digest, source_omap_digest;
+    uint32_t data_digest, omap_digest;
+    vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    uint64_t truncate_seq;
+    uint64_t truncate_size;
+    bool is_data_digest() {
+      return flags & object_copy_data_t::FLAG_DATA_DIGEST;
+    }
+    bool is_omap_digest() {
+      return flags & object_copy_data_t::FLAG_OMAP_DIGEST;
+    }
+    CopyResults()
+      : object_size(0), started_temp_obj(false),
+	final_tx(NULL), user_version(0),
+	should_requeue(false), mirror_snapset(false),
+	has_omap(false),
+	flags(0),
+	source_data_digest(-1), source_omap_digest(-1),
+	data_digest(-1), omap_digest(-1),
+	truncate_seq(0), truncate_size(0)
+    {}
   };
 
   struct CopyOp {
@@ -147,27 +127,41 @@ public:
     map<string,bufferlist> attrs;
     bufferlist data;
     bufferlist omap_header;
-    map<string,bufferlist> omap;
+    bufferlist omap_data;
     int rval;
 
     object_copy_cursor_t temp_cursor;
+
+    /*
+     * For CopyOp the process is:
+     * step1: read the data(attr/omap/data) from the source object
+     * step2: handle those data(w/ those data create a new object)
+     * src_obj_fadvise_flags used in step1;
+     * dest_obj_fadvise_flags used in step2
+     */
+    unsigned src_obj_fadvise_flags;
+    unsigned dest_obj_fadvise_flags;
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
            version_t v,
 	   unsigned f,
-	   bool ms)
+	   bool ms,
+	   unsigned src_obj_fadvise_flags,
+	   unsigned dest_obj_fadvise_flags)
       : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
 	mirror_snapset(ms),
 	objecter_tid(0),
 	objecter_tid2(0),
-	rval(-1)
+	rval(-1),
+	src_obj_fadvise_flags(src_obj_fadvise_flags),
+	dest_obj_fadvise_flags(dest_obj_fadvise_flags)
     {
       results.user_version = v;
       results.mirror_snapset = mirror_snapset;
     }
   };
-  typedef boost::shared_ptr<CopyOp> CopyOpRef;
+  typedef ceph::shared_ptr<CopyOp> CopyOpRef;
 
   /**
    * The CopyCallback class defines an interface for completions to the
@@ -178,24 +172,48 @@ public:
    * can associate itself with the correct copy operation.
    */
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
-  class CopyCallback : public GenContext<CopyCallbackResults> {
-  protected:
-    CopyCallback() {}
-    /**
-     * results.get<0>() is the return code: 0 for success; -ECANCELLED if
-     * the operation was cancelled by the local OSD; -errno for other issues.
-     * results.get<1>() is a pointer to a CopyResults object, which you are
-     * responsible for deleting.
-     */
-    virtual void finish(CopyCallbackResults results_) = 0;
-
-  public:
-    /// Provide the final size of the copied object to the CopyCallback
-    virtual ~CopyCallback() {};
-  };
 
   friend class CopyFromCallback;
   friend class PromoteCallback;
+
+  struct ProxyReadOp {
+    OpRequestRef op;
+    hobject_t soid;
+    ceph_tid_t objecter_tid;
+    vector<OSDOp> &ops;
+    version_t user_version;
+    int data_offset;
+    bool canceled;              ///< true if canceled
+
+    ProxyReadOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
+      : op(_op), soid(oid),
+        objecter_tid(0), ops(_ops),
+	user_version(0), data_offset(0),
+	canceled(false) { }
+  };
+  typedef ceph::shared_ptr<ProxyReadOp> ProxyReadOpRef;
+
+  struct ProxyWriteOp {
+    OpContext *ctx;
+    OpRequestRef op;
+    hobject_t soid;
+    ceph_tid_t objecter_tid;
+    vector<OSDOp> &ops;
+    version_t user_version;
+    bool sent_disk;
+    bool sent_ack;
+    utime_t mtime;
+    bool canceled;
+    osd_reqid_t reqid;
+
+    ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
+      : ctx(NULL), op(_op), soid(oid),
+        objecter_tid(0), ops(_ops),
+	user_version(0), sent_disk(false),
+	sent_ack(false), canceled(false),
+        reqid(_reqid) { }
+  };
+  typedef ceph::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
 
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
@@ -206,167 +224,139 @@ public:
     int rval;                   ///< copy-from result
     bool blocking;              ///< whether we are blocking updates
     bool removal;               ///< we are removing the backend object
-    Context *on_flush;          ///< callback, may be null
+    boost::optional<std::function<void()>> on_flush; ///< callback, may be null
 
     FlushOp()
-      : objecter_tid(0), rval(0),
-	blocking(false), removal(false),
-	on_flush(NULL) {}
+      : flushed_version(0), objecter_tid(0), rval(0),
+	blocking(false), removal(false) {}
     ~FlushOp() { assert(!on_flush); }
   };
-  typedef boost::shared_ptr<FlushOp> FlushOpRef;
+  typedef ceph::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
-  PGBackend *get_pgbackend() {
+  PGBackend *get_pgbackend() override {
     return pgbackend.get();
   }
 
   /// Listener methods
-  void on_local_recover_start(
-    const hobject_t &oid,
-    ObjectStore::Transaction *t);
   void on_local_recover(
     const hobject_t &oid,
-    const object_stat_sum_t &stat_diff,
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
     ObjectStore::Transaction *t
-    );
+    ) override;
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     const object_stat_sum_t &stat
-    );
+    ) override;
   void begin_peer_recover(
     pg_shard_t peer,
-    const hobject_t oid);
+    const hobject_t oid) override;
   void on_global_recover(
-    const hobject_t &oid);
-  void failed_push(pg_shard_t from, const hobject_t &soid);
-  void cancel_pull(const hobject_t &soid);
+    const hobject_t &oid,
+    const object_stat_sum_t &stat_diff) override;
+  void failed_push(pg_shard_t from, const hobject_t &soid) override;
+  void cancel_pull(const hobject_t &soid) override;
 
-  template <typename T>
-  class BlessedGenContext : public GenContext<T> {
-    ReplicatedPGRef pg;
-    GenContext<T> *c;
-    epoch_t e;
-  public:
-    BlessedGenContext(ReplicatedPG *pg, GenContext<T> *c, epoch_t e)
-      : pg(pg), c(c), e(e) {}
-    void finish(T t) {
-      pg->lock();
-      if (pg->pg_has_reset_since(e))
-	delete c;
-      else
-	c->complete(t);
-      pg->unlock();
-    }
-  };
-  class BlessedContext : public Context {
-    ReplicatedPGRef pg;
-    Context *c;
-    epoch_t e;
-  public:
-    BlessedContext(ReplicatedPG *pg, Context *c, epoch_t e)
-      : pg(pg), c(c), e(e) {}
-    void finish(int r) {
-      pg->lock();
-      if (pg->pg_has_reset_since(e))
-	delete c;
-      else
-	c->complete(r);
-      pg->unlock();
-    }
-  };
-  Context *bless_context(Context *c) {
-    return new BlessedContext(this, c, get_osdmap()->get_epoch());
-  }
+  template<class T> class BlessedGenContext;
+  class BlessedContext;
+  Context *bless_context(Context *c) override;
+
   GenContext<ThreadPool::TPHandle&> *bless_gencontext(
-    GenContext<ThreadPool::TPHandle&> *c) {
-    return new BlessedGenContext<ThreadPool::TPHandle&>(
-      this, c, get_osdmap()->get_epoch());
-  }
+    GenContext<ThreadPool::TPHandle&> *c) override;
     
-  void send_message(int to_osd, Message *m) {
+  void send_message(int to_osd, Message *m) override {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
   }
-  void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
-    list<ObjectStore::Transaction *> tls;
-    tls.push_back(t);
-    osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
+  void queue_transaction(ObjectStore::Transaction&& t,
+			 OpRequestRef op) override {
+    osd->store->queue_transaction(osr.get(), std::move(t), 0, 0, 0, op);
   }
-  epoch_t get_epoch() const {
+  void queue_transactions(vector<ObjectStore::Transaction>& tls,
+			  OpRequestRef op) override {
+    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op, NULL);
+  }
+  epoch_t get_epoch() const override {
     return get_osdmap()->get_epoch();
   }
-  const set<pg_shard_t> &get_actingbackfill_shards() const {
+  const set<pg_shard_t> &get_actingbackfill_shards() const override {
     return actingbackfill;
   }
-  const set<pg_shard_t> &get_acting_shards() const {
+  const set<pg_shard_t> &get_acting_shards() const override {
     return actingset;
   }
-  const set<pg_shard_t> &get_backfill_shards() const {
+  const set<pg_shard_t> &get_backfill_shards() const override {
     return backfill_targets;
   }
 
-  std::string gen_dbg_prefix() const { return gen_prefix(); }
+  std::string gen_dbg_prefix() const override { return gen_prefix(); }
   
-  const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards() const {
+  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>
+    &get_missing_loc_shards() const override {
     return missing_loc.get_missing_locs();
   }
-  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
+  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
     return peer_missing;
   }
-  const map<pg_shard_t, pg_info_t> &get_shard_info() const {
+  using PGBackend::Listener::get_shard_missing;
+  const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
     return peer_info;
   }
-  const pg_missing_t &get_local_missing() const {
+  using PGBackend::Listener::get_shard_info;  
+  const pg_missing_tracker_t &get_local_missing() const override {
     return pg_log.get_missing();
   }
-  const PGLog &get_log() const {
+  const PGLog &get_log() const override {
     return pg_log;
   }
-  bool pgb_is_primary() const {
+  bool pgb_is_primary() const override {
     return is_primary();
   }
-  OSDMapRef pgb_get_osdmap() const {
+  OSDMapRef pgb_get_osdmap() const override {
     return get_osdmap();
   }
-  const pg_info_t &get_info() const {
+  const pg_info_t &get_info() const override {
     return info;
   }
-  const pg_pool_t &get_pool() const {
+  const pg_pool_t &get_pool() const override {
     return pool.info;
   }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs) {
+    map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
+
   void log_operation(
-    vector<pg_log_entry_t> &logv,
+    const vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
+    const eversion_t &trim_rollback_to,
     bool transaction_applied,
-    ObjectStore::Transaction *t) {
+    ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
       dirty_info = true;
     }
-    append_log(logv, trim_to, *t, transaction_applied);
+    append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
   }
 
+  struct C_OSD_OnApplied;
   void op_applied(
-    const eversion_t &applied_version);
+    const eversion_t &applied_version) override;
 
   bool should_send_op(
     pg_shard_t peer,
-    const hobject_t &hoid) {
+    const hobject_t &hoid) override {
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
-    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
-      hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
+    bool should_send =
+      hoid.pool != (int64_t)info.pgid.pool() ||
+      cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
+      cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
     if (!should_send)
       assert(is_backfill_targets(peer));
     return should_send;
@@ -374,49 +364,66 @@ public:
   
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
-    eversion_t lcod) {
+    eversion_t lcod) override {
     peer_last_complete_ondisk[fromosd] = lcod;
   }
 
   void update_last_complete_ondisk(
-    eversion_t lcod) {
+    eversion_t lcod) override {
     last_complete_ondisk = lcod;
   }
 
   void update_stats(
-    const pg_stat_t &stat) {
+    const pg_stat_t &stat) override {
     info.stats = stat;
   }
 
-  void schedule_work(
-    GenContext<ThreadPool::TPHandle&> *c);
+  void schedule_recovery_work(
+    GenContext<ThreadPool::TPHandle&> *c) override;
 
-  pg_shard_t whoami_shard() const {
+  pg_shard_t whoami_shard() const override {
     return pg_whoami;
   }
-  spg_t primary_spg_t() const {
+  spg_t primary_spg_t() const override {
     return spg_t(info.pgid.pgid, primary.shard);
   }
-  pg_shard_t primary_shard() const {
+  pg_shard_t primary_shard() const override {
     return primary;
+  }
+  uint64_t min_peer_features() const override {
+    return get_min_peer_features();
+  }
+  bool sort_bitwise() const override {
+    return get_sort_bitwise();
   }
 
   void send_message_osd_cluster(
-    int peer, Message *m, epoch_t from_epoch);
+    int peer, Message *m, epoch_t from_epoch) override;
   void send_message_osd_cluster(
-    Message *m, Connection *con);
+    Message *m, Connection *con) override;
   void send_message_osd_cluster(
-    Message *m, const ConnectionRef& con);
-  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
-  entity_name_t get_cluster_msgr_name() {
+    Message *m, const ConnectionRef& con) override;
+  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
+  entity_name_t get_cluster_msgr_name() override {
     return osd->get_cluster_msgr_name();
   }
 
-  PerfCounters *get_logger();
+  PerfCounters *get_logger() override;
 
-  ceph_tid_t get_tid() { return osd->get_tid(); }
+  ceph_tid_t get_tid() override { return osd->get_tid(); }
 
-  LogClientTemp clog_error() { return osd->clog.error(); }
+  LogClientTemp clog_error() override { return osd->clog->error(); }
+
+  struct watch_disconnect_t {
+    uint64_t cookie;
+    entity_name_t name;
+    bool send_disconnect;
+    watch_disconnect_t(uint64_t c, entity_name_t n, bool sd)
+      : cookie(c), name(n), send_disconnect(sd) {}
+  };
+  void complete_disconnect_watches(
+    ObjectContextRef obc,
+    const list<watch_disconnect_t> &to_disconnect);
 
   /*
    * Capture all object state associated with an in-progress read or write.
@@ -437,20 +444,27 @@ public:
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
+    bool cache_evict;     ///< true if this is a cache eviction
+    bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
+    bool ignore_log_op_stats;  // don't log op stats
+    bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
 
     // side effects
-    list<watch_info_t> watch_connects;
-    list<watch_info_t> watch_disconnects;
+    list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
+    list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
     list<notify_info_t> notifies;
     struct NotifyAck {
       boost::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
-      NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
-      NotifyAck(uint64_t notify_id, uint64_t cookie)
-	: watch_cookie(cookie), notify_id(notify_id) {}
+      bufferlist reply_bl;
+      explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
+      NotifyAck(uint64_t notify_id, uint64_t cookie, bufferlist& rbl)
+	: watch_cookie(cookie), notify_id(notify_id) {
+	reply_bl.claim(rbl);
+      }
     };
     list<NotifyAck> notify_acks;
-    
+
     uint64_t bytes_written, bytes_read;
 
     utime_t mtime;
@@ -460,13 +474,13 @@ public:
 
     int current_osd_subop_num;
 
-    PGBackend::PGTransaction *op_t;
+    PGBackend::PGTransactionUPtr op_t;
     vector<pg_log_entry_t> log;
     boost::optional<pg_hit_set_history_t> updated_hset_history;
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef> src_obc;
+    map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
@@ -480,6 +494,8 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
+    vector<pair<osd_reqid_t, version_t> > extra_reqids;
+
     CopyFromCallback *copy_cb;
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
@@ -487,6 +503,31 @@ public:
     // pending xattr updates
     map<ObjectContextRef,
 	map<string, boost::optional<bufferlist> > > pending_attrs;
+
+    list<std::function<void()>> on_applied;
+    list<std::function<void()>> on_committed;
+    list<std::function<void()>> on_finish;
+    list<std::function<void()>> on_success;
+    template <typename F>
+    void register_on_finish(F &&f) {
+      on_finish.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_success(F &&f) {
+      on_success.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_applied(F &&f) {
+      on_applied.emplace_back(std::forward<F>(f));
+    }
+    template <typename F>
+    void register_on_commit(F &&f) {
+      on_committed.emplace_back(std::forward<F>(f));
+    }
+
+    bool sent_ack;
+    bool sent_disk;
+
     void apply_pending_attrs() {
       for (map<ObjectContextRef,
 	     map<string, boost::optional<bufferlist> > >::iterator i =
@@ -510,11 +551,11 @@ public:
       pending_attrs.clear();
     }
 
-    // pending async reads <off, len> -> <outbl, outr>
-    list<pair<pair<uint64_t, uint64_t>,
+    // pending async reads <off, len, op_flags> -> <outbl, outr>
+    list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
     int async_read_result;
-    unsigned inflightreads;
+    int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(ReplicatedPG *pg);
     void finish_read(ReplicatedPG *pg);
@@ -524,38 +565,51 @@ public:
 
     ObjectModDesc mod_desc;
 
-    enum { W_LOCK, R_LOCK, NONE } lock_to_release;
-
-    Context *on_finish;
+    ObjectContext::RWState::State lock_type;
+    ObcLockManager lock_manager;
 
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    bool release_snapset_obc;
-
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
-	      ObjectState *_obs, SnapSetContext *_ssc,
+	      ObjectContextRef& obc,
 	      ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
-      new_obs(_obs->oi, _obs->exists),
-      modify(false), user_modify(false), undirty(false),
+      op(_op), reqid(_reqid), ops(_ops),
+      obs(&obc->obs),
+      snapset(0),
+      new_obs(obs->oi, obs->exists),
+      modify(false), user_modify(false), undirty(false), cache_evict(false),
+      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      op_t(NULL),
+      obc(obc),
+      data_off(0), reply(NULL), pg(_pg),
+      num_read(0),
+      num_write(0),
+      copy_cb(NULL),
+      sent_ack(false), sent_disk(false),
+      async_read_result(0),
+      inflightreads(0),
+      lock_type(ObjectContext::RWState::RWNONE) {
+      if (obc->ssc) {
+	new_snapset = obc->ssc->snapset;
+	snapset = &obc->ssc->snapset;
+      }
+    }
+    OpContext(OpRequestRef _op, osd_reqid_t _reqid,
+              vector<OSDOp>& _ops, ReplicatedPG *_pg) :
+      op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
+      modify(false), user_modify(false), undirty(false), cache_evict(false),
+      ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      bytes_written(0), bytes_read(0), user_at_version(0),
+      current_osd_subop_num(0),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
       copy_cb(NULL),
       async_read_result(0),
       inflightreads(0),
-      lock_to_release(NONE),
-      on_finish(NULL),
-      release_snapset_obc(false) {
-      if (_ssc) {
-	new_snapset = _ssc->snapset;
-	snapset = &_ssc->snapset;
-      }
-    }
+      lock_type(ObjectContext::RWState::RWNONE) {}
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
@@ -565,25 +619,24 @@ public:
     }
     ~OpContext() {
       assert(!op_t);
-      assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
-      for (list<pair<pair<uint64_t, uint64_t>,
+      for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 		     pair<bufferlist*, Context*> > >::iterator i =
 	     pending_async_reads.begin();
 	   i != pending_async_reads.end();
 	   pending_async_reads.erase(i++)) {
 	delete i->second.second;
       }
-      assert(on_finish == NULL);
     }
-    void finish(int r) {
-      if (on_finish) {
-	on_finish->complete(r);
-	on_finish = NULL;
+    uint64_t get_features() {
+      if (op && op->get_req()) {
+        return op->get_req()->get_connection()->get_features();
       }
+      return -1ull;
     }
   };
+  using OpContextUPtr = std::unique_ptr<OpContext>;
   friend struct OpContext;
 
   /*
@@ -591,14 +644,12 @@ public:
    */
   class RepGather {
   public:
+    hobject_t hoid;
+    OpRequestRef op;
     xlist<RepGather*>::item queue_item;
     int nref;
 
     eversion_t v;
-
-    OpContext *ctx;
-    ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef> src_obc;
 
     ceph_tid_t rep_tid;
 
@@ -606,31 +657,50 @@ public:
 
     bool all_applied;
     bool all_committed;
-    bool sent_ack;
-    //bool sent_nvram;
-    bool sent_disk;
     
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
 
-    bool queue_snap_trimmer;
+    ObcLockManager lock_manager;
 
-    Context *on_applied;
+    list<std::function<void()>> on_applied;
+    list<std::function<void()>> on_committed;
+    list<std::function<void()>> on_success;
+    list<std::function<void()>> on_finish;
     
-    RepGather(OpContext *c, ObjectContextRef pi, ceph_tid_t rt,
+    RepGather(OpContext *c, ceph_tid_t rt,
 	      eversion_t lc) :
+      hoid(c->obc->obs.oi.soid),
+      op(c->op),
       queue_item(this),
       nref(1),
-      ctx(c), obc(pi),
       rep_tid(rt), 
       rep_aborted(false), rep_done(false),
-      all_applied(false), all_committed(false), sent_ack(false),
-      //sent_nvram(false),
-      sent_disk(false),
+      all_applied(false), all_committed(false),
       pg_local_last_complete(lc),
-      queue_snap_trimmer(false),
-      on_applied(NULL) { }
+      lock_manager(std::move(c->lock_manager)),
+      on_applied(std::move(c->on_applied)),
+      on_committed(std::move(c->on_committed)),
+      on_success(std::move(c->on_success)),
+      on_finish(std::move(c->on_finish)) {}
+
+    RepGather(
+      ObcLockManager &&manager,
+      boost::optional<std::function<void(void)> > &&on_complete,
+      ceph_tid_t rt,
+      eversion_t lc) :
+      queue_item(this),
+      nref(1),
+      rep_tid(rt),
+      rep_aborted(false), rep_done(false),
+      all_applied(false), all_committed(false),
+      pg_local_last_complete(lc),
+      lock_manager(std::move(manager)) {
+      if (on_complete) {
+	on_success.push_back(std::move(*on_complete));
+      }
+    }
 
     RepGather *get() {
       nref++;
@@ -639,8 +709,7 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	delete ctx; // must already be unlocked
-	assert(on_applied == NULL);
+	assert(on_applied.empty());
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
@@ -656,48 +725,42 @@ protected:
    * @param ctx [in,out] ctx to get locks for
    * @return true on success, false if we are queued
    */
-  bool get_rw_locks(OpContext *ctx) {
+  bool get_rw_locks(bool write_ordered, OpContext *ctx) {
     /* If snapset_obc, !obc->obs->exists and we will always take the
      * snapdir lock *before* the head lock.  Since all callers will do
      * this (read or write) if we get the first we will be guaranteed
      * to get the second.
      */
-    if (ctx->snapset_obc) {
-      assert(!ctx->obc->obs.exists);
-      if (ctx->op->may_write() || ctx->op->may_cache()) {
-	if (ctx->snapset_obc->get_write(ctx->op)) {
-	  ctx->release_snapset_obc = true;
-	  ctx->lock_to_release = OpContext::W_LOCK;
-	} else {
-	  return false;
-	}
-      } else {
-	assert(ctx->op->may_read());
-	if (ctx->snapset_obc->get_read(ctx->op)) {
-	  ctx->release_snapset_obc = true;
-	  ctx->lock_to_release = OpContext::R_LOCK;
-	} else {
-	  return false;
-	}
-      }
-    }
-    if (ctx->op->may_write() || ctx->op->may_cache()) {
-      if (ctx->obc->get_write(ctx->op)) {
-	ctx->lock_to_release = OpContext::W_LOCK;
-	return true;
-      } else {
-	assert(!ctx->snapset_obc);
-	return false;
-      }
+    if (write_ordered && ctx->op->may_read()) {
+      ctx->lock_type = ObjectContext::RWState::RWEXCL;
+    } else if (write_ordered) {
+      ctx->lock_type = ObjectContext::RWState::RWWRITE;
     } else {
       assert(ctx->op->may_read());
-      if (ctx->obc->get_read(ctx->op)) {
-	ctx->lock_to_release = OpContext::R_LOCK;
-	return true;
-      } else {
-	assert(!ctx->snapset_obc);
+      ctx->lock_type = ObjectContext::RWState::RWREAD;
+    }
+
+    if (ctx->snapset_obc) {
+      assert(!ctx->obc->obs.exists);
+      if (!ctx->lock_manager.get_lock_type(
+	    ctx->lock_type,
+	    ctx->snapset_obc->obs.oi.soid,
+	    ctx->snapset_obc,
+	    ctx->op)) {
+	ctx->lock_type = ObjectContext::RWState::RWNONE;
 	return false;
       }
+    }
+    if (ctx->lock_manager.get_lock_type(
+	  ctx->lock_type,
+	  ctx->obc->obs.oi.soid,
+	  ctx->obc,
+	  ctx->op)) {
+      return true;
+    } else {
+      assert(!ctx->snapset_obc);
+      ctx->lock_type = ObjectContext::RWState::RWNONE;
+      return false;
     }
   }
 
@@ -706,85 +769,93 @@ protected:
    *
    * @param ctx [in] ctx to clean up
    */
-  void close_op_ctx(OpContext *ctx, int r) {
-    release_op_ctx_locks(ctx);
-    delete ctx->op_t;
-    ctx->op_t = NULL;
-    ctx->finish(r);
+  void close_op_ctx(OpContext *ctx) {
+    release_object_locks(ctx->lock_manager);
+    ctx->op_t.reset();
+    for (auto p = ctx->on_finish.begin();
+	 p != ctx->on_finish.end();
+	 ctx->on_finish.erase(p++)) {
+      (*p)();
+    }
     delete ctx;
   }
 
   /**
-   * Releases ctx locks
+   * Releases locks
    *
-   * @param ctx [in] ctx to clean up
+   * @param manager [in] manager with locks to release
    */
-  void release_op_ctx_locks(OpContext *ctx) {
-    list<OpRequestRef> to_req;
+  void release_object_locks(
+    ObcLockManager &lock_manager) {
+    list<pair<hobject_t, list<OpRequestRef> > > to_req;
     bool requeue_recovery = false;
-    bool requeue_recovery_clone = false;
-    bool requeue_recovery_snapset = false;
-    bool requeue_snaptrimmer = false;
-    bool requeue_snaptrimmer_clone = false;
-    bool requeue_snaptrimmer_snapset = false;
-    switch (ctx->lock_to_release) {
-    case OpContext::W_LOCK:
-      if (ctx->snapset_obc && ctx->release_snapset_obc) {
-	ctx->snapset_obc->put_write(
-	  &to_req,
-	  &requeue_recovery_snapset,
-	  &requeue_snaptrimmer_snapset);
-	ctx->release_snapset_obc = false;
-      }
-      ctx->obc->put_write(
-	&to_req,
-	&requeue_recovery,
-	&requeue_snaptrimmer);
-      if (ctx->clone_obc)
-	ctx->clone_obc->put_write(
-	  &to_req,
-	  &requeue_recovery_clone,
-	  &requeue_snaptrimmer_clone);
-      break;
-    case OpContext::R_LOCK:
-      if (ctx->snapset_obc && ctx->release_snapset_obc) {
-	ctx->snapset_obc->put_read(&to_req);
-	ctx->release_snapset_obc = false;
-      }
-      ctx->obc->put_read(&to_req);
-      break;
-    case OpContext::NONE:
-      break;
-    default:
-      assert(0);
-    };
-    assert(ctx->release_snapset_obc == false);
-    ctx->lock_to_release = OpContext::NONE;
-    if (requeue_recovery || requeue_recovery_clone || requeue_recovery_snapset)
-      osd->recovery_wq.queue(this);
-    if (requeue_snaptrimmer ||
-	requeue_snaptrimmer_clone ||
-	requeue_snaptrimmer_snapset)
+    bool requeue_snaptrim = false;
+    lock_manager.put_locks(
+      &to_req,
+      &requeue_recovery,
+      &requeue_snaptrim);
+    if (requeue_recovery)
+      queue_recovery();
+    if (requeue_snaptrim)
       queue_snap_trim();
-    requeue_ops(to_req);
+
+    if (!to_req.empty()) {
+      // requeue at front of scrub blocking queue if we are blocked by scrub
+      for (auto &&p: to_req) {
+	if (scrubber.write_blocked_by_scrub(
+	      p.first.get_head(),
+	      get_sort_bitwise())) {
+	  waiting_for_active.splice(
+	    waiting_for_active.begin(),
+	    p.second,
+	    p.second.begin(),
+	    p.second.end());
+	} else {
+	  requeue_ops(p.second);
+	}
+      }
+    }
   }
 
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
-  map<ceph_tid_t, RepGather*> repop_map;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
   void repop_all_applied(RepGather *repop);
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, utime_t now);
-  RepGather *new_repop(OpContext *ctx, ObjectContextRef obc, ceph_tid_t rep_tid);
+  void issue_repop(RepGather *repop, OpContext *ctx);
+  RepGather *new_repop(
+    OpContext *ctx,
+    ObjectContextRef obc,
+    ceph_tid_t rep_tid);
+  boost::intrusive_ptr<RepGather> new_repop(
+    ObcLockManager &&manager,
+    boost::optional<std::function<void(void)> > &&on_complete);
   void remove_repop(RepGather *repop);
 
-  RepGather *simple_repop_create(ObjectContextRef obc);
-  void simple_repop_submit(RepGather *repop);
+  OpContextUPtr simple_opc_create(ObjectContextRef obc);
+  void simple_opc_submit(OpContextUPtr ctx);
+
+  /**
+   * Merge entries atomically into all actingbackfill osds
+   * adjusting missing and recovery state as necessary.
+   *
+   * Also used to store error log entries for dup detection.
+   */
+  void submit_log_entries(
+    const list<pg_log_entry_t> &entries,
+    ObcLockManager &&manager,
+    boost::optional<std::function<void(void)> > &&on_complete);
+  struct LogUpdateCtx {
+    boost::intrusive_ptr<RepGather> repop;
+    set<pg_shard_t> waiting_on;
+  };
+  void cancel_log_updates();
+  map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
+
 
   // hot/cold tracking
   HitSetRef hit_set;        ///< currently accumulating HitSet
@@ -797,41 +868,45 @@ protected:
   void hit_set_create();    ///< create a new HitSet
   void hit_set_persist();   ///< persist hit info
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
-  void hit_set_trim(RepGather *repop, unsigned max); ///< discard old HitSets
+  void hit_set_trim(OpContextUPtr &ctx, unsigned max); ///< discard old HitSets
+  void hit_set_in_memory_trim(uint32_t max_in_memory); ///< discard old in memory HitSets
+  void hit_set_remove_all();
 
   hobject_t get_hit_set_current_object(utime_t stamp);
-  hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
+  hobject_t get_hit_set_archive_object(utime_t start,
+				       utime_t end,
+				       bool using_gmt);
 
   // agent
   boost::scoped_ptr<TierAgentState> agent_state;
 
-  friend class C_AgentFlushStartStop;
-  friend class C_HitSetFlushing;
-
   void agent_setup();       ///< initialize agent state
-  bool agent_work(int max); ///< entry point to do some agent work
+  bool agent_work(int max) override ///< entry point to do some agent work
+  {
+    return agent_work(max, max);
+  }
+  bool agent_work(int max, int agent_flush_quota) override;
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
-  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+  bool agent_maybe_evict(ObjectContextRef& obc, bool after_flush);  ///< maybe evict
 
   void agent_load_hit_sets();  ///< load HitSets, if needed
 
   /// estimate object atime and temperature
   ///
   /// @param oid [in] object name
-  /// @param atime [out] seconds since last access (lower bound)
-  /// @param temperature [out] relative temperature (# hitset bins we appear in)
-  void agent_estimate_atime_temp(const hobject_t& oid,
-				 int *atime, int *temperature);
+  /// @param temperature [out] relative temperature (# consider both access time and frequency)
+  void agent_estimate_temp(const hobject_t& oid, int *temperature);
 
   /// stop the agent
-  void agent_stop();
-  void agent_delay();
+  void agent_stop() override;
+  void agent_delay() override;
 
   /// clear agent state
-  void agent_clear();
+  void agent_clear() override;
 
-  void agent_choose_mode(bool restart = false);  ///< choose (new) agent mode(s)
-  void agent_choose_mode_restart();
+  /// choose (new) agent mode(s), returns true if op is requeued
+  bool agent_choose_mode(bool restart = false, OpRequestRef op = OpRequestRef());
+  void agent_choose_mode_restart() override;
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
@@ -864,21 +939,19 @@ protected:
     return true;
   }
 
-  friend struct C_OnPushCommit;
-
   // projected object info
-  SharedPtrRegistry<hobject_t, ObjectContext> object_contexts;
+  SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
-  map<hobject_t, SnapSetContext*> snapset_contexts;
+  map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator> snapset_contexts;
   Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
-  map<hobject_t, map<client_t, ceph_tid_t> > debug_op_order;
+  map<hobject_t, map<client_t, ceph_tid_t>, hobject_t::BitwiseComparator> debug_op_order;
 
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
-  void check_blacklisted_watchers();
-  void get_watchers(list<obj_watch_item_t> &pg_watchers);
+  void check_blacklisted_watchers() override;
+  void get_watchers(list<obj_watch_item_t> &pg_watchers) override;
   void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
@@ -893,15 +966,7 @@ protected:
 
   void context_registry_on_change();
   void object_context_destructor_callback(ObjectContext *obc);
-  struct C_PG_ObjectContext : public Context {
-    ReplicatedPGRef pg;
-    ObjectContext *obc;
-    C_PG_ObjectContext(ReplicatedPG *p, ObjectContext *o) :
-      pg(p), obc(o) {}
-    void finish(int r) {
-      pg->object_context_destructor_callback(obc);
-     }
-  };
+  class C_PG_ObjectContext;
 
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
@@ -913,11 +978,11 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
-  SnapSetContext *create_snapset_context(const hobject_t& oid);
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0
+    map<string, bufferlist> *attrs = 0,
+    bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
     Mutex::Locker l(snapset_contexts_lock);
@@ -933,7 +998,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  map<hobject_t, ObjectContextRef> recovering;
+  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> recovering;
 
   /*
    * Backfill
@@ -949,10 +1014,10 @@ protected:
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
    */
-  set<hobject_t> backfills_in_flight;
-  map<hobject_t, pg_stat_t> pending_backfill_updates;
+  set<hobject_t, hobject_t::Comparator> backfills_in_flight;
+  map<hobject_t, pg_stat_t, hobject_t::Comparator> pending_backfill_updates;
 
-  void dump_recovery_info(Formatter *f) const {
+  void dump_recovery_info(Formatter *f) const override {
     f->open_array_section("backfill_targets");
     for (set<pg_shard_t>::const_iterator p = backfill_targets.begin();
         p != backfill_targets.end(); ++p)
@@ -983,7 +1048,7 @@ protected:
     }
     {
       f->open_array_section("backfills_in_flight");
-      for (set<hobject_t>::const_iterator i = backfills_in_flight.begin();
+      for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = backfills_in_flight.begin();
 	   i != backfills_in_flight.end();
 	   ++i) {
 	f->dump_stream("object") << *i;
@@ -992,7 +1057,7 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
+      for (map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
 	f->dump_stream("object") << i->first;
@@ -1016,7 +1081,7 @@ protected:
   void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
-  void check_recovery_sources(const OSDMapRef map);
+  void check_recovery_sources(const OSDMapRef& map) override ;
 
   int recover_missing(
     const hobject_t& oid,
@@ -1033,65 +1098,108 @@ protected:
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true);
+  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true,
+		  bool scrub_ok=false);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
+  void apply_ctx_stats(OpContext *ctx,
+		       bool scrub_ok=false); ///< true if we should skip scrub stat update
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
-				   SnapSet& ss, interval_set<uint64_t>& modified,
-				   uint64_t offset, uint64_t length, bool count_bytes);
+				   interval_set<uint64_t>& modified, uint64_t offset,
+				   uint64_t length, bool count_bytes,
+				   bool force_changesize=false);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
+
+  enum class cache_result_t {
+    NOOP,
+    BLOCKED_FULL,
+    BLOCKED_PROMOTE,
+    HANDLED_PROXY,
+    HANDLED_REDIRECT,
+  };
+  cache_result_t maybe_handle_cache_detail(OpRequestRef op,
+					   bool write_ordered,
+					   ObjectContextRef obc, int r,
+					   hobject_t missing_oid,
+					   bool must_promote,
+					   bool in_hit_set,
+					   ObjectContextRef *promote_obc);
   /**
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op,
-				 bool write_ordered,
-				 ObjectContextRef obc, int r,
-				 const hobject_t& missing_oid,
-				 bool must_promote);
+  bool maybe_handle_cache(OpRequestRef op,
+			  bool write_ordered,
+			  ObjectContextRef obc, int r,
+			  const hobject_t& missing_oid,
+			  bool must_promote,
+			  bool in_hit_set = false) {
+    return cache_result_t::NOOP != maybe_handle_cache_detail(
+      op,
+      write_ordered,
+      obc,
+      r,
+      missing_oid,
+      must_promote,
+      in_hit_set,
+      nullptr);
+  }
+
+  /**
+   * This helper function checks if a promotion is needed.
+   */
+  bool maybe_promote(ObjectContextRef obc,
+		     const hobject_t& missing_oid,
+		     const object_locator_t& oloc,
+		     bool in_hit_set,
+		     uint32_t recency,
+		     OpRequestRef promote_op,
+		     ObjectContextRef *promote_obc = nullptr);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
-  void do_cache_redirect(OpRequestRef op, ObjectContextRef obc);
+  void do_cache_redirect(OpRequestRef op);
   /**
-   * This function starts up a copy from
+   * This function attempts to start a promote.  Either it succeeds,
+   * or places op on a wait list.  If op is null, failure means that
+   * this is a noop.  If a future user wants to be able to distinguish
+   * these cases, a return value should be added.
    */
-  void promote_object(OpRequestRef op, ObjectContextRef obc,
-		      const hobject_t& missing_object);
-
-  /**
-   * Check if the op is such that we can skip promote (e.g., DELETE)
-   */
-  bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
+  void promote_object(
+    ObjectContextRef obc,            ///< [optional] obc
+    const hobject_t& missing_object, ///< oid (if !obc)
+    const object_locator_t& oloc,    ///< locator for obc|oid
+    OpRequestRef op,                 ///< [optional] client op
+    ObjectContextRef *promote_obc = nullptr ///< [optional] new obc for object
+    );
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
   
   // pg on-disk content
-  void check_local();
+  void check_local() override;
 
-  void _clear_recovery_state();
+  void _clear_recovery_state() override;
 
-  void queue_for_recovery();
   bool start_recovery_ops(
-    int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle, int *started);
+    uint64_t max,
+    ThreadPool::TPHandle &handle, uint64_t *started) override;
 
-  int recover_primary(int max, ThreadPool::TPHandle &handle);
-  int recover_replicas(int max, ThreadPool::TPHandle &handle);
+  uint64_t recover_primary(uint64_t max, ThreadPool::TPHandle &handle);
+  uint64_t recover_replicas(uint64_t max, ThreadPool::TPHandle &handle);
   hobject_t earliest_peer_backfill() const;
   bool all_peer_done() const;
   /**
    * @param work_started will be set to true if recover_backfill got anywhere
    * @returns the number of operations started
    */
-  int recover_backfill(int max, ThreadPool::TPHandle &handle,
-                       bool *work_started);
+  uint64_t recover_backfill(uint64_t max, ThreadPool::TPHandle &handle,
+			    bool *work_started);
 
   /**
    * scan a (hash) range of objects in the current pg
@@ -1119,58 +1227,10 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
 
-  struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContextRef obc, obc2, obc3;
-    C_OSD_OndiskWriteUnlock(
-      ObjectContextRef o,
-      ObjectContextRef o2 = ObjectContextRef(),
-      ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
-    void finish(int r) {
-      obc->ondisk_write_unlock();
-      if (obc2)
-	obc2->ondisk_write_unlock();
-      if (obc3)
-	obc3->ondisk_write_unlock();
-    }
-  };
-  struct C_OSD_OndiskWriteUnlockList : public Context {
-    list<ObjectContextRef> *pls;
-    C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
-    void finish(int r) {
-      for (list<ObjectContextRef>::iterator p = pls->begin(); p != pls->end(); ++p)
-	(*p)->ondisk_write_unlock();
-    }
-  };
-  struct C_OSD_AppliedRecoveredObject : public Context {
-    ReplicatedPGRef pg;
-    ObjectContextRef obc;
-    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContextRef o) :
-      pg(p), obc(o) {}
-    void finish(int r) {
-      pg->_applied_recovered_object(obc);
-    }
-  };
-  struct C_OSD_CommittedPushedObject : public Context {
-    ReplicatedPGRef pg;
-    epoch_t epoch;
-    eversion_t last_complete;
-    C_OSD_CommittedPushedObject(
-      ReplicatedPG *p, epoch_t epoch, eversion_t lc) :
-      pg(p), epoch(epoch), last_complete(lc) {
-    }
-    void finish(int r) {
-      pg->_committed_pushed_object(epoch, last_complete);
-    }
-  };
-  struct C_OSD_AppliedRecoveredObjectReplica : public Context {
-    ReplicatedPGRef pg;
-    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
-      pg(p) {}
-    void finish(int r) {
-      pg->_applied_recovered_object_replica();
-    }
-  };
-
+  class C_OSD_OndiskWriteUnlock;
+  class C_OSD_AppliedRecoveredObject;
+  class C_OSD_CommittedPushedObject;
+  class C_OSD_AppliedRecoveredObjectReplica;
   void sub_op_remove(OpRequestRef op);
 
   void _applied_recovered_object(ObjectContextRef obc);
@@ -1179,7 +1239,7 @@ protected:
   void recover_got(hobject_t oid, eversion_t v);
 
   // -- copyfrom --
-  map<hobject_t, CopyOpRef> copy_ops;
+  map<hobject_t, CopyOpRef, hobject_t::BitwiseComparator> copy_ops;
 
   int fill_in_copy_get(
     OpContext *ctx,
@@ -1187,6 +1247,8 @@ protected:
     OSDOp& op,
     ObjectContextRef& obc,
     bool classic);
+  void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
+                              OSDOp& osd_op, bool classic);
 
   /**
    * To copy an object, call start_copy.
@@ -1196,11 +1258,11 @@ protected:
    * @param src: The source object
    * @param oloc: the source object locator
    * @param version: the version of the source object to copy (0 for any)
-   * @param temp_dest_oid: the temporary object to use for large objects
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
-		  bool mirror_snapset);
+		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
+		  unsigned dest_obj_fadvise_flags);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
@@ -1217,21 +1279,20 @@ protected:
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       PGBackend::PGTransaction *t);
   void finish_copyfrom(OpContext *ctx);
-  void finish_promote(int r, OpRequestRef op,
-		      CopyResults *results, ObjectContextRef obc);
+  void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
   friend struct C_Copyfrom;
 
   // -- flush --
-  map<hobject_t, FlushOpRef> flush_ops;
+  map<hobject_t, FlushOpRef, hobject_t::BitwiseComparator> flush_ops;
 
   /// start_flush takes ownership of on_flush iff ret == -EINPROGRESS
   int start_flush(
     OpRequestRef op, ObjectContextRef obc,
     bool blocking, hobject_t *pmissing,
-    Context *on_flush);
+    boost::optional<std::function<void()>> &&on_flush);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue);
@@ -1243,45 +1304,81 @@ protected:
   friend struct C_Flush;
 
   // -- scrub --
-  virtual void _scrub(ScrubMap& map);
-  virtual void _scrub_clear_state();
-  virtual void _scrub_finish();
+  virtual bool _range_available_for_scrub(
+    const hobject_t &begin, const hobject_t &end) override;
+  virtual void _scrub(
+    ScrubMap &map,
+    const std::map<hobject_t, pair<uint32_t, uint32_t>,
+    hobject_t::BitwiseComparator> &missing_digest) override;
+  virtual void _scrub_clear_state() override;
+  virtual void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
 
-  virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
+  virtual void _split_into(pg_t child_pgid, PG *child,
+			   unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
-  void calc_trim_to();
+  void calc_trim_to() override;
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
+
+  int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
+  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> in_progress_proxy_ops;
+  void kick_proxy_ops_blocked(hobject_t& soid);
+  void cancel_proxy_ops(bool requeue);
+
+  // -- proxyread --
+  map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
+
+  void do_proxy_read(OpRequestRef op);
+  void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
+  void cancel_proxy_read(ProxyReadOpRef prdop);
+
+  friend struct C_ProxyRead;
+
+  // -- proxywrite --
+  map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
+
+  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid);
+  void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
+  void cancel_proxy_write(ProxyWriteOpRef pwop);
+
+  friend struct C_ProxyWrite_Commit;
+
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
-	       const PGPool &_pool, spg_t p, const hobject_t& oid,
-	       const hobject_t& ioid);
+	       const PGPool &_pool, spg_t p);
   ~ReplicatedPG() {}
 
-  int do_command(cmdmap_t cmdmap, ostream& ss, bufferlist& idata,
-		 bufferlist& odata);
+  int do_command(
+    cmdmap_t cmdmap,
+    ostream& ss,
+    bufferlist& idata,
+    bufferlist& odata,
+    ConnectionRef conn,
+    ceph_tid_t tid) override;
 
   void do_request(
-    OpRequestRef op,
-    ThreadPool::TPHandle &handle);
-  void do_op(OpRequestRef op);
+    OpRequestRef& op,
+    ThreadPool::TPHandle &handle) override;
+  void do_op(OpRequestRef& op) override;
+  void record_write_error(OpRequestRef op, const hobject_t &soid,
+			  MOSDOpReply *orig_reply, int r);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
-  void do_sub_op(OpRequestRef op);
-  void do_sub_op_reply(OpRequestRef op);
+  void do_sub_op(OpRequestRef op) override;
+  void do_sub_op_reply(OpRequestRef op) override;
   void do_scan(
     OpRequestRef op,
-    ThreadPool::TPHandle &handle);
-  void do_backfill(OpRequestRef op);
+    ThreadPool::TPHandle &handle) override;
+  void do_backfill(OpRequestRef op) override;
 
-  RepGather *trim_object(const hobject_t &coid);
-  void snap_trimmer();
+  OpContextUPtr trim_object(const hobject_t &coid);
+  void snap_trimmer(epoch_t e) override;
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
@@ -1289,31 +1386,57 @@ public:
   int do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op);
   int do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op, bufferlist& bl);
 
-  void do_osd_op_effects(OpContext *ctx);
+  void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
+  int do_scrub_ls(MOSDOp *op, OSDOp *osd_op);
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
+
   uint64_t temp_seq; ///< last id for naming temp objects
-  coll_t get_temp_coll(ObjectStore::Transaction *t);
   hobject_t generate_temp_object();  ///< generate a new temp object name
+  /// generate a new temp object name (for recovery)
+  hobject_t get_temp_recovery_object(eversion_t version,
+				     snapid_t snap) override;
+  int get_recovery_op_priority() const {
+      int pri = 0;
+      pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+      return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+  }
+  void log_missing(unsigned missing,
+			const boost::optional<hobject_t> &head,
+			LogChannelRef clog,
+			const spg_t &pgid,
+			const char *func,
+			const char *mode,
+			bool allow_incomplete_clones);
+  unsigned process_clones_to(const boost::optional<hobject_t> &head,
+    const boost::optional<SnapSet> &snapset,
+    LogChannelRef clog,
+    const spg_t &pgid,
+    const char *mode,
+    bool allow_incomplete_clones,
+    boost::optional<snapid_t> target,
+    vector<snapid_t>::reverse_iterator *curclone,
+    inconsistent_snapset_wrapper &snap_error);
+
 public:
-  void get_colls(list<coll_t> *out) {
-    out->push_back(coll);
-    return pgbackend->temp_colls(out);
+  coll_t get_coll() {
+    return coll;
   }
   void split_colls(
     spg_t child,
     int split_bits,
     int seed,
-    ObjectStore::Transaction *t) {
+    const pg_pool_t *pool,
+    ObjectStore::Transaction *t) override {
     coll_t target = coll_t(child);
-    t->create_collection(target);
+    PG::_create(*t, child, split_bits);
     t->split_collection(
       coll,
       split_bits,
       seed,
       target);
-    pgbackend->split_colls(child, split_bits, seed, t);
+    PG::_init(*t, child, pool);
   }
 private:
   struct NotTrimming;
@@ -1325,11 +1448,10 @@ private:
   };
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     ReplicatedPG *pg;
-    set<RepGather *> repops;
+    set<hobject_t, hobject_t::BitwiseComparator> in_flight;
     snapid_t snap_to_trim;
     bool need_share_pg_info;
-    bool requeue;
-    SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false), requeue(false) {}
+    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
     ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
@@ -1342,7 +1464,7 @@ private:
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
     hobject_t pos;
-    TrimmingObjects(my_context ctx);
+    explicit TrimmingObjects(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
@@ -1352,7 +1474,7 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    WaitingOnReplicas(my_context ctx);
+    explicit WaitingOnReplicas(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
@@ -1362,13 +1484,16 @@ private:
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    NotTrimming(my_context ctx);
+    explicit NotTrimming(my_context ctx);
     void exit();
     boost::statechart::result react(const SnapTrim&);
   };
 
   int _verify_no_head_clones(const hobject_t& soid,
 			     const SnapSet& ss);
+  // return true if we're creating a local object, false for a
+  // whiteout or no change.
+  bool maybe_create_new_object(OpContext *ctx);
   int _delete_oid(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
@@ -1377,30 +1502,43 @@ public:
     return is_missing_object(oid) ||
       !missing_loc.readable_with_acting(oid, actingset);
   }
+  void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
-  bool is_degraded_object(const hobject_t& oid);
+  bool is_degraded_or_backfilling_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
+
+  void block_write_on_full_cache(
+    const hobject_t& oid, OpRequestRef op);
+  void block_write_on_snap_rollback(
+    const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
+  void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
 
   bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
 
-  void mark_all_unfound_lost(int what);
+  void mark_all_unfound_lost(
+    int what,
+    ConnectionRef con,
+    ceph_tid_t tid);
   eversion_t pick_newest_available(const hobject_t& oid);
-  ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
-				  const hobject_t& oid, eversion_t version,
-				  utime_t mtime, int what);
-  void _finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs);
 
-  void on_role_change();
-  void on_pool_change();
-  void on_change(ObjectStore::Transaction *t);
-  void on_activate();
-  void on_flushed();
-  void on_removal(ObjectStore::Transaction *t);
-  void on_shutdown();
+  void do_update_log_missing(
+    OpRequestRef &op);
+
+  void do_update_log_missing_reply(
+    OpRequestRef &op);
+
+  void on_role_change() override;
+  void on_pool_change() override;
+  void _on_new_interval() override;
+  void on_change(ObjectStore::Transaction *t) override;
+  void on_activate() override;
+  void on_flushed() override;
+  void on_removal(ObjectStore::Transaction *t) override;
+  void on_shutdown() override;
 
   // attr cache handling
   void replace_cached_attrs(
@@ -1413,6 +1551,11 @@ public:
     PGBackend::PGTransaction *t,
     const string &key,
     bufferlist &val);
+  void setattrs_maybe_cache(
+    ObjectContextRef obc,
+    OpContext *op,
+    PGBackend::PGTransaction *t,
+    map<string, bufferlist> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
@@ -1428,17 +1571,25 @@ public:
     bool user_only = false);
 };
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
+inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
       << " committed?=" << repop.all_committed
       << " applied?=" << repop.all_applied;
-  if (repop.ctx->lock_to_release != ReplicatedPG::OpContext::NONE)
-    out << " lock=" << (int)repop.ctx->lock_to_release;
-  if (repop.ctx->op)
-    out << " op=" << *(repop.ctx->op->get_req());
+  out << ")";
+  return out;
+}
+
+inline ostream& operator<<(ostream& out,
+			   const ReplicatedPG::ProxyWriteOpRef& pwop)
+{
+  out << "proxywrite(" << &pwop
+      << " " << pwop->user_version
+      << " pwop_tid=" << pwop->objecter_tid;
+  if (pwop->ctx->op)
+    out << " op=" << *(pwop->ctx->op->get_req());
   out << ")";
   return out;
 }

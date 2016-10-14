@@ -15,11 +15,11 @@
 #ifndef CEPH_AUTHNONECLIENTHANDLER_H
 #define CEPH_AUTHNONECLIENTHANDLER_H
 
-#include "../AuthClientHandler.h"
+#include "auth/AuthClientHandler.h"
 #include "AuthNoneProtocol.h"
-
-class CephContext;
-
+#include "common/ceph_context.h"
+#include "common/config.h"
+ 
 class AuthNoneClientHandler : public AuthClientHandler {
 public:
   AuthNoneClientHandler(CephContext *cct_, RotatingKeyRing *rkeys) 

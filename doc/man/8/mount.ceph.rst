@@ -1,3 +1,5 @@
+:orphan:
+
 ========================================
  mount.ceph -- mount a ceph file system
 ========================================
@@ -44,17 +46,20 @@ Options
 =======
 
 :command:`wsize`
-  int, max write size. Default: none (writeback uses smaller of wsize
+  int (bytes), max write size. Default: none (writeback uses smaller of wsize
   and stripe unit)
 
 :command:`rsize`
-  int (bytes), max readahead, multiple of 1024, Default: 524288
-  (512*1024)
+  int (bytes), max read size. Default: none
+
+:command:`rasize`
+  int (bytes), max readahead, multiple of 1024, Default: 8388608
+  (8192*1024)
 
 :command:`osdtimeout`
   int (seconds), Default: 60
 
-:command:`osdkeepalivetimeout`
+:command:`osdkeepalive`
   int, Default: 5
 
 :command:`mount_timeout`
@@ -134,7 +139,7 @@ If there are multiple monitors::
 
         mount.ceph monhost1,monhost2,monhost3:/ /mnt/foo
 
-If :doc:`ceph-mon </man/8/ceph-mon>`\(8) is running on a non-standard
+If :doc:`ceph-mon <ceph-mon>`\(8) is running on a non-standard
 port::
 
         mount.ceph monhost1:7000,monhost2:7000,monhost3:7000:/ /mnt/foo
@@ -152,7 +157,7 @@ automatically invoked by mount(8) like so::
 Availability
 ============
 
-**mount.ceph** is part of the Ceph distributed storage system. Please
+**mount.ceph** is part of Ceph, a massively scalable, open-source, distributed storage system. Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 
