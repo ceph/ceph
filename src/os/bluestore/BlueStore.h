@@ -636,7 +636,7 @@ public:
       }
       int s = seek_shard(offset);
       assert(s >= 0);
-      if (s == shards.size() - 1) {
+      if (s == (int)shards.size() - 1) {
 	return false; // last shard
       }
       if (offset + length <= shards[s+1].offset) {
