@@ -4056,15 +4056,38 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  map<hobject_t,object, hobject_t::BitwiseComparator> objects;
+  bool bitwise; // ephemeral, not encoded
+  map<hobject_t,object, hobject_t::ComparatorWithDefault> objects;
   eversion_t valid_through;
   eversion_t incr_since;
 
+  ScrubMap() : bitwise(true) {}
+  ScrubMap(bool bitwise)
+    : bitwise(bitwise), objects(hobject_t::ComparatorWithDefault(bitwise)) {}
+
   void merge_incr(const ScrubMap &l);
+  void insert(const ScrubMap &r) {
+    objects.insert(r.objects.begin(), r.objects.end());
+  }
+  void swap(ScrubMap &r) {
+    ::swap(objects, r.objects);
+    ::swap(valid_through, r.valid_through);
+    ::swap(incr_since, r.incr_since);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl, int64_t pool=-1);
   void dump(Formatter *f) const;
+  void reset_bitwise(bool new_bitwise) {
+    if (bitwise == new_bitwise)
+      return;
+    map<hobject_t, object, hobject_t::ComparatorWithDefault> new_objects(
+      objects.begin(),
+      objects.end(),
+      hobject_t::ComparatorWithDefault(new_bitwise));
+    ::swap(new_objects, objects);
+    bitwise = new_bitwise;
+  }
   static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)

@@ -1169,6 +1169,9 @@ public:
     // Map from object with errors to good peers
     map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >, hobject_t::BitwiseComparator> authoritative;
 
+    // Cleaned map pending snap metadata scrub
+    ScrubMap cleaned_meta_map;
+
     // digest updates which we are waiting on
     int num_digest_updates_pending;
 
@@ -1227,11 +1230,28 @@ public:
 
     bool is_chunky_scrub_active() const { return state != INACTIVE; }
 
-    // classic (non chunk) scrubs block all writes
-    // chunky scrubs only block writes to a range
+    /* We use an inclusive upper bound here because the replicas scan .end
+     * as well in hammer (see http://tracker.ceph.com/issues/17491).
+     *
+     * The boundary can only be
+     * 1) Not an object (object boundary) or
+     * 2) A clone
+     * In case 1), it doesn't matter.  In case 2), we might fail to
+     * wait for an un-applied snap trim to complete, or fail to block an
+     * eviction on a tail object.  In such a case the replica might
+     * erroneously detect a snap_mapper/attr mismatch and "fix" the
+     * snap_mapper to the old value.
+     *
+     * @see _range_available_for_scrub
+     * @see chunk_scrub (the part where it determines the last relelvant log
+     *      entry)
+     *
+     * TODO: switch this logic back to an exclusive upper bound once the
+     * replicas don't scan the upper boundary
+     */
     bool write_blocked_by_scrub(const hobject_t &soid, bool sort_bitwise) {
       if (cmp(soid, start, sort_bitwise) >= 0 &&
-	  cmp(soid, end, sort_bitwise) < 0)
+	  cmp(soid, end, sort_bitwise) <= 0)
 	return true;
 
       return false;
@@ -1267,6 +1287,7 @@ public:
       missing.clear();
       authoritative.clear();
       num_digest_updates_pending = 0;
+      cleaned_meta_map = ScrubMap();
     }
 
     void create_results(const hobject_t& obj);
