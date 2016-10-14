@@ -612,6 +612,22 @@ TRACEPOINT_EVENT(objectstore, clone_range2_exit,
     )
 )
 
+TRACEPOINT_EVENT(objectstore, move_ranges_destroy_src_enter,
+    TP_ARGS(
+        const char *, osr_name),
+    TP_FIELDS(
+        ctf_string(osr_name, osr_name)
+    )
+)
+
+TRACEPOINT_EVENT(objectstore, move_ranges_destroy_src_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(objectstore, clone_range_enter,
     TP_ARGS(
         const char *, osr_name,
