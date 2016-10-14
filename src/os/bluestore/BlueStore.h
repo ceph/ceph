@@ -636,7 +636,7 @@ public:
       }
       int s = seek_shard(offset);
       assert(s >= 0);
-      if (s == shards.size() - 1) {
+      if (s == (int)shards.size() - 1) {
 	return false; // last shard
       }
       if (offset + length <= shards[s+1].offset) {
@@ -690,6 +690,14 @@ public:
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
+
+    bool do_write_check_depth(
+      uint64_t onode_size,
+      uint64_t start_offset,
+      uint64_t end_offset,
+      uint8_t  *blob_depth,
+      uint64_t *gc_start_offset,
+      uint64_t *gc_end_offset);
   };
 
   struct OnodeSpace;
@@ -734,6 +742,7 @@ public:
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
+
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
@@ -1872,14 +1881,6 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
-
-  bool _do_write_check_depth(
-    OnodeRef o,
-    uint64_t start_offset,
-    uint64_t end_offset,
-    uint8_t  *blob_depth,
-    uint64_t *gc_start_offset,
-    uint64_t *gc_end_offset);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,

@@ -986,6 +986,99 @@ TEST(ExtentMap, compress_extent_map)
   ASSERT_EQ(6u, em.extent_map.size());
 }
 
+TEST(ExtentMap, GarbageCollectorTest)
+{
+  BlueStore::LRUCache cache;
+  BlueStore::ExtentMap em(nullptr);
+  uint8_t  blob_depth = 0;
+  uint64_t gc_start_offset = 0;
+  uint64_t gc_end_offset = 0;
+
+  bool b;
+  b = em.do_write_check_depth(0, //onode_size
+                              0, //start_offset
+                              100, //end_offset
+                              &blob_depth,
+                              &gc_start_offset,
+                              &gc_end_offset);
+  ASSERT_TRUE(!b);
+  ASSERT_EQ(blob_depth, 1ul);
+  ASSERT_EQ(gc_start_offset, 0ul);
+  ASSERT_EQ(gc_end_offset, 0ul);
+
+  BlueStore::BlobRef b1(new BlueStore::Blob);
+  BlueStore::BlobRef b2(new BlueStore::Blob);
+  BlueStore::BlobRef b3(new BlueStore::Blob);
+  b1->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
+  b2->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
+  b3->shared_blob = new BlueStore::SharedBlob(1, string(), &cache);
+
+  em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, 3, b1));
+  em.extent_map.insert(*new BlueStore::Extent(100, 0, 50, 3, b2));
+  em.extent_map.insert(*new BlueStore::Extent(150, 0, 150, 1, b3));
+
+  b = em.do_write_check_depth(300, //onode_size
+                              10, //start_offset
+                              80, //end_offset
+                              &blob_depth,
+                              &gc_start_offset,
+                              &gc_end_offset);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(blob_depth, 1ul);
+  ASSERT_EQ(gc_start_offset, 0ul);
+  ASSERT_EQ(gc_end_offset, 150ul);
+
+  b = em.do_write_check_depth(300, //onode_size
+                              70, //start_offset
+                              310, //end_offset
+                              &blob_depth,
+                              &gc_start_offset,
+                              &gc_end_offset);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(blob_depth, 1ul);
+  ASSERT_EQ(gc_start_offset, 0ul);
+  ASSERT_EQ(gc_end_offset, 300ul);
+
+  b = em.do_write_check_depth(300, //onode_size
+                              70, //start_offset
+                              290, //end_offset
+                              &blob_depth,
+                              &gc_start_offset,
+                              &gc_end_offset);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(blob_depth, 1ul);
+  ASSERT_EQ(gc_start_offset, 0ul);
+  ASSERT_EQ(gc_end_offset, 300ul);
+
+  b = em.do_write_check_depth(300, //onode_size
+                              180, //start_offset
+                              290, //end_offset
+                              &blob_depth,
+                              &gc_start_offset,
+                              &gc_end_offset);
+  ASSERT_TRUE(!b);
+  ASSERT_EQ(blob_depth, 2ul);
+
+  em.extent_map.clear();
+  em.extent_map.insert(*new BlueStore::Extent(0x17c00, 0xc000, 0x400, 3, b1));
+  em.extent_map.insert(*new BlueStore::Extent(0x18000, 0, 0xf000, 3, b1));
+  em.extent_map.insert(*new BlueStore::Extent(0x27000, 0, 0x400, 3, b1));
+  em.extent_map.insert(*new BlueStore::Extent(0x27400, 0x400, 0x7c00, 2, b2));
+  em.extent_map.insert(*new BlueStore::Extent(0x2f000, 0, 0xe00, 1, b3));
+
+  b = em.do_write_check_depth(0x3f000, //onode_size
+                              0x1ac00, //start_offset
+                              0x1ac00 + 0x6600, //end_offset
+                              &blob_depth,
+                              &gc_start_offset,
+                              &gc_end_offset);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(blob_depth, 1ul);
+  ASSERT_EQ(gc_start_offset, 0x17c00ul);
+  ASSERT_EQ(gc_end_offset, 0x2f000ul);
+}
+
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
