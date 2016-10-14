@@ -4863,7 +4863,7 @@ int RGWRados::time_log_trim(const string& oid, const real_time& start_time, cons
 string RGWRados::objexp_hint_get_shardname(int shard_num)
 {
   char buf[32];
-  snprintf(buf, sizeof(buf), "%010u", shard_num);
+  snprintf(buf, sizeof(buf), "%010u", (unsigned)shard_num);
 
   string objname("obj_delete_at_hint.");
   return objname + buf;
