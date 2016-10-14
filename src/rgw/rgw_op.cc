@@ -726,6 +726,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
     return -EPERM;
   }
 
+  if (ent.size == 0) {
+    return 0;
+  }
+
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
@@ -735,6 +739,12 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
     off_t len = bl.length();
     cur_ofs += len;
+    if (!len) {
+        ldout(s->cct, 0) << "ERROR: read 0 bytes; ofs=" << cur_ofs
+	    << " end=" << cur_end << " from obj=" << ent.key.name
+	    << "[" << ent.key.instance << "]" << dendl;
+        return -EIO;
+    }
     op_ret = 0; /* XXX redundant? */
     perfcounter->tinc(l_rgw_get_lat,
                       (ceph_clock_now(s->cct) - start_time));
@@ -1002,6 +1012,11 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
         get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0) {
     return r;
+  }
+
+  if (!total_len) {
+    bufferlist bl;
+    send_response_data(bl, 0, 0);
   }
 
   return 0;
