@@ -6409,32 +6409,41 @@ void BlueStore::_kv_sync_thread()
 	  }
           txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
-	if (!kv_committing.empty()) {
-	  TransContext *first_txc = kv_committing.front();
-	  std::lock_guard<std::mutex> l(id_lock);
-	  if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
-	    nid_max = high_nid + g_conf->bluestore_nid_prealloc;
-	    bufferlist bl;
-	    ::encode(nid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "nid_max", bl);
-	    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
-	  }
-	  if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
-	    blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
-	    bufferlist bl;
-	    ::encode(blobid_max, bl);
-	    first_txc->t->set(PREFIX_SUPER, "blobid_max", bl);
-	    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
-	  }
-	}
 	for (auto txc : kv_committing) {
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
+	}
+      } else {
+	for (auto txc : kv_committing) {
+	  if (txc->last_nid > high_nid) {
+	    high_nid = txc->last_nid;
+	  }
+	  if (txc->last_blobid > high_blobid) {
+	    high_blobid = txc->last_blobid;
+	  }
 	}
       }
 
       // one final transaction to force a sync
       KeyValueDB::Transaction t = db->get_transaction();
+
+      {
+	std::lock_guard<std::mutex> l(id_lock);
+	if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
+	  nid_max = high_nid + g_conf->bluestore_nid_prealloc;
+	  bufferlist bl;
+	  ::encode(nid_max, bl);
+	  t->set(PREFIX_SUPER, "nid_max", bl);
+	  dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+	}
+	if (high_blobid + g_conf->bluestore_blobid_prealloc/2 > blobid_max) {
+	  blobid_max = high_blobid + g_conf->bluestore_blobid_prealloc;
+	  bufferlist bl;
+	  ::encode(blobid_max, bl);
+	  t->set(PREFIX_SUPER, "blobid_max", bl);
+	  dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+	}
+      }
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
