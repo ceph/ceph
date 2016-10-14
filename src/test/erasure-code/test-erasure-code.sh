@@ -32,14 +32,12 @@ function run() {
     run_mon $dir a || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
     for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
     wait_for_clean || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
-    grep 'load: jerasure.*lrc' $dir/osd.0.log || return 1
     create_erasure_coded_pool ecpool || return 1
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
