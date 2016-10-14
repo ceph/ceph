@@ -41,9 +41,6 @@ _prefix(std::ostream* _dout)
 // default window size for Zlib 1.2.8, negated for raw deflate
 #define ZLIB_DEFAULT_WIN_SIZE -15
 
-// compression level we use. probably should be configurable...
-#define ZLIB_COMPRESSION_LEVEL 5
-
 // desired memory usage level. increasing to 9 doesn't speed things up
 // significantly (helps only on >=16K blocks) and sometimes degrades
 // compression ratio.
@@ -61,7 +58,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
-  ret = deflateInit2(&strm, ZLIB_COMPRESSION_LEVEL, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
+  ret = deflateInit2(&strm, g_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
   if (ret != Z_OK) {
     dout(1) << "Compression init error: init return "
          << ret << " instead of Z_OK" << dendl;
