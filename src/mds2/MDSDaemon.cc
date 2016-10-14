@@ -196,6 +196,12 @@ void MDSDaemon::set_up_admin_socket()
       asok_hook,
       "dump metadata cache (optionally to a file)");
   assert(r == 0);
+
+  r = admin_socket->register_command("flush journal",
+      "flush journal",
+      asok_hook,
+      "Flush the journal to the backing store");
+  assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()
@@ -203,6 +209,7 @@ void MDSDaemon::clean_up_admin_socket()
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
 
   admin_socket->unregister_command("dump cache");
+  admin_socket->unregister_command("flush journal");
   delete asok_hook;
   asok_hook = NULL;
 }

@@ -208,7 +208,7 @@ private:
   void set_safe_pos(uint64_t pos);
   friend class MDSLogContextBase;
 public:
-  void start_new_segment();
+  void start_new_segment(MDSLogContextBase *onsafe);
 
   void prepare_new_segment() {
     Mutex::Locker l(submit_mutex);
@@ -295,7 +295,7 @@ private:
 public:
   void trim_expired_segments();
   void trim(int max=-1);
-  int trim_all();
+  int trim_all(MDSGather *gather);
   bool expiry_done() const
   {
     return expiring_segments.empty() && expired_segments.empty();

@@ -383,6 +383,10 @@ public:
 
   void retry_dispatch(Message *m);
   void retry_dispatch(const MDRequestRef &mdr);
+
+protected:
+  void command_flush_journal(Formatter *f);
+  int _command_flush_journal(std::stringstream *ss);
 };
 
 class C_MDS_RetryMessage : public MDSContext {

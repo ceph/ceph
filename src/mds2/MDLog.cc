@@ -403,7 +403,7 @@ void MDLog::_submit_thread()
       delete le;
 
       if (new_segment) {
-	start_new_segment();
+	start_new_segment(NULL);
       }
     } else {
       if (data.fin) {
@@ -533,9 +533,9 @@ void MDLog::shutdown()
 // -----------------------------
 // segments
 
-void MDLog::start_new_segment()
+void MDLog::start_new_segment(MDSLogContextBase *onsafe)
 {
-  mds->mdcache->journal_subtree_map(NULL);
+  mds->mdcache->journal_subtree_map(onsafe);
 }
 
 void MDLog::_prepare_new_segment()
@@ -670,7 +670,7 @@ public:
  * Like MDLog::trim, but instead of trimming to max_segments, trim all but the latest
  * segment.
  */
-int MDLog::trim_all()
+int MDLog::trim_all(MDSGather *gather)
 {
   submit_mutex.Lock();
 
@@ -699,6 +699,8 @@ int MDLog::trim_all()
     if (expiring_segments.count(ls)) {
       dout(5) << "trim already expiring segment " << ls->seq << "/" << ls->offset
 	      << ", " << ls->num_events << " events" << dendl;
+      if (gather)
+	ls->wait_for_expiry(gather->new_sub());
     } else if (expired_segments.count(ls)) {
       dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
 	      << ", " << ls->num_events << " events" << dendl;
@@ -706,6 +708,8 @@ int MDLog::trim_all()
       assert(expiring_segments.count(ls) == 0);
       expiring_segments.insert(ls);
       expiring_events += ls->num_events;
+      if (gather)
+	ls->wait_for_expiry(gather->new_sub());
       submit_mutex.Unlock();
 
       uint64_t next_seq = ls->seq + 1;

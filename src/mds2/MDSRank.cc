@@ -563,7 +563,7 @@ void MDSRank::starting_done()
   assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
   mdcache->open_root_and_mydir(NULL);
-  mdlog->start_new_segment();
+  mdlog->start_new_segment(NULL);
 }
 
 void MDSRank::replay_start()
@@ -1059,6 +1059,78 @@ void MDSRank::retry_dispatch(Message *m)
   msg_wq.queue_front(m);
 }
 
+class C_MDS_LogFlushed : public MDSLogContextBase
+{
+protected:
+  MDSRank *mds;
+  MDSRank *get_mds() { return mds; }
+  Context *fin;
+public:
+  C_MDS_LogFlushed(MDSRank *mds_, Context *f) : mds(mds_), fin(f) {}
+  void finish(int r) {
+    fin->complete(r);
+  }
+};
+
+class C_MDS_LogExpired : public MDSContextBase
+{
+protected:
+  MDSRank *mds;
+  MDSRank *get_mds() { return mds; }
+  Context *fin;
+public:
+  C_MDS_LogExpired(MDSRank *mds_, Context *f) : mds(mds_), fin(f) {}
+  void finish(int r) {
+    fin->complete(r);
+  }
+};
+
+void MDSRank::command_flush_journal(Formatter *f)
+{
+  assert(f != NULL);
+
+  std::stringstream ss;
+  const int r = _command_flush_journal(&ss);
+  f->open_object_section("result");
+  f->dump_string("message", ss.str());
+  f->dump_int("return_code", r);
+  f->close_section();
+}
+
+int MDSRank::_command_flush_journal(std::stringstream *ss)
+{
+  if (!is_active()) {
+    dout(5) << __func__ << ": MDS not active, no-op" << dendl;
+    return 0;
+  }
+
+  {
+    C_SaferCond mdlog_flushed;
+    mdlog->start_new_segment(new C_MDS_LogFlushed(this, &mdlog_flushed));
+    int r = mdlog_flushed.wait();
+    assert(r == 0);
+  }
+
+  {
+    MDSGatherBuilder expiry_gather(g_ceph_context);
+    mdlog->trim_all(expiry_gather.get());
+
+    if (expiry_gather.has_subs()) {
+      C_SaferCond log_expired;
+      expiry_gather.set_finisher(new C_MDS_LogExpired(this, &log_expired));
+      expiry_gather.activate();
+      int r = log_expired.wait();
+      assert(r == 0);  // MDLog is not allowed to raise errors via wait_for_expiry
+    }
+  }
+
+  dout(5) << __func__ << ": expiry complete, expire_pos/trim_pos is now " << std::hex
+	  << mdlog->get_journaler()->get_expire_pos() << "/"
+	  << mdlog->get_journaler()->get_trimmed_pos() << dendl;
+
+  return 0;
+}
+
 // --- MDSRankDispatcher ---
 bool MDSRankDispatcher::handle_asok_command(
     std::string command, cmdmap_t& cmdmap, Formatter *f,
@@ -1071,6 +1143,8 @@ bool MDSRankDispatcher::handle_asok_command(
     } else {
       mdcache->dump_cache(path.c_str());
     }
+  } else if (command == "flush journal") {
+    command_flush_journal(f);
   } else  {
     return false;
   }
