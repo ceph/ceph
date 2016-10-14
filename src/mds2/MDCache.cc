@@ -1709,12 +1709,6 @@ void MDCache::open_remote_dentry(CDentry *dn, inodeno_t ino, uint8_t d_type,
   open_inode(ino, pool, new C_MDC_OpenRemoteDentry(this, dn, ino, fin));
 }
 
-ESubtreeMap *MDCache::create_subtree_map()
-{
-  ESubtreeMap *le = new ESubtreeMap();
-  mds->mdlog->_start_entry(le);
-  return le;
-}
 
 void MDCache::rejoin_start(MDSContextBase *c)
 {
@@ -1907,6 +1901,24 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
 
     remove_replay_cap_reconnect(in->ino(), client);
   }
+}
+
+int MDCache::journal_subtree_map(MDSLogContextBase *onsafe)
+{
+  ESubtreeMap *le = new ESubtreeMap();
+  CObject::Locker l1(root.get());
+  CObject::Locker l2(myin.get());
+
+  CDirRef rootdir = root->get_dirfrag(frag_t());
+  CDirRef mydir = myin->get_dirfrag(frag_t());
+
+  le->metablob.add_dir(rootdir.get(), false);
+  le->metablob.add_dir(mydir.get(), false);
+  le->subtrees[rootdir->dirfrag()].clear();
+  le->subtrees[mydir->dirfrag()].clear();
+
+  mds->mdlog->start_submit_entry(le, onsafe, !!onsafe);
+  return 0;
 }
 
 void MDCache::dump_cache(const char *fn, Formatter *f)

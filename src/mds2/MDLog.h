@@ -201,19 +201,15 @@ public:
 
 private:
   // -- segments --
-  void _start_new_segment();
   void _prepare_new_segment();
-  void _journal_segment_subtree_map(MDSLogContextBase *onsync);
   LogSegment *_peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
   }
   void set_safe_pos(uint64_t pos);
   friend class MDSLogContextBase;
 public:
-  void start_new_segment() {
-    Mutex::Locker l(submit_mutex);
-    _start_new_segment();
-  }
+  void start_new_segment();
+
   void prepare_new_segment() {
     Mutex::Locker l(submit_mutex);
     return _prepare_new_segment();

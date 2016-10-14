@@ -280,7 +280,7 @@ public:
   void shutdown() {}
 public:
 
-  ESubtreeMap *create_subtree_map();
+  int journal_subtree_map(MDSLogContextBase *onsync);
 
   bool is_readonly() const { return false; }
   void standby_trim_segment(LogSegment *ls) {}

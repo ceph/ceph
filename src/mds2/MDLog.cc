@@ -272,6 +272,19 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c, bool flush)
     return;
   }
 
+  if (event_seq > 1 && le->get_type() == EVENT_SUBTREEMAP) {
+    ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+    if (event_seq > 1) {
+      assert(!segments.empty());
+      LogSegment *ls = segments.rbegin()->second;
+      dout(10) << "submit_entry starts new segment: last = "
+	<< ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
+      _prepare_new_segment();
+    }
+    sle->event_seq = get_last_segment_seq();
+    sle->expire_pos = journaler->get_expire_pos();
+  }
+
   // let the event register itself in the segment
   assert(!segments.empty());
   LogSegment *ls = segments.rbegin()->second;
@@ -290,29 +303,6 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c, bool flush)
   }
 
   unflushed++;
-  
-  uint64_t period = journaler->get_layout_period();
-  // start a new segment?
-  if (le->get_type() == EVENT_SUBTREEMAP ||
-      (le->get_type() == EVENT_IMPORTFINISH && mds->is_resolve())) {
-    // avoid infinite loop when ESubtreeMap is very large.
-    // do not insert ESubtreeMap among EImportFinish events that finish
-    // disambiguate imports. Because the ESubtreeMap reflects the subtree
-    // state when all EImportFinish events are replayed.
-  } else if (ls->end/period != ls->offset/period ||
-	     ls->num_events >= g_conf->mds_log_events_per_segment) {
-    dout(10) << "submit_entry also starting new segment: last = "
-	     << ls->seq  << "/" << ls->offset << ", event seq = " << event_seq << dendl;
-    _start_new_segment();
-  } else if (g_conf->mds_debug_subtrees &&
-	     le->get_type() != EVENT_SUBTREEMAP_TEST) {
-    // debug: journal this every time to catch subtree replay bugs.
-    // use a different event id so it doesn't get interpreted as a
-    // LogSegment boundary on replay.
-    LogEvent *sle = mds->mdcache->create_subtree_map();
-    sle->set_type(EVENT_SUBTREEMAP_TEST);
-    _submit_entry(sle, NULL, false);
-  }
 }
 
 void MDLog::set_safe_pos(uint64_t pos)
@@ -387,6 +377,14 @@ void MDLog::_submit_thread()
       const uint64_t new_write_pos = journaler->append_entry(bl);  // bl is destroyed.
       ls->end = new_write_pos;
 
+      bool new_segment = false;
+      if (le->get_type() != EVENT_SUBTREEMAP) {
+	uint64_t period = journaler->get_layout_period();
+	if (ls->end / period != ls->offset / period ||
+	    ls->num_events >= g_conf->mds_log_events_per_segment)
+	  new_segment = true;
+      }
+
       if (data.fin) {
 	MDSLogContextBase *fin = dynamic_cast<MDSLogContextBase*>(data.fin);
 	assert(fin);
@@ -403,6 +401,10 @@ void MDLog::_submit_thread()
 	logger->set(l_mdl_wrpos, ls->end);
 
       delete le;
+
+      if (new_segment) {
+	start_new_segment();
+      }
     } else {
       if (data.fin) {
 	MDSAsyncContextBase *fin = dynamic_cast<MDSAsyncContextBase*>(data.fin);
@@ -531,10 +533,9 @@ void MDLog::shutdown()
 // -----------------------------
 // segments
 
-void MDLog::_start_new_segment()
+void MDLog::start_new_segment()
 {
-  _prepare_new_segment();
-  _journal_segment_subtree_map(NULL);
+  mds->mdcache->journal_subtree_map(NULL);
 }
 
 void MDLog::_prepare_new_segment()
@@ -555,22 +556,10 @@ void MDLog::_prepare_new_segment()
   mds->mdcache->advance_stray();
 }
 
-void MDLog::_journal_segment_subtree_map(MDSLogContextBase *onsync)
+void MDLog::journal_segment_subtree_map(MDSContextBase *onsync)
 {
-  assert(submit_mutex.is_locked_by_me());
-
-  dout(7) << __func__ << dendl;
-  ESubtreeMap *sle = mds->mdcache->create_subtree_map();
-  sle->event_seq = get_last_segment_seq();
-  _submit_entry(sle, onsync, !!onsync);
-}
-
-void MDLog::journal_segment_subtree_map(MDSContextBase *onsync) {
-  submit_mutex.Lock();
-  _journal_segment_subtree_map(new C_MDL_Flushed(this, onsync));
-  submit_mutex.Unlock();
-  if (onsync)
-    flush();
+  assert(event_seq == 0);
+  mds->mdcache->journal_subtree_map(new C_MDL_Flushed(this, onsync));
 }
 
 void MDLog::trim(int m)

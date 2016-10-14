@@ -1208,16 +1208,18 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	p->update_inode(mds, in.get());
 	if (in->state_test(CInode::STATE_REPLAYUNDEF)) {
 	  in->clear_replay_undefined();
-	} else if (in->get_parent_dn() != dn) {
-	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
+	} else {
 	  CDentryRef other_dn = in->get_parent_dn();
-	  if (other_dn->get_dir_inode() != diri.get()) {
-	    assert(other_dn->get_dir_inode()->mutex_trylock()); // single thread, 
-	  }
-	  unlinked.insert(in.get());
-	  other_dn->get_dir()->unlink_inode(other_dn.get());
-	  if (other_dn->get_dir_inode() != diri.get()) {
-	    other_dn->get_dir_inode()->mutex_unlock(); // single thread, 
+	  if (other_dn && other_dn != dn) {
+	    dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
+	    if (other_dn->get_dir_inode() != diri.get()) {
+	      assert(other_dn->get_dir_inode()->mutex_trylock()); // single thread
+	    }
+	    unlinked.insert(in.get());
+	    other_dn->get_dir()->unlink_inode(other_dn.get());
+	    if (other_dn->get_dir_inode() != diri.get()) {
+	      other_dn->get_dir_inode()->mutex_unlock(); // single thread
+	    }
 	  }
 	}
       }
@@ -1227,7 +1229,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  if (dn->get_linkage()->is_primary()) {
 	    CInodeRef other_in = dn->get_linkage()->get_inode();
 	    assert(other_in->mutex_trylock()); // single thread, 
-	     unlinked.insert(other_in.get());
+	    unlinked.insert(other_in.get());
 	    stringstream ss;
 	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *other_in << " should be " << p->inode.ino;
@@ -2145,6 +2147,11 @@ void ESubtreeMap::generate_test_instances(list<ESubtreeMap*>& ls)
 
 void ESubtreeMap::replay(MDSRank *mds) 
 {
+  assert(ambiguous_subtrees.empty());
+  map<dirfrag_t, vector<dirfrag_t> > tmp;
+  tmp[dirfrag_t(CEPH_INO_ROOT, frag_t())].clear();
+  tmp[dirfrag_t(MDS_INO_MDSDIR(mds->get_nodeid()), frag_t())].clear();
+  assert(subtrees == tmp);
 #if 0
   if (expire_pos && expire_pos > mds->mdlog->journaler->get_expire_pos())
     mds->mdlog->journaler->set_expire_pos(expire_pos);
