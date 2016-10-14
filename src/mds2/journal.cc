@@ -516,7 +516,13 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 
   assert(old_inodes.empty());
   assert(oldest_snap == CEPH_NOSNAP);;
-  assert(snapbl.length() == 0);
+  if (snapbl.length() > 0) {
+    assert(in->is_base());
+    sr_t srnode;
+    bufferlist::iterator p = snapbl.begin();
+    ::decode(srnode, p);
+    assert(srnode.seq == 1); // no snapshot
+  }
 
   /*
    * In case there was anything malformed in the journal that we are

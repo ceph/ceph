@@ -24,6 +24,7 @@
 #include "MDLog.h"
 #include "SessionMap.h"
 #include "InoTable.h"
+#include "SnapServer.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 #include "osdc/Journaler.h"
@@ -60,7 +61,7 @@ MDSRank::MDSRank(
     mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
     server(NULL), locker(NULL), mdcache(NULL),
-    mdlog(NULL), sessionmap(NULL), inotable(NULL),
+    mdlog(NULL), sessionmap(NULL), inotable(NULL), snapserver(NULL),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
     stopping(false),
@@ -93,6 +94,7 @@ MDSRank::MDSRank(
   mdlog = new MDLog(this);
   sessionmap = new SessionMap(this);
   inotable = new InoTable(this);
+  snapserver = new SnapServer(this, monc);
 }
 
 MDSRank::~MDSRank()
@@ -107,6 +109,7 @@ MDSRank::~MDSRank()
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (sessionmap) { delete sessionmap; sessionmap = NULL; }
   if (inotable) { delete inotable; inotable = NULL; }
+  if (snapserver) { delete snapserver; snapserver = NULL; }
 
   delete log_finisher;
   log_finisher = NULL;
@@ -185,6 +188,13 @@ void MDSRankDispatcher::tick()
     mds_lock.Unlock();
     server->reconnect_tick();
     mds_lock.Lock();
+  }
+
+  if (is_active()) {
+#if 0
+    if (snapserver)
+      snapserver->check_osd_map(false);
+#endif
   }
 }
 
@@ -516,6 +526,12 @@ void MDSRank::boot_start(BootStep step, int r)
       sessionmap->set_rank(whoami);
       sessionmap->load(gather.new_sub());
 
+      if (mdsmap->get_tableserver() == whoami) {
+	dout(3) << "boot_start " << step << ": opening snap table" << dendl;
+	snapserver->set_rank(whoami);
+	snapserver->load(gather.new_sub());
+      }
+
       dout(3) << "boot_start " << step << ": opening mds log" << dendl;
       mdlog->open(gather.new_sub());
 
@@ -682,6 +698,14 @@ void MDSRank::recovery_done(int oldstate)
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
 
+#if 0
+  if (mdsmap->get_tableserver() == whoami) {
+    set<mds_rank_t> active;
+    mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
+    snapserver->finish_recovery(active);
+  }
+#endif
+
   if (oldstate == MDSMap::STATE_CREATING)
     return;
 
@@ -727,6 +751,14 @@ void MDSRank::boot_create()
   sessionmap->set_rank(whoami);
   sessionmap->save(gather.new_sub());
   sessionmap->mutex_unlock();
+
+  if (mdsmap->get_tableserver() == whoami) {
+    dout(10) << "boot_create creating fresh snaptable" << dendl;
+    snapserver->mutex_lock();
+    snapserver->reset();
+    snapserver->save(gather.new_sub());
+    snapserver->mutex_unlock();
+  }
 
   mdlog->journal_segment_subtree_map(gather.new_sub());
 

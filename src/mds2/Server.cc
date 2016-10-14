@@ -12,7 +12,6 @@
 #include "SessionMap.h"
 #include "InoTable.h"
 #include "LogEvent.h"
-#include "snap.h"
 
 #include "messages/MClientSession.h"
 #include "messages/MClientRequest.h"

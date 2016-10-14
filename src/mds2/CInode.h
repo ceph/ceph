@@ -8,6 +8,7 @@
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
+#include "snap.h"
 
 #include "include/elist.h"
 

@@ -1450,7 +1450,15 @@ void CInode::encode_bare(bufferlist &bl, uint64_t features)
     ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
-  ::encode(bufferlist(), bl); // snapbl
+  if (is_base()) {
+    sr_t srnode;
+    srnode.seq = 1;
+    bufferlist snapbl;
+    ::encode(srnode, snapbl);
+    ::encode(snapbl, bl);
+  } else {
+    ::encode(bufferlist(), bl);
+  }
   ::encode(old_inodes, bl, features);
 }
 
@@ -1473,9 +1481,15 @@ void CInode::decode_bare(bufferlist::iterator &bl, __u8 struct_v)
   }
   ::decode(xattrs, bl);
   {
-    bufferlist snap_blob;
-    ::decode(snap_blob, bl);
-    assert(snap_blob.length() == 0);
+    bufferlist snapbl;
+    ::decode(snapbl, bl);
+    if (snapbl.length() != 0) {
+      assert(is_base()); // no snapshot
+      sr_t srnode;
+      bufferlist::iterator p = snapbl.begin();
+      ::decode(srnode, p);
+      assert(srnode.seq == 1); // no snapshot
+    }
   }
   {
     map<snapid_t, old_inode_t> tmp;

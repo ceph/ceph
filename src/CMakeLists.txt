@@ -936,6 +936,8 @@ set(ceph_mds2_srcs
   mds2/MDSContext.cc
   mds2/MDSTable.cc
   mds2/InoTable.cc
+  mds2/MDSTableServer.cc
+  mds2/SnapServer.cc
   mds2/MDLog.cc
   mds2/journal.cc
   mds2/LogEvent.cc

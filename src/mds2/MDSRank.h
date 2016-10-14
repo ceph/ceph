@@ -43,6 +43,7 @@ class Objecter;
 class SessionMap;
 class Session;
 class InoTable;
+class SnapServer;
 class MDLog;
 
 struct MDRequestImpl;
@@ -93,6 +94,7 @@ public:
   MDLog        *mdlog;
   SessionMap   *sessionmap;
   InoTable     *inotable;
+  SnapServer   *snapserver;
 
   // The last different state I held before current
   MDSMap::DaemonState last_state;
