@@ -204,8 +204,6 @@ TEST(mempool, test_factory)
    check_usage(mempool::unittest_2);
 }
 
-MEMPOOL_DEFINE_FACTORY(int, int, unittest_1);
-
 TEST(mempool, vector)
 {
   {
@@ -220,9 +218,6 @@ TEST(mempool, vector)
   }
 }
 
-MEMPOOL_DEFINE_SET_FACTORY(int, int, unittest_1);
-MEMPOOL_DEFINE_SET_FACTORY(obj, obj, unittest_2);
-
 TEST(mempool, set)
 {
   unittest_1::set<int> set_int;
@@ -233,9 +228,6 @@ TEST(mempool, set)
   set_obj.insert(obj(1));
   set_obj.insert(obj(1, 2));
 }
-
-MEMPOOL_DEFINE_MAP_FACTORY(int, int, int_int, unittest_1);
-MEMPOOL_DEFINE_MAP_FACTORY(int, obj, int_obj, unittest_2);
 
 TEST(mempool, map)
 {
@@ -252,9 +244,6 @@ TEST(mempool, map)
   }
 }
 
-MEMPOOL_DEFINE_LIST_FACTORY(int, int, unittest_1);
-MEMPOOL_DEFINE_LIST_FACTORY(obj, obj, unittest_2);
-
 TEST(mempool, list)
 {
   {
@@ -268,9 +257,6 @@ TEST(mempool, list)
     v.push_back(obj(1));
   }
 }
-
-MEMPOOL_DEFINE_UNORDERED_MAP_BASE_FACTORY(unittest_2);
-MEMPOOL_DEFINE_UNORDERED_MAP_FACTORY(int, obj, false, int_obj, unittest_2);
 
 TEST(mempool, unordered_map)
 {
