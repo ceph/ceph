@@ -6,7 +6,9 @@
 
 size_t RGWFCGX::write_data(const char* const buf, const size_t len)
 {
-  const auto ret = FCGX_PutStr(buf, len, fcgx->out);
+ /* According to the documentation of FCGX_PutStr if there is no error
+ * (signalised by negative return value), then always ret == len. */
+ const auto ret = FCGX_PutStr(buf, len, fcgx->out);
   if (ret < 0) {
     throw rgw::io::Exception(-ret, std::system_category());
   }

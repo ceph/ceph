@@ -12,16 +12,21 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-size_t RGWCivetWeb::write_data(const char *buf, size_t len)
+size_t RGWCivetWeb::write_data(const char *buf, const size_t len)
 {
-  const int ret = mg_write(conn, buf, len);
-  if (ret == 0) {
-    /* didn't send anything, error out */
-    throw rgw::io::Exception(EIO, std::system_category());
-  } else if (ret < 0) {
-    throw rgw::io::Exception(-ret, std::system_category());
+  auto to_sent = len;
+  while (to_sent) {
+    const int ret = mg_write(conn, buf, len);
+    if (ret < 0 || ! ret) {
+      /* According to the documentation of mg_write() it always returns -1 on
+       * error. The details aren't available, so we will just throw EIO. Same
+       * goes to 0 that is associated with writing to a closed connection. */
+      throw rgw::io::Exception(EIO, std::system_category());
+    } else {
+      to_sent -= static_cast<size_t>(ret);
+    }
   }
-  return ret;
+  return len;
 }
 
 RGWCivetWeb::RGWCivetWeb(mg_connection* const conn, const int port)
@@ -36,7 +41,7 @@ size_t RGWCivetWeb::read_data(char *buf, size_t len)
 {
   const int ret = mg_read(conn, buf, len);
   if (ret < 0) {
-    throw rgw::io::Exception(-ret, std::system_category());
+    throw rgw::io::Exception(EIO, std::system_category());
   }
   return ret;
 }
