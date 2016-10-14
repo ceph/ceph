@@ -8128,7 +8128,7 @@ int BlueStore::_rmattr(TransContext *txc,
   if (it == o->onode.attrs.end())
     goto out;
 
-  o->onode.attrs.erase(name);
+  o->onode.attrs.erase(it);
   txc->write_onode(o);
 
  out:
