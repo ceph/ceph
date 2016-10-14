@@ -415,6 +415,19 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     ::encode(tag, bl);
     ::encode(features, bl);
 
+    // encode stripe_unit and stripe_count
+    tag = RBD_EXPORT_IMAGE_STRIPEUNIT;
+    uint64_t stripe_unit;
+    stripe_unit = image.get_stripe_unit();
+    ::encode(tag, bl);
+    ::encode(stripe_unit, bl);
+
+    tag = RBD_EXPORT_IMAGE_STRIPECOUNT;
+    uint64_t stripe_count;
+    stripe_count = image.get_stripe_count();
+    ::encode(tag, bl);
+    ::encode(stripe_count, bl);
+
     // encode end tag
     tag = RBD_EXPORT_IMAGE_END;
     ::encode(tag, bl);

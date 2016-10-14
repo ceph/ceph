@@ -420,6 +420,24 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
 	  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 	}
+      } else if (tag == RBD_EXPORT_IMAGE_STRIPEUNIT) {
+	uint64_t stripe_unit = 0;
+	r = safe_read_exact(fd, &stripe_unit, 8);
+	if (r < 0) {
+	  goto done;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+	}
+      } else if (tag == RBD_EXPORT_IMAGE_STRIPECOUNT) {
+	uint64_t stripe_count = 0;
+	r = safe_read_exact(fd, &stripe_count, 8);
+	if (r < 0) {
+	  goto done;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+	}
       } else {
 	std::cerr << "rbd: invalid tag in image priority zone: " << tag << std::endl;
 	r = -EINVAL;
