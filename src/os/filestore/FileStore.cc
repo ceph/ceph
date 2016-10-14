@@ -3813,6 +3813,8 @@ int FileStore::_move_ranges_destroy_src(const coll_t& src_cid, const ghobject_t&
      uint64_t len = move_info[i].get<2>();
 
      r = _do_clone_range(**t, **b, srcoff, len, dstoff);
+     if (r < 0)
+       break;
   }
 
   dout(10) << __func__  << cid << "/" << oid << " "  <<  " = " << r << dendl;
