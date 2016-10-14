@@ -411,6 +411,14 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	}
 	if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
 	  opts.set(RBD_IMAGE_OPTION_ORDER, order);
+      } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
+	uint64_t features = 0;
+	r = safe_read_exact(fd, &features, 8);
+	if (r < 0) {
+	  goto done;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 	}
       } else {
 	std::cerr << "rbd: invalid tag in image priority zone: " << tag << std::endl;

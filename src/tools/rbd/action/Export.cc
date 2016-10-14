@@ -408,6 +408,13 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     ::encode(tag, bl);
     ::encode(uint64_t(info.order), bl);
 
+    // encode features
+    tag = RBD_EXPORT_IMAGE_FEATURES;
+    uint64_t features;
+    image.features(&features);
+    ::encode(tag, bl);
+    ::encode(features, bl);
+
     // encode end tag
     tag = RBD_EXPORT_IMAGE_END;
     ::encode(tag, bl);
