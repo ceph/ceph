@@ -107,14 +107,19 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
 set(radosgw_srcs
-  rgw_asio_client.cc
-  rgw_asio_frontend.cc
   rgw_fcgi_process.cc
   rgw_loadgen_process.cc
   rgw_civetweb.cc
   rgw_civetweb_frontend.cc
   rgw_civetweb_log.cc
   rgw_main.cc)
+
+if (WITH_RADOSGW_ASIO_FRONTEND)
+  list(APPEND radosgw_srcs
+    rgw_asio_client.cc
+    rgw_asio_frontend.cc)
+endif (WITH_RADOSGW_ASIO_FRONTEND)
+
 add_executable(radosgw ${radosgw_srcs}  $<TARGET_OBJECTS:civetweb_common_objs>)
 target_link_libraries(radosgw rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
