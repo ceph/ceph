@@ -11441,7 +11441,6 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
   if (r == 0) {
     assert(target);
     fill_stat(target, attr);
-    _ll_get(target.get());
   }
 out:
   return r;
