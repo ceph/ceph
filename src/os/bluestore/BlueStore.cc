@@ -8352,7 +8352,6 @@ int BlueStore::_clone(TransContext *txc,
     return -EINVAL;
   }
 
-  bufferlist bl;
   newo->exists = true;
   _assign_nid(txc, newo);
 
@@ -8364,6 +8363,7 @@ int BlueStore::_clone(TransContext *txc,
   if (g_conf->bluestore_clone_cow) {
     _do_clone_range(txc, c, oldo, newo, 0, oldo->onode.size, 0);
   } else {
+    bufferlist bl;
     r = _do_read(c.get(), oldo, 0, oldo->onode.size, bl, 0);
     if (r < 0)
       goto out;
@@ -8391,13 +8391,13 @@ int BlueStore::_clone(TransContext *txc,
     get_omap_tail(oldo->onode.omap_head, &tail);
     it->lower_bound(head);
     while (it->valid()) {
-      string key;
       if (it->key() >= tail) {
 	dout(30) << __func__ << "  reached tail" << dendl;
 	break;
       } else {
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
+        string key;
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
@@ -8533,7 +8533,6 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
-  bufferlist bl;
 
   if (srcoff + length > oldo->onode.size) {
     r = -EINVAL;
@@ -8547,6 +8546,7 @@ int BlueStore::_clone_range(TransContext *txc,
     _do_zero(txc, c, newo, dstoff, length);
     _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
   } else {
+    bufferlist bl;
     r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
     if (r < 0)
       goto out;
