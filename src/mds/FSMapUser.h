@@ -35,18 +35,6 @@ public:
   FSMapUser()
     : epoch(0), legacy_client_fscid(FS_CLUSTER_ID_NONE) { }
 
-  FSMapUser(const FSMapUser &o)
-    : epoch(o.epoch), legacy_client_fscid(o.legacy_client_fscid),
-      filesystems(o.filesystems) { }
-
-  FSMapUser &operator=(const FSMapUser &o)
-  {
-    epoch = o.epoch;
-    legacy_client_fscid = o.legacy_client_fscid;
-    filesystems = o.filesystems;
-    return *this;
-  }
-
   epoch_t get_epoch() const { return epoch; }
 
   fs_cluster_id_t get_fs_cid(const std::string &name) const {
