@@ -53,7 +53,9 @@
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_frontend.h"
+#if defined(WITH_RADOSGW_ASIO_FRONTEND)
 #include "rgw_asio_frontend.h"
+#endif /* WITH_RADOSGW_ASIO_FRONTEND */
 
 #include <map>
 #include <string>
@@ -431,6 +433,7 @@ int main(int argc, const char **argv)
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
     RGWFrontend *fe;
+#if defined(WITH_RADOSGW_ASIO_FRONTEND)
     if ((framework == "asio") &&
 	cct->check_experimental_feature_enabled("rgw-asio-frontend")) {
       int port;
@@ -440,6 +443,9 @@ int main(int argc, const char **argv)
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix };
       fe = new RGWAsioFrontend(env);
     } else if (framework == "fastcgi" || framework == "fcgi") {
+#else
+    if (framework == "fastcgi" || framework == "fcgi") {
+#endif /* WITH_RADOSGW_ASIO_FRONTEND */
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix };

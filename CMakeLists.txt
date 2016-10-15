@@ -323,6 +323,8 @@ if(WITH_RADOSGW)
   find_package(fcgi REQUIRED)
 endif(WITH_RADOSGW)
 
+option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" OFF)
+
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
