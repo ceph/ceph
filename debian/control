@@ -148,6 +148,7 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
+         ${python:Depends},
          ${shlibs:Depends}
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
@@ -664,6 +665,7 @@ Architecture: linux-any
 Section: python
 Depends: librados2 (= ${binary:Version}),
          ${misc:Depends},
+         ${shlibs:Depends},
          ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
@@ -680,6 +682,7 @@ Architecture: linux-any
 Section: python
 Depends: librados2 (= ${binary:Version}),
          ${misc:Depends},
+         ${shlibs:Depends},
          ${python3:Depends}
 Description: Python 3 libraries for the Ceph librados library
  Ceph is a massively scalable, open-source, distributed
@@ -694,6 +697,7 @@ Architecture: linux-any
 Section: python
 Depends: librbd1 (>= ${binary:Version}),
          ${misc:Depends},
+         ${shlibs:Depends},
          ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
@@ -710,6 +714,7 @@ Architecture: linux-any
 Section: python
 Depends: librbd1 (>= ${binary:Version}),
          ${misc:Depends},
+         ${shlibs:Depends},
          ${python3:Depends}
 Description: Python 3 libraries for the Ceph librbd library
  Ceph is a massively scalable, open-source, distributed
@@ -724,6 +729,7 @@ Architecture: linux-any
 Section: python
 Depends: libcephfs1 (= ${binary:Version}),
          ${misc:Depends},
+         ${shlibs:Depends},
          ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
@@ -740,6 +746,7 @@ Architecture: linux-any
 Section: python
 Depends: libcephfs1 (= ${binary:Version}),
          ${misc:Depends},
+         ${shlibs:Depends},
          ${python3:Depends}
 Description: Python 3 libraries for the Ceph libcephfs library
  Ceph is a massively scalable, open-source, distributed
