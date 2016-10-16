@@ -13,6 +13,7 @@ fi
 rm -rf build && ./do_cmake.sh "$*" \
 	-D CMAKE_BUILD_TYPE=Debug \
 	-D CMAKE_CXX_FLAGS_DEBUG="-O0 -g" \
+	-D CMAKE_C_FLAGS_DEBUG="-O0 -g" \
 	-D ENABLE_GIT_VERSION=OFF \
 	-D WITH_BLKID=OFF \
 	-D WITH_FUSE=OFF \
@@ -26,6 +27,6 @@ rm -rf build && ./do_cmake.sh "$*" \
 	2>&1 | tee cmake.log
 
 cd build
-gmake -j$NPROC V=1 VERBOSE=1 | tee build.log 2>&1
-gmake -j$NPROC check CEPH_BUFFER_NO_BENCH=yes | tee check.log 2>&1
+gmake -j$NPROC V=1 VERBOSE=1 
+gmake -j$NPROC check CEPH_BUFFER_NO_BENCH=yes 
 
