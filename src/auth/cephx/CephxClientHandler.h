@@ -70,6 +70,7 @@ public:
   }
 private:
   void validate_tickets();
+  bool _need_tickets() const;
 };
 
 #endif
