@@ -69,10 +69,14 @@ tasks:
       name_length: [400, 800, 1600]
   - install.upgrade:
       mon.a: null
-  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1]
+  - ceph.restart:
+      daemons: [mon.a, mon.b, mon.c]
+      wait-for-healthy: false
   - exec:
       mon.a:
         - ceph osd set require_kraken_osds
+  - ceph.restart:
+      daemons: [osd.0, osd.1]
   - ceph_manager.wait_for_clean: null
   - ceph_manager.do_pg_scrub:
       args: ['test', 0, 'scrub']
