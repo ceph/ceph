@@ -27,6 +27,6 @@ rm -rf build && ./do_cmake.sh "$*" \
 	2>&1 | tee cmake.log
 
 cd build
-gmake -j$NPROC V=1 VERBOSE=1 | tee build.log 2>&1
-gmake -j$NPROC check CEPH_BUFFER_NO_BENCH=yes | tee check.log 2>&1
+gmake -j$NPROC V=1 VERBOSE=1 
+gmake -j$NPROC check CEPH_BUFFER_NO_BENCH=yes 
 
