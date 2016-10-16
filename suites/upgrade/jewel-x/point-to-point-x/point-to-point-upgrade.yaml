@@ -15,7 +15,6 @@ overrides:
     - reached quota
     - scrub
     - osd_map_max_advance
-    - failed to encode
     - wrongly marked
     fs: xfs
     conf:
@@ -177,6 +176,15 @@ upgrade-sequence_x:
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
@@ -192,16 +200,13 @@ upgrade-sequence_x:
    - ceph.restart: [osd.4]
    - sleep:
        duration: 30
-   - ceph.restart: [osd.5]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.b]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.c]
+   - ceph.restart:
+       daemons: [osd.5]
+       wait-for-healthy: false
+       wait-for-up-osds: true
+   - exec:
+       mon.a:
+         - ceph osd set require_kraken_osds
    - sleep:
        duration: 60
    - print: "**** done ceph.restart all -x branch mds/osd/mon"

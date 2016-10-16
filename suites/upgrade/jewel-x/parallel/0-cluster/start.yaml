@@ -22,7 +22,6 @@ overrides:
     log-whitelist:
     - scrub mismatch
     - ScrubResult
-    - failed to encode map
     - wrongly marked
     conf:
     fs: xfs
