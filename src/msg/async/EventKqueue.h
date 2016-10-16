@@ -25,18 +25,35 @@
 
 class KqueueDriver : public EventDriver {
   int kqfd;
-  struct kevent *events;
+  pthread_t mythread;
+  struct kevent *res_events;
   CephContext *cct;
   int size;
 
+  // Keep what we set on the kqfd
+  struct SaveEvent{
+    int fd;
+    int mask;
+  };
+  struct SaveEvent *sav_events;
+  int sav_max;
+  int restore_events();
+  int test_kqfd();
+  int test_thread_change(const char* funcname);
+
  public:
-  explicit KqueueDriver(CephContext *c): kqfd(-1), events(NULL), cct(c), size(0) {}
+  explicit KqueueDriver(CephContext *c): kqfd(-1), res_events(NULL), cct(c), 
+		size(0), sav_max(0) {}
   virtual ~KqueueDriver() {
     if (kqfd != -1)
       close(kqfd);
 
-    if (events)
-      free(events);
+    if (res_events)
+      free(res_events);
+    size = 0;
+    if (sav_events)
+      free(sav_events);
+    sav_max = 0;
   }
 
   int init(int nevent) override;
