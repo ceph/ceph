@@ -409,8 +409,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
       export_try_cancel(dir);
     } else {
       // bystander failed.
-      if (p->second.warning_ack_waiting.count(who)) {
-	p->second.warning_ack_waiting.erase(who);
+      if (p->second.warning_ack_waiting.erase(who)) {
 	p->second.notify_ack_waiting.erase(who);   // they won't get a notify either.
 	if (p->second.state == EXPORT_WARNING) {
 	  // exporter waiting for warning acks, let's fake theirs.
@@ -421,8 +420,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	    export_go(dir);
 	}
       }
-      if (p->second.notify_ack_waiting.count(who)) {
-	p->second.notify_ack_waiting.erase(who);
+      if (p->second.notify_ack_waiting.erase(who)) {
 	if (p->second.state == EXPORT_NOTIFYING) {
 	  // exporter is waiting for notify acks, fake it
 	  dout(10) << "faking export_notify_ack from mds." << who
