@@ -23,9 +23,10 @@ if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/git \
         devel/gmake \
-        devel/automake \
+        devel/cmake \
         devel/yasm \
         devel/boost-all \
+        devel/boost-python-libs \
         devel/valgrind \
         devel/pkgconf \
         devel/libatomic_ops \
