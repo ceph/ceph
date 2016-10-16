@@ -1225,8 +1225,21 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   {
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
+
+    // determine appropriate features
+    uint64_t features = mon->quorum_features;
+    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
+      features &= ~CEPH_FEATURE_SERVER_JEWEL;
+    }
+    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      dout(10) << __func__ << " encoding without feature SERVER_KRAKEN" << dendl;
+      features &= ~CEPH_FEATURE_SERVER_KRAKEN;
+    }
+    dout(10) << __func__ << " encoding full map with " << features << dendl;
+
     bufferlist fullbl;
-    ::encode(tmp, fullbl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+    ::encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
     pending_inc.full_crc = tmp.get_crc();
 
     // include full map in the txn.  note that old monitors will
@@ -3059,6 +3072,25 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail) {
         ss << "; this has the same effect as the 'noout' flag";
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
+    // warn about upgrade flags that can be set but are not.
+    if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) &&
+	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      string msg = "all OSDs are running kraken or later but the"
+	" 'require_kraken_osds' osdmap flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, msg));
+      if (detail) {
+	detail->push_back(make_pair(HEALTH_WARN, msg));
+      }
+    } else if ((osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) &&
+	       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      string msg = "all OSDs are running jewel or later but the"
+	" 'require_jewel_osds' osdmap flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, msg));
+      if (detail) {
+	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
     }
 
@@ -6413,7 +6445,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     } else if (key == "require_kraken_osds") {
       if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
-	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+	// ensure JEWEL is also set
+	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
+	return r;
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
 	err = -EPERM;
