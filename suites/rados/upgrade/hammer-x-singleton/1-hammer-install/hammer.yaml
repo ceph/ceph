@@ -1,7 +1,0 @@
-tasks:
-- install:
-    branch: hammer
-- print: "**** done  install hammer"
-- ceph:
-    fs: xfs
-- print: "**** done ceph"
