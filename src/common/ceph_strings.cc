@@ -238,3 +238,13 @@ const char *ceph_pool_op_name(int op)
 	}
 	return "???";
 }
+
+const char *ceph_osd_backoff_op_name(int op)
+{
+	switch (op) {
+	case CEPH_OSD_BACKOFF_OP_BLOCK: return "block";
+	case CEPH_OSD_BACKOFF_OP_ACK_BLOCK: return "ack-block";
+	case CEPH_OSD_BACKOFF_OP_UNBLOCK: return "unblock";
+	}
+	return "???";
+}

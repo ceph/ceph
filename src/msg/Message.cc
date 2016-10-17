@@ -82,6 +82,7 @@ using namespace std;
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDBackoff.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -459,6 +460,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     m = new MOSDPGUpdateLogMissingReply();
+    break;
+  case CEPH_MSG_OSD_BACKOFF:
+    m = new MOSDBackoff;
     break;
 
   case CEPH_MSG_OSD_MAP:
