@@ -229,6 +229,37 @@ TEST_P(StoreTest, IORemount) {
   }
 }
 
+TEST_P(StoreTest, UnprintableCharsName) {
+  ObjectStore::Sequencer osr("test");
+  coll_t cid;
+  string name = "funnychars_";
+  for (unsigned i = 0; i < 256; ++i) {
+    name.push_back(i);
+  }
+  ghobject_t oid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
+  int r;
+  {
+    cerr << "create collection + object" << std::endl;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  r = store->umount();
+  ASSERT_EQ(0, r);
+  r = store->mount();
+  ASSERT_EQ(0, r);
+  {
+    cout << "removing" << std::endl;
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    t.remove_collection(cid);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, FiemapEmpty) {
   ObjectStore::Sequencer osr("test");
   coll_t cid;
