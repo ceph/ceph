@@ -1,0 +1,8 @@
+tasks:
+- install.upgrade:
+    osd.3:
+       branch: jewel
+- print: "**** done install.upgrade jewel"
+- ceph.restart:
+    daemons: [osd.3, osd.4, osd.5]
+- print: "**** done 10-osds-upgrade-jewel/secondhalf.yaml"

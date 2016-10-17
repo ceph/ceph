@@ -1,0 +1,37 @@
+upgrade-sequence:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         branch: jewel
+   - print: "**** done install.upgrade mon.a to branch: jewel"
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart [mon.a] [osd.0, osd.1] [mds.a]"
+   - exec:
+      mon.b:
+        # is this command valid?
+        - ceph osd crush tunables hammer
+   - install.upgrade:
+       mon.b:
+         branch: jewel
+   - print: "**** done install.upgrade mon.b to branch: jewel"
+   - ceph.restart:
+       daemons: [osd.2, osd.3]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.b, mon.c]
+       wait-for-healthy: true
+   - print: "**** done ceph.restart [osd.2, osd.3] & [mon.b, mon.c]"
