@@ -6046,14 +6046,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
+      _txc_finalize_kv(txc, txc->t);
       if (!sync_transaction) {
 	if (sync_submit_transaction) {
-	  _txc_finalize_kv(txc, txc->t);
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	}
       } else {
-	_txc_finalize_kv(txc, txc->t);
 	int r = db->submit_transaction_sync(txc->t);
 	assert(r == 0);
       }
@@ -6402,7 +6401,6 @@ void BlueStore::_kv_sync_thread()
       uint64_t high_nid = 0, high_blobid = 0;
       if (!sync_transaction && !sync_submit_transaction) {
 	for (auto txc : kv_committing) {
-	  _txc_finalize_kv(txc, txc->t);
 	  if (txc->last_nid > high_nid) {
 	    high_nid = txc->last_nid;
 	  }
