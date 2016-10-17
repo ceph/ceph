@@ -3273,9 +3273,9 @@ int main(int argc, char **argv)
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
-      if (struct_ver != PG::cur_struct_v) {
+      if (struct_ver < PG::compat_struct_v) {
         cerr << "Can't remove past-intervals, version mismatch " << (int)struct_ver
-          << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+          << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
           << std::endl;
         ret = -EFAULT;
         goto out;
@@ -3298,9 +3298,9 @@ int main(int argc, char **argv)
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
-      if (struct_ver != PG::cur_struct_v) {
-	cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
-	     << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+      if (struct_ver < PG::compat_struct_v) {
+        cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
+	     << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
 	     << std::endl;
 	ret = 1;
 	goto out;
