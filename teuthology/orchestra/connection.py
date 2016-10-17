@@ -79,26 +79,18 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
         username=user,
         timeout=timeout
     )
-    if key_filename:
-        connect_args['key_filename'] = key_filename
 
     ssh_config_path = os.path.expanduser("~/.ssh/config")
     if os.path.exists(ssh_config_path):
         ssh_config = paramiko.SSHConfig()
         ssh_config.parse(open(ssh_config_path))
         opts = ssh_config.lookup(host)
-        opts_to_args = {
-            'host': 'hostname',
-            'user': 'username'
-        }
-        if not key_filename:
-            opts_to_args['identityfile'] = 'key_filename'
-        for opt_name, arg_name in opts_to_args.items():
-            if opt_name in opts:
-                value = opts[opt_name]
-                if arg_name == 'key_filename' and '~' in value:
-                    value = os.path.expanduser(value)
-                connect_args[arg_name] = value
+        if not key_filename and 'identityfile' in opts:
+            key_filename = opts['identityfile']
+
+    if key_filename:
+        key_filename = [os.path.expanduser(f) for f in key_filename]
+        connect_args['key_filename'] = key_filename
 
     log.debug(connect_args)
 
