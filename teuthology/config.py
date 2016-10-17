@@ -128,7 +128,7 @@ class TeuthologyConfig(YamlConfig):
     """
     yaml_path = os.path.join(os.path.expanduser('~/.teuthology.yaml'))
     _defaults = {
-        'archive_base': '/var/lib/teuthworker/archive',
+        'archive_base': '/home/teuthworker/archive',
         'archive_upload': None,
         'archive_upload_key': None,
         'archive_upload_url': None,
