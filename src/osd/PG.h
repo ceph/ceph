@@ -1368,6 +1368,7 @@ public:
     boost::intrusive_ptr< const boost::statechart::event_base > evt;
     string desc;
   public:
+    MEMPOOL_CLASS_HELPERS();
     template <class T>
     CephPeeringEvt(epoch_t epoch_sent,
 		   epoch_t epoch_requested,
