@@ -145,18 +145,7 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
     if (ancestors[i].dirino != other.ancestors[i].dirino ||
         ancestors[i].dname != other.ancestors[i].dname) {
       *equivalent = false;
-      if (ancestors[i-1].version < other.ancestors[i-1].version) {
-        if (comparator > 0)
-          *divergent = true;
-        return -1;
-      } else if (ancestors[i-1].version > other.ancestors[i-1].version) {
-        if (comparator < 0)
-          *divergent = true;
-        return 1;
-      } else {
-        assert(ancestors[i-1].version == other.ancestors[i-1].version);
-        return 0;
-      }
+      return comparator;
     } else if (ancestors[i].version > other.ancestors[i].version) {
       if (comparator < 0)
         *divergent = true;
