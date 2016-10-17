@@ -196,9 +196,9 @@ class Downburst(object):
                  '/etc/sysconfig/network-scripts/ifcfg-eth0'],
             ])
             user_info['packages'].append('redhat-lsb-core')
-        # On Ubuntu, starting with 16.04, we need to install 'python' to get
-        # python2.7, which ansible needs
-        elif os_type == 'ubuntu':
+        # On Ubuntu, starting with 16.04, and Fedora, starting with 24, we need
+        # to install 'python' to get python2.7, which ansible needs
+        if os_type in ('ubuntu', 'fedora'):
             user_info['packages'].append('python')
         user_fd = tempfile.NamedTemporaryFile(delete=False)
         yaml.safe_dump(user_info, user_fd)
