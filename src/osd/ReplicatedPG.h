@@ -58,6 +58,7 @@ class ReplicatedPG : public PG, public PGBackend::Listener {
   friend class Watch;
 
 public:
+  MEMPOOL_CLASS_HELPERS();
 
   /*
    * state associated with a copy operation
