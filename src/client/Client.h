@@ -516,7 +516,7 @@ protected:
   // path traversal for high-level interface
   InodeRef cwd;
   int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
-		bool followsym=true, int mask=0, int uid=-1, int gid=-1);
+		bool followsym=true, int mask=0);
 		
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
@@ -809,7 +809,6 @@ private:
 	      const char *data_pool, bool *created, const UserPerm &perms);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
-  loff_t _lseek(Fh *fh, loff_t offset, int whence, const UserPerm& perms);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt);
@@ -921,7 +920,7 @@ private:
 
   mds_rank_t _get_random_up_mds() const;
 
-  int _ll_getattr(Inode *in, const UserPerm& perms);
+  int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
 
 public:
   int mount(const std::string &mount_root, const UserPerm& perms,
@@ -1033,7 +1032,7 @@ public:
   int lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int close(int fd);
-  loff_t lseek(int fd, loff_t offset, int whence, const UserPerm& perms);
+  loff_t lseek(int fd, loff_t offset, int whence);
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);
   int preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
   int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
@@ -1168,7 +1167,7 @@ public:
 
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
-  loff_t ll_lseek(Fh *fh, loff_t offset, int whence, const UserPerm& perms);
+  loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
