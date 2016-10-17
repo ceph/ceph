@@ -69,6 +69,8 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
 
 #include <errno.h>
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(ReplicatedPG, replicatedpg, osd);
+
 PGLSFilter::PGLSFilter()
 {
 }
