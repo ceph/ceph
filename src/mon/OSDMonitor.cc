@@ -4943,10 +4943,15 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   _get_pending_crush(newcrush);
   ostringstream err;
   CrushTester tester(newcrush, err);
-  r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
+  // use the internal crush tester if crushtool config is empty
+  if (g_conf->crushtool.empty()) {
+    r = tester.test();
+  } else {
+    r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
 				 g_conf->mon_lease,
 				 crush_ruleset);
+  }
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r
 	     << ": " << err.str() << dendl;
