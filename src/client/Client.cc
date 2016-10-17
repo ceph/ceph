@@ -6048,8 +6048,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 }
 
 int Client::path_walk(const filepath& origpath, InodeRef *end,
-		      const UserPerm& perms, bool followsym,
-		      int mask, int uid, int gid)
+		      const UserPerm& perms, bool followsym, int mask)
 {
   filepath path = origpath;
   InodeRef cur;
@@ -6660,7 +6659,7 @@ int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in, perms, flags & AT_SYMLINK_NOFOLLOW);
+  int r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW));
   if (r < 0)
     return r;
   return _setattrx(in, stx, mask, perms);
@@ -6740,16 +6739,14 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 
   unsigned mask = statx_to_mask(flags, want);
 
-  int r = path_walk(path, &in, perms, flags & AT_SYMLINK_NOFOLLOW, mask);
+  int r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask);
   if (r < 0)
     return r;
 
-  if (mask && !in->caps_issued_mask(mask)) {
-    r = _getattr(in, mask, perms);
-    if (r < 0) {
-      ldout(cct, 3) << "statx exit on error!" << dendl;
-      return r;
-    }
+  r = _getattr(in, mask, perms);
+  if (r < 0) {
+    ldout(cct, 3) << "statx exit on error!" << dendl;
+    return r;
   }
 
   fill_statx(in, mask, stx);
@@ -6844,12 +6841,10 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   /* These are always considered to be available */
   stx->stx_dev = in->snapid;
   stx->stx_blksize = MAX(in->layout.stripe_unit, 4096);
-  stx->stx_mode = S_IFMT & in->mode;
 
-  if (use_faked_inos())
-   stx->stx_ino = in->faked_ino;
-  else
-    stx->stx_ino = in->ino;
+  /* Type bits are always set, even when CEPH_STATX_MODE is not */
+  stx->stx_mode = S_IFMT & in->mode;
+  stx->stx_ino = use_faked_inos() ? in->faked_ino : (ino_t)in->ino;
   stx->stx_rdev = in->rdev;
   stx->stx_mask |= (CEPH_STATX_INO|CEPH_STATX_RDEV);
 
@@ -6868,14 +6863,8 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 
   if (mask & CEPH_CAP_FILE_SHARED) {
 
-    if (in->ctime > in->mtime)
-      in->ctime.to_timespec(&stx->stx_ctime);
-    else
-      in->mtime.to_timespec(&stx->stx_ctime);
-
     in->atime.to_timespec(&stx->stx_atime);
     in->mtime.to_timespec(&stx->stx_mtime);
-    stx->stx_version = in->change_attr;
 
     if (in->is_dir()) {
       if (cct->_conf->client_dirsize_rbytes)
@@ -6887,9 +6876,20 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
       stx->stx_size = in->size;
       stx->stx_blocks = (in->size + 511) >> 9;
     }
-    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|CEPH_STATX_CTIME|
-		      CEPH_STATX_SIZE|CEPH_STATX_BLOCKS|CEPH_STATX_VERSION);
+    stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|
+		      CEPH_STATX_SIZE|CEPH_STATX_BLOCKS);
   }
+
+  /* Change time and change_attr both require all shared caps to view */
+  if ((mask & CEPH_STAT_CAP_INODE_ALL) == CEPH_STAT_CAP_INODE_ALL) {
+    stx->stx_version = in->change_attr;
+    if (in->ctime > in->mtime)
+      in->ctime.to_timespec(&stx->stx_ctime);
+    else
+      in->mtime.to_timespec(&stx->stx_ctime);
+    stx->stx_mask |= (CEPH_STATX_CTIME|CEPH_STATX_VERSION);
+  }
+
 }
 
 void Client::touch_dn(Dentry *dn)
@@ -8101,7 +8101,7 @@ int Client::close(int fd)
 // ------------
 // read, write
 
-loff_t Client::lseek(int fd, loff_t offset, int whence, const UserPerm& perms)
+loff_t Client::lseek(int fd, loff_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "lseek" << std::endl;
@@ -8116,17 +8116,13 @@ loff_t Client::lseek(int fd, loff_t offset, int whence, const UserPerm& perms)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
-  return _lseek(f, offset, whence, perms);
+  return _lseek(f, offset, whence);
 }
 
-loff_t Client::_lseek(Fh *f, loff_t offset, int whence, const UserPerm& perms)
+loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 {
   Inode *in = f->inode.get();
   int r;
-
-  if (!may_open(f->inode.get(), f->flags, perms)) {
-    return -EPERM;
-  }
 
   switch (whence) {
   case SEEK_SET:
@@ -8138,7 +8134,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence, const UserPerm& perms)
     break;
 
   case SEEK_END:
-    r = _getattr(in, CEPH_STAT_CAP_SIZE, perms);
+    r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
     if (r < 0)
       return r;
     f->pos = in->size + offset;
@@ -8685,7 +8681,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * change out from under us.
      */
     if (f->flags & O_APPEND) {
-      int r = _lseek(f, 0, SEEK_END, f->actor_perms);
+      int r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
@@ -9904,7 +9900,7 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
   return in;
 }
 
-int Client::_ll_getattr(Inode *in, const UserPerm& perms)
+int Client::_ll_getattr(Inode *in, int caps, const UserPerm& perms)
 {
   vinodeno_t vino = _get_vino(in);
 
@@ -9915,14 +9911,14 @@ int Client::_ll_getattr(Inode *in, const UserPerm& perms)
   if (vino.snapid < CEPH_NOSNAP)
     return 0;
   else
-    return _getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
+    return _getattr(in, caps, perms);
 }
 
 int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
-  int res = _ll_getattr(in, perms);
+  int res = _ll_getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
 
   if (res == 0)
     fill_stat(in, attr);
@@ -9939,7 +9935,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
   unsigned mask = statx_to_mask(flags, want);
 
   if (mask && !in->caps_issued_mask(mask))
-    res = _ll_getattr(in, perms);
+    res = _ll_getattr(in, mask, perms);
 
   if (res == 0)
     fill_statx(in, mask, stx);
@@ -11705,15 +11701,14 @@ out:
   return r;
 }
 
-loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence,
-			const UserPerm& perms)
+loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "ll_lseek" << std::endl;
   tout(cct) << offset << std::endl;
   tout(cct) << whence << std::endl;
 
-  return _lseek(fh, offset, whence, perms);
+  return _lseek(fh, offset, whence);
 }
 
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
