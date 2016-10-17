@@ -5,6 +5,8 @@ overrides:
         debug rgw: 20
         debug ms: 1
 tasks:
+- install:
+- ceph:
 - rgw:
     default_idle_timeout: 3600
     client.0: null
