@@ -173,7 +173,7 @@ bool ObjectRecorder::close() {
 
   assert(!m_object_closed);
   m_object_closed = true;
-  return m_in_flight_tids.empty() && !m_aio_scheduled;
+  return (m_in_flight_tids.empty() && !m_in_flight_flushes && !m_aio_scheduled);
 }
 
 void ObjectRecorder::handle_append_task() {
