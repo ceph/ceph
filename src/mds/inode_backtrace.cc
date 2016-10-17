@@ -130,6 +130,8 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
     comparator = 1;
   else if (ancestors[0].version < other.ancestors[0].version)
     comparator = -1;
+  if (ancestors[0].dirino != other.ancestors[0].dirino)
+    *divergent = true;
   for (int i = 1; i < min_size; ++i) {
     if (*divergent) {
       /**
