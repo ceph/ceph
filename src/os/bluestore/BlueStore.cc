@@ -8352,7 +8352,6 @@ int BlueStore::_clone(TransContext *txc,
     return -EINVAL;
   }
 
-  bufferlist bl;
   newo->exists = true;
   _assign_nid(txc, newo);
 
@@ -8364,6 +8363,7 @@ int BlueStore::_clone(TransContext *txc,
   if (g_conf->bluestore_clone_cow) {
     _do_clone_range(txc, c, oldo, newo, 0, oldo->onode.size, 0);
   } else {
+    bufferlist bl;
     r = _do_read(c.get(), oldo, 0, oldo->onode.size, bl, 0);
     if (r < 0)
       goto out;
@@ -8391,13 +8391,13 @@ int BlueStore::_clone(TransContext *txc,
     get_omap_tail(oldo->onode.omap_head, &tail);
     it->lower_bound(head);
     while (it->valid()) {
-      string key;
       if (it->key() >= tail) {
 	dout(30) << __func__ << "  reached tail" << dendl;
 	break;
       } else {
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
+        string key;
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
@@ -8501,7 +8501,8 @@ int BlueStore::_do_clone_range(
     if (e.blob->get_blob().is_compressed()) {
       txc->statfs_delta.compressed_original() += ne->length;
       if (blob_duped){
-        txc->statfs_delta.compressed() += cb->get_blob().get_compressed_payload_length();;
+        txc->statfs_delta.compressed() +=
+          cb->get_blob().get_compressed_payload_length();
       }
     }
     dout(20) << __func__ << "  dst " << *ne << dendl;
@@ -8532,7 +8533,6 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
-  bufferlist bl;
 
   if (srcoff + length > oldo->onode.size) {
     r = -EINVAL;
@@ -8546,6 +8546,7 @@ int BlueStore::_clone_range(TransContext *txc,
     _do_zero(txc, c, newo, dstoff, length);
     _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
   } else {
+    bufferlist bl;
     r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
     if (r < 0)
       goto out;
@@ -8569,24 +8570,28 @@ int BlueStore::_clone_range(TransContext *txc,
  * Once the move_info is traversed completely, delete the src object.
  */
 int BlueStore::_move_ranges_destroy_src(TransContext *txc,
-			    CollectionRef& c,
-			    OnodeRef& srco,
-			    OnodeRef& baseo,
-			    const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info)
+  CollectionRef& c,
+  OnodeRef& srco,
+  OnodeRef& baseo,
+  const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info)
 {
-  dout(15) << __func__ << " " << c->cid << " " << srco->oid << " -> " << baseo->oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " "
+           << srco->oid << " -> " << baseo->oid
+           << dendl;
 
   int r = 0;
 
-  //Traverse move_info completely, move contents from src object to base object.
+  // Traverse move_info completely, move contents from src object
+  // to base object.
   for (unsigned i = 0; i < move_info.size(); ++i) {
      uint64_t srcoff = move_info[i].get<0>();
      uint64_t dstoff = move_info[i].get<1>();
      uint64_t len = move_info[i].get<2>();
 
      dout(15) << __func__ << " " << c->cid << " " << srco->oid << " -> "
-     << baseo->oid << " from 0x" << std::hex << srcoff << "~" << len
-     << " to offset 0x" << dstoff << std::dec << dendl;
+              << baseo->oid << " from 0x" << std::hex << srcoff << "~" << len
+              << " to offset 0x" << dstoff << std::dec
+              << dendl;
 
      r = _clone_range(txc, c, srco, baseo, srcoff, len, dstoff);
      if (r < 0)
@@ -8709,12 +8714,11 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
 
     vector<ghobject_t> ls;
     ghobject_t next;
-    //Enumerate onodes in db, up to nonexistent_count + 1
+    // Enumerate onodes in db, up to nonexistent_count + 1
     // then check if all of them are marked as non-existent.
     // Bypass the check if returned number is greater than nonexistent_count
-    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(), true, nonexistent_count + 1,
-                          &ls, &next);
-
+    r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(), true,
+                         nonexistent_count + 1, &ls, &next);
     if (r >= 0) {
       bool exists = false; //ls.size() > nonexistent_count;
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
