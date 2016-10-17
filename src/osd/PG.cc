@@ -948,7 +948,7 @@ void PG::clear_primary_state()
 
   snap_trimq.clear();
 
-  finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
+  finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
 
   missing_loc.clear();
 
