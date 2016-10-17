@@ -122,6 +122,7 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
                                bool *equivalent, bool *divergent) const
 {
   int min_size = MIN(ancestors.size(),other.ancestors.size());
+  *equivalent = true;
   *divergent = false;
   if (min_size == 0)
     return 0;
@@ -166,7 +167,7 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
       comparator = -1;
     }
   }
-  if (!*divergent)
-    *equivalent = true;
+  if (*divergent)
+    *equivalent = false;
   return comparator;
 }
