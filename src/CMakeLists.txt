@@ -212,6 +212,7 @@ endif(HAVE_GOOD_YASM_ELF64)
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
+  common/AsyncOpTracker.cc
   common/DecayCounter.cc
   common/LogClient.cc
   common/LogEntry.cc

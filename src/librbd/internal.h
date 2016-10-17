@@ -134,8 +134,9 @@ namespace librbd {
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
 
-  int remove(librados::IoCtx& io_ctx, const char *imgname,
-	     ProgressContext& prog_ctx, bool force=false);
+  int remove(librados::IoCtx& io_ctx, const std::string &image_name,
+             const std::string &image_id, ProgressContext& prog_ctx,
+             bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,

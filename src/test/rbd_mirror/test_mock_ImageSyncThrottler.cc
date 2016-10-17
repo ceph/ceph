@@ -101,7 +101,6 @@ std::vector<MockImageSync *> MockImageSync::instances;
 
 // template definitions
 #include "tools/rbd_mirror/ImageSyncThrottler.cc"
-template class rbd::mirror::ImageSyncThrottler<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
