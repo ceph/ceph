@@ -522,9 +522,16 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     fuse_reply_entry(req, &fe);
   } else {
     fuse_reply_err(req, -r);
+
+    /*
+     * Many ll operations in libcephfs return an extra inode reference, but
+     * ll_link currently does not. Still, FUSE needs one for the new dentry,
+     * so we commandeer the reference taken earlier when ll_link is successful.
+     * On error however, we must put that reference.
+     */
+    cfuse->iput(in);
   }
 
-  cfuse->iput(in); // iputs required
   cfuse->iput(nin);
 }
 
