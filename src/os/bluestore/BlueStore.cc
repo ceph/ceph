@@ -2366,7 +2366,10 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
-    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
+    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply),
+    sync_transaction(cct->_conf->bluestore_sync_transaction),
+    sync_submit_transaction(cct->_conf->bluestore_sync_submit_transaction)
+
 {
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
@@ -6043,8 +6046,8 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
-      if (!g_conf->bluestore_sync_transaction) {
-	if (g_conf->bluestore_sync_submit_transaction) {
+      if (!sync_transaction) {
+	if (sync_submit_transaction) {
 	  _txc_finalize_kv(txc, txc->t);
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
@@ -6397,8 +6400,7 @@ void BlueStore::_kv_sync_thread()
       bdev->flush();
 
       uint64_t high_nid = 0, high_blobid = 0;
-      if (!g_conf->bluestore_sync_transaction &&
-	  !g_conf->bluestore_sync_submit_transaction) {
+      if (!sync_transaction && !sync_submit_transaction) {
 	for (auto txc : kv_committing) {
 	  _txc_finalize_kv(txc, txc->t);
 	  if (txc->last_nid > high_nid) {

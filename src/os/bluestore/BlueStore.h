@@ -1438,6 +1438,9 @@ private:
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
+  bool sync_transaction;  ///< see config option bluestore_sync_transaction
+  bool sync_submit_transaction;  ///<see config option bluestore_sync_submit_transction
+
   // compression options
   enum CompressionMode {
     COMP_NONE,                  ///< compress never
