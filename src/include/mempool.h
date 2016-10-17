@@ -84,7 +84,7 @@ declarations are needed.
 For a class:
 
   struct Foo {
-    MEMBER_OF_MEMPOOL()
+    MEMPOOL_CLASS_HELPERS();
     ...
   };
 
