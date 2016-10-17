@@ -1573,7 +1573,7 @@ int Client::verify_reply_trace(int r,
 			 << " got_ino " << got_created_ino
 			 << " ino " << created_ino
 			 << dendl;
-	  r = _do_lookup(d->dir->parent_inode, d->name, &target, uid, gid);
+	  r = _do_lookup(d->dir->parent_inode, d->name, request->regetattr_mask, &target, uid, gid);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
 	  assert(0 == "how did this happen?  i want logs!");
@@ -5206,7 +5206,7 @@ int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
   /* 'name == NULL' means rmsnap */
   if (uid != 0 && name && (dir->mode & S_ISVTX)) {
     InodeRef otherin;
-    r = _lookup(dir, name, &otherin, uid, gid);
+    r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, uid, gid);
     if (r < 0)
       goto out;
     if (dir->uid != (uid_t)uid && otherin->uid != (uid_t)uid)
@@ -5836,7 +5836,7 @@ void Client::renew_caps(MetaSession *session)
 // ===============================================================
 // high level (POSIXy) interface
 
-int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
+int Client::_do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
 		       int uid, int gid)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
@@ -5847,9 +5847,8 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
   req->set_filepath(path);
   req->set_inode(dir);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
-      req->head.args.getattr.mask = DEBUG_GETATTR_CAPS;
-  else
-      req->head.args.getattr.mask = 0;
+      mask |= DEBUG_GETATTR_CAPS;
+  req->head.args.getattr.mask = mask;
 
   ldout(cct, 10) << "_do_lookup on " << path << dendl;
 
@@ -5858,8 +5857,8 @@ int Client::_do_lookup(Inode *dir, const string& name, InodeRef *target,
   return r;
 }
 
-int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
-		    int uid, int gid)
+int Client::_lookup(Inode *dir, const string& dname, int mask,
+		    InodeRef *target, int uid, int gid)
 {
   int r = 0;
   Dentry *dn = NULL;
@@ -5901,7 +5900,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
-    if (!dn->inode || dn->inode->is_any_caps()) {
+    if (!dn->inode || dn->inode->caps_issued_mask(mask)) {
       // is dn lease valid?
       utime_t now = ceph_clock_now(cct);
       if (dn->lease_mds >= 0 &&
@@ -5920,8 +5919,9 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
       }
       // dir lease?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
-	if (dn->cap_shared_gen == dir->shared_gen)
-	  goto hit_dn;
+	if (dn->cap_shared_gen == dir->shared_gen &&
+	    (!dn->inode || dn->inode->caps_issued_mask(mask)))
+	      goto hit_dn;
 	if (!dn->inode && (dir->flags & I_COMPLETE)) {
 	  ldout(cct, 10) << "_lookup concluded ENOENT locally for "
 			 << *dir << " dn '" << dname << "'" << dendl;
@@ -5940,7 +5940,7 @@ int Client::_lookup(Inode *dir, const string& dname, InodeRef *target,
     }
   }
 
-  r = _do_lookup(dir, dname, target, uid, gid);
+  r = _do_lookup(dir, dname, mask, target, uid, gid);
   goto done;
 
  hit_dn:
@@ -6010,6 +6010,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
   ldout(cct, 10) << "path_walk " << path << dendl;
 
   int symlinks = 0;
+  int caps = 0;
 
   unsigned i=0;
   while (i < path.depth() && cur) {
@@ -6021,8 +6022,9 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
       int r = may_lookup(cur.get(), uid, gid);
       if (r < 0)
 	return r;
+      caps = CEPH_CAP_AUTH_SHARED;
     }
-    int r = _lookup(cur.get(), dname, &next, uid, gid);
+    int r = _lookup(cur.get(), dname, caps, &next, uid, gid);
     if (r < 0)
       return r;
     // only follow trailing symlink if followsym.  always follow
@@ -6206,7 +6208,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   //get through existing parts of path
   filepath path(relpath);
   unsigned int i;
-  int r=0;
+  int r = 0, caps = 0;
   InodeRef cur, next;
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
@@ -6214,8 +6216,9 @@ int Client::mkdirs(const char *relpath, mode_t mode)
       r = may_lookup(cur.get(), uid, gid);
       if (r < 0)
 	break;
+      caps = CEPH_CAP_AUTH_SHARED;
     }
-    r = _lookup(cur.get(), path[i].c_str(), &next, uid, gid);
+    r = _lookup(cur.get(), path[i].c_str(), caps, &next, uid, gid);
     if (r < 0)
       break;
     cur.swap(next);
@@ -6638,7 +6641,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_nlink = in->nlink;
   st->st_uid = in->uid;
   st->st_gid = in->gid;
-  if (in->ctime.sec() > in->mtime.sec()) {
+  if (in->ctime > in->mtime) {
     stat_set_ctime_sec(st, in->ctime.sec());
     stat_set_ctime_nsec(st, in->ctime.nsec());
   } else {
@@ -9436,7 +9439,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   string dname(name);
   InodeRef in;
 
-  r = _lookup(parent, dname, &in, uid, gid);
+  r = _lookup(parent, dname, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
@@ -10759,7 +10762,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  res = _lookup(dir, name, &otherin, uid, gid);
+  res = _lookup(dir, name, 0, &otherin, uid, gid);
   if (res < 0)
     goto fail;
   req->set_other_inode(otherin.get());
@@ -10822,7 +10825,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  res = _lookup(dir, name, &in, uid, gid);
+  res = _lookup(dir, name, 0, &in, uid, gid);
   if (res < 0)
     goto fail;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) {
@@ -10919,13 +10922,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, &oldin, uid, gid);
+    res = _lookup(fromdir, fromname, 0, &oldin, uid, gid);
     if (res < 0)
       goto fail;
     req->set_old_inode(oldin.get());
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
-    res = _lookup(todir, toname, &otherin, uid, gid);
+    res = _lookup(todir, toname, 0, &otherin, uid, gid);
     if (res != 0 && res != -ENOENT) {
       goto fail;
     } else if (res == 0) {
@@ -11261,7 +11264,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   InodeRef in;
-  int r = _lookup(parent, name, &in, uid, gid);
+  int r = _lookup(parent, name, CEPH_STAT_CAP_INODE_ALL, &in, uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
