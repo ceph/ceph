@@ -1,0 +1,8 @@
+tasks:
+- install.upgrade:
+    osd.0:
+      branch: jewel
+- print: "**** done install.upgrade jewel"
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+- print: "**** done 02-partial-upgrade-jewel"

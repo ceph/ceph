@@ -1,0 +1,13 @@
+upgrade-sequence:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         branch: jewel
+       mon.b:
+         branch: jewel
+   - print: "**** done install.upgrade mon.a & mon.b to branch: jewel"
+   - ceph.restart: [osd.0, osd.1, osd.2, osd.3]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a, mon.b, mon.c, mds.a]
+   - print: "**** done ceph.restart all"

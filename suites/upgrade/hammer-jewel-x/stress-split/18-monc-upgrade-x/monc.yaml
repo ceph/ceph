@@ -1,0 +1,8 @@
+tasks:
+- ceph.restart:
+    daemons: [mon.c]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- print: "**** done ceph.restart mon.c"
+- ceph.wait_for_mon_quorum: [a, b, c]
+- print: "**** done 18-monc-upgrade-x/monc.yaml"
