@@ -5,8 +5,9 @@ set(librbd_test
   test_ImageWatcher.cc
   test_internal.cc
   test_mirroring.cc
-  test_MirroringWatcher.cc 
+  test_MirroringWatcher.cc
   test_ObjectMap.cc
+  test_Operations.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})
