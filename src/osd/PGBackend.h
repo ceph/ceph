@@ -63,6 +63,9 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     */
    class Listener {
    public:
+     /// Debugging
+     virtual DoutPrefixProvider *get_dpp() = 0;
+
      /// Recovery
 
      /**
