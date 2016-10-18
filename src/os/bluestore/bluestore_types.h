@@ -188,7 +188,7 @@ struct bluestore_extent_ref_map_t {
     }
   };
 
-  typedef bluestore_meta_other::map<uint64_t,record_t> map_t;
+  typedef mempool::bluestore_meta_other::map<uint64_t,record_t> map_t;
   map_t ref_map;
 
   void _check() const;

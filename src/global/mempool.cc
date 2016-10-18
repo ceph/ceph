@@ -35,7 +35,7 @@ mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 
   switch (ix) {
 #define P(x)								\
-  case x: pools[ix] = new mempool::pool_t(#x); break;
+  case mempool_##x: pools[ix] = new mempool::pool_t(#x); break;
     DEFINE_MEMORY_POOLS_HELPER(P);
 #undef P
   default: assert(0);
