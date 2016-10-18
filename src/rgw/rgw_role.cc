@@ -164,6 +164,46 @@ int RGWRole::update()
   return 0;
 }
 
+void RGWRole::set_perm_policy(const string& policy_name, const string& perm_policy)
+{
+  perm_policy_map[policy_name] = perm_policy;
+}
+
+vector<string> RGWRole::get_role_policy_names()
+{
+  vector<string> policy_names;
+  for (const auto& it : perm_policy_map)
+  {
+    policy_names.push_back(std::move(it.first));
+  }
+
+  return policy_names;
+}
+
+int RGWRole::get_role_policy(const string& policy_name, string& perm_policy)
+{
+  const auto it = perm_policy_map.find(policy_name);
+  if (it == perm_policy_map.end()) {
+    ldout(cct, 0) << "ERROR: Policy name: " << policy_name << " not found" << dendl;
+    return -EINVAL;
+  } else {
+    perm_policy = it->second;
+  }
+  return 0;
+}
+
+int RGWRole::delete_policy(const string& policy_name)
+{
+  const auto& it = perm_policy_map.find(policy_name);
+  if (it == perm_policy_map.end()) {
+    ldout(cct, 0) << "ERROR: Policy name: " << policy_name << " not found" << dendl;
+    return -EINVAL;
+  } else {
+    perm_policy_map.erase(it);
+  }
+  return 0;
+}
+
 void RGWRole::dump(Formatter *f) const
 {
   encode_json("id", id , f);
