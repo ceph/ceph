@@ -106,7 +106,7 @@ TEST_F(TestMockManagedLockReleaseRequest, Success) {
                                                        &m_lock_watcher,
                                                        mock_image_ctx.header_oid,
                                                        TEST_COOKIE,
-                                                       &ctx, false);
+                                                       &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -128,7 +128,7 @@ TEST_F(TestMockManagedLockReleaseRequest, UnlockError) {
                                                        &m_lock_watcher,
                                                        mock_image_ctx.header_oid,
                                                        TEST_COOKIE,
-                                                       &ctx, false);
+                                                       &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 

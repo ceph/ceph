@@ -109,7 +109,13 @@ template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
-  bool is_locked = m_managed_lock->is_locked();
+  bool is_locked;
+  {
+    Mutex::Locker l(m_lock);
+    assert(!m_managed_lock->is_shutdown());
+    is_locked = m_managed_lock->is_locked();
+  }
+
   FunctionContext *ctx =
     new FunctionContext([this, on_shut_down, is_locked](int r) {
       {
@@ -120,7 +126,7 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
       if (!is_locked || r == 0) {
         m_image_ctx.aio_work_queue->unblock_writes();
       }
-      if (is_locked) {
+      if (!is_locked) {
         m_image_ctx.image_watcher->flush(on_shut_down);
       } else {
         on_shut_down->complete(r);
@@ -128,9 +134,15 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
     });
 
   if (is_locked) {
-    release_lock(new FunctionContext([this, on_shut_down, ctx](int r) {
-      m_managed_lock->shut_down(ctx);
-    }), true);
+    FunctionContext *shutdown_ctx = new FunctionContext([this, ctx](int r) {
+        m_managed_lock->shut_down(ctx);
+    });
+    ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_image_ctx,
+                                                       m_managed_lock,
+                                                       shutdown_ctx, true);
+    Mutex::Locker l(m_lock);
+    m_image_ctx.op_work_queue->queue(
+        new C_SendRequest<ReleaseRequest<I>>(req), 0);
   } else {
     m_managed_lock->shut_down(ctx);
   }
@@ -138,6 +150,20 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
 
 template <typename I>
 void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
+  bool is_locked;
+  bool is_shutdown;
+  {
+    Mutex::Locker l(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+    is_locked = m_managed_lock->is_locked();
+    is_shutdown = m_managed_lock->is_shutdown();
+  }
+
+  if (is_locked) {
+    on_tried_lock->complete(is_shutdown ? -ESHUTDOWN : 0);
+    return;
+  }
+
   FunctionContext *ctx = new FunctionContext([this, on_tried_lock](int r) {
       this->handle_acquire_lock(r);
       if (on_tried_lock != nullptr) {
@@ -147,13 +173,27 @@ void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
   AcquireRequest<I>* req = AcquireRequest<I>::create(m_image_ctx,
                                                      m_managed_lock, ctx,
                                                      true);
-
+  Mutex::Locker l(m_lock);
   m_image_ctx.op_work_queue->queue(
       new C_SendRequest<AcquireRequest<I>>(req), 0);
 }
 
 template <typename I>
 void ExclusiveLock<I>::request_lock(Context *on_locked) {
+  bool is_locked;
+  bool is_shutdown;
+  {
+    Mutex::Locker l(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+    is_locked = m_managed_lock->is_locked();
+    is_shutdown = m_managed_lock->is_shutdown();
+  }
+
+  if (is_locked) {
+    on_locked->complete(is_shutdown ? -ESHUTDOWN : 0);
+    return;
+  }
+
   FunctionContext *ctx = new FunctionContext([this, on_locked](int r) {
       this->handle_acquire_lock(r);
       if (on_locked != nullptr) {
@@ -164,13 +204,27 @@ void ExclusiveLock<I>::request_lock(Context *on_locked) {
                                                      m_managed_lock, ctx,
                                                      false);
 
+  Mutex::Locker l(m_lock);
   m_image_ctx.op_work_queue->queue(
       new C_SendRequest<AcquireRequest<I>>(req), 0);
 }
 
 template <typename I>
-void ExclusiveLock<I>::release_lock(Context *on_released,
-                                    bool is_shutting_down) {
+void ExclusiveLock<I>::release_lock(Context *on_released) {
+  bool is_locked;
+  bool is_shutdown;
+  {
+    Mutex::Locker l(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
+    is_locked = m_managed_lock->is_locked();
+    is_shutdown = m_managed_lock->is_shutdown();
+  }
+
+  if (!is_locked) {
+    on_released->complete(is_shutdown ? -ESHUTDOWN : 0);
+    return;
+  }
+
   FunctionContext *ctx = new FunctionContext([this, on_released](int r) {
       this->handle_release_lock(r);
       if (on_released != nullptr) {
@@ -179,8 +233,8 @@ void ExclusiveLock<I>::release_lock(Context *on_released,
   });
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_image_ctx,
                                                      m_managed_lock, ctx,
-                                                     is_shutting_down);
-
+                                                     false);
+  Mutex::Locker l(m_lock);
   m_image_ctx.op_work_queue->queue(
       new C_SendRequest<ReleaseRequest<I>>(req), 0);
 }

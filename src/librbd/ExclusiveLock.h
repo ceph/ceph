@@ -41,7 +41,7 @@ public:
 
   void try_lock(Context *on_tried_lock);
   void request_lock(Context *on_locked);
-  void release_lock(Context *on_released, bool is_shutting_down = false);
+  void release_lock(Context *on_released);
 
   void reacquire_lock(Context *on_reacquired = nullptr);
 

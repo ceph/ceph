@@ -501,8 +501,7 @@ void Lock<L>::send_release_lock() {
 
   ReleaseRequest<L>* req = ReleaseRequest<L>::create(
     m_ioctx, m_watcher, m_oid, m_cookie,
-    util::create_context_callback<Lock<L>, &Lock<L>::handle_release_lock>(this),
-    false);
+    util::create_context_callback<Lock<L>, &Lock<L>::handle_release_lock>(this));
   m_work_queue->queue(new C_SendRequest<ReleaseRequest<L>>(req), 0);
 }
 
@@ -552,8 +551,7 @@ void Lock<L>::send_shutdown_release() {
 
   ReleaseRequest<L>* req = ReleaseRequest<L>::create(
     m_ioctx, m_watcher, m_oid, cookie,
-    util::create_context_callback<Lock, &Lock<L>::handle_shutdown_released>(this),
-    true);
+    util::create_context_callback<Lock, &Lock<L>::handle_shutdown_released>(this));
   req->send();
 }
 

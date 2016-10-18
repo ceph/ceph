@@ -24,20 +24,17 @@ ReleaseRequest<L>* ReleaseRequest<L>::create(librados::IoCtx& ioctx,
                                        L *watcher,
                                        const string& oid,
                                        const string &cookie,
-                                       Context *on_finish,
-                                       bool shutting_down) {
-  return new ReleaseRequest(ioctx, watcher, oid, cookie,
-                            on_finish, shutting_down);
+                                       Context *on_finish) {
+  return new ReleaseRequest(ioctx, watcher, oid, cookie, on_finish);
 }
 
 template <typename L>
 ReleaseRequest<L>::ReleaseRequest(librados::IoCtx& ioctx, L *watcher,
                                   const string& oid, const string &cookie,
-                                  Context *on_finish, bool shutting_down)
+                                  Context *on_finish)
   : m_ioctx(ioctx), m_watcher(watcher), m_oid(oid), m_cookie(cookie),
     m_on_finish(new C_AsyncCallback<ContextWQ>(watcher->work_queue(),
-                                               on_finish)),
-    m_shutting_down(shutting_down) {
+                                               on_finish)) {
 }
 
 template <typename L>

@@ -36,9 +36,7 @@ struct MockWorkQueue {
   }
 };
 
-} // anonymous namespace
-
-struct MockManagedLockWatcher : public MockLockWatcher {
+struct MockManagedLockWatcher : public librbd::managed_lock::MockLockWatcher {
   MockWorkQueue *work_queue;
 
   MockManagedLockWatcher(Lock<MockManagedLockWatcher> *lock) {
@@ -52,6 +50,9 @@ struct MockManagedLockWatcher : public MockLockWatcher {
     delete work_queue;
   }
 };
+
+} // anonymous namespace
+
 
 template<typename T>
 struct BaseRequest {
@@ -592,10 +593,10 @@ TEST_F(TestMockManagedLock, RequestLockWatchRegisterError) {
 
   EXPECT_CALL(*mock_watcher, register_watch(_))
     .WillOnce(QueueContext(-EINVAL, mock_watcher->work_queue));
-  
+
   EXPECT_CALL(*mock_watcher, is_registered())
     .WillOnce(Return(false));
-  
+
   ASSERT_EQ(-EINVAL, when_request_lock(managed_lock));
   ASSERT_FALSE(is_lock_owner(managed_lock));
 
