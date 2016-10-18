@@ -2051,8 +2051,8 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
 
   if (dnl->is_primary()) {
     pi->update_backtrace();
-    mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     le->metablob.add_primary_dentry(straydn.get(), in.get(), true, true);
   } else {
     mdcache->predirty_journal_parents(mdr, &le->metablob, in.get(), NULL, PREDIRTY_PRIMARY);
@@ -2418,23 +2418,24 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     mdr->hold_rename_dir_mutex = false;
   }
 
-  if (straydn) {
-    mdcache->predirty_journal_parents(mdr, &le->metablob, oldin.get(), straydn->get_dir(),
-				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  }
   int predirty_dir = linkmerge ? 0 : PREDIRTY_DIR;
   int predirty_primary;
   if (!dest_dnl->is_null()) {
-    predirty_primary = dest_dnl->is_primary() ? PREDIRTY_PRIMARY : 0;
+    predirty_primary = straydn ? PREDIRTY_PRIMARY : 0;
     mdcache->predirty_journal_parents(mdr, &le->metablob, oldin.get(), destdn->get_dir(),
 				      predirty_dir|predirty_primary , -1);
   }
 
+  if (straydn) {
+    mdcache->predirty_journal_parents(mdr, &le->metablob, oldin.get(), straydn->get_dir(),
+				      PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  }
+
   predirty_primary = (src_dnl->is_primary() && srcdn->get_dir() != destdn->get_dir()) ? PREDIRTY_PRIMARY : 0;
-  mdcache->predirty_journal_parents(mdr, &le->metablob, srci.get(), destdn->get_dir(),
-				    predirty_dir|predirty_primary, 1);
   mdcache->predirty_journal_parents(mdr, &le->metablob, srci.get(), srcdn->get_dir(),
 				    predirty_dir|predirty_primary, -1);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, srci.get(), destdn->get_dir(),
+				    predirty_dir|predirty_primary, 1);
 
   if (!linkmerge) {
     if (dest_dnl->is_remote()) {
