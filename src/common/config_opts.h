@@ -1011,8 +1011,7 @@ OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
-OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
-OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
 OPTION(bluestore_wal_threads, OPT_INT, 4)
 OPTION(bluestore_wal_thread_timeout, OPT_INT, 30)

@@ -6162,15 +6162,10 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
-      if (!g_conf->bluestore_sync_transaction) {
-	if (g_conf->bluestore_sync_submit_transaction) {
-	  _txc_finalize_kv(txc, txc->t);
-	  int r = db->submit_transaction(txc->t);
-	  assert(r == 0);
-	}
-      } else {
+      if (g_conf->bluestore_sync_submit_transaction) {
 	_txc_finalize_kv(txc, txc->t);
-	int r = db->submit_transaction_sync(txc->t);
+	txc->kv_submitted = true;
+	int r = db->submit_transaction(txc->t);
 	assert(r == 0);
       }
       {
@@ -6529,9 +6524,9 @@ void BlueStore::_kv_sync_thread()
       bdev->flush();
 
       uint64_t high_nid = 0, high_blobid = 0;
-      if (!g_conf->bluestore_sync_transaction &&
-	  !g_conf->bluestore_sync_submit_transaction) {
-	for (auto txc : kv_committing) {
+      bool any_to_submit = false;
+      for (auto txc : kv_committing) {
+	if (!txc->kv_submitted) {
 	  _txc_finalize_kv(txc, txc->t);
 	  if (txc->last_nid > high_nid) {
 	    high_nid = txc->last_nid;
@@ -6540,8 +6535,11 @@ void BlueStore::_kv_sync_thread()
 	    high_blobid = txc->last_blobid;
 	  }
           txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	  any_to_submit = true;
 	}
-	if (!kv_committing.empty()) {
+      }
+      if (any_to_submit) {
+	if (high_nid || high_blobid) {
 	  TransContext *first_txc = kv_committing.front();
 	  std::lock_guard<std::mutex> l(id_lock);
 	  if (high_nid + g_conf->bluestore_nid_prealloc/2 > nid_max) {
@@ -6560,8 +6558,11 @@ void BlueStore::_kv_sync_thread()
 	  }
 	}
 	for (auto txc : kv_committing) {
-	  int r = db->submit_transaction(txc->t);
-	  assert(r == 0);
+	  if (!txc->kv_submitted) {
+	    txc->kv_submitted = true;
+	    int r = db->submit_transaction(txc->t);
+	    assert(r == 0);
+	  }
 	}
       }
 

@@ -1160,6 +1160,8 @@ public:
     bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
     vector<OnodeRef> wal_op_onodes;
 
+    bool kv_submitted = false; ///< true when we've been submitted to kv db
+
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
       enum {
