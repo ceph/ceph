@@ -125,6 +125,10 @@
     role delete                delete a role
     role get                   get a role
     role modify                modify the assume role policy of an existing role
+    role-policy put            add/update permission policy to role
+    role-policy list           list policies attached to a role
+    role-policy get            get the specified inline policy document embedded with the given role
+    role-policy delete         delete policy attached to a role
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -230,6 +234,8 @@
      --role-name               name of the role to create
      --path                    path to the role
      --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role
+     --policy-name             name of the policy document
+     --policy-doc              permission policy document
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   

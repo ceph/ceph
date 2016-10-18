@@ -14,6 +14,7 @@ class RGWRole
   string arn;
   string creation_date;
   string trust_policy;
+  map<string, string> perm_policy_map;
 
   int store_info(bool exclusive);
   int store_name(bool exclusive);
@@ -55,6 +56,7 @@ public:
     ::encode(arn, bl);
     ::encode(creation_date, bl);
     ::encode(trust_policy, bl);
+    ::encode(perm_policy_map, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -66,6 +68,7 @@ public:
     ::decode(arn, bl);
     ::decode(creation_date, bl);
     ::decode(trust_policy, bl);
+    ::decode(perm_policy_map, bl);
     DECODE_FINISH(bl);
   }
 
@@ -79,6 +82,10 @@ public:
   int get();
   int update();
   void update_trust_policy(string& trust_policy);
+  void set_perm_policy(const string& policy_name, const string& perm_policy);
+  vector<string> get_role_policy_names();
+  int get_role_policy(const string& policy_name, string& perm_policy);
+  int delete_policy(const string& policy_name);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
