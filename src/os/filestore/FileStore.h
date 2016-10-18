@@ -67,6 +67,31 @@ class FileStoreBackend;
 
 #define CEPH_FS_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(1, "sharded objects")
 
+enum {
+  l_filestore_first = 84000,
+  l_filestore_journal_queue_ops,
+  l_filestore_journal_queue_bytes,
+  l_filestore_journal_ops,
+  l_filestore_journal_bytes,
+  l_filestore_journal_latency,
+  l_filestore_journal_wr,
+  l_filestore_journal_wr_bytes,
+  l_filestore_journal_full,
+  l_filestore_committing,
+  l_filestore_commitcycle,
+  l_filestore_commitcycle_interval,
+  l_filestore_commitcycle_latency,
+  l_filestore_op_queue_max_ops,
+  l_filestore_op_queue_ops,
+  l_filestore_ops,
+  l_filestore_op_queue_max_bytes,
+  l_filestore_op_queue_bytes,
+  l_filestore_bytes,
+  l_filestore_apply_latency,
+  l_filestore_queue_transaction_latency_avg,
+  l_filestore_last,
+};
+
 class FSSuperblock {
 public:
   CompatSet compat_features;
