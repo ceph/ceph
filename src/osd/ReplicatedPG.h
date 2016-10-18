@@ -239,6 +239,10 @@ public:
   }
 
   /// Listener methods
+  DoutPrefixProvider *get_dpp() override {
+    return this;
+  }
+
   void on_local_recover(
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,

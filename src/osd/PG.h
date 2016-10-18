@@ -191,7 +191,7 @@ struct PGPool {
  *
  */
 
-class PG : DoutPrefixProvider {
+class PG : protected DoutPrefixProvider {
 protected:
   OSDService *osd;
   CephContext *cct;
