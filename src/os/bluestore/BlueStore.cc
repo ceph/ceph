@@ -5494,7 +5494,6 @@ int BlueStore::_collection_list(
 
   if (start == ghobject_t::get_max() ||
     start.hobj.is_max()) {
-    *pnext = ghobject_t::get_max();
     goto out;
   }
   get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
@@ -5576,11 +5575,11 @@ int BlueStore::_collection_list(
     ls->push_back(oid);
     it->next();
   }
+out:
   if (!set_next) {
     *pnext = ghobject_t::get_max();
   }
 
-out:
   return r;
 }
 
