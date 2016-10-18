@@ -1,6 +1,6 @@
 add_library(rbd_types STATIC
   journal/Types.cc
-  mirroring_watcher/Types.cc 
+  mirroring_watcher/Types.cc
   WatchNotifyTypes.cc)
 
 set(librbd_internal_srcs
@@ -22,9 +22,9 @@ set(librbd_internal_srcs
   Journal.cc
   LibrbdAdminSocketHook.cc
   LibrbdWriteback.cc
-  MirroringWatcher.cc 
+  MirroringWatcher.cc
   ObjectMap.cc
-  ObjectWatcher.cc 
+  ObjectWatcher.cc
   Operations.cc
   Utils.cc
   cache/ImageWriteback.cc
@@ -47,6 +47,7 @@ set(librbd_internal_srcs
   journal/CreateRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
+  journal/Utils.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
   object_map/CreateRequest.cc
