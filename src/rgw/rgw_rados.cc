@@ -9978,7 +9978,7 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, s
     olh_bl.append(olh_tag.c_str(), olh_tag.size());
     op.setxattr(RGW_ATTR_OLH_ID_TAG, olh_bl);
 
-    state.attrset[RGW_ATTR_OLH_ID_TAG] = bl;
+    state.attrset[RGW_ATTR_OLH_ID_TAG] = olh_bl;
     state.olh_tag = olh_bl;
     state.is_olh = true;
 
