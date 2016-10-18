@@ -2243,7 +2243,8 @@ public:
     map<epoch_t,pg_interval_t> &past_intervals,
     bool dirty_big_info,
     bool dirty_epoch,
-    bool try_fast_info);
+    bool try_fast_info,
+    PerfCounters *logger = NULL);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   eversion_t get_next_version() const {
