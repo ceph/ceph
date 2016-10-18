@@ -1398,6 +1398,8 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   assert(!h->file->deleted);
   assert(h->file->num_readers.load() == 0);
 
+  h->buffer_appender.flush();
+
   bool buffered;
   if (h->file->fnode.ino == 1)
     buffered = false;
@@ -1529,11 +1531,28 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     t.substr_of(bl, bloff, x_len);
     unsigned tail = x_len & ~super.block_mask();
     if (tail) {
+      size_t zlen = super.block_size - tail;
       dout(20) << __func__ << " caching tail of 0x"
-               << std::hex << tail << std::dec
-	       << " and padding block with zeros" << dendl;
+               << std::hex << tail
+	       << " and padding block with 0x" << zlen
+	       << std::dec << dendl;
       h->tail_block.substr_of(bl, bl.length() - tail, tail);
-      t.append_zero(super.block_size - tail);
+      if (h->file->fnode.ino > 1) {
+	// we are using the page_aligned_appender, and can safely use
+	// the tail of the raw buffer.
+	const bufferptr &last = t.back();
+	if (last.unused_tail_length() != zlen) {
+	  derr << " wtf, last is " << last << " from " << t << dendl;
+	}
+	assert(last.unused_tail_length() == zlen);
+	bufferptr z = last;
+	z.set_offset(last.offset() + last.length());
+	z.set_length(zlen);
+	z.zero();
+	t.append(z, 0, zlen);
+      } else {
+	t.append_zero(zlen);
+      }
     }
     bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
     bloff += x_len;
@@ -1584,6 +1603,7 @@ void BlueFS::wait_for_aio(FileWriter *h)
 
 int BlueFS::_flush(FileWriter *h, bool force)
 {
+  h->buffer_appender.flush();
   uint64_t length = h->buffer.length();
   uint64_t offset = h->pos;
   if (!force &&
@@ -1616,6 +1636,8 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 
   // we never truncate internal log files
   assert(h->file->fnode.ino > 1);
+
+  h->buffer_appender.flush();
 
   // truncate off unflushed data?
   if (h->pos < offset &&

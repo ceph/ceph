@@ -82,5 +82,6 @@ class JournalPointer {
     ls.back()->back = 0xfeedbead;
   }
 };
+WRITE_CLASS_ENCODER(JournalPointer)
 
 #endif // JOURNAL_POINTER_H

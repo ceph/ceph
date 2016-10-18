@@ -28,6 +28,22 @@ struct inodeno_t {
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
 
+template<>
+struct denc_traits<inodeno_t> {
+  enum { supported = 2 };
+  enum { featured = false };
+  enum { bounded = true };
+  static void bound_encode(const inodeno_t o, size_t& p) {
+    denc(o.val, p);
+  }
+  static void encode(const inodeno_t &o, buffer::list::contiguous_appender& p) {
+    denc(o.val, p);
+  }
+  static void decode(inodeno_t& o, buffer::ptr::iterator &p) {
+    denc(o.val, p);
+  }
+};
+
 inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;
 }

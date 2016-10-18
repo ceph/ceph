@@ -550,7 +550,7 @@ void TestMemIoCtxImpl::append_clone(bufferlist& src, bufferlist* dest) {
   if (src.length() > 0) {
     bufferlist::iterator iter = src.begin();
     buffer::ptr ptr;
-    iter.copy(src.length(), ptr);
+    iter.copy_deep(src.length(), ptr);
     dest->append(ptr);
   }
 }

@@ -114,6 +114,7 @@ public:
     uint64_t pos;           ///< start offset for buffer
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
+    bufferlist::page_aligned_appender buffer_appender;  //< for const char* only
     int writer_type = 0;    ///< WRITER_*
 
     std::mutex lock;
@@ -121,24 +122,29 @@ public:
 
     FileWriter(FileRef f)
       : file(f),
-	pos(0) {
+	pos(0),
+	buffer_appender(buffer.get_page_aligned_appender()) {
       ++file->num_writers;
     }
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
       --file->num_writers;
     }
+
+    // note: BlueRocksEnv uses this append exclusively, so it's safe
+    // to use buffer_appender exclusively here (e.g., it's notion of
+    // offset will remain accurate).
     void append(const char *buf, size_t len) {
-      buffer.append(buf, len);
+      buffer_appender.append(buf, len);
     }
+
+    // note: used internally only, for ino 1 or 0.
     void append(bufferlist& bl) {
       buffer.claim_append(bl);
     }
-    void append(bufferptr& bp) {
-      buffer.append(bp);
-    }
 
     uint64_t get_effective_write_pos() {
+      buffer_appender.flush();
       return pos + buffer.length();
     }
   };

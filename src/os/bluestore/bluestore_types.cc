@@ -98,20 +98,6 @@ ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
 
 // cnode_t
 
-void bluestore_cnode_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(bits, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_cnode_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(bits, p);
-  DECODE_FINISH(p);
-}
-
 void bluestore_cnode_t::dump(Formatter *f) const
 {
   f->dump_unsigned("bits", bits);
@@ -122,29 +108,6 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t());
   o.push_back(new bluestore_cnode_t(0));
   o.push_back(new bluestore_cnode_t(123));
-}
-
-// bluestore_pextent_t
-
-void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl)
-{
-  size_t n = v.size();
-  small_encode_varint(n, bl);
-  for (auto e : v) {
-    e.encode(bl);
-  }
-}
-
-void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p)
-{
-  size_t n;
-  small_decode_varint(n, p);
-  v.clear();
-  v.reserve(n);
-  while (n--) {
-    v.push_back(bluestore_pextent_t());
-    ::decode(v.back(), p);
-  }
 }
 
 // bluestore_extent_ref_map_t
@@ -334,41 +297,6 @@ bool bluestore_extent_ref_map_t::intersects(
   return true;  // intersects p!
 }
 
-void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
-{
-  uint32_t n = ref_map.size();
-  small_encode_varint(n, bl);
-  if (n) {
-    auto p = ref_map.begin();
-    small_encode_varint_lowz(p->first, bl);
-    p->second.encode(bl);
-    int64_t pos = p->first;
-    while (--n) {
-      ++p;
-      small_encode_varint_lowz(p->first - pos, bl);
-      p->second.encode(bl);
-      pos = p->first;
-    }
-  }
-}
-
-void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
-{
-  uint32_t n;
-  small_decode_varint(n, p);
-  if (n) {
-    int64_t pos;
-    small_decode_varint_lowz(pos, p);
-    ref_map[pos].decode(p);
-    while (--n) {
-      int64_t delta;
-      small_decode_varint_lowz(delta, p);
-      pos += delta;
-      ref_map[pos].decode(p);
-    }
-  }
-}
-
 void bluestore_extent_ref_map_t::dump(Formatter *f) const
 {
   f->open_array_section("ref_map");
@@ -458,59 +386,6 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
   }
 
   return s;
-}
-
-void bluestore_blob_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  small_encode(extents, bl);
-  small_encode_varint(flags, bl);
-  if (is_shared()) {
-    small_encode_varint(sbid, bl);
-  }
-  if (is_compressed()) {
-    small_encode_varint_lowz(compressed_length_orig, bl);
-    small_encode_varint_lowz(compressed_length, bl);
-  }
-  if (has_csum()) {
-    ::encode(csum_type, bl);
-    ::encode(csum_chunk_order, bl);
-    small_encode_buf_lowz(csum_data, bl);
-  }
-  if (has_unused()) {
-    ::encode(unused_uint_t(unused.to_ullong()), bl);
-  }
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_blob_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  small_decode(extents, p);
-  small_decode_varint(flags, p);
-  if (is_shared()) {
-    small_decode_varint(sbid, p);
-  }
-  if (is_compressed()) {
-    small_decode_varint_lowz(compressed_length_orig, p);
-    small_decode_varint_lowz(compressed_length, p);
-  } else {
-    compressed_length_orig = compressed_length = 0;
-  }
-  if (has_csum()) {
-    ::decode(csum_type, p);
-    ::decode(csum_chunk_order, p);
-    small_decode_buf_lowz(csum_data, p);
-  } else {
-    csum_type = CSUM_NONE;
-    csum_chunk_order = 0;
-  }
-  if (has_unused()) {
-    unused_uint_t val;
-    ::decode(val, p);
-    unused = unused_t(val);
-  }
-  DECODE_FINISH(p);
 }
 
 void bluestore_blob_t::dump(Formatter *f) const
@@ -646,19 +521,6 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 }
 
 // bluestore_shared_blob_t
-void bluestore_shared_blob_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(ref_map, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_shared_blob_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(ref_map, p);
-  DECODE_FINISH(p);
-}
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
@@ -690,34 +552,6 @@ ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si)
 {
   return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes, "
 	     << std::dec << si.extents << " extents)";
-}
-
-void bluestore_onode_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(nid, bl);
-  ::encode(size, bl);
-  ::encode(attrs, bl);
-  ::encode(omap_head, bl);
-  ::encode(extent_map_shards, bl);
-  ::encode(expected_object_size, bl);
-  ::encode(expected_write_size, bl);
-  ::encode(alloc_hint_flags, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_onode_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(nid, p);
-  ::decode(size, p);
-  ::decode(attrs, p);
-  ::decode(omap_head, p);
-  ::decode(extent_map_shards, p);
-  ::decode(expected_object_size, p);
-  ::decode(expected_write_size, p);
-  ::decode(alloc_hint_flags, p);
-  DECODE_FINISH(p);
 }
 
 void bluestore_onode_t::dump(Formatter *f) const
@@ -764,24 +598,6 @@ size_t bluestore_onode_t::get_preferred_csum_order() const
 
 // bluestore_wal_op_t
 
-void bluestore_wal_op_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(op, bl);
-  ::encode(extents, bl);
-  ::encode(data, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_wal_op_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(op, p);
-  ::decode(extents, p);
-  ::decode(data, p);
-  DECODE_FINISH(p);
-}
-
 void bluestore_wal_op_t::dump(Formatter *f) const
 {
   f->dump_unsigned("op", (int)op);
@@ -801,24 +617,6 @@ void bluestore_wal_op_t::generate_test_instances(list<bluestore_wal_op_t*>& o)
   o.back()->extents.push_back(bluestore_pextent_t(1, 2));
   o.back()->extents.push_back(bluestore_pextent_t(100, 5));
   o.back()->data.append("my data");
-}
-
-void bluestore_wal_transaction_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(seq, bl);
-  ::encode(ops, bl);
-  ::encode(released, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_wal_transaction_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(seq, p);
-  ::decode(ops, p);
-  ::decode(released, p);
-  DECODE_FINISH(p);
 }
 
 void bluestore_wal_transaction_t::dump(Formatter *f) const
@@ -850,22 +648,6 @@ void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_tra
   o.back()->ops.back().op = bluestore_wal_op_t::OP_WRITE;
   o.back()->ops.back().extents.push_back(bluestore_pextent_t(1,7));
   o.back()->ops.back().data.append("foodata");
-}
-
-void bluestore_compression_header_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(type, bl);
-  ::encode(length, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_compression_header_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(type, p);
-  ::decode(length, p);
-  DECODE_FINISH(p);
 }
 
 void bluestore_compression_header_t::dump(Formatter *f) const

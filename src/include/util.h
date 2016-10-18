@@ -69,6 +69,7 @@ struct ceph_data_stats
   }
 };
 typedef struct ceph_data_stats ceph_data_stats_t;
+WRITE_CLASS_ENCODER(ceph_data_stats)
 
 int get_fs_stats(ceph_data_stats_t &stats, const char *path);
 
