@@ -144,10 +144,10 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
 {
   os_commit_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_j_lat));
+      l_filestore_journal_latency));
   os_apply_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_apply_lat));
+      l_filestore_apply_latency));
 }
 
 
@@ -600,29 +600,29 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   }
 
   // initialize logger
-  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, internal_name, l_filestore_first, l_filestore_last);
 
-  plb.add_u64(l_os_jq_ops, "journal_queue_ops", "Operations in journal queue");
-  plb.add_u64_counter(l_os_j_ops, "journal_ops", "Total journal entries written");
-  plb.add_u64(l_os_jq_bytes, "journal_queue_bytes", "Size of journal queue");
-  plb.add_u64_counter(l_os_j_bytes, "journal_bytes", "Total operations size in journal");
-  plb.add_time_avg(l_os_j_lat, "journal_latency", "Average journal queue completing latency");
-  plb.add_u64_counter(l_os_j_wr, "journal_wr", "Journal write IOs");
-  plb.add_u64_avg(l_os_j_wr_bytes, "journal_wr_bytes", "Journal data written");
-  plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
-  plb.add_u64(l_os_oq_ops, "op_queue_ops", "Operations in writing to FS queue");
-  plb.add_u64_counter(l_os_ops, "ops", "Operations written to store");
-  plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
-  plb.add_u64(l_os_oq_bytes, "op_queue_bytes", "Size of writing to FS queue");
-  plb.add_u64_counter(l_os_bytes, "bytes", "Data written to store");
-  plb.add_time_avg(l_os_apply_lat, "apply_latency", "Apply latency");
-  plb.add_u64(l_os_committing, "committing", "Is currently committing");
+  plb.add_u64(l_filestore_journal_queue_ops, "journal_queue_ops", "Operations in journal queue");
+  plb.add_u64_counter(l_filestore_journal_ops, "journal_ops", "Total journal entries written");
+  plb.add_u64(l_filestore_journal_queue_bytes, "journal_queue_bytes", "Size of journal queue");
+  plb.add_u64_counter(l_filestore_journal_bytes, "journal_bytes", "Total operations size in journal");
+  plb.add_time_avg(l_filestore_journal_latency, "journal_latency", "Average journal queue completing latency");
+  plb.add_u64_counter(l_filestore_journal_wr, "journal_wr", "Journal write IOs");
+  plb.add_u64_avg(l_filestore_journal_wr_bytes, "journal_wr_bytes", "Journal data written");
+  plb.add_u64(l_filestore_op_queue_max_ops, "op_queue_max_ops", "Max operations in writing to FS queue");
+  plb.add_u64(l_filestore_op_queue_ops, "op_queue_ops", "Operations in writing to FS queue");
+  plb.add_u64_counter(l_filestore_ops, "ops", "Operations written to store");
+  plb.add_u64(l_filestore_op_queue_max_bytes, "op_queue_max_bytes", "Max data in writing to FS queue");
+  plb.add_u64(l_filestore_op_queue_bytes, "op_queue_bytes", "Size of writing to FS queue");
+  plb.add_u64_counter(l_filestore_bytes, "bytes", "Data written to store");
+  plb.add_time_avg(l_filestore_apply_latency, "apply_latency", "Apply latency");
+  plb.add_u64(l_filestore_committing, "committing", "Is currently committing");
 
-  plb.add_u64_counter(l_os_commit, "commitcycle", "Commit cycles");
-  plb.add_time_avg(l_os_commit_len, "commitcycle_interval", "Average interval between commits");
-  plb.add_time_avg(l_os_commit_lat, "commitcycle_latency", "Average latency of commit");
-  plb.add_u64_counter(l_os_j_full, "journal_full", "Journal writes while full");
-  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg", "Store operation queue latency");
+  plb.add_u64_counter(l_filestore_commitcycle, "commitcycle", "Commit cycles");
+  plb.add_time_avg(l_filestore_commitcycle_interval, "commitcycle_interval", "Average interval between commits");
+  plb.add_time_avg(l_filestore_commitcycle_latency, "commitcycle_latency", "Average latency of commit");
+  plb.add_u64_counter(l_filestore_journal_full, "journal_full", "Journal writes while full");
+  plb.add_time_avg(l_filestore_queue_transaction_latency_avg, "queue_transaction_latency_avg", "Store operation queue latency");
 
   logger = plb.create_perf_counters();
 
@@ -1947,8 +1947,8 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
   osr->queue(o);
 
-  logger->inc(l_os_ops);
-  logger->inc(l_os_bytes, o->bytes);
+  logger->inc(l_filestore_ops);
+  logger->inc(l_filestore_bytes, o->bytes);
 
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
@@ -1963,16 +1963,16 @@ void FileStore::op_queue_reserve_throttle(Op *o)
   throttle_ops.get();
   throttle_bytes.get(o->bytes);
 
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  logger->set(l_filestore_op_queue_ops, throttle_ops.get_current());
+  logger->set(l_filestore_op_queue_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
   throttle_ops.put();
   throttle_bytes.put(o->bytes);
-  logger->set(l_os_oq_ops, throttle_ops.get_current());
-  logger->set(l_os_oq_bytes, throttle_bytes.get_current());
+  logger->set(l_filestore_op_queue_ops, throttle_ops.get_current());
+  logger->set(l_filestore_op_queue_bytes, throttle_bytes.get_current());
 }
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
@@ -2017,7 +2017,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   // called with tp lock held
   op_queue_release_throttle(o);
 
-  logger->tinc(l_os_apply_lat, lat);
+  logger->tinc(l_filestore_apply_latency, lat);
 
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
@@ -2124,7 +2124,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     }
     submit_manager.op_submit_finish(op_num);
     utime_t end = ceph_clock_now(g_ceph_context);
-    logger->tinc(l_os_queue_lat, end - start);
+    logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
 
@@ -2152,7 +2152,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
       apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
     utime_t end = ceph_clock_now(g_ceph_context);
-    logger->tinc(l_os_queue_lat, end - start);
+    logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
     return 0;
   }
 
@@ -2189,7 +2189,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   apply_manager.op_apply_finish(op);
 
   utime_t end = ceph_clock_now(g_ceph_context);
-  logger->tinc(l_os_queue_lat, end - start);
+  logger->tinc(l_filestore_queue_transaction_latency_avg, end - start);
   return r;
 }
 
@@ -3918,7 +3918,7 @@ void FileStore::sync_entry()
       timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
 
-      logger->set(l_os_committing, 1);
+      logger->set(l_filestore_committing, 1);
 
       dout(15) << "sync_entry committing " << cp << dendl;
       stringstream errstream;
@@ -3991,16 +3991,16 @@ void FileStore::sync_entry()
       utime_t dur = done - startwait;
       dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
 
-      logger->inc(l_os_commit);
-      logger->tinc(l_os_commit_lat, lat);
-      logger->tinc(l_os_commit_len, dur);
+      logger->inc(l_filestore_commitcycle);
+      logger->tinc(l_filestore_commitcycle_latency, lat);
+      logger->tinc(l_filestore_commitcycle_interval, dur);
 
       apply_manager.commit_finish();
       if (!m_disable_wbthrottle) {
         wbthrottle.clear();
       }
 
-      logger->set(l_os_committing, 0);
+      logger->set(l_filestore_committing, 0);
 
       // remove old snaps?
       if (backend->can_checkpoint()) {
@@ -5687,8 +5687,8 @@ int FileStore::set_throttle_params()
     g_conf->filestore_queue_max_ops,
     &ss);
 
-  logger->set(l_os_oq_max_ops, throttle_ops.get_max());
-  logger->set(l_os_oq_max_bytes, throttle_bytes.get_max());
+  logger->set(l_filestore_op_queue_max_ops, throttle_ops.get_max());
+  logger->set(l_filestore_op_queue_max_bytes, throttle_bytes.get_max());
 
   if (!valid) {
     derr << "tried to set invalid params: "
