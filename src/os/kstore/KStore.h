@@ -126,7 +126,7 @@ public:
     int trim(int max=-1);
   };
 
-  struct Collection {
+  struct Collection : public CollectionImpl {
     KStore *store;
     coll_t cid;
     kstore_cnode_t cnode;
@@ -137,6 +137,10 @@ public:
     OnodeHashLRU onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
+
+    const coll_t &get_cid() override {
+      return cid;
+    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -151,7 +155,7 @@ public:
 
     Collection(KStore *ns, coll_t c);
   };
-  typedef ceph::shared_ptr<Collection> CollectionRef;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
