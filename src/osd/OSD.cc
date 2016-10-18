@@ -4939,7 +4939,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  OSD::Session *session = (OSD::Session *)con->get_priv();
+  Session *session = (Session *)con->get_priv();
   dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -4955,7 +4955,7 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  OSD::Session *session = (OSD::Session *)con->get_priv();
+  Session *session = (Session *)con->get_priv();
   dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -8692,7 +8692,7 @@ public:
   }
 
   void finish(ThreadPool::TPHandle& tp) {
-    OSD::Session *session = static_cast<OSD::Session *>(
+    Session *session = static_cast<Session *>(
         con->get_priv());
     epoch_t last_sent_epoch;
     if (session) {

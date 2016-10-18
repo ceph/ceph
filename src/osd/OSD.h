@@ -37,6 +37,7 @@
 #include "include/CompatSet.h"
 
 #include "OpRequest.h"
+#include "Session.h"
 
 #include <atomic>
 #include <map>
@@ -1440,36 +1441,6 @@ public:
     }
   }
 
-  struct Session : public RefCountedObject {
-    EntityName entity_name;
-    OSDCap caps;
-    int64_t auid;
-    ConnectionRef con;
-    WatchConState wstate;
-
-    Mutex session_dispatch_lock;
-    boost::intrusive::list<OpRequest> waiting_on_map;
-
-    OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
-    map<spg_t, boost::intrusive::list<OpRequest> > waiting_for_pg;
-
-    Spinlock sent_epoch_lock;
-    epoch_t last_sent_epoch;
-    Spinlock received_map_lock;
-    epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
-
-    explicit Session(CephContext *cct) :
-      RefCountedObject(cct),
-      auid(-1), con(0), wstate(cct),
-      session_dispatch_lock("Session::session_dispatch_lock"), 
-      last_sent_epoch(0), received_map_epoch(0)
-    {}
-    void maybe_reset_osdmap() {
-      if (waiting_for_pg.empty()) {
-	osdmap.reset();
-      }
-    }
-  };
 
 private:
   void update_waiting_for_pg(Session *session, OSDMapRef osdmap);
