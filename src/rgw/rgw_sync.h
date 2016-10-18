@@ -3,6 +3,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
+#include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
 
 #include "include/stringify.h"
@@ -200,12 +201,7 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                   RGWMetaSyncStatusManager *_sm)
-    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      store(_store), conn(NULL), async_rados(async_rados),
-      http_manager(store->ctx(), completion_mgr),
-      status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
-
+                   RGWMetaSyncStatusManager *_sm);
   ~RGWRemoteMetaLog();
 
   int init();

@@ -1775,6 +1775,15 @@ public:
   }
 };
 
+RGWRemoteMetaLog::RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                                   RGWMetaSyncStatusManager *_sm)
+  : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+    store(_store), conn(NULL), async_rados(async_rados),
+    http_manager(store->ctx(), completion_mgr),
+    status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL)
+{
+}
+
 void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->cct = store->ctx();
   env->store = store;
