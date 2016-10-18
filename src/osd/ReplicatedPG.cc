@@ -12464,6 +12464,10 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     dout(20) << __func__ << " skip (cache_pinned) " << obc->obs.oi << dendl;
     return false;
   }
+  if (multi_object_write_op_find(soid)) {
+    dout(20) << __func__ << " skip (multi operation) " << obc->obs.oi << dendl;
+    return false;
+  }
 
   if (soid.snap == CEPH_NOSNAP) {
     int result = _verify_no_head_clones(soid, obc->ssc->snapset);
