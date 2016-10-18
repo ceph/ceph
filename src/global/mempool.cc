@@ -17,7 +17,7 @@
 
 
 // default to debug_mode off
-static bool debug_mode = false;
+bool mempool::debug_mode = false;
 
 // --------------------------------------------------------------
 
@@ -35,7 +35,7 @@ mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 
   switch (ix) {
 #define P(x)								\
-  case x: pools[ix] = new mempool::pool_t(#x,debug_mode); break;
+  case x: pools[ix] = new mempool::pool_t(#x); break;
     DEFINE_MEMORY_POOLS_HELPER(P);
 #undef P
   default: assert(0);
@@ -56,11 +56,6 @@ void mempool::dump(ceph::Formatter *f, size_t skip)
 void mempool::set_debug_mode(bool d)
 {
   debug_mode = d;
-  for (size_t i = 0; i < mempool::num_pools; ++i) {
-    if (pools[i]) {
-      pools[i]->debug = d;
-    }
-  }
 }
 
 // --------------------------------------------------------------
@@ -94,7 +89,7 @@ void mempool::pool_t::get_stats(
     total->items += shard[i].items;
     total->bytes += shard[i].bytes;
   }
-  if (debug) {
+  if (debug_mode) {
     std::unique_lock<std::mutex> shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);

@@ -151,6 +151,7 @@ enum pool_index_t {
 };
 #undef P
 
+extern bool debug_mode;
 extern void set_debug_mode(bool d);
 
 // --------------------------------------------------------------
@@ -202,10 +203,8 @@ class pool_t {
   std::unordered_map<const char *, type_t> type_map;
 
 public:
-  bool debug;
-
-  pool_t(const std::string& n, bool _debug)
-    : name(n), debug(_debug) {
+  pool_t(const std::string& n)
+    : name(n) {
   }
 
   //
@@ -274,7 +273,7 @@ public:
 
   void init(bool force_register) {
     pool = &get_pool(pool_ix);
-    if (pool->debug || force_register) {
+    if (debug_mode || force_register) {
       type = pool->get_type(typeid(T), sizeof(T));
     }
   }
@@ -292,7 +291,7 @@ public:
     shard_t *shard = pool->pick_a_shard();
     shard->bytes += total;
     shard->items += n;
-    if (pool->debug) {
+    if (debug_mode) {
       type->items += n;
     }
     T* r = reinterpret_cast<T*>(new char[total]);
