@@ -46,6 +46,7 @@ set(librbd_internal_srcs
   journal/RemoveRequest.cc
   journal/CreateRequest.cc
   journal/OpenRequest.cc
+  journal/PromoteRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   journal/Utils.cc
