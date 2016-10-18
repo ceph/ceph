@@ -123,6 +123,7 @@ void ReleaseRequest<I>::handle_block_writes(int r) {
   if (r < 0) {
     m_image_ctx.aio_work_queue->unblock_writes();
     finish();
+    return;
   }
 
   send_image_flush_notifies();
@@ -174,7 +175,6 @@ void ReleaseRequest<I>::handle_close_journal(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
-  save_result(r);
   if (r < 0) {
     // error implies some journal events were not flushed -- continue
     lderr(cct) << "failed to close journal: " << cpp_strerror(r) << dendl;
