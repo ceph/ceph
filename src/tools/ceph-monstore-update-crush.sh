@@ -28,6 +28,12 @@ else
     exit 1
 fi
 
+if [ `uname` = FreeBSD ]; then
+    GETOPT=/usr/local/bin/getopt
+else
+    GETOPT=getopt
+fi
+
 function osdmap_get() {
     local store_path=$1
     local query=$2
@@ -90,7 +96,7 @@ EOF
 
 function main() {
     local temp
-    temp=$(getopt -o h --long verbose,help,mon-store:,out:,rewrite -n $0 -- "$@") || return 1
+    temp=$($GETOPT -o h --long verbose,help,mon-store:,out:,rewrite -n $0 -- "$@") || return 1
 
     eval set -- "$temp"
     local rewrite
