@@ -16,7 +16,7 @@ install(TARGETS ceph_test_mon_workloadgen
 add_executable(ceph_test_mon_msg 
   test-mon-msg.cc
   )
-target_link_libraries(ceph_test_mon_msg os osdc global ${UNITTEST_LIBS})
+target_link_libraries(ceph_test_mon_msg os osdc global ${UNITTEST_LIBS} ${ALLOC_LIBS})
 set_target_properties(ceph_test_mon_msg PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 

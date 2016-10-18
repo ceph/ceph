@@ -31,6 +31,7 @@ if(WITH_RBD)
     udev
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
+    ${ALLOC_LIBS}
     keyutils
     )
   add_dependencies(ceph_smalliobenchrbd
@@ -53,7 +54,7 @@ add_executable(ceph_smalliobenchfs
   ${ceph_smalliobenchfs_srcs}
   )
 target_link_libraries(ceph_smalliobenchfs librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 
 # ceph_smalliobenchdumb
 set(smalliobenchdumb_srcs
@@ -66,7 +67,7 @@ add_executable(ceph_smalliobenchdumb
   ${smalliobenchdumb_srcs}
   )
 target_link_libraries(ceph_smalliobenchdumb librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 
 # ceph_tpbench
 set(tpbench_srcs
