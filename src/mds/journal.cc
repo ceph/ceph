@@ -495,10 +495,11 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->open_object_section("inode");
   inode.dump(f);
   f->close_section(); // inode
-  f->open_array_section("xattrs");
+  f->open_object_section("xattrs");
   for (map<string, bufferptr>::const_iterator iter = xattrs.begin();
       iter != xattrs.end(); ++iter) {
-    f->dump_string(iter->first.c_str(), iter->second.c_str());
+    string s(iter->second.c_str(), iter->second.length());
+    f->dump_string(iter->first.c_str(), s);
   }
   f->close_section(); // xattrs
   if (inode.is_symlink()) {
