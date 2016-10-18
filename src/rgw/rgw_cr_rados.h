@@ -613,7 +613,17 @@ public:
   }
 };
 
-class RGWShardedOmapCRManager {
+// interface for unit testing
+class RGWBaseShardedOmapCRManager {
+ public:
+  virtual ~RGWBaseShardedOmapCRManager() = default;
+
+  virtual bool append(const string& entry, int shard_id) = 0;
+  virtual bool finish() = 0;
+  virtual uint64_t get_total_entries(int shard_id) = 0;
+};
+
+class RGWShardedOmapCRManager : public RGWBaseShardedOmapCRManager {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   RGWCoroutine *op;
@@ -642,10 +652,10 @@ public:
     }
   }
 
-  bool append(const string& entry, int shard_id) {
+  bool append(const string& entry, int shard_id) override {
     return shards[shard_id]->append(entry);
   }
-  bool finish() {
+  bool finish() override {
     bool success = true;
     for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
       success &= ((*iter)->finish() && (!(*iter)->is_error()));
@@ -653,7 +663,7 @@ public:
     return success;
   }
 
-  uint64_t get_total_entries(int shard_id) {
+  uint64_t get_total_entries(int shard_id) override {
     return shards[shard_id]->get_total_entries();
   }
 };
