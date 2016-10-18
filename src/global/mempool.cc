@@ -46,6 +46,8 @@ mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 void mempool::dump(ceph::Formatter *f, size_t skip)
 {
   for (size_t i = skip; i < num_pools; ++i) {
+    if (!pools[i])
+      continue;
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
     f->open_object_section(pool.get_name().c_str());
     pool.dump(f);
