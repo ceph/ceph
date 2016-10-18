@@ -12,6 +12,7 @@
 #include "journal/Policy.h"
 #include "journal/ReplayEntry.h"
 #include "journal/Settings.h"
+#include "journal/Utils.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -28,121 +29,12 @@
 
 namespace librbd {
 
+using util::create_async_context_callback;
+using util::create_context_callback;
+using journal::util::C_DecodeTag;
+using journal::util::C_DecodeTags;
+
 namespace {
-
-struct C_DecodeTag : public Context {
-  CephContext *cct;
-  Mutex *lock;
-  uint64_t *tag_tid;
-  journal::TagData *tag_data;
-  Context *on_finish;
-
-  cls::journal::Tag tag;
-
-  C_DecodeTag(CephContext *cct, Mutex *lock, uint64_t *tag_tid,
-              journal::TagData *tag_data, Context *on_finish)
-    : cct(cct), lock(lock), tag_tid(tag_tid), tag_data(tag_data),
-      on_finish(on_finish) {
-  }
-
-  virtual void complete(int r) override {
-    on_finish->complete(process(r));
-    Context::complete(0);
-  }
-  virtual void finish(int r) override {
-  }
-
-  int process(int r) {
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to allocate tag: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    Mutex::Locker locker(*lock);
-    *tag_tid = tag.tid;
-
-    bufferlist::iterator data_it = tag.data.begin();
-    r = decode(&data_it, tag_data);
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to decode allocated tag" << dendl;
-      return r;
-    }
-
-    ldout(cct, 20) << this << " " << __func__ << ": "
-                   << "allocated journal tag: "
-                   << "tid=" << tag.tid << ", "
-                   << "data=" << *tag_data << dendl;
-    return 0;
-  }
-
-  static int decode(bufferlist::iterator *it,
-                    journal::TagData *tag_data) {
-    try {
-      ::decode(*tag_data, *it);
-    } catch (const buffer::error &err) {
-      return -EBADMSG;
-    }
-    return 0;
-  }
-
-};
-
-struct C_DecodeTags : public Context {
-  CephContext *cct;
-  Mutex *lock;
-  uint64_t *tag_tid;
-  journal::TagData *tag_data;
-  Context *on_finish;
-
-  ::journal::Journaler::Tags tags;
-
-  C_DecodeTags(CephContext *cct, Mutex *lock, uint64_t *tag_tid,
-               journal::TagData *tag_data, Context *on_finish)
-    : cct(cct), lock(lock), tag_tid(tag_tid), tag_data(tag_data),
-      on_finish(on_finish) {
-  }
-
-  virtual void complete(int r) {
-    on_finish->complete(process(r));
-    Context::complete(0);
-  }
-  virtual void finish(int r) override {
-  }
-
-  int process(int r) {
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to retrieve journal tags: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    }
-
-    if (tags.empty()) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "no journal tags retrieved" << dendl;
-      return -ENOENT;
-    }
-
-    Mutex::Locker locker(*lock);
-    *tag_tid = tags.back().tid;
-
-    bufferlist::iterator data_it = tags.back().data.begin();
-    r = C_DecodeTag::decode(&data_it, tag_data);
-    if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": "
-                 << "failed to decode journal tag" << dendl;
-      return r;
-    }
-
-    ldout(cct, 20) << this << " " << __func__ << ": "
-                   << "most recent journal tag: "
-                   << "tid=" << *tag_tid << ", "
-                   << "data=" << *tag_data << dendl;
-    return 0;
-  }
-};
 
 // TODO: once journaler is 100% async, remove separate threads and
 // reuse ImageCtx's thread pool
@@ -390,9 +282,6 @@ int allocate_journaler_tag(CephContext *cct, J *journaler,
 }
 
 } // anonymous namespace
-
-using util::create_async_context_callback;
-using util::create_context_callback;
 
 // client id for local image
 template <typename I>
