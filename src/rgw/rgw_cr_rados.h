@@ -1007,7 +1007,19 @@ public:
   }
 };
 
-class RGWContinuousLeaseCR : public RGWCoroutine {
+// interface for unit testing
+class RGWBaseContinuousLeaseCR : public RGWCoroutine {
+ public:
+  RGWBaseContinuousLeaseCR(CephContext *cct) : RGWCoroutine(cct) {}
+  virtual ~RGWBaseContinuousLeaseCR() = default;
+
+  virtual bool is_locked() = 0;
+  virtual void set_locked(bool status) = 0;
+  virtual void go_down() = 0;
+  virtual void abort() = 0;
+};
+
+class RGWContinuousLeaseCR : public RGWBaseContinuousLeaseCR {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
 
@@ -1030,7 +1042,7 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                        const rgw_bucket& _pool, const string& _oid,
-                       const string& _lock_name, int _interval, RGWCoroutine *_caller) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                       const string& _lock_name, int _interval, RGWCoroutine *_caller) : RGWBaseContinuousLeaseCR (_store->ctx()), async_rados(_async_rados), store(_store),
                                         pool(_pool), oid(_oid), lock_name(_lock_name), interval(_interval),
                                         lock("RGWContimuousLeaseCR"), locked(false), caller(_caller), aborted(false) {
 #define COOKIE_LEN 16
@@ -1042,22 +1054,22 @@ public:
 
   int operate();
 
-  bool is_locked() {
+  bool is_locked() override {
     Mutex::Locker l(lock);
     return locked;
   }
 
-  void set_locked(bool status) {
+  void set_locked(bool status) override {
     Mutex::Locker l(lock);
     locked = status;
   }
 
-  void go_down() {
+  void go_down() override {
     going_down.set(1);
     wakeup();
   }
 
-  void abort() {
+  void abort() override {
     aborted = true;
   }
 };
