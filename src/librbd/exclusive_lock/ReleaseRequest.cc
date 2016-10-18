@@ -24,14 +24,14 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 
 template <typename I>
-ReleaseRequest<I>* ReleaseRequest<I>::create(I &image_ctx, Lock *managed_lock,
+ReleaseRequest<I>* ReleaseRequest<I>::create(I &image_ctx, LockT *managed_lock,
                                              Context *on_finish,
                                              bool shutting_down) {
   return new ReleaseRequest(image_ctx, managed_lock, on_finish, shutting_down);
 }
 
 template <typename I>
-ReleaseRequest<I>::ReleaseRequest(I &image_ctx, Lock *managed_lock,
+ReleaseRequest<I>::ReleaseRequest(I &image_ctx, LockT *managed_lock,
                                   Context *on_finish, bool shutting_down)
   : m_image_ctx(image_ctx), m_managed_lock(managed_lock),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),

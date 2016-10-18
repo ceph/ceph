@@ -22,7 +22,7 @@ public:
                                 LockWatcherT *watcher,
                                 const std::string& m_oid,
                                 const std::string &cookie,
-                                Context *on_releasing, Context *on_finish,
+                                Context *on_finish,
                                 bool shutting_down);
 
   ~ReleaseRequest();
@@ -48,14 +48,12 @@ private:
 
   ReleaseRequest(librados::IoCtx& ioctx, LockWatcherT *watcher,
                  const std::string& oid, const std::string &cookie,
-                 Context *on_releasing, Context *on_finish,
-                 bool shutting_down);
+                 Context *on_finish, bool shutting_down);
 
   librados::IoCtx& m_ioctx;
   LockWatcherT *m_watcher;
   std::string m_oid;
   std::string m_cookie;
-  Context *m_on_releasing;
   Context *m_on_finish;
   bool m_shutting_down;
 

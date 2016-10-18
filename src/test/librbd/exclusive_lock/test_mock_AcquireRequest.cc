@@ -12,6 +12,7 @@
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "cls/lock/cls_lock_ops.h"
 #include "librbd/Lock.h"
+#include "librbd/managed_lock/LockWatcher.h"
 #include "librbd/exclusive_lock/AcquireRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "gmock/gmock.h"
@@ -287,7 +288,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -320,7 +321,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessRefresh) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -354,7 +355,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -393,7 +394,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -422,7 +423,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, RefreshError) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -455,7 +456,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, RefreshLockDisabled) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -498,7 +499,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   expect_unlock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -543,7 +544,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, AllocateJournalTagError) {
   expect_unlock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -566,7 +567,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, 0);
@@ -575,7 +576,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -602,7 +603,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoError) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -630,7 +631,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoEmpty) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -657,7 +658,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalTag) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -680,12 +681,12 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoShared) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_SHARED);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -708,12 +709,12 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalCookie) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "external cookie", Lock::WATCHER_LOCK_TAG,
+                       "external cookie", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -736,13 +737,13 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersError) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, -EINVAL, "dead client", 123);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -765,13 +766,13 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersAlive) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "1.2.3.4", 123);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -795,7 +796,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistDisabled) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_break_lock(mock_image_ctx, 0);
@@ -803,7 +804,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistDisabled) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -826,14 +827,14 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistError) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, -EINVAL);
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -856,7 +857,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockMissing) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, 0);
@@ -865,7 +866,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockMissing) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -888,7 +889,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockError) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", managed_lock::LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, 0);
@@ -896,7 +897,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockError) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -938,7 +939,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, OpenObjectMapError) {
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);

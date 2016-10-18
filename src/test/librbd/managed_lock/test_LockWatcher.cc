@@ -121,7 +121,7 @@ public:
   }
 
   int register_watch(const string& oid) {
-    m_lock = new librbd::Lock(m_ioctx, oid);
+    m_lock = new librbd::Lock<>(m_ioctx, oid);
     m_watcher = new LockWatcher(m_lock);
     m_watch_ctx = new WatchCtx(*this);
     return m_watch_ctx->watch(oid);
@@ -150,7 +150,7 @@ public:
 
   WatchCtx *m_watch_ctx;
   LockWatcher *m_watcher;
-  librbd::Lock *m_lock;
+  librbd::Lock<> *m_lock;
 
   NotifyOps m_notifies;
   NotifyOpPayloads m_notify_payloads;

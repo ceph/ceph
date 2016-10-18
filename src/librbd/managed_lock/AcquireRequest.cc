@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/managed_lock/AcquireRequest.h"
-#include "librbd/Lock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
@@ -104,7 +103,7 @@ void AcquireRequest<L>::send_lock() {
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_cookie,
-                         Lock::WATCHER_LOCK_TAG, "", utime_t(), 0);
+                         L::WATCHER_LOCK_TAG, "", utime_t(), 0);
 
   using klass = AcquireRequest;
   librados::AioCompletion *rados_completion =
@@ -175,7 +174,7 @@ void AcquireRequest<L>::handle_get_lockers(int r) {
     return;
   }
 
-  if (lock_tag != Lock::WATCHER_LOCK_TAG) {
+  if (lock_tag != L::WATCHER_LOCK_TAG) {
     ldout(m_cct, 5) <<"locked by external mechanism: tag=" << lock_tag << dendl;
     save_result(-EBUSY);
     finish();
@@ -191,7 +190,7 @@ void AcquireRequest<L>::handle_get_lockers(int r) {
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t>::iterator iter = lockers.begin();
-  if (!Lock::decode_lock_cookie(iter->first.cookie, &m_locker_handle)) {
+  if (!L::decode_lock_cookie(iter->first.cookie, &m_locker_handle)) {
     ldout(m_cct, 5) << "locked by external mechanism: "
                     << "cookie=" << iter->first.cookie << dendl;
     save_result(-EBUSY);

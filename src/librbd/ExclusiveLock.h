@@ -15,7 +15,7 @@
 
 namespace librbd {
 
-class Lock;
+template <typename> class Lock;
 class ImageCtx;
 
 template <typename ImageCtxT = ImageCtx>
@@ -54,7 +54,7 @@ public:
 private:
 
   ImageCtxT &m_image_ctx;
-  Lock *m_managed_lock;
+  Lock<> *m_managed_lock;
 
   mutable Mutex m_lock;
 

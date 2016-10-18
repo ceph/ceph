@@ -30,7 +30,6 @@ set(unittest_librbd_srcs
   test_mock_Journal.cc
   test_mock_ObjectWatcher.cc
   exclusive_lock/test_mock_AcquireRequest.cc
-  #exclusive_lock/test_mock_ReacquireRequest.cc
   exclusive_lock/test_mock_ReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
   image_watcher/test_mock_RewatchRequest.cc
@@ -57,6 +56,8 @@ set(unittest_librbd_srcs
   managed_lock/test_mock_ReleaseRequest.cc
   managed_lock/test_mock_ReacquireRequest.cc
   managed_lock/test_mock_AcquireRequest.cc
+  managed_lock/test_mock_LockWatcher.cc
+  test_mock_Lock.cc
   )
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}

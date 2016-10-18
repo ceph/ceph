@@ -22,11 +22,19 @@ using watcher::ResponseMessage;
 
 namespace managed_lock {
 
+namespace {
+
+const std::string WATCHER_LOCK_COOKIE_PREFIX = "auto";
+
+} // anonymous namespace
+
+const std::string LockWatcher::WATCHER_LOCK_TAG("internal");
+
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
 const watcher::TaskCode LockWatcher::TASK_CODE_REQUEST_LOCK = watcher::TaskCode(1);
 
-LockWatcher::LockWatcher(Lock *managed_lock)
+LockWatcher::LockWatcher(Lock<LockWatcher> *managed_lock)
   : watcher::Watcher<LockPayload>(managed_lock->io_ctx(),
                                   managed_lock->work_queue(),
                                   managed_lock->oid()),
@@ -208,6 +216,22 @@ void LockWatcher::handle_error(uint64_t handle, int err) {
     set_owner_client_id(ClientId());
   }
   watcher::Watcher<LockPayload>::handle_error(handle, err);
+}
+
+string LockWatcher::encode_lock_cookie() const {
+  assert(is_registered());
+  std::ostringstream ss;
+  ss << WATCHER_LOCK_COOKIE_PREFIX << " " << get_watch_handle();
+  return ss.str();
+}
+
+bool LockWatcher::decode_lock_cookie(const std::string &tag, uint64_t *handle) {
+  std::string prefix;
+  std::istringstream ss(tag);
+  if (!(ss >> prefix >> *handle) || prefix != WATCHER_LOCK_COOKIE_PREFIX) {
+    return false;
+  }
+  return true;
 }
 
 } // namespace managed_lock

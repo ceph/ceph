@@ -24,10 +24,9 @@ namespace managed_lock {
 
 using managed_lock::Policy;
 
+template <typename LockWatcherT = managed_lock::LockWatcher>
 class Lock {
 public:
-  static const std::string WATCHER_LOCK_TAG;
-
   static Lock *create(librados::IoCtx& ioctx,
                       const std::string& oid,
                       Policy *policy = nullptr) {
@@ -77,8 +76,6 @@ public:
     return m_state == STATE_LOCKED;
   }
 
-  static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
-
 private:
 
   /**
@@ -125,7 +122,6 @@ private:
     STATE_WAITING_FOR_PEER,
     STATE_WAITING_FOR_REGISTER,
     STATE_REACQUIRING,
-    STATE_PRE_RELEASING,
     STATE_RELEASING,
     STATE_PRE_SHUTTING_DOWN,
     STATE_SHUTTING_DOWN,
@@ -158,7 +154,7 @@ private:
   CephContext *m_cct;
   ContextWQ *m_work_queue;
   std::string m_oid;
-  managed_lock::LockWatcher *m_watcher;
+  LockWatcherT *m_watcher;
   Policy *m_policy;
 
   mutable Mutex m_lock;
@@ -167,8 +163,6 @@ private:
   std::string m_new_cookie;
 
   ActionsContexts m_actions_contexts;
-
-  std::string encode_lock_cookie() const;
 
   bool is_transition_state() const;
 
@@ -188,17 +182,17 @@ private:
   void handle_reacquire_lock(int r);
 
   void send_release_lock();
-  void handle_releasing_lock(int r);
   void handle_release_lock(int r);
 
   void send_shutdown();
   void send_shutdown_release();
-  void handle_shutdown_releasing(int r);
   void handle_shutdown_released(int r);
   void handle_shutdown(int r);
   void complete_shutdown(int r);
 };
 
 } // namespace librbd
+
+extern template class librbd::Lock<librbd::managed_lock::LockWatcher>;
 
 #endif // CEPH_LIBRBD_LOCK_H

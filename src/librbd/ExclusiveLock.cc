@@ -3,6 +3,7 @@
 
 #include "librbd/ExclusiveLock.h"
 #include "librbd/Lock.h"
+#include "librbd/managed_lock/LockWatcher.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -42,7 +43,7 @@ struct C_SendRequest : public Context {
 template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
   : m_image_ctx(image_ctx),
-    m_managed_lock(new Lock(image_ctx.md_ctx, image_ctx.header_oid)),
+    m_managed_lock(new Lock<>(image_ctx.md_ctx, image_ctx.header_oid)),
     m_lock(util::unique_lock_name("librbd::ExclusiveLock::m_lock", this)) {
 }
 
@@ -202,7 +203,7 @@ void ExclusiveLock<I>::assert_header_locked(librados::ObjectWriteOperation *op) 
 template <typename I>
 bool ExclusiveLock<I>::decode_lock_cookie(const std::string &tag,
                                           uint64_t *handle) {
-  return Lock::decode_lock_cookie(tag, handle);
+  return managed_lock::LockWatcher::decode_lock_cookie(tag, handle);
 }
 
 template <typename I>

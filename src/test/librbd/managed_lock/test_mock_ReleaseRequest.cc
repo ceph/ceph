@@ -3,6 +3,7 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
+#include "test/librbd/managed_lock/test_mock_LockWatcher.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "librbd/managed_lock/ReleaseRequest.h"
 #include "common/WorkQueue.h"
@@ -10,16 +11,6 @@
 #include "gtest/gtest.h"
 #include <list>
 
-namespace librbd {
-namespace managed_lock {
-
-struct MockLockWatcher {
-  MOCK_METHOD1(flush, void(Context *));
-  MOCK_METHOD0(work_queue, ContextWQ*());
-};
-
-}
-}
 
 // template definitions
 #include "librbd/managed_lock/ReleaseRequest.cc"
@@ -63,10 +54,6 @@ static const std::string TEST_COOKIE("auto 123");
 class TestMockManagedLockReleaseRequest : public TestMockFixture {
 public:
   typedef ReleaseRequest<MockLockWatcher> MockReleaseRequest;
-
-  void expect_complete_context(MockContext &mock_context, int r) {
-    EXPECT_CALL(mock_context, complete(r));
-  }
 
   void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
@@ -112,9 +99,6 @@ TEST_F(TestMockManagedLockReleaseRequest, Success) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
 
-  MockContext mock_releasing_ctx;
-  expect_complete_context(mock_releasing_ctx, 0);
-
   expect_unlock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
@@ -122,7 +106,6 @@ TEST_F(TestMockManagedLockReleaseRequest, Success) {
                                                        &m_lock_watcher,
                                                        mock_image_ctx.header_oid,
                                                        TEST_COOKIE,
-                                                       &mock_releasing_ctx,
                                                        &ctx, false);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -145,7 +128,6 @@ TEST_F(TestMockManagedLockReleaseRequest, UnlockError) {
                                                        &m_lock_watcher,
                                                        mock_image_ctx.header_oid,
                                                        TEST_COOKIE,
-                                                       nullptr,
                                                        &ctx, false);
   req->send();
   ASSERT_EQ(0, ctx.wait());

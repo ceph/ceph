@@ -14,15 +14,20 @@ class Context;
 
 namespace librbd {
 
+namespace managed_lock{
+class LockWatcher;
+}
+
 template <typename> class Journal;
-class Lock;
+template <typename> class Lock;
+typedef Lock<librbd::managed_lock::LockWatcher> LockT;
 
 namespace exclusive_lock {
 
 template <typename ImageCtxT = ImageCtx>
 class AcquireRequest {
 public:
-  static AcquireRequest* create(ImageCtxT &image_ctx, Lock *managed_lock,
+  static AcquireRequest* create(ImageCtxT &image_ctx, LockT *managed_lock,
                                 Context *on_finish, bool try_lock);
 
   ~AcquireRequest();
@@ -75,11 +80,11 @@ private:
    * @endverbatim
    */
 
-  AcquireRequest(ImageCtxT &image_ctx, Lock *managed_lock, Context *on_finish,
+  AcquireRequest(ImageCtxT &image_ctx, LockT *managed_lock, Context *on_finish,
                  bool try_lock);
 
   ImageCtxT &m_image_ctx;
-  Lock *m_managed_lock;
+  LockT *m_managed_lock;
   Context *m_on_finish;
   bool m_try_lock;
 

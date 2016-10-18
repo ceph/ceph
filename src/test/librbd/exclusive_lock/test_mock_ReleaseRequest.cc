@@ -9,6 +9,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "librbd/exclusive_lock/ReleaseRequest.h"
 #include "librbd/Lock.h"
+#include "librbd/managed_lock/LockWatcher.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <list>
@@ -20,6 +21,7 @@ template class librbd::exclusive_lock::ReleaseRequest<librbd::MockImageCtx>;
 namespace librbd {
 
 using librbd::Lock;
+using librbd::managed_lock::LockWatcher;
 
 namespace exclusive_lock {
 
@@ -143,7 +145,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<LockWatcher> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx, false);
@@ -176,7 +178,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
 
   //C_SaferCond release_ctx;
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<LockWatcher> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
                                                        managed_lock,
                                                        &ctx,
@@ -205,7 +207,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
 
   //C_SaferCond release_ctx;
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<LockWatcher> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
                                                        //TEST_COOKIE,
                                                        managed_lock,
@@ -232,7 +234,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, BlockWritesError) {
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<LockWatcher> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
                                                        //TEST_COOKIE,
                                                        managed_lock,
@@ -260,7 +262,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   expect_unlock(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
-  Lock *managed_lock = new Lock(m_ioctx, mock_image_ctx.header_oid);
+  Lock<LockWatcher> *managed_lock = new Lock<>(m_ioctx, mock_image_ctx.header_oid);
   MockReleaseRequest *req = MockReleaseRequest::create(mock_image_ctx,
                                                        //TEST_COOKIE,
                                                        managed_lock,

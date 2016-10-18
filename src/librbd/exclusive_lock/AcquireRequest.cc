@@ -33,14 +33,14 @@ using util::create_rados_safe_callback;
 
 
 template <typename I>
-AcquireRequest<I>* AcquireRequest<I>::create(I &image_ctx, Lock *managed_lock,
+AcquireRequest<I>* AcquireRequest<I>::create(I &image_ctx, LockT *managed_lock,
                                              Context *on_finish,
                                              bool try_lock) {
   return new AcquireRequest(image_ctx, managed_lock, on_finish, try_lock);
 }
 
 template <typename I>
-AcquireRequest<I>::AcquireRequest(I &image_ctx, Lock *managed_lock,
+AcquireRequest<I>::AcquireRequest(I &image_ctx, LockT *managed_lock,
                                   Context *on_finish, bool try_lock)
   : m_image_ctx(image_ctx), m_managed_lock(managed_lock),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),

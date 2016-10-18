@@ -13,6 +13,9 @@ class Context;
 namespace librbd {
 namespace managed_lock {
 
+class LockWatcher;
+
+template <typename L = LockWatcher>
 class ReacquireRequest {
 public:
 
@@ -57,5 +60,8 @@ private:
 
 } // namespace managed_lock
 } // namespace librbd
+
+extern template class librbd::managed_lock::ReacquireRequest<
+                                            librbd::managed_lock::LockWatcher>;
 
 #endif // CEPH_LIBRBD_LOCK_REACQUIRE_REQUEST_H

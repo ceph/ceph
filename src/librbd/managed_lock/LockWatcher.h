@@ -17,13 +17,15 @@ class Formatter;
 
 namespace librbd {
 
-class Lock;
+template <typename> class Lock;
 
 namespace managed_lock {
 
 class LockWatcher : public watcher::Watcher<LockPayload> {
 public:
-  LockWatcher(Lock *managed_lock);
+  static const std::string WATCHER_LOCK_TAG;
+
+  LockWatcher(Lock<LockWatcher> *managed_lock);
   virtual ~LockWatcher();
 
   void notify_acquired_lock();
@@ -34,10 +36,13 @@ public:
     return m_work_queue;
   }
 
+  static bool decode_lock_cookie(const std::string &tag, uint64_t *handle);
+  std::string encode_lock_cookie() const;
+
 private:
   static const watcher::TaskCode TASK_CODE_REQUEST_LOCK;
 
-  Lock *m_managed_lock;
+  Lock<LockWatcher> *m_managed_lock;
   CephContext *m_cct;
   Mutex m_owner_client_id_lock;
   ClientId m_owner_client_id;

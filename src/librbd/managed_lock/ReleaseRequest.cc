@@ -24,20 +24,17 @@ ReleaseRequest<L>* ReleaseRequest<L>::create(librados::IoCtx& ioctx,
                                        L *watcher,
                                        const string& oid,
                                        const string &cookie,
-                                       Context *on_releasing,
                                        Context *on_finish,
                                        bool shutting_down) {
   return new ReleaseRequest(ioctx, watcher, oid, cookie,
-                            on_releasing, on_finish, shutting_down);
+                            on_finish, shutting_down);
 }
 
 template <typename L>
 ReleaseRequest<L>::ReleaseRequest(librados::IoCtx& ioctx, L *watcher,
                                   const string& oid, const string &cookie,
-                                  Context *on_releasing, Context *on_finish,
-                                  bool shutting_down)
+                                  Context *on_finish, bool shutting_down)
   : m_ioctx(ioctx), m_watcher(watcher), m_oid(oid), m_cookie(cookie),
-    m_on_releasing(on_releasing),
     m_on_finish(new C_AsyncCallback<ContextWQ>(watcher->work_queue(),
                                                on_finish)),
     m_shutting_down(shutting_down) {
@@ -78,12 +75,6 @@ template <typename L>
 void ReleaseRequest<L>::send_unlock() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << __func__ << dendl;
-
-  if (m_on_releasing != nullptr) {
-    // alert caller that we no longer own the exclusive lock
-    m_on_releasing->complete(0);
-    m_on_releasing = nullptr;
-  }
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);

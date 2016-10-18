@@ -21,8 +21,8 @@ namespace managed_lock {
 
 using librbd::util::create_rados_safe_callback;
 
-
-ReacquireRequest::ReacquireRequest(librados::IoCtx& ioctx,
+template <typename L>
+ReacquireRequest<L>::ReacquireRequest(librados::IoCtx& ioctx,
                                    const string& oid, const string &old_cookie,
                                    const std::string &new_cookie,
                                    Context *on_finish)
@@ -31,17 +31,19 @@ ReacquireRequest::ReacquireRequest(librados::IoCtx& ioctx,
 }
 
 
-void ReacquireRequest::send() {
+template <typename L>
+void ReacquireRequest<L>::send() {
   set_cookie();
 }
 
-void ReacquireRequest::set_cookie() {
+template <typename L>
+void ReacquireRequest<L>::set_cookie() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::set_cookie(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_old_cookie,
-                               Lock::WATCHER_LOCK_TAG, m_new_cookie);
+                               L::WATCHER_LOCK_TAG, m_new_cookie);
 
   librados::AioCompletion *rados_completion = create_rados_safe_callback<
     ReacquireRequest, &ReacquireRequest::handle_set_cookie>(this);
@@ -50,8 +52,8 @@ void ReacquireRequest::set_cookie() {
   rados_completion->release();
 }
 
-
-void ReacquireRequest::handle_set_cookie(int r) {
+template <typename L>
+void ReacquireRequest<L>::handle_set_cookie(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << ": r=" << r << dendl;
 
@@ -68,3 +70,6 @@ void ReacquireRequest::handle_set_cookie(int r) {
 } // namespace managed_lock
 } // namespace librbd
 
+#include "librbd/managed_lock/LockWatcher.h"
+template class librbd::managed_lock::ReacquireRequest<
+                                            librbd::managed_lock::LockWatcher>;

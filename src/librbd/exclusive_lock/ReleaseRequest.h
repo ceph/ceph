@@ -11,8 +11,13 @@ class Context;
 
 namespace librbd {
 
+namespace managed_lock{
+class LockWatcher;
+}
+
 struct ImageCtx;
-class Lock;
+template <typename> class Lock;
+typedef Lock<librbd::managed_lock::LockWatcher> LockT;
 template <typename> class Journal;
 
 namespace exclusive_lock {
@@ -20,7 +25,7 @@ namespace exclusive_lock {
 template <typename ImageCtxT = ImageCtx>
 class ReleaseRequest {
 public:
-  static ReleaseRequest* create(ImageCtxT &image_ctx, Lock *managed_lock,
+  static ReleaseRequest* create(ImageCtxT &image_ctx, LockT *managed_lock,
                                 Context *on_finish, bool shutting_down);
 
   ~ReleaseRequest();
@@ -59,11 +64,11 @@ private:
    * @endverbatim
    */
 
-  ReleaseRequest(ImageCtxT &image_ctx, Lock *managed_lock, Context *on_finish,
+  ReleaseRequest(ImageCtxT &image_ctx, LockT *managed_lock, Context *on_finish,
                  bool shutting_down);
 
   ImageCtxT &m_image_ctx;
-  Lock *m_managed_lock;
+  LockT *m_managed_lock;
   Context *m_on_finish;
   bool m_shutting_down;
 

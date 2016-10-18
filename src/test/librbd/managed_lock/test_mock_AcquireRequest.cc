@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
+#include "test/librbd/managed_lock/test_mock_LockWatcher.h"
 #include "cls/lock/cls_lock_ops.h"
 #include "librbd/managed_lock/AcquireRequest.h"
 #include "gmock/gmock.h"
@@ -12,16 +13,6 @@
 #include <arpa/inet.h>
 #include <list>
 
-namespace librbd {
-namespace managed_lock {
-
-struct MockLockWatcher {
-  MOCK_METHOD1(flush, void(Context *));
-  MOCK_METHOD0(work_queue, ContextWQ*());
-};
-
-}
-}
 
 // template definitions
 #include "librbd/managed_lock/AcquireRequest.cc"
@@ -204,7 +195,7 @@ TEST_F(TestMockManagedLockAcquireRequest, LockBusy) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, 0);
@@ -294,7 +285,7 @@ TEST_F(TestMockManagedLockAcquireRequest, GetLockInfoShared) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_SHARED);
 
   C_SaferCond ctx;
@@ -316,7 +307,7 @@ TEST_F(TestMockManagedLockAcquireRequest, GetLockInfoExternalCookie) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "external cookie", Lock::WATCHER_LOCK_TAG,
+                       "external cookie", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
 
   C_SaferCond ctx;
@@ -338,7 +329,7 @@ TEST_F(TestMockManagedLockAcquireRequest, GetWatchersError) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, -EINVAL, "dead client", 123);
 
@@ -361,7 +352,7 @@ TEST_F(TestMockManagedLockAcquireRequest, GetWatchersAlive) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "1.2.3.4", 123);
 
@@ -386,7 +377,7 @@ TEST_F(TestMockManagedLockAcquireRequest, BlacklistDisabled) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_break_lock(mock_image_ctx, 0);
@@ -399,7 +390,7 @@ TEST_F(TestMockManagedLockAcquireRequest, BlacklistDisabled) {
                                                        TEST_COOKIE, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
-  
+
   cct->_conf->set_val("rbd_blacklist_on_break_lock", "true");
 }
 
@@ -413,7 +404,7 @@ TEST_F(TestMockManagedLockAcquireRequest, BlacklistError) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, -EINVAL);
@@ -437,7 +428,7 @@ TEST_F(TestMockManagedLockAcquireRequest, BreakLockMissing) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, 0);
@@ -463,7 +454,7 @@ TEST_F(TestMockManagedLockAcquireRequest, BreakLockError) {
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
-                       "auto 123", Lock::WATCHER_LOCK_TAG,
+                       "auto 123", LockWatcher::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
   expect_blacklist_add(mock_image_ctx, 0);

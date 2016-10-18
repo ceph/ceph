@@ -3,7 +3,7 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
-#include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/managed_lock/test_mock_LockWatcher.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "cls/lock/cls_lock_ops.h"
@@ -12,6 +12,10 @@
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
 #include <list>
+
+// template definitions
+#include "librbd/managed_lock/ReacquireRequest.cc"
+template class librbd::managed_lock::ReacquireRequest<librbd::managed_lock::MockLockWatcher>;
 
 namespace librbd {
 namespace managed_lock {
@@ -23,7 +27,7 @@ using ::testing::StrEq;
 
 class TestMockManagedLockReacquireRequest : public TestMockFixture {
 public:
-  typedef ReacquireRequest MockReacquireRequest;
+  typedef ReacquireRequest<MockLockWatcher> MockReacquireRequest;
 
   void expect_set_cookie(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
