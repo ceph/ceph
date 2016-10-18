@@ -41,6 +41,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         archivers/snappy \
         ftp/curl \
         misc/e2fsprogs-libuuid \
+        misc/getopt \
         textproc/expat2 \
         textproc/libxml2 \
         textproc/xmlstarlet \
