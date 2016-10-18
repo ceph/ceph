@@ -113,6 +113,7 @@ struct C_InvokeAsyncRequest : public Context {
   boost::function<void(Context*)> remote;
   std::set<int> filter_error_codes;
   Context *on_finish;
+  bool request_lock = false;
 
   C_InvokeAsyncRequest(I &image_ctx, const std::string& request_type,
                        bool permit_snapshot,
@@ -196,7 +197,15 @@ struct C_InvokeAsyncRequest : public Context {
       C_InvokeAsyncRequest<I>,
       &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
         this);
-    image_ctx.exclusive_lock->try_lock(ctx);
+
+    if (request_lock) {
+      // current lock owner doesn't support op -- try to perform
+      // the action locally
+      request_lock = false;
+      image_ctx.exclusive_lock->request_lock(ctx);
+    } else {
+      image_ctx.exclusive_lock->try_lock(ctx);
+    }
     owner_lock.put_read();
   }
 
@@ -238,7 +247,13 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
-    if (r != -ETIMEDOUT && r != -ERESTART) {
+    if (r == -EOPNOTSUPP) {
+      ldout(cct, 5) << request_type << " not supported by current lock owner"
+                    << dendl;
+      request_lock = true;
+      send_refresh_image();
+      return;
+    } else if (r != -ETIMEDOUT && r != -ERESTART) {
       image_ctx.state->handle_update_notification();
 
       complete(r);
