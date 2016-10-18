@@ -937,10 +937,19 @@ TEST_P(StoreTest, garbageCollection) {
   int64_t waste1, waste2;
   coll_t cid;
   int buf_len = 256 * 1024;
+  int overlap_offset = 64 * 1024;
+  int write_offset = buf_len;
   if (string(GetParam()) != "bluestore")
     return;
 
-  g_conf->set_val("bluestore_compression", "force");
+#define WRITE_AT(offset, length) {\
+      ObjectStore::Transaction t;\
+      t.write(cid, hoid, offset, length, bl);\
+      r = apply_transaction(store, &osr, std::move(t));\
+      ASSERT_EQ(r, 0);\
+  }
+  g_conf->set_val("bluestore_compression", "none");
+  //g_conf->set_val("bluestore_compression", "force");
   g_conf->set_val("bluestore_merge_gc_data", "true"); 
   g_ceph_context->_conf->apply_changes(NULL);
 
@@ -981,33 +990,18 @@ TEST_P(StoreTest, garbageCollection) {
       data[i] = 'R';
 
     bl.append(data);
+    
+    WRITE_AT(0, buf_len);
+    WRITE_AT(write_offset - 3 * overlap_offset, buf_len);
+    WRITE_AT(write_offset - 2 * overlap_offset, buf_len);
     {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 0, bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, buf_len - 4096, bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 2 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
       ASSERT_EQ(r, 0);
       waste1 = statfs.allocated - statfs.stored;
     }
+    WRITE_AT(write_offset - overlap_offset, buf_len);
     {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 3 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
       ASSERT_EQ(r, 0);
@@ -1042,36 +1036,16 @@ TEST_P(StoreTest, garbageCollection) {
       data[i] = i  % 256;
     bl.append(data);
 
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 3 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 2 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, buf_len - 4096, bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
+    WRITE_AT(write_offset - overlap_offset, buf_len);
+    WRITE_AT(write_offset - 2 * overlap_offset, buf_len);
+    WRITE_AT(write_offset - 3 * overlap_offset, buf_len);
     {
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
       ASSERT_EQ(r, 0);
       waste1 = statfs.allocated - statfs.stored;
     }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 50 * 1024, bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
+    WRITE_AT(0, buf_len);
     {
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
@@ -1106,48 +1080,10 @@ TEST_P(StoreTest, garbageCollection) {
       data[i] = i  % 256;
     bl.append(data);
 
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 5 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 4 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 3 * (buf_len - 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, buf_len - 4096, bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 40 * 1024, bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
-    {
-      struct store_statfs_t statfs;
-      int r = store->statfs(&statfs);
-      ASSERT_EQ(r, 0);
-      waste1 = statfs.allocated - statfs.stored;
-    }
-    {
-      ObjectStore::Transaction t;
-      t.write(cid, hoid, 5 * (buf_len - 3 * 4096), bl.length(), bl);
-      r = apply_transaction(store, &osr, std::move(t));
-      ASSERT_EQ(r, 0);
-    }
+    WRITE_AT(2 * write_offset - 5 * overlap_offset, buf_len);
+    WRITE_AT(2 * write_offset - 4 * overlap_offset, buf_len);
+    WRITE_AT(2 * write_offset - 3 * overlap_offset, buf_len);
+    WRITE_AT(2 * overlap_offset, buf_len);
     {
       struct store_statfs_t statfs;
       int r = store->statfs(&statfs);
