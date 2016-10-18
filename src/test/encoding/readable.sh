@@ -69,7 +69,7 @@ test_object() {
       if [ -n "$incompat" ]; then
         if [ -z "$incompat_paths" ]; then
           echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
-          continue
+	  return
         else
           # If we are ignoring not whole type, but objects that are in $incompat_path,
           # we don't skip here, just give info.
