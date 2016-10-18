@@ -8,22 +8,22 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
-#include "Lock.h"
 #include <list>
-#include <map>
 #include <string>
 #include <utility>
 
 namespace librbd {
 
-template <typename> class Lock;
+namespace managed_lock {
+class LockWatcher;
+}
+
 class ImageCtx;
+template <typename> class Lock;
 
 template <typename ImageCtxT = ImageCtx>
 class ExclusiveLock {
 public:
-  static const std::string WATCHER_LOCK_TAG;
-
   static ExclusiveLock *create(ImageCtxT &image_ctx) {
     return new ExclusiveLock<ImageCtxT>(image_ctx);
   }
@@ -41,7 +41,7 @@ public:
   void shut_down(Context *on_shutdown);
 
   void try_lock(Context *on_tried_lock);
-  void request_lock(Context *on_locked, bool try_lock = false);
+  void request_lock(Context *on_locked);
   void release_lock(Context *on_released);
 
   void reacquire_lock(Context *on_reacquired = nullptr);
@@ -50,37 +50,131 @@ public:
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
 
-  static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
-
 private:
+
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    |
+   *    |
+   *    |
+   *    |
+   *    |
+   *    |
+   *    v            (init)
+   * UNINITIALIZED  -------> UNLOCKED ------------------------> ACQUIRING
+   *                            ^                                   |
+   *                            |                                   |
+   *                            |                                   |
+   *                            |                                   |
+   *                            |                                   |
+   *                            |          (release_lock)           v
+   *                          RELEASING <------------------------ LOCKED
+   *
+   * <LOCKED state>
+   *    |
+   *    v
+   * REACQUIRING -------------------------------------> <finish>
+   *    .                                                 ^
+   *    .                                                 |
+   *    . . . > <RELEASE action> ---> <ACQUIRE action> ---/
+   *
+   * <UNLOCKED/LOCKED states>
+   *    |
+   *    |
+   *    v
+   * SHUTTING_DOWN ---> SHUTDOWN ---> <finish>
+   *
+   * @endverbatim
+   */
+  enum State {
+    STATE_UNINITIALIZED,
+    STATE_UNLOCKED,
+    STATE_LOCKED,
+    STATE_INITIALIZING,
+    STATE_ACQUIRING,
+    STATE_REACQUIRING,
+    STATE_RELEASING,
+    STATE_SHUTTING_DOWN,
+    STATE_SHUTDOWN
+  };
 
   enum Action {
     ACTION_TRY_LOCK,
     ACTION_REQUEST_LOCK,
+    ACTION_REACQUIRE_LOCK,
     ACTION_RELEASE_LOCK,
     ACTION_SHUT_DOWN
   };
 
   typedef std::list<Context *> Contexts;
-  typedef std::map<Action, Contexts> ActionsContexts;
+  typedef std::pair<Action, Contexts> ActionContexts;
+  typedef std::list<ActionContexts> ActionsContexts;
+
+  struct C_InitComplete : public Context {
+    ExclusiveLock *exclusive_lock;
+    Context *on_init;
+    C_InitComplete(ExclusiveLock *exclusive_lock, Context *on_init)
+      : exclusive_lock(exclusive_lock), on_init(on_init) {
+    }
+    virtual void finish(int r) override {
+      if (r == 0) {
+        exclusive_lock->handle_init_complete();
+      }
+      on_init->complete(r);
+    }
+  };
+
+  struct C_ShutDownRelease : public Context {
+    ExclusiveLock *exclusive_lock;
+    C_ShutDownRelease(ExclusiveLock *exclusive_lock)
+      : exclusive_lock(exclusive_lock) {
+    }
+    virtual void finish(int r) override {
+      exclusive_lock->send_shutdown_release();
+    }
+  };
 
   ImageCtxT &m_image_ctx;
-  Lock<> *m_managed_lock;
+  Lock<managed_lock::LockWatcher> *m_managed_lock;
 
   mutable Mutex m_lock;
+  State m_state;
 
   ActionsContexts m_actions_contexts;
-  void append_context(Action action, Context *ctx);
 
   uint32_t m_request_blocked_count = 0;
   int m_request_blocked_ret_val = 0;
 
-  void handle_acquire_lock(int r);
-  void handle_release_lock(int r);
-  void handle_shut_down_locked(int r);
-  void handle_shut_down_unlocked(int r);
+  bool is_transition_state() const;
 
-  void complete_contexts(Action action, int r);
+  void append_context(Action action, Context *ctx);
+  void execute_action(Action action, Context *ctx);
+  void execute_next_action();
+
+  Action get_active_action() const;
+  void complete_active_action(State next_state, int r);
+
+  bool is_shutdown() const;
+
+  void handle_init_complete();
+
+  void send_acquire_lock();
+  void handle_acquire_lock(int r);
+
+  void send_reacquire_lock();
+  void handle_reacquire_lock(int r);
+
+  void send_release_lock();
+  void handle_release_lock(int r);
+
+  void send_shutdown();
+  void send_shutdown_release();
+  void handle_shutdown_released(int r);
+  void handle_shutdown(int r);
+  void complete_shutdown(int r);
 };
 
 } // namespace librbd
