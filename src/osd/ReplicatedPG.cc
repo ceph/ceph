@@ -244,11 +244,13 @@ class ReplicatedPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
 void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
   inflightreads = 1;
+  list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
+	    pair<bufferlist*, Context*> > > in;
+  in.swap(pending_async_reads);
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
-    pending_async_reads,
+    in,
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
-  pending_async_reads.clear();
 }
 void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
 {
