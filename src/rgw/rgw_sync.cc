@@ -737,7 +737,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   RGWShardedOmapCRManager *entries_index;
 
-  RGWContinuousLeaseCR *lease_cr;
+  boost::intrusive_ptr<RGWBaseContinuousLeaseCR> lease_cr;
   RGWCoroutinesStack *lease_stack;
   bool lost_lock;
   bool failed;
@@ -748,14 +748,8 @@ public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
                     map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
-						      ret_status(0), entries_index(NULL), lease_cr(nullptr), lease_stack(nullptr),
+						      ret_status(0), entries_index(NULL), lease_stack(nullptr),
                                                       lost_lock(false), failed(false), markers(_markers) {
-  }
-
-  ~RGWFetchAllMetaCR() {
-    if (lease_cr) {
-      lease_cr->put();
-    }
   }
 
   void append_section_from_set(set<string>& all_sections, const string& name) {
@@ -793,7 +787,6 @@ public:
         string lock_name = "sync_lock";
 	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
                                             lock_name, lock_duration, this);
-        lease_cr->get();
         lease_stack = spawn(lease_cr, false);
       }
       while (!lease_cr->is_locked()) {
