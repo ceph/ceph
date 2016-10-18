@@ -2209,18 +2209,20 @@ bool BlueStore::ExtentMap::do_write_check_depth(
   auto hp = seek_lextent(start_offset);
   if (hp != extent_map.end() &&
     hp->logical_offset < start_offset &&
-    start_offset < hp->logical_offset + hp->length) {
-    depth = hp->blob_depth;
-    head_overlap = true;
+    start_offset < (hp->logical_offset + hp->length) &&
+    hp->blob->get_blob().is_compressed()) {
+      depth = hp->blob_depth;
+      head_overlap = true;
   }
 
   auto tp = seek_lextent(end_offset);
   if (tp != extent_map.end() &&
     tp->logical_offset < end_offset &&
-    end_offset < tp->logical_offset + tp->length) {
-    tail_overlap = true;
-    if (depth < tp->blob_depth) {
-      depth = tp->blob_depth;
+    end_offset < (tp->logical_offset + tp->length) &&
+    tp->blob->get_blob().is_compressed()) {
+      tail_overlap = true;
+      if (depth < tp->blob_depth) {
+        depth = tp->blob_depth;
     }
   }
 
