@@ -844,7 +844,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
           goto out;         // commit what we have
 
         if (logger)
-          logger->inc(l_os_j_full);
+          logger->inc(l_filestore_journal_full);
 
         if (wait_on_full) {
           dout(20) << "prepare_multi_write full on first entry, need to wait" << dendl;
@@ -923,7 +923,7 @@ void FileJournal::queue_completions_thru(uint64_t seq)
 	     << " " << next.finish
 	     << " lat " << lat << dendl;
     if (logger) {
-      logger->tinc(l_os_j_lat, lat);
+      logger->tinc(l_filestore_journal_latency, lat);
     }
     if (next.finish)
       finisher->queue(next.finish);
@@ -1260,8 +1260,8 @@ void FileJournal::write_thread_entry()
     assert(r == 0);
 
     if (logger) {
-      logger->inc(l_os_j_wr);
-      logger->inc(l_os_j_wr_bytes, bl.length());
+      logger->inc(l_filestore_journal_wr);
+      logger->inc(l_filestore_journal_wr_bytes, bl.length());
     }
 
 #ifdef HAVE_LIBAIO
@@ -1596,14 +1596,14 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
   if (logger) {
-    logger->inc(l_os_jq_bytes, orig_len);
-    logger->inc(l_os_jq_ops, 1);
+    logger->inc(l_filestore_journal_queue_bytes, orig_len);
+    logger->inc(l_filestore_journal_queue_ops, 1);
   }
 
   throttle.register_throttle_seq(seq, e.length());
   if (logger) {
-    logger->inc(l_os_j_ops, 1);
-    logger->inc(l_os_j_bytes, e.length());
+    logger->inc(l_filestore_journal_ops, 1);
+    logger->inc(l_filestore_journal_bytes, e.length());
   }
 
   {
@@ -1646,8 +1646,8 @@ void FileJournal::pop_write()
   assert(write_lock.is_locked());
   Mutex::Locker locker(writeq_lock);
   if (logger) {
-    logger->dec(l_os_jq_bytes, writeq.front().orig_len);
-    logger->dec(l_os_jq_ops, 1);
+    logger->dec(l_filestore_journal_queue_bytes, writeq.front().orig_len);
+    logger->dec(l_filestore_journal_queue_ops, 1);
   }
   writeq.pop_front();
 }
@@ -1661,8 +1661,8 @@ void FileJournal::batch_pop_write(list<write_item> &items)
   }
   for (auto &&i : items) {
     if (logger) {
-      logger->dec(l_os_jq_bytes, i.orig_len);
-      logger->dec(l_os_jq_ops, 1);
+      logger->dec(l_filestore_journal_queue_bytes, i.orig_len);
+      logger->dec(l_filestore_journal_queue_ops, 1);
     }
   }
 }
@@ -1672,8 +1672,8 @@ void FileJournal::batch_unpop_write(list<write_item> &items)
   assert(write_lock.is_locked());
   for (auto &&i : items) {
     if (logger) {
-      logger->inc(l_os_jq_bytes, i.orig_len);
-      logger->inc(l_os_jq_ops, 1);
+      logger->inc(l_filestore_journal_queue_bytes, i.orig_len);
+      logger->inc(l_filestore_journal_queue_ops, 1);
     }
   }
   Mutex::Locker locker(writeq_lock);
@@ -1735,8 +1735,8 @@ void FileJournal::committed_thru(uint64_t seq)
 
   auto released = throttle.flush(seq);
   if (logger) {
-    logger->dec(l_os_j_ops, released.first);
-    logger->dec(l_os_j_bytes, released.second);
+    logger->dec(l_filestore_journal_ops, released.first);
+    logger->dec(l_filestore_journal_bytes, released.second);
   }
 
   if (seq < last_committed_seq) {
@@ -1935,8 +1935,8 @@ bool FileJournal::read_entry(
     throttle.take(amount_to_take);
     throttle.register_throttle_seq(next_seq, amount_to_take);
     if (logger) {
-      logger->inc(l_os_j_ops, 1);
-      logger->inc(l_os_j_bytes, amount_to_take);
+      logger->inc(l_filestore_journal_ops, 1);
+      logger->inc(l_filestore_journal_bytes, amount_to_take);
     }
     if (next_seq > seq) {
       return false;
