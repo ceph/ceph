@@ -110,32 +110,24 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
   bool is_locked;
+  bool send_request;
   {
     Mutex::Locker l(m_lock);
     assert(!m_managed_lock->is_shutdown());
     is_locked = m_managed_lock->is_locked();
+    send_request = m_actions_contexts.count(ACTION_SHUT_DOWN) == 0;
+    append_context(ACTION_SHUT_DOWN, on_shut_down);
   }
 
-  FunctionContext *ctx =
-    new FunctionContext([this, on_shut_down, is_locked](int r) {
-      {
-        RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-        m_image_ctx.aio_work_queue->clear_require_lock_on_read();
-        m_image_ctx.exclusive_lock = nullptr;
-      }
-      if (!is_locked || r == 0) {
-        m_image_ctx.aio_work_queue->unblock_writes();
-      }
-      if (!is_locked) {
-        m_image_ctx.image_watcher->flush(on_shut_down);
-      } else {
-        on_shut_down->complete(r);
-      }
-    });
+  if (!send_request) {
+    return;
+  }
 
+  using el = ExclusiveLock<I>;
   if (is_locked) {
-    FunctionContext *shutdown_ctx = new FunctionContext([this, ctx](int r) {
-        m_managed_lock->shut_down(ctx);
+    FunctionContext *shutdown_ctx = new FunctionContext([this](int r) {
+        m_managed_lock->shut_down(
+        util::create_context_callback<el, &el::handle_shut_down_locked>(this));
     });
     ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_image_ctx,
                                                        m_managed_lock,
@@ -144,65 +136,44 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
     m_image_ctx.op_work_queue->queue(
         new C_SendRequest<ReleaseRequest<I>>(req), 0);
   } else {
-    m_managed_lock->shut_down(ctx);
+    m_managed_lock->shut_down(
+      util::create_context_callback<el, &el::handle_shut_down_unlocked>(this));
   }
 }
 
 template <typename I>
 void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
-  bool is_locked;
-  bool is_shutdown;
-  {
-    Mutex::Locker l(m_lock);
-    assert(m_image_ctx.owner_lock.is_locked());
-    is_locked = m_managed_lock->is_locked();
-    is_shutdown = m_managed_lock->is_shutdown();
-  }
-
-  if (is_locked) {
-    on_tried_lock->complete(is_shutdown ? -ESHUTDOWN : 0);
-    return;
-  }
-
-  FunctionContext *ctx = new FunctionContext([this, on_tried_lock](int r) {
-      this->handle_acquire_lock(r);
-      if (on_tried_lock != nullptr) {
-        on_tried_lock->complete(r);
-      }
-  });
-  AcquireRequest<I>* req = AcquireRequest<I>::create(m_image_ctx,
-                                                     m_managed_lock, ctx,
-                                                     true);
-  Mutex::Locker l(m_lock);
-  m_image_ctx.op_work_queue->queue(
-      new C_SendRequest<AcquireRequest<I>>(req), 0);
+  request_lock(on_tried_lock, true);
 }
 
 template <typename I>
-void ExclusiveLock<I>::request_lock(Context *on_locked) {
+void ExclusiveLock<I>::request_lock(Context *on_locked, bool try_lock) {
   bool is_locked;
   bool is_shutdown;
+  bool send_request;
   {
     Mutex::Locker l(m_lock);
     assert(m_image_ctx.owner_lock.is_locked());
     is_locked = m_managed_lock->is_locked();
     is_shutdown = m_managed_lock->is_shutdown();
+    send_request = m_actions_contexts.count(ACTION_REQUEST_LOCK) == 0;
+    append_context(ACTION_REQUEST_LOCK, on_locked);
   }
 
-  if (is_locked) {
-    on_locked->complete(is_shutdown ? -ESHUTDOWN : 0);
+  if (!send_request) {
     return;
   }
 
-  FunctionContext *ctx = new FunctionContext([this, on_locked](int r) {
-      this->handle_acquire_lock(r);
-      if (on_locked != nullptr) {
-        on_locked->complete(r);
-      }
-  });
-  AcquireRequest<I>* req = AcquireRequest<I>::create(m_image_ctx,
-                                                     m_managed_lock, ctx,
-                                                     false);
+  if (is_locked) {
+    complete_contexts(ACTION_REQUEST_LOCK, is_shutdown ? -ESHUTDOWN : 0);
+    return;
+  }
+
+  using el = ExclusiveLock<I>;
+  AcquireRequest<I>* req = AcquireRequest<I>::create(
+      m_image_ctx, m_managed_lock,
+      util::create_context_callback<el, &el::handle_acquire_lock>(this),
+      try_lock);
 
   Mutex::Locker l(m_lock);
   m_image_ctx.op_work_queue->queue(
@@ -213,15 +184,22 @@ template <typename I>
 void ExclusiveLock<I>::release_lock(Context *on_released) {
   bool is_locked;
   bool is_shutdown;
+  bool send_request;
   {
     Mutex::Locker l(m_lock);
     assert(m_image_ctx.owner_lock.is_locked());
     is_locked = m_managed_lock->is_locked();
     is_shutdown = m_managed_lock->is_shutdown();
+    send_request = m_actions_contexts.count(ACTION_RELEASE_LOCK) == 0;
+    append_context(ACTION_RELEASE_LOCK, on_released);
+  }
+
+  if (!send_request) {
+    return;
   }
 
   if (!is_locked) {
-    on_released->complete(is_shutdown ? -ESHUTDOWN : 0);
+    complete_contexts(ACTION_RELEASE_LOCK, is_shutdown ? -ESHUTDOWN : 0);
     return;
   }
 
@@ -278,6 +256,8 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
     m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     m_image_ctx.aio_work_queue->unblock_writes();
   }
+
+  complete_contexts(ACTION_REQUEST_LOCK, r);
 }
 
 template <typename I>
@@ -291,9 +271,75 @@ void ExclusiveLock<I>::handle_release_lock(int r) {
     if (lock_request_needed) {
       // if we have blocked IO -- re-request the lock
       RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-      request_lock(nullptr);
+      request_lock(new FunctionContext([this, r](int ret) {
+            complete_contexts(ACTION_RELEASE_LOCK, r);
+      }));
     }
   }
+}
+
+template <typename I>
+void ExclusiveLock<I>::handle_shut_down_locked(int r) {
+  {
+    RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+    m_image_ctx.exclusive_lock = nullptr;
+  }
+  if (r == 0) {
+    m_image_ctx.aio_work_queue->unblock_writes();
+  }
+
+  complete_contexts(ACTION_SHUT_DOWN, r);
+}
+
+template <typename I>
+void ExclusiveLock<I>::handle_shut_down_unlocked(int r) {
+  {
+    RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+    m_image_ctx.exclusive_lock = nullptr;
+  }
+
+  m_image_ctx.aio_work_queue->unblock_writes();
+  m_image_ctx.image_watcher->flush(new FunctionContext([this, r](int ret) {
+        complete_contexts(ACTION_SHUT_DOWN, r);
+  }));
+}
+
+template <typename I>
+void ExclusiveLock<I>::complete_contexts(Action action, int r) {
+  Contexts ctxs;
+  {
+    Mutex::Locker l(m_lock);
+    assert(m_actions_contexts.count(action) > 0);
+
+    ctxs = std::move(m_actions_contexts.find(action)->second);
+    m_actions_contexts.erase(action);
+  }
+
+  assert(ctxs.size() > 0);
+  for (auto ctx : ctxs) {
+    if (ctx != nullptr) {
+      ctx->complete(r);
+    }
+  }
+}
+
+template <typename I>
+void ExclusiveLock<I>::append_context(Action action, Context *ctx) {
+  assert(m_lock.is_locked());
+
+  auto it = m_actions_contexts.find(action);
+  if (it != m_actions_contexts.end()) {
+    (*it).second.push_back(ctx);
+    return;
+  }
+
+  Contexts contexts;
+  if (ctx != nullptr) {
+    contexts.push_back(ctx);
+  }
+  m_actions_contexts.insert({action, std::move(contexts)});
 }
 
 } // namespace librbd

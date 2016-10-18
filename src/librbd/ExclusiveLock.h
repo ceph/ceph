@@ -10,6 +10,7 @@
 #include "common/Mutex.h"
 #include "Lock.h"
 #include <list>
+#include <map>
 #include <string>
 #include <utility>
 
@@ -40,7 +41,7 @@ public:
   void shut_down(Context *on_shutdown);
 
   void try_lock(Context *on_tried_lock);
-  void request_lock(Context *on_locked);
+  void request_lock(Context *on_locked, bool try_lock = false);
   void release_lock(Context *on_released);
 
   void reacquire_lock(Context *on_reacquired = nullptr);
@@ -53,17 +54,33 @@ public:
 
 private:
 
+  enum Action {
+    ACTION_TRY_LOCK,
+    ACTION_REQUEST_LOCK,
+    ACTION_RELEASE_LOCK,
+    ACTION_SHUT_DOWN
+  };
+
+  typedef std::list<Context *> Contexts;
+  typedef std::map<Action, Contexts> ActionsContexts;
+
   ImageCtxT &m_image_ctx;
   Lock<> *m_managed_lock;
 
   mutable Mutex m_lock;
 
+  ActionsContexts m_actions_contexts;
+  void append_context(Action action, Context *ctx);
+
   uint32_t m_request_blocked_count = 0;
   int m_request_blocked_ret_val = 0;
 
   void handle_acquire_lock(int r);
-
   void handle_release_lock(int r);
+  void handle_shut_down_locked(int r);
+  void handle_shut_down_unlocked(int r);
+
+  void complete_contexts(Action action, int r);
 };
 
 } // namespace librbd

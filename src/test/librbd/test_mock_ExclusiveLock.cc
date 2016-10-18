@@ -482,7 +482,7 @@ TEST_F(TestMockExclusiveLock, ReleaseLockError) {
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 }
-/*
+
 TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -557,7 +557,7 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   expect_flush_notifies(mock_image_ctx);
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
-*/
+
 TEST_F(TestMockExclusiveLock, BlockRequests) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
