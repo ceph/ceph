@@ -1183,6 +1183,7 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
+    bool id_wait; //need wait nid_max/bloblid_max update completed
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -1193,7 +1194,8 @@ public:
 	onreadable_sync(NULL),
 	wal_txn(NULL),
 	ioc(this),
-	start(ceph_clock_now(g_ceph_context)) {
+	start(ceph_clock_now(g_ceph_context)),
+	id_wait(false) {
     }
     ~TransContext() {
       delete wal_txn;
@@ -1390,6 +1392,8 @@ private:
   vector<Cache*> cache_shards;
 
   std::mutex id_lock;
+  std::condition_variable id_cond;
+  std::atomic<bool> id_wait;
   std::atomic<uint64_t> nid_last = {0};
   uint64_t nid_max = 0;
   std::atomic<uint64_t> blobid_last = {0};

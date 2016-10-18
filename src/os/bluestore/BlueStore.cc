@@ -2343,6 +2343,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     fsid_fd(-1),
     mounted(false),
     coll_lock("BlueStore::coll_lock"),
+    id_wait(false),
     throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
     throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
     throttle_wal_ops(cct, "bluestore_wal_max_ops",
@@ -5976,6 +5977,11 @@ void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
   if (o->onode.nid)
     return;
   uint64_t nid = ++nid_last;
+  if (nid >= nid_max && (sync_transaction || sync_submit_transaction)) {
+    id_wait = true;
+    txc->id_wait = true;
+    kv_cond.notify_one();
+  }
   dout(20) << __func__ << " " << nid << dendl;
   o->onode.nid = nid;
   txc->last_nid = nid;
@@ -5984,6 +5990,11 @@ void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
 uint64_t BlueStore::_assign_blobid(TransContext *txc)
 {
   uint64_t bid = ++blobid_last;
+  if (bid >= blobid_max && (sync_transaction || sync_submit_transaction)) {
+    id_wait = true;
+    txc->id_wait = true;
+    kv_cond.notify_one();
+  }
   dout(20) << __func__ << " " << bid << dendl;
   txc->last_blobid = bid;
   return bid;
@@ -6370,13 +6381,44 @@ void BlueStore::_kv_sync_thread()
   while (true) {
     assert(kv_committing.empty());
     assert(wal_cleaning.empty());
+
+    uint64_t nid_max_tmp = 0, blobid_max_tmp = 0;
+
     if (kv_queue.empty() && wal_cleanup_queue.empty()) {
       if (kv_stop)
 	break;
-      dout(20) << __func__ << " sleep" << dendl;
-      kv_sync_cond.notify_all();
-      kv_cond.wait(l);
-      dout(20) << __func__ << " wake" << dendl;
+      if (!id_wait) {
+	dout(20) << __func__ << " sleep" << dendl;
+	kv_sync_cond.notify_all();
+	kv_cond.wait(l);
+	dout(20) << __func__ << " wake" << dendl;
+      } else {
+	id_wait = false;
+	KeyValueDB::Transaction t = db->get_transaction();
+
+	if (nid_last >= nid_max) {
+	  nid_max_tmp = nid_max + g_conf->bluestore_nid_prealloc;
+	  bufferlist bl;
+	  ::encode(nid_max_tmp, bl);
+	  t->set(PREFIX_SUPER, "nid_max", bl);
+	  dout(10) << __func__ << " nid_max now " << nid_max_tmp << dendl;
+	}
+	if (blobid_last >= blobid_max) {
+	  blobid_max_tmp = blobid_max +  g_conf->bluestore_blobid_prealloc;
+	  bufferlist bl;
+	  ::encode(blobid_max_tmp, bl);
+	  t->set(PREFIX_SUPER, "blobid_max", bl);
+	  dout(10) << __func__ << " blobid_max now " << blobid_max_tmp << dendl;
+	}
+
+	int r = db->submit_transaction_sync(t);
+	assert(r == 0);
+
+	std::unique_lock<std::mutex> m(id_lock);
+	nid_max = nid_max_tmp;
+	blobid_max = blobid_max_tmp;
+	id_cond.notify_all();
+      }
     } else {
       dout(20) << __func__ << " committing " << kv_queue.size()
 	       << " cleaning " << wal_cleanup_queue.size() << dendl;
@@ -6393,8 +6435,12 @@ void BlueStore::_kv_sync_thread()
       // flush/barrier on block device
       bdev->flush();
 
+      // one final transaction to force a sync
+      KeyValueDB::Transaction t = db->get_transaction();
+
       uint64_t high_nid = 0, high_blobid = 0;
       TransContext::volatile_statfs vstatfs;
+      bool update_max = false;
 
       if (!sync_transaction && !sync_submit_transaction) {
 	for (auto txc : kv_committing) {
@@ -6432,10 +6478,26 @@ void BlueStore::_kv_sync_thread()
       } else {
 	for (auto txc : kv_committing)
 	  _txc_update_store_statfs(txc, &vstatfs);
+	if (id_wait) {
+	  id_wait = false;
+	  if (nid_last >= nid_max) {
+	    nid_max_tmp = nid_max + g_conf->bluestore_nid_prealloc;
+	    bufferlist bl;
+	    ::encode(nid_max_tmp, bl);
+	    t->set(PREFIX_SUPER, "nid_max", bl);
+	    dout(10) << __func__ << " nid_max now " << nid_max << dendl;
+	    update_max = true;
+	  }
+	  if (blobid_last >= blobid_max) {
+	    blobid_max_tmp = blobid_max +  g_conf->bluestore_blobid_prealloc;
+	    bufferlist bl;
+	    ::encode(blobid_max_tmp, bl);
+	    t->set(PREFIX_SUPER, "blobid_max", bl);
+	    dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
+	    update_max = true;
+	  }
+	}
       }
-
-      // one final transaction to force a sync
-      KeyValueDB::Transaction t = db->get_transaction();
 
       vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
@@ -6484,6 +6546,13 @@ void BlueStore::_kv_sync_thread()
 
       int r = db->submit_transaction_sync(t);
       assert(r == 0);
+
+      if (update_max) {
+	std::lock_guard<std::mutex> l(id_lock);
+	nid_max = nid_max_tmp;
+	blobid_max = blobid_max_tmp;
+	id_cond.notify_all();
+      }
 
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
@@ -6702,6 +6771,16 @@ int BlueStore::queue_transactions(
     handle->reset_tp_timeout();
 
   logger->inc(l_bluestore_txc);
+
+  //check nid_max/blobid_max whether update into db
+  if (txc->id_wait && (txc->last_nid >= nid_max || txc->last_blobid >= blobid_max)) {
+    std::unique_lock<std::mutex> l(id_lock);
+    while (txc->last_nid >= nid_max || txc->last_blobid >= blobid_max) {
+      id_wait = true;
+      kv_cond.notify_one();
+      id_cond.wait(l);
+    }
+  }
 
   // execute (start)
   _txc_state_proc(txc);
