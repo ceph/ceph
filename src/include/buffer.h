@@ -55,6 +55,8 @@
 # include <assert.h>
 #endif
 
+#include "include/inline_memory.h"
+
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
 #else
@@ -167,6 +169,73 @@ namespace buffer CEPH_BUFFER_API {
     void release();
 
   public:
+    class iterator {
+      const ptr *bp;     ///< parent ptr
+      const char *start; ///< starting pointer into bp->c_str()
+      const char *pos;   ///< pointer into bp->c_str()
+      const char *end_ptr;   ///< pointer to bp->end_c_str()
+      bool deep;         ///< if true, no not allow shallow ptr copies
+
+      iterator(const ptr *p, size_t offset, bool d)
+	: bp(p),
+	  start(p->c_str() + offset),
+	  pos(start),
+	  end_ptr(p->end_c_str()),
+	  deep(d) {}
+
+      friend class ptr;
+
+    public:
+      const char *get_pos_add(size_t n) {
+	const char *r = pos;
+	pos += n;
+	if (pos > end_ptr)
+	  throw end_of_buffer();
+	return r;
+      }
+
+      ptr get_ptr(size_t len) {
+	if (deep) {
+	  return buffer::copy(get_pos_add(len), len);
+	} else {
+	  size_t off = pos - bp->c_str();
+	  pos += len;
+	  if (pos > end_ptr)
+	    throw end_of_buffer();
+	  return ptr(*bp, off, len);
+	}
+      }
+      ptr get_preceding_ptr(size_t len) {
+	if (deep) {
+	  return buffer::copy(get_pos() - len, len);
+	} else {
+	  size_t off = pos - bp->c_str();
+	  return ptr(*bp, off - len, len);
+	}
+      }
+
+      void advance(size_t len) {
+	pos += len;
+	if (pos > end_ptr)
+	  throw end_of_buffer();
+      }
+
+      const char *get_pos() {
+	return pos;
+      }
+      const char *get_end() {
+	return end_ptr;
+      }
+
+      size_t get_offset() {
+	return pos - start;
+      }
+
+      bool end() const {
+	return pos == end_ptr;
+      }
+    };
+
     ptr() : _raw(0), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
@@ -187,6 +256,13 @@ namespace buffer CEPH_BUFFER_API {
     raw *clone();
     void swap(ptr& other);
     ptr& make_shareable();
+
+    iterator begin(size_t offset=0) const {
+      return iterator(this, offset, false);
+    }
+    iterator begin_deep(size_t offset=0) const {
+      return iterator(this, offset, true);
+    }
 
     // misc
     bool at_buffer_head() const { return _off == 0; }
@@ -209,6 +285,8 @@ namespace buffer CEPH_BUFFER_API {
     raw *get_raw() const { return _raw; }
     const char *c_str() const;
     char *c_str();
+    const char *end_c_str() const;
+    char *end_c_str();
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
     unsigned start() const { return _off; }
@@ -320,7 +398,8 @@ namespace buffer CEPH_BUFFER_API {
       // copy data out.
       // note that these all _append_ to dest!
       void copy(unsigned len, char *dest);
-      void copy(unsigned len, ptr &dest);
+      void copy_deep(unsigned len, ptr &dest);
+      void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
@@ -360,7 +439,8 @@ namespace buffer CEPH_BUFFER_API {
 
       // copy data out
       void copy(unsigned len, char *dest);
-      void copy(unsigned len, ptr &dest);
+      void copy_deep(unsigned len, ptr &dest);
+      void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
@@ -377,6 +457,186 @@ namespace buffer CEPH_BUFFER_API {
 	return bl != rhs.bl || off != rhs.off;
       }
     };
+
+    class contiguous_appender {
+      bufferlist *pbl;
+      char *pos;
+      ptr bp;
+      bool deep;
+
+      /// running count of bytes appended that are not reflected by @pos
+      size_t out_of_band_offset = 0;
+
+      contiguous_appender(bufferlist *l, size_t len, bool d)
+	: pbl(l),
+	  deep(d) {
+	size_t unused = pbl->append_buffer.unused_tail_length();
+	if (len > unused) {
+	  // note: if len < the normal append_buffer size it *might*
+	  // be better to allocate a normal-sized append_buffer and
+	  // use part of it.  however, that optimizes for the case of
+	  // old-style types including new-style types.  and in most
+	  // such cases, this won't be the very first thing encoded to
+	  // the list, so append_buffer will already be allocated.
+	  // OTOH if everything is new-style, we *should* allocate
+	  // only what we need and conserve memory.
+	  bp = buffer::create(len);
+	  pos = bp.c_str();
+	} else {
+	  pos = pbl->append_buffer.end_c_str();
+	}
+      }
+
+      void flush_and_continue() {
+	if (bp.have_raw()) {
+	  // we allocated a new buffer
+	  size_t l = pos - bp.c_str();
+	  pbl->append(bufferptr(bp, 0, l));
+	  bp.set_length(bp.length() - l);
+	  bp.set_offset(bp.offset() + l);
+	} else {
+	  // we are using pbl's append_buffer
+	  size_t l = pos - pbl->append_buffer.end_c_str();
+	  if (l) {
+	    pbl->append_buffer.set_length(pbl->append_buffer.length() + l);
+	    pbl->append(pbl->append_buffer, pbl->append_buffer.end() - l, l);
+	    pos = pbl->append_buffer.end_c_str();
+	  }
+	}
+      }
+
+      friend class list;
+
+    public:
+      ~contiguous_appender() {
+	if (bp.have_raw()) {
+	  // we allocated a new buffer
+	  bp.set_length(pos - bp.c_str());
+	  pbl->append(std::move(bp));
+	} else {
+	  // we are using pbl's append_buffer
+	  size_t l = pos - pbl->append_buffer.end_c_str();
+	  if (l) {
+	    pbl->append_buffer.set_length(pbl->append_buffer.length() + l);
+	    pbl->append(pbl->append_buffer, pbl->append_buffer.end() - l, l);
+	  }
+	}
+      }
+
+      size_t get_out_of_band_offset() const {
+	return out_of_band_offset;
+      }
+      void append(const char *p, size_t l) {
+	maybe_inline_memcpy(pos, p, l, 16);
+	pos += l;
+      }
+      char *get_pos_add(size_t len) {
+	char *r = pos;
+	pos += len;
+	return r;
+      }
+      char *get_pos() {
+	return pos;
+      }
+
+      void append(const bufferptr& p) {
+	if (!p.length()) {
+	  return;
+	}
+	if (deep) {
+	  append(p.c_str(), p.length());
+	} else {
+	  flush_and_continue();
+	  pbl->append(p);
+	  out_of_band_offset += p.length();
+	}
+      }
+      void append(const bufferlist& l) {
+	if (!l.length()) {
+	  return;
+	}
+	if (deep) {
+	  for (const auto &p : l._buffers) {
+	    append(p.c_str(), p.length());
+	  }
+	} else {
+	  flush_and_continue();
+	  pbl->append(l);
+	  out_of_band_offset += l.length();
+	}
+      }
+
+      size_t get_logical_offset() {
+	if (bp.have_raw()) {
+	  return out_of_band_offset + (pos - bp.c_str());
+	} else {
+	  return out_of_band_offset + (pos - pbl->append_buffer.end_c_str());
+	}
+      }
+    };
+
+    contiguous_appender get_contiguous_appender(size_t len, bool deep=false) {
+      return contiguous_appender(this, len, deep);
+    }
+
+    class page_aligned_appender {
+      bufferlist *pbl;
+      size_t offset;
+      unsigned min_alloc;
+      ptr buffer;
+      char *pos, *end;
+
+      page_aligned_appender(list *l, unsigned min_pages)
+	: pbl(l),
+	  min_alloc(min_pages * CEPH_PAGE_SIZE),
+	  pos(nullptr), end(nullptr) {}
+
+      friend class list;
+
+    public:
+      ~page_aligned_appender() {
+	flush();
+      }
+
+      void flush() {
+	if (pos && pos != buffer.c_str()) {
+	  size_t len = pos - buffer.c_str();
+	  pbl->append(buffer, 0, len);
+	  buffer.set_length(buffer.length() - len);
+	  buffer.set_offset(buffer.offset() + len);
+	}
+      }
+
+      void append(const char *buf, size_t len) {
+	while (len > 0) {
+	  if (!pos) {
+	    size_t alloc = (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK;
+	    if (alloc < min_alloc) {
+	      alloc = min_alloc;
+	    }
+	    buffer = create_page_aligned(alloc);
+	    pos = buffer.c_str();
+	    end = buffer.end_c_str();
+	  }
+	  size_t l = len;
+	  if (l > (size_t)(end - pos)) {
+	    l = end - pos;
+	  }
+	  memcpy(pos, buf, l);
+	  pos += l;
+	  buf += l;
+	  len -= l;
+	  if (pos == end) {
+	    pbl->append(buffer, 0, buffer.length());
+	    pos = end = nullptr;
+	  }
+	}
+      }
+    };
+
+    page_aligned_appender get_page_aligned_appender(unsigned min_pages=1) {
+      return page_aligned_appender(this, min_pages);
+    }
 
   private:
     mutable iterator last_p;
@@ -601,7 +861,7 @@ namespace buffer CEPH_BUFFER_API {
     int write_fd_zero_copy(int fd) const;
     void prepare_iov(std::vector<iovec> *piov) const;
     uint32_t crc32c(uint32_t crc) const;
-	void invalidate_crc();
+    void invalidate_crc();
   };
 
   /*

@@ -698,6 +698,13 @@ add_executable(unittest_arch
 add_ceph_unittest(unittest_arch ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_arch)
 target_link_libraries(unittest_arch global)
 
+# unittest_denc
+add_executable(unittest_denc
+  test_denc.cc
+  )
+add_ceph_unittest(unittest_denc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_denc)
+target_link_libraries(unittest_denc os global)
+
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc
