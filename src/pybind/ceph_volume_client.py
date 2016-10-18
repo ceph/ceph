@@ -4,7 +4,6 @@ Copyright (C) 2015 Red Hat, Inc.
 LGPL2.  See file COPYING.
 """
 
-from contextlib import contextmanager
 import errno
 import fcntl
 import json
@@ -16,11 +15,11 @@ import sys
 import threading
 import time
 import uuid
-
-from ceph_argparse import json_command
+from contextlib import contextmanager
 
 import cephfs
 import rados
+from ceph_argparse import json_command
 
 
 class RadosError(Exception):
@@ -80,7 +79,7 @@ class ClusterError(Exception):
         self._result_str = result_str
 
     def __str__(self):
-        return "Error {0} (\"{1}\") while {2}".format(
+        return 'Error {0} ("{1}") while {2}'.format(
             self._result_code, self._result_str, self._action)
 
 
@@ -318,7 +317,7 @@ class CephFSVolumeClient(object):
 
         log.debug("Recovered from partial auth updates (if any).")
 
-    def _recover_auth_meta(auth_id, auth_meta):
+    def _recover_auth_meta(self, auth_id, auth_meta):
         """
         Call me after locking the auth meta file.
         """
@@ -328,7 +327,7 @@ class CephFSVolumeClient(object):
             if not volume_data['dirty']:
                 continue
 
-            (group_id, volume_id) = volume.split('/')
+            group_id, volume_id = volume.split('/')
             volume_path = VolumePath(group_id, volume_id)
             access_level = volume_data['access_level']
 
@@ -617,7 +616,7 @@ class CephFSVolumeClient(object):
         self._mkdir_p(path)
 
         if size is not None:
-            self.fs.setxattr(path, 'ceph.quota.max_bytes', size.__str__(), 0)
+            self.fs.setxattr(path, 'ceph.quota.max_bytes', str(size).encode(), 0)
 
         # data_isolated means create a separate pool for this volume
         if data_isolated:
@@ -788,7 +787,7 @@ class CephFSVolumeClient(object):
     def _lock(self, path):
         @contextmanager
         def fn():
-            while(1):
+            while True:
                 fd = self.fs.open(path, os.O_CREAT, 0o755)
                 self.fs.flock(fd, fcntl.LOCK_EX, self._id)
 
@@ -940,7 +939,7 @@ class CephFSVolumeClient(object):
                 log.debug("Authorize: no existing meta")
                 auth_meta = {
                     'dirty': True,
-                    'tenant_id': tenant_id.__str__() if tenant_id else None,
+                    'tenant_id': str(tenant_id) if tenant_id else None,
                     'volumes': volume
                 }
 
@@ -953,7 +952,7 @@ class CephFSVolumeClient(object):
                 # (e.g. limit it to only access keys with a manila.* prefix)
             else:
                 # Disallow tenants to share auth IDs
-                if auth_meta['tenant_id'].__str__() != tenant_id.__str__():
+                if str(auth_meta['tenant_id']) != str(tenant_id):
                     msg = "auth ID: {0} is already in use".format(auth_id)
                     log.error(msg)
                     raise CephFSVolumeClientError(msg)
@@ -1289,8 +1288,11 @@ class CephFSVolumeClient(object):
         return int(self.fs.getxattr(self._get_path(volume_path), "ceph.dir.rbytes"))
 
     def set_max_bytes(self, volume_path, max_bytes):
+        if not max_bytes:
+            max_bytes = 0
+
         self.fs.setxattr(self._get_path(volume_path), 'ceph.quota.max_bytes',
-                         max_bytes.__str__() if max_bytes is not None else "0",
+                         str(max_bytes).encode(),
                          0)
 
     def _snapshot_path(self, dir_path, snapshot_name):
