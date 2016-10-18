@@ -5276,7 +5276,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_ZERO:
       tracepoint(osd, do_osd_op_pre_zero, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
-      if (pool.info.require_rollback()) {
+      if (pool.info.requires_aligned_append()) {
 	result = -EOPNOTSUPP;
 	break;
       }
@@ -5333,7 +5333,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_TRUNCATE:
       tracepoint(osd, do_osd_op_pre_truncate, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
-      if (pool.info.require_rollback()) {
+      if (pool.info.requires_aligned_append()) {
 	result = -EOPNOTSUPP;
 	break;
       }
