@@ -2591,6 +2591,13 @@ void OSD::create_logger()
   osd_plb.add_time_avg(l_osd_tier_promote_lat, "osd_tier_promote_lat", "Object promote latency");
   osd_plb.add_time_avg(l_osd_tier_r_lat, "osd_tier_r_lat", "Object proxy read latency");
 
+  osd_plb.add_u64_counter(l_osd_pg_info, "osd_pg_info",
+			  "PG updated its info (using any method)");
+  osd_plb.add_u64_counter(l_osd_pg_fastinfo, "osd_pg_fastinfo",
+			  "PG updated its info using fastinfo attr");
+  osd_plb.add_u64_counter(l_osd_pg_biginfo, "osd_pg_biginfo",
+			  "PG updated its biginfo attr");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }

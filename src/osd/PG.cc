@@ -25,6 +25,7 @@
 #include "ScrubStore.h"
 
 #include "common/Timer.h"
+#include "common/perf_counters.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
@@ -2794,11 +2795,15 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    map<epoch_t,pg_interval_t> &past_intervals,
 			    bool dirty_big_info,
 			    bool dirty_epoch,
-			    bool try_fast_info)
+			    bool try_fast_info,
+			    PerfCounters *logger)
 {
   if (dirty_epoch) {
     ::encode(epoch, (*km)[epoch_key]);
   }
+
+  if (logger)
+    logger->inc(l_osd_pg_info);
 
   // try to do info efficiently?
   if (!dirty_big_info && try_fast_info &&
@@ -2809,6 +2814,8 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
     assert(did);  // we verified last_update increased above
     if (info == last_written_info) {
       ::encode(fast, (*km)[fastinfo_key]);
+      if (logger)
+	logger->inc(l_osd_pg_fastinfo);
       return 0;
     }
     generic_dout(30) << __func__ << " fastinfo failed, info:\n";
@@ -2839,6 +2846,8 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
     ::encode(past_intervals, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    if (logger)
+      logger->inc(l_osd_pg_biginfo);
   }
 
   return 0;
@@ -2884,7 +2893,8 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
 				last_written_info,
 				past_intervals,
 				dirty_big_info, need_update_epoch,
-				g_conf->osd_fast_info);
+				g_conf->osd_fast_info,
+				osd->logger);
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();
