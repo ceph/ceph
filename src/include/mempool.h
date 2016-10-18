@@ -272,19 +272,19 @@ public:
     typedef pool_allocator<pool_ix,U> other;
   };
 
-  void init() {
+  void init(bool force_register) {
     pool = &get_pool(pool_ix);
-    if (pool) {
+    if (pool->debug || force_register) {
       type = pool->get_type(typeid(T), sizeof(T));
     }
   }
 
-  pool_allocator() {
-    init();
+  pool_allocator(bool force_register=false) {
+    init(force_register);
   }
   template<typename U>
   pool_allocator(const pool_allocator<pool_ix,U>&) {
-    init();
+    init(false);
   }
 
   T* allocate(size_t n, void *p = nullptr) {
@@ -393,7 +393,8 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
-  pool::pool_allocator<obj> _factory_##pool##factoryname##_alloc = {};
+  pool::pool_allocator<obj>						\
+  _factory_##pool##factoryname##_alloc = {true};
 
 // Use this for each class that belongs to a mempool.  For example,
 //
