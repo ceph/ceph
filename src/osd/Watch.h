@@ -271,7 +271,7 @@ public:
 
 /**
  * Holds weak refs to Watch structures corresponding to a connection
- * Lives in the OSD::Session object of an OSD connection
+ * Lives in the Session object of an OSD connection
  */
 class WatchConState {
   Mutex lock;

@@ -22,6 +22,7 @@
 #include "OSD.h"
 #include "OpRequest.h"
 #include "ScrubStore.h"
+#include "Session.h"
 #include "objclass/objclass.h"
 
 #include "common/errno.h"
@@ -6457,7 +6458,7 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 
   assert(conn);
 
-  boost::intrusive_ptr<OSD::Session> session((OSD::Session *)conn->get_priv());
+  boost::intrusive_ptr<Session> session((Session *)conn->get_priv());
   if (!session.get())
     return;
   session->put();  // get_priv() takes a ref, and so does the intrusive_ptr

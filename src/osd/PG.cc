@@ -23,6 +23,7 @@
 #include "OSD.h"
 #include "OpRequest.h"
 #include "ScrubStore.h"
+#include "Session.h"
 
 #include "common/Timer.h"
 #include "common/perf_counters.h"
@@ -1851,7 +1852,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 
   MOSDOp *req = static_cast<MOSDOp*>(op->get_req());
 
-  OSD::Session *session = (OSD::Session *)req->get_connection()->get_priv();
+  Session *session = (Session *)req->get_connection()->get_priv();
   if (!session) {
     dout(0) << "op_has_sufficient_caps: no session for op " << *req << dendl;
     return false;
