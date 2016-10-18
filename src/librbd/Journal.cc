@@ -7,6 +7,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/OpenRequest.h"
+#include "librbd/journal/PromoteRequest.h"
 #include "librbd/journal/Replay.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
@@ -540,48 +541,11 @@ int Journal<I>::promote(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
+  C_SaferCond ctx;
+  auto promote_req = journal::PromoteRequest<I>::create(image_ctx, false, &ctx);
+  promote_req->send();
 
-  Mutex lock("lock");
-  journal::ImageClientMeta client_meta;
-  uint64_t tag_tid;
-  journal::TagData tag_data;
-
-  C_SaferCond open_ctx;
-  auto open_req = journal::OpenRequest<I>::create(image_ctx, &journaler, &lock,
-                                                  &client_meta, &tag_tid,
-                                                  &tag_data, &open_ctx);
-  open_req->send();
-
-  BOOST_SCOPE_EXIT_ALL(&journaler) {
-    journaler.shut_down();
-  };
-
-  int r = open_ctx.wait();
-  if (r < 0) {
-    return r;
-  }
-
-  journal::TagPredecessor predecessor;
-  if (tag_data.mirror_uuid == ORPHAN_MIRROR_UUID) {
-    // orderly promotion -- demotion epoch will have a single entry
-    // so link to our predecessor (demotion) epoch
-    predecessor = journal::TagPredecessor{
-      ORPHAN_MIRROR_UUID, true, tag_tid, 1};
-  } else {
-    // forced promotion -- create an epoch no peers can link against
-    predecessor = journal::TagPredecessor{
-      LOCAL_MIRROR_UUID, true, tag_tid, 0};
-  }
-
-  cls::journal::Tag new_tag;
-  r = allocate_journaler_tag(cct, &journaler, client_meta.tag_class,
-                             predecessor, LOCAL_MIRROR_UUID, &new_tag);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
+  return ctx.wait();
 }
 
 template <typename I>
