@@ -66,13 +66,13 @@ with the appropriate allocators.
 
 Thus for mempool "unittest_1" we have automatically available to us:
 
-   unittest_1::map
-   unittest_1::multimap
-   unittest_1::set
-   unittest_1::multiset
-   unittest_1::list
-   unittest_1::vector
-   unittest_1::unordered_map
+   mempool::unittest_1::map
+   mempool::unittest_1::multimap
+   mempool::unittest_1::set
+   mempool::unittest_1::multiset
+   mempool::unittest_1::list
+   mempool::unittest_1::vector
+   mempool::unittest_1::unordered_map
 
 
 Putting objects in a mempool
@@ -105,7 +105,7 @@ can't use :: in a variable name.)
 In order to use the STL containers, simply use the namespaced variant
 of the container type.  For example,
 
-  unittest_1::map<int> myvec;
+  mempool::unittest_1::map<int> myvec;
 
 Introspection
 -------------
@@ -121,8 +121,8 @@ num_types).  When debug name is disabled it is O(num_shards).
 
 You can also interogate a specific pool programatically with
 
-  size_t bytes = unittest_2::allocated_bytes();
-  size_t items = unittest_2::allocated_items();
+  size_t bytes = mempool::unittest_2::allocated_bytes();
+  size_t items = mempool::unittest_2::allocated_items();
 
 The runtime complexity is O(num_shards).
 
@@ -144,7 +144,7 @@ namespace mempool {
   f(bluestore_meta_other)
 
 // give them integer ids
-#define P(x) x,
+#define P(x) mempool_##x,
 enum pool_index_t {
   DEFINE_MEMORY_POOLS_HELPER(P)
   num_pools        // Must be last.
@@ -348,16 +348,14 @@ public:
   }
 };
 
-};
-
 
 // Namespace mempool
 
 #define P(x)								\
   namespace x {								\
-    static const mempool::pool_index_t pool_ix = mempool::x;			\
+    static const mempool::pool_index_t id = mempool::mempool_##x;	\
     template<typename v>						\
-    using pool_allocator = mempool::pool_allocator<mempool::x,v>;	\
+    using pool_allocator = mempool::pool_allocator<id,v>;		\
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<k,v>>>;		\
@@ -376,12 +374,12 @@ public:
     using unordered_map =						\
       std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
     template<typename v>						\
-    using factory = mempool::factory<mempool::x,v>;			\
+    using factory = mempool::factory<id,v>;				\
     inline size_t allocated_bytes() {					\
-      return mempool::get_pool(mempool::x).allocated_bytes();		\
+      return mempool::get_pool(id).allocated_bytes();			\
     }									\
     inline size_t allocated_items() {					\
-      return mempool::get_pool(mempool::x).allocated_items();		\
+      return mempool::get_pool(id).allocated_items();			\
     }									\
   };
 
@@ -389,10 +387,14 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 
 #undef P
 
+};
+
+
+
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
 #define MEMPOOL_DEFINE_FACTORY(obj, factoryname, pool)			\
-  pool::pool_allocator<obj>						\
+  mempool::pool::pool_allocator<obj>					\
   _factory_##pool##factoryname##_alloc = {true};
 
 // Use this for each class that belongs to a mempool.  For example,

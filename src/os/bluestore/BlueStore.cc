@@ -2533,9 +2533,9 @@ void *BlueStore::MempoolThread::entry()
 {
   Mutex::Locker l(lock);
   while (!stop) {
-    store->mempool_bytes = bluestore_meta_other::allocated_bytes() +
-      bluestore_meta_onode::allocated_bytes();
-    store->mempool_onodes = bluestore_meta_onode::allocated_items();
+    store->mempool_bytes = mempool::bluestore_meta_other::allocated_bytes() +
+      mempool::bluestore_meta_onode::allocated_bytes();
+    store->mempool_onodes = mempool::bluestore_meta_onode::allocated_items();
     ++store->mempool_seq;
     utime_t wait;
     wait += g_conf->bluestore_cache_trim_interval;
