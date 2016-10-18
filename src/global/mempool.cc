@@ -21,11 +21,11 @@ static bool debug_mode = false;
 
 // --------------------------------------------------------------
 
-static mempool::pool_t *pools[mempool::num_pools] = {
-#define P(x) nullptr,
-   DEFINE_MEMORY_POOLS_HELPER(P)
-#undef P
-};
+// We rely on this array of pointers being zeroed when the process
+// starts *before* the ctors from *any* linked modules are executed.
+// That way, regardless of link order, pool_t's are allocated and
+// instantiated on demand.
+static mempool::pool_t *pools[mempool::num_pools];
 
 mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 {
