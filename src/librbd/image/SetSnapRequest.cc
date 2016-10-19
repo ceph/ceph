@@ -56,7 +56,8 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
     }
   }
 
-  if (!m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+  if (m_image_ctx.read_only ||
+      !m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     int r = 0;
     if (send_refresh_parent(&r) != nullptr) {
       send_complete();
