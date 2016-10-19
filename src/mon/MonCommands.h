@@ -227,10 +227,10 @@ COMMAND("auth rm " \
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage (DEPRECATED)", \
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb storage", \
 	     "mon", "rw", "cli,rest", \
              FLAG(NOFORWARD)|FLAG(DEPRECATED))
-COMMAND_WITH_FLAG("scrub", "scrub the monitor stores (DEPRECATED)", \
+COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
              "mon", "rw", "cli,rest", \
              FLAG(DEPRECATED))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
@@ -256,7 +256,7 @@ COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r", "cli,re
 COMMAND_WITH_FLAG("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
-	"force sync of and clear monitor store (DEPRECATED)", \
+	"force sync of and clear monitor store", \
         "mon", "rw", "cli,rest", \
         FLAG(NOFORWARD)|FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("heap " \
@@ -302,16 +302,16 @@ COMMAND("mon metadata name=id,type=CephString,req=false",
  */
 
 COMMAND("mds stat", "show MDS status", "mds", "r", "cli,rest")
-COMMAND("mds dump " 
+COMMAND_WITH_FLAG("mds dump "
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"dump legacy MDS cluster info, optionally from epoch",
-        "mds", "r", "cli,rest")
+        "mds", "r", "cli,rest", FLAG(DEPRECATED))
 COMMAND("fs dump "
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"dump all CephFS status, optionally from epoch", "mds", "r", "cli,rest")
-COMMAND("mds getmap " \
+COMMAND_WITH_FLAG("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
-	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
+	"get MDS map, optionally from epoch", "mds", "r", "cli,rest", FLAG(DEPRECATED))
 COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
 	"mds", "r", "cli,rest")
@@ -321,19 +321,19 @@ COMMAND("mds tell " \
 	"send command to particular mds", "mds", "rw", "cli,rest")
 COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
-COMMAND("mds stop name=who,type=CephString", "stop mds", \
-	"mds", "rw", "cli,rest")
+COMMAND_WITH_FLAG("mds stop name=who,type=CephString", "stop mds", \
+	"mds", "rw", "cli,rest", FLAG(DEPRECATED))
 COMMAND("mds deactivate name=who,type=CephString", "stop mds", \
 	"mds", "rw", "cli,rest")
-COMMAND("mds set_max_mds " \
+COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
-	"set max MDS index", "mds", "rw", "cli,rest")
-COMMAND("mds set " \
+	"set max MDS index", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds set " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
 	"|allow_new_snaps|inline_data|allow_multimds|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
-	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
+	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
@@ -350,29 +350,29 @@ COMMAND("mds rm " \
 	"remove nonactive mds", "mds", "rw", "cli,rest")
 COMMAND("mds rmfailed name=who,type=CephString name=confirm,type=CephString,req=false", \
 	"remove failed mds", "mds", "rw", "cli,rest")
-COMMAND("mds cluster_down", "take MDS cluster down", "mds", "rw", "cli,rest")
-COMMAND("mds cluster_up", "bring MDS cluster up", "mds", "rw", "cli,rest")
+COMMAND_WITH_FLAG("mds cluster_down", "take MDS cluster down", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds cluster_up", "bring MDS cluster up", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
 COMMAND("mds compat rm_compat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove compatible feature", "mds", "rw", "cli,rest")
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove incompatible feature", "mds", "rw", "cli,rest")
-COMMAND("mds add_data_pool " \
+COMMAND_WITH_FLAG("mds add_data_pool " \
 	"name=pool,type=CephString", \
-	"add data pool <pool>", "mds", "rw", "cli,rest")
-COMMAND("mds remove_data_pool " \
+	"add data pool <pool>", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds remove_data_pool " \
 	"name=pool,type=CephString", \
-	"remove data pool <pool>", "mds", "rw", "cli,rest")
-COMMAND("mds rm_data_pool " \
+	"remove data pool <pool>", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds rm_data_pool " \
 	"name=pool,type=CephString", \
-	"remove data pool <pool>", "mds", "rw", "cli,rest")
-COMMAND("mds newfs " \
+	"remove data pool <pool>", "mds", "rw", "cli,rest", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"make new filesystem using pools <metadata> and <data>", \
-	"mds", "rw", "cli,rest")
+	"mds", "rw", "cli,rest", FLAG(DEPRECATED))
 COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \

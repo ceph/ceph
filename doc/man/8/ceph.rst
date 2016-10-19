@@ -33,7 +33,7 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *stat* \| *stop* \| *tell* ] ...
+| **ceph** **mds** [ *compat* \| *deactivate* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *tell* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
@@ -328,24 +328,6 @@ mds
 Manage metadata server configuration and administration. It uses some
 additional subcommands.
 
-Subcommand ``add_data_pool`` adds data pool.
-
-Usage::
-
-	ceph mds add_data_pool <pool>
-
-Subcommand ``cluster_down`` takes mds cluster down.
-
-Usage::
-
-	ceph mds cluster_down
-
-Subcommand ``cluster_up`` brings mds cluster up.
-
-Usage::
-
-	ceph mds cluster_up
-
 Subcommand ``compat`` manages compatible features. It uses some additional
 subcommands.
 
@@ -373,35 +355,11 @@ Usage::
 
 	ceph mds deactivate <who>
 
-Subcommand ``dump`` dumps information, optionally from epoch.
-
-Usage::
-
-	ceph mds dump {<int[0-]>}
-
 Subcommand ``fail`` forces mds to status fail.
 
 Usage::
 
 	ceph mds fail <who>
-
-Subcommand ``getmap`` gets MDS map, optionally from epoch.
-
-Usage::
-
-	ceph mds getmap {<int[0-]>}
-
-Subcommand ``newfs`` makes new filesystem using pools <metadata> and <data>.
-
-Usage::
-
-	ceph mds newfs <int[0-]> <int[0-]> {--yes-i-really-mean-it}
-
-Subcommand ``remove_data_pool`` removes data pool.
-
-Usage::
-
-	ceph mds remove_data_pool <pool>
 
 Subcommand ``rm`` removes inactive mds.
 
@@ -415,18 +373,6 @@ Usage::
 
 	ceph mds rmfailed <int[0-]>
 
-Subcommand ``set`` set mds parameter <var> to <val>
-
-Usage::
-
-	ceph mds set max_mds|max_file_size|allow_new_snaps|inline_data <va> {<confirm>}
-
-Subcommand ``set_max_mds`` sets max MDS index.
-
-Usage::
-
-	ceph mds set_max_mds <int[0-]>
-
 Subcommand ``set_state`` sets mds state of <gid> to <numeric-state>.
 
 Usage::
@@ -438,12 +384,6 @@ Subcommand ``stat`` shows MDS status.
 Usage::
 
 	ceph mds stat
-
-Subcommand ``stop`` stops mds.
-
-Usage::
-
-	ceph mds stop <who>
 
 Subcommand ``tell`` sends command to particular mds.
 
