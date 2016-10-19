@@ -73,8 +73,14 @@ int MgrStandby::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD
       |CEPH_ENTITY_TYPE_MDS|CEPH_ENTITY_TYPE_MGR);
   monc->set_messenger(client_messenger);
-  monc->init();
-  int r = monc->authenticate();
+  int r = monc->init();
+  if (r < 0) {
+    monc->shutdown();
+    client_messenger->shutdown();
+    client_messenger->wait();
+    return r;
+  }
+  r = monc->authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify a mgr ID with a valid keyring?" << dendl;
     monc->shutdown();
@@ -112,8 +118,7 @@ void MgrStandby::send_beacon()
                                  available);
                                  
   monc->send_mon_message(m);
-  // TODO configure period
-  timer.add_event_after(5, new C_StdFunction(
+  timer.add_event_after(g_conf->mgr_beacon_period, new C_StdFunction(
         [this](){
           send_beacon();
         }
