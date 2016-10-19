@@ -227,6 +227,10 @@ class TestCephDisk(object):
             c.helper("install multipath-tools device-mapper-multipath")
         c.conf['global']['pid file'] = '/var/run/ceph/$cluster-$name.pid'
         #
+        # Avoid json parsing interference
+        #
+        c.conf['global']['debug monc'] = 0
+        #
         # objecstore
         #
         c.conf['global']['osd journal size'] = 100
