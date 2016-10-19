@@ -154,11 +154,11 @@ private:
 			  int threshold,
 			  vector<string>& args) const;
 
-  void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    object_stat_sum_t &sum,
-			    uint64_t avail,
-			    float raw_used_rate,
-			    bool verbose, const pg_pool_t *pool) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+				   object_stat_sum_t &sum,
+				   uint64_t avail,
+				   float raw_used_rate,
+				   bool verbose, const pg_pool_t *pool);
 
   int64_t get_rule_avail(OSDMap& osdmap, int ruleno) const;
 
@@ -221,6 +221,11 @@ private:
   // no copying allowed
   PGMonitor(const PGMonitor &rhs);
   PGMonitor &operator=(const PGMonitor &rhs);
+
+  // we don't want to include gtest.h just for FRIEND_TEST
+  friend class pgmonitor_dump_object_stat_sum_0_Test;
+  friend class pgmonitor_dump_object_stat_sum_1_Test;
+  friend class pgmonitor_dump_object_stat_sum_2_Test;
 };
 
 #endif
