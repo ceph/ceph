@@ -1953,7 +1953,6 @@ void BlueStore::ExtentMap::fault_range(
 }
 
 void BlueStore::ExtentMap::dirty_range(
-  KeyValueDB::Transaction t,
   uint32_t offset,
   uint32_t length)
 {
@@ -8088,7 +8087,7 @@ int BlueStore::_do_write(
 
   o->extent_map.compress_extent_map(offset, length);
 
-  o->extent_map.dirty_range(txc->t, offset, length);
+  o->extent_map.dirty_range(offset, length);
 
   if (end > o->onode.size) {
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
@@ -8158,7 +8157,7 @@ int BlueStore::_do_zero(TransContext *txc,
   WriteContext wctx;
   o->extent_map.fault_range(db, offset, length);
   o->extent_map.punch_hole(offset, length, &wctx.old_extents);
-  o->extent_map.dirty_range(txc->t, offset, length);
+  o->extent_map.dirty_range(offset, length);
   _wctx_finish(txc, c, o, &wctx);
 
   if (offset + length > o->onode.size) {
@@ -8193,7 +8192,7 @@ int BlueStore::_do_truncate(
     uint64_t length = o->onode.size - offset;
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(offset, length, &wctx.old_extents);
-    o->extent_map.dirty_range(txc->t, offset, length);
+    o->extent_map.dirty_range(offset, length);
     _wctx_finish(txc, c, o, &wctx);
   }
 
@@ -8673,7 +8672,7 @@ int BlueStore::_do_clone_range(
     ++n;
   }
   if (dirtied_oldo) {
-    oldo->extent_map.dirty_range(txc->t, srcoff, length); // overkill
+    oldo->extent_map.dirty_range(srcoff, length); // overkill
     txc->write_onode(oldo);
   }
   txc->write_onode(newo);
@@ -8681,7 +8680,7 @@ int BlueStore::_do_clone_range(
   if (dstoff + length > newo->onode.size) {
     newo->onode.size = dstoff + length;
   }
-  newo->extent_map.dirty_range(txc->t, dstoff, length);
+  newo->extent_map.dirty_range(dstoff, length);
   _dump_onode(oldo);
   _dump_onode(newo);
   return 0;
@@ -8808,7 +8807,7 @@ int BlueStore::_move_ranges_destroy_src(
 	       << offset + length << std::dec << dendl;
       baseo->onode.size = offset + length;
     }
-    baseo->extent_map.dirty_range(txc->t, offset, length);
+    baseo->extent_map.dirty_range(offset, length);
   }
   _wctx_finish(txc, c, baseo, &wctx);
   txc->write_onode(baseo);
