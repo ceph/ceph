@@ -919,7 +919,7 @@ void ECBackend::handle_sub_write(
   if (!op.temp_added.empty()) {
     add_temp_objs(op.temp_added);
   }
-  if (op.t.empty()) {
+  if (op.backfill) {
     for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = op.temp_removed.begin();
 	 i != op.temp_removed.end();
 	 ++i) {
@@ -939,7 +939,7 @@ void ECBackend::handle_sub_write(
     op.updated_hit_set_history,
     op.trim_to,
     op.roll_forward_to,
-    !(op.t.empty()),
+    !op.backfill,
     localt);
 
   ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
@@ -1960,7 +1960,8 @@ bool ECBackend::try_reads_to_commit()
       op->log_entries,
       op->updated_hit_set_history,
       op->temp_added,
-      op->temp_cleared);
+      op->temp_cleared,
+      !should_send);
     if (*i == get_parent()->whoami_shard()) {
       handle_sub_write(
 	get_parent()->whoami_shard(),

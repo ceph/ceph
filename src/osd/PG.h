@@ -2201,7 +2201,7 @@ public:
     return at_version;
   }
 
-  void add_log_entry(const pg_log_entry_t& e);
+  void add_log_entry(const pg_log_entry_t& e, bool applied);
   void append_log(
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
