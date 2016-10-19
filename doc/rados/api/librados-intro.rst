@@ -993,7 +993,7 @@ PHP Example
 
 
 .. _user ID: ../../operations/user-management#command-line-usage
-.. _CAPS: ../../operations/auth-intro#ceph-authorization-caps
+.. _CAPS: ../../operations/user-management#authorization-capabilities
 .. _Installation (Quick): ../../../start
 .. _Smart Daemons Enable Hyperscale: ../../../architecture#smart-daemons-enable-hyperscale
 .. _Calculating PG IDs: ../../../architecture#calculating-pg-ids
