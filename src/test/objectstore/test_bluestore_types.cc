@@ -692,6 +692,27 @@ TEST(Blob, put_ref)
     ASSERT_TRUE(b.extents[0].is_valid());
     ASSERT_EQ(mas*4, b.extents[0].length);
   }
+  {
+    BlueStore::Blob B;
+    B.shared_blob = new BlueStore::SharedBlob(-1, string(), nullptr);
+    B.shared_blob->get();  // hack to avoid dtor from running
+    bluestore_blob_t& b = B.dirty_blob();
+    B.ref_map.get(0x0, 0x3800);
+    B.ref_map.get(0x17c00, 0x6400);
+    b.extents.push_back(bluestore_pextent_t(0x40101000, 0x4000));
+    b.extents.push_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
+					    0x13000));
+    b.extents.push_back(bluestore_pextent_t(0x40118000, 0x7000));
+    b.set_flag(bluestore_blob_t::FLAG_SHARED);
+    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 12, 0x1e000);
+    b.sbid = 0xcf92e;
+
+    cout << "before: " << B << std::endl;
+    vector<bluestore_pextent_t> r;
+    B.put_ref(0x1800, 0x2000, 0x1000, &r);
+    cout << "after: " << B << std::endl;
+    cout << "r " << r << std::endl;
+  }
 }
 
 TEST(bluestore_blob_t, can_split)
