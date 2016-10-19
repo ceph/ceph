@@ -1045,7 +1045,7 @@ void MemStore::_do_transaction(Transaction& t)
 	  dump_all();
 	}
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op->op
+	derr    << " error " << cpp_strerror(r) << " not handled on operation " << op->op
 		<< " (op " << pos << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
