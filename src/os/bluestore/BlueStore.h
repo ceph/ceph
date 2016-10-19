@@ -1433,9 +1433,9 @@ private:
 
   std::mutex id_lock;
   std::atomic<uint64_t> nid_last = {0};
-  uint64_t nid_max = 0;
+  std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
-  uint64_t blobid_max = 0;
+  std::atomic<uint64_t> blobid_max = {0};
 
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
