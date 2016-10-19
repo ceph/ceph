@@ -35,7 +35,7 @@ active by the monitors, and the others will be standbys.  There is
 no requirement for quorum among the ceph-mgr daemons.
 
 If the active daemon fails to send a beacon to the monitors for
-more than ``mgr beacon period`` (default 30s), then it will be replaced
+more than ``mon mgr beacon grace`` (default 30s), then it will be replaced
 by a standby.
 
 If you want to pre-empt failover, you can explicitly mark a ceph-mgr
