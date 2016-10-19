@@ -6020,11 +6020,13 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "nid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, p);
+      uint64_t v;
+      ::decode(v, p);
+      nid_max = v;
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
-    nid_last = nid_max;
+    nid_last = nid_max.load();
   }
 
   // blobid
@@ -6034,11 +6036,13 @@ int BlueStore::_open_super_meta()
     db->get(PREFIX_SUPER, "blobid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(blobid_max, p);
+      uint64_t v;
+      ::decode(v, p);
+      blobid_max = v;
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old blobid_max " << blobid_max << dendl;
-    blobid_last = blobid_max;
+    blobid_last = blobid_max.load();
   }
 
   // freelist
@@ -6163,10 +6167,17 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       txc->shared_blobs_written.clear();
       if (g_conf->bluestore_sync_submit_transaction) {
-	_txc_finalize_kv(txc, txc->t);
-	txc->kv_submitted = true;
-	int r = db->submit_transaction(txc->t);
-	assert(r == 0);
+	if (txc->last_nid >= nid_max ||
+	    txc->last_blobid >= blobid_max) {
+	  dout(20) << __func__
+		   << " last_{nid,blobid} exceeds max, submit via kv thread"
+		   << dendl;
+	} else {
+	  _txc_finalize_kv(txc, txc->t);
+	  txc->kv_submitted = true;
+	  int r = db->submit_transaction(txc->t);
+	  assert(r == 0);
+	}
       }
       {
 	std::lock_guard<std::mutex> l(kv_lock);
