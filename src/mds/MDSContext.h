@@ -77,7 +77,8 @@ public:
 
 class MDSIOContextBase : public MDSContext
 {
-    void complete(int r);
+public:
+  void complete(int r);
 };
 
 /**
@@ -129,10 +130,17 @@ public:
  */
 class C_IO_Wrapper : public MDSIOContext
 {
-private:
+protected:
+  bool async;
   MDSInternalContextBase *wrapped;
+  virtual void finish(int r) {
+    wrapped->complete(r);
+    wrapped = nullptr;
+  }
+  virtual void complete(int r) final;
 public:
-  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) : MDSIOContext(mds_), wrapped(wrapped_) {
+  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
+    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
     assert(wrapped != NULL);
   }
 
@@ -141,11 +149,6 @@ public:
       delete wrapped;
       wrapped = nullptr;
     }
-  }
-
-  virtual void finish(int r) {
-    wrapped->complete(r);
-    wrapped = nullptr;
   }
 };
 

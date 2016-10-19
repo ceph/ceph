@@ -4218,8 +4218,7 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
     if (req_epoch > epoch) {
 
       // well, our map is older. consult mds.
-      Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
-        new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
+      Context *fin = new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr));
 
       if (!mds->objecter->wait_for_map(req_epoch, fin))
         return r; // wait, fin will retry this request later
@@ -4240,8 +4239,8 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
       // latest map. One day if COMPACT_VERSION of MClientRequest >=3,
       // we can remove those code.
       mdr->waited_for_osdmap = true;
-      mds->objecter->wait_for_latest_osdmap(new C_OnFinisher(new C_IO_Wrapper(
-        mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
+      mds->objecter->wait_for_latest_osdmap(new C_IO_Wrapper(
+			      mds, new C_MDS_RetryRequest(mdcache, mdr)));
       return r;
     }
   }
