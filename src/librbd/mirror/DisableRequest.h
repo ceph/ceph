@@ -48,6 +48,9 @@ private:
    * NOTIFY_MIRRORING_WATCHER                                     *
    *    |                                                         *
    *    v                                                         *
+   * PROMOTE_IMAGE (skip if primary)                              *
+   *    |                                                         *
+   *    v                                                         *
    * GET_CLIENTS <----------------------------------------\ * * * *
    *    |     | (unregister clients)                      |       *  (on error)
    *    |     |/----------------------------\             |       *
@@ -103,6 +106,9 @@ private:
   void send_notify_mirroring_watcher();
   Context *handle_notify_mirroring_watcher(int *result);
 
+  void send_promote_image();
+  Context *handle_promote_image(int *result);
+
   void send_get_clients();
   Context *handle_get_clients(int *result);
 
@@ -123,6 +129,7 @@ private:
     Context*(DisableRequest<ImageCtxT>::*handle)(
       int*, const std::string &client_id),
     const std::string &client_id);
+
 };
 
 } // namespace mirror
