@@ -8,9 +8,11 @@ import urlparse
 from collections import OrderedDict
 from cStringIO import StringIO
 
+from . import repo_utils
+
 from .config import config
 from .contextutil import safe_while
-from .exceptions import VersionNotFoundError
+from .exceptions import VersionNotFoundError, CommitNotFoundError
 from .orchestra.opsys import OS, DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
@@ -467,6 +469,7 @@ class GitbuilderProject(object):
         # when we're initializing with a remote we most likely have
         # a task config, not the entire teuthology job config
         self.flavor = self.job_config.get("flavor", "basic")
+        self.tag = self.job_config.get("tag")
 
     def _init_from_config(self):
         """
@@ -793,7 +796,9 @@ class ShamanProject(GitbuilderProject):
         req_obj['flavor'] = flavor
         req_obj['distros'] = '%s/%s' % (self.distro, self.arch)
         ref_name, ref_val = self._choose_reference().items()[0]
-        if ref_name == 'sha1':
+        if ref_name == 'tag':
+            req_obj['sha1'] = self._sha1 = self._tag_to_sha1()
+        elif ref_name == 'sha1':
             req_obj['sha1'] = ref_val
         else:
             req_obj['ref'] = ref_val
@@ -803,6 +808,25 @@ class ShamanProject(GitbuilderProject):
             'search',
         ) + '?%s' % req_str
         return uri
+
+    def _tag_to_sha1(self):
+        """
+        Shaman doesn't know about tags. Use git ls-remote to query the remote
+        repo in order to map tags to their sha1 value.
+        """
+        git_url = repo_utils.build_git_url(self.project)
+        # Ceph (and other projects) uses annotated tags for releases. This has
+        # the side-effect of making git ls-remote return the sha1 for the
+        # annotated tag object and not the last "real" commit in that tag. By
+        # contrast, when a person (or a build system) issues a
+        # "git checkout <tag>" command, HEAD will be the last "real" commit and
+        # not the tag.
+        # Below we have to append "^{}" to the tag value to work around this in
+        # order to query for the sha1 that the build system uses.
+        result = repo_utils.ls_remote(git_url, "%s^{}" % self.tag)
+        if result is None:
+            raise CommitNotFoundError(self.tag, git_url)
+        return result
 
     def assert_result(self):
         if len(self._result.json()) == 0:
