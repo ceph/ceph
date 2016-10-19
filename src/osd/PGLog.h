@@ -419,7 +419,11 @@ public:
     }
 
     // actors
-    void add(const pg_log_entry_t& e) {
+    void add(const pg_log_entry_t& e, bool applied = true) {
+      if (!applied) {
+	assert(get_can_rollback_to() == head);
+      }
+
       // add to log
       log.push_back(e);
 
@@ -448,6 +452,10 @@ public:
 	     ++j) {
 	  extra_caller_ops.insert(make_pair(j->first, &(log.back())));
         }
+      }
+
+      if (!applied) {
+	skip_can_rollback_to_to_head();
       }
     }
 

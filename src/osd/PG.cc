@@ -3012,7 +3012,7 @@ void PG::trim_peers()
   }
 }
 
-void PG::add_log_entry(const pg_log_entry_t& e)
+void PG::add_log_entry(const pg_log_entry_t& e, bool applied)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -3028,7 +3028,7 @@ void PG::add_log_entry(const pg_log_entry_t& e)
     info.last_user_version = e.user_version;
 
   // log mutation
-  pg_log.add(e);
+  pg_log.add(e, applied);
   dout(10) << "add_log_entry " << e << dendl;
 }
 
