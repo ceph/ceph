@@ -28,7 +28,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
-
+namespace {
 class SessionMapIOContext : public MDSIOContextBase
 {
   protected:
@@ -38,6 +38,7 @@ class SessionMapIOContext : public MDSIOContextBase
     explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       assert(sessionmap != NULL);
     }
+};
 };
 
 void SessionMap::register_perfcounters()
@@ -80,6 +81,7 @@ object_t SessionMap::get_object_name()
   return object_t(s);
 }
 
+namespace {
 class C_IO_SM_Load : public SessionMapIOContext {
 public:
   const bool first;  //< Am I the initial (header) load?
@@ -95,6 +97,7 @@ public:
     sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals);
   }
 };
+}
 
 
 /**
@@ -262,6 +265,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
   mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
 }
 
+namespace {
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
 public:
   bufferlist bl;
@@ -270,6 +274,7 @@ public:
     sessionmap->_load_legacy_finish(r, bl);
   }
 };
+}
 
 
 /**
@@ -323,6 +328,7 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
 // ----------------
 // SAVE
 
+namespace {
 class C_IO_SM_Save : public SessionMapIOContext {
   version_t version;
 public:
@@ -332,6 +338,7 @@ public:
     sessionmap->_save_finish(version);
   }
 };
+}
 
 void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 {
@@ -652,7 +659,7 @@ version_t SessionMap::mark_projected(Session *s)
   return projected;
 }
 
-
+namespace {
 class C_IO_SM_Save_One : public SessionMapIOContext {
   MDSInternalContextBase *on_safe;
 public:
@@ -666,6 +673,7 @@ public:
     }
   }
 };
+}
 
 
 void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
