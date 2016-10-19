@@ -318,7 +318,7 @@ class CephFSVolumeClient(object):
 
         log.debug("Recovered from partial auth updates (if any).")
 
-    def _recover_auth_meta(auth_id, auth_meta):
+    def _recover_auth_meta(self, auth_id, auth_meta):
         """
         Call me after locking the auth meta file.
         """
@@ -329,6 +329,7 @@ class CephFSVolumeClient(object):
                 continue
 
             (group_id, volume_id) = volume.split('/')
+            group_id = group_id if group_id is not 'None' else None
             volume_path = VolumePath(group_id, volume_id)
             access_level = volume_data['access_level']
 
@@ -338,7 +339,7 @@ class CephFSVolumeClient(object):
                 # No VMeta update indicates that there was no auth update
                 # in Ceph either. So it's safe to remove corresponding
                 # partial update in AMeta.
-                if auth_id not in vol_meta['auths']:
+                if not vol_meta or auth_id not in vol_meta['auths']:
                     remove_volumes.append(volume)
                     continue
 
