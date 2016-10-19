@@ -3556,7 +3556,8 @@ void RGWPutACLs::execute()
   }
 
   new_policy.encode(bl);
-  obj = rgw_obj(s->bucket, s->object);
+  obj = rgw_obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
   map<string, bufferlist> attrs;
 
   store->set_atomic(s->obj_ctx, obj);
