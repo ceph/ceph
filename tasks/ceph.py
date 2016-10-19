@@ -28,6 +28,34 @@ CEPH_ROLE_TYPES = ['mon', 'osd', 'mds', 'rgw']
 log = logging.getLogger(__name__)
 
 
+def generate_caps(type_):
+    """
+    Each call will return the next capability for each system type
+    (essentially a subset of possible role values).  Valid types are osd,
+    mds and client.
+    """
+    defaults = dict(
+        osd=dict(
+            mon='allow *',
+            osd='allow *',
+        ),
+        mds=dict(
+            mon='allow *',
+            osd='allow *',
+            mds='allow',
+        ),
+        client=dict(
+            mon='allow rw',
+            osd='allow rwx',
+            mds='allow',
+        ),
+    )
+    for subsystem, capability in defaults[type_].items():
+        yield '--cap'
+        yield subsystem
+        yield capability
+
+
 @contextlib.contextmanager
 def ceph_log(ctx, config):
     """
@@ -776,7 +804,7 @@ def cluster(ctx, config):
                              type=type_,
                              id=id_,
                          ),
-                     ] + list(teuthology.generate_caps(type_)),
+                     ] + list(generate_caps(type_)),
                 wait=False,
             ),
         )
