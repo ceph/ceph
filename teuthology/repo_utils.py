@@ -36,6 +36,20 @@ def is_fresh(path):
     return False
 
 
+def ls_remote(url, ref):
+    """
+    Return the current sha1 for a given repository and ref
+
+    :returns: The sha1 if found; else None
+    """
+    cmd = "git ls-remote {} {}".format(url, ref)
+    result = subprocess.check_output(
+        cmd, shell=True).split()
+    sha1 = result[0] if result else None
+    log.debug("{} -> {}".format(cmd, sha1))
+    return sha1
+
+
 def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
     """
     Use git to either clone or update a given repo, forcing it to switch to the

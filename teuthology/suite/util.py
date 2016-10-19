@@ -11,6 +11,7 @@ import sys
 from email.mime.text import MIMEText
 
 from .. import lock
+from .. import repo_utils
 
 from ..config import config
 from ..exceptions import BranchNotFoundError, ScheduleFailError
@@ -175,12 +176,7 @@ def git_ls_remote(project, branch, project_owner='ceph'):
     :returns: The sha1 if found; else None
     """
     url = build_git_url(project, project_owner)
-    cmd = "git ls-remote {} {}".format(url, branch)
-    result = subprocess.check_output(
-        cmd, shell=True).split()
-    sha1 = result[0] if result else None
-    log.debug("{} -> {}".format(cmd, sha1))
-    return sha1
+    return repo_utils.ls_remote(url, branch)
 
 
 def git_validate_sha1(project, sha1, project_owner='ceph'):
