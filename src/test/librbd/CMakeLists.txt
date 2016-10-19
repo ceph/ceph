@@ -38,6 +38,7 @@ set(unittest_librbd_srcs
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
+  mirror/test_mock_DisableRequest.cc
   object_map/test_mock_InvalidateRequest.cc
   object_map/test_mock_LockRequest.cc
   object_map/test_mock_RefreshRequest.cc
