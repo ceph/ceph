@@ -588,7 +588,19 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   }
 
   lock.get_write();
-  assert(context_stacks.empty() || going_down.read()); // assert on deadlock
+  if (!context_stacks.empty() && !going_down.read()) {
+    JSONFormatter formatter(true);
+    formatter.open_array_section("context_stacks");
+    for (auto& s : context_stacks) {
+      ::encode_json("entry", *s, &formatter);
+    }
+    formatter.close_section();
+    lderr(cct) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
+    formatter.flush(*_dout);
+    *_dout << dendl;
+    assert(context_stacks.empty() || going_down.read()); // assert on deadlock
+  }
+
   for (auto stack : context_stacks) {
     ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
     stack->put();
