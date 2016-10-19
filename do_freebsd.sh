@@ -16,6 +16,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D CMAKE_C_FLAGS_DEBUG="-O0 -g" \
 	-D ENABLE_GIT_VERSION=OFF \
 	-D WITH_BLKID=OFF \
+	-D WITH_LTTNG=OFF \
 	-D WITH_FUSE=OFF \
 	-D WITH_RBD=OFF \
 	-D WITH_XFS=OFF \
