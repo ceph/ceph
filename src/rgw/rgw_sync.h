@@ -451,5 +451,31 @@ public:
   int operate();
 };
 
+class RGWBaseContinuousLeaseCR;
+class RGWBaseShardedOmapCRManager;
+
+class RGWFetchAllMetaEnv {
+ public:
+  virtual ~RGWFetchAllMetaEnv() = default;
+
+  // child cr factories to support unit testing
+  virtual RGWBaseContinuousLeaseCR* create_lease(RGWCoroutine *parent) = 0;
+  virtual RGWBaseShardedOmapCRManager* create_omap_mgr(RGWCoroutine *parent,
+                                                       int num_shards) = 0;
+  virtual RGWCoroutine* create_read_sections(std::list<std::string> *res) = 0;
+  virtual RGWCoroutine* create_read_keys(const std::string& section,
+                                         std::list<std::string> *res) = 0;
+  virtual RGWCoroutine* create_write_marker(int shard_id,
+                                            const rgw_meta_sync_marker& m) = 0;
+
+  virtual int get_log_shard_id(const std::string& section,
+                               const std::string& key, int *shard_id) = 0;
+};
+
+// create a coroutine to build the full sync maps for metadata
+extern RGWCoroutine* create_fetch_all_meta_cr(CephContext *cct,
+                                              RGWFetchAllMetaEnv *env,
+                                              int num_shards,
+                                              std::map<uint32_t, rgw_meta_sync_marker>& markers);
 
 #endif
