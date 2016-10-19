@@ -183,7 +183,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   projected_version(0),  item_dirty(this), item_new(this),
-  scrub_infop(NULL),
   num_head_items(0), num_head_null(0),
   num_snap_items(0), num_snap_null(0),
   num_dirty(0), committing_version(0), committed_version(0),
@@ -195,7 +194,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
   num_dentries_nested(0), num_dentries_auth_subtree(0),
   num_dentries_auth_subtree_nested(0),
-  bloom(NULL),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
   g_num_dir++;
@@ -639,7 +637,7 @@ void CDir::add_to_bloom(CDentry *dn)
       return;
     unsigned size = get_num_head_items() + get_num_snap_items();
     if (size < 100) size = 100;
-    bloom = new bloom_filter(size, 1.0 / size, 0);
+    bloom.reset(new bloom_filter(size, 1.0 / size, 0));
   }
   /* This size and false positive probability is completely random.*/
   bloom->insert(dn->name.c_str(), dn->name.size());
@@ -650,12 +648,6 @@ bool CDir::is_in_bloom(const string& name)
   if (!bloom)
     return false;
   return bloom->contains(name.c_str(), name.size());
-}
-
-void CDir::remove_bloom()
-{
-  delete bloom;
-  bloom = NULL;
 }
 
 void CDir::remove_null_dentries() {
@@ -1379,7 +1371,7 @@ void CDir::log_mark_dirty()
 
 void CDir::mark_complete() {
   state_set(STATE_COMPLETE);
-  remove_bloom();
+  bloom.reset();
 }
 
 void CDir::first_get()
@@ -2915,7 +2907,7 @@ void CDir::scrub_info_create() const
   CDir *me = const_cast<CDir*>(this);
   fnode_t *fn = me->get_projected_fnode();
 
-  scrub_info_t *si = new scrub_info_t();
+  std::unique_ptr<scrub_info_t> si(new scrub_info_t());
 
   si->last_recursive.version = si->recursive_start.version =
       fn->recursive_scrub_version;
@@ -2925,7 +2917,7 @@ void CDir::scrub_info_create() const
   si->last_local.version = fn->localized_scrub_version;
   si->last_local.time = fn->localized_scrub_stamp;
 
-  me->scrub_infop = si;
+  me->scrub_infop.swap(si);
 }
 
 void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
@@ -3108,8 +3100,7 @@ void CDir::scrub_maybe_delete_info()
       !scrub_infop->last_scrub_dirty &&
       !scrub_infop->pending_scrub_error &&
       scrub_infop->dirty_scrub_stamps.empty()) {
-    delete scrub_infop;
-    scrub_infop = NULL;
+    scrub_infop.reset();
   }
 }
 
