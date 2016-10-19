@@ -27,8 +27,6 @@
 
 	osd default data pool replay window = 5
 
-	debug monc = 1
-
 [osd]
         osd journal size = 100
 
@@ -52,7 +50,6 @@
 
 	filestore ondisk finisher threads = 3
 	filestore apply finisher threads = 3
-
 
 [mon]
 	debug ms = 1
