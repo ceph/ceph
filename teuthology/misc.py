@@ -291,34 +291,6 @@ def get_mons(roles, ips):
     return mons
 
 
-def generate_caps(type_):
-    """
-    Each call will return the next capability for each system type
-    (essentially a subset of possible role values).  Valid types are osd,
-    mds and client.
-    """
-    defaults = dict(
-        osd=dict(
-            mon='allow *',
-            osd='allow *',
-        ),
-        mds=dict(
-            mon='allow *',
-            osd='allow *',
-            mds='allow',
-        ),
-        client=dict(
-            mon='allow rw',
-            osd='allow rwx',
-            mds='allow',
-        ),
-    )
-    for subsystem, capability in defaults[type_].items():
-        yield '--cap'
-        yield subsystem
-        yield capability
-
-
 def skeleton_config(ctx, roles, ips, cluster='ceph'):
     """
     Returns a ConfigObj that is prefilled with a skeleton config.
