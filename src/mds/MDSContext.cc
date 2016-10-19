@@ -45,7 +45,6 @@ void MDSInternalContextWrapper::finish(int r)
   fin->complete(r);
 }
 
-
 void MDSIOContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
@@ -64,6 +63,15 @@ void MDSIOContextBase::complete(int r) {
   } else {
     MDSContext::complete(r);
   }
+}
+
+void MDSLogContextBase::complete(int r) {
+  MDLog *mdlog = get_mds()->mdlog;
+  uint64_t safe_pos = write_pos;
+  pre_finish(r);
+  // MDSContextBase::complete() free this
+  MDSIOContextBase::complete(r);
+  mdlog->set_safe_pos(safe_pos);
 }
 
 MDSRank *MDSIOContext::get_mds() {

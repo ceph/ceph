@@ -266,8 +266,9 @@ private:
   friend class C_Locker_FileUpdate_finish;
   friend class C_Locker_RetryCapRelease;
   friend class C_Locker_Eval;
-  friend class LockerContext;
   friend class C_Locker_ScatterWB;
+  friend class LockerContext;
+  friend class LockerLogContext;
 
   
   // -- client leases --
