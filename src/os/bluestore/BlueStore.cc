@@ -6166,7 +6166,8 @@ void BlueStore::_txc_state_proc(TransContext *txc)
         sb->bc.finish_write(txc->seq);
       }
       txc->shared_blobs_written.clear();
-      if (g_conf->bluestore_sync_submit_transaction) {
+      if (g_conf->bluestore_sync_submit_transaction &&
+	  fm->supports_parallel_transactions()) {
 	if (txc->last_nid >= nid_max ||
 	    txc->last_blobid >= blobid_max) {
 	  dout(20) << __func__
