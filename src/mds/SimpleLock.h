@@ -16,7 +16,7 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
-#include "mdstypes.h"
+#include "MDSCacheObject.h"
 #include "MDSContext.h"
 
 // -- lock types --

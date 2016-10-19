@@ -23,7 +23,7 @@
 #include "include/lru.h"
 #include "include/compact_set.h"
 
-#include "mdstypes.h"
+#include "MDSCacheObject.h"
 #include "flock.h"
 
 #include "CDentry.h"
