@@ -28,6 +28,8 @@ Linux Kernel
   - 3.16.z
   - 3.10.z
 
+  For CephFS, see `CephFS best practices`_ for kernel version guidance.
+
   Older kernel client versions may not support your `CRUSH tunables`_ profile.
 
 - **B-tree File System (Btrfs)**
@@ -129,3 +131,5 @@ Testing
   pre-release, and released code.
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
+
+.. _CephFS best practices: ../../cephfs/best-practices
