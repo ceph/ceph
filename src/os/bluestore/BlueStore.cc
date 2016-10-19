@@ -4585,9 +4585,9 @@ int BlueStore::fsck(bool deep)
     size_t count = used_blocks.count();
     if (used_blocks.size() != count) {
       assert(used_blocks.size() > count);
-      derr << __func__ << " leaked some space;"
+      derr << __func__ << " leaked 0x" << std::hex
 	   << (used_blocks.size() - count) * min_alloc_size
-	   << " bytes leaked" << dendl;
+	   << std::dec << " bytes" << dendl;
       ++errors;
     }
   }
