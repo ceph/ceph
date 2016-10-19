@@ -1874,7 +1874,7 @@ void CInode::start_scatter(ScatterLock *lock)
 }
 
 
-class C_Inode_FragUpdate : public MDSInternalContextBase {
+class C_Inode_FragUpdate : public MDSLogContextBase {
 protected:
   CInode *in;
   CDir *dir;

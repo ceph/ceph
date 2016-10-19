@@ -93,6 +93,7 @@ class StrayManager
   void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
 
   friend class StrayManagerIOContext;
+  friend class StrayManagerLogContext;
   friend class StrayManagerContext;
 
   friend class C_StraysFetched;

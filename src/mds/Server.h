@@ -59,6 +59,7 @@ private:
 
   friend class MDSContinuation;
   friend class ServerContext;
+  friend class ServerLogContext;
 
 public:
   bool terminating_sessions;
@@ -112,8 +113,8 @@ public:
   void handle_client_request(MClientRequest *m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
-			 LogEvent *le, MDSInternalContextBase *fin);
-  void submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin,
+			 LogEvent *le, MDSLogContextBase *fin);
+  void submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin,
                           MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);

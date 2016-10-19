@@ -164,6 +164,17 @@ public:
   explicit MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
+class MDCacheLogContext : public virtual MDSLogContextBase {
+protected:
+  MDCache *mdcache;
+  virtual MDSRank *get_mds()
+  {
+    assert(mdcache != NULL);
+    return mdcache->mds;
+  }
+public:
+  explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
+};
 
 MDCache::MDCache(MDSRank *m) :
   mds(m),
@@ -472,13 +483,13 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
   myin->store(gather->new_sub());
 }
 
-struct C_MDC_CreateSystemFile : public MDCacheContext {
+struct C_MDC_CreateSystemFile : public MDCacheLogContext {
   MutationRef mut;
   CDentry *dn;
   version_t dpv;
   MDSInternalContextBase *fin;
   C_MDC_CreateSystemFile(MDCache *c, MutationRef& mu, CDentry *d, version_t v, MDSInternalContextBase *f) :
-    MDCacheContext(c), mut(mu), dn(d), dpv(v), fin(f) {}
+    MDCacheLogContext(c), mut(mu), dn(d), dpv(v), fin(f) {}
   void finish(int r) {
     mdcache->_create_system_file_finish(mut, dn, dpv, fin);
   }
@@ -884,11 +895,11 @@ void MDCache::try_subtree_merge(CDir *dir)
     try_subtree_merge_at(*p);
 }
 
-class C_MDC_SubtreeMergeWB : public MDCacheContext {
+class C_MDC_SubtreeMergeWB : public MDCacheLogContext {
   CInode *in;
   MutationRef mut;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : MDCacheContext(mdc), in(i), mut(m) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : MDCacheLogContext(mdc), in(i), mut(m) {}
   void finish(int r) { 
     mdcache->subtree_merge_writebehind_finish(in, mut);
   }
@@ -2390,9 +2401,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
  * remove them from the uncommitted_masters map (used during recovery
  * to commit|abort slaves).
  */
-struct C_MDC_CommittedMaster : public MDCacheContext {
+struct C_MDC_CommittedMaster : public MDCacheLogContext {
   metareqid_t reqid;
-  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : MDCacheContext(s), reqid(r) {}
+  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : MDCacheLogContext(s), reqid(r) {}
   void finish(int r) {
     mdcache->_logged_master_commit(reqid);
   }
@@ -2465,10 +2476,10 @@ void MDCache::finish_committed_masters()
  * masters when it reaches up:active (all other recovering nodes must
  * complete resolve before that happens).
  */
-struct C_MDC_SlaveCommit : public MDCacheContext {
+struct C_MDC_SlaveCommit : public MDCacheLogContext {
   mds_rank_t from;
   metareqid_t reqid;
-  C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : MDCacheContext(c), from(f), reqid(r) {}
+  C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : MDCacheLogContext(c), from(f), reqid(r) {}
   void finish(int r) {
     mdcache->_logged_slave_commit(from, reqid);
   }
@@ -5225,13 +5236,13 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
   }
 }
 
-class C_MDC_RejoinSessionsOpened : public MDCacheContext {
+class C_MDC_RejoinSessionsOpened : public MDCacheLogContext {
 public:
   map<client_t,entity_inst_t> client_map;
   map<client_t,uint64_t> sseqmap;
 
   C_MDC_RejoinSessionsOpened(MDCache *c, map<client_t,entity_inst_t>& cm) :
-    MDCacheContext(c), client_map(cm) {}
+    MDCacheLogContext(c), client_map(cm) {}
   void finish(int r) {
     assert(r == 0);
     mdcache->rejoin_open_sessions_finish(client_map, sseqmap);
@@ -6229,11 +6240,11 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 					   mds->finisher));
 }
 
-struct C_MDC_TruncateLogged : public MDCacheContext {
+struct C_MDC_TruncateLogged : public MDCacheLogContext {
   CInode *in;
   MutationRef mut;
   C_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
-    MDCacheContext(m), in(i), mut(mu) {}
+    MDCacheLogContext(m), in(i), mut(mu) {}
   void finish(int r) {
     mdcache->truncate_inode_logged(in, mut);
   }
@@ -9111,13 +9122,13 @@ void MDCache::request_kill(MDRequestRef& mdr)
 // -------------------------------------------------------------------------------
 // SNAPREALMS
 
-struct C_MDC_snaprealm_create_finish : public MDCacheContext {
+struct C_MDC_snaprealm_create_finish : public MDCacheLogContext {
   MDRequestRef mdr;
   MutationRef mut;
   CInode *in;
   C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m,
                                 MutationRef& mu, CInode *i) :
-    MDCacheContext(c), mdr(m), mut(mu), in(i) {}
+    MDCacheLogContext(c), mdr(m), mut(mu), in(i) {}
   void finish(int r) {
     mdcache->_snaprealm_create_finish(mdr, mut, in);
   }
@@ -10960,33 +10971,30 @@ void MDCache::find_stale_fragment_freeze()
   }
 }
 
-class C_MDC_FragmentPrep : public MDSInternalContext {
-  MDCache *mdcache;
+class C_MDC_FragmentPrep : public MDCacheLogContext {
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
+  C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : MDCacheLogContext(m),  mdr(r) {}
   virtual void finish(int r) {
     mdcache->_fragment_logged(mdr);
   }
 };
 
-class C_MDC_FragmentStore : public MDSInternalContext {
-  MDCache *mdcache;
+class C_MDC_FragmentStore : public MDCacheContext {
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
+  C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->_fragment_stored(mdr);
   }
 };
 
-class C_MDC_FragmentCommit : public MDSInternalContext {
-  MDCache *mdcache;
+class C_MDC_FragmentCommit : public MDCacheLogContext {
   dirfrag_t basedirfrag;
   list<CDir*> resultfrags;
 public:
   C_MDC_FragmentCommit(MDCache *m, dirfrag_t df, list<CDir*>& l) :
-    MDSInternalContext(m->mds), mdcache(m), basedirfrag(df), resultfrags(l) {}
+    MDCacheLogContext(m), basedirfrag(df), resultfrags(l) {}
   virtual void finish(int r) {
     mdcache->_fragment_committed(basedirfrag, resultfrags);
   }
@@ -11915,13 +11923,13 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   return;
 }
 
-struct C_MDC_RepairDirfragStats : public MDSInternalContext {
+struct C_MDC_RepairDirfragStats : public MDCacheLogContext {
   MDRequestRef mdr;
-  C_MDC_RepairDirfragStats(MDSRank *_mds, MDRequestRef& m) :
-    MDSInternalContext(_mds), mdr(m) {}
+  C_MDC_RepairDirfragStats(MDCache *c, MDRequestRef& m) :
+    MDCacheLogContext(c), mdr(m) {}
   void finish(int r) {
     mdr->apply();
-    mds->server->respond_to_request(mdr, r);
+    get_mds()->server->respond_to_request(mdr, r);
   }
 };
 
@@ -12024,7 +12032,7 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   le->metablob.add_dir_context(dir);
   le->metablob.add_dir(dir, true);
 
-  mds->mdlog->submit_entry(le, new C_MDC_RepairDirfragStats(mds, mdr));
+  mds->mdlog->submit_entry(le, new C_MDC_RepairDirfragStats(this, mdr));
 }
 
 void MDCache::repair_inode_stats(CInode *diri)

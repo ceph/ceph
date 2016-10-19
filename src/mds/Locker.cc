@@ -56,19 +56,32 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
 
 
 class LockerContext : public MDSInternalContextBase {
-  protected:
+protected:
   Locker *locker;
   MDSRank *get_mds()
   {
     return locker->mds;
   }
 
-  public:
+public:
   explicit LockerContext(Locker *locker_) : locker(locker_) {
     assert(locker != NULL);
   }
 };
 
+class LockerLogContext : public MDSLogContextBase {
+protected:
+  Locker *locker;
+  MDSRank *get_mds()
+  {
+    return locker->mds;
+  }
+
+public:
+  explicit LockerLogContext(Locker *locker_) : locker(locker_) {
+    assert(locker != NULL);
+  }
+};
 
 /* This function DOES put the passed message before returning */
 void Locker::dispatch(Message *m)
@@ -1686,7 +1699,7 @@ version_t Locker::issue_file_data_version(CInode *in)
   return in->inode.file_data_version;
 }
 
-class C_Locker_FileUpdate_finish : public LockerContext {
+class C_Locker_FileUpdate_finish : public LockerLogContext {
   CInode *in;
   MutationRef mut;
   bool share;
@@ -1698,7 +1711,7 @@ public:
 				bool e=false, client_t c=-1,
 				Capability *cp = 0,
 				MClientCaps *ac = 0)
-    : LockerContext(l), in(i), mut(m), share(e), client(c), cap(cp),
+    : LockerLogContext(l), in(i), mut(m), share(e), client(c), cap(cp),
       ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
@@ -4188,12 +4201,12 @@ Some notes on scatterlocks.
 
 */
 
-class C_Locker_ScatterWB : public LockerContext {
+class C_Locker_ScatterWB : public LockerLogContext {
   ScatterLock *lock;
   MutationRef mut;
 public:
   C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
-    LockerContext(l), lock(sl), mut(m) {}
+    LockerLogContext(l), lock(sl), mut(m) {}
   void finish(int r) { 
     locker->scatter_writebehind_finish(lock, mut); 
   }

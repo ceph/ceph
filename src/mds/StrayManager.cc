@@ -45,6 +45,16 @@ public:
   explicit StrayManagerIOContext(StrayManager *sm_) : sm(sm_) {}
 };
 
+class StrayManagerLogContext : public virtual MDSLogContextBase {
+protected:
+  StrayManager *sm;
+  virtual MDSRank *get_mds()
+  {
+    return sm->mds;
+  }
+public:
+  explicit StrayManagerLogContext(StrayManager *sm_) : sm(sm_) {}
+};
 
 class StrayManagerContext : public virtual MDSInternalContextBase {
 protected:
@@ -170,24 +180,24 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   gather.activate();
 }
 
-class C_PurgeStrayLogged : public StrayManagerContext {
+class C_PurgeStrayLogged : public StrayManagerLogContext {
   CDentry *dn;
   version_t pdv;
   LogSegment *ls;
 public:
   C_PurgeStrayLogged(StrayManager *sm_, CDentry *d, version_t v, LogSegment *s) : 
-    StrayManagerContext(sm_), dn(d), pdv(v), ls(s) { }
+    StrayManagerLogContext(sm_), dn(d), pdv(v), ls(s) { }
   void finish(int r) {
     sm->_purge_stray_logged(dn, pdv, ls);
   }
 };
 
-class C_TruncateStrayLogged : public StrayManagerContext {
+class C_TruncateStrayLogged : public StrayManagerLogContext {
   CDentry *dn;
   LogSegment *ls;
 public:
   C_TruncateStrayLogged(StrayManager *sm, CDentry *d, LogSegment *s) :
-    StrayManagerContext(sm), dn(d), ls(s) { }
+    StrayManagerLogContext(sm), dn(d), ls(s) { }
   void finish(int r) {
     sm->_truncate_stray_logged(dn, ls);
   }

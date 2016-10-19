@@ -35,11 +35,12 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".tableclient(" << get_mdstable_name(table) << ") "
 
 
-class C_LoggedAck : public MDSInternalContext {
+class C_LoggedAck : public MDSLogContextBase {
   MDSTableClient *tc;
   version_t tid;
+  MDSRank *get_mds() { return tc->mds; }
 public:
-  C_LoggedAck(MDSTableClient *a, version_t t) : MDSInternalContext(a->mds), tc(a), tid(t) {}
+  C_LoggedAck(MDSTableClient *a, version_t t) : tc(a), tid(t) {}
   void finish(int r) {
     tc->_logged_ack(tid);
   }
