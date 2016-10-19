@@ -151,7 +151,7 @@ public:
   void notify_recall_sent(int const new_limit);
   void clear_recalled_at();
 
-  inodeno_t next_ino() {
+  inodeno_t next_ino() const {
     if (info.prealloc_inos.empty())
       return 0;
     return info.prealloc_inos.range_start();
@@ -172,17 +172,17 @@ public:
     info.used_inos.insert(ino, 1);
     return ino;
   }
-  int get_num_projected_prealloc_inos() {
+  int get_num_projected_prealloc_inos() const {
     return info.prealloc_inos.size() + pending_prealloc_inos.size();
   }
 
-  client_t get_client() {
+  client_t get_client() const {
     return info.get_client();
   }
 
   int get_state() { return state; }
   const char *get_state_name() const { return get_state_name(state); }
-  uint64_t get_state_seq() { return state_seq; }
+  uint64_t get_state_seq() const { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }
   bool is_open() const { return state == STATE_OPEN; }
@@ -197,7 +197,7 @@ public:
     assert(importing_count > 0);
     --importing_count;
   }
-  bool is_importing() { return importing_count > 0; }
+  bool is_importing() const { return importing_count > 0; }
 
   // -- caps --
 private:
@@ -292,12 +292,16 @@ public:
   }
 
   unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }
-  unsigned get_num_trim_flushes_warnings() { return num_trim_flushes_warnings; }
+  unsigned get_num_trim_flushes_warnings() const {
+    return num_trim_flushes_warnings;
+  }
   void inc_num_trim_flushes_warnings() { ++num_trim_flushes_warnings; }
   void reset_num_trim_flushes_warnings() { num_trim_flushes_warnings = 0; }
 
   unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
-  unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
+  unsigned get_num_trim_requests_warnings() const {
+    return num_trim_requests_warnings;
+  }
   void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
   void reset_num_trim_requests_warnings() { num_trim_requests_warnings = 0; }
 
@@ -592,7 +596,7 @@ public:
   inodeno_t ino;
   list<MDSInternalContextBase*> waiting_for_load;
 
-  object_t get_object_name();
+  object_t get_object_name() const;
 
   void load(MDSInternalContextBase *onload);
   void _load_finish(
