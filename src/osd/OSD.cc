@@ -5474,7 +5474,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability);
+			   cp->module, cp->perm, cp->availability, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
