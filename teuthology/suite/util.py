@@ -1,7 +1,6 @@
 import copy
 import logging
 import os
-import re
 import requests
 import smtplib
 import socket
@@ -19,6 +18,7 @@ from ..misc import deep_merge
 from ..repo_utils import fetch_qa_suite, fetch_teuthology
 from ..orchestra.opsys import OS
 from ..packaging import get_builder_project
+from ..repo_utils import build_git_url
 from ..task.install import get_flavor
 
 log = logging.getLogger(__name__)
@@ -203,20 +203,6 @@ def git_validate_sha1(project, sha1, project_owner='ceph'):
     if resp.ok:
         return sha1
     return None
-
-
-def build_git_url(project, project_owner='ceph'):
-    """
-    Return the git URL to clone the project
-    """
-    if project == 'ceph-qa-suite':
-        base = config.get_ceph_qa_suite_git_url()
-    elif project == 'ceph':
-        base = config.get_ceph_git_url()
-    else:
-        base = 'https://github.com/{project_owner}/{project}'
-    url_templ = re.sub('\.git$', '', base)
-    return url_templ.format(project_owner=project_owner, project=project)
 
 
 def git_branch_exists(project, branch, project_owner='ceph'):
