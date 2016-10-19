@@ -158,6 +158,10 @@ enum {
   l_osd_tier_promote_lat,
   l_osd_tier_r_lat,
 
+  l_osd_pg_info,
+  l_osd_pg_fastinfo,
+  l_osd_pg_biginfo,
+
   l_osd_last,
 };
 
