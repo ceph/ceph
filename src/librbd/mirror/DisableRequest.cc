@@ -13,6 +13,7 @@
 #include "librbd/MirroringWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/journal/PromoteRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -111,7 +112,6 @@ Context *DisableRequest<I>::handle_get_tag_owner(int *result) {
     return m_on_finish;
   }
 
-  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
   send_set_mirror_image();
   return nullptr;
 }
@@ -120,6 +120,8 @@ template <typename I>
 void DisableRequest<I>::send_set_mirror_image() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
 
   librados::ObjectWriteOperation op;
   cls_client::mirror_image_set(&op, m_image_ctx->id, m_mirror_image);
@@ -172,6 +174,40 @@ Context *DisableRequest<I>::handle_notify_mirroring_watcher(int *result) {
     lderr(cct) << "failed to send update notification: "
                << cpp_strerror(*result) << dendl;
     *result = 0;
+  }
+
+  send_promote_image();
+  return nullptr;
+}
+
+template <typename I>
+void DisableRequest<I>::send_promote_image() {
+  if (m_is_primary) {
+    send_get_clients();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  // Not primary -- shouldn't have the journal open
+  assert(m_image_ctx->journal == nullptr);
+
+  using klass = DisableRequest<I>;
+  Context *ctx = util::create_context_callback<
+    klass, &klass::handle_promote_image>(this);
+  auto req = journal::PromoteRequest<I>::create(m_image_ctx, true, ctx);
+  req->send();
+}
+
+template <typename I>
+Context *DisableRequest<I>::handle_promote_image(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to promote image: " << cpp_strerror(*result) << dendl;
+    return m_on_finish;
   }
 
   send_get_clients();
