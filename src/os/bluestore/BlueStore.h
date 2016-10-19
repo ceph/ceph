@@ -1163,7 +1163,7 @@ public:
     bool kv_submitted = false; ///< true when we've been submitted to kv db
 
     interval_set<uint64_t> allocated, released;
-    struct volatile_statfs{
+    struct volatile_statfs {
       enum {
         STATFS_ALLOCATED = 0,
         STATFS_STORED,

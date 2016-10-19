@@ -4664,24 +4664,22 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
   if (r >= 0) {
-       TransContext::volatile_statfs vstatfs;
-     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
-       auto it = bl.begin();
-       vstatfs.decode(it);
+    TransContext::volatile_statfs vstatfs;
+    if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
+      auto it = bl.begin();
+      vstatfs.decode(it);
 
-       buf->allocated = vstatfs.allocated();
-       buf->stored = vstatfs.stored();
-       buf->compressed = vstatfs.compressed();
-       buf->compressed_original = vstatfs.compressed_original();
-       buf->compressed_allocated = vstatfs.compressed_allocated();
-     } else {
-       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
-     }
+      buf->allocated = vstatfs.allocated();
+      buf->stored = vstatfs.stored();
+      buf->compressed = vstatfs.compressed();
+      buf->compressed_original = vstatfs.compressed_original();
+      buf->compressed_allocated = vstatfs.compressed_allocated();
+    } else {
+      dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
+    }
   } else {
     dout(10) << __func__ << " store_statfs missed, using empty" << dendl;
   }
-
-
   dout(20) << __func__ << *buf << dendl;
   return 0;
 }
@@ -8666,7 +8664,7 @@ int BlueStore::_do_clone_range(
     txc->statfs_delta.stored() += ne->length;
     if (e.blob->get_blob().is_compressed()) {
       txc->statfs_delta.compressed_original() += ne->length;
-      if (blob_duped){
+      if (blob_duped) {
         txc->statfs_delta.compressed() +=
           cb->get_blob().get_compressed_payload_length();
       }
