@@ -1156,6 +1156,8 @@ fi
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 %{_sbindir}/mount.fuse.ceph
+%{_unitdir}/ceph-fuse@.service
+%{_unitdir}/ceph-fuse.target
 
 %files -n rbd-fuse
 %defattr(-,root,root,-)
