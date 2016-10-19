@@ -833,3 +833,60 @@ vc.disconnect()
             volume_id=volume_id,
         )))
         self.assertNotIn(vol_metadata_filename, self.mounts[0].ls("volumes"))
+
+    def test_recover_metadata(self):
+        """
+        That volume client can recover from partial auth updates using
+        metadata files, which store auth info and its update status info.
+        """
+        volumeclient_mount = self.mounts[1]
+        volumeclient_mount.umount_wait()
+
+        # Configure volumeclient_mount as the handle for driving volumeclient.
+        self._configure_vc_auth(volumeclient_mount, "manila")
+
+        group_id = "groupid"
+        volume_id = "volumeid"
+
+        guestclient = {
+            "auth_id": "guest",
+            "tenant_id": "tenant",
+        }
+
+        # Create a volume.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.create_volume(vp, 1024*1024*10)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
+        # Authorize 'guestclient' access to the volume.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.authorize(vp, "{auth_id}", tenant_id="{tenant_id}")
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            auth_id=guestclient["auth_id"],
+            tenant_id=guestclient["tenant_id"]
+        )))
+
+        # Check that auth metadata file for auth ID 'guest' is created.
+        auth_metadata_filename = "${0}.meta".format(guestclient["auth_id"])
+        self.assertIn(auth_metadata_filename, self.mounts[0].ls("volumes"))
+
+        # Induce partial auth update state by modifying the auth metadata file,
+        # and then run recovery procedure.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            auth_metadata = vc._auth_metadata_get("{auth_id}")
+            auth_metadata['dirty'] = True
+            vc._auth_metadata_set("{auth_id}", auth_metadata)
+            vc.recover()
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            auth_id=guestclient["auth_id"],
+        )))
