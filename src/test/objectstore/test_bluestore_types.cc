@@ -1012,6 +1012,9 @@ TEST(ExtentMap, GarbageCollectorTest)
   b1->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
   b2->shared_blob = new BlueStore::SharedBlob(-1, string(), &cache);
   b3->shared_blob = new BlueStore::SharedBlob(1, string(), &cache);
+  b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+  b2->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+  b3->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
 
   em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, 3, b1));
   em.extent_map.insert(*new BlueStore::Extent(100, 0, 50, 3, b2));
