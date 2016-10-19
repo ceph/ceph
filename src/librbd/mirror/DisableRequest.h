@@ -27,6 +27,9 @@ public:
     return new DisableRequest(image_ctx, force, remove, on_finish);
   }
 
+  DisableRequest(ImageCtxT *image_ctx, bool force, bool remove,
+                 Context *on_finish);
+
   void send();
 
 private:
@@ -76,9 +79,6 @@ private:
    *
    * @endverbatim
    */
-
-  DisableRequest(ImageCtxT *image_ctx, bool force, bool remove,
-                 Context *on_finish);
 
   ImageCtxT *m_image_ctx;
   bool m_force;
