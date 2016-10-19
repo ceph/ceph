@@ -350,8 +350,7 @@ set(HAVE_LIBROCKSDB 1)
 find_package(ZLIB REQUIRED)
 
 #option for LTTng
-#currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
-option(WITH_LTTNG "LTTng tracing is enabled" OFF)
+option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
   find_package(LTTngUST REQUIRED)
   find_program(LTTNG_GEN_TP
