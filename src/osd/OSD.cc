@@ -5540,11 +5540,10 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   // 'tell <pgid>' (which comes in without any of that prefix)?
 
   else if (prefix == "pg" ||
-	   (cmd_getval(cct, cmdmap, "pgid", pgidstr) &&
-	     (prefix == "query" ||
-	      prefix == "mark_unfound_lost" ||
-	      prefix == "list_missing")
-	   )) {
+	    prefix == "query" ||
+	    prefix == "mark_unfound_lost" ||
+	    prefix == "list_missing"
+	   ) {
     pg_t pgid;
 
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
