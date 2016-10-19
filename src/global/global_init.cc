@@ -36,6 +36,10 @@
 #include <errno.h>
 #include <deque>
 
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
+
 #define dout_subsys ceph_subsys_
 
 static void global_init_set_globals(CephContext *cct)
@@ -269,6 +273,12 @@ void global_init(std::vector < const char * > *alt_def_args,
       priv_ss << "deferred set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
     }
   }
+
+#if defined(HAVE_SYS_PRCTL_H)
+  if (prctl(PR_SET_DUMPABLE, 1) == -1) {
+    cerr << "warning: unable to set dumpable flag: " << cpp_strerror(errno) << std::endl;
+  }
+#endif
 
   // Expand metavariables. Invoke configuration observers. Open log file.
   g_conf->apply_changes(NULL);
