@@ -118,9 +118,9 @@ class C_MDL_WriteError : public MDSIOContextBase {
 
 void MDLog::write_head(MDSInternalContextBase *c) 
 {
-  C_OnFinisher *fin = NULL;
+  Context *fin = NULL;
   if (c != NULL) {
-    fin = new C_OnFinisher(new C_IO_Wrapper(mds, c), mds->finisher);
+    fin = new C_IO_Wrapper(mds, c);
   }
   journaler->write_head(fin);
 }
@@ -149,7 +149,7 @@ void MDLog::create(MDSInternalContextBase *c)
   C_GatherBuilder gather(g_ceph_context);
   // This requires an OnFinisher wrapper because Journaler will call back the completion for write_head inside its own lock
   // XXX but should maybe that be handled inside Journaler?
-  gather.set_finisher(new C_OnFinisher(new C_IO_Wrapper(mds, c), mds->finisher));
+  gather.set_finisher(new C_IO_Wrapper(mds, c));
 
   // The inode of the default Journaler we will create
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();

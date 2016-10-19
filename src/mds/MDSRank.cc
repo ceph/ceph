@@ -1029,7 +1029,7 @@ void MDSRank::replay_start()
   calc_recovery_set();
 
   // Check if we need to wait for a newer OSD map before starting
-  Context *fin = new C_OnFinisher(new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL)), finisher);
+  Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL));
   bool const ready = objecter->wait_for_map(
       mdsmap->get_last_failure_osd_epoch(),
       fin);
@@ -1079,9 +1079,7 @@ inline void MDSRank::standby_replay_restart()
     /* We are transitioning out of standby: wait for OSD map update
        before making final pass */
     dout(1) << "standby_replay_restart (final takeover pass)" << dendl;
-    Context *fin = new C_OnFinisher(new C_IO_Wrapper(this,
-          new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG)),
-      finisher);
+    Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
     bool const ready =
       objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(), fin);
     if (ready) {

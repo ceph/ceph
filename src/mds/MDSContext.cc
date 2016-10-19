@@ -79,6 +79,16 @@ void MDSIOContextWrapper::finish(int r)
   fin->complete(r);
 }
 
+void C_IO_Wrapper::complete(int r)
+{
+  if (async) {
+    async = false;
+    get_mds()->finisher->queue(this, r);
+  } else {
+    MDSIOContext::complete(r);
+  }
+}
+
 MDSRank *MDSInternalContextGather::get_mds()
 {
   derr << "Forbidden call to MDSInternalContextGather::get_mds by " << typeid(*this).name() << dendl;
