@@ -2725,7 +2725,14 @@ TEST_P(StoreTest, SimpleCloneTest) {
     rl.hexdump(cout);*/
     ASSERT_TRUE(bl_eq(rl, final));
   }
-  {
+
+  //Unfortunately we need a workaround for filestore since EXPECT_DEATH
+  // macro has potential issues when using /in multithread environments. 
+  //It works well for all stores but filestore for now. 
+  //A fix setting gtest_death_test_style = "threadsafe" doesn't help as well - 
+  //  test app clone asserts on store folder presence.
+  //
+  if (string(GetParam()) != "filestore") { 
     //verify if non-empty collection is properly handled after store reload
     r = store->umount();
     ASSERT_EQ(r, 0);
@@ -2739,26 +2746,30 @@ TEST_P(StoreTest, SimpleCloneTest) {
 
   }
   {
-    //verify if non-empty collection is properly handled when there are some pending removes and live records in db
-    cerr << "Invalid rm coll again" << std::endl;
-
     ObjectStore::Transaction t;
     t.touch(cid, hoid3); //new record in db
-    t.remove(cid, hoid);
-    t.remove(cid, hoid2);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
-
+  }
+  //See comment above for "filestore" check explanation.
+  if (string(GetParam()) != "filestore") {
+    ObjectStore::Transaction t;
+    //verify if non-empty collection is properly handled when there are some pending removes and live records in db
+    cerr << "Invalid rm coll again" << std::endl;
     r = store->umount();
     ASSERT_EQ(r, 0);
     r = store->mount();
     ASSERT_EQ(r, 0);
 
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
     t.remove_collection(cid);
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
   }
   {
     ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
     t.remove(cid, hoid3);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
