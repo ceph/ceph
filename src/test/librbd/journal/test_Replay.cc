@@ -42,14 +42,16 @@ public:
 
   template<typename T>
   void inject_into_journal(librbd::ImageCtx *ictx, T event) {
-
+    C_SaferCond ctx;
     librbd::journal::EventEntry event_entry(event);
     librbd::Journal<>::AioObjectRequests requests;
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      ictx->journal->append_io_event(std::move(event_entry), requests, 0, 0,
-                                     true);
+      uint64_t tid = ictx->journal->append_io_event(std::move(event_entry),
+                                                    requests, 0, 0, true);
+      ictx->journal->wait_event(tid, &ctx);
     }
+    ASSERT_EQ(0, ctx.wait());
   }
 
   void get_journal_commit_position(librbd::ImageCtx *ictx, int64_t *tag,
