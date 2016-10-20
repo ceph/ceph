@@ -21,35 +21,29 @@ bool mempool::debug_mode = false;
 
 // --------------------------------------------------------------
 
-// We rely on this array of pointers being zeroed when the process
-// starts *before* the ctors from *any* linked modules are executed.
-// That way, regardless of link order, pool_t's are allocated and
-// instantiated on demand.
-static mempool::pool_t *pools[mempool::num_pools];
-
 mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 {
-  if (pools[ix]) {
-    return *pools[ix];
-  }
+  // We rely on this array being initialized before any invocation of
+  // this function, even if it is called by ctors in other compilation
+  // units that are being initialized before this compilation unit.
+  static mempool::pool_t table[num_pools];
+  return table[ix];
+}
 
-  switch (ix) {
-#define P(x)								\
-  case mempool_##x: pools[ix] = new mempool::pool_t(#x); break;
-    DEFINE_MEMORY_POOLS_HELPER(P);
+const char *mempool::get_pool_name(mempool::pool_index_t ix) {
+#define P(x) #x,
+  static const char *names[num_pools] = {
+    DEFINE_MEMORY_POOLS_HELPER(P)
+  };
 #undef P
-  default: assert(0);
-  }
-  return *pools[ix];
+  return names[ix];
 }
 
 void mempool::dump(ceph::Formatter *f, size_t skip)
 {
   for (size_t i = skip; i < num_pools; ++i) {
-    if (!pools[i])
-      continue;
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
-    f->open_object_section(pool.get_name().c_str());
+    f->open_object_section(get_pool_name((pool_index_t)i));
     pool.dump(f);
     f->close_section();
   }

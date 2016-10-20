@@ -182,6 +182,7 @@ struct stats_t {
 };
 
 pool_t& get_pool(pool_index_t ix);
+const char *get_pool_name(pool_index_t ix);
 
 struct type_t {
   const char *type_name;
@@ -196,26 +197,17 @@ struct type_info_hash {
 };
 
 class pool_t {
-  std::string name;
   shard_t shard[num_shards];
 
   mutable std::mutex lock;  // only used for types list
   std::unordered_map<const char *, type_t> type_map;
 
 public:
-  pool_t(const std::string& n)
-    : name(n) {
-  }
-
   //
   // How much this pool consumes. O(<num_shards>)
   //
   size_t allocated_bytes() const;
   size_t allocated_items() const;
-
-  const std::string& get_name() const {
-    return name;
-  }
 
   shard_t* pick_a_shard() {
     // Dirt cheap, see:
