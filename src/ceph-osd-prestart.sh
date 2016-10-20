@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 eval set -- "$(getopt -o i: --long id:,cluster: -- $@)"
 
