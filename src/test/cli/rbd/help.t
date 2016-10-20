@@ -171,7 +171,7 @@
     --image-feature arg       image features
                               [layering(+), striping, exclusive-lock(+*),
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*)]
+                              journaling(*), data-pool]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
     --stripe-count arg        stripe count
@@ -217,7 +217,7 @@
     --image-feature arg          image features
                                  [layering(+), striping, exclusive-lock(+*),
                                  object-map(+*), fast-diff(+*), deep-flatten(+-),
-                                 journaling(*)]
+                                 journaling(*), data-pool]
     --image-shared               shared image
     --stripe-unit arg            stripe unit
     --stripe-count arg           stripe count
@@ -261,7 +261,7 @@
     --image-feature arg       image features
                               [layering(+), striping, exclusive-lock(+*),
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*)]
+                              journaling(*), data-pool]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
     --stripe-count arg        stripe count
@@ -371,7 +371,7 @@
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
                          [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten, journaling]
+                         fast-diff, deep-flatten, journaling, data-pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -391,7 +391,7 @@
                               (example: [<pool-name>/]<image-name>)
     <features>                image features
                               [layering, striping, exclusive-lock, object-map,
-                              fast-diff, deep-flatten, journaling]
+                              fast-diff, deep-flatten, journaling, data-pool]
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -607,7 +607,7 @@
     --image-feature arg       image features
                               [layering(+), striping, exclusive-lock(+*),
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*)]
+                              journaling(*), data-pool]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
     --stripe-count arg        stripe count
