@@ -358,12 +358,6 @@ private:
 
 static int do_export(librbd::Image& image, const char *path, bool no_progress, int export_format)
 {
-  // check current supported formats.
-  if (export_format != 1 && export_format != 2) {
-    std::cerr << "rbd: wrong file format to import" << std::endl;
-    return -EINVAL;
-  }
-
   librbd::image_info_t info;
   int64_t r = image.stat(info, sizeof(info));
   if (r < 0)
@@ -520,8 +514,7 @@ void get_arguments(po::options_description *positional,
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
   at::add_no_progress_option(options);
-  options->add_options()
-    ("export-format", po::value<int>(), "format to export image");
+  at::add_export_format_option(options);
 }
 
 int execute(const po::variables_map &vm) {

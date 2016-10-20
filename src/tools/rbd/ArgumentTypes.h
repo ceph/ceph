@@ -114,6 +114,13 @@ struct Format : public TypedValue<std::string> {
 
 struct JournalObjectSize {};
 
+struct ExportFormat {};
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              ExportFormat *target_type, int);
+
+void add_export_format_option(boost::program_options::options_description *opt);
+
 std::string get_name_prefix(ArgumentModifier modifier);
 std::string get_description_prefix(ArgumentModifier modifier);
 
