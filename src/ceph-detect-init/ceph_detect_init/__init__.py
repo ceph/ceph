@@ -13,6 +13,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+from ceph_detect_init import alpine
 from ceph_detect_init import centos
 from ceph_detect_init import debian
 from ceph_detect_init import exc
@@ -52,6 +53,7 @@ def _get_distro(distro, use_rhceph=False):
 
     distro = _normalized_distro_name(distro)
     distributions = {
+        'alpine': alpine,
         'debian': debian,
         'ubuntu': debian,
         'linuxmint': debian,
@@ -88,9 +90,11 @@ def _normalized_distro_name(distro):
 
 def platform_information():
     """detect platform information from remote host."""
+    linux_distro = platform.linux_distribution(
+        supported_dists=platform._supported_dists + ('alpine',))
     logging.debug('platform_information: linux_distribution = ' +
-                  str(platform.linux_distribution()))
-    distro, release, codename = platform.linux_distribution()
+                  str(linux_distro))
+    distro, release, codename = linux_distro
     # this could be an empty string in Debian
     if not codename and 'debian' in distro.lower():
         debian_codenames = {
