@@ -124,6 +124,7 @@
     role create                create a AWS role for use with STS
     role delete                delete a role
     role get                   get a role
+    role modify                modify the assume role policy of an existing role
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
