@@ -29,7 +29,7 @@ int do_import_diff_fd(librbd::Image &image, int fd,
   uint64_t size = 0;
   uint64_t off = 0;
   string from, to;
-  string banner = (format == 1 ? utils::RBD_DIFF_BANNER:utils::RBD_DIFF_BANNER_V2);
+  string banner = (format == 1 ? utils::RBD_DIFF_BANNER : utils::RBD_DIFF_BANNER_V2);
   char buf[banner.size() + 1];
 
   bool from_stdin = (fd == 0);
@@ -289,6 +289,211 @@ private:
   uint64_t m_offset;
 };
 
+static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts)
+{
+  int r = 0;
+  char image_buf[utils::RBD_IMAGE_BANNER_V2.size() + 1];
+
+  // There is no header in v1 image.
+  if (import_format == 1)
+    return r;
+
+  if (fd == 0 || size < utils::RBD_IMAGE_BANNER_V2.size()) {
+    r = -EINVAL;
+    return r;
+  }
+  r = safe_read_exact(fd, image_buf, utils::RBD_IMAGE_BANNER_V2.size());
+  if (r < 0)
+    return r;
+
+  image_buf[utils::RBD_IMAGE_BANNER_V2.size()] = '\0';
+  if (strcmp(image_buf, utils::RBD_IMAGE_BANNER_V2.c_str())) {
+    // Old format
+    r = -EINVAL;
+    return r;
+  }
+
+  char buf[8];
+  bufferlist bl;
+  bufferlist::iterator p;
+
+  // As V1 format for image is already deprecated, import image in V2 by default.
+  uint64_t image_format = 2;
+  if (opts.get(RBD_IMAGE_OPTION_FORMAT, &image_format) != 0) {
+    opts.set(RBD_IMAGE_OPTION_FORMAT, image_format);
+  }
+
+  while (1) {
+    __u8 tag;
+    uint64_t length;
+    r = safe_read_exact(fd, &tag, 1);
+    if (r < 0) {
+      return r;
+    }
+
+    if (tag == RBD_EXPORT_IMAGE_END) {
+      break;
+    } else {
+      r = safe_read_exact(fd, &length, 8);
+      if (r < 0) {
+	return r;
+      }
+
+      if (tag == RBD_EXPORT_IMAGE_ORDER) {
+	uint64_t order = 0;
+	r = safe_read_exact(fd, &order, 8);
+	if (r < 0) {
+	  return r;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_ORDER, order);
+	}
+      } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
+	uint64_t features = 0;
+	r = safe_read_exact(fd, &features, 8);
+	if (r < 0) {
+	  return r;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+	}
+      } else if (tag == RBD_EXPORT_IMAGE_STRIPE_UNIT) {
+	uint64_t stripe_unit = 0;
+	r = safe_read_exact(fd, &stripe_unit, 8);
+	if (r < 0) {
+	  return r;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+	}
+      } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
+	uint64_t stripe_count = 0;
+	r = safe_read_exact(fd, &stripe_count, 8);
+	if (r < 0) {
+	  return r;
+	}
+	if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
+	  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+	}
+      } else {
+	std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it." << std::endl;
+	::lseek(fd, length, SEEK_CUR);
+      }
+    }
+  }
+
+  return r;
+}
+
+static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
+			size_t imgblklen, boost::scoped_ptr<SimpleThrottle> &throttle,
+		       	utils::ProgressContext &pc)
+{
+  int r = 0;
+  char snap_buf[utils::RBD_IMAGE_DIFFS_BANNER_V2.size() + 1];
+  uint64_t diff_num;
+
+  r = safe_read_exact(fd, snap_buf, utils::RBD_IMAGE_DIFFS_BANNER_V2.size());
+  if (r < 0)
+    return r;
+  snap_buf[utils::RBD_IMAGE_DIFFS_BANNER_V2.size()] = '\0';
+  if (strcmp(snap_buf, utils::RBD_IMAGE_DIFFS_BANNER_V2.c_str())) {
+    cerr << "Incorrect RBD_IMAGE_DIFFS_BANNER." << snap_buf <<std::endl;
+    return -EINVAL;
+  } else {
+    r = safe_read_exact(fd, &diff_num, 8);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  for (size_t i = 0; i < diff_num; i++) {
+    r = do_import_diff_fd(image, fd, true, 2);
+    if (r < 0) {
+      pc.fail();
+      std::cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    pc.update_progress(i + 1, diff_num);
+  }
+
+  return r;
+}
+
+static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
+			size_t imgblklen, boost::scoped_ptr<SimpleThrottle> &throttle,
+		       	utils::ProgressContext &pc)
+{
+  int r = 0;
+  size_t reqlen = imgblklen;    // amount requested from read
+  ssize_t readlen;              // amount received from one read
+  size_t blklen = 0;            // amount accumulated from reads to fill blk
+  char *p = new char[imgblklen];
+  uint64_t image_pos = 0;
+  bool from_stdin = (fd == 0);
+
+  reqlen = min(reqlen, size);
+  // loop body handles 0 return, as we may have a block to flush
+  while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
+    if (throttle->pending_error()) {
+      break;
+    }
+
+    blklen += readlen;
+    // if read was short, try again to fill the block before writing
+    if (readlen && ((size_t)readlen < reqlen)) {
+      reqlen -= readlen;
+      continue;
+    }
+    if (!from_stdin)
+      pc.update_progress(image_pos, size);
+
+    bufferlist bl(blklen);
+    bl.append(p, blklen);
+    // resize output image by binary expansion as we go for stdin
+    if (from_stdin && (image_pos + (size_t)blklen) > size) {
+      size *= 2;
+      r = image.resize(size);
+      if (r < 0) {
+	std::cerr << "rbd: can't resize image during import" << std::endl;
+	goto out;
+      }
+    }
+
+    // write as much as we got; perhaps less than imgblklen
+    // but skip writing zeros to create sparse images
+    if (!bl.is_zero()) {
+      C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
+      ctx->send();
+    }
+
+    // done with whole block, whether written or not
+    image_pos += blklen;
+    if (!from_stdin && image_pos >= size)
+      break;
+    // if read had returned 0, we're at EOF and should quit
+    if (readlen == 0)
+      break;
+    blklen = 0;
+    reqlen = imgblklen;
+  }
+  r = throttle->wait_for_ret();
+  if (r < 0) {
+    goto out;
+  }
+
+  if (fd == 0) {
+    r = image.resize(image_pos);
+    if (r < 0) {
+      std::cerr << "rbd: final image resize failed" << std::endl;
+      goto out;
+    }
+  }
+out:
+  delete[] p;
+  return r;
+}
+
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
                      const char *imgname, const char *path,
 		     librbd::ImageOptions& opts, bool no_progress,
@@ -306,16 +511,9 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   }
 
   // try to fill whole imgblklen blocks for sparsification
-  uint64_t image_pos = 0;
   size_t imgblklen = 1 << order;
-  char *p = new char[imgblklen];
-  size_t reqlen = imgblklen;    // amount requested from read
-  ssize_t readlen;              // amount received from one read
-  size_t blklen = 0;            // amount accumulated from reads to fill blk
   librbd::Image image;
   uint64_t size = 0;
-  uint64_t snap_num;
-  char image_buf[utils::RBD_IMAGE_BANNER_V2.size() + 1];
 
   boost::scoped_ptr<SimpleThrottle> throttle;
   bool from_stdin = !strcmp(path, "-");
@@ -360,85 +558,11 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
 #endif
   }
-  
-  if (import_format == 2) {
-    if (from_stdin || size < utils::RBD_IMAGE_BANNER_V2.size()) {
-      r = -EINVAL;
-      goto done;
-    }
-    r = safe_read_exact(fd, image_buf, utils::RBD_IMAGE_BANNER_V2.size());
-    if (r < 0)
-      goto done;
 
-    image_buf[utils::RBD_IMAGE_BANNER_V2.size()] = '\0';
-    if (strcmp(image_buf, utils::RBD_IMAGE_BANNER_V2.c_str())) {
-      // Old format
-      r = -EINVAL;
-      goto done;
-    }
-
-    r = safe_read_exact(fd, &size, 8);
-    if (r < 0) {
-      goto done;
-    }
-
-    // As V1 format for image is already deprecated, import image in V2 by default.
-    uint64_t image_format = 2;
-    if (opts.get(RBD_IMAGE_OPTION_FORMAT, &image_format) != 0) {
-      opts.set(RBD_IMAGE_OPTION_FORMAT, image_format);
-    }
-
-    while (1) {
-      __u8 tag;
-      r = safe_read_exact(fd, &tag, 1);
-      if (r < 0) {
-	goto done;
-      }
-
-      if (tag == RBD_EXPORT_IMAGE_END) {
-	break;
-      } else if (tag == RBD_EXPORT_IMAGE_ORDER) {
-	uint64_t order = 0;
-	r = safe_read_exact(fd, &order, 8);
-	if (r < 0) {
-	  goto done;
-	}
-	if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_ORDER, order);
-      } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
-	uint64_t features = 0;
-	r = safe_read_exact(fd, &features, 8);
-	if (r < 0) {
-	  goto done;
-	}
-	if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-	}
-      } else if (tag == RBD_EXPORT_IMAGE_STRIPEUNIT) {
-	uint64_t stripe_unit = 0;
-	r = safe_read_exact(fd, &stripe_unit, 8);
-	if (r < 0) {
-	  goto done;
-	}
-	if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
-	}
-      } else if (tag == RBD_EXPORT_IMAGE_STRIPECOUNT) {
-	uint64_t stripe_count = 0;
-	r = safe_read_exact(fd, &stripe_count, 8);
-	if (r < 0) {
-	  goto done;
-	}
-	if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
-	}
-      } else {
-	std::cerr << "rbd: invalid tag in image priority zone: " << tag << std::endl;
-	r = -EINVAL;
-	goto done;
-      }
-      //TODO, set the image options according flags and appending data.
-    }
+  r = do_import_header(fd, import_format, size, opts);
+  if (r < 0) {
+    std::cerr << "rbd: import header failed." << std::endl;
+    goto done;
   }
 
   r = rbd.create4(io_ctx, imgname, size, opts);
@@ -453,93 +577,12 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     goto err;
   }
 
-  if (import_format == 2) {
-    char snap_buf[utils::RBD_IMAGE_SNAPS_BANNER_V2.size() + 1];
-
-    r = safe_read_exact(fd, snap_buf, utils::RBD_IMAGE_SNAPS_BANNER_V2.size());
-    if (r < 0)
-      goto done;
-    snap_buf[utils::RBD_IMAGE_SNAPS_BANNER_V2.size()] = '\0';
-    if (strcmp(snap_buf, utils::RBD_IMAGE_SNAPS_BANNER_V2.c_str())) {
-      cerr << "Incorrect RBD_IMAGE_SNAPS_BANNER." << std::endl;
-      return -EINVAL;
-    } else {
-      r = safe_read_exact(fd, &snap_num, 8);
-      if (r < 0) {
-        goto close;
-      }
-    }
-
-    for (size_t i = 0; i < snap_num; i++) {
-      r = do_import_diff_fd(image, fd, true, 2);
-      if (r < 0) {
-	pc.fail();
-	std::cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
-	return r;
-      }
-      pc.update_progress(i + 1, snap_num);
-    }
+  if (import_format == 1) {
+    r = do_import_v1(fd, image, size, imgblklen, throttle, pc);
   } else {
-    reqlen = min(reqlen, size);
-    // loop body handles 0 return, as we may have a block to flush
-    while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
-      if (throttle->pending_error()) {
-	break;
-      }
-
-      blklen += readlen;
-      // if read was short, try again to fill the block before writing
-      if (readlen && ((size_t)readlen < reqlen)) {
-	reqlen -= readlen;
-	continue;
-      }
-      if (!from_stdin)
-	pc.update_progress(image_pos, size);
-
-      bufferlist bl(blklen);
-      bl.append(p, blklen);
-      // resize output image by binary expansion as we go for stdin
-      if (from_stdin && (image_pos + (size_t)blklen) > size) {
-	size *= 2;
-	r = image.resize(size);
-	if (r < 0) {
-	  std::cerr << "rbd: can't resize image during import" << std::endl;
-	  goto close;
-	}
-      }
-
-      // write as much as we got; perhaps less than imgblklen
-      // but skip writing zeros to create sparse images
-      if (!bl.is_zero()) {
-	C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
-	ctx->send();
-      }
-
-      // done with whole block, whether written or not
-      image_pos += blklen;
-      if (!from_stdin && image_pos >= size)
-	break;
-      // if read had returned 0, we're at EOF and should quit
-      if (readlen == 0)
-	break;
-      blklen = 0;
-      reqlen = imgblklen;
-    }
-    r = throttle->wait_for_ret();
-    if (r < 0) {
-      goto close;
-    }
-
-    if (from_stdin) {
-      r = image.resize(image_pos);
-      if (r < 0) {
-	std::cerr << "rbd: final image resize failed" << std::endl;
-	goto close;
-      }
-    }
+    r = do_import_v2(fd, image, size, imgblklen, throttle, pc);
   }
 
-close:
   r = image.close();
 err:
   if (r < 0)
@@ -552,7 +595,6 @@ done:
   if (!from_stdin)
     close(fd);
 done2:
-  delete[] p;
   return r;
 }
 
@@ -627,8 +669,8 @@ int execute(const po::variables_map &vm) {
   }
 
   int format = 1;
-  if (vm.count("import-format"))
-    format = vm["import-format"].as<int>();
+  if (vm.count("export-format"))
+    format = vm["export-format"].as<uint64_t>();
 
   librbd::RBD rbd;
   r = do_import(rbd, io_ctx, image_name.c_str(), path.c_str(),

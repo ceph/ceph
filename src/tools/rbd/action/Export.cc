@@ -356,6 +356,133 @@ private:
   int m_fd;
 };
 
+static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd,
+		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
+{
+  int r = 0;
+  size_t offset = 0;
+  // header
+  bufferlist bl;
+  bl.append(utils::RBD_IMAGE_BANNER_V2);
+
+  __u8 tag;
+  uint64_t length;
+  // encode order
+  tag = RBD_EXPORT_IMAGE_ORDER;
+  length = 8;
+  ::encode(tag, bl);
+  ::encode(length, bl);
+  ::encode(uint64_t(info.order), bl);
+
+  // encode features
+  tag = RBD_EXPORT_IMAGE_FEATURES;
+  uint64_t features;
+  image.features(&features);
+  length = 8;
+  ::encode(tag, bl);
+  ::encode(length, bl);
+  ::encode(features, bl);
+
+  // encode stripe_unit and stripe_count
+  tag = RBD_EXPORT_IMAGE_STRIPE_UNIT;
+  uint64_t stripe_unit;
+  stripe_unit = image.get_stripe_unit();
+  length = 8;
+  ::encode(tag, bl);
+  ::encode(length, bl);
+  ::encode(stripe_unit, bl);
+
+  tag = RBD_EXPORT_IMAGE_STRIPE_COUNT;
+  uint64_t stripe_count;
+  stripe_count = image.get_stripe_count();
+  length = 8;
+  ::encode(tag, bl);
+  ::encode(length, bl);
+  ::encode(stripe_count, bl);
+
+  // encode end tag
+  tag = RBD_EXPORT_IMAGE_END;
+  ::encode(tag, bl);
+
+  // write bl to fd.
+  r = bl.write_fd(fd);
+  if (r < 0) {
+    return r;
+  }
+  offset += bl.length();
+
+  lseek(fd, offset, SEEK_SET);
+
+  // header for snapshots
+  bl.clear();
+  bl.append(utils::RBD_IMAGE_DIFFS_BANNER_V2);
+
+  std::vector<librbd::snap_info_t> snaps;
+  r = image.snap_list(snaps);
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t diff_num = snaps.size() + 1;
+  ::encode(diff_num, bl);
+
+  r = bl.write_fd(fd);
+  if (r < 0) {
+    return r;
+  }
+
+  if (0 == diff_num) {
+    return r;
+  } else {
+    const char *last_snap = NULL;
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      utils::snap_set(image, snaps[i].name.c_str());
+      r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
+      if (r < 0) {
+	return r;
+      }
+      pc.update_progress(i, snaps.size() + 1);
+      last_snap = snaps[i].name.c_str();
+    }
+    utils::snap_set(image, std::string(""));
+    r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+    if (r < 0) {
+      return r;
+    }
+    pc.update_progress(snaps.size() + 1, snaps.size() + 1);
+  }
+  return r;
+}
+
+static int do_export_v1(librbd::Image& image, librbd::image_info_t &info, int fd,
+		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
+{
+  int r = 0;
+  size_t file_size = 0;
+  SimpleThrottle throttle(max_concurrent_ops, false);
+  for (uint64_t offset = 0; offset < info.size; offset += period) {
+    if (throttle.pending_error()) {
+      break;
+    }
+
+    uint64_t length = min(period, info.size - offset);
+    C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset, length, fd);
+    ctx->send();
+
+    pc.update_progress(offset, info.size);
+  }
+
+  file_size += info.size;
+  r = throttle.wait_for_ret();
+  if (fd != 1) {
+    if (r >= 0) {
+      r = ftruncate(fd, file_size);
+      r = lseek(fd, file_size, SEEK_SET);
+    }
+  }
+  return r;
+}
+
 static int do_export(librbd::Image& image, const char *path, bool no_progress, int export_format)
 {
   librbd::image_info_t info;
@@ -381,123 +508,13 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
   }
 
   utils::ProgressContext pc("Exporting image", no_progress);
-  SimpleThrottle throttle(max_concurrent_ops, false);
   uint64_t period = image.get_stripe_count() * (1ull << info.order);
 
-  if (export_format == 2) {
-    size_t offset = 0;
-    // header
-    bufferlist bl;
-    bl.append(utils::RBD_IMAGE_BANNER_V2);
+  if (export_format == 1)
+    r = do_export_v1(image, info, fd, period, max_concurrent_ops, pc);
+  else
+    r = do_export_v2(image, info, fd, period, max_concurrent_ops, pc);
 
-    // size in header
-    uint64_t size = info.size;
-    ::encode(size, bl);
-
-    // TODO add more priorities here, such as image_feature...
-    __u8 tag;
-
-    // encode order
-    tag = RBD_EXPORT_IMAGE_ORDER;
-    ::encode(tag, bl);
-    ::encode(uint64_t(info.order), bl);
-
-    // encode features
-    tag = RBD_EXPORT_IMAGE_FEATURES;
-    uint64_t features;
-    image.features(&features);
-    ::encode(tag, bl);
-    ::encode(features, bl);
-
-    // encode stripe_unit and stripe_count
-    tag = RBD_EXPORT_IMAGE_STRIPEUNIT;
-    uint64_t stripe_unit;
-    stripe_unit = image.get_stripe_unit();
-    ::encode(tag, bl);
-    ::encode(stripe_unit, bl);
-
-    tag = RBD_EXPORT_IMAGE_STRIPECOUNT;
-    uint64_t stripe_count;
-    stripe_count = image.get_stripe_count();
-    ::encode(tag, bl);
-    ::encode(stripe_count, bl);
-
-    // encode end tag
-    tag = RBD_EXPORT_IMAGE_END;
-    ::encode(tag, bl);
-
-    // write bl to fd.
-    r = bl.write_fd(fd);
-    if (r < 0) {
-      goto out;
-    }
-    offset += bl.length();
-
-    lseek(fd, offset, SEEK_SET);
-
-    // header for snapshots
-    bl.clear();
-    bl.append(utils::RBD_IMAGE_SNAPS_BANNER_V2);
-
-    std::vector<librbd::snap_info_t> snaps;
-    r = image.snap_list(snaps);
-    if (r < 0) {
-      goto out;
-    }
-
-    uint64_t snap_num = snaps.size() + 1;
-    ::encode(snap_num, bl);
-
-    r = bl.write_fd(fd);
-    if (r < 0) {
-      goto out;
-    }
-
-    if (0 == snap_num) {
-      goto out;
-    } else {
-      const char *last_snap = NULL;
-      for (size_t i = 0; i < snaps.size(); ++i) {
-	utils::snap_set(image, snaps[i].name.c_str());
-	r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
-	if (r < 0) {
-	  goto out;
-	}
-	pc.update_progress(i, snaps.size() + 1);
-	last_snap = snaps[i].name.c_str();
-      }
-      utils::snap_set(image, std::string(""));
-      r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
-      if (r < 0) {
-	goto out;
-      }
-      pc.update_progress(snaps.size() + 1, snaps.size() + 1);
-    }
-  } else {
-    size_t file_size = 0;
-    for (uint64_t offset = 0; offset < info.size; offset += period) {
-      if (throttle.pending_error()) {
-	break;
-      }
-
-      uint64_t length = min(period, info.size - offset);
-      C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset, length, fd);
-      ctx->send();
-
-      pc.update_progress(offset, info.size);
-    }
-
-    file_size += info.size;
-    r = throttle.wait_for_ret();
-    if (!to_stdout) {
-      if (r >= 0) {
-	r = ftruncate(fd, file_size);
-	r = lseek(fd, file_size, SEEK_SET);
-      }
-    }
-  }
-
-out:
   if (r < 0)
     pc.fail();
   else
@@ -547,7 +564,7 @@ int execute(const po::variables_map &vm) {
   
   int format = 1;
   if (vm.count("export-format"))
-    format = vm["export-format"].as<int>();
+    format = vm["export-format"].as<uint64_t>();
 
   r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(), format);
   if (r < 0) {
