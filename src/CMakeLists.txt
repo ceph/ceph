@@ -464,6 +464,7 @@ install(TARGETS ceph-monstore-tool DESTINATION bin)
 
 add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
+  tools/rebuild_mondb.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)

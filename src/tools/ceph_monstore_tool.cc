@@ -20,8 +20,11 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
+#include "auth/KeyRing.h"
+#include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
+#include "mon/AuthMonitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
 #include "mon/MonMap.h"
@@ -217,6 +220,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (rewrite-crush -- --help for more info)\n"
   << "  inflate-pgmap [-- options]      add given number of pgmaps to store\n"
   << "                                  (inflate-pgmap -- --help for more info)\n"
+  << "  rebuild                         rebuild store\n"
+  << "                                  (rebuild -- --help for more info)\n"
   << std::endl;
   std::cerr << d << std::endl;
   std::cerr
@@ -506,6 +511,193 @@ int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
   txn->put("pgmap_meta", "version", ver);
   // this will also piggy back the leftover pgmap added in the loop above
   st.apply_transaction(txn);
+  return 0;
+}
+
+static int update_auth(MonitorDBStore& st, const string& keyring_path)
+{
+  // import all keyrings stored in the keyring file
+  KeyRing keyring;
+  int r = keyring.load(g_ceph_context, keyring_path);
+  if (r < 0) {
+    cerr << "unable to load admin keyring: " << keyring_path << std::endl;
+    return r;
+  }
+
+  bufferlist bl;
+  __u8 v = 1;
+  ::encode(v, bl);
+
+  for (const auto& k : keyring.get_keys()) {
+    KeyServerData::Incremental auth_inc;
+    auth_inc.name = k.first;
+    auth_inc.auth = k.second;
+    if (auth_inc.auth.caps.empty()) {
+      cerr << "no caps granted to: " << auth_inc.name << std::endl;
+      return -EINVAL;
+    }
+    auth_inc.op = KeyServerData::AUTH_INC_ADD;
+
+    AuthMonitor::Incremental inc;
+    inc.inc_type = AuthMonitor::AUTH_DATA;
+    ::encode(auth_inc, inc.auth_data);
+    inc.auth_type = CEPH_AUTH_CEPHX;
+
+    inc.encode(bl, CEPH_FEATURES_ALL);
+  }
+
+  const string prefix("auth");
+  auto last_committed = st.get(prefix, "last_committed") + 1;
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put(prefix, last_committed, bl);
+  t->put(prefix, "last_committed", last_committed);
+  auto first_committed = st.get(prefix, "first_committed");
+  if (!first_committed) {
+    t->put(prefix, "first_committed", last_committed);
+  }
+  st.apply_transaction(t);
+  return 0;
+}
+
+static int update_mkfs(MonitorDBStore& st)
+{
+  MonMap monmap;
+  int r = monmap.build_initial(g_ceph_context, cerr);
+  if (r) {
+    cerr << "no initial monitors" << std::endl;
+    return -EINVAL;
+  }
+  bufferlist bl;
+  monmap.encode(bl, CEPH_FEATURES_ALL);
+  monmap.set_epoch(0);
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put("mkfs", "monmap", bl);
+  st.apply_transaction(t);
+  return 0;
+}
+
+static int update_monitor(MonitorDBStore& st)
+{
+  const string prefix("monitor");
+  // a stripped-down Monitor::mkfs()
+  bufferlist bl;
+  bl.append(CEPH_MON_ONDISK_MAGIC "\n");
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put(prefix, "magic", bl);
+  st.apply_transaction(t);
+  return 0;
+}
+
+static int update_paxos(MonitorDBStore& st)
+{
+  // build a pending paxos proposal from all non-permanent k/v pairs. once the
+  // proposal is committed, it will gets applied. on the sync provider side, it
+  // will be a no-op, but on its peers, the paxos commit will help to build up
+  // the necessary epochs.
+  bufferlist pending_proposal;
+  {
+    MonitorDBStore::Transaction t;
+    vector<string> prefixes = {"auth", "osdmap",
+			       "pgmap", "pgmap_pg", "pgmap_meta"};
+    for (const auto& prefix : prefixes) {
+      for (auto i = st.get_iterator(prefix); i->valid(); i->next()) {
+	auto key = i->raw_key();
+	auto val = i->value();
+	t.put(key.first, key.second, val);
+      }
+    }
+    t.encode(pending_proposal);
+  }
+  const string prefix("paxos");
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  t->put(prefix, "first_committed", 0);
+  t->put(prefix, "last_committed", 0);
+  auto pending_v = 1;
+  t->put(prefix, pending_v, pending_proposal);
+  t->put(prefix, "pending_v", pending_v);
+  t->put(prefix, "pending_pn", 400);
+  st.apply_transaction(t);
+  return 0;
+}
+
+// rebuild
+//  - pgmap_meta/version
+//  - pgmap_meta/last_osdmap_epoch
+//  - pgmap_meta/last_pg_scan
+//  - pgmap_meta/full_ratio
+//  - pgmap_meta/nearfull_ratio
+//  - pgmap_meta/stamp
+static int update_pgmap_meta(MonitorDBStore& st)
+{
+  const string prefix("pgmap_meta");
+  auto t = make_shared<MonitorDBStore::Transaction>();
+  // stolen from PGMonitor::create_pending()
+  // the first pgmap_meta
+  t->put(prefix, "version", 1);
+  {
+    auto stamp = ceph_clock_now(g_ceph_context);
+    bufferlist bl;
+    ::encode(stamp, bl);
+    t->put(prefix, "stamp", bl);
+  }
+  {
+    auto last_osdmap_epoch = st.get("osdmap", "last_committed");
+    t->put(prefix, "last_osdmap_epoch", last_osdmap_epoch);
+  }
+  // be conservative, so PGMonitor will scan the all pools for pg changes
+  t->put(prefix, "last_pg_scan", 1);
+  {
+    auto full_ratio = g_ceph_context->_conf->mon_osd_full_ratio;
+    if (full_ratio > 1.0)
+      full_ratio /= 100.0;
+    bufferlist bl;
+    ::encode(full_ratio, bl);
+    t->put(prefix, "full_ratio", bl);
+  }
+  {
+    auto nearfull_ratio = g_ceph_context->_conf->mon_osd_nearfull_ratio;
+    if (nearfull_ratio > 1.0)
+      nearfull_ratio /= 100.0;
+    bufferlist bl;
+    ::encode(nearfull_ratio, bl);
+    t->put(prefix, "nearfull_ratio", bl);
+  }
+  st.apply_transaction(t);
+  return 0;
+}
+
+int rebuild_monstore(const char* progname,
+		     vector<string>& subcmds,
+		     MonitorDBStore& st)
+{
+  po::options_description op_desc("Allowed 'rebuild' options");
+  string keyring_path;
+  op_desc.add_options()
+    ("keyring", po::value<string>(&keyring_path),
+     "path to the client.admin key");
+  po::variables_map op_vm;
+  int r = parse_cmd_args(&op_desc, nullptr, nullptr, subcmds, &op_vm);
+  if (r) {
+    return -r;
+  }
+  if (op_vm.count("help")) {
+    usage(progname, op_desc);
+    return 0;
+  }
+  if (!keyring_path.empty())
+    update_auth(st, keyring_path);
+  if ((r = update_pgmap_meta(st))) {
+    return r;
+  }
+  if ((r = update_paxos(st))) {
+    return r;
+  }
+  if ((r = update_mkfs(st))) {
+    return r;
+  }
+  if ((r = update_monitor(st))) {
+    return r;
+  }
   return 0;
 }
 
@@ -1094,6 +1286,8 @@ int main(int argc, char **argv) {
       goto done;
     }
     err = inflate_pgmap(st, n, can_be_trimmed);
+  } else if (cmd == "rebuild") {
+    err = rebuild_monstore(argv[0], subcmds, st);
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     usage(argv[0], desc);
