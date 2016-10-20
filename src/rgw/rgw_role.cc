@@ -150,6 +150,20 @@ int RGWRole::get()
   return 0;
 }
 
+int RGWRole::update()
+{
+  auto& pool = store->get_zone_params().roles_pool;
+
+  int ret = store_info(false);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR:  storing info in pool: " << pool.name << ": "
+                  << id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 void RGWRole::dump(Formatter *f) const
 {
   encode_json("id", id , f);
@@ -246,6 +260,11 @@ int RGWRole::read_name()
   }
   id = nameToId.obj_id;
   return 0;
+}
+
+void RGWRole::update_trust_policy(string& trust_policy)
+{
+  this->trust_policy = trust_policy;
 }
 
 const string& RGWRole::get_names_oid_prefix()

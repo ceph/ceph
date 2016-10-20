@@ -178,6 +178,7 @@ void _usage()
   cout << "  role create                create a AWS role for use with STS\n";
   cout << "  role delete                delete a role\n";
   cout << "  role get                   get a role\n";
+  cout << "  role modify                modify the assume role policy of an existing role\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -448,6 +449,7 @@ enum {
   OPT_ROLE_CREATE,
   OPT_ROLE_DELETE,
   OPT_ROLE_GET,
+  OPT_ROLE_MODIFY,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -849,6 +851,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ROLE_DELETE;
     if (strcmp(cmd, "get") == 0)
       return OPT_ROLE_GET;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_ROLE_MODIFY;
   }
 
   return -EINVAL;
@@ -4578,6 +4582,39 @@ int main(int argc, const char **argv)
         return -ret;
       }
       show_role_info(role, formatter);
+      return 0;
+    }
+  case OPT_ROLE_MODIFY:
+    {
+      if (role_name.empty() || assume_role_doc.empty()) {
+        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+      /* The following two calls will be replaced by read_decode_json or something
+         similar when the code for AWS Policies is in place */
+      bufferlist bl;
+      int ret = read_input(assume_role_doc, bl);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      JSONParser p;
+      if (!p.parse(bl.c_str(), bl.length())) {
+        cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
+        return -EINVAL;
+      }
+      string trust_policy = bl.to_str();
+      RGWRole role(g_ceph_context, store, role_name);
+      ret = role.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      role.update_trust_policy(trust_policy);
+      ret = role.update();
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Assume role policy document updated successfully for role: " << role_name << std::endl;
       return 0;
     }
   default:

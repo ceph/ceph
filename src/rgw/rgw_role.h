@@ -77,6 +77,8 @@ public:
   int create(bool exclusive);
   int delete_obj();
   int get();
+  int update();
+  void update_trust_policy(string& trust_policy);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
