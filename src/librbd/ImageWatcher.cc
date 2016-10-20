@@ -54,13 +54,20 @@ struct C_UnwatchAndFlush : public Context {
       r = rados.aio_watch_flush(aio_comp);
       assert(r == 0);
       aio_comp->release();
-    } else {
-      Context::complete(ret_val);
+      return;
     }
+
+    // ensure our reference to the RadosClient is released prior
+    // to completing the callback to avoid racing an explicit
+    // librados shutdown
+    Context *ctx = on_finish;
+    r = ret_val;
+    delete this;
+
+    ctx->complete(r);
   }
 
   virtual void finish(int r) override {
-    on_finish->complete(r);
   }
 };
 
