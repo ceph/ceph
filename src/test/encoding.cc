@@ -1,9 +1,10 @@
-#include "common/config.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/small_encoding.h"
 
 #include "gtest/gtest.h"
+
+using namespace std;
 
 template < typename T >
 static void test_encode_and_decode(const T& src)
