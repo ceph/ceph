@@ -378,7 +378,7 @@ void AsyncConnection::process()
           t = (ceph_timespec*)state_buffer;
           utime_t kp_t = utime_t(*t);
           write_lock.lock();
-          _send_keepalive_or_ack(true, &kp_t);
+          _append_keepalive_or_ack(true, &kp_t);
 	  write_lock.unlock();
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
 	  set_last_keepalive(ceph_clock_now(NULL));
@@ -2365,8 +2365,9 @@ void AsyncConnection::mark_down()
   _stop();
 }
 
-void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
+void AsyncConnection::_append_keepalive_or_ack(bool ack, utime_t *tp)
 {
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (ack) {
     assert(tp);
     struct ceph_timespec ts;
@@ -2382,8 +2383,6 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
   } else {
     outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE);
   }
-
-  ldout(async_msgr->cct, 10) << __func__ << " try send keepalive or ack" << dendl;
 }
 
 void AsyncConnection::handle_write()
@@ -2394,7 +2393,7 @@ void AsyncConnection::handle_write()
   write_lock.lock();
   if (can_write == WriteStatus::CANWRITE) {
     if (keepalive) {
-      _send_keepalive_or_ack();
+      _append_keepalive_or_ack();
       keepalive = false;
     }
 
