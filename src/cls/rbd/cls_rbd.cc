@@ -1678,7 +1678,9 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	        (unsigned long long)snap_id.val);
 	return -EIO;
       }
-      if (snap_meta.name == old_meta.name || snap_meta.id == old_meta.id) {
+      if ((snap_meta.name == old_meta.name &&
+	    snap_meta.snapshot_namespace == old_meta.snapshot_namespace) ||
+	  snap_meta.id == old_meta.id) {
 	CLS_LOG(20, "snap_name %s or snap_id %llu matches existing snap %s %llu",
 		snap_meta.name.c_str(), (unsigned long long)snap_meta.id.val,
 		old_meta.name.c_str(), (unsigned long long)old_meta.id.val);
