@@ -97,22 +97,19 @@ bool Throttle::_wait(int64_t c)
   if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
     Cond *cv = new Cond;
     cond.push_back(cv);
+    waited = true;
+    ldout(cct, 2) << "_wait waiting..." << dendl;
+    if (logger)
+      start = ceph_clock_now(cct);
+
     do {
-      if (!waited) {
-	ldout(cct, 2) << "_wait waiting..." << dendl;
-	if (logger)
-	  start = ceph_clock_now(cct);
-      }
-      waited = true;
       cv->Wait(lock);
     } while (_should_wait(c) || cv != cond.front());
 
-    if (waited) {
-      ldout(cct, 3) << "_wait finished waiting" << dendl;
-      if (logger) {
-	utime_t dur = ceph_clock_now(cct) - start;
-        logger->tinc(l_throttle_wait, dur);
-      }
+    ldout(cct, 2) << "_wait finished waiting" << dendl;
+    if (logger) {
+      utime_t dur = ceph_clock_now(cct) - start;
+      logger->tinc(l_throttle_wait, dur);
     }
 
     delete cv;
