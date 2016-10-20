@@ -331,12 +331,19 @@ def task(ctx, config):
     - install:
     - ceph:
         log-whitelist:
-        - '!= known digest'
-        - '!= known omap_digest'
+        - '!= data_digest'
+        - '!= omap_digest'
+        - '!= size'
         - deep-scrub 0 missing, 1 inconsistent objects
-        - deep-scrub 1 errors
+        - deep-scrub [0-9]+ errors
         - repair 0 missing, 1 inconsistent objects
-        - repair 1 errors, 1 fixed
+        - repair [0-9]+ errors, [0-9]+ fixed
+        - shard [0-9]+ missing
+        - deep-scrub 1 missing, 1 inconsistent objects
+        - does not match object info size
+        - attr name mistmatch
+        - deep-scrub 1 missing, 0 inconsistent objects
+        - failed to pick suitable auth object
     - scrub_test:
     """
     if config is None:
