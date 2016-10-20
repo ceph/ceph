@@ -33,7 +33,7 @@ struct denc_traits<inodeno_t> {
   enum { supported = 2 };
   enum { featured = false };
   enum { bounded = true };
-  static void bound_encode(const inodeno_t o, size_t& p) {
+  static void bound_encode(const inodeno_t &o, size_t& p) {
     denc(o.val, p);
   }
   static void encode(const inodeno_t &o, buffer::list::contiguous_appender& p) {
