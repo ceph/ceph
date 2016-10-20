@@ -259,6 +259,7 @@ void Paxos::collect(version_t oldpn)
 // peon
 void Paxos::handle_collect(MonOpRequestRef op)
 {
+  
   op->mark_paxos_event("handle_collect");
 
   MMonPaxos *collect = static_cast<MMonPaxos*>(op->get_req());
@@ -268,6 +269,9 @@ void Paxos::handle_collect(MonOpRequestRef op)
 
   // we're recoverying, it seems!
   state = STATE_RECOVERING;
+
+  //update the peon recovery timeout 
+  reset_lease_timeout();
 
   if (collect->first_committed > last_committed+1) {
     dout(2) << __func__
