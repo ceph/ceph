@@ -837,27 +837,25 @@ public:
         }
         iter = result.begin();
         for (; iter != result.end(); ++iter) {
-          RGWRados *store;
-          int ret;
-          yield {
-            if (!lease_cr->is_locked()) {
-              lost_lock = true;
-              break;
-            }
-	    ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
-	    string s = *sections_iter + ":" + *iter;
-            int shard_id;
-            store = sync_env->store;
-            ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
-            if (ret < 0) {
-              ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
-              ret_status = ret;
-              break;
-            }
-	    if (!entries_index->append(s, shard_id)) {
-              break;
-            }
-	  }
+          if (!lease_cr->is_locked()) {
+            lost_lock = true;
+            break;
+          }
+          yield; // allow entries_index consumer to make progress
+
+          ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
+          string s = *sections_iter + ":" + *iter;
+          int shard_id;
+          RGWRados *store = sync_env->store;
+          int ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
+          if (ret < 0) {
+            ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
+            ret_status = ret;
+            break;
+          }
+          if (!entries_index->append(s, shard_id)) {
+            break;
+          }
 	}
       }
       yield {
