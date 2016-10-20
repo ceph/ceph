@@ -115,7 +115,7 @@ public:
     projected.pop_front();
   }
 
-  inline int get_state() const {return state;}
+  int get_state() const { return state; }
   void set_state(int new_state)
   {
     if (state != new_state) {
@@ -180,7 +180,6 @@ public:
     return info.get_client();
   }
 
-  int get_state() { return state; }
   const char *get_state_name() const { return get_state_name(state); }
   uint64_t get_state_seq() const { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
