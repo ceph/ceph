@@ -286,11 +286,13 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
       int r = add_condition(v[0], v[1], v[2], err_msg);
       if (r < 0)
         return r;
-    } else {
+    } else if (!citer.end()) {
       JSONObj *c = *citer;
       dout(0) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
 
       add_simple_check(c->get_name(), c->get_data());
+    } else {
+      return -EINVAL;
     }
   }
   return 0;
