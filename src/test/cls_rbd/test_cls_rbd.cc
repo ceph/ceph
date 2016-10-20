@@ -949,6 +949,7 @@ TEST_F(TestClsRbd, snapshots)
 TEST_F(TestClsRbd, snapshots_namespaces)
 {
   cls::rbd::SnapshotNamespace groupSnapNamespace = cls::rbd::GroupSnapshotNamespace(5, "1018643c9869", 3);
+  cls::rbd::SnapshotNamespace userSnapNamespace = cls::rbd::UserSnapshotNamespace();
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -969,16 +970,18 @@ TEST_F(TestClsRbd, snapshots_namespaces)
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 0, "snap1"));
 
   librados::ObjectWriteOperation op;
-  ::librbd::cls_client::snapshot_add(&op, 0, "snap1", groupSnapNamespace);
+  ::librbd::cls_client::snapshot_add(&op, 1, "snap1", groupSnapNamespace);
   int r = ioctx.operate(oid, &op);
   ASSERT_EQ(0, r);
 
   ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
-  ASSERT_EQ(1u, snapc.snaps.size());
-  ASSERT_EQ(0u, snapc.snaps[0]);
-  ASSERT_EQ(0u, snapc.seq);
+  ASSERT_EQ(2u, snapc.snaps.size());
+  ASSERT_EQ(1u, snapc.snaps[0]);
+  ASSERT_EQ(0u, snapc.snaps[1]);
+  ASSERT_EQ(1u, snapc.seq);
   ASSERT_EQ(0, snap_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(groupSnapNamespace, snap_namespaces[0]);
+  ASSERT_EQ(userSnapNamespace, snap_namespaces[1]);
 }
 
 TEST_F(TestClsRbd, snapid_race)
