@@ -3652,10 +3652,14 @@ TEST_F(TestLibRBD, UpdateFeatures)
   // must provide a single feature
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                     RBD_FEATURE_OBJECT_MAP |
-                                     RBD_FEATURE_FAST_DIFF |
-                                     RBD_FEATURE_JOURNALING, false));
+  uint64_t disable_features;
+  disable_features = features & (RBD_FEATURE_EXCLUSIVE_LOCK |
+                                 RBD_FEATURE_OBJECT_MAP |
+                                 RBD_FEATURE_FAST_DIFF |
+                                 RBD_FEATURE_JOURNALING);
+  if (disable_features != 0) {
+    ASSERT_EQ(0, image.update_features(disable_features, false));
+  }
 
   // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));

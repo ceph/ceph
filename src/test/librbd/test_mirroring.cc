@@ -464,7 +464,7 @@ TEST_F(TestMirroring, EnableJournaling_In_MirrorModeDisabled) {
   uint64_t init_features = 0;
   init_features |= RBD_FEATURE_OBJECT_MAP;
   init_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
-  uint64_t features = init_features | RBD_FEATURE_JOURNALING;
+  uint64_t features = RBD_FEATURE_JOURNALING;
   check_mirroring_on_update_features(init_features, true, false, features, 0,
                       RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_IMAGE_DISABLED);
 }
@@ -473,7 +473,7 @@ TEST_F(TestMirroring, EnableJournaling_In_MirrorModeImage) {
   uint64_t init_features = 0;
   init_features |= RBD_FEATURE_OBJECT_MAP;
   init_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
-  uint64_t features = init_features | RBD_FEATURE_JOURNALING;
+  uint64_t features = RBD_FEATURE_JOURNALING;
   check_mirroring_on_update_features(init_features, true, false, features, 0,
                       RBD_MIRROR_MODE_IMAGE, RBD_MIRROR_IMAGE_DISABLED);
 }
@@ -482,7 +482,7 @@ TEST_F(TestMirroring, EnableJournaling_In_MirrorModePool) {
   uint64_t init_features = 0;
   init_features |= RBD_FEATURE_OBJECT_MAP;
   init_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
-  uint64_t features = init_features | RBD_FEATURE_JOURNALING;
+  uint64_t features = RBD_FEATURE_JOURNALING;
   check_mirroring_on_update_features(init_features, true, false, features, 0,
                       RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED);
 }
