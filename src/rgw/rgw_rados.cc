@@ -3312,9 +3312,26 @@ int RGWRados::replace_region_with_zonegroup()
     default_oid = default_region_info_oid;
   }
 
-  string default_region;
+
   RGWZoneGroup default_zonegroup;
-  int ret = default_zonegroup.init(cct, this, false, true);
+  string pool_name = default_zonegroup.get_pool_name(cct);
+  rgw_bucket pool(pool_name.c_str());
+  string oid  = "converted";
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(this);
+
+  int ret = rgw_get_system_obj(this, obj_ctx, pool ,oid, bl, NULL,  NULL);
+  if (ret < 0 && ret !=  -ENOENT) {
+    ldout(cct, 0) << "failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
+  } else if (ret != -ENOENT) {
+    ldout(cct, 0) << "System already converted " << dendl;
+    return 0;
+  }
+
+  string default_region;
+  ret = default_zonegroup.init(cct, this, false, true);
   if (ret < 0) {
     ldout(cct, 0) << "failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -3417,6 +3434,15 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
+    ldout(cct, 0) << "Converting  " << *iter << dendl;
+    /* check to see if we don't have already a zonegroup with this name */
+    RGWZoneGroup new_zonegroup(*iter);
+    ret = new_zonegroup.init(cct , this);
+    if (ret == 0 && new_zonegroup.get_id() != *iter) {
+      ldout(cct, 0) << "zonegroup  "<< *iter << " already exists id " << new_zonegroup.get_id () <<
+	" skipping conversion " << dendl;
+      continue;
+    }
     RGWZoneGroup zonegroup(*iter);
     zonegroup.set_id(*iter);
     int ret = zonegroup.init(cct, this, true, true);
@@ -3425,6 +3451,11 @@ int RGWRados::replace_region_with_zonegroup()
       return ret;
     }
     zonegroup.realm_id = realm.get_id();
+    /* fix default region master zone */
+    if (*iter == default_zonegroup_name && zonegroup.master_zone.empty()) {
+      ldout(cct, 0) << "Setting default zone as master for default region" << dendl;
+      zonegroup.master_zone = default_zone_name;
+    }
     ret = zonegroup.update();
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
@@ -3447,6 +3478,7 @@ int RGWRados::replace_region_with_zonegroup()
     }
     for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
          iter ++) {
+      ldout(cct, 0) << "Converting zone" << iter->first << dendl;
       RGWZoneParams zoneparams(iter->first, iter->first);
       zoneparams.set_id(iter->first);
       zoneparams.realm_id = realm.get_id();
@@ -3511,6 +3543,15 @@ int RGWRados::replace_region_with_zonegroup()
         << dendl;
       return ret;
     }
+  }
+
+  /* mark as converted */
+  ret = rgw_put_system_obj(this, pool, oid, bl.c_str(), bl.length(),
+			   true, NULL, real_time(), NULL);
+  if (ret < 0 ) {
+    ldout(cct, 0) << "failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
   }
 
   return 0;
