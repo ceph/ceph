@@ -8,9 +8,9 @@ best practices.
 
 The patch signing procedures and definitions are unmodified.
 
----------------------
+
 SIGNING CONTRIBUTIONS
----------------------
+=====================
 
 In order to keep the record of code attribution clean within the
 source repository, please follow these guidelines for signing 
@@ -18,7 +18,9 @@ patches submitted to the project.  These definitions are taken
 from those used by the Linux kernel and many other open source
 projects.
 
+
 1. Sign your work
+-----------------
 
    To improve tracking of who did what, especially with patches that can
    percolate to their final resting place in the kernel through several
@@ -30,7 +32,8 @@ projects.
    pass it on as a open-source patch.  The rules are pretty simple: if you
    can certify the below:
 
-   Developer's Certificate of Origin 1.1
+Developer's Certificate of Origin 1.1
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    By making a contribution to this project, I certify that:
 
@@ -113,7 +116,9 @@ projects.
    tracking your trees, and to people trying to trouble-shoot bugs in your
    tree.
 
+
 2. When to use ``Acked-by:`` and ``Cc:``
+----------------------------------------
 
    The ``Signed-off-by:`` tag indicates that the signer was involved in the
    development of the patch, or that he/she was in the patch's delivery path.
@@ -143,7 +148,9 @@ projects.
    person it names.  This tag documents that potentially interested parties
    have been included in the discussion
 
+
 3. Using ``Reported-by:``, ``Tested-by:`` and ``Reviewed-by:``
+--------------------------------------------------------------
 
    If this patch fixes a problem reported by somebody else, consider adding a
    Reported-by: tag to credit the reporter for their contribution.  Please
@@ -160,7 +167,8 @@ projects.
    ``Reviewed-by:``, instead, indicates that the patch has been reviewed and found
    acceptable according to the Reviewer's Statement:
 
-   Reviewer's statement of oversight
+Reviewer's statement of oversight
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    By offering my ``Reviewed-by:`` tag, I state that:
 
@@ -192,9 +200,8 @@ projects.
    increase the likelihood of your patch getting into the kernel.
 
 
------------------------------
 PREPARING AND SENDING PATCHES
------------------------------
+=============================
 
 The upstream repository is managed by Git.  You will find that it
 is easiest to work on the project and submit changes by using the
@@ -208,7 +215,9 @@ patches are expected to be reviewed in the email list. And for everything
 else, github is preferred due to the convenience of the 'pull request'
 feature.
 
+
 1. Github pull request
+----------------------
 
    The preferred way to submit code is by publishing your patches in a branch
    in your github fork of the ceph repository and then submitting a github
@@ -226,7 +235,8 @@ feature.
 
      https://github.com/ceph/ceph/pulls
 
-   and click 'New pull request'.  The 'hub' command-line tool, available from
+   and click 'New pull request'. See :ref:`_title_of_commit` for our naming
+   convention of pull requests. The 'hub' command-line tool, available from
 
      https://github.com/github/hub
 
@@ -303,7 +313,9 @@ feature.
       The developer merging the pull request should note positive reviews and
       include the appropriate Reviewed-by: lines in the merge commit.
 
+
 2. Patch submission via ceph-devel@vger.kernel.org
+--------------------------------------------------
 
    The best way to generate a patch for manual submission is to work from
    a Git checkout of the Ceph source code.  You can then generate patches
@@ -367,8 +379,14 @@ feature.
 
 
 3. Describe your changes.
+-------------------------
 
    Describe the technical detail of the change(s) your patch includes.
+
+.. _title_of_commit:
+
+Title of pull requests and title of commits
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
    The text up to the first empty line in a commit message is the commit
    title. Ideally it is a single short line less than 50 characters,
@@ -378,18 +396,19 @@ feature.
 
      git log
 
-   for more examples.
+   for more examples. Please use this convention for naming pull requests
+   (subsystem: short description) also, as it feeds directly into the script
+   that generates release notes and it's tedious to clean up at release time.
+
+Commit message
+^^^^^^^^^^^^^^
 
    Be as specific as possible.  The WORST descriptions possible include
    things like "update driver X", "bug fix for driver X", or "this patch
    includes updates for subsystem X.  Please apply."
 
-   The maintainer will thank you if you write your patch description in a
-   form which can be easily pulled into Linux's source code management
-   system, git, as a "commit log".  See #15, below.
-
    If your description starts to get long, that's a sign that you probably
-   need to split up your patch.  See #3, next.
+   need to split up your patch.  See :ref:`split_changes`.
 
    When you submit or resubmit a patch or patch series, include the
    complete patch description and justification for it.  Don't just
@@ -400,8 +419,11 @@ feature.
    This benefits both the patch merger(s) and reviewers.  Some reviewers
    probably didn't even receive earlier versions of the patch.
 
+Tag the commit
+^^^^^^^^^^^^^^
+
    If the patch fixes a logged bug entry, refer to that bug entry by
-   number and URL. In particular, if this patch fixes one or more issues
+   URL. In particular, if this patch fixes one or more issues
    tracked by http://tracker.ceph.com, consider adding a ``Fixes:`` tag to
    connect this change to addressed issue(s). So a line saying ::
 
@@ -422,7 +444,10 @@ feature.
      Fixes: http://tracker.ceph.com/issues/12345
      Signed-off-by: Random J Developer <random@developer.example.org>
 
+.. _split_changes:
+
 4. Separate your changes.
+-------------------------
 
    Separate *logical changes* into a single patch file.
 
@@ -442,12 +467,16 @@ feature.
    If you cannot condense your patch set into a smaller set of patches,
    then only post say 15 or so at a time and wait for review and integration.
 
+
 5. Style check your changes.
+----------------------------
 
    Check your patch for basic style violations, details of which can be
    found in CodingStyle.
 
+
 6. No MIME, no links, no compression, no attachments.  Just plain text.
+-----------------------------------------------------------------------
 
    Developers need to be able to read and comment on the changes you are
    submitting.  It is important for a kernel developer to be able to
