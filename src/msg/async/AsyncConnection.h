@@ -57,8 +57,6 @@ class AsyncConnection : public Connection {
     outcoming_bl.claim_append(bl);
     return _try_send(more);
   }
-  // if "send" is false, it will only append bl to send buffer
-  // the main usage is avoid error happen outside messenger threads
   ssize_t _try_send(bool more=false);
   ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
