@@ -292,14 +292,14 @@ public:
   void tick();
 
   UserPerm pick_my_perms() {
-    uid_t uid = user_id >= 0 ? user_id : ::geteuid();
-    gid_t gid = group_id >= 0 ? group_id : ::getegid();
+    uid_t uid = user_id >= 0 ? user_id : -1;
+    gid_t gid = group_id >= 0 ? group_id : -1;
     return UserPerm(uid, gid);
   }
 
   static UserPerm pick_my_perms(CephContext *c) {
-    uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : ::geteuid();
-    gid_t gid = c->_conf->client_mount_gid >= 0 ? c->_conf->client_mount_gid : ::getegid();
+    uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : -1;
+    gid_t gid = c->_conf->client_mount_gid >= 0 ? c->_conf->client_mount_gid : -1;
     return UserPerm(uid, gid);
   }
 protected:
