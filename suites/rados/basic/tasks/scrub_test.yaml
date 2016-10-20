@@ -14,6 +14,9 @@ overrides:
     - 'attr name mistmatch'
     - 'deep-scrub 1 missing, 0 inconsistent objects'
     - 'failed to pick suitable auth object'
+    conf:
+      osd:
+        osd deep scrub update digest min age: 0
 tasks:
 - install:
 - ceph:
