@@ -294,12 +294,6 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     librbd::ImageOptions& opts, bool no_progress,
 		     int import_format)
 {
-  // check current supported formats.
-  if (import_format != 1 && import_format != 2) {
-    std::cerr << "rbd: wrong file format to import" << std::endl;
-    return -EINVAL;
-  }
-
   int fd, r;
   struct stat stat_buf;
   utils::ProgressContext pc("Importing image", no_progress);
@@ -569,8 +563,7 @@ void get_arguments(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, true);
   at::add_no_progress_option(options);
-  options->add_options()
-    ("import-format", po::value<int>(), "format of the file to be imported");
+  at::add_export_format_option(options);
 
   // TODO legacy rbd allowed import to accept both 'image'/'dest' and
   //      'pool'/'dest-pool'
