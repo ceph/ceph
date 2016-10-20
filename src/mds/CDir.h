@@ -19,9 +19,10 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
-#include "mdstypes.h"
 #include "common/config.h"
 #include "common/DecayCounter.h"
+
+#include "MDSCacheObject.h"
 
 #include <iosfwd>
 

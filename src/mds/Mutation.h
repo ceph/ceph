@@ -19,7 +19,7 @@
 #include "include/elist.h"
 #include "include/filepath.h"
 
-#include "mdstypes.h"
+#include "MDSCacheObject.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"
