@@ -38,8 +38,8 @@ class MMDSSlaveRequest;
 
 struct MutationImpl {
   metareqid_t reqid;
-  __u32 attempt;      // which attempt for this request
-  LogSegment *ls;  // the log segment i'm committing to
+  __u32 attempt = 0;      // which attempt for this request
+  LogSegment *ls = nullptr;  // the log segment i'm committing to
 
 private:
   utime_t mds_stamp; ///< mds-local timestamp (real time)
@@ -47,7 +47,7 @@ private:
 
 public:
   // flag mutation as slave
-  mds_rank_t slave_to_mds;                // this is a slave request if >= 0.
+  mds_rank_t slave_to_mds = MDS_RANK_NONE;  // this is a slave request if >= 0.
 
   // -- my pins and locks --
   // cache pins (so things don't expire)
@@ -67,15 +67,15 @@ public:
 
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
-  SimpleLock *locking;
-  mds_rank_t locking_target_mds;
+  SimpleLock *locking = nullptr;
+  mds_rank_t locking_target_mds = -1;
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
-  bool done_locking; 
-  bool committing;
-  bool aborted;
-  bool killed;
+  bool done_locking = false;
+  bool committing = false;
+  bool aborted = false;
+  bool killed = false;
 
   // for applying projected inode changes
   list<CInode*> projected_inodes;
@@ -86,20 +86,10 @@ public:
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
   // keep our default values synced with MDRequestParam's
-  MutationImpl()
-    : attempt(0),
-      ls(0),
-      slave_to_mds(MDS_RANK_NONE),
-      locking(NULL),
-      locking_target_mds(-1),
-      done_locking(false), committing(false), aborted(false), killed(false) { }
+  MutationImpl() = default;
   MutationImpl(metareqid_t ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
     : reqid(ri), attempt(att),
-      ls(0),
-      slave_to_mds(slave_to), 
-      locking(NULL),
-      locking_target_mds(-1),
-      done_locking(false), committing(false), aborted(false), killed(false) { }
+      slave_to_mds(slave_to) { }
   virtual ~MutationImpl() {
     assert(locking == NULL);
     assert(pins.empty());
