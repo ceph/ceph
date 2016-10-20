@@ -163,7 +163,7 @@ add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados)
-target_link_libraries(unittest_librados librados global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES})
 
 # unittest_librados_config
 add_executable(unittest_librados_config
@@ -172,7 +172,6 @@ add_executable(unittest_librados_config
 add_ceph_unittest(unittest_librados_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados_config)
 target_link_libraries(unittest_librados_config
   librados
-  global
   ${BLKID_LIBRARIES}
   )
 
