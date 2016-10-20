@@ -1,4 +1,7 @@
-EXTRA_DIST += $(srcdir)/pybind/rados/setup.py $(srcdir)/pybind/rados/rados.pyx $(srcdir)/pybind/rados/rados.pxd
+EXTRA_DIST += \
+	$(srcdir)/pybind/rados/CMakeLists.txt \
+	$(srcdir)/pybind/rados/setup.py \
+	$(srcdir)/pybind/rados/rados.pyx $(srcdir)/pybind/rados/rados.pxd
 
 rados-pybind-all: librados.la ${srcdir}/ceph_ver.h
 	cd $(srcdir)/pybind/rados; $(PY_DISTUTILS) build \

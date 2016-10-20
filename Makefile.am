@@ -5,6 +5,8 @@ EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec install-deps.sh
 SUBDIRS = . src man doc systemd selinux
 
 EXTRA_DIST += \
+	CMakeLists.txt \
+	qa \
 	src/test/run-cli-tests \
 	src/test/run-cli-tests-maybe-unset-ccache \
 	src/test/cli \

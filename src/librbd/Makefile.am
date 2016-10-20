@@ -160,3 +160,5 @@ noinst_HEADERS += \
 endif # WITH_RBD
 endif # WITH_RADOS
 endif # ENABLE_CLIENT
+
+EXTRA_DIST += librbd/CMakeLists.txt

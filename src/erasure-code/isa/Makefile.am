@@ -75,3 +75,5 @@ libec_isa_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
 
 erasure_codelib_LTLIBRARIES += libec_isa.la
+
+EXTRA_DIST += erasure-code/isa/CMakeLists.txt

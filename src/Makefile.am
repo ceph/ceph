@@ -139,6 +139,7 @@ EXTRA_DIST += \
 	yasm-wrapper
 
 EXTRA_DIST += \
+	CMakeLists.txt \
 	unittest_bufferlist.sh
 
 
