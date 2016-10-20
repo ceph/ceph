@@ -262,3 +262,33 @@ class TestForwardScrub(CephFSTestCase):
         self.assertGreater(
                 table['0']['data']['inotable']['free'][0]['start'],
                 inos['./file3_sixmegs'])
+
+    def test_backtrace_repair(self):
+        """
+        That the MDS can repair an inodes backtrace in the data pool
+        if it is found to be damaged.
+        """
+        # Create a file for subsequent checks
+        self.mount_a.run_shell(["mkdir", "parent_a"])
+        self.mount_a.run_shell(["touch", "parent_a/alpha"])
+        file_ino = self.mount_a.path_to_ino("parent_a/alpha")
+
+        # That backtrace and layout are written after initial flush
+        self.fs.mds_asok(["flush", "journal"])
+        backtrace = self.fs.read_backtrace(file_ino)
+        self.assertEqual(['alpha', 'parent_a'],
+                         [a['dname'] for a in backtrace['ancestors']])
+
+        with self.assert_cluster_log("bad backtrace on inode", invert_match=True):
+            self.fs.mds_asok(["scrub_path", "/", "repair", "recursive"])
+
+        # Go corrupt the backtrace
+        self.fs._write_data_xattr(file_ino, "inode_backtrace_t",
+                                  "oh i'm sorry did i overwrite your xattr?")
+
+        with self.assert_cluster_log("bad backtrace on inode"):
+            self.fs.mds_asok(["scrub_path", "/", "repair", "recursive"])
+        self.fs.mds_asok(["flush", "journal"])
+        backtrace = self.fs.read_backtrace(file_ino)
+        self.assertEqual(['alpha', 'parent_a'],
+                         [a['dname'] for a in backtrace['ancestors']])
