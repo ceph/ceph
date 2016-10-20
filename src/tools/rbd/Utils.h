@@ -29,8 +29,8 @@ static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 
 #define RBD_EXPORT_IMAGE_ORDER		'O'
 #define RBD_EXPORT_IMAGE_FEATURES	'T'
-#define RBD_EXPORT_IMAGE_STRIPEUNIT	'U'
-#define RBD_EXPORT_IMAGE_STRIPECOUNT	'C'
+#define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'
+#define RBD_EXPORT_IMAGE_STRIPE_COUNT	'C'
 #define RBD_EXPORT_IMAGE_END		'E'
 
 enum SnapshotPresence {
