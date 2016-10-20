@@ -382,6 +382,7 @@ void AsyncConnection::process()
 	  write_lock.unlock();
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
 	  set_last_keepalive(ceph_clock_now(NULL));
+          need_dispatch_writer = true;
           state = STATE_OPEN;
           break;
         }
