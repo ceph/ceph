@@ -376,7 +376,9 @@ bool DeterministicOpSequence::do_move_ranges_delete_srcobj(rngen_t& gen)
   boost::uniform_int<> move_len(1, bl.length());
   size = (size_t) move_len(gen);
 
-  vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info = { boost::make_tuple(0, 0, size)};
+  vector<std::pair<uint64_t, uint64_t>> move_info = {
+    make_pair(0, size)
+  };
 
   dout(0) << "do_move_ranges_delete_srcobj " << coll.to_str() << "/" << orig_obj.oid.name
       << " (0~" << size << ")"
@@ -561,18 +563,19 @@ void DeterministicOpSequence::_do_write_and_clone_range(coll_t coll,
   m_store->apply_transaction(&m_osr, std::move(t));
 }
 
-void DeterministicOpSequence::_do_write_and_merge_delete(coll_t coll,
-                                                        hobject_t& orig_obj,
-                                                        hobject_t& new_obj,
-                                                        vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info,
-                                                        bufferlist& bl)
+void DeterministicOpSequence::_do_write_and_merge_delete(
+  coll_t coll,
+  hobject_t& orig_obj,
+  hobject_t& new_obj,
+  vector<std::pair<uint64_t, uint64_t>> move_info,
+  bufferlist& bl)
 {
   ObjectStore::Transaction t;
 
   note_txn(&t);
   for (unsigned i = 0; i < move_info.size(); ++i) {
-    uint64_t srcoff = move_info[i].get<0>();
-    t.write(coll, ghobject_t(orig_obj), srcoff, bl.length(), bl);
+    uint64_t off = move_info[i].first;
+    t.write(coll, ghobject_t(orig_obj), off, bl.length(), bl);
   }
   t.move_ranges_destroy_src(coll, ghobject_t(orig_obj), ghobject_t(new_obj), move_info);
   m_store->apply_transaction(&m_osr, std::move(t));
