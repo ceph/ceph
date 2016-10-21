@@ -5814,6 +5814,12 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
   g_ceph_context->_conf->set_val("bluestore_onode_cache_size", "500");
 
+  // very short *_max prealloc so that we fall back to async submits
+  g_ceph_context->_conf->set_val("bluestore_blobid_prealloc", "10");
+  g_ceph_context->_conf->set_val("bluestore_nid_prealloc", "10");
+  g_ceph_context->_conf->set_val("bluestore_debug_randomize_serial_transaction",
+				 "10");
+
   // specify device size
   g_ceph_context->_conf->set_val("bluestore_block_size", "10240000000");
 
