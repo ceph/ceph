@@ -344,6 +344,7 @@ public:
   friend class C_OSD_OnOpApplied;
   void submit_transaction(
     const hobject_t &hoid,
+    const object_stat_sum_t &delta_stats,
     const eversion_t &at_version,
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,

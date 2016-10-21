@@ -521,6 +521,7 @@ void generate_transaction(
 
 void ReplicatedBackend::submit_transaction(
   const hobject_t &soid,
+  const object_stat_sum_t &delta_stats,
   const eversion_t &at_version,
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
@@ -534,6 +535,10 @@ void ReplicatedBackend::submit_transaction(
   osd_reqid_t reqid,
   OpRequestRef orig_op)
 {
+  parent->apply_stats(
+    soid,
+    delta_stats);
+
   vector<pg_log_entry_t> log_entries(_log_entries);
   ObjectStore::Transaction op_t;
   PGTransactionUPtr t(std::move(_t));
