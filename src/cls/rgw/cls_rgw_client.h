@@ -304,6 +304,9 @@ public:
     CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), tag_timeout(_tag_timeout) {}
 };
 
+void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o, bool absolute,
+                                 const map<uint8_t, rgw_bucket_category_stats>& stats);
+
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                const cls_rgw_obj_key& key, const string& locator, bool log_op,
                                uint16_t bilog_op);
@@ -324,6 +327,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry);
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, rgw_cls_bi_entry& entry);
+void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const string oid, rgw_cls_bi_entry& entry);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
                    const string& name, const string& marker, uint32_t max,
                    list<rgw_cls_bi_entry> *entries, bool *is_truncated);
