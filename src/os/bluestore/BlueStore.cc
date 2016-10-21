@@ -1503,14 +1503,12 @@ bool BlueStore::ExtentMap::update(Onode *o, KeyValueDB::Transaction t,
   if (o->onode.extent_map_shards.empty()) {
     if (inline_bl.length() == 0) {
       unsigned n;
-      if (encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n)) {
-	return true;
-      }
+      bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n); //we need to encode inline_bl to measure encoded length
+      assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << " inline shard "
 	       << len << " bytes from " << n << " extents" << dendl;
       if (!force && len > g_conf->bluestore_extent_map_shard_max_size) {
-        inline_bl.clear();
 	return true;
       }
     }
