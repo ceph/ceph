@@ -883,11 +883,21 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   RGWMetaSyncEnv meta_sync_env;
 
   RGWDataSyncDebugLogger logger;
+  const std::string status_oid;
+
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
 
 public:
   RGWRunBucketSyncCoroutine(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs) {
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
+      status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)) {
     logger.init(sync_env, "Bucket", bs.get_key());
+  }
+  ~RGWRunBucketSyncCoroutine() {
+    if (lease_cr) {
+      lease_cr->abort();
+    }
   }
 
   int operate();
@@ -2699,10 +2709,32 @@ int RGWBucketShardIncrementalSyncCR::operate()
 int RGWRunBucketSyncCoroutine::operate()
 {
   reenter(this) {
+    yield {
+      set_status("acquiring sync lock");
+      auto store = sync_env->store;
+      lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                          store->get_zone_params().log_pool,
+                                          status_oid, "sync_lock",
+                                          cct->_conf->rgw_sync_lease_period,
+                                          this);
+      lease_stack = spawn(lease_cr.get(), false);
+    }
+    while (!lease_cr->is_locked()) {
+      if (lease_cr->is_done()) {
+        ldout(cct, 5) << "lease cr failed, done early" << dendl;
+        set_status("lease lock failed, early abort");
+        return set_cr_error(lease_cr->get_ret_status());
+      }
+      set_sleeping(true);
+      yield;
+    }
+
     yield call(new RGWReadBucketSyncStatusCoroutine(sync_env, bs, &sync_status));
     if (retcode < 0 && retcode != -ENOENT) {
       ldout(sync_env->cct, 0) << "ERROR: failed to read sync status for bucket="
           << bucket_shard_str{bs} << dendl;
+      lease_cr->go_down();
+      drain_all();
       return set_cr_error(retcode);
     }
 
@@ -2726,6 +2758,8 @@ int RGWRunBucketSyncCoroutine::operate()
       }
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch bucket instance info for " << bucket_str{bs.bucket} << dendl;
+        lease_cr->go_down();
+        drain_all();
         return set_cr_error(retcode);
       }
 
@@ -2733,6 +2767,8 @@ int RGWRunBucketSyncCoroutine::operate()
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "ERROR: failed to retrieve bucket info for bucket=" << bucket_str{bs.bucket} << dendl;
+      lease_cr->go_down();
+      drain_all();
       return set_cr_error(retcode);
     }
 
@@ -2745,6 +2781,8 @@ int RGWRunBucketSyncCoroutine::operate()
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "ERROR: init sync on " << bucket_shard_str{bs}
           << " failed, retcode=" << retcode << dendl;
+      lease_cr->go_down();
+      drain_all();
       return set_cr_error(retcode);
     }
     yield {
@@ -2757,6 +2795,8 @@ int RGWRunBucketSyncCoroutine::operate()
     if (retcode < 0) {
       ldout(sync_env->cct, 5) << "full sync on " << bucket_shard_str{bs}
           << " failed, retcode=" << retcode << dendl;
+      lease_cr->go_down();
+      drain_all();
       return set_cr_error(retcode);
     }
 
@@ -2769,9 +2809,13 @@ int RGWRunBucketSyncCoroutine::operate()
     if (retcode < 0) {
       ldout(sync_env->cct, 5) << "incremental sync on " << bucket_shard_str{bs}
           << " failed, retcode=" << retcode << dendl;
+      lease_cr->go_down();
+      drain_all();
       return set_cr_error(retcode);
     }
 
+    lease_cr->go_down();
+    drain_all();
     return set_cr_done();
   }
 
