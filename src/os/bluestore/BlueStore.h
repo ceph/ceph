@@ -1277,6 +1277,8 @@ public:
 
     uint64_t last_seq = 0;
 
+    std::atomic_int kv_committing_serially = {0};
+
     OpSequencer()
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL) {
@@ -1431,7 +1433,6 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex id_lock;
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
@@ -1454,8 +1455,10 @@ private:
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
   bool kv_stop;
-  deque<TransContext*> kv_queue, kv_committing;
-  deque<TransContext*> wal_cleanup_queue, wal_cleaning;
+  deque<TransContext*> kv_queue;             ///< ready, already submitted
+  deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
+  deque<TransContext*> kv_committing;        ///< currently syncing
+  deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
 
   PerfCounters *logger;
 
