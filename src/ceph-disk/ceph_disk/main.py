@@ -1904,6 +1904,7 @@ class PrepareSpace(object):
                 raise Error('%s is not a block device' % name.capitalize,
                             getattr(args, name))
             self.type = self.FILE
+            return
 
         raise Error('%s %s is neither a block device nor regular file' %
                     (name.capitalize, getattr(args, name)))
@@ -1962,12 +1963,12 @@ class PrepareSpace(object):
         if getattr(self.args, space_uuid) is not None:
             write_one_line(path, space_uuid,
                            getattr(self.args, space_uuid))
-
-    def populate_data_path_device(self, path):
-        self.populate_data_path_file(path)
         if self.space_symlink is not None:
             adjust_symlink(self.space_symlink,
                            os.path.join(path, self.name))
+
+    def populate_data_path_device(self, path):
+        self.populate_data_path_file(path)
 
         if self.space_dmcrypt is not None:
             adjust_symlink(self.space_dmcrypt,
@@ -1997,6 +1998,7 @@ class PrepareSpace(object):
                       space_filename)
             space_file = open(space_filename, 'wb')
             space_file.close()
+            path_set_context(space_filename)
 
         LOG.debug('%s is file %s',
                   self.name.capitalize(),

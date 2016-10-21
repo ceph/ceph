@@ -488,6 +488,35 @@ class TestCephDisk(object):
         os.unlink(symlink)
         os.rmdir(tempdir)
 
+    def test_activate_journal_file(self):
+        c = CephDisk()
+        disks = c.unused_disks()
+        data_disk = disks[0]
+        #
+        # /var/lib/ceph/osd is required otherwise it may violate
+        # restrictions enforced by systemd regarding the directories
+        # which ceph-osd is allowed to read/write
+        #
+        tempdir = tempfile.mkdtemp(dir='/var/lib/ceph/osd')
+        c.sh("chown ceph:ceph " + tempdir + " || true")
+        journal_file = os.path.join(tempdir, 'journal')
+        osd_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+             " " + data_disk + " " + journal_file)
+        c.wait_for_osd_up(osd_uuid)
+        device = json.loads(
+            c.sh("ceph-disk list --format json " + data_disk))[0]
+        assert len(device['partitions']) == 1
+        partition = device['partitions'][0]
+        assert journal_file == os.readlink(
+            os.path.join(partition['mount'], 'journal'))
+        c.check_osd_status(osd_uuid)
+        c.helper("pool_read_write 1")  # 1 == pool size
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk --verbose zap " + data_disk)
+        os.unlink(journal_file)
+        os.rmdir(tempdir)
+
     def test_activate_separated_journal(self):
         c = CephDisk()
         disks = c.unused_disks()
