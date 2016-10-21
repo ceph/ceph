@@ -844,23 +844,37 @@ namespace librbd {
 
     /******************** rbd_directory object methods ********************/
 
-    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
-		   const std::string &name, std::string *id)
-    {
-      bufferlist in, out;
-      ::encode(name, in);
-      int r = ioctx->exec(oid, "rbd", "dir_get_id", in, out);
-      if (r < 0)
-	return r;
+    void dir_get_id_start(librados::ObjectReadOperation *op,
+                          const std::string &image_name) {
+      bufferlist bl;
+      ::encode(image_name, bl);
 
-      bufferlist::iterator iter = out.begin();
+      op->exec("rbd", "dir_get_id", bl);
+    }
+
+    int dir_get_id_finish(bufferlist::iterator *iter, std::string *image_id) {
       try {
-	::decode(*id, iter);
+        ::decode(*image_id, *iter);
       } catch (const buffer::error &err) {
-	return -EBADMSG;
+        return -EBADMSG;
       }
 
       return 0;
+    }
+
+    int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
+                   const std::string &name, std::string *id) {
+      librados::ObjectReadOperation op;
+      dir_get_id_start(&op, name);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      return dir_get_id_finish(&iter, id);
     }
 
     void dir_get_name_start(librados::ObjectReadOperation *op,
@@ -1706,17 +1720,28 @@ namespace librbd {
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec &group_spec)
     {
-      bufferlist in, out;
+      bufferlist out_bl;
+      librados::ObjectReadOperation op;
 
-      int r = ioctx->exec(oid, "rbd", "image_get_group", in, out);
+      image_get_group_start(&op);
+      int r = ioctx->operate(oid, &op, &out_bl);
       if (r < 0)
 	return r;
 
-      bufferlist::iterator iter = out.begin();
+      return image_get_group_finish(out_bl, group_spec);
+    }
+
+    void image_get_group_start(librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "image_get_group", bl);
+    }
+
+    int image_get_group_finish(bufferlist &bl, cls::rbd::GroupSpec &group_spec) {
+      bufferlist::iterator iter = bl.begin();
       try {
-	::decode(group_spec, iter);
+        ::decode(group_spec, iter);
       } catch (const buffer::error &err) {
-	return -EBADMSG;
+        return -EBADMSG;
       }
 
       return 0;

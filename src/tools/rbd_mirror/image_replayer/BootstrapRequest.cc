@@ -7,6 +7,7 @@
 #include "CreateImageRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
+#include "CreateLocalImageRequest.h"
 #include "common/debug.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -385,16 +386,15 @@ template <typename I>
 void BootstrapRequest<I>::create_local_image() {
   dout(20) << dendl;
 
-  m_local_image_id = "";
   update_progress("CREATE_LOCAL_IMAGE");
 
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
-      this);
-  CreateImageRequest<I> *request = CreateImageRequest<I>::create(
-    m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
-    m_local_image_name, m_remote_image_ctx, ctx);
-  request->send();
+  using klass = BootstrapRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_create_local_image>(this);
+
+  CreateLocalImageRequest<I> *req = CreateLocalImageRequest<I>::create(
+    m_local_io_ctx, &m_local_image_id, m_local_image_name, m_global_image_id,
+    m_remote_mirror_uuid, m_remote_image_ctx, m_work_queue, ctx);
+  req->send();
 }
 
 template <typename I>

@@ -601,7 +601,7 @@ Context* CreateRequest<I>::handle_journal_create(int *result) {
 
 template<typename I>
 void CreateRequest<I>::fetch_mirror_image() {
-  if ((m_mirror_mode != RBD_MIRROR_MODE_POOL) && !m_force_non_primary) {
+  if ((m_mirror_mode != RBD_MIRROR_MODE_POOL) || m_force_non_primary) {
     complete(0);
     return;
   }

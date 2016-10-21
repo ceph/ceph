@@ -25,17 +25,19 @@ public:
                                     ContextWQ *work_queue,
                                     const std::string &global_image_id,
                                     const std::string &remote_mirror_uuid,
+                                    const std::string &local_image_id,
                                     const std::string &local_image_name,
                                     ImageCtxT *remote_image_ctx,
                                     Context *on_finish) {
     return new CreateImageRequest(local_io_ctx, work_queue, global_image_id,
-                                  remote_mirror_uuid, local_image_name,
-                                  remote_image_ctx, on_finish);
+                                  remote_mirror_uuid, local_image_id,
+                                  local_image_name, remote_image_ctx, on_finish);
   }
 
   CreateImageRequest(librados::IoCtx &local_io_ctx, ContextWQ *work_queue,
                      const std::string &global_image_id,
                      const std::string &remote_mirror_uuid,
+                     const std::string &local_image_id,
                      const std::string &local_image_name,
                      ImageCtxT *remote_image_ctx,
                      Context *on_finish);
@@ -83,6 +85,7 @@ private:
   ContextWQ *m_work_queue;
   std::string m_global_image_id;
   std::string m_remote_mirror_uuid;
+  std::string m_local_image_id;
   std::string m_local_image_name;
   ImageCtxT *m_remote_image_ctx;
   Context *m_on_finish;

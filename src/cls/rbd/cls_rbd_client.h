@@ -180,6 +180,9 @@ namespace librbd {
     // operations on rbd_directory objects
     int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
 		   const std::string &name, std::string *id);
+    void dir_get_id_start(librados::ObjectReadOperation *op,
+                          const std::string &image_name);
+    int dir_get_id_finish(bufferlist::iterator *iter, std::string *image_id);
     void dir_get_name_start(librados::ObjectReadOperation *op,
 			    const std::string &id);
     int dir_get_name_finish(bufferlist::iterator *it, std::string *name);
@@ -345,6 +348,8 @@ namespace librbd {
 			   const cls::rbd::GroupSpec &group_spec);
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec &s);
+    void image_get_group_start(librados::ObjectReadOperation *op);
+    int image_get_group_finish(bufferlist &bl, cls::rbd::GroupSpec &group_spec);
 
   } // namespace cls_client
 } // namespace librbd

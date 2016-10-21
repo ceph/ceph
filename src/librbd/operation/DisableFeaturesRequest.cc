@@ -33,9 +33,10 @@ template <typename I>
 DisableFeaturesRequest<I>::DisableFeaturesRequest(I &image_ctx,
                                                   Context *on_finish,
                                                   uint64_t journal_op_tid,
-                                                  uint64_t features)
-  : Request<I>(image_ctx, on_finish, journal_op_tid), m_features(features) {
-}
+                                                  uint64_t features,
+                                                  bool force)
+  : Request<I>(image_ctx, on_finish, journal_op_tid), m_features(features),
+  m_force(force) { }
 
 template <typename I>
 void DisableFeaturesRequest<I>::send_op() {
@@ -307,7 +308,7 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_image(int *result) {
     return handle_finish(*result);
   }
 
-  if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+  if ((mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) && !m_force) {
     lderr(cct) << "cannot disable journaling: image mirroring "
                << "enabled and mirror pool mode set to image"
                << dendl;
@@ -331,7 +332,7 @@ void DisableFeaturesRequest<I>::send_disable_mirror_image() {
     &DisableFeaturesRequest<I>::handle_disable_mirror_image>(this);
 
   mirror::DisableRequest<I> *req =
-    mirror::DisableRequest<I>::create(&image_ctx, false, true, ctx);
+    mirror::DisableRequest<I>::create(&image_ctx, m_force, true, ctx);
   req->send();
 }
 

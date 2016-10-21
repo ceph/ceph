@@ -11,6 +11,7 @@
 #include "tools/rbd_mirror/image_replayer/CreateImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/CreateLocalImageRequest.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -130,6 +131,7 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
                                     ContextWQ *work_queue,
                                     const std::string &global_image_id,
                                     const std::string &remote_mirror_uuid,
+                                    const std::string &local_image_id,
                                     const std::string &local_image_name,
                                     librbd::MockTestImageCtx *remote_image_ctx,
                                     Context *on_finish) {
@@ -212,6 +214,37 @@ struct OpenLocalImageRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD0(send, void());
 };
 
+template<>
+struct CreateLocalImageRequest<librbd::MockTestImageCtx> {
+  static CreateLocalImageRequest* s_instance;
+  Context *on_finish = nullptr;
+
+  static CreateLocalImageRequest* create(librados::IoCtx &local_io_ctx,
+                                         std::string *local_image_id,
+                                         const std::string &local_image_name,
+                                         const std::string &global_image_id,
+                                         const std::string &remote_mirror_uuid,
+                                         librbd::MockTestImageCtx *remote_image_ctx,
+                                         ContextWQ *op_work_queue,
+                                         Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    s_instance->construct(local_io_ctx, local_image_id);
+    return s_instance;
+  }
+
+  CreateLocalImageRequest() {
+    assert(s_instance == nullptr);
+    s_instance = this;
+  }
+  ~CreateLocalImageRequest() {
+    s_instance = nullptr;
+  }
+
+  MOCK_METHOD2(construct, void(librados::IoCtx &io_ctx, std::string *image_id));
+  MOCK_METHOD0(send, void());
+};
+
 CloseImageRequest<librbd::MockTestImageCtx>*
   CloseImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 CreateImageRequest<librbd::MockTestImageCtx>*
@@ -220,6 +253,8 @@ OpenImageRequest<librbd::MockTestImageCtx>*
   OpenImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 OpenLocalImageRequest<librbd::MockTestImageCtx>*
   OpenLocalImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+CreateLocalImageRequest<librbd::MockTestImageCtx>*
+  CreateLocalImageRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image_replayer
 } // namespace mirror

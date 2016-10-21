@@ -31,14 +31,15 @@ CreateImageRequest<I>::CreateImageRequest(librados::IoCtx &local_io_ctx,
                                           ContextWQ *work_queue,
                                           const std::string &global_image_id,
                                           const std::string &remote_mirror_uuid,
+                                          const std::string &local_image_id,
                                           const std::string &local_image_name,
                                           I *remote_image_ctx,
                                           Context *on_finish)
   : m_local_io_ctx(local_io_ctx), m_work_queue(work_queue),
     m_global_image_id(global_image_id),
     m_remote_mirror_uuid(remote_mirror_uuid),
-    m_local_image_name(local_image_name), m_remote_image_ctx(remote_image_ctx),
-    m_on_finish(on_finish) {
+    m_local_image_id(local_image_id), m_local_image_name(local_image_name),
+    m_remote_image_ctx(remote_image_ctx), m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -73,10 +74,8 @@ void CreateImageRequest<I>::create_image() {
   image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
                     m_remote_image_ctx->stripe_count);
 
-  std::string id = librbd::util::generate_image_id(m_local_io_ctx);
-
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
-    m_local_io_ctx, m_local_image_name, id, m_remote_image_ctx->size,
+    m_local_io_ctx, m_local_image_name, m_local_image_id, m_remote_image_ctx->size,
     image_options, m_global_image_id, m_remote_mirror_uuid,
     m_remote_image_ctx->op_work_queue, ctx);
   req->send();
@@ -292,8 +291,8 @@ void CreateImageRequest<I>::clone_image() {
       opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, m_remote_image_ctx->stripe_count);
 
       r = utils::clone_image(m_local_parent_image_ctx, m_local_io_ctx,
-                             m_local_image_name.c_str(), opts,
-                             m_global_image_id, m_remote_mirror_uuid);
+                             m_local_image_name.c_str(), m_local_image_id.c_str(),
+                             opts, m_global_image_id, m_remote_mirror_uuid);
       handle_clone_image(r);
     });
   m_work_queue->queue(ctx, 0);

@@ -19,10 +19,10 @@ namespace utils {
 //       converted to async state machines
 template <typename I>
 int clone_image(I *p_imctx, librados::IoCtx& c_ioctx, const char *c_name,
-                librbd::ImageOptions& c_opts,
+                const char *c_image_id, librbd::ImageOptions& c_opts,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid) {
-  return librbd::clone(p_imctx, c_ioctx, c_name, c_opts,
+  return librbd::clone(p_imctx, c_ioctx, c_name, c_image_id, c_opts,
                        non_primary_global_image_id, primary_mirror_uuid);
 }
 
