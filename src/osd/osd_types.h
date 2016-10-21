@@ -61,7 +61,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_HINTS CompatSet::Feature(12, "transaction hints")
 #define CEPH_OSD_FEATURE_INCOMPAT_PGMETA CompatSet::Feature(13, "pg meta object")
 #define CEPH_OSD_FEATURE_INCOMPAT_MISSING CompatSet::Feature(14, "explicit missing set")
-#define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(14, "fastinfo pg attr")
+#define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
 
 
 /// max recovery priority for MBackfillReserve
