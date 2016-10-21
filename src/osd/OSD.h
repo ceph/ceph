@@ -2499,9 +2499,9 @@ public:
   friend class OSDService;
 
   struct corrupt_map : public std::exception {
-    epoch_t epoch;
+    const epoch_t epoch;
     explicit corrupt_map(epoch_t e) : epoch(e) { }
-    const char *what() const throw();
+    const char *what() const override noexcept;
   };
 };
 
