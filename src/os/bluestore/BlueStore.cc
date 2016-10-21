@@ -8120,6 +8120,7 @@ int BlueStore::_do_remove(
     txc->t->rmkey(PREFIX_OBJ, s.key);
   }
   txc->t->rmkey(PREFIX_OBJ, o->key);
+  o->extent_map.clear();
   _debug_obj_on_delete(o->oid);
   return 0;
 }
