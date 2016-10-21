@@ -28,6 +28,7 @@ cls_method_handle_t h_rgw_bucket_set_tag_timeout;
 cls_method_handle_t h_rgw_bucket_list;
 cls_method_handle_t h_rgw_bucket_check_index;
 cls_method_handle_t h_rgw_bucket_rebuild_index;
+cls_method_handle_t h_rgw_bucket_update_stats;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
 cls_method_handle_t h_rgw_bucket_link_olh;
@@ -58,9 +59,6 @@ cls_method_handle_t h_rgw_lc_get_head;
 cls_method_handle_t h_rgw_lc_list_entries;
 
 
-#define ROUND_BLOCK_SIZE 4096
-
-
 #define BI_PREFIX_CHAR 0x80
 
 #define BI_BUCKET_OBJS_INDEX          0
@@ -77,11 +75,6 @@ static string bucket_index_prefixes[] = { "", /* special handling for the objs l
 
                                           /* this must be the last index */
                                           "9999_",};
-
-static uint64_t get_rounded_size(uint64_t size)
-{
-  return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
-}
 
 static bool bi_is_objs_index(const string& s) {
   return ((unsigned char)s[0] != BI_PREFIX_CHAR);
@@ -542,7 +535,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
       struct rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
       stats.num_entries++;
       stats.total_size += entry.meta.accounted_size;
-      stats.total_size_rounded += get_rounded_size(entry.meta.accounted_size);
+      stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
 
       start_obj = kiter->first;
     }
@@ -585,6 +578,38 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
   return write_bucket_header(hctx, &calc_header);
 }
 
+int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_bucket_update_stats_op op;
+  auto iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s(): failed to decode request\n", __func__);
+    return -EINVAL;
+  }
+
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
+    return rc;
+  }
+
+  for (auto& s : op.stats) {
+    auto& dest = header.stats[s.first];
+    if (op.absolute) {
+      dest = s.second;
+    } else {
+      dest.total_size += s.second.total_size;
+      dest.total_size_rounded += s.second.total_size_rounded;
+      dest.num_entries += s.second.num_entries;
+    }
+  }
+
+  return write_bucket_header(hctx, &header);
+}
 
 int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -714,7 +739,7 @@ static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_buc
   struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
   stats.num_entries--;
   stats.total_size -= entry.meta.accounted_size;
-  stats.total_size_rounded -= get_rounded_size(entry.meta.accounted_size);
+  stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
 }
 
 static void log_entry(const char *func, const char *str, struct rgw_bucket_dir_entry *entry)
@@ -899,7 +924,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.tag = op.tag;
       stats.num_entries++;
       stats.total_size += meta.accounted_size;
-      stats.total_size_rounded += get_rounded_size(meta.accounted_size);
+      stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
       int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1929,7 +1954,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
-        old_stats.total_size_rounded -= get_rounded_size(cur_disk.meta.accounted_size);
+        old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
         header_changed = true;
       }
       struct rgw_bucket_category_stats& stats =
@@ -1956,7 +1981,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
                 cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
         stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
-        stats.total_size_rounded += get_rounded_size(cur_change.meta.accounted_size);
+        stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
         header_changed = true;
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
@@ -2261,6 +2286,11 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 {
   string filter = name;
   string start_key = marker;
+
+  string first_instance_idx;
+  encode_obj_versioned_data_key(string(), &first_instance_idx);
+  string end_key = first_instance_idx;
+
   int count = 0;
   map<string, bufferlist> keys;
   do {
@@ -2276,6 +2306,11 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 
     map<string, bufferlist>::iterator iter;
     for (iter = keys.begin(); iter != keys.end(); ++iter) {
+      if (iter->first >= end_key) {
+        /* past the end of plain namespace */
+        return count;
+      }
+
       rgw_cls_bi_entry entry;
       entry.type = PlainIdx;
       entry.idx = iter->first;
@@ -2293,12 +2328,15 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 
       CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__, escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
 
-      if (e.key.name != name) {
+      if (!name.empty() && e.key.name != name) {
         return count;
       }
 
       entries->push_back(entry);
       count++;
+      if (count >= (int)max) {
+        return count;
+      }
       start_key = entry.idx;
     }
   } while (!keys.empty());
@@ -2312,13 +2350,20 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
   cls_rgw_obj_key key(name);
   string first_instance_idx;
   encode_obj_versioned_data_key(key, &first_instance_idx);
-  string start_key = first_instance_idx;
+  string start_key;
+
+  if (!name.empty()) {
+    start_key = first_instance_idx;
+  } else {
+    start_key = BI_PREFIX_CHAR;
+    start_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
+  }
+  string filter = start_key;
   if (bi_entry_gt(marker, start_key)) {
     start_key = marker;
   }
   int count = 0;
   map<string, bufferlist> keys;
-  string filter = first_instance_idx;
   bool started = true;
   do {
     if (count >= (int)max) {
@@ -2330,13 +2375,13 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     if (started) {
       ret = cls_cxx_map_get_val(hctx, start_key, &keys[start_key]);
       if (ret == -ENOENT) {
-        ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+        ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
       }
       started = false;
     } else {
-      ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+      ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
     }
-    CLS_LOG(20, "%s(): start_key=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), (int)keys.size());
+    CLS_LOG(20, "%s(): start_key=%s first_instance_idx=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), escape_str(first_instance_idx).c_str(), (int)keys.size());
     if (ret < 0) {
       return ret;
     }
@@ -2347,6 +2392,10 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
       entry.type = InstanceIdx;
       entry.idx = iter->first;
       entry.data = iter->second;
+
+      if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+        return count;
+      }
 
       CLS_LOG(20, "%s(): entry.idx=%s", __func__, escape_str(entry.idx).c_str());
 
@@ -2360,7 +2409,85 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
         return -EIO;
       }
 
-      if (e.key.name != name) {
+      if (!name.empty() && e.key.name != name) {
+        return count;
+      }
+
+      entries->push_back(entry);
+      count++;
+      start_key = entry.idx;
+    }
+  } while (!keys.empty());
+
+  return count;
+}
+
+static int list_olh_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
+                            list<rgw_cls_bi_entry> *entries)
+{
+  cls_rgw_obj_key key(name);
+  string first_instance_idx;
+  encode_olh_data_key(key, &first_instance_idx);
+  string start_key;
+
+  if (!name.empty()) {
+    start_key = first_instance_idx;
+  } else {
+    start_key = BI_PREFIX_CHAR;
+    start_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
+  }
+  string filter = start_key;
+  if (bi_entry_gt(marker, start_key)) {
+    start_key = marker;
+  }
+  int count = 0;
+  map<string, bufferlist> keys;
+  bool started = true;
+  do {
+    if (count >= (int)max) {
+      return count;
+    }
+    keys.clear();
+#define BI_GET_NUM_KEYS 128
+    int ret;
+    if (started) {
+      ret = cls_cxx_map_get_val(hctx, start_key, &keys[start_key]);
+      if (ret == -ENOENT) {
+        ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
+      }
+      started = false;
+    } else {
+      ret = cls_cxx_map_get_vals(hctx, start_key, string(), BI_GET_NUM_KEYS, &keys);
+    }
+    CLS_LOG(20, "%s(): start_key=%s first_instance_idx=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), escape_str(first_instance_idx).c_str(), (int)keys.size());
+    if (ret < 0) {
+      return ret;
+    }
+
+    map<string, bufferlist>::iterator iter;
+    for (iter = keys.begin(); iter != keys.end(); ++iter) {
+      rgw_cls_bi_entry entry;
+      entry.type = OLHIdx;
+      entry.idx = iter->first;
+      entry.data = iter->second;
+
+      if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+        return count;
+      }
+
+      CLS_LOG(20, "%s(): entry.idx=%s", __func__, escape_str(entry.idx).c_str());
+
+      bufferlist::iterator biter = entry.data.begin();
+
+      rgw_bucket_olh_entry e;
+      try {
+        ::decode(e, biter);
+      } catch (buffer::error& err) {
+        CLS_LOG(0, "ERROR: %s(): failed to decode buffer (size=%d)", __func__, entry.data.length());
+        return -EIO;
+      }
+
+      if (!name.empty() && e.key.name != name) {
         return count;
       }
 
@@ -2391,12 +2518,14 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 #define MAX_BI_LIST_ENTRIES 1000
   int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
   string start_key = op.marker;
-  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries);
+  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries) + 1; /* one extra entry for identifying truncation */
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_plain_entries retured ret=%d", __func__, ret);
     return ret;
   }
   int count = ret;
+
+  CLS_LOG(20, "found %d plain entries", count);
 
   ret = list_instance_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
   if (ret < 0) {
@@ -2404,16 +2533,20 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return ret;
   }
 
-  cls_rgw_obj_key key(op.name);
-  rgw_cls_bi_entry entry;
-  encode_olh_data_key(key, &entry.idx);
-  ret = cls_cxx_map_get_val(hctx, entry.idx, &entry.data);
-  if (ret < 0 && ret != -ENOENT) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_map_get_val retured ret=%d", __func__, ret);
+  count += ret;
+
+  ret = list_olh_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
     return ret;
-  } else if (ret >= 0) {
-    entry.type = OLHIdx;
-    op_ret.entries.push_back(entry);
+  }
+
+  count += ret;
+
+  op_ret.is_truncated = (count >= max);
+  while (count >= max) {
+    op_ret.entries.pop_back();
+    count--;
   }
 
   ::encode(op_ret, *out);
@@ -3381,6 +3514,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_list", CLS_METHOD_RD, rgw_bucket_list, &h_rgw_bucket_list);
   cls_register_cxx_method(h_class, "bucket_check_index", CLS_METHOD_RD, rgw_bucket_check_index, &h_rgw_bucket_check_index);
   cls_register_cxx_method(h_class, "bucket_rebuild_index", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
+  cls_register_cxx_method(h_class, "bucket_update_stats", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);

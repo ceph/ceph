@@ -49,6 +49,8 @@ class RGWRESTConn;
 
 #define RGW_NO_SHARD -1
 
+#define MAX_BUCKET_INDEX_SHARDS_PRIME 7877
+
 static inline void prepend_bucket_marker(rgw_bucket& bucket, const string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -1819,6 +1821,8 @@ class RGWRados
       string& bucket_oid_base);
   int open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       const string& obj_key, string *bucket_obj, int *shard_id);
+  int open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+                              int shard_id, string *bucket_obj);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       map<int, string>& bucket_objs, int shard_id = -1, map<int, string> *bucket_instance_ids = NULL);
   template<typename T>
@@ -2083,6 +2087,10 @@ public:
   int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
   int get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size);
 
+  uint32_t get_max_bucket_shards() {
+    return MAX_BUCKET_INDEX_SHARDS_PRIME;
+  }
+
   int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
                        bool *is_truncated);
@@ -2160,6 +2168,7 @@ public:
                                  RGWZonePlacementInfo *rule_info);
   int set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket,
                                   RGWZonePlacementInfo *rule_info);
+  void create_bucket_id(string *bucket_id);
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
@@ -2242,6 +2251,7 @@ public:
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(rgw_bucket& _bucket, rgw_obj& obj);
+    int init(rgw_bucket& _bucket, int sid);
   };
 
   class Object {
@@ -2923,9 +2933,14 @@ public:
 
   int bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
+  void bi_put(librados::ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry);
+  int bi_put(BucketShard& bs, rgw_cls_bi_entry& entry);
   int bi_put(rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry);
+  int bi_list(rgw_bucket& bucket, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated);
+  int bi_list(BucketShard& bs, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated);
   int bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max,
               list<rgw_cls_bi_entry> *entries, bool *is_truncated);
+  int bi_remove(BucketShard& bs);
 
   int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -2936,6 +2951,7 @@ public:
   void shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
   void shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
   void shard_name(const string& prefix, unsigned shard_id, string& name);
+  int get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key, int *shard_id);
   void time_log_prepare_entry(cls_log_entry& entry, const ceph::real_time& ut, const string& section, const string& key, bufferlist& bl);
   int time_log_add_init(librados::IoCtx& io_ctx);
   int time_log_add(const string& oid, list<cls_log_entry>& entries,
@@ -3107,6 +3123,9 @@ public:
    */
   int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
       uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type, string *bucket_obj, int *shard);
+
+  void get_bucket_index_object(const string& bucket_oid_base, uint32_t num_shards,
+                               int shard_id, string *bucket_obj);
 
   /**
    * Check the actual on-disk state of the object specified
