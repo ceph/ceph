@@ -160,3 +160,40 @@ the range 0-(N_workers - 1), like so:
 
 It is important to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
+
+Finding files affected by lost data PGs
+---------------------------------------
+
+Losing a data PG may affect many files.  Files are split into many objects,
+so identifying which files are affected by loss of particular PGs requires
+a full scan over all object IDs that may exist within the size of a file. 
+This type of scan may be useful for identifying which files require
+restoring from a backup.
+
+.. danger::
+
+    This command does not repair any metadata, so when restoring files in
+    this case you must *remove* the damaged file, and replace it in order
+    to have a fresh inode.  Do not overwrite damaged files in place.
+
+If you know that objects have been lost from PGs, use the ``pg_files``
+subcommand to scan for files that may have been damaged as a result:
+
+::
+
+    cephfs-data-scan pg_files <path> <pg id> [<pg id>...]
+
+For example, if you have lost data from PGs 1.4 and 4.5, and you would like
+to know which files under /home/bob might have been damaged:
+
+::
+
+    cephfs-data-scan pg_files /home/bob 1.4 4.5
+
+The output will be a list of paths to potentially damaged files, one
+per line.
+
+Note that this command acts as a normal CephFS client to find all the
+files in the filesystem and read their layouts, so the MDS must be
+up and running.
+
