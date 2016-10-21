@@ -12918,6 +12918,13 @@ void ReplicatedPG::_scrub_finish()
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
+  if (pool.info.is_hacky_ecoverwrites()) {
+    dout(10) << __func__
+	     << ": skipping stat comparisons since hacky_overwrites are enabled"
+	     << dendl;
+    return;
+  }
+
   if (info.stats.stats_invalid) {
     info.stats.stats = scrub_cstat;
     info.stats.stats_invalid = false;

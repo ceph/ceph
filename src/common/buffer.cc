@@ -1841,6 +1841,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	append("\n", 1);
     }
   }
+
+  void buffer::list::prepend_zero(unsigned len)
+  {
+    ptr bp(len);
+    bp.zero(false);
+    _len += len;
+    _buffers.emplace_front(std::move(bp));
+  }
   
   void buffer::list::append_zero(unsigned len)
   {

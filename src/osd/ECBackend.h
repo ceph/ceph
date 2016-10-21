@@ -15,11 +15,15 @@
 #ifndef ECBACKEND_H
 #define ECBACKEND_H
 
+#include <boost/intrusive/set.hpp>
+#include <boost/intrusive/list.hpp>
+
 #include "OSD.h"
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
 #include "ECTransaction.h"
+#include "ExtentCache.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -88,8 +92,11 @@ public:
 
   void dump_recovery_info(Formatter *f) const;
 
+  void call_write_ordered(std::function<void(void)> &&cb) override;
+
   void submit_transaction(
     const hobject_t &hoid,
+    const object_stat_sum_t &delta_stats,
     const eversion_t &at_version,
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
@@ -129,12 +136,36 @@ public:
    * ensures that we won't ever have to restart a client initiated read in
    * check_recovery_sources.
    */
+  void objects_read_and_reconstruct(
+    const hobject_t::bitwisemap<
+      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+    > &reads,
+    bool fast_read,
+    GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func);
+
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
-    bool complete;
-    Context *on_complete;
-    explicit ClientAsyncReadStatus(Context *on_complete)
-    : complete(false), on_complete(on_complete) {}
+    unsigned objects_to_read;
+    GenContextURef<hobject_t::bitwisemap<extent_map> &&> func;
+    hobject_t::bitwisemap<extent_map> results;
+    explicit ClientAsyncReadStatus(
+      unsigned objects_to_read,
+      GenContextURef<hobject_t::bitwisemap<extent_map> &&> &&func)
+      : objects_to_read(objects_to_read), func(std::move(func)) {}
+    void complete_object(
+      const hobject_t &hoid,
+      extent_map &&buffers) {
+      assert(objects_to_read);
+      --objects_to_read;
+      assert(!results.count(hoid));
+      results.emplace(hoid, std::move(buffers));
+    }
+    bool is_complete() const {
+      return objects_to_read == 0;
+    }
+    void run() {
+      func.release()->complete(std::move(results));
+    }
   };
   list<ClientAsyncReadStatus> in_progress_client_reads;
   void objects_read_async(
@@ -143,6 +174,32 @@ public:
 		    pair<bufferlist*, Context*> > > &to_read,
     Context *on_complete,
     bool fast_read = false);
+
+  template <typename Func>
+  void objects_read_async_no_cache(
+    const hobject_t::bitwisemap<extent_set> &to_read,
+    Func &&on_complete) {
+    hobject_t::bitwisemap<
+      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
+    for (auto &&hpair: to_read) {
+      auto &l = _to_read[hpair.first];
+      for (auto extent: hpair.second) {
+	l.emplace_back(extent.first, extent.second, 0);
+      }
+    }
+    objects_read_and_reconstruct(
+      _to_read,
+      false,
+      make_gen_lambda_context<hobject_t::bitwisemap<extent_map> &&, Func>(
+	std::forward<Func>(on_complete)));
+  }
+  void kick_reads() {
+    while (in_progress_client_reads.size() &&
+	   in_progress_client_reads.front().is_complete()) {
+      in_progress_client_reads.front().run();
+      in_progress_client_reads.pop_front();
+    }
+  }
 
 private:
   friend struct ECRecoveryHandle;
@@ -221,7 +278,7 @@ private:
     }
 
     // must be filled if state == WRITING
-    map<shard_id_t, bufferlist> returned_data;
+    map<int, bufferlist> returned_data;
     map<string, bufferlist> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
@@ -236,6 +293,24 @@ private:
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
   map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator> recovery_ops;
+
+  void continue_recovery_op(
+    RecoveryOp &op,
+    RecoveryMessages *m);
+  void dispatch_recovery_messages(RecoveryMessages &m, int priority);
+  friend struct OnRecoveryReadComplete;
+  void handle_recovery_read_complete(
+    const hobject_t &hoid,
+    boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
+    boost::optional<map<string, bufferlist> > attrs,
+    RecoveryMessages *m);
+  void handle_recovery_push(
+    PushOp &op,
+    RecoveryMessages *m);
+  void handle_recovery_push_reply(
+    PushReplyOp &op,
+    pg_shard_t from,
+    RecoveryMessages *m);
 
 public:
   /**
@@ -319,8 +394,7 @@ public:
     OpRequestRef op,
     bool do_redundant_reads, bool for_recovery);
 
-  void do_read_op(ReadOp &rop,
-    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read);
+  void do_read_op(ReadOp &rop);
   int send_all_remaining_reads(
     const hobject_t &hoid,
     ReadOp &rop);
@@ -339,59 +413,136 @@ public:
    * completions. Thus, callbacks and completion are called in order
    * on the writing list.
    */
-  struct Op {
+  struct Op : boost::intrusive::list_base_hook<> {
+    /// From submit_transaction caller, decribes operation
     hobject_t hoid;
+    object_stat_sum_t delta_stats;
     eversion_t version;
     eversion_t trim_to;
-    eversion_t roll_forward_to;
-    vector<pg_log_entry_t> log_entries;
-    map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> obc_map;
     boost::optional<pg_hit_set_history_t> updated_hit_set_history;
-    Context *on_local_applied_sync;
-    Context *on_all_applied;
-    Context *on_all_commit;
+    vector<pg_log_entry_t> log_entries;
     ceph_tid_t tid;
     osd_reqid_t reqid;
-    OpRequestRef client_op;
 
-    std::unique_ptr<PGTransaction> t;
+    eversion_t roll_forward_to; /// Soon to be generated internally
 
+    /// Ancillary also provided from submit_transaction caller
+    map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> obc_map;
+
+    /// see call_write_ordered
+    std::list<std::function<void(void)> > on_write;
+
+    /// Generated internally
     set<hobject_t, hobject_t::BitwiseComparator> temp_added;
     set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
 
+    ECTransaction::WritePlan plan;
+    bool requires_inplace() const { return plan.inplace; }
+    bool requires_rollforward() const { return plan.rollforward; }
+
+    /// In progress read state;
+    hobject_t::bitwisemap<extent_set> pending_read; // subset already being read
+    hobject_t::bitwisemap<extent_set> remote_read;  // subset we must read
+    hobject_t::bitwisemap<extent_map> remote_read_result;
+    bool read_in_progress() const {
+      return !remote_read.empty() && remote_read_result.empty();
+    }
+
+    /// In progress write state
     set<pg_shard_t> pending_commit;
     set<pg_shard_t> pending_apply;
+    bool write_in_progress() const {
+      return !pending_commit.empty() || !pending_apply.empty();
+    }
 
-    map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> unstable_hash_infos;
+    /// optional, may be null, for tracking purposes
+    OpRequestRef client_op;
+
+    /// pin for cache
+    ExtentCache::write_pin pin;
+
+    /// Callbacks
+    Context *on_local_applied_sync = nullptr;
+    Context *on_all_applied = nullptr;
+    Context *on_all_commit = nullptr;
     ~Op() {
       delete on_local_applied_sync;
       delete on_all_applied;
       delete on_all_commit;
     }
   };
+  using op_list = boost::intrusive::list<Op>;
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
-  void continue_recovery_op(
-    RecoveryOp &op,
-    RecoveryMessages *m);
+  ExtentCache cache;
+  map<ceph_tid_t, Op> tid_to_op_map; /// Owns Op structure
 
-  void dispatch_recovery_messages(RecoveryMessages &m, int priority);
-  friend struct OnRecoveryReadComplete;
-  void handle_recovery_read_complete(
-    const hobject_t &hoid,
-    boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
-    boost::optional<map<string, bufferlist> > attrs,
-    RecoveryMessages *m);
-  void handle_recovery_push(
-    PushOp &op,
-    RecoveryMessages *m);
-  void handle_recovery_push_reply(
-    PushReplyOp &op,
-    pg_shard_t from,
-    RecoveryMessages *m);
+  /**
+   * We model the possible rmw states as a set of waitlists.
+   * All writes at this time complete in order, so a write blocked
+   * at waiting_state blocks all writes behind it as well (same for
+   * other states).
+   *
+   * Future work: We can break this up into a per-object pipeline
+   * (almost).  First, provide an ordering token to submit_transaction
+   * and require that all operations within a single transaction take
+   * place on a subset of hobject_t space partitioned by that token
+   * (the hashid seem about right to me -- even works for temp objects
+   * if you recall that a temp object created for object head foo will
+   * only ever be referenced by other transactions on foo and aren't
+   * reused).  Next, factor this part into a class and maintain one per
+   * ordering token.  Next, fixup ReplicatedPG's repop queue to be
+   * partitioned by ordering token.  Finally, refactor the op pipeline
+   * so that the log entries passed into submit_tranaction aren't
+   * versioned.  We can't assign versions to them until we actually
+   * submit the operation.  That's probably going to be the hard part.
+   */
+  class pipeline_state_t {
+    enum {
+      NONE = 0,
+      INPLACE = 1,
+      ROLLFORWARD = 2,
+      EXCL = 3
+    };
+    int pipeline_state = NONE;
+  public:
+    bool is_inplace() const {
+      return pipeline_state & pipeline_state_t::INPLACE;
+    }
+    bool is_rollforward() const {
+      return pipeline_state & pipeline_state_t::ROLLFORWARD;
+    }
+    bool caching_enabled() const {
+      return is_rollforward();
+    }
+    void set_inplace() {
+      pipeline_state |= pipeline_state_t::INPLACE;
+    }
+    void set_rollforward() {
+      pipeline_state |= pipeline_state_t::ROLLFORWARD;
+    }
+    void clear() {
+      pipeline_state = NONE;
+    }
+    friend ostream &operator<<(ostream &lhs, const pipeline_state_t &rhs);
+  } pipeline_state;
 
-  map<ceph_tid_t, Op> tid_to_op_map; /// lists below point into here
-  list<Op*> writing;
+
+  op_list waiting_state;        /// writes waiting on pipe_state
+  op_list waiting_reads;        /// writes waiting on partial stripe reads
+  op_list waiting_commit;       /// writes waiting on initial commit
+  op_list waiting_rollforward;  /// writes waiting on rollforward to start
+  op_list waiting_completion;   /// waiting on rollforward to complete
+  eversion_t completed_to;
+  eversion_t committed_to;
+  void start_rmw(Op *op, PGTransactionUPtr &&t);
+  bool try_state_to_reads();
+  bool try_reads_to_commit();
+  bool try_commit_to_rollforward();
+  bool try_rollforward_to_completion();
+  bool try_finish_rmw();
+  void finish_op(Op *op);
+  void check_ops();
 
   CephContext *cct;
   ErasureCodeInterfaceRef ec_impl;
@@ -454,8 +605,6 @@ public:
 				    const map<string,bufferptr> *attr = NULL);
 
   friend struct ReadCB;
-  void check_op(Op *op);
-  void start_write(Op *op);
 public:
   ECBackend(
     PGBackend::Listener *pg,
@@ -503,5 +652,6 @@ public:
   void _failed_push(const hobject_t &hoid,
     pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
 };
+ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs);
 
 #endif
