@@ -334,6 +334,15 @@ class Filesystem(MDSCluster):
     def get_data_pool_name(self):
         return self.data_pool_name
 
+    def get_data_pool_id(self):
+        """
+        Don't call this if you have multiple data pools
+        :return: integer
+        """
+        pools = self.get_mds_map()['data_pools']
+        assert(len(pools) == 1)
+        return pools[0]
+
     def get_data_pool_names(self):
         osd_map = self.mon_manager.get_osd_dump_json()
         id_to_name = {}
