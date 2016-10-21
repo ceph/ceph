@@ -219,7 +219,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
   stat_queue_item(this),
-  snap_trim_queued(false),
   scrub_queued(false),
   recovery_queued(false),
   recovery_ops_active(0),
@@ -1618,9 +1617,6 @@ void PG::activate(ObjectStore::Transaction& t,
                 << pool.cached_removed_snaps << ")" << dendl;
         snap_trimq.subtract(intersection);
     }
-    dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
-    if (!snap_trimq.empty() && is_clean())
-      queue_snap_trim();
   }
 
   // init complete pointer
@@ -2034,17 +2030,6 @@ void PG::all_activated_and_committed()
         AllReplicasActivated())));
 }
 
-void PG::queue_snap_trim()
-{
-  if (snap_trim_queued) {
-    dout(10) << "queue_snap_trim -- already queued" << dendl;
-  } else {
-    dout(10) << "queue_snap_trim -- queuing" << dendl;
-    snap_trim_queued = true;
-    osd->queue_for_snap_trim(this);
-  }
-}
-
 bool PG::requeue_scrub()
 {
   assert(is_locked());
@@ -2123,8 +2108,11 @@ void PG::mark_clean()
 
   trim_past_intervals();
 
-  if (is_clean() && !snap_trimq.empty())
-    queue_snap_trim();
+  if (is_active()) {
+    /* The check is needed because if we are below min_size we're not
+     * actually active */
+    kick_snap_trim();
+  }
 
   dirty_info = true;
 }
@@ -2266,7 +2254,6 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_active.empty());
   split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
 
-  snap_trim_queued = false;
   osd->dequeue_pg(this, &waiting_for_peered);
 
   OSD::split_list(
@@ -4352,7 +4339,7 @@ void PG::scrub_clear_state()
 
   if (scrubber.queue_snap_trim) {
     dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
-    queue_snap_trim();
+    snap_trimmer_scrub_complete();
   }
 
   scrubber.reset();
@@ -5102,7 +5089,6 @@ void PG::start_peering_interval(
 
   peer_purged.clear();
   actingbackfill.clear();
-  snap_trim_queued = false;
   scrub_queued = false;
 
   // reset primary state?
@@ -5230,16 +5216,17 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 	  for (snapid_t snap = i.get_start();
 	       snap != i.get_len() + i.get_start();
 	       ++snap) {
-	    hobject_t hoid;
-	    int r = snap_mapper.get_next_object_to_trim(snap, &hoid);
+	    vector<hobject_t> hoids;
+	    int r = snap_mapper.get_next_objects_to_trim(snap, 1, &hoids);
 	    if (r != 0 && r != -ENOENT) {
 	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
 		   << cpp_strerror(r) << dendl;
 	      assert(0);
 	    } else if (r != -ENOENT) {
+	      assert(!hoids.empty());
 	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
 		   << cpp_strerror(r) << " for object "
-		   << hoid << " on snap " << snap
+		   << hoids[0] << " on snap " << snap
 		   << " which should have been fully trimmed " << dendl;
 	      assert(0);
 	    }
@@ -6813,10 +6800,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
 
-  if (!pg->snap_trimq.empty() &&
-      pg->is_clean()) {
-    dout(10) << "Active: queuing snap trim" << dendl;
-    pg->queue_snap_trim();
+  if (pg->is_active()) {
+    dout(10) << "Active: kicking snap trim" << dendl;
+    pg->kick_snap_trim();
   }
 
   if (pg->is_peered() &&

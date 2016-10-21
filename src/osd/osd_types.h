@@ -4322,11 +4322,12 @@ public:
   bool get_write_greedy(OpRequestRef op) {
     return rwstate.get_write(op, true);
   }
-  bool get_snaptrimmer_write() {
+  bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
     if (rwstate.get_write_lock()) {
       return true;
     } else {
-      rwstate.snaptrimmer_write_marker = true;
+      if (mark_if_unsuccessful)
+	rwstate.snaptrimmer_write_marker = true;
       return false;
     }
   }
@@ -4529,9 +4530,10 @@ public:
   /// Get write lock for snap trim
   bool get_snaptrimmer_write(
     const hobject_t &hoid,
-    ObjectContextRef obc) {
+    ObjectContextRef obc,
+    bool mark_if_unsuccessful) {
     assert(locks.find(hoid) == locks.end());
-    if (obc->get_snaptrimmer_write()) {
+    if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
       locks.insert(
 	make_pair(
 	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));

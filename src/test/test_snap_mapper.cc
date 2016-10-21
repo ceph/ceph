@@ -512,34 +512,37 @@ public:
       rand_choose(snap_to_hobject);
     set<hobject_t, hobject_t::BitwiseComparator> hobjects = snap->second;
 
-    hobject_t hoid;
-    while (mapper->get_next_object_to_trim(snap->first, &hoid) == 0) {
-      assert(!hoid.is_max());
-      assert(hobjects.count(hoid));
-      hobjects.erase(hoid);
+    vector<hobject_t> hoids;
+    while (mapper->get_next_objects_to_trim(
+	     snap->first, rand() % 5 + 1, &hoids) == 0) {
+      for (auto &&hoid: hoids) {
+	assert(!hoid.is_max());
+	assert(hobjects.count(hoid));
+	hobjects.erase(hoid);
 
-      map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
-	hobject_to_snap.find(hoid);
-      assert(j->second.count(snap->first));
-      set<snapid_t> old_snaps(j->second);
-      j->second.erase(snap->first);
+	map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
+	  hobject_to_snap.find(hoid);
+	assert(j->second.count(snap->first));
+	set<snapid_t> old_snaps(j->second);
+	j->second.erase(snap->first);
 
-      {
-	PausyAsyncMap::Transaction t;
-	mapper->update_snaps(
-	  hoid,
-	  j->second,
-	  &old_snaps,
-	  &t);
-	driver->submit(&t);
+	{
+	  PausyAsyncMap::Transaction t;
+	  mapper->update_snaps(
+	    hoid,
+	    j->second,
+	    &old_snaps,
+	    &t);
+	  driver->submit(&t);
+	}
+	if (j->second.empty()) {
+	  hobject_to_snap.erase(j);
+	}
+	hoid = hobject_t::get_max();
       }
-      if (j->second.empty()) {
-	hobject_to_snap.erase(j);
-      }
-      hoid = hobject_t::get_max();
+      hoids.clear();
     }
     assert(hobjects.empty());
-
     snap_to_hobject.erase(snap);
   }
 
