@@ -1710,8 +1710,7 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-  rgw_bucket_shard_sync_info sync_status;
-  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, sync_status);
+  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, init_status);
 }
 
 template <class T>
