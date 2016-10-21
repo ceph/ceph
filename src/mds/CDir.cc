@@ -1358,24 +1358,14 @@ void CDir::mark_clean()
   }
 }
 
-
-struct C_Dir_Dirty : public CDirContext {
-  version_t pv;
-  LogSegment *ls;
-  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
-  void finish(int r) {
-    dir->mark_dirty(pv, ls);
-    dir->auth_unpin(dir);
-  }
-};
-
 // caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
-  MDLog *mdlog = inode->mdcache->mds->mdlog;
+  if (is_dirty() || is_projected())
+    return; // noop if it is already dirty or will be dirty
+
   version_t pv = pre_dirty();
-  mdlog->flush();
-  mdlog->wait_for_safe(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
+  mark_dirty(pv, cache->mds->mdlog->get_current_segment());
 }
 
 void CDir::mark_complete() {
@@ -1901,10 +1891,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   // dirty myself to remove stale snap dentries
-  if (force_dirty && !is_dirty() && !inode->mdcache->is_readonly())
+  if (force_dirty && !inode->mdcache->is_readonly())
     log_mark_dirty();
-  else
-    auth_unpin(this);
+
+  auth_unpin(this);
 
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
