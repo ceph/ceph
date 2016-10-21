@@ -63,7 +63,8 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::DB *db;
   rocksdb::Env *env;
   string options_str;
-  int do_open(ostream &out, bool create_if_missing);
+  int do_open(ostream &out, bool create_if_missing, int num_shards,
+	      std::vector<KeyValueDB::Shard> *shards);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -131,12 +132,24 @@ public:
   static bool check_omap_dir(string &omap_dir);
   /// Opens underlying db
   int open(ostream &out) {
-    return do_open(out, false);
+    return do_open(out, false, 0, nullptr);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out);
 
   void close();
+
+  /// Opens underlying db and shards
+  int open_shards(ostream &out, int num_shards,
+		  vector<KeyValueDB::Shard> *shards) {
+    return do_open(out, false, num_shards, shards);
+  }
+  /// Creates underlying db and shards if missing and opens them
+  int create_and_open_shards(ostream &out, int num_shards,
+			     vector<KeyValueDB::Shard> *shards);
+  void close_shard(KeyValueDB::Shard s);
+  int drop_shard(KeyValueDB::Shard s);
+  
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
     int num_seen = 0;
@@ -239,7 +252,16 @@ public:
       const string &prefix,
       const string &k,
       const bufferlist &bl) override;
+    void set_in_shard(
+      const KeyValueDB::Shard s,
+      const string &prefix,
+      const string &k,
+      const bufferlist &bl) override;
     void rmkey(
+      const string &prefix,
+      const string &k) override;
+    void rmkey_from_shard(
+      const KeyValueDB::Shard s,
       const string &prefix,
       const string &k) override;
     void rm_single_key(
@@ -266,6 +288,12 @@ public:
     std::map<string, bufferlist> *out
     );
   int get(
+    const string &prefix,
+    const string &key,
+    bufferlist *out
+    );
+  int get_from_shard(
+    const KeyValueDB::Shard s,
     const string &prefix,
     const string &key,
     bufferlist *out

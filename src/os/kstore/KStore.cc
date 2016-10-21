@@ -848,10 +848,19 @@ int KStore::_open_db(bool create)
     options = g_conf->kstore_rocksdb_options;
   db->init(options);
   stringstream err;
+  int num_shards = g_conf->kstore_num_shards;
   if (create)
-    r = db->create_and_open(err);
+    if (num_shards > 1) {
+      r = db->create_and_open_shards(err, num_shards, &shards);
+    } else {
+      r = db->create_and_open(err);
+    }
   else
-    r = db->open(err);
+    if (num_shards > 1) {
+      r = db->open_shards(err, num_shards, &shards);
+    } else {
+      r = db->open(err);
+    }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     delete db;
@@ -865,6 +874,17 @@ int KStore::_open_db(bool create)
 
 void KStore::_close_db()
 {
+  KeyValueDB::Shard s = nullptr;
+  for (std::vector<KeyValueDB::Shard>::iterator it = shards.begin();
+       it != shards.end();
+       it++) {
+    s = *it;
+    if (s) {
+      db->close_shard(s);
+    }
+  }
+  shards.clear();
+  
   assert(db);
   delete db;
   db = NULL;
@@ -1175,6 +1195,11 @@ int KStore::read(
 
   int r;
 
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -1184,7 +1209,7 @@ int KStore::read(
   if (offset == length && offset == 0)
     length = o->onode.size;
 
-  r = _do_read(o, offset, length, bl, op_flags);
+  r = _do_read(s, o, offset, length, bl, op_flags);
 
  out:
   dout(10) << __func__ << " " << cid << " " << oid
@@ -1194,6 +1219,7 @@ int KStore::read(
 }
 
 int KStore::_do_read(
+    KeyValueDB::Shard s,
     OnodeRef o,
     uint64_t offset,
     size_t length,
@@ -1225,7 +1251,7 @@ int KStore::_do_read(
   stripe_off = offset % stripe_size;
   while (length > 0) {
     bufferlist stripe;
-    _do_read_stripe(o, offset - stripe_off, &stripe);
+    _do_read_stripe(s, o, offset - stripe_off, &stripe);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
     unsigned swant = MIN(stripe_size - stripe_off, length);
@@ -2564,37 +2590,52 @@ void KStore::_dump_onode(OnodeRef o)
   }
 }
 
-void KStore::_do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl)
+void KStore::_do_read_stripe(KeyValueDB::Shard s, OnodeRef o,
+			     uint64_t offset, bufferlist *pbl)
 {
   map<uint64_t,bufferlist>::iterator p = o->pending_stripes.find(offset);
   if (p == o->pending_stripes.end()) {
     string key;
     get_data_key(o->onode.nid, offset, &key);
-    db->get(PREFIX_DATA, key, pbl);
+    if (s) {
+      db->get_from_shard(s, PREFIX_DATA, key, pbl);
+    } else {
+      db->get(PREFIX_DATA, key, pbl);
+    }
     o->pending_stripes[offset] = *pbl;
   } else {
     *pbl = p->second;
   }
 }
 
-void KStore::_do_write_stripe(TransContext *txc, OnodeRef o,
-			      uint64_t offset, bufferlist& bl)
+void KStore::_do_write_stripe(TransContext *txc, KeyValueDB::Shard s,
+			      OnodeRef o, uint64_t offset, bufferlist& bl)
 {
   o->pending_stripes[offset] = bl;
   string key;
   get_data_key(o->onode.nid, offset, &key);
-  txc->t->set(PREFIX_DATA, key, bl);
+  if (s) {
+    txc->t->set_in_shard(s, PREFIX_DATA, key, bl);
+  } else {
+    txc->t->set(PREFIX_DATA, key, bl);
+  }
 }
 
-void KStore::_do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset)
+void KStore::_do_remove_stripe(TransContext *txc, KeyValueDB::Shard s,
+			       OnodeRef o, uint64_t offset)
 {
   o->pending_stripes.erase(offset);
   string key;
   get_data_key(o->onode.nid, offset, &key);
-  txc->t->rmkey(PREFIX_DATA, key);
+  if (s) {
+    txc->t->rmkey_from_shard(s, PREFIX_DATA, key);
+  } else {
+    txc->t->rmkey(PREFIX_DATA, key);
+  }
 }
 
 int KStore::_do_write(TransContext *txc,
+		      KeyValueDB::Shard s,
 		      OnodeRef o,
 		      uint64_t offset, uint64_t length,
 		      bufferlist& orig_bl,
@@ -2627,7 +2668,7 @@ int KStore::_do_write(TransContext *txc,
       bufferlist bl;
       bl.substr_of(orig_bl, bl_off, stripe_size);
       dout(30) << __func__ << " full stripe " << offset << dendl;
-      _do_write_stripe(txc, o, offset, bl);
+      _do_write_stripe(txc, s, o, offset, bl);
       offset += stripe_size;
       length -= stripe_size;
       bl_off += stripe_size;
@@ -2635,7 +2676,7 @@ int KStore::_do_write(TransContext *txc,
     }
     uint64_t stripe_off = offset - offset_rem;
     bufferlist prev;
-    _do_read_stripe(o, stripe_off, &prev);
+    _do_read_stripe(s, o, stripe_off, &prev);
     dout(20) << __func__ << " read previous stripe " << stripe_off
 	     << ", got " << prev.length() << dendl;
     bufferlist bl;
@@ -2670,7 +2711,7 @@ int KStore::_do_write(TransContext *txc,
     dout(30) << " writing:\n";
     bl.hexdump(*_dout);
     *_dout << dendl;
-    _do_write_stripe(txc, o, stripe_off, bl);
+    _do_write_stripe(txc, s, o, stripe_off, bl);
     offset += use;
     length -= use;
   }
@@ -2695,7 +2736,13 @@ int KStore::_write(TransContext *txc,
 	   << " " << offset << "~" << length
 	   << dendl;
   _assign_nid(txc, o);
-  int r = _do_write(txc, o, offset, length, bl, fadvise_flags);
+  
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  
+  int r = _do_write(txc, s, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
 
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -2718,6 +2765,11 @@ int KStore::_zero(TransContext *txc,
   _dump_onode(o);
   _assign_nid(txc, o);
 
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  
   uint64_t stripe_size = o->onode.stripe_size;
   if (stripe_size) {
     uint64_t end = offset + length;
@@ -2726,7 +2778,7 @@ int KStore::_zero(TransContext *txc,
     while (pos < offset + length) {
       if (stripe_off || end - pos < stripe_size) {
 	bufferlist stripe;
-	_do_read_stripe(o, pos - stripe_off, &stripe);
+	_do_read_stripe(s, o, pos - stripe_off, &stripe);
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist bl;
@@ -2747,12 +2799,12 @@ int KStore::_zero(TransContext *txc,
 	    bl.claim_append(t);
 	  }
 	}
-	_do_write_stripe(txc, o, pos - stripe_off, bl);
+	_do_write_stripe(txc, s, o, pos - stripe_off, bl);
 	pos += stripe_size - stripe_off;
 	stripe_off = 0;
       } else {
 	dout(20) << __func__ << " rm stripe " << pos << dendl;
-	_do_remove_stripe(txc, o, pos - stripe_off);
+	_do_remove_stripe(txc, s, o, pos - stripe_off);
 	pos += stripe_size;
       }
     }
@@ -2770,7 +2822,8 @@ int KStore::_zero(TransContext *txc,
   return r;
 }
 
-int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
+int KStore::_do_truncate(TransContext *txc, KeyValueDB::Shard s,
+			 OnodeRef o, uint64_t offset)
 {
   uint64_t stripe_size = o->onode.stripe_size;
 
@@ -2783,19 +2836,19 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
     while (pos < o->onode.size) {
       if (stripe_off) {
 	bufferlist stripe;
-	_do_read_stripe(o, pos - stripe_off, &stripe);
+	_do_read_stripe(s, o, pos - stripe_off, &stripe);
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist t;
 	t.substr_of(stripe, 0, MIN(stripe_off, stripe.length()));
-	_do_write_stripe(txc, o, pos - stripe_off, t);
+	_do_write_stripe(txc, s, o, pos - stripe_off, t);
 	dout(20) << __func__ << " truncated stripe " << pos - stripe_off
 		 << " to " << t.length() << dendl;
 	pos += stripe_size - stripe_off;
 	stripe_off = 0;
       } else {
 	dout(20) << __func__ << " rm stripe " << pos << dendl;
-	_do_remove_stripe(txc, o, pos - stripe_off);
+	_do_remove_stripe(txc, s, o, pos - stripe_off);
 	pos += stripe_size;
       }
     }
@@ -2824,7 +2877,11 @@ int KStore::_truncate(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset
 	   << dendl;
-  int r = _do_truncate(txc, o, offset);
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  int r = _do_truncate(txc, s, o, offset);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << offset
 	   << " = " << r << dendl;
@@ -2832,11 +2889,12 @@ int KStore::_truncate(TransContext *txc,
 }
 
 int KStore::_do_remove(TransContext *txc,
+		       KeyValueDB::Shard s,
 		       OnodeRef o)
 {
   string key;
 
-  _do_truncate(txc, o, 0);
+  _do_truncate(txc, s, o, 0);
 
   o->onode.size = 0;
   if (o->onode.omap_head) {
@@ -2855,7 +2913,11 @@ int KStore::_remove(TransContext *txc,
 		    OnodeRef &o)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  int r = _do_remove(txc, o);
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  int r = _do_remove(txc, s, o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
@@ -3120,16 +3182,21 @@ int KStore::_clone(TransContext *txc,
   // data
   oldo->flush();
 
-  r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+     s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  
+  r = _do_read(s, oldo, 0, oldo->onode.size, bl, 0);
   if (r < 0)
     goto out;
 
   // truncate any old data
-  r = _do_truncate(txc, newo, 0);
+  r = _do_truncate(txc, s, newo, 0);
   if (r < 0)
     goto out;
 
-  r = _do_write(txc, newo, 0, oldo->onode.size, bl, 0);
+  r = _do_write(txc, s, newo, 0, oldo->onode.size, bl, 0);
   if (r < 0)
     goto out;
 
@@ -3190,11 +3257,16 @@ int KStore::_clone_range(TransContext *txc,
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  r = _do_read(oldo, srcoff, length, bl, 0);
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+  
+  r = _do_read(s, oldo, srcoff, length, bl, 0);
   if (r < 0)
     goto out;
 
-  r = _do_write(txc, newo, dstoff, bl.length(), bl, 0);
+  r = _do_write(txc, s, newo, dstoff, bl.length(), bl, 0);
 
   txc->write_onode(newo);
 
@@ -3223,6 +3295,11 @@ int KStore::_move_ranges_destroy_src(TransContext *txc,
   baseo->exists = true;
   _assign_nid(txc, baseo);
 
+  KeyValueDB::Shard s = nullptr;
+  if (g_conf->kstore_num_shards > 1) {
+    s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+  }
+
 // Traverse move_info completely, move contents from src to base object.
   for (unsigned i = 0; i < move_info.size(); ++i) {
     uint64_t srcoff;
@@ -3233,17 +3310,17 @@ int KStore::_move_ranges_destroy_src(TransContext *txc,
     dstoff = move_info[i].get<1>();
     len = move_info[i].get<2>();
 
-    r = _do_read(srco, srcoff, len, bl, 0);
+    r = _do_read(s, srco, srcoff, len, bl, 0);
     if (r < 0)
     goto out;
 
-    r = _do_write(txc, baseo, dstoff, bl.length(), bl, 0);
+    r = _do_write(txc, s, baseo, dstoff, bl.length(), bl, 0);
     txc->write_onode(baseo);
     r = 0;
   }
 
 // After for loop ends, remove src obj
-  r = _do_remove(txc, srco);
+  r = _do_remove(txc, s, srco);
 
   out:
   return r;
@@ -3262,10 +3339,14 @@ int KStore::_rename(TransContext *txc,
   ghobject_t old_oid = oldo->oid;
   bufferlist bl;
   string old_key, new_key;
+  KeyValueDB::Shard s = nullptr;
 
   if (newo && newo->exists) {
+    if (g_conf->kstore_num_shards) {
+      s = shards[c->cid.kstore_shard(g_conf->kstore_num_shards)];
+    }
     // destination object already exists, remove it first
-    r = _do_remove(txc, newo);
+    r = _do_remove(txc, s, newo);
     if (r < 0)
       goto out;
   }
