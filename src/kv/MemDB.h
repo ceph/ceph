@@ -33,7 +33,12 @@ class MemDB : public KeyValueDB
   uint64_t m_total_bytes;
   uint64_t m_allocated_bytes;
 
-  btree::btree_map<std::string, bufferptr> m_btree;
+  typedef std::map<std::string, bufferptr> mdb_map_t;
+  typedef mdb_map_t::iterator mdb_iter_t;
+  bool m_using_btree;
+
+  mdb_map_t m_map;
+
   CephContext *m_cct;
   void* m_priv;
   string m_options;
@@ -45,14 +50,14 @@ class MemDB : public KeyValueDB
   bool _get(const string &prefix, const string &k, bufferlist *out);
   bool _get_locked(const string &prefix, const string &k, bufferlist *out);
   std::string _get_data_fn();
-  void _encode(btree::btree_map<string, bufferptr>:: iterator iter, bufferlist &bl);
+  void _encode(mdb_iter_t iter, bufferlist &bl);
   void _save();
   int _load();
   uint64_t iterator_seq_no;
 
 public:
   MemDB(CephContext *c, const string &path, void *p) :
-    m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
+    m_using_btree(false), m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
   {
     //Nothing as of now
   }
@@ -129,21 +134,23 @@ public:
 
   class MDBWholeSpaceIteratorImpl : public KeyValueDB::WholeSpaceIteratorImpl {
 
-      btree::btree_map<string, bufferptr>::iterator m_iter;
+      mdb_iter_t m_iter;
       std::pair<string, bufferlist> m_key_value;
-      btree::btree_map<std::string, bufferptr> *m_btree_p;
-      std::mutex *m_btree_lock_p;
+      mdb_map_t *m_map_p;
+      std::mutex *m_map_lock_p;
       uint64_t *global_seq_no;
       uint64_t this_seq_no;
+      bool m_using_btree;
 
   public:
-    MDBWholeSpaceIteratorImpl(btree::btree_map<std::string, bufferptr> *btree_p,
-                             std::mutex *btree_lock_p, uint64_t *iterator_seq_no) {
-        m_btree_p = btree_p;
-        m_btree_lock_p = btree_lock_p;
-	std::lock_guard<std::mutex> l(*m_btree_lock_p);
-	global_seq_no = iterator_seq_no;
-	this_seq_no = *iterator_seq_no;
+    MDBWholeSpaceIteratorImpl(mdb_map_t *btree_p, std::mutex *btree_lock_p,
+                              uint64_t *iterator_seq_no, bool using_btree) {
+      m_map_p = btree_p;
+      m_map_lock_p = btree_lock_p;
+      std::lock_guard<std::mutex> l(*m_map_lock_p);
+      global_seq_no = iterator_seq_no;
+      this_seq_no = *iterator_seq_no;
+      m_using_btree = using_btree;
     }
 
     void fill_current();
@@ -190,7 +197,7 @@ protected:
 
   WholeSpaceIterator _get_iterator() {
     return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-      new MDBWholeSpaceIteratorImpl(&m_btree, &m_lock, &iterator_seq_no));
+      new MDBWholeSpaceIteratorImpl(&m_map, &m_lock, &iterator_seq_no, m_using_btree));
   }
 
   WholeSpaceIterator _get_snapshot_iterator();
