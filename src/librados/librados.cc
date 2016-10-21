@@ -14,6 +14,7 @@
 
 #include <limits.h>
 
+#include "acconfig.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -66,7 +67,7 @@ using std::runtime_error;
 
 namespace {
 
-TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tracing");
+TracepointProvider::Traits tracepoint_traits(LIBRADOS_TP_SONAME, "rados_tracing");
 
 } // anonymous namespace
 
