@@ -20,6 +20,7 @@
 #include "mds/CInode.h"
 #include "cls/cephfs/cls_cephfs_client.h"
 
+#include "PgFiles.h"
 #include "DataScan.h"
 #include "include/compat.h"
 
@@ -33,6 +34,7 @@ void DataScan::usage()
     << "  cephfs-data-scan init [--force-init]\n"
     << "  cephfs-data-scan scan_extents [--force-pool] <data pool name>\n"
     << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] <data pool name>\n"
+    << "  cephfs-data-scan pg_files <path> <pg id> [<pg id>...]\n"
     << "\n"
     << "    --force-corrupt: overrite apparently corrupt structures\n"
     << "    --force-init: write root inodes even if they exist\n"
@@ -142,6 +144,9 @@ int DataScan::main(const std::vector<const char*> &args)
   std::string data_pool_name;
   std::string metadata_pool_name;
 
+  std::string pg_files_path;
+  std::set<pg_t> pg_files_pgs;
+
   // Consume any known --key val or --flag arguments
   for (std::vector<const char *>::const_iterator i = args.begin() + 1;
        i != args.end(); ++i) {
@@ -162,6 +167,24 @@ int DataScan::main(const std::vector<const char*> &args)
         (command == "scan_inodes" || command == "scan_extents")) {
       data_pool_name = *i;
       continue;
+    }
+
+    if (command == "pg_files") {
+      if (i == args.begin() + 1) {
+        pg_files_path = *i;
+        continue;
+      } else {
+        pg_t pg;
+        bool parsed = pg.parse(*i);
+        if (!parsed) {
+          std::cerr << "Invalid PG '" << *i << "'" << std::endl;
+          return -EINVAL;
+        } else {
+          pg_files_pgs.insert(pg);
+          continue;
+        }
+      }
+
     }
 
     // Fall through: unhandled
@@ -201,6 +224,12 @@ int DataScan::main(const std::vector<const char*> &args)
   r = driver->init(rados, fsmap, fscid);
   if (r < 0) {
     return r;
+  }
+
+  if (command == "pg_files") {
+    auto pge = PgFiles(objecter, pg_files_pgs);
+    pge.init();
+    return pge.scan_path(pg_files_path);
   }
 
   // Initialize data_io for those commands that need it
