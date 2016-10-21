@@ -1203,6 +1203,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  // features for osdmap and its incremental
+  uint64_t features = mon->quorum_features;
+
   // encode full map and determine its crc
   OSDMap tmp;
   {
@@ -1210,7 +1213,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.apply_incremental(pending_inc);
 
     // determine appropriate features
-    uint64_t features = mon->quorum_features;
     if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
       dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
       features &= ~CEPH_FEATURE_SERVER_JEWEL;
@@ -1229,7 +1231,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+  ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
   dout(20) << " full_crc " << tmp.get_crc()
 	   << " inc_crc " << pending_inc.inc_crc << dendl;
