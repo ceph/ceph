@@ -509,3 +509,50 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
 
   return nullptr;
 }
+
+rgw::auth::Engine::result_t
+rgw::auth::Strategy::authenticate(const req_state* const s) const
+{
+  for (const stack_item_t& kv : auth_stack) {
+    const rgw::auth::Engine& engine = kv.first;
+    const auto& policy = kv.second;
+
+    rgw::auth::Engine::result_t res;
+    try {
+      res = engine.authenticate(s);
+    } catch (int err) {
+      /* NOP */
+    }
+
+    const auto& applier = res.first;
+    if (! applier) {
+      /* The current auth engine denied authenticate the request returning
+       * a null rgw::auth::Applier. As it has been included into strategy
+       * as an obligatory one, we quite immediately. */
+      switch (policy) {
+        case Control::REQUISITE:
+          goto auth_fail;
+        case Control::SUFFICIENT:
+          /* Just try next. */
+          continue;
+        default:
+          /* Huh, memory corruption? */
+          abort();
+      }
+    } else {
+      /* Success. */
+      return std::move(res);
+    }
+  }
+
+auth_fail:
+  /* Returning nullptr as the rgw::auth::Applier means access denied. */
+  return Engine::result_t(nullptr, nullptr);
+}
+
+void
+rgw::auth::Strategy::add_engine(const Control ctrl_flag,
+                                const Engine& engine) noexcept
+{
+  auth_stack.push_back(std::make_pair(std::cref(engine), ctrl_flag));
+}
