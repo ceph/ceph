@@ -484,7 +484,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
      !m_image_ctx.snap_name.empty() ||
      m_image_ctx.journal != nullptr ||
      m_image_ctx.exclusive_lock == nullptr ||
-     !m_image_ctx.exclusive_lock->is_lock_owner());
+     (!m_image_ctx.exclusive_lock->is_lock_owner() || m_acquiring_lock) );
   bool journal_disabled_by_policy;
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
@@ -583,7 +583,7 @@ void RefreshRequest<I>::send_v2_open_object_map() {
       (m_image_ctx.snap_name.empty() &&
        (m_image_ctx.read_only ||
         m_image_ctx.exclusive_lock == nullptr ||
-        !m_image_ctx.exclusive_lock->is_lock_owner()))) {
+        (!m_image_ctx.exclusive_lock->is_lock_owner() || m_acquiring_lock)))) {
     send_v2_open_journal();
     return;
   }

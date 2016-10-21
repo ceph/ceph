@@ -11,7 +11,13 @@ class Context;
 
 namespace librbd {
 
-class ImageCtx;
+namespace managed_lock{
+class LockWatcher;
+}
+
+struct ImageCtx;
+template <typename> class Lock;
+typedef Lock<librbd::managed_lock::LockWatcher> LockT;
 template <typename> class Journal;
 
 namespace exclusive_lock {
@@ -19,9 +25,8 @@ namespace exclusive_lock {
 template <typename ImageCtxT = ImageCtx>
 class ReleaseRequest {
 public:
-  static ReleaseRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_releasing, Context *on_finish,
-                                bool shutting_down);
+  static ReleaseRequest* create(ImageCtxT &image_ctx, LockT *managed_lock,
+                                Context *on_finish, bool shutting_down);
 
   ~ReleaseRequest();
   void send();
@@ -59,39 +64,47 @@ private:
    * @endverbatim
    */
 
-  ReleaseRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_releasing, Context *on_finish,
+  ReleaseRequest(ImageCtxT &image_ctx, LockT *managed_lock, Context *on_finish,
                  bool shutting_down);
 
   ImageCtxT &m_image_ctx;
-  std::string m_cookie;
-  Context *m_on_releasing;
+  LockT *m_managed_lock;
   Context *m_on_finish;
   bool m_shutting_down;
+
+  int m_error_result;
 
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
   void send_prepare_lock();
-  Context *handle_prepare_lock(int *ret_val);
+  void handle_prepare_lock(int r);
 
   void send_cancel_op_requests();
-  Context *handle_cancel_op_requests(int *ret_val);
+  void handle_cancel_op_requests(int r);
 
   void send_block_writes();
-  Context *handle_block_writes(int *ret_val);
+  void handle_block_writes(int r);
 
-  void send_flush_notifies();
-  Context *handle_flush_notifies(int *ret_val);
+  void send_image_flush_notifies();
+  void handle_image_flush_notifies(int r);
 
   void send_close_journal();
-  Context *handle_close_journal(int *ret_val);
+  void handle_close_journal(int r);
 
   void send_close_object_map();
-  Context *handle_close_object_map(int *ret_val);
+  void handle_close_object_map(int r);
 
   void send_unlock();
-  Context *handle_unlock(int *ret_val);
+  void handle_unlock(int r);
+
+  void finish();
+
+  void save_result(int result) {
+    if (m_error_result == 0 && result < 0) {
+      m_error_result = result;
+    }
+  }
 
 };
 

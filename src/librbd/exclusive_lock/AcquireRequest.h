@@ -14,15 +14,21 @@ class Context;
 
 namespace librbd {
 
+namespace managed_lock{
+class LockWatcher;
+}
+
 template <typename> class Journal;
+template <typename> class Lock;
+typedef Lock<librbd::managed_lock::LockWatcher> LockT;
 
 namespace exclusive_lock {
 
 template <typename ImageCtxT = ImageCtx>
 class AcquireRequest {
 public:
-  static AcquireRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
-                                Context *on_acquire, Context *on_finish);
+  static AcquireRequest* create(ImageCtxT &image_ctx, LockT *managed_lock,
+                                Context *on_finish, bool try_lock);
 
   ~AcquireRequest();
   void send();
@@ -40,24 +46,20 @@ private:
    *    v
    * FLUSH_NOTIFIES
    *    |
-   *    |     /-----------------------------------------------------------\
-   *    |     |                                                           |
-   *    |     |             (no lockers)                                  |
-   *    |     |   . . . . . . . . . . . . . . . . . . . . . .             |
-   *    |     |   .                                         .             |
-   *    |     v   v      (EBUSY)                            .             |
-   *    \--> LOCK_IMAGE * * * * * * * * > GET_LOCKERS . . . .             |
-   *              |                         |                             |
-   *              v                         v                             |
-   *         REFRESH (skip if not         GET_WATCHERS                    |
-   *              |   needed)               |                             |
-   *              v                         v                             |
-   *         OPEN_OBJECT_MAP (skip if     BLACKLIST (skip if blacklist    |
-   *              |           disabled)     |        disabled)            |
-   *              v                         v                             |
-   *         OPEN_JOURNAL (skip if        BREAK_LOCK                      |
-   *              |   *     disabled)       |                             |
-   *              |   *                     \-----------------------------/
+   *    |
+   *    |
+   *    \--> LOCK_IMAGE
+   *              |
+   *              v
+   *         REFRESH (skip if not
+   *              |   needed)
+   *              v
+   *         OPEN_OBJECT_MAP (skip if
+   *              |           disabled)
+   *              v
+   *         OPEN_JOURNAL (skip if
+   *              |   *     disabled)
+   *              |   *
    *              |   * * * * * * * *
    *              v                 *
    *          ALLOCATE_JOURNAL_TAG  *
@@ -78,26 +80,18 @@ private:
    * @endverbatim
    */
 
-  AcquireRequest(ImageCtxT &image_ctx, const std::string &cookie,
-                 Context *on_acquire, Context *on_finish);
+  AcquireRequest(ImageCtxT &image_ctx, LockT *managed_lock, Context *on_finish,
+                 bool try_lock);
 
   ImageCtxT &m_image_ctx;
-  std::string m_cookie;
-  Context *m_on_acquire;
+  LockT *m_managed_lock;
   Context *m_on_finish;
+  bool m_try_lock;
 
   bufferlist m_out_bl;
 
-  std::list<obj_watch_t> m_watchers;
-  int m_watchers_ret_val;
-
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
-
-  entity_name_t m_locker_entity;
-  std::string m_locker_cookie;
-  std::string m_locker_address;
-  uint64_t m_locker_handle;
 
   int m_error_result;
   bool m_prepare_lock_completed = false;

@@ -14,13 +14,16 @@
 
 namespace librbd {
 
+namespace managed_lock {
+class LockWatcher;
+}
+
 class ImageCtx;
+template <typename> class Lock;
 
 template <typename ImageCtxT = ImageCtx>
 class ExclusiveLock {
 public:
-  static const std::string WATCHER_LOCK_TAG;
-
   static ExclusiveLock *create(ImageCtxT &image_ctx) {
     return new ExclusiveLock<ImageCtxT>(image_ctx);
   }
@@ -47,30 +50,28 @@ public:
 
   void assert_header_locked(librados::ObjectWriteOperation *op);
 
-  static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
-
 private:
 
   /**
    * @verbatim
    *
-   * <start>                              * * > WAITING_FOR_REGISTER --------\
-   *    |                                 * (watch not registered)           |
-   *    |                                 *                                  |
-   *    |                                 * * > WAITING_FOR_PEER ------------\
-   *    |                                 * (request_lock busy)              |
-   *    |                                 *                                  |
-   *    |                                 * * * * * * * * * * * * * *        |
-   *    |                                                           *        |
-   *    v            (init)            (try_lock/request_lock)      *        |
-   * UNINITIALIZED  -------> UNLOCKED ------------------------> ACQUIRING <--/
+   * <start>
+   *    |
+   *    |
+   *    |
+   *    |
+   *    |
+   *    |
+   *    |
+   *    v            (init)
+   * UNINITIALIZED  -------> UNLOCKED ------------------------> ACQUIRING
    *                            ^                                   |
-   *                            |                                   v
-   *                         RELEASING                        POST_ACQUIRING
+   *                            |                                   |
+   *                            |                                   |
    *                            |                                   |
    *                            |                                   |
    *                            |          (release_lock)           v
-   *                      PRE_RELEASING <------------------------ LOCKED
+   *                          RELEASING <------------------------ LOCKED
    *
    * <LOCKED state>
    *    |
@@ -84,7 +85,7 @@ private:
    *    |
    *    |
    *    v
-   * PRE_SHUTTING_DOWN ---> SHUTTING_DOWN ---> SHUTDOWN ---> <finish>
+   * SHUTTING_DOWN ---> SHUTDOWN ---> <finish>
    *
    * @endverbatim
    */
@@ -94,13 +95,8 @@ private:
     STATE_LOCKED,
     STATE_INITIALIZING,
     STATE_ACQUIRING,
-    STATE_POST_ACQUIRING,
-    STATE_WAITING_FOR_PEER,
-    STATE_WAITING_FOR_REGISTER,
     STATE_REACQUIRING,
-    STATE_PRE_RELEASING,
     STATE_RELEASING,
-    STATE_PRE_SHUTTING_DOWN,
     STATE_SHUTTING_DOWN,
     STATE_SHUTDOWN
   };
@@ -142,19 +138,15 @@ private:
   };
 
   ImageCtxT &m_image_ctx;
+  Lock<managed_lock::LockWatcher> *m_managed_lock;
 
   mutable Mutex m_lock;
   State m_state;
-  std::string m_cookie;
-  std::string m_new_cookie;
-  uint64_t m_watch_handle;
 
   ActionsContexts m_actions_contexts;
 
   uint32_t m_request_blocked_count = 0;
   int m_request_blocked_ret_val = 0;
-
-  std::string encode_lock_cookie() const;
 
   bool is_transition_state() const;
 
@@ -170,19 +162,16 @@ private:
   void handle_init_complete();
 
   void send_acquire_lock();
-  void handle_acquiring_lock(int r);
   void handle_acquire_lock(int r);
 
   void send_reacquire_lock();
   void handle_reacquire_lock(int r);
 
   void send_release_lock();
-  void handle_releasing_lock(int r);
   void handle_release_lock(int r);
 
   void send_shutdown();
   void send_shutdown_release();
-  void handle_shutdown_releasing(int r);
   void handle_shutdown_released(int r);
   void handle_shutdown(int r);
   void complete_shutdown(int r);

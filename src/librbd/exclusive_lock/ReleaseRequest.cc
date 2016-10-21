@@ -2,12 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/exclusive_lock/ReleaseRequest.h"
-#include "cls/lock/cls_lock_client.h"
-#include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/Lock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
@@ -23,25 +22,21 @@ namespace exclusive_lock {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_safe_callback;
 
 template <typename I>
-ReleaseRequest<I>* ReleaseRequest<I>::create(I &image_ctx,
-                                             const std::string &cookie,
-                                             Context *on_releasing,
+ReleaseRequest<I>* ReleaseRequest<I>::create(I &image_ctx, LockT *managed_lock,
                                              Context *on_finish,
                                              bool shutting_down) {
-  return new ReleaseRequest(image_ctx, cookie, on_releasing, on_finish,
-                            shutting_down);
+  return new ReleaseRequest(image_ctx, managed_lock, on_finish, shutting_down);
 }
 
 template <typename I>
-ReleaseRequest<I>::ReleaseRequest(I &image_ctx, const std::string &cookie,
-                                  Context *on_releasing, Context *on_finish,
-                                  bool shutting_down)
-  : m_image_ctx(image_ctx), m_cookie(cookie), m_on_releasing(on_releasing),
+ReleaseRequest<I>::ReleaseRequest(I &image_ctx, LockT *managed_lock,
+                                  Context *on_finish, bool shutting_down)
+  : m_image_ctx(image_ctx), m_managed_lock(managed_lock),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
-    m_shutting_down(shutting_down), m_object_map(nullptr), m_journal(nullptr) {
+    m_shutting_down(shutting_down), m_error_result(0), m_object_map(nullptr),
+    m_journal(nullptr) {
 }
 
 template <typename I>
@@ -49,7 +44,6 @@ ReleaseRequest<I>::~ReleaseRequest() {
   if (!m_shutting_down) {
     m_image_ctx.state->handle_prepare_lock_complete();
   }
-  delete m_on_releasing;
 }
 
 template <typename I>
@@ -74,12 +68,11 @@ void ReleaseRequest<I>::send_prepare_lock() {
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_prepare_lock(int *ret_val) {
+void ReleaseRequest<I>::handle_prepare_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
   send_cancel_op_requests();
-  return nullptr;
 }
 
 template <typename I>
@@ -94,14 +87,13 @@ void ReleaseRequest<I>::send_cancel_op_requests() {
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_cancel_op_requests(int *ret_val) {
+void ReleaseRequest<I>::handle_cancel_op_requests(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
-  assert(*ret_val == 0);
+  assert(r == 0);
 
   send_block_writes();
-  return nullptr;
 }
 
 template <typename I>
@@ -123,38 +115,38 @@ void ReleaseRequest<I>::send_block_writes() {
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_block_writes(int *ret_val) {
+void ReleaseRequest<I>::handle_block_writes(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
-  if (*ret_val < 0) {
+  save_result(r);
+  if (r < 0) {
     m_image_ctx.aio_work_queue->unblock_writes();
-    return m_on_finish;
+    finish();
+    return;
   }
 
-  send_flush_notifies();
-  return nullptr;
+  send_image_flush_notifies();
 }
 
 template <typename I>
-void ReleaseRequest<I>::send_flush_notifies() {
+void ReleaseRequest<I>::send_image_flush_notifies() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
   using klass = ReleaseRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_flush_notifies>(this);
+  Context *ctx =
+    create_context_callback<klass, &klass::handle_image_flush_notifies>(this);
   m_image_ctx.image_watcher->flush(ctx);
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_flush_notifies(int *ret_val) {
+void ReleaseRequest<I>::handle_image_flush_notifies(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
-  assert(*ret_val == 0);
+  assert(r == 0);
   send_close_journal();
-  return nullptr;
 }
 
 template <typename I>
@@ -179,20 +171,18 @@ void ReleaseRequest<I>::send_close_journal() {
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_close_journal(int *ret_val) {
+void ReleaseRequest<I>::handle_close_journal(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
-  if (*ret_val < 0) {
+  if (r < 0) {
     // error implies some journal events were not flushed -- continue
-    lderr(cct) << "failed to close journal: " << cpp_strerror(*ret_val)
-               << dendl;
+    lderr(cct) << "failed to close journal: " << cpp_strerror(r) << dendl;
   }
 
   delete m_journal;
 
   send_close_object_map();
-  return nullptr;
 }
 
 template <typename I>
@@ -217,16 +207,15 @@ void ReleaseRequest<I>::send_close_object_map() {
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_close_object_map(int *ret_val) {
+void ReleaseRequest<I>::handle_close_object_map(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
 
   // object map shouldn't return errors
-  assert(*ret_val == 0);
+  assert(r == 0);
   delete m_object_map;
 
   send_unlock();
-  return nullptr;
 }
 
 template <typename I>
@@ -234,36 +223,21 @@ void ReleaseRequest<I>::send_unlock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
-  if (m_on_releasing != nullptr) {
-    // alert caller that we no longer own the exclusive lock
-    m_on_releasing->complete(0);
-    m_on_releasing = nullptr;
-  }
-
-  librados::ObjectWriteOperation op;
-  rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);
-
-  using klass = ReleaseRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_safe_callback<klass, &klass::handle_unlock>(this);
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-                                         rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
+  using k = ReleaseRequest<I>;
+  m_managed_lock->release_lock(
+      util::create_context_callback<k, &k::handle_unlock>(this));
 }
 
 template <typename I>
-Context *ReleaseRequest<I>::handle_unlock(int *ret_val) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+void ReleaseRequest<I>::handle_unlock(int r) {
+  save_result(r);
+  finish();
+}
 
-  if (*ret_val < 0 && *ret_val != -ENOENT) {
-    lderr(cct) << "failed to unlock: " << cpp_strerror(*ret_val) << dendl;
-  }
-
-  // treat errors as the image is unlocked
-  *ret_val = 0;
-  return m_on_finish;
+template <typename I>
+void ReleaseRequest<I>::finish() {
+  m_on_finish->complete(m_error_result);
+  delete this;
 }
 
 } // namespace exclusive_lock
