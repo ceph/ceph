@@ -604,6 +604,14 @@ public:
       extent_map.clear_and_dispose([&](Extent *e) { delete e; });
     }
 
+    void clear() {
+      extent_map.clear();
+      extent_map.clear_and_dispose([&](Extent *e) { delete e; });
+      shards.clear();
+      inline_bl.clear();
+      needs_reshard = false;
+    }
+
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
     void decode_some(bufferlist& bl);
