@@ -5129,6 +5129,8 @@ void PG::start_peering_interval(
   // pg->on_*
   on_change(t);
 
+  projected_last_update = eversion_t();
+
   assert(!deleting);
 
   // should we tell the primary we are here?

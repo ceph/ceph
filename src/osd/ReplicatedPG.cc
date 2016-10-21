@@ -6894,25 +6894,30 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->snapset = ctx->new_snapset;
   }
 
-  apply_ctx_stats(ctx, scrub_ok);
+  apply_ctx_scrub_stats(ctx, scrub_ok);
 }
 
-void ReplicatedPG::apply_ctx_stats(OpContext *ctx, bool scrub_ok)
-{
-  info.stats.stats.add(ctx->delta_stats);
+void ReplicatedPG::apply_stats(
+  const hobject_t &soid,
+  const object_stat_sum_t &delta_stats) {
 
-  const hobject_t& soid = ctx->obs->oi.soid;
+  info.stats.stats.add(delta_stats);
+
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
        ++i) {
     pg_shard_t bt = *i;
     pg_info_t& pinfo = peer_info[bt];
     if (cmp(soid, pinfo.last_backfill, get_sort_bitwise()) <= 0)
-      pinfo.stats.stats.add(ctx->delta_stats);
+      pinfo.stats.stats.add(delta_stats);
     else if (cmp(soid, last_backfill_started, get_sort_bitwise()) <= 0)
-      pending_backfill_updates[soid].stats.add(ctx->delta_stats);
+      pending_backfill_updates[soid].stats.add(delta_stats);
   }
+}
 
+void ReplicatedPG::apply_ctx_scrub_stats(OpContext *ctx, bool scrub_ok)
+{
+  const hobject_t& soid = ctx->obs->oi.soid;
   if (!scrub_ok && scrubber.active) {
     assert(cmp(soid, scrubber.start, get_sort_bitwise()) < 0 ||
 	   cmp(soid, scrubber.end, get_sort_bitwise()) >= 0);
@@ -8548,8 +8553,13 @@ void ReplicatedPG::issue_repop(RepGather *repop, OpContext *ctx)
     ctx->obc,
     ctx->clone_obc,
     unlock_snapset_obc ? ctx->snapset_obc : ObjectContextRef());
+  if (!(ctx->log.empty())) {
+    assert(ctx->at_version >= projected_last_update);
+    projected_last_update = ctx->at_version;
+  }
   pgbackend->submit_transaction(
     soid,
+    ctx->delta_stats,
     ctx->at_version,
     std::move(ctx->op_t),
     pg_trim_to,
@@ -9783,7 +9793,7 @@ void ReplicatedPG::mark_all_unfound_lost(
     missing_loc.get_needs_recovery().end();
 
   ObcLockManager manager;
-  eversion_t v = info.last_update;
+  eversion_t v = get_next_version();
   v.epoch = get_osdmap()->get_epoch();
   unsigned num_unfound = missing_loc.num_unfound();
   while (m != mend) {
@@ -9806,7 +9816,6 @@ void ReplicatedPG::mark_all_unfound_lost(
       prev = pick_newest_available(oid);
       if (prev > eversion_t()) {
 	// log it
-	++v.version;
 	pg_log_entry_t e(
 	  pg_log_entry_t::LOST_REVERT, oid, v,
 	  m->second.need, 0, osd_reqid_t(), mtime, 0);
@@ -9817,13 +9826,13 @@ void ReplicatedPG::mark_all_unfound_lost(
 	dout(10) << e << dendl;
 
 	// we are now missing the new version; recovery code will sort it out.
+	++v.version;
 	++m;
 	break;
       }
 
     case pg_log_entry_t::LOST_DELETE:
       {
-	++v.version;
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, v, m->second.need,
 			 0, osd_reqid_t(), mtime, 0);
 	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
@@ -9841,6 +9850,7 @@ void ReplicatedPG::mark_all_unfound_lost(
 	dout(10) << e << dendl;
 	log_entries.push_back(e);
 
+	++v.version;
 	++m;
       }
       break;
@@ -11501,7 +11511,7 @@ void ReplicatedPG::hit_set_remove_all()
     utime_t now = ceph_clock_now(cct);
     ctx->mtime = now;
     hit_set_trim(ctx, 0);
-    apply_ctx_stats(ctx.get());
+    apply_ctx_scrub_stats(ctx.get());
     simple_opc_submit(std::move(ctx));
   }
 
@@ -11720,7 +11730,7 @@ void ReplicatedPG::hit_set_persist()
 
   hit_set_trim(ctx, max);
 
-  apply_ctx_stats(ctx.get());
+  apply_ctx_scrub_stats(ctx.get());
   simple_opc_submit(std::move(ctx));
 }
 
@@ -13101,7 +13111,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 	pg->queue_snap_trim();
       });
 
-    pg->apply_ctx_stats(ctx.get());
+    pg->apply_ctx_scrub_stats(ctx.get());
 
     in_flight.insert(pos);
     pg->simple_opc_submit(std::move(ctx));

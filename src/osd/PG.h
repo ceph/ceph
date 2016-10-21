@@ -2190,11 +2190,14 @@ public:
     PerfCounters *logger = NULL);
   void write_if_dirty(ObjectStore::Transaction& t);
 
+  eversion_t projected_last_update;
   eversion_t get_next_version() const {
-    eversion_t at_version(get_osdmap()->get_epoch(),
-			  pg_log.get_head().version+1);
+    eversion_t at_version(
+      get_osdmap()->get_epoch(),
+      projected_last_update.version+1);
     assert(at_version > info.last_update);
     assert(at_version > pg_log.get_head());
+    assert(at_version > projected_last_update);
     return at_version;
   }
 

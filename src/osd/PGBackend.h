@@ -105,6 +105,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      
      virtual void cancel_pull(const hobject_t &soid) = 0;
 
+     virtual void apply_stats(
+       const hobject_t &soid,
+       const object_stat_sum_t &delta_stats) = 0;
+
+
      /**
       * Bless a context
       *
@@ -379,6 +384,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    /// execute implementation specific transaction
    virtual void submit_transaction(
      const hobject_t &hoid,               ///< [in] object
+     const object_stat_sum_t &delta_stats,///< [in] stat change
      const eversion_t &at_version,        ///< [in] version
      PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
