@@ -6180,6 +6180,11 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  // sequencer that is committing serially it is possible to keep
 	  // submitting new transactions fast enough that we get stuck doing
 	  // so.  the alternative is to block here... fixme?
+	} else if (g_conf->bluestore_debug_randomize_serial_transaction &&
+		   rand() % g_conf->bluestore_debug_randomize_serial_transaction
+		   == 0) {
+	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
+		   << dendl;
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
 	  txc->kv_submitted = true;
