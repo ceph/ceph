@@ -1927,6 +1927,7 @@ class PrepareSpace(object):
                 raise Error('%s is not a block device' % name.capitalize,
                             getattr(args, name))
             self.type = self.FILE
+            return
 
         raise Error('%s %s is neither a block device nor regular file' %
                     (name.capitalize, getattr(args, name)))
