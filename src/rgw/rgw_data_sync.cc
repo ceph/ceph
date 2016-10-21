@@ -1750,13 +1750,10 @@ public:
 
 class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
-  RGWRados *store;
 
   rgw_bucket_shard bs;
-  string sync_status_oid;
+  const string sync_status_oid;
 
-  string lock_name;
-  string cookie;
   rgw_bucket_shard_sync_info& status;
 
   bucket_index_marker_info info;
@@ -1764,30 +1761,13 @@ public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
                                         const rgw_bucket_shard& bs,
                                         rgw_bucket_shard_sync_info& _status)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs), status(_status) {
-    store = sync_env->store;
-    lock_name = "sync_lock";
-
-#define COOKIE_LEN 16
-    char buf[COOKIE_LEN + 1];
-
-    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-    string cookie = buf;
-
-    sync_status_oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
-  }
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
+      sync_status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+      status(_status)
+  {}
 
   int operate() {
     reenter(this) {
-      yield {
-	uint32_t lock_duration = 30;
-	call(new RGWSimpleRadosLockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
-			             lock_name, cookie, lock_duration));
-	if (retcode < 0) {
-	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
-	  return set_cr_error(retcode);
-	}
-      }
       /* fetch current position in logs */
       yield call(new RGWReadRemoteBucketIndexLogInfoCR(sync_env, bs, &info));
       if (retcode < 0 && retcode != -ENOENT) {
@@ -1799,12 +1779,10 @@ public:
         status.inc_marker.position = info.max_marker;
         map<string, bufferlist> attrs;
         status.encode_all_attrs(attrs);
-        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, store->get_zone_params().log_pool,
+        auto store = sync_env->store;
+        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store,
+                                            store->get_zone_params().log_pool,
                                             sync_status_oid, attrs));
-      }
-      yield { /* unlock */
-	call(new RGWSimpleRadosUnlockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
-			             lock_name, cookie));
       }
       return set_cr_done();
     }
@@ -2772,19 +2750,17 @@ int RGWRunBucketSyncCoroutine::operate()
       return set_cr_error(retcode);
     }
 
-    yield {
-      if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
-        call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
+    if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
+      yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
+      if (retcode < 0) {
+        ldout(sync_env->cct, 0) << "ERROR: init sync on " << bucket_shard_str{bs}
+            << " failed, retcode=" << retcode << dendl;
+        lease_cr->go_down();
+        drain_all();
+        return set_cr_error(retcode);
       }
     }
 
-    if (retcode < 0) {
-      ldout(sync_env->cct, 0) << "ERROR: init sync on " << bucket_shard_str{bs}
-          << " failed, retcode=" << retcode << dendl;
-      lease_cr->go_down();
-      drain_all();
-      return set_cr_error(retcode);
-    }
     yield {
       if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
         call(new RGWBucketShardFullSyncCR(sync_env, bs, &bucket_info,
