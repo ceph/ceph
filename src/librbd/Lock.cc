@@ -6,6 +6,7 @@
 #include "librbd/managed_lock/AcquireRequest.h"
 #include "librbd/managed_lock/ReleaseRequest.h"
 #include "librbd/managed_lock/ReacquireRequest.h"
+#include "librbd/managed_lock/NoReleasePolicy.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -56,6 +57,10 @@ Lock<L>::Lock(librados::IoCtx &ioctx, const string& oid,
     m_policy(policy),
     m_lock(util::unique_lock_name("librbd::Lock<L>::m_lock", this)),
     m_state(STATE_UNLOCKED) {
+
+  if (m_policy == nullptr) {
+    m_policy = new managed_lock::NoReleasePolicy();
+  }
 
   ThreadPoolSingleton *thread_pool_singleton;
   m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
@@ -209,7 +214,7 @@ template <typename L>
 void Lock<L>::assert_locked(librados::ObjectWriteOperation *op,
                           ClsLockType type) {
   Mutex::Locker locker(m_lock);
-  rados::cls::lock::assert_locked(op, m_oid, type, m_cookie,
+  rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, type, m_cookie,
                                   L::WATCHER_LOCK_TAG);
 }
 

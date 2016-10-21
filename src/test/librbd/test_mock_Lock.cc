@@ -118,6 +118,9 @@ struct ReleaseRequest<MockManagedLockWatcher> :
 #include "librbd/Lock.cc"
 template class librbd::Lock<librbd::managed_lock::MockManagedLockWatcher>;
 
+#include "librbd/managed_lock/AutomaticPolicy.cc"
+template class librbd::managed_lock::AutomaticPolicy<librbd::managed_lock::MockManagedLockWatcher>;
+
 
 ACTION_P3(QueueRequest, request, r, wq) {
   if (request->on_finish != nullptr) {

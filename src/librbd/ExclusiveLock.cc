@@ -55,6 +55,22 @@ ExclusiveLock<I>::~ExclusiveLock() {
 
 template <typename I>
 bool ExclusiveLock<I>::is_lock_owner() const {
+  /*Mutex::Locker locker(m_lock);
+
+  bool lock_owner;
+  switch (m_state) {
+  case STATE_LOCKED:
+  case STATE_REACQUIRING:
+    lock_owner = true;
+    break;
+  default:
+    lock_owner = false;
+    break;
+  }
+
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "=" << lock_owner
+                             << dendl;
+  return lock_owner;*/
   return m_managed_lock->is_lock_owner();
 }
 

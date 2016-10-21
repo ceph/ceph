@@ -1528,7 +1528,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         ictx->state->close();
         return r;
       }
-      if (watchers.size() > 1) {
+      if ((ictx->exclusive_lock != nullptr && watchers.size() > 2) ||
+          (ictx->exclusive_lock == nullptr && watchers.size() > 1)) {
         lderr(cct) << "image has watchers - not removing" << dendl;
 	ictx->owner_lock.put_read();
         ictx->state->close();

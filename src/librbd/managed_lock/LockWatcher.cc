@@ -94,7 +94,9 @@ void LockWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
 }
 
 void LockWatcher::notify_request_lock() {
-  assert(!m_managed_lock->is_lock_owner());
+  if (m_managed_lock->is_lock_owner()) {
+    return;
+  }
 
   ldout(m_cct, 10) << this << " notify request lock" << dendl;
 

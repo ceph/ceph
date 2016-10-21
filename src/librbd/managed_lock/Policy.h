@@ -11,7 +11,6 @@ struct Policy {
   virtual ~Policy() {
   }
 
-  virtual bool may_auto_request_lock() = 0;
   virtual int lock_requested(bool force) = 0;
 };
 
