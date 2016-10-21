@@ -710,8 +710,8 @@ void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
 
   // buffers
   if (buffer_bytes > buffer_max) {
-    uint64_t kin = buffer_max / 2;
-    uint64_t khot = kin;
+    uint64_t kin = buffer_max * g_conf->bluestore_2q_cache_kin_ratio;
+    uint64_t khot = buffer_max - kin;
 
     // pre-calculate kout based on average buffer size too,
     // which is typical(the warm_in and hot lists may change later)
@@ -720,7 +720,8 @@ void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
     if (buffer_num) {
       uint64_t buffer_avg_size = buffer_bytes / buffer_num;
       assert(buffer_avg_size);
-      kout = buffer_max / buffer_avg_size;
+      uint64_t caculated_buffer_num = buffer_max / buffer_avg_size;
+      kout = caculated_buffer_num * g_conf->bluestore_2q_cache_kout_ratio;
     }
 
     if (buffer_list_bytes[BUFFER_HOT] < khot) {
