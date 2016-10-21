@@ -3547,7 +3547,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
   }
 }
 
-ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
+ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(bool first, const hobject_t &coid)
 {
   // load clone info
   bufferlist bl;
@@ -3604,7 +3604,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
 	coid,
-	obc)) {
+	obc,
+	first)) {
     close_op_ctx(ctx.release());
     dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
     return NULL;
@@ -3612,7 +3613,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
 	snapoid,
-	snapset_obc)) {
+	snapset_obc,
+	first)) {
     close_op_ctx(ctx.release());
     dout(10) << __func__ << ": Unable to get a wlock on " << snapoid << dendl;
     return NULL;
@@ -3776,8 +3778,21 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
   return ctx;
 }
 
+void ReplicatedPG::kick_snap_trim()
+{
+  snap_trimmer_machine.process_event(KickTrim());
+}
+
+void ReplicatedPG::snap_trimmer_scrub_complete()
+{
+  snap_trimmer_machine.process_event(ScrubComplete());
+}
+
 void ReplicatedPG::snap_trimmer(epoch_t queued)
 {
+  if (deleting || pg_has_reset_since(queued)) {
+    return;
+  }
   if (g_conf->osd_snap_trim_sleep > 0) {
     unlock();
     utime_t t;
@@ -3786,31 +3801,12 @@ void ReplicatedPG::snap_trimmer(epoch_t queued)
     lock();
     dout(20) << __func__ << " slept for " << t << dendl;
   }
-  if (deleting || pg_has_reset_since(queued)) {
-    return;
-  }
-  snap_trim_queued = false;
-  dout(10) << "snap_trimmer entry" << dendl;
-  if (is_primary()) {
-    if (scrubber.active) {
-      dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
-      scrubber.queue_snap_trim = true;
-      return;
-    }
 
-    dout(10) << "snap_trimmer posting" << dendl;
-    snap_trimmer_machine.process_event(SnapTrim());
+  assert(is_primary());
 
-    if (snap_trimmer_machine.need_share_pg_info) {
-      dout(10) << "snap_trimmer share_pg_info" << dendl;
-      snap_trimmer_machine.need_share_pg_info = false;
-      share_pg_info();
-    }
-  } else if (is_active() && 
-	     last_complete_ondisk.epoch > info.history.last_epoch_started) {
-    // replica collection trimming
-    snap_trimmer_machine.process_event(SnapTrim());
-  }
+  dout(10) << "snap_trimmer posting" << dendl;
+  snap_trimmer_machine.process_event(DoSnapWork());
+  dout(10) << "snap_trimmer complete" << dendl;
   return;
 }
 
@@ -13047,137 +13043,133 @@ void ReplicatedPG::NotTrimming::exit()
   context< SnapTrimmer >().log_exit(state_name, enter_time);
 }
 
-boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
+boost::statechart::result ReplicatedPG::NotTrimming::react(const KickTrim&)
 {
   ReplicatedPG *pg = context< SnapTrimmer >().pg;
-  dout(10) << "NotTrimming react" << dendl;
+  dout(10) << "NotTrimming react KickTrim" << dendl;
 
-  if (!pg->is_primary() || !pg->is_active() || !pg->is_clean()) {
-    dout(10) << "NotTrimming not primary, active, clean" << dendl;
-    return discard_event();
-  } else if (pg->scrubber.active) {
-    dout(10) << "NotTrimming finalizing scrub" << dendl;
-    pg->queue_snap_trim();
+  assert(pg->is_primary() && pg->is_active());
+  if (!pg->is_clean() ||
+      pg->snap_trimq.empty()) {
+    dout(10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
 
-  // Primary trimming
-  if (pg->snap_trimq.empty()) {
-    return discard_event();
+  if (pg->scrubber.active) {
+    dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
+    pg->scrubber.queue_snap_trim = true;
+    return transit< WaitScrub >();
   } else {
     context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
     dout(10) << "NotTrimming: trimming "
 	     << pg->snap_trimq.range_start()
 	     << dendl;
-    post_event(SnapTrim());
-    return transit<TrimmingObjects>();
+    return transit< AwaitAsyncWork >();
   }
 }
 
-/* TrimmingObjects */
-ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx)
+/* AwaitAsyncWork */
+ReplicatedPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
   : my_base(ctx),
-    NamedState(context< SnapTrimmer >().pg->cct, "Trimming/TrimmingObjects")
+    NamedState(context< SnapTrimmer >().pg->cct, "Trimming/AwaitAsyncWork")
 {
   context< SnapTrimmer >().log_enter(state_name);
+  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(
+    context< SnapTrimmer >().pg);
 }
 
-void ReplicatedPG::TrimmingObjects::exit()
+void ReplicatedPG::AwaitAsyncWork::exit()
 {
   context< SnapTrimmer >().log_exit(state_name, enter_time);
-  context<SnapTrimmer>().in_flight.clear();
 }
 
-boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
+boost::statechart::result ReplicatedPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
-  dout(10) << "TrimmingObjects react" << dendl;
+  dout(10) << "AwaitAsyncWork react" << dendl;
   ReplicatedPGRef pg = context< SnapTrimmer >().pg;
   snapid_t snap_to_trim = context<SnapTrimmer>().snap_to_trim;
   auto &in_flight = context<SnapTrimmer>().in_flight;
+  assert(in_flight.empty());
 
-  dout(10) << "TrimmingObjects: trimming snap " << snap_to_trim << dendl;
+  assert(pg->is_primary() && pg->is_active());
+  if (!pg->is_clean() ||
+      pg->scrubber.active) {
+    dout(10) << "something changed, reverting to NotTrimming" << dendl;
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
 
-  while (in_flight.size() < g_conf->osd_pg_max_concurrent_snap_trims) {
+  dout(10) << "AwaitAsyncWork: trimming snap " << snap_to_trim << dendl;
+
+  vector<hobject_t> to_trim;
+  unsigned max = g_conf->osd_pg_max_concurrent_snap_trims;
+  to_trim.reserve(max);
+  int r = pg->snap_mapper.get_next_objects_to_trim(
+    snap_to_trim,
+    max,
+    &to_trim);
+  if (r != 0 && r != -ENOENT) {
+    derr << "get_next_objects_to_trim returned "
+	 << cpp_strerror(r) << dendl;
+    assert(0 == "get_next_objects_to_trim returned an invalid code");
+  } else if (r == -ENOENT) {
+    // Done!
+    dout(10) << "got ENOENT" << dendl;
+
+    dout(10) << "adding snap " << snap_to_trim
+	     << " to purged_snaps"
+	     << dendl;
+    pg->info.purged_snaps.insert(snap_to_trim);
+    pg->snap_trimq.erase(snap_to_trim);
+    dout(10) << "purged_snaps now "
+	     << pg->info.purged_snaps << ", snap_trimq now "
+	     << pg->snap_trimq << dendl;
+
+    ObjectStore::Transaction t;
+    pg->dirty_big_info = true;
+    pg->write_if_dirty(t);
+    int tr = pg->osd->store->queue_transaction(pg->osr.get(), std::move(t), NULL);
+    assert(tr == 0);
+
+    pg->share_pg_info();
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+  assert(!to_trim.empty());
+
+  for (auto &&object: to_trim) {
     // Get next
-    hobject_t old_pos = pos;
-    int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
-    if (r != 0 && r != -ENOENT) {
-      derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
-      assert(0);
-    } else if (r == -ENOENT) {
-      // Done!
-      dout(10) << "TrimmingObjects: got ENOENT" << dendl;
-      post_event(SnapTrim());
-      return transit< WaitingOnReplicas >();
+    dout(10) << "AwaitAsyncWork react trimming " << object << dendl;
+    OpContextUPtr ctx = pg->trim_object(in_flight.empty(), object);
+    if (!ctx) {
+      dout(10) << "could not get write lock on obj "
+	       << object << dendl;
+      if (in_flight.empty()) {
+	dout(10) << "waiting for it to clear"
+		 << dendl;
+	return transit< WaitRWLock >();
+
+      } else {
+	dout(10) << "letting the ones we already started finish"
+		 << dendl;
+	return transit< WaitRepops >();
+      }
     }
 
-    dout(10) << "TrimmingObjects react trimming " << pos << dendl;
-    OpContextUPtr ctx = pg->trim_object(pos);
-    if (!ctx) {
-      dout(10) << __func__ << " could not get write lock on obj "
-	       << pos << dendl;
-      pos = old_pos;
-      return discard_event();
-    }
-    assert(ctx);
-    hobject_t to_remove = pos;
+    in_flight.insert(object);
     ctx->register_on_success(
-      [pg, to_remove, &in_flight]() {
-	in_flight.erase(to_remove);
-	pg->queue_snap_trim();
+      [pg, object, &in_flight]() {
+	assert(in_flight.find(object) != in_flight.end());
+	in_flight.erase(object);
+	if (in_flight.empty())
+	  pg->snap_trimmer_machine.process_event(RepopsComplete());
       });
 
     pg->apply_ctx_scrub_stats(ctx.get());
-
-    in_flight.insert(pos);
     pg->simple_opc_submit(std::move(ctx));
   }
-  return discard_event();
-}
 
-/* WaitingOnReplicasObjects */
-ReplicatedPG::WaitingOnReplicas::WaitingOnReplicas(my_context ctx)
-  : my_base(ctx),
-    NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitingOnReplicas")
-{
-  context< SnapTrimmer >().log_enter(state_name);
-}
-
-void ReplicatedPG::WaitingOnReplicas::exit()
-{
-  context< SnapTrimmer >().log_exit(state_name, enter_time);
-  context<SnapTrimmer>().in_flight.clear();
-}
-
-boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&)
-{
-  // Have all the trims finished?
-  dout(10) << "Waiting on Replicas react" << dendl;
-  ReplicatedPG *pg = context< SnapTrimmer >().pg;
-  if (!context<SnapTrimmer>().in_flight.empty()) {
-    return discard_event();
-  }
-
-  snapid_t &sn = context<SnapTrimmer>().snap_to_trim;
-  dout(10) << "WaitingOnReplicas: adding snap " << sn << " to purged_snaps"
-	   << dendl;
-
-  pg->info.purged_snaps.insert(sn);
-  pg->snap_trimq.erase(sn);
-  dout(10) << "purged_snaps now " << pg->info.purged_snaps << ", snap_trimq now " 
-	   << pg->snap_trimq << dendl;
-  
-  ObjectStore::Transaction t;
-  pg->dirty_big_info = true;
-  pg->write_if_dirty(t);
-  int tr = pg->osd->store->queue_transaction(pg->osr.get(), std::move(t), NULL);
-  assert(tr == 0);
-
-  context<SnapTrimmer>().need_share_pg_info = true;
-
-  // Back to the start
-  pg->queue_snap_trim();
-  return transit< NotTrimming >();
+  return transit< WaitRepops >();
 }
 
 void ReplicatedPG::setattr_maybe_cache(

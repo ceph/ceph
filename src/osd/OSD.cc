@@ -1454,6 +1454,19 @@ void OSDService::queue_for_peering(PG *pg)
   peering_wq.queue(pg);
 }
 
+void OSDService::queue_for_snap_trim(PG *pg) {
+  dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
+  op_wq.queue(
+    make_pair(
+      pg,
+      PGQueueable(
+	PGSnapTrim(pg->get_osdmap()->get_epoch()),
+	cct->_conf->osd_snap_trim_cost,
+	cct->_conf->osd_snap_trim_priority,
+	ceph_clock_now(cct),
+	entity_inst_t())));
+}
+
 
 // ====================================================================
 // OSD

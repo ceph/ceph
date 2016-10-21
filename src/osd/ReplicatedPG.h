@@ -793,7 +793,7 @@ protected:
     if (requeue_recovery)
       queue_recovery();
     if (requeue_snaptrim)
-      queue_snap_trim();
+      snap_trimmer_machine.process_event(TrimWriteUnblocked());
 
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
@@ -1374,8 +1374,10 @@ public:
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
 
-  OpContextUPtr trim_object(const hobject_t &coid);
+  OpContextUPtr trim_object(bool first, const hobject_t &coid);
   void snap_trimmer(epoch_t e) override;
+  void kick_snap_trim() override;
+  void snap_trimmer_scrub_complete() override;
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
@@ -1437,8 +1439,20 @@ public:
   }
 private:
   struct NotTrimming;
-  struct SnapTrim : boost::statechart::event< SnapTrim > {
-    SnapTrim() : boost::statechart::event < SnapTrim >() {}
+  struct DoSnapWork : boost::statechart::event< DoSnapWork > {
+    DoSnapWork() : boost::statechart::event < DoSnapWork >() {}
+  };
+  struct KickTrim : boost::statechart::event< KickTrim > {
+    KickTrim() : boost::statechart::event < KickTrim >() {}
+  };
+  struct RepopsComplete : boost::statechart::event< RepopsComplete > {
+    RepopsComplete() : boost::statechart::event < RepopsComplete >() {}
+  };
+  struct ScrubComplete : boost::statechart::event< ScrubComplete > {
+    ScrubComplete() : boost::statechart::event < ScrubComplete >() {}
+  };
+  struct TrimWriteUnblocked : boost::statechart::event< TrimWriteUnblocked > {
+    TrimWriteUnblocked() : boost::statechart::event < TrimWriteUnblocked >() {}
   };
   struct Reset : boost::statechart::event< Reset > {
     Reset() : boost::statechart::event< Reset >() {}
@@ -1447,43 +1461,112 @@ private:
     ReplicatedPG *pg;
     set<hobject_t, hobject_t::BitwiseComparator> in_flight;
     snapid_t snap_to_trim;
-    bool need_share_pg_info;
-    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false) {}
+    explicit SnapTrimmer(ReplicatedPG *pg) : pg(pg) {}
     ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
   } snap_trimmer_machine;
 
   /* SnapTrimmerStates */
-  struct TrimmingObjects : boost::statechart::state< TrimmingObjects, SnapTrimmer >, NamedState {
+  struct AwaitAsyncWork : boost::statechart::state< AwaitAsyncWork, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::custom_reaction< DoSnapWork >,
+      boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    hobject_t pos;
-    explicit TrimmingObjects(my_context ctx);
+    explicit AwaitAsyncWork(my_context ctx);
     void exit();
-    boost::statechart::result react(const SnapTrim&);
+    boost::statechart::result react(const DoSnapWork&);
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
   };
 
-  struct WaitingOnReplicas : boost::statechart::state< WaitingOnReplicas, SnapTrimmer >, NamedState {
+  struct WaitRWLock : boost::statechart::state< WaitRWLock, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::custom_reaction< TrimWriteUnblocked >,
+      boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    explicit WaitingOnReplicas(my_context ctx);
-    void exit();
-    boost::statechart::result react(const SnapTrim&);
+    explicit WaitRWLock(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRWLock") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<SnapTrimmer>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const TrimWriteUnblocked&) {
+      post_event(KickTrim());
+      return discard_event();
+    }
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
   };
-  
+
+  struct WaitScrub : boost::statechart::state< WaitScrub, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< ScrubComplete >,
+      boost::statechart::custom_reaction< KickTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    explicit WaitScrub(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitScrub") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<SnapTrimmer>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const ScrubComplete&) {
+      post_event(KickTrim());
+      return transit< NotTrimming >();
+    }
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
+  };
+
+  struct WaitRepops : boost::statechart::state< WaitRepops, SnapTrimmer >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< RepopsComplete >,
+      boost::statechart::custom_reaction< KickTrim >,
+      boost::statechart::custom_reaction< Reset >
+      > reactions;
+    explicit WaitRepops(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(!context<SnapTrimmer>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      assert(context<SnapTrimmer>().in_flight.empty());
+    }
+    boost::statechart::result react(const RepopsComplete&) {
+      post_event(KickTrim());
+      return transit< NotTrimming >();
+    }
+    boost::statechart::result react(const KickTrim&) {
+      return discard_event();
+    }
+    boost::statechart::result react(const Reset&) {
+      context<SnapTrimmer>().in_flight.clear();
+      return transit< NotTrimming>();
+    }
+  };
+
   struct NotTrimming : boost::statechart::state< NotTrimming, SnapTrimmer >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
     explicit NotTrimming(my_context ctx);
     void exit();
-    boost::statechart::result react(const SnapTrim&);
+    boost::statechart::result react(const KickTrim&);
   };
 
   int _verify_no_head_clones(const hobject_t& soid,

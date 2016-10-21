@@ -211,9 +211,10 @@ public:
     );
 
   /// Returns first object with snap as a snap
-  int get_next_object_to_trim(
+  int get_next_objects_to_trim(
     snapid_t snap,              ///< [in] snap to check
-    hobject_t *hoid             ///< [out] next hoid to trim
+    unsigned max,               ///< [in] max to get
+    vector<hobject_t> *out      ///< [out] next objects to trim (must be empty)
     );  ///< @return error, -ENOENT if no more objects
 
   /// Remove mapping for oid
