@@ -512,6 +512,13 @@ public:
 
   Engine::result_t authenticate(const req_state* s) const override final;
 
+private:
+  /* Using the reference wrapper here to explicitly point out we are not
+   * interested in storing nulls while preserving the dynamic polymorphism. */
+  using stack_item_t = std::pair<std::reference_wrapper<const Engine>,
+                                 Control>;
+  std::vector<stack_item_t> auth_stack;
+
 protected:
   void add_engine(Control ctrl_flag, const Engine& engine) noexcept;
 };
