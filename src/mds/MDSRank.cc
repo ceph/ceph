@@ -1556,7 +1556,7 @@ void MDSRankDispatcher::handle_mds_map(
     oldmap->get_down_mds_set(&olddown);
     mdsmap->get_down_mds_set(&down);
     for (set<mds_rank_t>::iterator p = down.begin(); p != down.end(); ++p) {
-      if (olddown.count(*p) == 0) {
+      if (oldmap->have_inst(*p) && olddown.count(*p) == 0) {
         messenger->mark_down(oldmap->get_inst(*p).addr);
         handle_mds_failure(*p);
       }
