@@ -98,6 +98,7 @@ TEST(mempool, vector_context)
   for (unsigned i = 0; i < 10; ++i) {
     vector<int> a;
     mempool::osd::vector<int> b,c;
+    EXPECT_EQ(mempool::osd::containers(), 2u);
     eq_elements(a,b);
     do_push_back(a,b,i,i);
     eq_elements(a,b);
@@ -120,9 +121,11 @@ TEST(mempool, vector_context)
 
 TEST(mempool, list_context)
 {
+  EXPECT_EQ(mempool::osd::containers(), 0u);
   for (unsigned i = 1; i < 10; ++i) {
     list<int> a;
     mempool::osd::list<int> b,c;
+    EXPECT_EQ(mempool::osd::containers(), 2u);
     eq_elements(a,b);
     do_push_back(a,b,i,i);
     eq_elements(a,b);
@@ -150,17 +153,21 @@ TEST(mempool, list_context)
 
 TEST(mempool, set_context)
 {
+  EXPECT_EQ(mempool::osd::containers(), 0u);
   for (int i = 0; i < 10; ++i) {
     set<int> a;
     mempool::osd::set<int> b;
+    EXPECT_EQ(mempool::osd::containers(), 1u);
     do_insert(a,b,i,i);
     eq_elements(a,b);
     check_usage(mempool::osd::id);
   }
 
+  EXPECT_EQ(mempool::osd::containers(), 0u);
   for (int i = 1; i < 10; ++i) {
     set<int> a;
     mempool::osd::set<int> b;
+    EXPECT_EQ(mempool::osd::containers(), 1u);
     do_insert(a,b,i,0);
     EXPECT_NE(a.find(i/2),a.end());
     EXPECT_NE(b.find(i/2),b.end());

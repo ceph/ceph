@@ -39,11 +39,11 @@ Memory Pools
 ============
 
 A memory pool is a method for accounting the consumption of memory of
-a set of containers.
+a set of containers and objects.
 
 Memory pools are statically declared (see pool_index_t).
 
-Each memory pool tracks the number of bytes and items it contains.
+Each memory pool tracks a several statistics about things within the pool.
 
 Allocators can be declared and associated with a type so that they are
 tracked independently of the pool total.  This additional accounting
@@ -59,7 +59,8 @@ Using memory pools is very easy.
 
 To create a new memory pool, simply add a new name into the list of
 memory pools that's defined in "DEFINE_MEMORY_POOLS_HELPER".  That's
-it.  :)
+it.  :) There's really very little cost to a memory pool but the 
+interface is built assuming maybe 10's of pools.
 
 For each memory pool that's created a C++ namespace is also
 automatically created (name is same as in DEFINE_MEMORY_POOLS_HELPER).
@@ -76,14 +77,27 @@ Thus for mempool "osd" we have automatically available to us:
    mempool::osd::vector
    mempool::osd::unordered_map
 
+These containers operate identically to the std::xxxxx named version of same
+(same template parameters, etc.). However, while these are derived classes
+from the std::xxxxx namespace version they all have allocators provided which
+aren't compatible with the std::xxxxx version of the containers so that 
+pointers, references, iterators, etc. aren't compatible.
+
+Best practice is to use a typedef to define the mempool/container and then use
+the typedef'ed name everywhere. Better documentation and easier to move
+containers from std::xxxx or to a different mempool if the occasion warrants.
+(This is particularly helpful with slab_containers, see slab_containers.h)
 
 Putting objects in a mempool
 ----------------------------
 
-In order to use a memory pool with a particular type, a few additional
-declarations are needed.
+The stuff above applies to containers. In order to put a particular object
+into a namespace you must use the following declarations and mechanism. 
+Note that this mechanism is per-object-type, in other words you can't put 
+some instances of a class in one mempool and other instances of the class
+in another mempool (or outside of any mempool) -- It's all or nothing at all :)
 
-For a class:
+For a class declaration (the .h file):
 
   struct Foo {
     MEMPOOL_CLASS_HELPERS();
@@ -95,7 +109,7 @@ Then, in an appropriate .cc file,
   MEMPOOL_DEFINE_OBJECT_FACTORY(Foo, foo, osd);
 
 The second argument can generally be identical to the first, except
-when the type contains a nested scope.  For example, for
+when the type contains a nested scope. For example, for
 BlueStore::Onode, we need to do
 
   MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
@@ -115,6 +129,58 @@ of the container type.  For example,
 
   mempool::osd::map<int> myvec;
 
+Once this machinery is in place, you can do new/delete of these objects
+without any additional decoration/machinery. It's all done through
+a per-class operator new and operator delete.
+
+NOTE: Right now it's strictly scalar new/data. Array new/delete will
+assert out. There is no fundamental problem here. Just didn't get around
+to writing the necessary code.
+
+When you look at the statistics, what you'll find is that there is a
+single container declared for ALL of your objects of this class.
+(Effectively it's like an unordered_multiset<Foo>, except there's no
+hashing or key involved.) In other words, if you use the new/delete 
+factory (above), your statistics will show one container and 'N' items
+where N is the number of currently existing instances of class 'Foo'.
+
+Statistics Tracked
+------------------
+
+There are several statistics that are tracked for each mempool.
+
+In addition, when 'debug' mode is enabled, the same statistics
+are tracked on a per-typename basis. In other words, let's assume
+you have a type: mempool::unittest_1::set<Foo> and there are 25
+instances of that type, the debug-mode statistics will aggregate
+the stats for all of those 25 instances. One note: 'debug' mode
+CAN be dynamically enabled/disabled. The implementation of 'debug'
+mode is 'sampled' by the constructor of each container. In other words
+the debug information is only collected for containers that are ctor'ed
+when 'debug' is ON. Once the construction is finished, 'debug' mode
+is not sampled for that container -- forever. Thus if you have a
+container that is declared at file scope, the only way to enable
+'debug' for that container is to change the default in the mempool.cc 
+file and recompile.
+
+The stats are:
+
+bytes       - number of bytes malloced
+items       - number of elements in each container.
+containers  - number of containers
+
+There are 5 additional stats also part of this machinery, but
+they only make sense if you understand slab_containers. So
+read the description in slab_containers.h :)
+
+slabs       - number of outstanding slabs
+free_bytes  - number of malloc'ed bytes that are not in use.
+free_items  - number of malloc'ed items that are not in use.
+inuse_Items - bytes - free_bytes (but computed more cheaply)
+inuse_bytes - items - free_items (but computed more cheaply)
+
+By using the introspection feature (see below), 
+
 Introspection
 -------------
 
@@ -129,14 +195,23 @@ num_types).  When debug name is disabled it is O(num_shards).
 
 You can also interrogate a specific pool programmatically with
 
-  size_t bytes = mempool::unittest_2::allocated_bytes();
-  size_t items = mempool::unittest_2::allocated_items();
+  size_t bytes       = mempool::unittest_2::allocated_bytes();
+  size_t items       = mempool::unittest_2::allocated_items();
+  size_t slabs       = mempool::unittest_2::slabs();
+  size_t container   = mempool::unittest_2::containers();
+  size_t free_bytes  = mempool::unittest_2::free_bytes();
+  size_t free_items  = mempool::unittest_2::free_items();
+  size_t inuse_bytes = mempool::unittest_2::inuse_bytes();
+  size_T inuse_items = mempool::unittest_2::inuse_items();
 
-The runtime complexity is O(num_shards).
+The runtime complexity of these is O(num_shards)., However you're
+likely to sustain O(num_shards/2) cache misses, so it's not
+an operation that you want to throw around too much.
 
 Note that you cannot easily query per-type, primarily because debug
 mode is optional and you should not rely on that information being
-available.
+available. Also, the type definitions are a bit ugly and filled
+with STL-isms -- caveat developer.
 
 */
 
@@ -192,11 +267,19 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
-// align shard to a cacheline
+//
+// For each mempool, there is an array [num_shards] of these objects. The idea is that each shard
+// will be in it's own cacheline, so as to avoid cache ping pongs. We assume that a cacheline is
+// about 8 size_t objects (this is a pretty good assumption on all known processors)
+//
 struct shard_t {
-  std::atomic<size_t> bytes = {0};
-  std::atomic<size_t> items = {0};
-  char __padding[128 - sizeof(std::atomic<size_t>)*2];
+  std::atomic<ssize_t> bytes = {0};
+  std::atomic<ssize_t> items = {0};
+  std::atomic<ssize_t> free_items = {0};  // Number of bytes malloc'ed but not in use by client (i.e., free in a slab)
+  std::atomic<ssize_t> free_bytes = {0};  // Number of client objects      not in use by client (i.e., free in a slab)
+  std::atomic<ssize_t> containers = {0};  // Number of containers (Object Factory = 1 container)
+  std::atomic<ssize_t> slabs      = {0};  // Number of slabs
+  char __padding[128 - sizeof(std::atomic<size_t>)*6];
 } __attribute__ ((aligned (128)));
 
 static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
@@ -204,14 +287,26 @@ static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
 struct stats_t {
   ssize_t items = 0;
   ssize_t bytes = 0;
+  ssize_t free_bytes = 0;
+  ssize_t free_items = 0;
+  ssize_t containers = 0;
+  ssize_t slabs = 0;
   void dump(ceph::Formatter *f) const {
     f->dump_int("items", items);
     f->dump_int("bytes", bytes);
+    f->dump_int("free_bytes", free_bytes);
+    f->dump_int("free_items", free_items);
+    f->dump_int("containers", containers);
+    f->dump_int("slabs", slabs);
   }
 
   stats_t& operator+=(const stats_t& o) {
     items += o.items;
     bytes += o.bytes;
+    free_bytes = o.free_bytes;
+    free_items = o.free_items;
+    containers = o.containers;
+    slabs = o.slabs;
     return *this;
   }
 };
@@ -219,10 +314,18 @@ struct stats_t {
 pool_t& get_pool(pool_index_t ix);
 const char *get_pool_name(pool_index_t ix);
 
+//
+// Only used when debug mode is on, these accumulate per-object-type-signature statistics
+// we didn't bother to shard them or cache-line align them
+//
 struct type_t {
   const char *type_name;
   size_t item_size;
   std::atomic<ssize_t> items = {0};  // signed
+  std::atomic<ssize_t> free_items = {0};
+  // XXX: should we have free_bytes as well?
+  std::atomic<ssize_t> containers = {0};
+  std::atomic<ssize_t> slabs = {0};
 };
 
 struct type_info_hash {
@@ -232,7 +335,7 @@ struct type_info_hash {
 };
 
 class pool_t {
-  shard_t shard[num_shards];
+  alignas(shard_t) shard_t shard[num_shards];
 
   mutable std::mutex lock;  // only used for types list
   std::unordered_map<const char *, type_t> type_map;
@@ -243,8 +346,15 @@ public:
   //
   size_t allocated_bytes() const;
   size_t allocated_items() const;
-
   void adjust_count(ssize_t items, ssize_t bytes);
+  size_t free_items() const;
+  size_t free_bytes() const;
+  size_t inuse_bytes() const;
+  size_t inuse_items() const;
+  size_t containers()  const;
+  size_t slabs() const;
+  size_t sumup(std::atomic<ssize_t> shard_t::*pm) const;
+  size_t sumupdiff(std::atomic<ssize_t> shard_t::*pl,std::atomic<ssize_t> shard_t::*pr) const;
 
   shard_t* pick_a_shard() {
     // Dirt cheap, see:
@@ -263,6 +373,7 @@ public:
     type_t &t = type_map[ti.name()];
     t.type_name = ti.name();
     t.item_size = size;
+    t.containers ++;
     return &t;
   }
 
@@ -273,20 +384,36 @@ public:
   void dump(ceph::Formatter *f, stats_t *ptotal=0) const;
 };
 
-void dump(ceph::Formatter *f);
+void dump(ceph::Formatter *f, size_t skip=0);
 
 
-// STL allocator for use with containers.  All actual state
-// is stored in the static pool_allocator_base_t, which saves us from
-// passing the allocator to container constructors.
+//
+// There are actually a couple of types of allocators
+// so we make a base class that can be customized.
 
 template<pool_index_t pool_ix, typename T>
-class pool_allocator {
+class pool_allocator_base_t {
+protected:
   pool_t *pool;
   type_t *type = nullptr;
 
+  // a sorta-constructor
+  void ctor(bool force_register,size_t sizeofT) {
+    pool = &get_pool(pool_ix);
+    if (debug_mode || force_register) {
+      type = pool->get_type(typeid(T), sizeofT);
+    }
+    shard_t *shard = pool->pick_a_shard();
+    shard->containers++;
+  }
+
+  void dtor() {
+    if (type) type->containers--;
+    shard_t *shard = pool->pick_a_shard();
+    shard->containers--;
+  }
+
 public:
-  typedef pool_allocator<pool_ix, T> allocator_type;
   typedef T value_type;
   typedef value_type *pointer;
   typedef const value_type * const_pointer;
@@ -294,75 +421,6 @@ public:
   typedef const value_type& const_reference;
   typedef std::size_t size_type;
   typedef std::ptrdiff_t difference_type;
-
-  template<typename U> struct rebind {
-    typedef pool_allocator<pool_ix,U> other;
-  };
-
-  void init(bool force_register) {
-    pool = &get_pool(pool_ix);
-    if (debug_mode || force_register) {
-      type = pool->get_type(typeid(T), sizeof(T));
-    }
-  }
-
-  pool_allocator(bool force_register=false) {
-    init(force_register);
-  }
-  template<typename U>
-  pool_allocator(const pool_allocator<pool_ix,U>&) {
-    init(false);
-  }
-
-  T* allocate(size_t n, void *p = nullptr) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes += total;
-    shard->items += n;
-    if (type) {
-      type->items += n;
-    }
-    T* r = reinterpret_cast<T*>(new char[total]);
-    return r;
-  }
-
-  void deallocate(T* p, size_t n) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes -= total;
-    shard->items -= n;
-    if (type) {
-      type->items -= n;
-    }
-    delete[] reinterpret_cast<char*>(p);
-  }
-
-  T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes += total;
-    shard->items += n;
-    if (type) {
-      type->items += n;
-    }
-    char *ptr;
-    int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
-    if (rc)
-      throw std::bad_alloc();
-    T* r = reinterpret_cast<T*>(ptr);
-    return r;
-  }
-
-  void deallocate_aligned(T* p, size_t n) {
-    size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes -= total;
-    shard->items -= n;
-    if (type) {
-      type->items -= n;
-    }
-    ::free(p);
-  }
 
   void destroy(T* p) {
     p->~T();
@@ -381,8 +439,173 @@ public:
     ::new((void *)p) U(std::forward<Args>(args)...);
   }
 
-  bool operator==(const pool_allocator&) const { return true; }
-  bool operator!=(const pool_allocator&) const { return false; }
+  bool operator==(const pool_allocator_base_t&) const { return true; }
+  bool operator!=(const pool_allocator_base_t&) const { return false; }
+};
+
+// STL allocator for use with regular containers.  All actual state
+// is stored in the static pool_allocator_base_t, which saves us from
+// passing the allocator to container constructors.
+template<pool_index_t pool_ix, typename T>
+class pool_allocator : public pool_allocator_base_t<pool_ix,T> {
+public:
+  typedef pool_allocator<pool_ix, T> allocator_type;
+
+  template<typename U> struct rebind {
+    typedef pool_allocator<pool_ix,U> other;
+  };
+
+  // a sorta-copy constructor, but a different type :)
+  template<typename U>
+  pool_allocator(const pool_allocator<pool_ix,U>&) {
+    this->ctor(false,sizeof(T));
+  }
+
+  pool_allocator(bool force_register=false) {
+    this->ctor(force_register,sizeof(T));
+  }
+
+  ~pool_allocator() {
+    this->dtor();
+  }
+
+  T* allocate(size_t n, void *p = nullptr) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->bytes += total;
+    shard->items += n;
+    if (this->type) {
+      this->type->items += n;
+    }
+    T* r = reinterpret_cast<T*>(new char[total]);
+    return r;
+  }
+
+  void deallocate(T* p, size_t n) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->bytes -= total;
+    shard->items -= n;
+    if (this->type) {
+      this->type->items -= n;
+    }
+    delete[] reinterpret_cast<char*>(p);
+  }
+
+  T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->bytes += total;
+    shard->items += n;
+    if (this->type) {
+      this->type->items += n;
+    }
+    char *ptr;
+    int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
+    if (rc)
+      throw std::bad_alloc();
+    T* r = reinterpret_cast<T*>(ptr);
+    return r;
+  }
+
+  void deallocate_aligned(T* p, size_t n) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->bytes -= total;
+    shard->items -= n;
+    if (this->type) {
+      this->type->items -= n;
+    }
+    ::free(p);
+  }
+};
+
+//
+// An specialized sorta-allocator for slabs, sorta-belongs in slab_containers.h,
+// I put it here because it's all about the mempool stats
+//
+template<pool_index_t pool_ix, typename T>
+class pool_slab_allocator : public pool_allocator_base_t<pool_ix,T> {
+
+public:
+
+  pool_slab_allocator(bool force_register=false, size_t sizeof_T = sizeof(T)) {
+    this->ctor(force_register,sizeof_T);
+  }
+
+  ~pool_slab_allocator() {
+    this->dtor();
+  }
+
+  //
+  // Slab allocate and free. They aren't always symmettric because slots in slab
+  // get iterated over to put them on the freelist -> which causes some accounting there :)
+  // But when you delete a slab you don't iterate over the slots, so we have to do that here
+  //
+  void slab_allocate(size_t n, size_t sizeof_T, size_t extra) {
+    size_t total = sizeof_T * n;
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->bytes += total + extra;
+    shard->items += n;
+    shard->slabs++;
+    if (this->type) {
+      this->type->items += n;
+      this->type->slabs++;
+    }
+  }
+
+  void slab_deallocate(size_t n, size_t sizeof_T, size_t extra,bool free_free_items) {
+    size_t total = sizeof_T * n;
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->bytes -= total + extra;
+    shard->items -= n;
+    shard->slabs --;
+    if (free_free_items) {
+      shard->free_items -= n;  
+      shard->free_bytes -= total;
+    }
+    if (this->type) {
+      this->type->items -= n;
+      this->type->slabs--;
+      if (free_free_items) this->type->free_items -= n;
+    }
+  }
+
+  void slab_item_allocate(size_t sizeof_T) {
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->free_bytes -= sizeof_T;
+    shard->free_items -= 1;
+    if (this->type) {
+      this->type->free_items -= 1;
+    }
+  }
+
+  void slab_item_free(size_t sizeof_T) {
+    shard_t *shard = this->pool->pick_a_shard();
+    shard->free_bytes += sizeof_T;
+    shard->free_items += 1;
+    if (this->type) {
+      this->type->free_items += 1;
+    }
+  }
+
+};
+
+// There is one factory associated with every type that lives in a
+// mempool.
+
+template<pool_index_t pool_ix,typename o>
+class factory {
+public:
+  typedef pool_allocator<pool_ix,o> allocator_type;
+  static allocator_type alloc;
+
+  static void *allocate() {
+    return (void *)alloc.allocate(1);
+  }
+  static void free(void *p) {
+    alloc.deallocate((o *)p, 1);
+  }
 };
 
 
@@ -439,11 +662,32 @@ public:
     using unordered_map =						\
       std::unordered_map<k,v,h,eq,pool_allocator<std::pair<const k,v>>>;\
                                                                         \
+    template<typename v>						\
+    using factory = mempool::factory<id,v>;				\
+                                                                        \
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\
     }									\
     inline size_t allocated_items() {					\
       return mempool::get_pool(id).allocated_items();			\
+    }									\
+    inline size_t containers() {                                        \
+      return mempool::get_pool(id).containers();                        \
+    }                                                                   \
+    inline size_t free_bytes() {					\
+      return mempool::get_pool(id).free_bytes();			\
+    }									\
+    inline size_t free_items() {					\
+      return mempool::get_pool(id).free_items();			\
+    }									\
+    inline size_t inuse_bytes() {					\
+      return mempool::get_pool(id).inuse_bytes();			\
+    }									\
+    inline size_t inuse_items() {					\
+      return mempool::get_pool(id).inuse_items();			\
+    }									\
+    inline size_t slabs() {		          			\
+      return mempool::get_pool(id).slabs();	         		\
     }									\
   };
 
