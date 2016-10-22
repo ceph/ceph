@@ -418,10 +418,7 @@ struct bluestore_blob_t {
       !has_flag(FLAG_HAS_UNUSED);     // splitting unused set is complex
   }
   bool can_split_at(uint32_t blob_offset) const {
-    if (has_csum() &&
-	blob_offset % get_csum_chunk_size() != 0)
-      return false;
-    return true;
+    return !has_csum() || blob_offset % get_csum_chunk_size() == 0;
   }
 
   void dump(Formatter *f) const;

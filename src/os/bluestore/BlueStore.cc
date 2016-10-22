@@ -2259,7 +2259,7 @@ bool BlueStore::ExtentMap::do_write_check_depth(
   bool do_collect = true;
   if (depth < g_conf->bluestore_gc_max_blob_depth) {
     *blob_depth = 1 + depth;
-    do_collect = false;;
+    do_collect = false;
   }
   dout(20) << __func__ << " GC depth " << (int)*blob_depth
            << ", gc 0x" << std::hex << *gc_start_offset << "~"
@@ -3209,7 +3209,7 @@ int BlueStore::_open_db(bool create)
       return -EIO;
     }
   }
-  dout(10) << __func__ << " bluefs = " << bluefs << dendl;
+  dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
