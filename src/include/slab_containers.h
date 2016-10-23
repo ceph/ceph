@@ -19,43 +19,60 @@
 
 namespace mempool {
 
-//
-// The slab_xxxx containers are made from standard STL containers with a custom allocator.
-//
-// When you declare a slab container you provide 1 or 2 additional integer template parameters that
-// modify the memory allocation pattern. The point is to amortize the memory allocations for nodes
-// within the container so that the memory allocation time and space overheads are reduced.
-//
-//  slab_map     <key,value,stackSize,heapSize = stackSize,compare = less<key>>
-//  slab_multimap<key,value,stackSize,heapSize = stackSize,compare = less<key>>
-//  slab_set     <value,    stackSize,heapSize = stackSize,compare = less<key>>
-//  slab_multiset<value,    stackSize,heapSize = stackSize,compare = less<key>>
-//  list         <value,    stackSize,heapSize = stackSize>
-//   
-//  stackSize indicates the number of nodes that will be allocated within the container itself.
-//      in other words, if the container never has more than stackSize nodes, there will be no additional
-//      memory allocation calls.
-//
-//  heapSize indicates the number of nodes that will be requested when a memory allocation is required.
-//      In other words, nodes are allocated in batches of heapSize.
-//
-//  All of this wizardry comes with a price. There are two basic restrictions:
-//  (1) nodes allocated in a batch can only be freed in the same batch amount
-//  (2) nodes cannot escape a container, i.e., be transferred to another container
-//
-//  The first restriction suggests that long-lived containers might not want to use this code. As some allocation/free
-//      patterns can result in large amounts of unused, but un-freed memory (worst case 'excess' memory occurs when
-//      each batch contains only a single in-use node). Worst-case unused memory consumption is thus equal to:
-//         container.size() * (heapSize -1) * sizeof(Node)
-//      This computation assumes that the slab_xxxx::reserve function is NOT used. If that function is used then
-//      the maximum unused memory consumption is related to its parameters.
-//  The second restriction means that some functions like list::splice are now O(N), not O(1)
-//      list::swap is supported but is O(2N) not O(1) as before.
-//      vector::swap is also supported. It converts any stack elements into heap elements and then does an O(1) swap. So
-//          it's worst-case runtime is O(2*stackSize), which is likely to be pretty good :)
-//      set::swap, multiset::swap, map::swap and multimap::swap are unavailable, but could be implemented if needed (though EXPENSIVELY).
-//
+/*
 
+The slab_xxxx containers are only available with a mempool. If you don't know what a mempool
+is see mempool.h
+
+The slab_xxxx containers are made from standard STL containers with a custom allocator.
+The declaration for each slab container mimics the corresponding stl container
+but has two additional parameters: stackSize and slabSize (which has a default).
+
+The basic idea of slab_containers is that rather than malloc/free for each container node,
+you malloc a 'slab' of nodes and hand those out one by one (per-container). In this
+documentation we'll use the term 'slabSize' as a short hand for "number of nodes in a slab".
+
+The ADVANTAGE of slab containers is that the run-time cost of the per-node malloc/free is
+reduced by 'slabSize' (well technically amortized across slabSize number of STL alloc/frees).
+Also, heap fragmentation is typically reduced. Especially for containers with lots of small 
+modes.
+
+The DISADVANTAGE of slab containers is that you malloc/free entire slabs. Thus slab
+containers always consume more memory than their STL equivalents. The amount of extra
+memory consumed is dependent on the access pattern (and container type). The worst-case
+memory expansion is 'slabSize-1' times an STL container (approximately). However it's
+likely to be very hard to create a worst-case memory pattern (unless you're trying ;-).
+This also leads toward keeping the slabSizes modest -- unless you have special knowledge
+of the access pattern OR the container itself is expected to be ephemeral.
+
+Another disdvantage of slabs is that you can't move them from one container to another.
+This causes certain operations that used to have O(1) cost to have O(N) cost.
+
+   list::split   O(N)
+   list::swap    O(2N)
+   vector::swap is O(2*stackSize)
+
+Since I'm lazy, not all of the stl::xxxx.swap operations have been implemented. They
+are pretty much discouraged for slab_containers anyways.
+
+In order to reduce malloc/free traffic further, each container has within it one slab
+that is part of the container itself (logically pre-allocated, but it's not a separate
+malloc call -- its part of the container itself). The size of this slab is set through
+the template parameter 'stackSize' which must be specified on every declaration (no default).
+Thus the first 'stackSize' items in this slab container result in no malloc/free invokation
+at the expense of burning that memory whether it's used or not.
+
+There are two ways to create malloc slabs. Normal usage or "reserve".
+In the normal usage case, a slab is allocated using the slabSize template parameter,
+which has a default value intended to try to round up all allocations to something
+like 256 Bytes.
+
+slab containers generally have a "reserve" function that emulates the vector::reserve
+function in that it guarantees space is available for that many nodes. Reserve always
+results in either 0 or 1 calls to malloc (0 for when the currently available space
+is sufficient). 
+
+*/
 
 //
 // fast slab allocator
@@ -67,13 +84,13 @@ namespace mempool {
 // The first slab is part of the object itself, meaning that no memory allocation is required
 // if the container doesn't exceed "stackSize" nodes.
 //
-// Subsequent slabs are allocated using the supplied allocator. A slab on the heap, by default, contains 'heapSize' nodes.
+// Subsequent slabs are allocated using the supplied allocator. A slab on the heap, by default, contains 'slabSize' nodes.
 // However, a "reserve" function (same functionality as vector::reserve) is provided that ensure a minimum number
 // of free nodes is available without further memory allocation. If the slab_xxxx::reserve function needs to allocate
 // additional nodes, only a single memory allocation will be done. Meaning that it's possible to have slabs that
-// are larger (or smaller) than 'heapSize' nodes.
+// are larger (or smaller) than 'slabSize' nodes.
 //
-template<pool_index_t pool_ix,typename T,size_t stackSize, size_t heapSize>
+template<pool_index_t pool_ix,typename T,size_t stackSize, size_t slabSize>
 class slab_allocator : public pool_slab_allocator<pool_ix,T> {
   struct slab_t;
   struct slabHead_t {
@@ -98,7 +115,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    //
    struct slab_t {
       slabHead_t slabHead;  // membership of slab in list of slabs with free elements
-      uint32_t slabSize;    // # of allocated slots in this slab
+      uint32_t size;    // # of allocated slots in this slab
       uint32_t freeSlots;   // # of free slots, i.e., size of freelist of slots within this slab
       slot_t *freeHead;     // Head of list of freeslots OR NULL if none
       slot_t slot[0];       // slots
@@ -114,7 +131,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    // Initialize a new slab, remember, "T" might not be correct use the stored sizes.
    //
    void initSlab(slab_t *slab,size_t sz) {
-      slab->slabSize = sz;
+      slab->size = sz;
       slab->freeSlots = 0; // Pretend that it was completely allocated before :)
       slab->freeHead = NULL;
       slab->slabHead.next = NULL;
@@ -150,14 +167,14 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          freeSlabHeads.next = &slab->slabHead;
          slab->slabHead.prev = &freeSlabHeads;
       }         
-      if (freeEmpty && slab->freeSlots == slab->slabSize && slab != &stackSlab) {
+      if (freeEmpty && slab->freeSlots == slab->size && slab != &stackSlab) {
          //
          // Slab is entirely free
          //
          slab->slabHead.next->prev = slab->slabHead.prev;
          slab->slabHead.prev->next = slab->slabHead.next;
-         assert(freeSlotCount >= slab->slabSize);
-         freeSlotCount -= slab->slabSize;
+         assert(freeSlotCount >= slab->size);
+         freeSlotCount -= slab->size;
          this->slab_deallocate(slab->freeSlots,trueSlotSize,sizeof(slab_t),true);
          delete[] slab;
       }
@@ -188,7 +205,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    
    slot_t *allocslot() {
       if (freeSlabHeads.next == &freeSlabHeads) {
-         addSlab(heapSize);
+         addSlab(slabSize);
       }
       slab_t *freeSlab = slabHeadToSlab(freeSlabHeads.next);
       slot_t *freeSlot = freeSlab->freeHead;
@@ -227,10 +244,10 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
   
 public:
   template<typename U> struct rebind {
-    typedef slab_allocator<pool_ix,U,stackSize,heapSize> other;
+    typedef slab_allocator<pool_ix,U,stackSize,slabSize> other;
   };
 
-  typedef slab_allocator<pool_ix,T,stackSize,heapSize> allocator_type;
+  typedef slab_allocator<pool_ix,T,stackSize,slabSize> allocator_type;
 
    slab_allocator() : freeSlotCount(0), allocSlotCount(stackSize), trueSlotSize(sizeof(slot_t)) {
       //
@@ -640,33 +657,36 @@ enum { _desired_slab_size = 256 }; // approximate preferred allocation size
 
 #define P(x)								\
   namespace x {								\
-    inline constexpr size_t defaultSlabHeapSize(size_t nodeSize) {      \
-      return (_desired_slab_size / nodeSize) ? (_desired_slab_size / nodeSize) : size_t(1); \
+    inline constexpr size_t defaultSlabSize(size_t nodeSize) {          \
+      return (_desired_slab_size / nodeSize) ?                          \
+             (_desired_slab_size / nodeSize) : size_t(1);               \
     }                                                                   \
                                                                         \
     template<typename k,typename v,size_t stackSize,                    \
-             size_t heapSize = defaultSlabHeapSize(sizeof(k)+sizeof(v)),\
+             size_t slabSize = defaultSlabSize(sizeof(k)+sizeof(v)),    \
              typename cmp = std::less<k> >	                        \
-    using slab_map = mempool::slab_map<id, k, v,stackSize,heapSize,cmp>;\
+    using slab_map = mempool::slab_map<id, k, v,stackSize,slabSize,cmp>;\
                                                                         \
     template<typename k,typename v,size_t stackSize,                    \
-             size_t heapSize = defaultSlabHeapSize(sizeof(k)+sizeof(v)),\
+             size_t slabSize = defaultSlabSize(sizeof(k)+sizeof(v)),    \
              typename cmp = std::less<k> >	                        \
-    using slab_multimap = mempool::slab_multimap<id,k,v,stackSize,heapSize,cmp>; \
+    using slab_multimap                                                 \
+       = mempool::slab_multimap<id,k,v,stackSize,slabSize,cmp>;         \
                                                                         \
     template<typename k,size_t stackSize,                               \
-             size_t heapSize = defaultSlabHeapSize(sizeof(k)),          \
+             size_t slabSize = defaultSlabSize(sizeof(k)),              \
              typename cmp = std::less<k> >	                        \
-    using slab_set = mempool::slab_set<id,k, stackSize, heapSize,cmp>;  \
+    using slab_set = mempool::slab_set<id,k, stackSize, slabSize,cmp>;  \
                                                                         \
     template<typename k,size_t stackSize,                               \
-             size_t heapSize = defaultSlabHeapSize(sizeof(k)),          \
+             size_t slabSize = defaultSlabSize(sizeof(k)),              \
              typename cmp = std::less<k> >	                        \
-    using slab_multiset = mempool::slab_multiset<id,k,stackSize,heapSize,cmp>;\
+    using slab_multiset =                                               \ 
+       mempool::slab_multiset<id,k,stackSize,slabSize,cmp>;             \
                                                                         \
     template<typename v,size_t stackSize,                               \
-             size_t heapSize = defaultSlabHeapSize(sizeof(v))>          \
-    using slab_list = mempool::slab_list<id,v,stackSize,heapSize>;	\
+             size_t slabSize = defaultSlabSize(sizeof(v))>              \
+    using slab_list = mempool::slab_list<id,v,stackSize,slabSize>;	\
                                                                         \
     template<typename v,size_t stackSize>                               \
     using slab_vector = mempool::slab_vector<id,v,stackSize>;	        \

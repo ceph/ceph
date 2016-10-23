@@ -704,6 +704,18 @@ add_executable(unittest_denc
   )
 add_ceph_unittest(unittest_denc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_denc)
 target_link_libraries(unittest_denc os global)
+#unittest_slab_containers
+add_executable(unittest_slab_containers
+  test_slab_containers.cc
+  )
+add_ceph_unittest(unittest_slab_containers $(CMAKE_RUNTIME_OUTPUT_DIRECTORY)/unittest_slab_containers)
+target_link_libraries(unittest_slab_containers global)
+# test_mempool
+add_executable(unittest_mempool
+  test_mempool.cc
+  )
+add_ceph_unittest(unittest_mempool $(CMAKE_RUNTIME_OUTPUT_DIRECTORY)/unittest_mempool)
+target_link_libraries(unittest_mempool global)
 
 # unittest_crypto
 add_executable(unittest_crypto

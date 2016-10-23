@@ -1,5 +1,6 @@
 set(libglobal_srcs
   global_init.cc
+  mempool.cc
   pidfile.cc
   signal_handler.cc)
 set(global_common_files

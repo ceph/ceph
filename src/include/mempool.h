@@ -41,7 +41,7 @@ a set of containers.
 
 Memory pools are statically declared (see pool_index_t).
 
-Each memory pool tracks the number of bytes and items it contains.
+Each memory pool tracks a several statistics about things within the pool.
 
 Allocators can be declared and associated with a type so that they are
 tracked independently of the pool total.  This additional accounting
@@ -57,7 +57,8 @@ Using memory pools is very easy.
 
 To create a new memory pool, simply add a new name into the list of
 memory pools that's defined in "DEFINE_MEMORY_POOLS_HELPER".  That's
-it.  :)
+it.  :) There's really very little cost to a memory pool but the 
+interface is built assuming maybe 10's of pools.
 
 For each memory pool that's created a C++ namespace is also
 automatically created (name is same as in DEFINE_MEMORY_POOLS_HELPER).
@@ -74,14 +75,27 @@ Thus for mempool "unittest_1" we have automatically available to us:
    mempool::unittest_1::vector
    mempool::unittest_1::unordered_map
 
+These containers  operate identically to the std::xxxxx named version of same
+(same template parameters, etc.). However, while these are derived classes
+from the std::xxxxx namespace version they all have allocators provided which
+aren't compatible with the std::xxxxx version of the containers so that 
+pointers, references, iterators, etc. aren't compatible.
+
+Best practice is to use a typedef to define the mempool/container and then use
+the typedef'ed name everywhere. Better documentation and easier to move
+containers from std::xxxx or to a difference mempool if the occasion warants.
+(This is particularly helpful with slab_containers, see slab_containers.h)
 
 Putting objects in a mempool
 ----------------------------
 
-In order to use a memory pool with a particular type, a few additional
-declarations are needed.
+The stuff above applies to containers. In order to put a particular object
+into a namespace you must use the following declarations andmechanism. 
+Note that this mechanism is per-object-type, in other words you can't put 
+some instances of a class in one mempool and other instances of the class
+in another mempool It's all or nothing at all :)
 
-For a class:
+For a class declaration (the .h file):
 
   struct Foo {
     MEMPOOL_CLASS_HELPERS();
@@ -102,10 +116,57 @@ BlueStore::Onode, we need to do
 (This is just because we need to name some static varables and we
 can't use :: in a variable name.)
 
-In order to use the STL containers, simply use the namespaced variant
-of the container type.  For example,
+Once this machinery is in place, you can do new/delete of these objects
+without any additional decoration/machinery. It's all done through
+a per-class operator new and operator delete.
 
-  mempool::unittest_1::map<int> myvec;
+NOTE: Right now it's strictly scalar new/data. Array new/delete will
+assert out. These' no fundamental problem here. Just didn't get around
+to writing the necessary code.
+
+When you look at the statistics, what you'll find is that there is a
+single container declared for ALL of your objects of this class.
+(Effectively it's like an unordered_multiset<Foo>, except there's no
+hashing or key involved.) In other words, if you use the new/delete 
+factory (above), your statistics will show one container and 'N' items
+where N is the number of currently existing instances of class 'Foo'.
+
+Statistics Tracked
+------------------
+
+There are several statistics that are tracked for each mempool.
+
+In addition, when 'debug' mode is enabled, the same statistics
+are tracked on a per-typename basis. In other words, let's assume
+you have a type: mempool::unittest_1::set<Foo> and there are 25
+instances of that type, the debug-mode statistics will aggregate
+the stats for all of those 25 instances. One note: 'debug' mode
+CAN be dynamically enabled/disabled. The implementation of 'debug'
+mode is 'sampled' by the constructor of each container. In other words
+the debug information is only collected for containers that are ctor'ed
+when 'debug' is ON. Once the construction is finished, 'debug' mode
+is not sampled for that container -- forever. Thus if you have a
+container that is declared at file scope, the only way to enable
+'debug' for that container is to change the default in the mempool.cc 
+file and recompile.
+
+The stats are:
+
+bytes       - number of bytes malloced
+items       - number of elements in each container.
+containers  - number of containers
+
+There are 5 additional stats also part of this machinery, but
+they only make sense if you understand slab_containers. So
+read the description in slab_containers.h :)
+
+slabs       - number of outstanding slabs
+free_bytes  - number of malloc'ed bytes that are not in use.
+free_items  - number of malloc'ed items that are not in use.
+inuse_Items - bytes - free_bytes (but computed more cheaply)
+inuse_bytes - items - free_items (but computed more cheaply)
+
+By using the introspection feature (see below), 
 
 Introspection
 -------------
@@ -121,14 +182,23 @@ num_types).  When debug name is disabled it is O(num_shards).
 
 You can also interogate a specific pool programatically with
 
-  size_t bytes = mempool::unittest_2::allocated_bytes();
-  size_t items = mempool::unittest_2::allocated_items();
+  size_t bytes       = mempool::unittest_2::allocated_bytes();
+  size_t items       = mempool::unittest_2::allocated_items();
+  size_t slabs       = mempool::unittest_2::slabs();
+  size_t container   = mempool::unittest_2::containers();
+  size_t free_bytes  = mempool::unittest_2::free_bytes();
+  size_t free_items  = mempool::unittest_2::free_items();
+  size_t inuse_bytes = mempool::unittest_2::inuse_bytes();
+  size_T inuse_items = mempool::unittest_2::inuse_items();
 
-The runtime complexity is O(num_shards).
+The runtime complexity of these is O(num_shards)., However you're
+likely to sustain O(num_shards/2) cache misses, so it's not
+an operation that you want to throw around too much.
 
 Note that you cannot easily query per-type, primarily because debug
 mode is optional and you should not rely on that information being
-available.
+available. Also, the type definitions are a bit ugly and filled
+with STL-isms -- caveat developer.
 
 */
 
