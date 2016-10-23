@@ -147,11 +147,12 @@ void DamageTable::dump(Formatter *f) const
 
 void DamageTable::erase(damage_entry_id_t damage_id)
 {
-  if (by_id.count(damage_id) == 0) {
+  auto by_id_entry = by_id.find(damage_id);
+  if (by_id_entry == by_id.end()) {
     return;
   }
 
-  DamageEntryRef entry = by_id.at(damage_id);
+  DamageEntryRef entry = by_id_entry->second;
   assert(entry->id == damage_id);  // Sanity
 
   const auto type = entry->get_type();
@@ -169,6 +170,6 @@ void DamageTable::erase(damage_entry_id_t damage_id)
     assert(0);
   }
 
-  by_id.erase(damage_id);
+  by_id.erase(by_id_entry);
 }
 
