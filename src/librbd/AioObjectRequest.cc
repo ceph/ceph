@@ -53,9 +53,10 @@ AioObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                   uint64_t object_no, uint64_t object_off,
                                   const ceph::bufferlist &data,
                                   const ::SnapContext &snapc,
-                                  Context *completion, int op_flags) {
+                                  Context *completion, int op_flags,
+                                  ZTracer::Trace *trace) {
   return new AioObjectWrite(util::get_image_ctx(ictx), oid, object_no,
-                            object_off, data, snapc, completion, op_flags);
+                            object_off, data, snapc, completion, op_flags, trace);
 }
 
 template <typename I>
@@ -148,9 +149,10 @@ AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
                                 uint64_t len,
                                 vector<pair<uint64_t,uint64_t> >& be,
                                 librados::snap_t snap_id, bool sparse,
-                                Context *completion, int op_flags)
+                                Context *completion, int op_flags,
+                                ZTracer::Trace *trace)
   : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
-                        snap_id, completion, false),
+                        snap_id, completion, false, trace),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
@@ -283,7 +285,7 @@ void AioObjectRead<I>::send() {
   librados::AioCompletion *rados_completion =
     util::create_rados_ack_callback(this);
   int r = image_ctx->data_ctx.aio_operate(this->m_oid, rados_completion, &op,
-                                          flags, nullptr);
+                                          flags, nullptr, (this->m_trace) ? this->m_trace.get_info() : nullptr);
   assert(r == 0);
 
   rados_completion->release();
@@ -554,7 +556,7 @@ void AbstractAioObjectWrite::send_write_op(bool write_guard)
   librados::AioCompletion *rados_completion =
     util::create_rados_safe_callback(this);
   int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-           m_snap_seq, m_snaps, (m_trace && m_trace.valid()) ? m_trace.get_info() : nullptr);
+           m_snap_seq, m_snaps, (m_trace) ? m_trace.get_info() : nullptr);
   assert(r == 0);
   rados_completion->release();
 }

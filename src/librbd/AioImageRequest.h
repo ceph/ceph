@@ -149,7 +149,7 @@ protected:
                                     AioObjectRequests *aio_object_requests);
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish) = 0;
+      Context *on_finish, ZTracer::Trace *trace = nullptr) = 0;
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous) = 0;
@@ -200,7 +200,7 @@ protected:
                                     AioObjectRequests *aio_object_requests);
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish);
+      Context *on_finish, ZTracer::Trace *trace = nullptr);
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);
@@ -239,7 +239,7 @@ protected:
 
   virtual AioObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish);
+      Context *on_finish, ZTracer::Trace *trace = nullptr);
 
   virtual uint64_t append_journal_event(const AioObjectRequests &requests,
                                         bool synchronous);

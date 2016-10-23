@@ -60,7 +60,8 @@ public:
                                         uint64_t object_off,
                                         const ceph::bufferlist &data,
                                         const ::SnapContext &snapc,
-                                        Context *completion, int op_flags);
+                                        Context *completion, int op_flags,
+                                        ZTracer::Trace *trace = nullptr);
   static AioObjectRequest* create_zero(ImageCtxT *ictx, const std::string &oid,
                                        uint64_t object_no, uint64_t object_off,
                                        uint64_t object_len,
@@ -108,15 +109,17 @@ public:
                                uint64_t objectno, uint64_t offset,
                                uint64_t len, Extents &buffer_extents,
                                librados::snap_t snap_id, bool sparse,
-                               Context *completion, int op_flags) {
+                               Context *completion, int op_flags,
+                               ZTracer::Trace *trace = nullptr) {
     return new AioObjectRead(ictx, oid, objectno, offset, len, buffer_extents,
-                             snap_id, sparse, completion, op_flags);
+                             snap_id, sparse, completion, op_flags, trace);
   }
 
   AioObjectRead(ImageCtxT *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t offset, uint64_t len,
                 Extents& buffer_extents, librados::snap_t snap_id, bool sparse,
-                Context *completion, int op_flags);
+                Context *completion, int op_flags,
+                ZTracer::Trace *trace = nullptr);
 
   virtual bool should_complete(int r);
   virtual void send();

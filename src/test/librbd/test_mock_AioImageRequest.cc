@@ -59,7 +59,8 @@ struct AioObjectRequest<librbd::MockTestImageCtx> : public AioObjectRequestHandl
                                         uint64_t object_off,
                                         const ceph::bufferlist &data,
                                         const ::SnapContext &snapc,
-                                        Context *completion, int op_flags) {
+                                        Context *completion, int op_flags,
+                                        ZTracer::Trace *trace) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -100,7 +101,8 @@ struct AioObjectRead<librbd::MockTestImageCtx> : public AioObjectRequest<librbd:
                                uint64_t objectno, uint64_t offset,
                                uint64_t len, Extents &buffer_extents,
                                librados::snap_t snap_id, bool sparse,
-                               Context *completion, int op_flags) {
+                               Context *completion, int op_flags,
+                               ZTracer::Trace *trace) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;

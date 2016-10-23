@@ -332,7 +332,7 @@ void AioImageRead<I>::send_request() {
       AioObjectRead<I> *req = AioObjectRead<I>::create(
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
         extent.length, extent.buffer_extents, snap_id, true, req_comp,
-        m_op_flags);
+        m_op_flags, &this->trace);
       req_comp->set_req(req);
 
       if (image_ctx.object_cacher) {
@@ -448,7 +448,7 @@ void AbstractAioImageWrite<I>::send_object_requests(
                    << " from " << p->buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     AioObjectRequestHandle *request = create_object_request(*p, snapc,
-                                                            req_comp);
+                                                            req_comp, &this->trace);
 
     // if journaling, stash the request for later; otherwise send
     if (request != NULL) {
@@ -542,7 +542,7 @@ void AioImageWrite<I>::send_object_requests(
 template <typename I>
 AioObjectRequestHandle *AioImageWrite<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
-    Context *on_finish) {
+    Context *on_finish, ZTracer::Trace *trace) {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.object_cacher == NULL);
 
@@ -550,7 +550,7 @@ AioObjectRequestHandle *AioImageWrite<I>::create_object_request(
   assemble_extent(object_extent, &bl);
   AioObjectRequest<I> *req = AioObjectRequest<I>::create_write(
     &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, bl, snapc, on_finish, m_op_flags);
+    object_extent.offset, bl, snapc, on_finish, m_op_flags, trace);
   return req;
 }
 
@@ -642,7 +642,7 @@ void AioImageDiscard<I>::send_object_cache_requests(const ObjectExtents &object_
 template <typename I>
 AioObjectRequestHandle *AioImageDiscard<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
-    Context *on_finish) {
+    Context *on_finish, ZTracer::Trace *trace) {
   I &image_ctx = this->m_image_ctx;
 
   AioObjectRequest<I> *req;
