@@ -329,8 +329,9 @@ public:
    */
 
   void clear_payload() {
-    if (byte_throttler)
+    if (byte_throttler) {
       byte_throttler->put(payload.length() + middle.length());
+    }
     payload.clear();
     middle.clear();
   }
