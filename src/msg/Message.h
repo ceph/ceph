@@ -361,10 +361,10 @@ public:
 
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
-      byte_throttler->put(payload.length());
+      byte_throttler->put(middle.length());
     middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
-      byte_throttler->take(payload.length());
+      byte_throttler->take(middle.length());
   }
   bufferlist& get_middle() { return middle; }
 
