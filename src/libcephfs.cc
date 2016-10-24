@@ -1576,11 +1576,10 @@ extern "C" int ceph_ll_link(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
 			       Inode *in,
 			       struct ceph_dir_result **dirpp,
-			       int uid, int gid)
+			       const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
   return (cmount->get_client()->ll_opendir(in, O_RDONLY, (dir_result_t**) dirpp,
-					   perms));
+					   *perms));
 }
 
 extern "C" int ceph_ll_releasedir(class ceph_mount_info *cmount,
