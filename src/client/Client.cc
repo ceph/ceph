@@ -7324,7 +7324,7 @@ struct dentry_off_lt {
   }
 };
 
-int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, bool lazy)
+int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, int caps)
 {
   assert(client_lock.is_locked());
   ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
@@ -7360,9 +7360,13 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, b
       continue;
     }
 
+    int r = _getattr(dn->inode, caps, dirp->perms);
+    if (r < 0)
+      return r;
+
     struct ceph_statx stx;
     struct dirent de;
-    fill_statx(dn->inode, lazy ? 0 : dn->inode->caps_issued(), &stx);
+    fill_statx(dn->inode, caps, &stx);
 
     uint64_t next_off = dn->offset + 1;
     ++pd;
@@ -7374,7 +7378,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, b
     dn_name = dn->name; // fill in name while we have lock
 
     client_lock.Unlock();
-    int r = cb(p, &de, &stx, next_off);  // _next_ offset
+    r = cb(p, &de, &stx, next_off);  // _next_ offset
     client_lock.Lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
 		   << " = " << r << dendl;
@@ -7397,8 +7401,11 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, b
   return 0;
 }
 
-int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy)
+int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
+			 unsigned want, unsigned flags)
 {
+  int caps = statx_to_mask(flags, want);
+
   Mutex::Locker lock(client_lock);
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
@@ -7422,11 +7429,16 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
     assert(diri->dn_set.size() < 2); // can't have multiple hard-links to a dir
     uint64_t next_off = 1;
 
-    fill_statx(diri, lazy ? 0 : diri->caps_issued(), &stx);
+    int r;
+    r = _getattr(diri, caps, dirp->perms);
+    if (r < 0)
+      return r;
+
+    fill_statx(diri, caps, &stx);
     fill_dirent(&de, ".", S_IFDIR, stx.stx_ino, next_off);
 
     client_lock.Unlock();
-    int r = cb(p, &de, &stx, next_off);
+    r = cb(p, &de, &stx, next_off);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7444,11 +7456,16 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
     else
       in = diri->get_first_parent()->inode;
 
-    fill_statx(in, lazy ? 0 : in->caps_issued(), &stx);
+    int r;
+    r = _getattr(diri, caps, dirp->perms);
+    if (r < 0)
+      return r;
+
+    fill_statx(in, caps, &stx);
     fill_dirent(&de, "..", S_IFDIR, stx.stx_ino, next_off);
 
     client_lock.Unlock();
-    int r = cb(p, &de, &stx, next_off);
+    r = cb(p, &de, &stx, next_off);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7467,7 +7484,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
   if (dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
-    int err = _readdir_cache_cb(dirp, cb, p, lazy);
+    int err = _readdir_cache_cb(dirp, cb, p, caps);
     if (err != -EAGAIN)
       return err;
   }
@@ -7476,12 +7493,14 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
     if (dirp->at_end())
       return 0;
 
+    bool check_caps = true;
     if (!dirp->is_cached()) {
       int r = _readdir_get_frag(dirp);
       if (r)
 	return r;
       // _readdir_get_frag () may updates dirp->offset if the replied dirfrag is
       // different than the requested one. (our dirfragtree was outdated)
+      check_caps = false;
     }
     frag_t fg = dirp->buffer_frag;
 
@@ -7495,11 +7514,19 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p, bool lazy
       dir_result_t::dentry &entry = *it;
 
       uint64_t next_off = entry.offset + 1;
-      fill_statx(entry.inode, lazy ? 0 : entry.inode->caps_issued(), &stx);
+
+      int r;
+      if (check_caps) {
+	r = _getattr(entry.inode, caps, dirp->perms);
+	if (r < 0)
+	  return r;
+      }
+
+      fill_statx(entry.inode, caps, &stx);
       fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
       client_lock.Unlock();
-      int r = cb(p, &de, &stx, next_off);  // _next_ offset
+      r = cb(p, &de, &stx, next_off);  // _next_ offset
       client_lock.Lock();
 
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
@@ -7615,8 +7642,7 @@ int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
 
   // our callback fills the dirent and sets sr.full=true on first
   // call, and returns -1 the second time around.
-  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr,
-		       flags & AT_NO_ATTR_SYNC);
+  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr, want, flags);
   if (r < -1)
     return r;
   if (sr.full)
