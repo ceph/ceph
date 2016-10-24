@@ -607,15 +607,6 @@ extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing
   return cmount->get_client()->symlink(existing, newname, cmount->default_perms);
 }
 
-// inode stuff
-extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path,
-			 struct stat *stbuf)
-{
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->stat(path, stbuf, cmount->default_perms);
-}
-
 extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
 			  struct ceph_statx *stx, unsigned int want, unsigned int flags)
 {
@@ -623,30 +614,6 @@ extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
     return -ENOTCONN;
   return cmount->get_client()->statx(path, stx, cmount->default_perms,
 				     want, flags);
-}
-
-extern "C" int ceph_lstat(struct ceph_mount_info *cmount, const char *path,
-			  struct stat *stbuf)
-{
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lstat(path, stbuf, cmount->default_perms);
-}
-
-extern "C" int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath,
-			    struct stat *attr, int mask)
-{
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->setattr(relpath, attr, mask, cmount->default_perms);
-}
-
-extern "C" int ceph_fsetattr(struct ceph_mount_info *cmount, int fd,
-	            struct stat *attr, int mask)
-{
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fsetattr(fd, attr, mask, cmount->default_perms);
 }
 
 extern "C" int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd,
@@ -907,13 +874,6 @@ extern "C" int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->fallocate(fd, mode, offset, length);
-}
-
-extern "C" int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf)
-{
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fstat(fd, stbuf, cmount->default_perms);
 }
 
 extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
