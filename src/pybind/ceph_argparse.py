@@ -1191,7 +1191,7 @@ def run_in_thread(target, *args, **kwargs):
         interrupt = True
 
     if interrupt:
-        t.retval = -errno.EINTR
+        t.retval = -errno.EINTR, None, 'Interrupted!'
     if t.exception:
         raise t.exception
     return t.retval
