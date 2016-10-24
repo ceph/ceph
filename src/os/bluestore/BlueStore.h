@@ -2009,11 +2009,12 @@ private:
 		   OnodeRef& oldo,
 		   OnodeRef& newo,
 		   uint64_t srcoff, uint64_t length, uint64_t dstoff);
-  int _move_ranges_destroy_src(TransContext *txc,
-		   CollectionRef& c,
-		   OnodeRef& oldo,
-		   OnodeRef& newo,
-		   const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info);
+  int _move_ranges_destroy_src(
+    TransContext *txc,
+    CollectionRef& c,
+    OnodeRef& oldo,
+    OnodeRef& newo,
+    const vector<std::pair<uint64_t,uint64_t>> move_info);
   int _rename(TransContext *txc,
 	      CollectionRef& c,
 	      OnodeRef& oldo,
