@@ -7324,7 +7324,8 @@ struct dentry_off_lt {
   }
 };
 
-int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, int caps)
+int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
+			      int caps, bool getref)
 {
   assert(client_lock.is_locked());
   ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
@@ -7373,12 +7374,17 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, i
     if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
 
+    Inode *in = NULL;
     fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+    if (getref) {
+      in = dn->inode.get();
+      _ll_get(in);
+    }
 
     dn_name = dn->name; // fill in name while we have lock
 
     client_lock.Unlock();
-    r = cb(p, &de, &stx, next_off);  // _next_ offset
+    r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.Lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
 		   << " = " << r << dendl;
@@ -7402,7 +7408,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, i
 }
 
 int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
-			 unsigned want, unsigned flags)
+			 unsigned want, unsigned flags, bool getref)
 {
   int caps = statx_to_mask(flags, want);
 
@@ -7437,8 +7443,14 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     fill_statx(diri, caps, &stx);
     fill_dirent(&de, ".", S_IFDIR, stx.stx_ino, next_off);
 
+    Inode *inode = NULL;
+    if (getref) {
+      inode = diri.get();
+      _ll_get(inode);
+    }
+
     client_lock.Unlock();
-    r = cb(p, &de, &stx, next_off);
+    r = cb(p, &de, &stx, next_off, inode);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7464,8 +7476,14 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     fill_statx(in, caps, &stx);
     fill_dirent(&de, "..", S_IFDIR, stx.stx_ino, next_off);
 
+    Inode *inode = NULL;
+    if (getref) {
+      inode = in.get();
+      _ll_get(inode);
+    }
+
     client_lock.Unlock();
-    r = cb(p, &de, &stx, next_off);
+    r = cb(p, &de, &stx, next_off, inode);
     client_lock.Lock();
     if (r < 0)
       return r;
@@ -7484,7 +7502,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
   if (dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
-    int err = _readdir_cache_cb(dirp, cb, p, caps);
+    int err = _readdir_cache_cb(dirp, cb, p, caps, getref);
     if (err != -EAGAIN)
       return err;
   }
@@ -7525,8 +7543,14 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       fill_statx(entry.inode, caps, &stx);
       fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
+      Inode *inode = NULL;
+      if (getref) {
+	inode = entry.inode.get();
+	_ll_get(inode);
+      }
+
       client_lock.Unlock();
-      r = cb(p, &de, &stx, next_off);  // _next_ offset
+      r = cb(p, &de, &stx, next_off, inode);  // _next_ offset
       client_lock.Lock();
 
       ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
@@ -7576,7 +7600,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 
 int Client::readdir_r(dir_result_t *d, struct dirent *de)
 {  
-  return readdirplus_r(d, de, 0, 0, 0);
+  return readdirplus_r(d, de, 0, 0, 0, NULL);
 }
 
 /*
@@ -7591,11 +7615,13 @@ int Client::readdir_r(dir_result_t *d, struct dirent *de)
 struct single_readdir {
   struct dirent *de;
   struct ceph_statx *stx;
+  Inode *inode;
   bool full;
 };
 
 static int _readdir_single_dirent_cb(void *p, struct dirent *de,
-				     struct ceph_statx *stx, off_t off)
+				     struct ceph_statx *stx, off_t off,
+				     Inode *in)
 {
   single_readdir *c = static_cast<single_readdir *>(p);
 
@@ -7605,6 +7631,7 @@ static int _readdir_single_dirent_cb(void *p, struct dirent *de,
   *c->de = *de;
   if (c->stx)
     *c->stx = *stx;
+  c->inode = in;
   c->full = true;
   return 1;
 }
@@ -7616,6 +7643,7 @@ struct dirent *Client::readdir(dir_result_t *d)
   single_readdir sr;
   sr.de = &de;
   sr.stx = NULL;
+  sr.inode = NULL;
   sr.full = false;
 
   // our callback fills the dirent and sets sr.full=true on first
@@ -7633,18 +7661,21 @@ struct dirent *Client::readdir(dir_result_t *d)
 
 int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
 			  struct ceph_statx *stx, unsigned want,
-			  unsigned flags)
+			  unsigned flags, Inode **out)
 {  
   single_readdir sr;
   sr.de = de;
   sr.stx = stx;
+  sr.inode = NULL;
   sr.full = false;
 
   // our callback fills the dirent and sets sr.full=true on first
   // call, and returns -1 the second time around.
-  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr, want, flags);
+  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr, want, flags, out);
   if (r < -1)
     return r;
+  if (out)
+    *out = sr.inode;
   if (sr.full)
     return 1;
   return 0;
@@ -7660,7 +7691,7 @@ struct getdents_result {
 };
 
 static int _readdir_getdent_cb(void *p, struct dirent *de,
-			       struct ceph_statx *stx, off_t off)
+			       struct ceph_statx *stx, off_t off, Inode *in)
 {
   struct getdents_result *c = static_cast<getdents_result *>(p);
 
@@ -7712,7 +7743,7 @@ struct getdir_result {
   int num;
 };
 
-static int _getdir_cb(void *p, struct dirent *de, struct ceph_statx *stx, off_t off)
+static int _getdir_cb(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in)
 {
   getdir_result *r = static_cast<getdir_result *>(p);
 

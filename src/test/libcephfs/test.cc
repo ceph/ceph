@@ -426,7 +426,7 @@ TEST(LibCephFS, DirLs) {
     struct dirent rdent;
     struct ceph_statx stx;
     int len = ceph_readdirplus_r(cmount, ls_dir, &rdent, &stx,
-				 CEPH_STATX_SIZE, AT_NO_ATTR_SYNC);
+				 CEPH_STATX_SIZE, AT_NO_ATTR_SYNC, NULL);
     if (len == 0)
       break;
     ASSERT_EQ(len, 1);
@@ -1138,7 +1138,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));
 
   struct ceph_statx stx;
-  EXPECT_EQ(-ENOTCONN, ceph_readdirplus_r(cmount, dirp, &rdent, &stx, 0, 0));
+  EXPECT_EQ(-ENOTCONN, ceph_readdirplus_r(cmount, dirp, &rdent, &stx, 0, 0, NULL));
   EXPECT_EQ(-ENOTCONN, ceph_getdents(cmount, dirp, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_getdnames(cmount, dirp, NULL, 0));
   EXPECT_EQ(-ENOTCONN, ceph_telldir(cmount, dirp));

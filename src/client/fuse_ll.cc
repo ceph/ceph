@@ -680,7 +680,8 @@ struct readdir_context {
  * return 0 on success, -1 if out of space
  */
 static int fuse_ll_add_dirent(void *p, struct dirent *de,
-			      struct ceph_statx *stx, off_t next_off)
+			      struct ceph_statx *stx, off_t next_off,
+			      Inode *in)
 {
   struct readdir_context *c = (struct readdir_context *)p;
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(c->req);
