@@ -171,6 +171,13 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   return true;
 }
 
+bool SnapRealm::open_parents(MDSInternalContextBase *retryorfinish) {
+  if (!_open_parents(retryorfinish))
+    return false;
+  delete retryorfinish;
+  return true;
+}
+
 bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
 {
   dout(10) << "have_past_parents_open [" << first << "," << last << "]" << dendl;
