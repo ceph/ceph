@@ -1154,7 +1154,7 @@ public:
   int ll_rename(Inode *parent, const char *name, Inode *newparent,
 		const char *newname, const UserPerm& perm);
   int ll_link(Inode *in, Inode *newparent, const char *newname,
-	      struct stat *attr, const UserPerm& perm);
+	      const UserPerm& perm);
   int ll_open(Inode *in, int flags, Fh **fh, const UserPerm& perms);
   int _ll_create(Inode *parent, const char *name, mode_t mode,
 	      int flags, InodeRef *in, int caps, Fh **fhp,

@@ -11532,7 +11532,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
 }
 
 int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
-		    struct stat *attr, const UserPerm& perm)
+		    const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11550,25 +11550,19 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
   InodeRef target;
 
   if (!cct->_conf->fuse_default_permissions) {
-    if (S_ISDIR(in->mode)) {
-      r = -EPERM;
-      goto out;
-    }
+    if (S_ISDIR(in->mode))
+      return -EPERM;
+
     r = may_hardlink(in, perm);
     if (r < 0)
-      goto out;
+      return r;
+
     r = may_create(newparent, perm);
     if (r < 0)
-      goto out;
+      return r;
   }
 
-  r = _link(in, newparent, newname, perm, &target);
-  if (r == 0) {
-    assert(target);
-    fill_stat(target, attr);
-  }
-out:
-  return r;
+  return _link(in, newparent, newname, perm, &target);
 }
 
 int Client::ll_num_osds(void)
