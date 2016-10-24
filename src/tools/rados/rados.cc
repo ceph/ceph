@@ -1879,6 +1879,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // snapname?
   if (snapname) {
+    if (!pool_name) {
+      cerr << "pool name must be specified with --snap" << std::endl;
+      ret = -1;
+      goto out;
+    }
     ret = io_ctx.snap_lookup(snapname, &snapid);
     if (ret < 0) {
       cerr << "error looking up snap '" << snapname << "': " << cpp_strerror(ret) << std::endl;
@@ -1886,10 +1891,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
   }
   if (oloc.size()) {
+    if (!pool_name) {
+      cerr << "pool name must be specified with --object_locator" << std::endl;
+      ret = -1;
+      goto out;
+    }
     io_ctx.locator_set_key(oloc);
   }
   // Use namespace from command line if specified
   if (opts.find("namespace") != opts.end()) {
+    if (!pool_name) {
+      cerr << "pool name must be specified with --namespace" << std::endl;
+      ret = -1;
+      goto out;
+    }
     io_ctx.set_namespace(nspace);
   // Use wildcard if --all specified and --default NOT specified
   } else if (opts.find("all") != opts.end() && opts.find("default") == opts.end()) {
@@ -1897,6 +1912,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     wildcard = true;
   }
   if (snapid != CEPH_NOSNAP) {
+    if (!pool_name) {
+      cerr << "pool name must be specified with --snapid" << std::endl;
+      ret = -1;
+      goto out;
+    }
     string name;
     ret = io_ctx.snap_get_name(snapid, &name);
     if (ret < 0) {
