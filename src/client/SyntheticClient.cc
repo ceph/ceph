@@ -1344,12 +1344,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t i = t.get_int();
       int64_t ni = t.get_int();
       const char *nn = t.get_string(buf, p);
-      struct stat attr;
       if (ll_inos.count(i) &&
 	  ll_inos.count(ni)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
 	i2 = client->ll_get_inode(vinodeno_t(ll_inos[ni],CEPH_NOSNAP));
-	client->ll_link(i1, i2, nn, &attr, perms);
+	client->ll_link(i1, i2, nn, perms);
 	client->ll_put(i1);
 	client->ll_put(i2);
       }

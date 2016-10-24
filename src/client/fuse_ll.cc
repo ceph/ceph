@@ -515,14 +515,22 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   UserPerm perm(ctx->uid, ctx->gid);
   GET_GROUPS(perm, req);
   
-  int r = cfuse->client->ll_link(in, nin, newname, &fe.attr, perm);
+  /*
+   * Note that we could successfully link, but then fail the subsequent
+   * getattr and return an error. Perhaps we should ignore getattr errors,
+   * but then how do we tell FUSE that the attrs are bogus?
+   */
+  int r = cfuse->client->ll_link(in, nin, newname, perm);
   if (r == 0) {
-    fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
-    fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
-    fuse_reply_entry(req, &fe);
-  } else {
-    fuse_reply_err(req, -r);
+    r = cfuse->client->ll_getattr(in, &fe.attr, perm);
+    if (r == 0) {
+      fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+      fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
+      fuse_reply_entry(req, &fe);
+    }
+  }
 
+  if (r != 0) {
     /*
      * Many ll operations in libcephfs return an extra inode reference, but
      * ll_link currently does not. Still, FUSE needs one for the new dentry,
@@ -530,6 +538,7 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
      * On error however, we must put that reference.
      */
     cfuse->iput(in);
+    fuse_reply_err(req, -r);
   }
 
   cfuse->iput(nin);

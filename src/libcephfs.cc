@@ -1568,11 +1568,9 @@ extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount, Inode *parent,
 
 extern "C" int ceph_ll_link(class ceph_mount_info *cmount,
 			    Inode *in, Inode *newparent,
-			    const char *name, struct stat *attr, int uid,
-			    int gid)
+			    const char *name, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_link(in, newparent, name, attr, perms));
+  return cmount->get_client()->ll_link(in, newparent, name, *perms);
 }
 
 extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,

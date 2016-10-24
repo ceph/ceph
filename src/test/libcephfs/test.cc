@@ -1396,7 +1396,6 @@ TEST(LibCephFS, Nlink) {
   sprintf(filename, "nlinkorig%x", getpid());
   sprintf(linkname, "nlinklink%x", getpid());
 
-  struct stat	st;
   struct ceph_statx stx;
   Fh *fh;
   UserPerm *perms = ceph_mount_perms(cmount);
@@ -1406,8 +1405,9 @@ TEST(LibCephFS, Nlink) {
 			   &file, &fh, &stx, CEPH_STATX_NLINK, 0, perms), 0);
   ASSERT_EQ(stx.stx_nlink, (nlink_t)1);
 
-  ASSERT_EQ(ceph_ll_link(cmount, file, dir, linkname, &st, getuid(), getgid()), 0);
-  ASSERT_EQ(st.st_nlink, (nlink_t)2);
+  ASSERT_EQ(ceph_ll_link(cmount, file, dir, linkname, perms), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount, file, &stx, CEPH_STATX_NLINK, 0, perms), 0);
+  ASSERT_EQ(stx.stx_nlink, (nlink_t)2);
 
   ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, getuid(), getgid()), 0);
   ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &file, &stx,
