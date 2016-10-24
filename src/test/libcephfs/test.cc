@@ -1403,8 +1403,8 @@ TEST(LibCephFS, Nlink) {
 
   ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &st, &dir, getuid(), getgid()), 0);
   ASSERT_EQ(ceph_ll_create(cmount, dir, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
-			   &st, &file, &fh, getuid(), getgid()), 0);
-  ASSERT_EQ(st.st_nlink, (nlink_t)1);
+			   &file, &fh, &stx, CEPH_STATX_NLINK, 0, perms), 0);
+  ASSERT_EQ(stx.stx_nlink, (nlink_t)1);
 
   ASSERT_EQ(ceph_ll_link(cmount, file, dir, linkname, &st, getuid(), getgid()), 0);
   ASSERT_EQ(st.st_nlink, (nlink_t)2);
@@ -1412,7 +1412,7 @@ TEST(LibCephFS, Nlink) {
   ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, getuid(), getgid()), 0);
   ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &file, &stx,
 			   CEPH_STATX_NLINK, 0, perms), 0);
-  ASSERT_EQ(st.st_nlink, (nlink_t)1);
+  ASSERT_EQ(stx.stx_nlink, (nlink_t)1);
 
   ceph_shutdown(cmount);
 }
@@ -1565,7 +1565,6 @@ TEST(LibCephFS, LazyStatx) {
   sprintf(filename, "lazystatx%x", getpid());
 
   Inode *root1, *file1, *root2, *file2;
-  struct stat st;
   struct ceph_statx stx;
   Fh *fh;
   UserPerm *perms1 = ceph_mount_perms(cmount1);
@@ -1574,8 +1573,7 @@ TEST(LibCephFS, LazyStatx) {
   ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root1), 0);
   ceph_ll_unlink(cmount1, root1, filename, getuid(), getgid());
   ASSERT_EQ(ceph_ll_create(cmount1, root1, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
-			    &st, &file1, &fh, getuid(), getgid()), 0);
-
+			   &file1, &fh, &stx, 0, 0, perms1), 0);
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
 

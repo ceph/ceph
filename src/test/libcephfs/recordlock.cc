@@ -80,7 +80,7 @@ TEST(LibCephFS, BasicRecordLocking) {
   sprintf(c_file, "recordlock_test_%d", getpid());
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   int rc;
   struct flock lock1, lock2;
 
@@ -89,8 +89,8 @@ TEST(LibCephFS, BasicRecordLocking) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   // write lock twice
@@ -282,7 +282,7 @@ static void thread_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   struct ceph_mount_info *const cmount = s.cmount;
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   struct flock lock1;
   int rc;
   struct timespec ts;
@@ -292,8 +292,8 @@ static void thread_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, s.file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, s.file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   lock1.l_type = F_WRLCK;
@@ -373,7 +373,7 @@ TEST(LibCephFS, ConcurrentRecordLocking) {
   sprintf(c_file, "recordlock_test_%d", mypid);
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   struct flock lock1;
   int rc;
 
@@ -382,8 +382,8 @@ TEST(LibCephFS, ConcurrentRecordLocking) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -515,7 +515,7 @@ TEST(LibCephFS, ThreesomeRecordLocking) {
   sprintf(c_file, "recordlock_test_%d", mypid);
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   struct flock lock1;
   int rc;
 
@@ -524,8 +524,8 @@ TEST(LibCephFS, ThreesomeRecordLocking) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -667,7 +667,7 @@ static void process_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   struct timespec ts;
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   int rc;
   struct flock lock1;
 
@@ -679,8 +679,8 @@ static void process_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, s.file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, s.file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   WAIT_MAIN(1); // (R1)
@@ -758,7 +758,7 @@ TEST(LibCephFS, DISABLED_InterProcessRecordLocking) {
   sprintf(c_file, "recordlock_test_%d", mypid);
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   struct flock lock1;
   int rc;
 
@@ -788,8 +788,8 @@ TEST(LibCephFS, DISABLED_InterProcessRecordLocking) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -919,7 +919,7 @@ TEST(LibCephFS, DISABLED_ThreesomeInterProcessRecordLocking) {
   sprintf(c_file, "recordlock_test_%d", mypid);
   Fh *fh = NULL;
   Inode *root = NULL, *inode = NULL;
-  struct stat attr;
+  struct ceph_statx stx;
   struct flock lock1;
   int rc;
 
@@ -956,8 +956,8 @@ TEST(LibCephFS, DISABLED_ThreesomeInterProcessRecordLocking) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
-  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT, &attr,
-  		      &inode, &fh, 0, 0);
+  rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
+		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
   ASSERT_EQ(rc, 0); 
 
   // Lock
