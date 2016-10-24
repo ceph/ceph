@@ -1643,11 +1643,11 @@ extern "C" int ceph_ll_rmdir(class ceph_mount_info *cmount,
 
 extern "C" int ceph_ll_getxattr(class ceph_mount_info *cmount,
 				Inode *in, const char *name, void *value,
-				size_t size, int uid, int gid)
+				size_t size, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_getxattr(in, name, value, size, perms));
+  return (cmount->get_client()->ll_getxattr(in, name, value, size, *perms));
 }
+
 extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
                               Inode *in, char *list,
                               size_t buf_size, size_t *list_size, int uid, int gid)

@@ -586,7 +586,7 @@ TEST(LibCephFS, Xattrs_ll) {
   res = ceph_ll_setxattr(cmount, existent_file_handle, valid_name, value, strlen(value), 0, 0, 0);
   ASSERT_EQ(res, 0);
 
-  res = ceph_ll_getxattr(cmount, existent_file_handle, valid_name, value_buf, 256, 0, 0);
+  res = ceph_ll_getxattr(cmount, existent_file_handle, valid_name, value_buf, 256, perms);
   ASSERT_EQ(res, (int)strlen(value));
 
   value_buf[res] = '\0';
