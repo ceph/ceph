@@ -21,6 +21,7 @@
 #include "include/elist.h"
 #include "common/snap_types.h"
 
+class MDSInternalContextBase;
 
 struct SnapRealm {
   // realm state
@@ -71,13 +72,8 @@ struct SnapRealm {
   bool is_open() const { return open; }
   void _close_parents() { open = false; }
   bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  bool open_parents(MDSInternalContextBase *retryorfinish);
   void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
-  bool open_parents(MDSInternalContextBase *retryorfinish) {
-    if (!_open_parents(retryorfinish))
-      return false;
-    delete retryorfinish;
-    return true;
-  }
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void add_open_past_parent(SnapRealm *parent, snapid_t last);
   void remove_open_past_parent(inodeno_t ino, snapid_t last);
