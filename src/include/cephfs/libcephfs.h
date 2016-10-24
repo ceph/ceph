@@ -483,11 +483,13 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
  * @param stx the stats of the file/directory of the entry returned
  * @param want mask showing desired inode attrs for returned entry
  * @param flags bitmask of flags to use when filling out attributes
+ * @param out optional returned Inode argument. If non-NULL, then a reference will be taken on
+ *            the inode and the pointer set on success.
  * @returns 1 if the next entry was filled in, 0 if the end of the directory stream was reached,
  *          and a negative error code on failure.
  */
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
-		       struct ceph_statx *stx, unsigned want, unsigned flags);
+		       struct ceph_statx *stx, unsigned want, unsigned flags, struct Inode **out);
 
 /**
  * Gets multiple directory entries.
