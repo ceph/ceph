@@ -1435,10 +1435,8 @@ int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 		 struct Inode **i,
 		 struct stat *attr);
 int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
-		    struct stat *attr, int uid, int gid);
-int ceph_ll_getattrx(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
-		    int uid, int gid);
+		    const UserPerm *perms);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
 int ceph_ll_setattrx(struct ceph_mount_info *cmount, struct Inode *in,
