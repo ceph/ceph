@@ -1139,6 +1139,9 @@ public:
   int ll_readlink(Inode *in, char *buf, size_t bufsize, const UserPerm& perms);
   int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev,
 	       struct stat *attr, Inode **out, const UserPerm& perms);
+  int ll_mknodx(Inode *parent, const char *name, mode_t mode, dev_t rdev,
+	        Inode **out, struct ceph_statx *stx, unsigned want,
+		unsigned flags, const UserPerm& perms);
   int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr,
 	       Inode **out, const UserPerm& perm);
   int ll_symlink(Inode *in, const char *name, const char *value,
