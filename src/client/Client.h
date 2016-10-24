@@ -727,7 +727,7 @@ private:
   void _readdir_next_frag(dir_result_t *dirp);
   void _readdir_rechoose_frag(dir_result_t *dirp);
   int _readdir_get_frag(dir_result_t *dirp);
-  int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
+  int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, bool lazy);
   void _closedir(dir_result_t *dirp);
 
   // other helpers
@@ -952,7 +952,7 @@ public:
    * Returns 0 if it reached the end of the directory.
    * If @a cb returns a negative error code, stop and return that.
    */
-  int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p);
+  int readdir_r_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, bool lazy=true);
 
   struct dirent * readdir(dir_result_t *d);
   int readdir_r(dir_result_t *dirp, struct dirent *de);
