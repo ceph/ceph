@@ -1581,7 +1581,7 @@ TEST(LibCephFS, LazyStatx) {
   ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &st, CEPH_SETATTR_MODE, getuid(), getgid()), 0);
 
   struct ceph_statx	stx;
-  ASSERT_EQ(ceph_ll_getattrx(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, ceph_mount_perms(cmount2)), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
   ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
 	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);

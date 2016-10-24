@@ -1430,20 +1430,11 @@ extern "C" int ceph_ll_walk(class ceph_mount_info *cmount, const char *name,
 }
 
 extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
-			       Inode *in, struct stat *attr,
-			       int uid, int gid)
+			       Inode *in, struct ceph_statx *stx,
+			       unsigned int want, unsigned int flags,
+			       const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_getattr(in, attr, perms));
-}
-
-extern "C" int ceph_ll_getattrx(class ceph_mount_info *cmount,
-			        Inode *in, struct ceph_statx *stx,
-				unsigned int want, unsigned int flags,
-				int uid, int gid)
-{
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_getattrx(in, stx, want, flags, perms));
+  return (cmount->get_client()->ll_getattrx(in, stx, want, flags, *perms));
 }
 
 extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,
