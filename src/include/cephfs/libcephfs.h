@@ -1481,10 +1481,10 @@ int ceph_ll_create(struct ceph_mount_info *cmount, Inode *parent,
 		   const char *name, mode_t mode, int oflags, Inode **outp,
 		   Fh **fhp, struct ceph_statx *stx, unsigned want,
 		   unsigned lflags, const UserPerm *perms);
-int ceph_ll_mknod(struct ceph_mount_info *cmount, struct Inode *parent,
-		  const char *name, mode_t mode, dev_t rdev,
-		  struct stat *attr, struct Inode **out,
-		  int uid, int gid);
+int ceph_ll_mknod(struct ceph_mount_info *cmount, Inode *parent,
+		  const char *name, mode_t mode, dev_t rdev, Inode **out,
+		  struct ceph_statx *stx, unsigned want, unsigned flags,
+		  const UserPerm *perms);
 int ceph_ll_mkdir(struct ceph_mount_info *cmount, struct Inode *parent,
 		  const char *name, mode_t mode, struct stat *attr,
 		  Inode **out, int uid, int gid);
