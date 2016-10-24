@@ -1438,9 +1438,7 @@ int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
 		    const UserPerm *perms);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
-		    struct stat *st, int mask, int uid, int gid);
-int ceph_ll_setattrx(struct ceph_mount_info *cmount, struct Inode *in,
-		    struct ceph_statx *stx, int mask, int uid, int gid);
+		    struct ceph_statx *stx, int mask, const UserPerm *perms);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
 		 struct Fh **fh, int uid, int gid);
 off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,

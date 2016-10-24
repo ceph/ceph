@@ -1568,6 +1568,8 @@ TEST(LibCephFS, LazyStatx) {
   struct stat st;
   struct ceph_statx stx;
   Fh *fh;
+  UserPerm *perms1 = ceph_mount_perms(cmount1);
+  UserPerm *perms2 = ceph_mount_perms(cmount2);
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root1), 0);
   ceph_ll_unlink(cmount1, root1, filename, getuid(), getgid());
@@ -1577,8 +1579,7 @@ TEST(LibCephFS, LazyStatx) {
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
 
-  UserPerm *perms = ceph_mount_perms(cmount2);
-  ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &file2, &stx, CEPH_STATX_CTIME, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &file2, &stx, CEPH_STATX_CTIME, 0, perms2), 0);
 
   struct timespec old_ctime = stx.stx_ctime;
 
@@ -1587,10 +1588,10 @@ TEST(LibCephFS, LazyStatx) {
    * different ctime with a statx that uses AT_NO_ATTR_SYNC
    */
   sleep(1);
-  st.st_mode = 0644;
-  ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &st, CEPH_SETATTR_MODE, getuid(), getgid()), 0);
+  stx.stx_mode = 0644;
+  ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &stx, CEPH_SETATTR_MODE, perms1), 0);
 
-  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, perms), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, perms2), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
   ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
 	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);
