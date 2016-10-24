@@ -79,6 +79,12 @@ done
 TDIR=`mktemp -d -t test_rados_tool.XXXXXXXXXX` || die "mktemp failed"
 [ $KEEP_TEMP_FILES -eq 0 ] && trap "rm -rf ${TDIR}; exit" INT TERM EXIT
 
+# ensure rados doesn't segfault without --pool
+run_expect_nosignal "$RADOS_TOOL" --snap "asdf" ls
+run_expect_nosignal "$RADOS_TOOL" --snapid "0" ls
+run_expect_nosignal "$RADOS_TOOL" --object_locator "asdf" ls
+run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
+
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
 
 # expb happens to be the empty export for legacy reasons
