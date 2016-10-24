@@ -920,7 +920,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   }
 
   assert(it->second.state == EXPORT_FREEZING);
-  assert(dir->is_frozen());
+  assert(dir->is_frozen_tree_root());
   assert(dir->get_cum_auth_pins() == 0);
 
   CInode *diri = dir->get_inode();
@@ -1218,6 +1218,7 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   it->second.state = EXPORT_EXPORTING;
   assert(g_conf->mds_kill_export_at != 7);
 
+  assert(dir->is_frozen_tree_root());
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
