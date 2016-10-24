@@ -1463,13 +1463,12 @@ int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
  * @param name name of attribute
  * @param value pointer to begin buffer
  * @param size buffer size
- * @param uid user ID
- * @param gid group ID
+ * @param perms pointer to UserPerms object
  * @returns size of returned buffer. Negative number in error case
  */
 int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
-		     const char *name, void *value, size_t size, int uid,
-		     int gid);
+		     const char *name, void *value, size_t size,
+		     const UserPerm *perms);
 int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, const void *value, size_t size,
 		     int flags, int uid, int gid);
