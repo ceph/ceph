@@ -1409,7 +1409,7 @@ TEST(LibCephFS, Nlink) {
   ASSERT_EQ(ceph_ll_getattr(cmount, file, &stx, CEPH_STATX_NLINK, 0, perms), 0);
   ASSERT_EQ(stx.stx_nlink, (nlink_t)2);
 
-  ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, perms), 0);
   ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &file, &stx,
 			   CEPH_STATX_NLINK, 0, perms), 0);
   ASSERT_EQ(stx.stx_nlink, (nlink_t)1);
@@ -1571,7 +1571,7 @@ TEST(LibCephFS, LazyStatx) {
   UserPerm *perms2 = ceph_mount_perms(cmount2);
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root1), 0);
-  ceph_ll_unlink(cmount1, root1, filename, getuid(), getgid());
+  ceph_ll_unlink(cmount1, root1, filename, perms1);
   ASSERT_EQ(ceph_ll_create(cmount1, root1, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
 			   &file1, &fh, &stx, 0, 0, perms1), 0);
 

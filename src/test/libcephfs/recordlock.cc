@@ -83,6 +83,7 @@ TEST(LibCephFS, BasicRecordLocking) {
   struct ceph_statx stx;
   int rc;
   struct flock lock1, lock2;
+  UserPerm *perms = ceph_mount_perms(cmount);
 
   // Get the root inode
   rc = ceph_ll_lookup_root(cmount, &root);
@@ -90,7 +91,7 @@ TEST(LibCephFS, BasicRecordLocking) {
 
   // Get the inode and Fh corresponding to c_file
   rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
-		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
+		      &inode, &fh, &stx, 0, 0, perms);
   ASSERT_EQ(rc, 0); 
 
   // write lock twice
@@ -228,7 +229,7 @@ TEST(LibCephFS, BasicRecordLocking) {
   ASSERT_EQ(lock2.l_pid, getpid());
 
   ASSERT_EQ(0, ceph_ll_close(cmount, fh));
-  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, 0, 0));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, perms));
   CLEANUP_CEPH();
 }
 
@@ -376,6 +377,7 @@ TEST(LibCephFS, ConcurrentRecordLocking) {
   struct ceph_statx stx;
   struct flock lock1;
   int rc;
+  UserPerm *perms = ceph_mount_perms(cmount);
 
   // Get the root inode
   rc = ceph_ll_lookup_root(cmount, &root);
@@ -383,7 +385,7 @@ TEST(LibCephFS, ConcurrentRecordLocking) {
 
   // Get the inode and Fh corresponding to c_file
   rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
-		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
+		      &inode, &fh, &stx, 0, 0, perms);
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -502,7 +504,7 @@ TEST(LibCephFS, ConcurrentRecordLocking) {
   ASSERT_EQ(NULL, retval);
   s.sem_destroy();
   ASSERT_EQ(0, ceph_ll_close(cmount, fh));
-  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, 0, 0));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, perms));
   CLEANUP_CEPH();
 }
 
@@ -518,6 +520,7 @@ TEST(LibCephFS, ThreesomeRecordLocking) {
   struct ceph_statx stx;
   struct flock lock1;
   int rc;
+  UserPerm *perms = ceph_mount_perms(cmount);
 
   // Get the root inode
   rc = ceph_ll_lookup_root(cmount, &root);
@@ -525,7 +528,7 @@ TEST(LibCephFS, ThreesomeRecordLocking) {
 
   // Get the inode and Fh corresponding to c_file
   rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
-		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
+		      &inode, &fh, &stx, 0, 0, perms);
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -648,7 +651,7 @@ TEST(LibCephFS, ThreesomeRecordLocking) {
   ASSERT_EQ(NULL, retval);
   s.sem_destroy();
   ASSERT_EQ(0, ceph_ll_close(cmount, fh));
-  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, 0, 0));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, perms));
   CLEANUP_CEPH();
 }
 
@@ -782,6 +785,7 @@ TEST(LibCephFS, DISABLED_InterProcessRecordLocking) {
   struct timespec ts;
   struct ceph_mount_info *cmount;
   STARTUP_CEPH();
+  UserPerm *perms = ceph_mount_perms(cmount);
 
   // Get the root inode
   rc = ceph_ll_lookup_root(cmount, &root);
@@ -789,7 +793,7 @@ TEST(LibCephFS, DISABLED_InterProcessRecordLocking) {
 
   // Get the inode and Fh corresponding to c_file
   rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
-		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
+		      &inode, &fh, &stx, 0, 0, perms);
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -906,7 +910,7 @@ TEST(LibCephFS, DISABLED_InterProcessRecordLocking) {
   s.sem_destroy();
   ASSERT_EQ(0, munmap(shs, sizeof(*shs)));
   ASSERT_EQ(0, ceph_ll_close(cmount, fh));
-  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, 0, 0));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, perms));
   CLEANUP_CEPH();
 }
 
@@ -956,8 +960,9 @@ TEST(LibCephFS, DISABLED_ThreesomeInterProcessRecordLocking) {
   ASSERT_EQ(rc, 0); 
 
   // Get the inode and Fh corresponding to c_file
+  UserPerm *perms = ceph_mount_perms(cmount);
   rc = ceph_ll_create(cmount, root, c_file, fileMode, O_RDWR | O_CREAT,
-		      &inode, &fh, &stx, 0, 0, ceph_mount_perms(cmount));
+		      &inode, &fh, &stx, 0, 0, perms);
   ASSERT_EQ(rc, 0); 
 
   // Lock
@@ -1077,6 +1082,6 @@ TEST(LibCephFS, DISABLED_ThreesomeInterProcessRecordLocking) {
   s.sem_destroy();
   ASSERT_EQ(0, munmap(shs, sizeof(*shs)));
   ASSERT_EQ(0, ceph_ll_close(cmount, fh));
-  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, 0, 0));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, perms));
   CLEANUP_CEPH();
 }
