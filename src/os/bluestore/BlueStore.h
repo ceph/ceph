@@ -1025,6 +1025,9 @@ public:
     // contention.
     OnodeSpace onode_map;
 
+    //pool options
+    pool_opts_t pool_opts;
+
     OnodeRef get_onode(const ghobject_t& oid, bool create);
 
     // the terminology is confusing here, sorry!
@@ -1474,23 +1477,7 @@ private:
 
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
-  // compression options
-  enum CompressionMode {
-    COMP_NONE,                  ///< compress never
-    COMP_PASSIVE,               ///< compress if hinted COMPRESSIBLE
-    COMP_AGGRESSIVE,            ///< compress unless hinted INCOMPRESSIBLE
-    COMP_FORCE                  ///< compress always
-  };
-  const char *get_comp_mode_name(int m) {
-    switch (m) {
-    case COMP_NONE: return "none";
-    case COMP_PASSIVE: return "passive";
-    case COMP_AGGRESSIVE: return "aggressive";
-    case COMP_FORCE: return "force";
-    default: return "???";
-    }
-  }
-  std::atomic<int> comp_mode = {COMP_NONE}; ///< compression mode
+  std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
@@ -1603,7 +1590,15 @@ private:
   int _collection_list(Collection *c, ghobject_t start, ghobject_t end,
     bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
 
-
+  template <typename T, typename F>
+  T select_option(const std::string& opt_name, T val1, F f) {
+    //NB: opt_name reserved for future use
+    boost::optional<T> val2 = f();
+    if (val2) {
+      return *val2;
+    }
+    return val1;
+  }
 public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
@@ -1645,6 +1640,9 @@ public:
 
   bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
+  int set_collection_opts(
+    const coll_t& cid,
+    const pool_opts_t& opts) override;
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -1894,6 +1892,7 @@ private:
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
+    CollectionRef c,
     WriteContext *wctx);
   void _wctx_finish(
     TransContext *txc,

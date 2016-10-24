@@ -915,19 +915,19 @@ TEST_P(StoreTest, CompressionTest) {
     return;
 
   g_conf->set_val("bluestore_compression_algorithm", "snappy");
-  g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_compression_mode", "force");
   g_ceph_context->_conf->apply_changes(NULL);
 
   doCompressionTest(store);
 
   g_conf->set_val("bluestore_compression_algorithm", "zlib");
-  g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_compression_mode", "force");
   g_ceph_context->_conf->apply_changes(NULL);
 
   doCompressionTest(store);
 
   g_conf->set_val("bluestore_compression_algorithm", "snappy");
-  g_conf->set_val("bluestore_compression", "none");
+  g_conf->set_val("bluestore_compression_mode", "none");
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
@@ -948,8 +948,8 @@ TEST_P(StoreTest, garbageCollection) {
       r = apply_transaction(store, &osr, std::move(t));\
       ASSERT_EQ(r, 0);\
   }
-  g_conf->set_val("bluestore_compression", "none");
-  //g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_compression_mode", "none");
+  //g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->set_val("bluestore_merge_gc_data", "true"); 
   g_ceph_context->_conf->apply_changes(NULL);
 
@@ -1100,7 +1100,7 @@ TEST_P(StoreTest, garbageCollection) {
       ASSERT_EQ(r, 0);
      }
   }
-  g_conf->set_val("bluestore_compression", "none");
+  g_conf->set_val("bluestore_compression_mode", "none");
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
@@ -1323,7 +1323,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
 TEST_P(StoreTest, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
-  g_conf->set_val("bluestore_compression", "force");
+  g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->set_val("bluestore_min_alloc_size", "65536");
   g_ceph_context->_conf->apply_changes(NULL);
   int r = store->umount();
@@ -1563,7 +1563,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.compressed);
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
-  g_conf->set_val("bluestore_compression", "none");
+  g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_min_alloc_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 }
@@ -4459,7 +4459,7 @@ TEST_P(StoreTest, SyntheticMatrixCsumVsCompression) {
     { "max_size", "262144", 0 },
     { "alignment", "512", 0 },
     { "bluestore_min_alloc_size", "4096", "16384", 0 },
-    { "bluestore_compression", "force", 0},
+    { "bluestore_compression_mode", "force", 0},
     { "bluestore_compression_algorithm", "snappy", "zlib", 0 },
     { "bluestore_csum_type", "crc32c", 0 },
     { "bluestore_default_buffered_read", "true", "false", 0 },
@@ -4478,7 +4478,7 @@ TEST_P(StoreTest, SyntheticMatrixCompression) {
     { "max_size", "4194304", 0 },
     { "alignment", "65536", 0 },
     { "bluestore_min_alloc_size", "4096", "65536", 0 },
-    { "bluestore_compression", "force", "aggressive", "passive", "none", 0},
+    { "bluestore_compression_mode", "force", "aggressive", "passive", "none", 0},
     { "bluestore_default_buffered_write", "false", 0 },
     { 0 },
   };
@@ -4494,7 +4494,7 @@ TEST_P(StoreTest, SyntheticMatrixCompressionAlgorithm) {
     { "max_size", "4194304", 0 },
     { "alignment", "65536", 0 },
     { "bluestore_compression_algorithm", "zlib", "snappy", 0 },
-    { "bluestore_compression", "force", 0 },
+    { "bluestore_compression_mode", "force", 0 },
     { "bluestore_default_buffered_write", "false", 0 },
     { 0 },
   };
@@ -4511,7 +4511,7 @@ TEST_P(StoreTest, SyntheticMatrixNoCsum) {
     { "alignment", "512", 0 },
     { "bluestore_min_alloc_size", "65536", "4096", 0 },
     { "bluestore_max_blob_size", "262144", 0 },
-    { "bluestore_compression", "force", "none", 0},
+    { "bluestore_compression_mode", "force", "none", 0},
     { "bluestore_csum_type", "none", 0},
     { "bluestore_default_buffered_read", "true", "false", 0 },
     { "bluestore_default_buffered_write", "true", 0 },

@@ -18,6 +18,7 @@
 #ifndef COMPRESSION_PLUGIN_H
 #define COMPRESSION_PLUGIN_H
 
+#include <iostream>
 #include "common/Mutex.h"
 #include "common/PluginRegistry.h"
 #include "Compressor.h"
@@ -35,7 +36,7 @@ namespace ceph {
     virtual ~CompressionPlugin() {}
 
     virtual int factory(CompressorRef *cs,
-			                  ostream *ss) = 0;
+			                  std::ostream *ss) = 0;
 
     virtual const char* name() {return "CompressionPlugin";}
   };

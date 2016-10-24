@@ -3069,6 +3069,13 @@ int FileStore::stat(
   }
 }
 
+int FileStore::set_collection_opts(
+  const coll_t& cid,
+  const pool_opts_t& opts)
+{
+  return -EOPNOTSUPP;
+}
+
 int FileStore::read(
   const coll_t& _cid,
   const ghobject_t& oid,
