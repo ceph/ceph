@@ -121,7 +121,7 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: ceph-fuse (= ${binary:Version}),
-            libcephfs1 (= ${binary:Version})
+            libcephfs2 (= ${binary:Version})
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
 Description: metadata server for the ceph distributed file system
@@ -517,7 +517,7 @@ Description: RADOS block device client library (development files)
  This package contains development files needed for building applications that
  link against librbd1.
 
-Package: libcephfs1
+Package: libcephfs2
 Conflicts: libceph, libceph1, libcephfs
 Replaces: libceph, libceph1, libcephfs
 Architecture: linux-any
@@ -530,28 +530,28 @@ Description: Ceph distributed file system client library
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
 
-Package: libcephfs1-dbg
+Package: libcephfs2-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
+Depends: libcephfs2 (= ${binary:Version}), ${misc:Depends}
 Conflicts: libceph1-dbg
 Replaces: libceph1-dbg
-Description: debugging symbols for libcephfs1
+Description: debugging symbols for libcephfs2
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
  .
- This package contains debugging symbols for libcephfs1.
+ This package contains debugging symbols for libcephfs2.
 
 Package: libcephfs-dev
 Architecture: linux-any
 Section: libdevel
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
-Conflicts: libceph-dev, libceph1-dev, libcephfs1-dev
-Replaces: libceph-dev, libceph1-dev, libcephfs1-dev
+Depends: libcephfs2 (= ${binary:Version}), ${misc:Depends}
+Conflicts: libceph-dev, libceph1-dev, libcephfs2-dev
+Replaces: libceph-dev, libceph1-dev, libcephfs2-dev
 Description: Ceph distributed file system client library (development files)
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -727,7 +727,7 @@ Description: Python 3 libraries for the Ceph librbd library
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}),
+Depends: libcephfs2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
          ${python:Depends}
@@ -744,7 +744,7 @@ Description: Python 2 libraries for the Ceph libcephfs library
 Package: python3-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}),
+Depends: libcephfs2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
          ${python3:Depends}
@@ -777,6 +777,6 @@ Description: Java libraries for the Ceph File System
 Package: libcephfs-jni
 Architecture: linux-any
 Section: java
-Depends: libcephfs1 (= ${binary:Version}), ${java:Depends},
+Depends: libcephfs2 (= ${binary:Version}), ${java:Depends},
          ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings
