@@ -1538,13 +1538,13 @@ extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)
 }
 
 extern "C" int ceph_ll_create(class ceph_mount_info *cmount,
-			      struct Inode *parent, const char *name,
-			      mode_t mode, int flags, struct stat *attr,
-			      struct Inode **out, Fh **fhp, int uid, int gid)
+			      Inode *parent, const char *name, mode_t mode,
+			      int oflags, Inode **outp, Fh **fhp,
+			      struct ceph_statx *stx, unsigned want,
+			      unsigned lflags, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client())->ll_create(parent, name, mode, flags,
-					   attr, out, fhp, perms);
+  return (cmount->get_client())->ll_createx(parent, name, mode, oflags, outp,
+					    fhp, stx, want, lflags, *perms);
 }
 
 extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount,

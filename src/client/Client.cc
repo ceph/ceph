@@ -11777,6 +11777,33 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   return r;
 }
 
+int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
+			int oflags, Inode **outp, Fh **fhp,
+			struct ceph_statx *stx, unsigned want, unsigned lflags,
+			const UserPerm& perms)
+{
+  unsigned caps = statx_to_mask(lflags, want);
+  InodeRef in;
+  Mutex::Locker lock(client_lock);
+
+  int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
+  if (r >= 0) {
+    assert(in);
+
+    // passing an Inode in outp requires an additional ref
+    if (outp) {
+      _ll_get(in.get());
+      *outp = in.get();
+    }
+    fill_statx(in, caps, stx);
+  } else {
+    stx->stx_ino = 0;
+    stx->stx_mask = 0;
+  }
+
+  return r;
+}
+
 loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 {
   Mutex::Locker lock(client_lock);
