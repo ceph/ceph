@@ -262,13 +262,14 @@ void ImageWatcher<I>::notify_resize(uint64_t request_id, uint64_t size,
 
 template <typename I>
 void ImageWatcher<I>::notify_snap_create(const std::string &snap_name,
+					 const cls::rbd::SnapshotNamespace &snap_namespace,
                                          Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.exclusive_lock &&
          !m_image_ctx.exclusive_lock->is_lock_owner());
 
   bufferlist bl;
-  ::encode(NotifyMessage(SnapCreatePayload(snap_name)), bl);
+  ::encode(NotifyMessage(SnapCreatePayload(snap_name, snap_namespace)), bl);
   notify_lock_owner(std::move(bl), on_finish);
 }
 
@@ -822,6 +823,7 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
 			         << payload.snap_name << dendl;
 
       m_image_ctx.operations->execute_snap_create(payload.snap_name,
+						  payload.snap_namespace,
                                                   new C_ResponseMessage(ack_ctx),
                                                   0, false);
       return false;

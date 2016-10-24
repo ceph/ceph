@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_OPERATIONS_H
 #define CEPH_TEST_LIBRBD_MOCK_OPERATIONS_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "include/int_types.h"
 #include "include/rbd/librbd.hpp"
 #include "gmock/gmock.h"
@@ -24,9 +25,11 @@ struct MockOperations {
                                     ProgressContext &prog_ctx,
                                     Context *on_finish,
                                     uint64_t journal_op_tid));
-  MOCK_METHOD2(snap_create, void(const std::string &snap_name,
+  MOCK_METHOD3(snap_create, void(const std::string &snap_name,
+				 const cls::rbd::SnapshotNamespace &snapshot_namespace,
                                  Context *on_finish));
-  MOCK_METHOD4(execute_snap_create, void(const std::string &snap_name,
+  MOCK_METHOD5(execute_snap_create, void(const std::string &snap_name,
+					 const cls::rbd::SnapshotNamespace &snapshot_namespace,
                                          Context *on_finish,
                                          uint64_t journal_op_tid,
                                          bool skip_object_map));

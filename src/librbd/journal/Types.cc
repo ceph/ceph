@@ -154,6 +154,25 @@ void SnapEventBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void SnapCreateEvent::encode(bufferlist &bl) const {
+  SnapEventBase::encode(bl);
+  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+}
+
+void SnapCreateEvent::decode(__u8 version, bufferlist::iterator& it) {
+  SnapEventBase::decode(version, it);
+  if (version >= 3) {
+    cls::rbd::SnapshotNamespaceOnDisk sn;
+    ::decode(sn, it);
+    snap_namespace = sn.snapshot_namespace;
+  }
+}
+
+void SnapCreateEvent::dump(Formatter *f) const {
+  SnapEventBase::dump(f);
+  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+}
+
 void SnapLimitEvent::encode(bufferlist &bl) const {
   OpEventBase::encode(bl);
   ::encode(limit, bl);
@@ -295,7 +314,7 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
 }
@@ -386,7 +405,8 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(OpFinishEvent(123, -1)));
 
   o.push_back(new EventEntry(SnapCreateEvent()));
-  o.push_back(new EventEntry(SnapCreateEvent(234, "snap")));
+  o.push_back(new EventEntry(SnapCreateEvent(234, "snap",
+					       cls::rbd::UserSnapshotNamespace())));
 
   o.push_back(new EventEntry(SnapRemoveEvent()));
   o.push_back(new EventEntry(SnapRemoveEvent(345, "snap")));

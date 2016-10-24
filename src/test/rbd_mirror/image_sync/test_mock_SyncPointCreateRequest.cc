@@ -67,8 +67,8 @@ public:
   }
 
   void expect_snap_create(librbd::MockTestImageCtx &mock_remote_image_ctx, int r) {
-    EXPECT_CALL(*mock_remote_image_ctx.operations, snap_create(_, _))
-      .WillOnce(WithArg<1>(CompleteContext(r)));
+    EXPECT_CALL(*mock_remote_image_ctx.operations, snap_create(_, _, _))
+      .WillOnce(WithArg<2>(CompleteContext(r)));
   }
 
   MockSyncPointCreateRequest *create_request(librbd::MockTestImageCtx &mock_remote_image_ctx,

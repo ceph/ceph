@@ -216,7 +216,8 @@ public:
 						    "", "", m_remote_io_ctx,
                                                     false);
       ictx->state->open();
-      EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str()));
+      EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str(),
+						 cls::rbd::UserSnapshotNamespace()));
       EXPECT_EQ(0, ictx->operations->snap_protect(snap_name.c_str()));
       ictx->state->close();
     }

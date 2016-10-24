@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/Context.h"
@@ -36,7 +37,9 @@ public:
                       Context *on_finish);
   void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
-  void notify_snap_create(const std::string &snap_name, Context *on_finish);
+  void notify_snap_create(const std::string &snap_name,
+			  const cls::rbd::SnapshotNamespace &snap_namespace,
+			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
                           Context *on_finish);
