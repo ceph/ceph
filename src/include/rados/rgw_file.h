@@ -14,11 +14,12 @@
 #ifndef RADOS_RGW_FILE_H
 #define RADOS_RGW_FILE_H
 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "include/rados/librgw.h"
+#include "librgw.h"
 
 #ifdef __cplusplus
 extern "C" {
