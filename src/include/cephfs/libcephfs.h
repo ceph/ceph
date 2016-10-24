@@ -1425,9 +1425,9 @@ int ceph_ll_lookup_inode(
  */
 int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
                   Inode **parent);
-int ceph_ll_lookup(struct ceph_mount_info *cmount, struct Inode *parent,
-		   const char *name, struct stat *attr,
-		   Inode **out, int uid, int gid);
+int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
+		   const char *name, Inode **out, struct ceph_statx *stx,
+		   unsigned want, unsigned flags, const UserPerm *perms);
 int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_forget(struct ceph_mount_info *cmount, struct Inode *in,
 		   int count);

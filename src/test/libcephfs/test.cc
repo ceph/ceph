@@ -568,11 +568,15 @@ TEST(LibCephFS, Xattrs_ll) {
 
   Inode *root = NULL;
   Inode *existent_file_handle = NULL;
-  struct stat attr;
 
   int res = ceph_ll_lookup_root(cmount, &root);
   ASSERT_EQ(res, 0);
-  res = ceph_ll_lookup(cmount, root, test_xattr_file, &attr, &existent_file_handle, 0, 0);
+
+  UserPerm *perms = ceph_mount_perms(cmount);
+  struct ceph_statx stx;
+
+  res = ceph_ll_lookup(cmount, root, test_xattr_file, &existent_file_handle,
+		       &stx, 0, 0, perms);
   ASSERT_EQ(res, 0);
 
   const char *valid_name = "user.attrname";
@@ -1393,7 +1397,9 @@ TEST(LibCephFS, Nlink) {
   sprintf(linkname, "nlinklink%x", getpid());
 
   struct stat	st;
+  struct ceph_statx stx;
   Fh *fh;
+  UserPerm *perms = ceph_mount_perms(cmount);
 
   ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &st, &dir, getuid(), getgid()), 0);
   ASSERT_EQ(ceph_ll_create(cmount, dir, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
@@ -1404,7 +1410,8 @@ TEST(LibCephFS, Nlink) {
   ASSERT_EQ(st.st_nlink, (nlink_t)2);
 
   ASSERT_EQ(ceph_ll_unlink(cmount, dir, linkname, getuid(), getgid()), 0);
-  ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &st, &file, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_lookup(cmount, dir, filename, &file, &stx,
+			   CEPH_STATX_NLINK, 0, perms), 0);
   ASSERT_EQ(st.st_nlink, (nlink_t)1);
 
   ceph_shutdown(cmount);
@@ -1559,6 +1566,7 @@ TEST(LibCephFS, LazyStatx) {
 
   Inode *root1, *file1, *root2, *file2;
   struct stat st;
+  struct ceph_statx stx;
   Fh *fh;
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root1), 0);
@@ -1568,9 +1576,11 @@ TEST(LibCephFS, LazyStatx) {
 
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount2, &root2), 0);
-  ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &st, &file2, getuid(), getgid()), 0);
 
-  struct timespec old_ctime = st.st_ctim;
+  UserPerm *perms = ceph_mount_perms(cmount2);
+  ASSERT_EQ(ceph_ll_lookup(cmount2, root2, filename, &file2, &stx, CEPH_STATX_CTIME, 0, perms), 0);
+
+  struct timespec old_ctime = stx.stx_ctime;
 
   /*
    * Now sleep, do a chmod on the first client and the see whether we get a
@@ -1580,8 +1590,7 @@ TEST(LibCephFS, LazyStatx) {
   st.st_mode = 0644;
   ASSERT_EQ(ceph_ll_setattr(cmount1, file1, &st, CEPH_SETATTR_MODE, getuid(), getgid()), 0);
 
-  struct ceph_statx	stx;
-  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, ceph_mount_perms(cmount2)), 0);
+  ASSERT_EQ(ceph_ll_getattr(cmount2, file2, &stx, CEPH_STATX_CTIME, AT_NO_ATTR_SYNC, perms), 0);
   ASSERT_TRUE(stx.stx_mask & CEPH_STATX_CTIME);
   ASSERT_TRUE(stx.stx_ctime.tv_sec == old_ctime.tv_sec &&
 	      stx.stx_ctime.tv_nsec == old_ctime.tv_nsec);

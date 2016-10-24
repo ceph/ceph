@@ -1402,13 +1402,13 @@ extern "C" int ceph_ll_lookup_inode(
   return 0;
 }
 
-extern "C" int ceph_ll_lookup(class ceph_mount_info *cmount,
-			      struct Inode *parent, const char *name,
-			      struct stat *attr, Inode **out,
-			      int uid, int gid)
+extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
+			      Inode *parent, const char *name, Inode **out,
+			      struct ceph_statx *stx, unsigned want,
+			      unsigned flags, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);  
-  return (cmount->get_client())->ll_lookup(parent, name, attr, out, perms);
+  return (cmount->get_client())->ll_lookupx(parent, name, out, stx, want,
+					    flags, *perms);
 }
 
 extern "C" int ceph_ll_put(class ceph_mount_info *cmount, Inode *in)

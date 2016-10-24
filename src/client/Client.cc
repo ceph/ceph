@@ -9786,6 +9786,43 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
+int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
+		       struct ceph_statx *stx, unsigned want, unsigned flags,
+		       const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_lookupx " << parent << " " << name << dendl;
+  tout(cct) << "ll_lookupx" << std::endl;
+  tout(cct) << name << std::endl;
+
+  int r = 0;
+  if (!cct->_conf->fuse_default_permissions) {
+    r = may_lookup(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  string dname(name);
+  InodeRef in;
+
+  unsigned mask = statx_to_mask(flags, want);
+  r = _lookup(parent, dname, mask, &in, perms);
+  if (r < 0) {
+    stx->stx_ino = 0;
+    stx->stx_mask = 0;
+  } else {
+    assert(in);
+    fill_statx(in, mask, stx);
+    _ll_get(in.get());
+  }
+
+  ldout(cct, 3) << "ll_lookupx " << parent << " " << name
+	  << " -> " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
+  tout(cct) << stx->stx_ino << std::endl;
+  *out = in.get();
+  return r;
+}
+
 int Client::ll_walk(const char* name, Inode **out, struct stat *attr,
 		    const UserPerm& perms)
 {
