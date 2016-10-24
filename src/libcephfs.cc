@@ -1592,19 +1592,16 @@ extern "C" int ceph_ll_releasedir(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_rename(class ceph_mount_info *cmount,
 			      Inode *parent, const char *name,
 			      Inode *newparent, const char *newname,
-			      int uid, int gid)
+			      const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_rename(parent, name,
-					  newparent, newname, perms));
+  return cmount->get_client()->ll_rename(parent, name, newparent,
+					 newname, *perms);
 }
 
-extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount,
-			      Inode *in, const char *name,
-			      int uid, int gid)
+extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount, Inode *in,
+			      const char *name, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_unlink(in, name, perms));
+  return cmount->get_client()->ll_unlink(in, name, *perms);
 }
 
 extern "C" int ceph_ll_statfs(class ceph_mount_info *cmount,

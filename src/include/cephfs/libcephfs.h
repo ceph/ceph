@@ -1498,9 +1498,9 @@ int ceph_ll_releasedir(struct ceph_mount_info *cmount,
 		       struct ceph_dir_result* dir);
 int ceph_ll_rename(struct ceph_mount_info *cmount, struct Inode *parent,
 		   const char *name, struct Inode *newparent,
-		   const char *newname, int uid, int gid);
+		   const char *newname, const UserPerm *perms);
 int ceph_ll_unlink(struct ceph_mount_info *cmount, struct Inode *in,
-		   const char *name, int uid, int gid);
+		   const char *name, const UserPerm *perms);
 int ceph_ll_statfs(struct ceph_mount_info *cmount, struct Inode *in,
 		   struct statvfs *stbuf);
 int ceph_ll_readlink(struct ceph_mount_info *cmount, struct Inode *in,
