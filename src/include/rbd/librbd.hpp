@@ -164,14 +164,14 @@ public:
   // RBD consistency groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
   int group_remove(IoCtx& io_ctx, const char *group_name);
-  int group_list(IoCtx& io_ctx, std::vector<std::string>& names);
+  int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
 
   int group_image_add(IoCtx& io_ctx, const char *group_name,
 		      IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
 			 IoCtx& image_io_ctx, const char *image_name);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
-		       std::vector<group_image_status_t>& images);
+		       std::vector<group_image_status_t> *images);
 
 private:
   /* We don't allow assignment or copying */

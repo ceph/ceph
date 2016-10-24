@@ -256,8 +256,7 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
                                                       &m_lockers,
                                                       &m_exclusive_locked,
                                                       &m_lock_tag, &m_snapc,
-                                                      &m_parent_md,
-						      &m_group_spec);
+                                                      &m_parent_md);
   }
   if (*result < 0) {
     lderr(cct) << "failed to retrieve mutable metadata: "
@@ -334,6 +333,48 @@ Context *RefreshRequest<I>::handle_v2_get_flags(int *result) {
     return nullptr;
   } else if (*result < 0) {
     lderr(cct) << "failed to retrieve flags: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
+  }
+
+  send_v2_get_group();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_v2_get_group() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::image_get_group_start(&op);
+
+  using klass = RefreshRequest<I>;
+  librados::AioCompletion *comp = create_rados_ack_callback<
+    klass, &klass::handle_v2_get_group>(this);
+  m_out_bl.clear();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
+                                         &m_out_bl);
+  assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": "
+                 << "r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    cls_client::image_get_group_finish(&it, &m_group_spec);
+  }
+  if (*result == -EOPNOTSUPP) {
+    // Older OSD doesn't support RBD groups
+    *result = 0;
+    ldout(cct, 10) << "OSD does not support consistency groups" << dendl;
+  } else if (*result < 0) {
+    lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
   }
@@ -931,10 +972,9 @@ void RefreshRequest<I>::apply() {
     } else {
       m_image_ctx.features = m_features;
       m_image_ctx.flags = m_flags;
+      m_image_ctx.group_spec = m_group_spec;
       m_image_ctx.parent_md = m_parent_md;
     }
-
-     m_image_ctx.group_spec = m_group_spec;
 
     for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
       std::vector<librados::snap_t>::const_iterator it = std::find(
