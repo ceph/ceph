@@ -1401,7 +1401,7 @@ TEST(LibCephFS, Nlink) {
   Fh *fh;
   UserPerm *perms = ceph_mount_perms(cmount);
 
-  ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &st, &dir, getuid(), getgid()), 0);
+  ASSERT_EQ(ceph_ll_mkdir(cmount, root, dirname, 0755, &dir, &stx, 0, 0, perms), 0);
   ASSERT_EQ(ceph_ll_create(cmount, dir, filename, 0666, O_RDWR|O_CREAT|O_EXCL,
 			   &file, &fh, &stx, CEPH_STATX_NLINK, 0, perms), 0);
   ASSERT_EQ(stx.stx_nlink, (nlink_t)1);

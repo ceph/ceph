@@ -1557,13 +1557,13 @@ extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount, Inode *parent,
 					   out, stx, want, flags, *perms);
 }
 
-extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount,
-			     Inode *parent, const char *name,
-			     mode_t mode, struct stat *attr, Inode **out,
-			     int uid, int gid)
+extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount, Inode *parent,
+			     const char *name, mode_t mode, Inode **out,
+			     struct ceph_statx *stx, unsigned want,
+			     unsigned flags, const UserPerm *perms)
 {
-  UserPerm perms(uid, gid);
-  return (cmount->get_client()->ll_mkdir(parent, name, mode, attr, out, perms));
+  return cmount->get_client()->ll_mkdirx(parent, name, mode, out, stx, want,
+					 flags, *perms);
 }
 
 extern "C" int ceph_ll_link(class ceph_mount_info *cmount,

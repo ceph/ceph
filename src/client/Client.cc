@@ -11119,6 +11119,42 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   return r;
 }
 
+int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
+		      struct ceph_statx *stx, unsigned want, unsigned flags,
+		      const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+
+  vinodeno_t vparent = _get_vino(parent);
+
+  ldout(cct, 3) << "ll_mkdirx " << vparent << " " << name << dendl;
+  tout(cct) << "ll_mkdirx" << std::endl;
+  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << name << std::endl;
+  tout(cct) << mode << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, perms);
+    if (r < 0)
+      return r;
+  }
+
+  InodeRef in;
+  int r = _mkdir(parent, name, mode, perms, &in);
+  if (r == 0) {
+    fill_statx(in, statx_to_mask(flags, want), stx);
+    _ll_get(in.get());
+  } else {
+    stx->stx_ino = 0;
+    stx->stx_mask = 0;
+  }
+  tout(cct) << stx->stx_ino << std::endl;
+  ldout(cct, 3) << "ll_mkdirx " << vparent << " " << name
+	  << " = " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
+  *out = in.get();
+  return r;
+}
+
 int Client::_symlink(Inode *dir, const char *name, const char *target,
 		     const UserPerm& perms, InodeRef *inp)
 {
