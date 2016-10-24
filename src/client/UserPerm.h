@@ -42,8 +42,9 @@ private:
 public:
   UserPerm() : m_uid(-1), m_gid(-1), gid_count(0),
 	       gids(NULL), alloced_gids(false) {}
-  UserPerm(int uid, int gid) : m_uid(uid), m_gid(gid), gid_count(0),
-			       gids(NULL), alloced_gids(false) {}
+  UserPerm(uid_t uid, gid_t gid, int ngids=0, gid_t *gidlist=NULL) :
+	    m_uid(uid), m_gid(gid), gid_count(ngids),
+	    gids(gidlist), alloced_gids(false) {}
   UserPerm(const UserPerm& o) : UserPerm() {
     deep_copy_from(o);
   }
