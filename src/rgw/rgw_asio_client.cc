@@ -15,8 +15,9 @@
 RGWAsioClientIO::RGWAsioClientIO(tcp::socket&& socket,
                                  request_type&& request)
   : socket(std::move(socket)),
-    request(std::move(request))
-{}
+    request(std::move(request)),
+    txbuf(*this) {
+}
 
 RGWAsioClientIO::~RGWAsioClientIO() = default;
 
@@ -109,7 +110,7 @@ size_t RGWAsioClientIO::complete_request()
 
 void RGWAsioClientIO::flush()
 {
-  return;
+  txbuf.pubsync();
 }
 
 size_t RGWAsioClientIO::send_status(const int status,
@@ -121,13 +122,16 @@ size_t RGWAsioClientIO::send_status(const int status,
   const auto statuslen = snprintf(statusbuf, sizeof(statusbuf),
                                   "HTTP/1.1 %d %s\r\n", status, status_name);
 
-  return write_data(statusbuf, statuslen);
+  return txbuf.sputn(statusbuf, statuslen);
 }
 
 size_t RGWAsioClientIO::send_100_continue()
 {
   const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
-  return write_data(HTTTP_100_CONTINUE, sizeof(HTTTP_100_CONTINUE) - 1);
+  const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
+                                  sizeof(HTTTP_100_CONTINUE) - 1);
+  flush();
+  return sent;
 }
 
 static constexpr size_t TIME_BUF_SIZE = 128;
@@ -149,31 +153,38 @@ size_t RGWAsioClientIO::complete_header()
 
   char timestr[TIME_BUF_SIZE];
   if (dump_date_header(timestr)) {
-    sent += write_data(timestr, strlen(timestr));
+    sent += txbuf.sputn(timestr, strlen(timestr));
   }
 
   if (conn_keepalive) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
-    sent += write_data(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+    sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
   } else if (conn_close) {
     constexpr char CONN_KEEP_CLOSE[] = "Connection: close\r\n";
-    sent += write_data(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
+    sent += txbuf.sputn(CONN_KEEP_CLOSE, sizeof(CONN_KEEP_CLOSE) - 1);
   }
 
   constexpr char HEADER_END[] = "\r\n";
-  return sent + write_data(HEADER_END, sizeof(HEADER_END) - 1);
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  flush();
+  return sent;
 }
 
 size_t RGWAsioClientIO::send_header(const boost::string_ref& name,
                                     const boost::string_ref& value)
 {
-  char hdrbuf[name.size() + 2 + value.size() + 2 + 1];
-  const auto hdrlen = snprintf(hdrbuf, sizeof(hdrbuf), "%.*s: %.*s\r\n",
-                               static_cast<int>(name.length()),
-                               name.data(),
-                               static_cast<int>(value.length()),
-                               value.data());
-  return write_data(hdrbuf, hdrlen);
+  static constexpr char HEADER_SEP[] = ": ";
+  static constexpr char HEADER_END[] = "\r\n";
+
+  size_t sent = 0;
+
+  sent += txbuf.sputn(name.data(), name.length());
+  sent += txbuf.sputn(HEADER_SEP, sizeof(HEADER_SEP) - 1);
+  sent += txbuf.sputn(value.data(), value.length());
+  sent += txbuf.sputn(HEADER_END, sizeof(HEADER_END) - 1);
+
+  return sent;
 }
 
 size_t RGWAsioClientIO::send_content_length(const uint64_t len)
@@ -184,5 +195,5 @@ size_t RGWAsioClientIO::send_content_length(const uint64_t len)
   const auto sizelen = snprintf(sizebuf, sizeof(sizebuf),
                                 "Content-Length: %" PRIu64 "\r\n", len);
 
-  return write_data(sizebuf, sizelen);
+  return txbuf.sputn(sizebuf, sizelen);
 }

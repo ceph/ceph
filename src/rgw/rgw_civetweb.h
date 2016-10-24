@@ -10,8 +10,8 @@
 
 struct mg_connection;
 
-class RGWCivetWeb : public rgw::io::RestfulClient
-{
+class RGWCivetWeb : public rgw::io::RestfulClient,
+                    public rgw::io::BuffererSink {
   RGWEnv env;
   mg_connection *conn;
 
@@ -20,7 +20,9 @@ class RGWCivetWeb : public rgw::io::RestfulClient
   bool explicit_keepalive;
   bool explicit_conn_close;
 
-  size_t write_data(const char *buf, size_t len);
+  rgw::io::StaticOutputBufferer<> txbuf;
+
+  size_t write_data(const char *buf, size_t len) override;
   size_t read_data(char *buf, size_t len);
   size_t dump_date_header();
 

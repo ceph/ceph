@@ -24,7 +24,8 @@ class RGWBufferlistBody {
                                             Headers>;
 };
 
-class RGWAsioClientIO : public rgw::io::RestfulClient {
+class RGWAsioClientIO : public rgw::io::RestfulClient,
+                        public rgw::io::BuffererSink {
   using tcp = boost::asio::ip::tcp;
   tcp::socket socket;
 
@@ -38,7 +39,9 @@ class RGWAsioClientIO : public rgw::io::RestfulClient {
   bool conn_close{false};
   RGWEnv env;
 
-  size_t write_data(const char *buf, size_t len);
+  rgw::io::StaticOutputBufferer<> txbuf;
+
+  size_t write_data(const char *buf, size_t len) override;
   size_t read_data(char *buf, size_t max);
 
  public:

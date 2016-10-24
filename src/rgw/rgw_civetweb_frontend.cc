@@ -22,14 +22,15 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   /* Hold a read lock over access to env.store for reconfiguration. */
   RWLock::RLocker lock(env.mutex);
 
-  RGWRequest req(env.store->get_new_req_id());
+  RGWCivetWeb cw_client(conn, env.port);
   auto real_client_io = rgw::io::add_reordering(
                           rgw::io::add_buffering(
                             rgw::io::add_chunking(
                               rgw::io::add_conlen_controlling(
-                                RGWCivetWeb(conn, env.port)))));
+                                &cw_client))));
   RGWRestfulIO client_io(&real_client_io);
 
+  RGWRequest req(env.store->get_new_req_id());
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
                             &client_io, env.olog);
   if (ret < 0) {

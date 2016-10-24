@@ -239,6 +239,67 @@ public:
   }
 } /* rgw::io::DecoratedRestfulClient */;
 
+
+/* Interface that should be provided by a front-end class wanting to to use
+ * the low-level buffering offered by i.e. StaticOutputBufferer. */
+class BuffererSink {
+public:
+  virtual ~BuffererSink() = default;
+
+  /* Send exactly @len bytes from the memory location pointed by @buf.
+   * On success returns @len. On failure throws rgw::io::Exception. */
+  virtual size_t write_data(const char *buf, size_t len) = 0;
+};
+
+/* Utility class providing RestfulClient's implementations with facilities
+ * for low-level buffering without relying on dynamic memory allocations.
+ * The buffer is carried entirely on stack. This narrows down applicability
+ * to these situations where buffers are relatively small. This perfectly
+ * fits the needs of composing an HTTP header. Without that a front-end
+ * might need to issue a lot of small IO operations leading to increased
+ * overhead on syscalls and fragmentation of a message if the Nagle's
+ * algorithm won't be able to form a single TCP segment (usually when
+ * running on extremely fast network interfaces like the loopback). */
+template <size_t BufferSizeV = 4096>
+class StaticOutputBufferer : public std::streambuf {
+  static_assert(BufferSizeV >= sizeof(std::streambuf::char_type),
+                "Buffer size must be bigger than a single char_type.");
+
+  using std::streambuf::int_type;
+
+  int_type overflow(const int_type c) override {
+    *pptr() = c;
+    pbump(sizeof(std::streambuf::char_type));
+
+    if (! sync()) {
+      /* No error, the buffer has been successfully synchronized. */
+      return c;
+     } else {
+      return std::streambuf::traits_type::eof();
+    }
+  }
+
+  int sync() override {
+    const auto len = static_cast<size_t>(std::streambuf::pptr() -
+                                         std::streambuf::pbase());
+    std::streambuf::pbump(-len);
+    sink.write_data(std::streambuf::pbase(), len);
+    /* Always return success here. In case of failure write_data() will throw
+     * rgw::io::Exception. */
+    return 0;
+  }
+
+  BuffererSink& sink;
+  std::streambuf::char_type buffer[BufferSizeV];
+
+public:
+  StaticOutputBufferer(BuffererSink& sink)
+    : sink(sink) {
+    constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
+    std::streambuf::setp(buffer, buffer + len);
+  }
+};
+
 } /* namespace rgw */
 } /* namespace io */
 
