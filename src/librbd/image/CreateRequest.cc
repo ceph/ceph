@@ -190,6 +190,7 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
   if (!m_data_pool.empty() && m_data_pool != ioctx.get_pool_name()) {
     m_features |= RBD_FEATURE_DATA_POOL;
   } else {
+    m_data_pool.clear();
     m_features &= ~RBD_FEATURE_DATA_POOL;
   }
 
