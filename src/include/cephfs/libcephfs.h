@@ -1491,8 +1491,6 @@ int ceph_ll_mkdir(struct ceph_mount_info *cmount, struct Inode *parent,
 int ceph_ll_link(struct ceph_mount_info *cmount, struct Inode *in,
 		 struct Inode *newparrent, const char *name,
 		 struct stat *attr, int uid, int gid);
-int ceph_ll_truncate(struct ceph_mount_info *cmount, struct Inode *in,
-		     uint64_t length, int uid, int gid);
 int ceph_ll_opendir(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct ceph_dir_result **dirpp, int uid, int gid);
 int ceph_ll_releasedir(struct ceph_mount_info *cmount,

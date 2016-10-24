@@ -1576,17 +1576,6 @@ extern "C" int ceph_ll_link(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_link(in, newparent, name, attr, perms));
 }
 
-extern "C" int ceph_ll_truncate(class ceph_mount_info *cmount,
-				Inode *in, uint64_t length, int uid,
-				int gid)
-{
-  struct ceph_statx stx;
-  stx.stx_size = length;
-  UserPerm perms(uid, gid);
-
-  return(cmount->get_client()->ll_setattrx(in, &stx, CEPH_SETATTR_SIZE, perms));
-}
-
 extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
 			       Inode *in,
 			       struct ceph_dir_result **dirpp,
