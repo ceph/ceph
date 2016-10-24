@@ -241,7 +241,6 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
 	create_collection(cid, 0);
       }
       break;
-
     case Transaction::OP_COLL_HINT:
       {
 	coll_t cid;

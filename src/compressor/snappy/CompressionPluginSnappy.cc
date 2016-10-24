@@ -27,7 +27,7 @@ public:
   {}
 
   virtual int factory(CompressorRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     if (compressor == 0) {
       SnappyCompressor *interface = new SnappyCompressor();
