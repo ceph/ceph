@@ -1504,14 +1504,14 @@ int ceph_ll_unlink(struct ceph_mount_info *cmount, struct Inode *in,
 int ceph_ll_statfs(struct ceph_mount_info *cmount, struct Inode *in,
 		   struct statvfs *stbuf);
 int ceph_ll_readlink(struct ceph_mount_info *cmount, struct Inode *in,
-		     char *buf, size_t bufsize, int uid, int gid);
+		     char *buf, size_t bufsize, const UserPerm *perms);
 int ceph_ll_symlink(struct ceph_mount_info *cmount,
 		    Inode *in, const char *name, const char *value,
 		    Inode **out, struct ceph_statx *stx,
 		    unsigned want, unsigned flags,
 		    const UserPerm *perms);
 int ceph_ll_rmdir(struct ceph_mount_info *cmount, struct Inode *in,
-		  const char *name, int uid, int gid);
+		  const char *name, const UserPerm *perms);
 uint32_t ceph_ll_stripe_unit(struct ceph_mount_info *cmount,
 			     struct Inode *in);
 uint32_t ceph_ll_file_layout(struct ceph_mount_info *cmount,
