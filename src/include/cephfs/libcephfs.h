@@ -1431,9 +1431,9 @@ int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_forget(struct ceph_mount_info *cmount, struct Inode *in,
 		   int count);
-int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
-		 struct Inode **i,
-		 struct stat *attr);
+int ceph_ll_walk(struct ceph_mount_info *cmount, const char* name, Inode **i,
+		 struct ceph_statx *stx, unsigned int want, unsigned int flags,
+		 const UserPerm *perms);
 int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
 		    const UserPerm *perms);
