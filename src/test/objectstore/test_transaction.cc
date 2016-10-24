@@ -123,7 +123,10 @@ TEST(Transaction, MoveRangesDelSrcObj)
 
   ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
   ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
-  vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info = { boost::make_tuple(1, 1, 5), boost::make_tuple(10, 10, 5) };
+  vector<std::pair<uint64_t, uint64_t>> move_info = {
+    make_pair(1, 5),
+    make_pair(10, 5)
+  };
 
   t.touch(c, o1);
   bufferlist bl;
@@ -136,7 +139,6 @@ TEST(Transaction, MoveRangesDelSrcObj)
   t.write(c, o2, 1, bl.length(), bl);
 
   t.move_ranges_destroy_src(c, o1, o2, move_info);
-
 }
 
 TEST(Transaction, GetNumBytes)

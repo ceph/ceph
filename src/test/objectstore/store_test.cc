@@ -2813,7 +2813,10 @@ TEST_P(StoreTest, SimpleMoveRangeDelSrcTest) {
 
   }
   {
-    vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info = { boost::make_tuple(0, 0, 5), boost::make_tuple(10, 10, 5) };
+    vector<std::pair<uint64_t, uint64_t>> move_info = {
+      make_pair(0, 5),
+      make_pair(10, 5)
+    };
 
     ObjectStore::Transaction t;
     t.move_ranges_destroy_src(cid, hoid2, hoid, move_info);
@@ -3730,40 +3733,37 @@ public:
 
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
-    uint64_t srcoff = u1(*rng);
-    uint64_t dstoff = u1(*rng);
+    uint64_t off = u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
-      srcoff = ROUND_UP_TO(srcoff, write_alignment);
-      dstoff = ROUND_UP_TO(dstoff, write_alignment);
+      off = ROUND_UP_TO(off, write_alignment);
       len = ROUND_UP_TO(len, write_alignment);
     }
 
-    if (srcoff > srcdata.length() - 1) {
-      srcoff = srcdata.length() - 1;
+    if (off > srcdata.length() - 1) {
+      off = srcdata.length() - 1;
     }
-    if (srcoff + len > srcdata.length()) {
-      len = srcdata.length() - srcoff;
+    if (off + len > srcdata.length()) {
+      len = srcdata.length() - off;
     }
     if (0)
-      cout << __func__ << " from " << srcoff << "~" << len
-	 << " (size " << srcdata.length() << ") to "
-	 << dstoff << "~" << len << std::endl;
+      cout << __func__ << " " << off << "~" << len
+	   << " (size " << srcdata.length() << ")" << std::endl;
 
     ObjectStore::Transaction t;
-    vector<boost::tuple<uint64_t,uint64_t,uint64_t>> extents;
+    vector<std::pair<uint64_t,uint64_t>> extents;
     extents.emplace_back(
-      boost::tuple<uint64_t,uint64_t,uint64_t>(srcoff, dstoff, len));
+      std::pair<uint64_t,uint64_t>(off, len));
     t.move_ranges_destroy_src(cid, old_obj, new_obj, extents);
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
     bufferlist bl;
-    if (srcoff < srcdata.length()) {
-      if (srcoff + len > srcdata.length()) {
-	bl.substr_of(srcdata, srcoff, srcdata.length() - srcoff);
+    if (off < srcdata.length()) {
+      if (off + len > srcdata.length()) {
+	bl.substr_of(srcdata, off, srcdata.length() - off);
       } else {
-	bl.substr_of(srcdata, srcoff, len);
+	bl.substr_of(srcdata, off, len);
       }
     }
 
@@ -3775,15 +3775,15 @@ public:
     }
 
     bufferlist& dstdata = contents[new_obj].data;
-    if (dstdata.length() <= dstoff) {
+    if (dstdata.length() <= off) {
       if (bl.length() > 0) {
-        dstdata.append_zero(dstoff - dstdata.length());
+        dstdata.append_zero(off - dstdata.length());
         dstdata.append(bl);
       }
     } else {
       bufferlist value;
-      assert(dstdata.length() > dstoff);
-      dstdata.copy(0, dstoff, value);
+      assert(dstdata.length() > off);
+      dstdata.copy(0, off, value);
       value.append(bl);
       if (value.length() < dstdata.length())
         dstdata.copy(value.length(),

@@ -852,7 +852,7 @@ void MemStore::_do_transaction(Transaction& t)
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
-        vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
+        vector<std::pair<uint64_t, uint64_t>> move_info;
         i.decode_move_info(move_info);
         r = _move_ranges_destroy_src(cid, oid, noid, move_info);
       }
@@ -1258,11 +1258,13 @@ int MemStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid,
 /* Move contents of src object according to move_info to base object.
  * Once the move_info is traversed completely, delete the src object.
  */
-int MemStore::_move_ranges_destroy_src(const coll_t& cid, const ghobject_t& srcoid,
-			   const ghobject_t& baseoid,
-			   const vector<boost::tuple<uint64_t, uint64_t, uint64_t> > move_info)
+int MemStore::_move_ranges_destroy_src(
+  const coll_t& cid, const ghobject_t& srcoid,
+  const ghobject_t& baseoid,
+  const vector<std::pair<uint64_t, uint64_t> > move_info)
 {
-  dout(10) << __func__ << " " << cid << " "  << srcoid << " -> "  << baseoid << dendl;
+  dout(10) << __func__ << " " << cid << " "  << srcoid << " -> "
+	   << baseoid << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -1273,21 +1275,18 @@ int MemStore::_move_ranges_destroy_src(const coll_t& cid, const ghobject_t& srco
   ObjectRef no = c->get_or_create_object(baseoid);
 
   for (unsigned i = 0; i < move_info.size(); ++i) {
-      uint64_t srcoff = move_info[i].get<0>();
-      uint64_t dstoff = move_info[i].get<1>();
-      uint64_t len = move_info[i].get<2>();
-
-      if (srcoff >= oo->get_size())
-        return 0;
-      if (srcoff + len >= oo->get_size())
-        len = oo->get_size() - srcoff;
-
-      const ssize_t old_size = no->get_size();
-      no->clone(oo.get(), srcoff, len, dstoff);
-      used_bytes += (no->get_size() - old_size);
+    uint64_t off = move_info[i].first;
+    uint64_t len = move_info[i].second;
+    if (off >= oo->get_size())
+      return 0;
+    if (off + len >= oo->get_size())
+      len = oo->get_size() - off;
+    const ssize_t old_size = no->get_size();
+    no->clone(oo.get(), off, len, off);
+    used_bytes += (no->get_size() - old_size);
   }
 
-// delete the src object
+  // delete the src object
   _remove(cid, srcoid);
   return 0;
 }

@@ -82,9 +82,10 @@ class DeterministicOpSequence : public TestObjectStoreState {
   virtual void _do_write_and_clone_range(coll_t coll, hobject_t& orig_obj,
       hobject_t& new_obj, uint64_t srcoff, uint64_t srclen,
       uint64_t dstoff, bufferlist& bl);
-  virtual void _do_write_and_merge_delete(coll_t coll, hobject_t& orig_obj,
-      hobject_t& new_obj, vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info,
-      bufferlist& bl);
+  virtual void _do_write_and_merge_delete(
+    coll_t coll, hobject_t& orig_obj,
+    hobject_t& new_obj, vector<std::pair<uint64_t, uint64_t>> move_info,
+    bufferlist& bl);
   virtual void _do_coll_move(coll_t orig_coll, coll_t new_coll, hobject_t& obj);
   virtual void _do_coll_create(coll_t cid, uint32_t pg_num, uint64_t num_objs);
 
