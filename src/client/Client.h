@@ -1163,8 +1163,8 @@ public:
   int ll_commit_blocks(Inode *in, uint64_t offset, uint64_t length);
 
   int ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms);
-  int ll_walk(const char* name, Inode **i, struct stat *attr,
-	      const UserPerm& perms); // XXX in?
+  int ll_walk(const char* name, Inode **i, struct ceph_statx *stx,
+	       unsigned int want, unsigned int flags, const UserPerm& perms);
   uint32_t ll_stripe_unit(Inode *in);
   int ll_file_layout(Inode *in, file_layout_t *layout);
   uint64_t ll_snap_seq(Inode *in);

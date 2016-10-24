@@ -9823,31 +9823,33 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
   return r;
 }
 
-int Client::ll_walk(const char* name, Inode **out, struct stat *attr,
-		    const UserPerm& perms)
+int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
+		    unsigned int want, unsigned int flags, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   filepath fp(name, 0);
   InodeRef in;
   int rc;
+  unsigned mask = statx_to_mask(flags, want);
 
   ldout(cct, 3) << "ll_walk" << name << dendl;
   tout(cct) << "ll_walk" << std::endl;
   tout(cct) << name << std::endl;
 
-  rc = path_walk(fp, &in, perms, false, CEPH_STAT_CAP_INODE_ALL);
+  rc = path_walk(fp, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask);
   if (rc < 0) {
-    attr->st_ino = 0;
+    /* zero out mask, just in case... */
+    stx->stx_mask = 0;
+    stx->stx_ino = 0;
     *out = NULL;
     return rc;
   } else {
     assert(in);
-    fill_stat(in, attr);
+    fill_statx(in, mask, stx);
     *out = in.get();
     return 0;
   }
 }
-
 
 void Client::_ll_get(Inode *in)
 {

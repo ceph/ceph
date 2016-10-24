@@ -1422,11 +1422,11 @@ extern "C" int ceph_ll_forget(class ceph_mount_info *cmount, Inode *in,
   return (cmount->get_client()->ll_forget(in, count));
 }
 
-extern "C" int ceph_ll_walk(class ceph_mount_info *cmount, const char *name,
-			    struct Inode **i,
-			    struct stat *attr)
+int ceph_ll_walk(struct ceph_mount_info *cmount, const char* name, Inode **i,
+		 struct ceph_statx *stx, unsigned int want, unsigned int flags,
+		 const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_walk(name, i, attr, cmount->default_perms));
+  return(cmount->get_client()->ll_walk(name, i, stx, want, flags, *perms));
 }
 
 extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
