@@ -190,6 +190,41 @@ TEST(test_slab_containers, set_context) {
    }
 }
 
+TEST(test_slab_containers, documentation_test) {
+
+  mempool::unittest_1::slab_set<int,2,4> x;
+
+  EXPECT_EQ(2u,mempool::unittest_1::allocated_items()); // 2 items in stackSlab
+  EXPECT_EQ(2u,mempool::unittest_1::free_items());      // both are free
+  EXPECT_EQ(1u,mempool::unittest_1::containers());      // 1 container
+  EXPECT_EQ(1u,mempool::unittest_1::slabs());           // 1 stackSlab
+  EXPECT_EQ(0u,mempool::unittest_1::inuse_items());     // No items inuse
+
+  x.insert(1); // satisfied by first internal slab element
+
+  EXPECT_EQ(2u,mempool::unittest_1::allocated_items()); // still 2 in stackSlab
+  EXPECT_EQ(1u,mempool::unittest_1::free_items());      // only 1 is free
+  EXPECT_EQ(1u,mempool::unittest_1::containers());
+  EXPECT_EQ(1u,mempool::unittest_1::slabs());
+  EXPECT_EQ(1u,mempool::unittest_1::inuse_items());     // One item inuse
+
+  x.insert(2); // Uses second internal slab element
+
+  EXPECT_EQ(2u,mempool::unittest_1::allocated_items()); // still 2 in stackSlab
+  EXPECT_EQ(0u,mempool::unittest_1::free_items());      // none are free
+  EXPECT_EQ(1u,mempool::unittest_1::containers());
+  EXPECT_EQ(1u,mempool::unittest_1::slabs());
+  EXPECT_EQ(2u,mempool::unittest_1::inuse_items());
+
+  x.insert(3); // Allocates a slab of 4
+
+  EXPECT_EQ(6u,mempool::unittest_1::allocated_items()); // 2 + 4 (one slab)
+  EXPECT_EQ(3u,mempool::unittest_1::free_items());      // 3 of the 4 are still free
+  EXPECT_EQ(1u,mempool::unittest_1::containers());
+  EXPECT_EQ(2u,mempool::unittest_1::slabs());
+  EXPECT_EQ(3u,mempool::unittest_1::inuse_items());
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;

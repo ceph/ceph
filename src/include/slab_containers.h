@@ -48,7 +48,7 @@ of the access pattern OR the container itself is expected to be ephemeral.
 Another disdvantage of slabs is that you can't move them from one container to another.
 This causes certain operations that used to have O(1) cost to have O(N) cost.
 
-   list::split   O(N)
+   list::splice  O(N)
    list::swap    O(2N)
    vector::swap is O(2*stackSize)
 
@@ -60,17 +60,43 @@ that is part of the container itself (logically pre-allocated, but it's not a se
 malloc call -- its part of the container itself). The size of this slab is set through
 the template parameter 'stackSize' which must be specified on every declaration (no default).
 Thus the first 'stackSize' items in this slab container result in no malloc/free invokation
-at the expense of burning that memory whether it's used or not.
+at the expense of burning that memory whether it's used or not. This is ideal for
+continers that are normally one or two nodes but have the ability to grow on that rare
+occasion when it's needed.
 
-There are two ways to create malloc slabs. Normal usage or "reserve".
-In the normal usage case, a slab is allocated using the slabSize template parameter,
-which has a default value intended to try to round up all allocations to something
-like 256 Bytes.
+There are two ways to create more slabs: Normal usage or "reserve".
+In the normal usage case, when no more free nodes are available, a slab is allocated
+using the slabSize template parameter, which has a default value intended to try to
+round up all allocations to something like 256 Bytes.
 
 slab containers generally have a "reserve" function that emulates the vector::reserve
 function in that it guarantees space is available for that many nodes. Reserve always
 results in either 0 or 1 calls to malloc (0 for when the currently available space
-is sufficient). 
+is sufficient). If more nodes are required, they are allocated into a single slab
+regardless of the value of the slabSize template parameter.
+
+STATISTICS
+----------
+
+Normal mempools assume that all of the memory associated with a mempool is "allocated",
+but slab_containers introduce another interesting state known as "free". Bytes and items
+are in the "free" state when they are part of slab but not currently being used by
+the client container. Thus 100% of a slab is considered "allocated" regardless of
+whether any of the contained items are being used by the client container. Hence
+there are several new per-pool statistics:
+
+slabs          number of slabs in system (regardless of size)
+free_items     number of items in slabs not being used by client container
+free_bytes     number of bytes in slabs not begin used by client container
+inuse_items    number of items in use (generally same as slab_xxxx.size())
+inuse_bytes    number of bytes in use
+
+Note, since each slab container has within itself one slab, that slab is added to the
+statistics as soon as the container is ctor'ed.
+
+See the unit test "documentation_test" in src/test/test_slab_containers.cc for
+a step by step examination of how these statistics work.
+
 
 */
 
@@ -183,7 +209,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    // Danger, because of the my_actual_allocator hack. You can't rely on T to be correct, nor any value or offset that's
    // derived directly or indirectly from T. We use the values saved during initialization, when T was correct.
    //
-   void addSlab(size_t slabSize) {
+   void addSlab(size_t size) {
        //
        // I need to compute the size of this structure
        //
@@ -198,9 +224,9 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
        //
        // Allocate the slab and free the slots within.
        //
-       size_t total = (slabSize * trueSlotSize) + sizeof(slab_t);
+       size_t total = (size * trueSlotSize) + sizeof(slab_t);
        slab_t *slab = reinterpret_cast<slab_t *>(new char[total]);
-       initSlab(slab,slabSize);
+       initSlab(slab,size);
    }
    
    slot_t *allocslot() {
@@ -681,7 +707,7 @@ enum { _desired_slab_size = 256 }; // approximate preferred allocation size
     template<typename k,size_t stackSize,                               \
              size_t slabSize = defaultSlabSize(sizeof(k)),              \
              typename cmp = std::less<k> >	                        \
-    using slab_multiset =                                               \ 
+    using slab_multiset =                                               \
        mempool::slab_multiset<id,k,stackSize,slabSize,cmp>;             \
                                                                         \
     template<typename v,size_t stackSize,                               \
